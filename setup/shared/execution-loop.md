@@ -27,7 +27,9 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
    - LOG: MUST update when tripped (DoD gate #4). Reference all three
      files: docs/lessons.md, docs/footguns.md, docs/confusion-log.md
      with when-to-use table. Footgun propagation rule.
-     Context-based loading rules
+     Context-based loading rules.
+     Dual-agent projects: learning loop files are shared. Read the
+     current file before appending to avoid duplicating entries.
 
 c) Autonomy Tiers: Always / Ask First / Never
    - Adapt Ask First boundaries for THIS project's specific risks

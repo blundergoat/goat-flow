@@ -9,7 +9,7 @@ shellcheck scripts/maintenance/*.sh      # Lint shell scripts
 bash -n scripts/maintenance/*.sh          # Syntax-check scripts
 ```
 
-## Execution Loop: READ → CLASSIFY → ACT → VERIFY → LOG
+## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
 ```
@@ -17,7 +17,16 @@ BAD:  "The spec says 100 lines for apps" (guessed without reading)
 GOOD: Read docs/system-spec.md:104 → "Target 100 (libraries) to 120 (apps)"
 ```
 
-**CLASSIFY** - MUST declare complexity (Hotfix / Standard Feature / System Change / Infrastructure) and mode (Plan/Implement/Explain/Debug/Review) before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
+**CLASSIFY** - MUST declare complexity and mode before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
+
+| Complexity | Read budget | Turn budget |
+|------------|-------------|-------------|
+| Hotfix | 2 reads | 3 turns |
+| Standard Feature | 4 reads | 10 turns |
+| System Change | 6 reads | 20 turns |
+| Infrastructure | 8 reads | 25 turns |
+
+Over budget = re-classify before continuing. Mode: Plan / Implement / Explain / Debug / Review.
 
 **SCOPE** - MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
 
@@ -41,7 +50,7 @@ GOOD: Inline format. Extract when second format needed
 - Level 2 (cross-doc inconsistency, broken refs, evidence corruption): MUST full stop, file:line diagnosis, wait for human
 - Two corrections on same approach = MUST rewind
 
-**LOG** - SHOULD update the appropriate learning loop file. Footguns mapped to specific directories: propagate one-line summary to local CLAUDE.md.
+**LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. Footguns mapped to specific directories: propagate one-line summary to local CLAUDE.md.
 
 | File | When to update |
 |------|---------------|
@@ -99,6 +108,7 @@ SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` be
 | Evaluation templates | `workflow/evaluation/` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
+| Confusion log | `docs/confusion-log.md` |
 | Architecture | `docs/architecture.md` |
 | Maintenance scripts | `scripts/maintenance/` |
 | Preflight skill | `.claude/skills/goat-preflight/` |

@@ -13,9 +13,9 @@ Prefer a single session. If the repo is too large for one clean pass, finish the
 Paste this first:
 
 ```text
-I have the GOAT Flow system - a 5-step execution loop (READ → CLASSIFY →
-ACT → VERIFY → LOG) with autonomy tiers, a definition of done, and a
-learning loop. I want to set it up for Codex.
+I have the GOAT Flow system - a 6-step execution loop (READ → CLASSIFY →
+SCOPE → ACT → VERIFY → LOG) with autonomy tiers, a definition of done,
+and a learning loop. I want to set it up for Codex.
 
 Read this file for the full system design:
 - docs/system-spec.md
@@ -50,6 +50,9 @@ WHAT TO BUILD (in this order):
    reference playbook files instead of slash commands.
    Target: under 135 lines (Codex files run ~35% larger than Claude Code
    because enforcement can't be offloaded to hooks).
+   Do NOT skip sections (f)–(i) - they are small but required.
+   The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
+   CLASSIFY MUST include read/turn budgets per complexity tier.
 
 2. Docs seed files - Create the files listed in setup/shared/docs-seed.md.
 
@@ -71,7 +74,10 @@ WHAT TO BUILD (in this order):
      verification script.
 
 5. Codex evals - codex-evals/ directory with replay prompts from real
-   incidents (same format as agent-evals/).
+   incidents (same format as agent-evals/). If agent-evals/ already
+   exists, read it first. Do NOT duplicate incidents already covered —
+   reference the existing eval and add only incidents or failure modes
+   that are missing.
 
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
@@ -95,6 +101,7 @@ VERIFICATION:
 - [ ] Router table references all resolve to real files
 - [ ] Ask First boundaries are project-specific (not generic template)
 - [ ] If dual-agent: no Claude Code files were modified or removed
+- [ ] If dual-agent: codex-evals/ does not duplicate incidents already in agent-evals/
 - [ ] Test deny-dangerous by asking Codex to run `git push --force origin main`
 
 ---

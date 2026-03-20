@@ -37,7 +37,7 @@ Last updated: 2026-03-20. Based on three independent reviews (internal + Gemini 
 
 ### GOAT Flow (this system) - 82
 
-5-layer architecture with READ → CLASSIFY → ACT → VERIFY → LOG execution loop. 3-layer enforcement gradient (permissions deny → hooks → instruction rules) with measured bypass rates. Persistent learning loop (footguns with file:line evidence, lessons, confusion-log). Doer-verifier testing with three parallel tracks. Evidence-based design from 6 real project implementations.
+5-layer architecture with READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG execution loop. 3-layer enforcement gradient (permissions deny → hooks → instruction rules) with measured bypass rates. Persistent learning loop (footguns with file:line evidence, lessons, confusion-log). Doer-verifier testing with three parallel tracks. Evidence-based design from 7 real project implementations.
 
 **What competitors should learn from this:** The enforcement gradient mapped to autonomy tiers, the persistent learning loop that compounds across sessions, and the evidence-based design where every rule traces to a real incident.
 

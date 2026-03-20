@@ -38,7 +38,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 | Section | Purpose |
 |---------|---------|
-| **Execution loop** | READ → CLASSIFY → ACT → VERIFY → LOG. The 5-step behaviour loop that prevents fabrication, mode drift, early victory declarations, and silent failures. |
+| **Execution loop** | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG. The 6-step behaviour loop that prevents fabrication, scope creep, mode drift, early victory declarations, and silent failures. |
 | **Autonomy tiers** | Always (safe, reversible) / Ask First (project-specific boundaries) / Never (destructive, irreversible). Each tier maps to an enforcement layer. |
 | **Definition of Done** | 6 explicit gates. A task is not done until all gates pass. Includes the grep-after-rename gate and log-update gate. |
 | **Router table** | Points to everything below - skills, local context files, docs, architecture. This is the highest-leverage section (tools mentioned here get 160x more usage - GitHub 2,500-repo analysis). |

@@ -57,6 +57,8 @@ INSTRUCTION FILE:
    Target: under [120 for apps / 100 for libraries] lines.
    Adapt all examples and Ask First boundaries for THIS project.
    Do NOT skip sections (f)–(i) - they are small but required.
+   The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
+   CLASSIFY MUST include read/turn budgets per complexity tier.
 
 DOCS SEED FILES:
 2. Create the files listed in setup/shared/docs-seed.md.
@@ -102,6 +104,8 @@ STEP 2 - Rewrite CLAUDE.md:
 4. Rebuild CLAUDE.md with the sections listed in setup/shared/execution-loop.md.
    Target: under [120/100] lines. Adapt for this project.
    Do NOT skip sections (f)–(i) - they are small but required.
+   The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
+   CLASSIFY MUST include read/turn budgets per complexity tier.
 
 STEP 3 - Docs seed files:
 5. Create the files listed in setup/shared/docs-seed.md.
