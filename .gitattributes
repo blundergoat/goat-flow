@@ -1,0 +1,50 @@
+# Auto-detect text files and normalize to LF
+* text=auto eol=lf
+
+# Source files - LF
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.rs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+
+# Shell scripts - LF (Unix)
+*.sh text eol=lf
+
+# Windows scripts - CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Config files
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+
+# Lock files - don't diff (noisy)
+pnpm-lock.yaml binary
+package-lock.json binary
+Cargo.lock text -diff
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# SVG can be text (for diffs)
+*.svg text eol=lf
