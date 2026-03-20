@@ -135,6 +135,8 @@ flowchart TD
 
 **Why 5 layers, not 3 or 7:** Each layer has a distinct loading trigger -- always (L1), automatic per-directory (L2), on-demand by user (L3/L4), or CI/regression (L5). Fewer layers would combine different loading semantics. More would create layers with no meaningful distinction.
 
+**Progressive disclosure (attention zone design):** Research shows the beginning and end of the context window receive higher attention than the middle. The 5-layer loading model exploits this: CLAUDE.md loads at session start (high-attention zone), Skills load at invocation time (also high-attention, because they're the most recent content). The middle of the conversation -- where context degrades -- is where on-demand loading avoids placing instructions. This architecture recovers ~15,000 tokens per session compared to front-loading everything.
+
 ---
 
 ## Guidelines Ownership Split
@@ -326,3 +328,13 @@ flowchart TD
 **Problem:** The system accumulates rules that outlive their usefulness. A footgun that was critical six months ago may have been fixed in code. A lesson that was important when the agent was less capable may now be default behaviour.
 
 **Design decision:** Periodic re-count, stale rule check, and the question: "if I removed this, would the model still do the right thing?" Rules that once helped become constraints as models improve. The system is designed to get smaller over time, not larger.
+
+**Model-version gating (v0.7 addition):** The original principle assumed models would improve monotonically. They don't -- new model releases can regress on specific behaviours. Updated process:
+
+1. Run the agent eval suite on the new model version
+2. If all evals pass, identify rule removal candidates (rules never triggered in 90+ days, rules now enforced mechanically by tooling)
+3. Remove candidates
+4. Re-run evals to confirm no regressions
+5. Maintain a rollback plan for the next model version
+
+Shrink based on **tooling improvements** (better linters, better hooks, better CI) and **rules never triggered** -- not assumptions about base model capability.

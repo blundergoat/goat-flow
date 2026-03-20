@@ -1,4 +1,4 @@
-# Real-World Implementations — AI Workflow Framework
+# Real-World Implementations — GOAT Flow
 
 Six BlunderGOAT projects scanned for workflow framework adoption. These serve as reference implementations showing how the system adapts across project shapes and stacks.
 

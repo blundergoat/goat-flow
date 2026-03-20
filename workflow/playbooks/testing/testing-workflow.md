@@ -51,12 +51,26 @@ Open a fresh AI session (browser, separate CLI instance, or different agent) and
 Example prompt for the verifier agent:
 > "Manually test this system from a user perspective. Don't follow any existing test scripts — I want you to explore naturally and report anything that feels wrong, broken, or unexpected."
 
+Verifier prompt template (fill in the blanks):
+```
+Test [PROJECT_NAME] as an end user. The developer changed [CHANGES].
+Focus on [AREAS]. Report anything broken, unexpected, or unclear.
+Do not modify any code or files. Do not follow any existing test scripts.
+```
+
 ### 2b. Code review (read-only)
 
 In a separate terminal, open a fresh agent and prompt it to review the changes without modifying anything.
 
 Example prompt for the reviewer agent:
 > "Deeply review the code changes since the last commit/milestone. Look for blockers, regressions, security issues, or anything important that should be changed before merging. Don't make any code or file changes."
+
+Reviewer prompt template (fill in the blanks):
+```
+Review the code changes since [LAST COMMIT/MILESTONE]. Focus on:
+[AREAS OF CHANGE]. Look for regressions, security issues, logic gaps,
+or architectural concerns. Do not make any code changes — review only.
+```
 
 **What this catches:** Logic gaps the coding agent was blind to, architectural issues, security problems, inconsistencies between what was asked and what was built.
 
@@ -121,4 +135,11 @@ A milestone is complete when:
 | Review & Fix | Agent fixes, developer reviews | Until clean |
 | Code Review | Separate agent + developer | Before merge |
 
-The ratio is roughly 1:1 — for every unit of coding agent work, spend an equal unit verifying it. This feels slow but prevents the compounding cost of undetected regressions.
+The verification ratio scales with the autonomy tier of the changes being made:
+
+| Autonomy Tier | Verification Ratio | Rationale |
+|--------------|-------------------|-----------|
+| Never / Ask First work | 1:1 or higher | High-risk changes need thorough verification |
+| Always work | 1:3 (one unit verification per three units coding) | Low-risk, reversible changes with good test coverage |
+
+The old 1:1 ratio was too conservative for low-risk work and too aggressive for high-risk work. Map verification effort to the autonomy tier of the changes being made.

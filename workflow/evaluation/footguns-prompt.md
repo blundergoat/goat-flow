@@ -37,6 +37,15 @@ FORMAT — every entry MUST follow this structure:
 **Risk:** [what breaks and why — be specific]
 **Mitigation:** [how to avoid triggering it]
 
+Every entry added by the agent must include this flag at the start:
+> [!WARNING] AI-GENERATED: UNVERIFIED
+The human removes this flag after reviewing the entry. CI will fail
+if this flag exists on the main branch.
+
+Every footgun entry must include a `**Created:** YYYY-MM-DD` line.
+This enables CI staleness detection (entries not triggered in 90+ days
+are candidates for archival during quarterly shrink).
+
 RULES:
 - Every entry MUST include file:line evidence pointing to REAL code
 - Do NOT invent hypothetical footguns

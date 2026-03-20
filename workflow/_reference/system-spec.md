@@ -1,5 +1,7 @@
 # AI Workflow System Specification
 
+**Version:** v0.7 | Based on ai-workflow-improvement-plan-prime v1.5
+
 **Implements:** 5-layer architecture with default execution loop
 
 ---
@@ -115,6 +117,8 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 
 **Never cut:** The execution loop, autonomy tiers, or definition of done.
 
+**Router table placement:** The router table should be positioned at the END of the instruction file. Research shows the beginning and end of the context window receive higher attention than the middle. The router table is the highest-leverage section (160x usage uplift) -- placing it at the end exploits the end-of-context attention zone.
+
 ---
 
 ## The Default Execution Loop
@@ -122,6 +126,8 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 Every task follows: READ -> CLASSIFY -> ACT -> VERIFY -> LOG
 
 ### READ
+
+**Problem:** Agent fabricates codebase facts without reading files.
 
 - Read the relevant files first. Never fabricate codebase facts.
 - Apps: read both sides for cross-boundary changes
@@ -134,6 +140,8 @@ GOOD: Read composer.json first -> "acme-client is installed via Packagist at ^1.
 ```
 
 ### CLASSIFY
+
+**Problem:** Agent confuses questions with directives and drifts between modes silently.
 
 Complexity: Hotfix / Standard Feature / System Change / Infrastructure Change
 Mode: Plan / Implement / Explain / Debug / Review
@@ -154,7 +162,11 @@ BAD:  "Created INotificationProvider interface" (only one implementation exists)
 GOOD: "EmailNotifier handles notifications. Extract interface when second provider needed."
 ```
 
+After classifying, declare SCOPE before acting: files allowed to change, systems allowed to change, explicit non-goals, max blast radius before escalation. See FIVE_STEP_LOOP.md for full detail.
+
 ### ACT
+
+**Problem:** Planning loops (reads 8-12 files, produces nothing) and premature fixes.
 
 | Mode      | Behaviour                                                                                 |
 | --------- | ----------------------------------------------------------------------------------------- |
@@ -174,6 +186,8 @@ No actions outside the declared state without "Switching to [NEW STATE] because 
 
 ### VERIFY
 
+**Problem:** Agent declares victory early -- tests pass but old patterns remain.
+
 Run tests after each meaningful code change, not just at the end.
 
 ```
@@ -191,6 +205,8 @@ Level 2 -- Stop and Escalate (cross-boundary or security):
 Revert-and-rescope: (1) Esc + restate approach, (2) git revert + rescope, (3) /clear + handoff. Two corrections on the same issue = cut your losses (applies to _approach_, not legitimate multi-step work).
 
 ### LOG
+
+**Problem:** Agent repeats the same mistakes across sessions.
 
 | File                    | When                                    | Example                                                                 |
 | ----------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
@@ -234,6 +250,10 @@ Never do:
 - Change file permissions or security configurations
 - Make git commits unless explicitly asked
 - Edit files outside the current project repository
+- Modify lockfiles (package-lock.json, pnpm-lock.yaml, composer.lock, Cargo.lock)
+- Modify generated code, migration files, or compiled artifacts
+
+Lockfile/generated rationale: agents hallucinate dependency version bumps to fix type errors.
 ```
 
 **Enforcement (strongest first):**
@@ -258,9 +278,29 @@ A task is NOT done until ALL are true:
 6. After bulk renames/refactors: grep for old pattern, confirm ZERO remaining references
 ```
 
+## Anti-Pattern Deductions
+
+Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
+
+| ID | Anti-Pattern | Detection | Deduction |
+|----|-------------|-----------|-----------|
+| AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 |
+| AP2 | `/review` skill shadows built-in | `{skills_dir}/review` exists (not `code-review`) | -3 |
+| AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 |
+| AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 |
+| AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 |
+| AP6 | Stop hook exits non-zero | Last exit in stop hook is not `exit 0` | -5 |
+| AP7 | Local instruction file over 20 lines | Any local file `wc -l` > 20 | -2 |
+| AP8 | Generic Ask First boundaries | Ask First section matches known template text verbatim | -2 |
+| AP9 | settings.local.json committed | `git ls-files .claude/settings.local.json` returns match | -2 |
+| AP10 | Incident without footgun/lesson entry | Incident occurred but no corresponding entry in learning loop | -2 |
+| AP11 | Mandatory-but-dead artifacts | Required file empty after 6+ months of active development | -2 |
+
 ## Working Memory and Handoffs
 
 For tasks exceeding 5 turns: maintain Working Notes in tasks/todo.md. Context escalation: `/compact` after 15+ turns -> two compactions = split sub-tasks -> `/clear` between unrelated tasks -> worktrees for parallel work. Handoff: write tasks/handoff.md before ending incomplete work.
+
+For within-session state persistence, use `.claude/tasks/session-current.md`. This complements the escalation ladder (scratchpad -> handoff -> ask human) by providing a file the agent can read and write during the session that persists across tool calls.
 
 ## Sub-Agent Objectives
 
@@ -401,6 +441,22 @@ Blocks tool invocations before commands run, before hooks fire. Add `Bash(terraf
 
 The deny script should block (exit 2 with message): `rm -rf` without scoping, direct push to main/master, `git push --force`, `chmod 777`, pipe-to-shell (`curl | bash`), `.env` edits, `git commit --no-verify`. Add project-specific blocks for files requiring tooling (binary dictionaries, generated code, lock files).
 
+### Agent Ignore Files
+
+Prevent agents from READING sensitive files. The deny-dangerous hook blocks writes to .env but agents can still read secrets and leak them into context.
+
+| Agent | Ignore File |
+|-------|------------|
+| Claude Code | `permissions.deny` Read patterns in settings.json |
+| GitHub Copilot | `.copilotignore` |
+| Cursor | `.cursorignore` |
+
+Standard patterns: `.env*`, `**/secrets/`, `**/*.pem`, `**/*.key`, `**/credentials*`, `**/.git/`
+
+### Content-Preserving Write Guard
+
+PreToolUse hook: block any Write operation that would reduce a file's size by more than 80%. Catches agents emptying files during refactors.
+
 ### Secret Scanning
 
 Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to modify global git config. Document in README.
@@ -434,3 +490,5 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 **Cut priority:** (1) essential commands -> referenced file, (2) structural debt -> one line, (3) communication when blocked -> one line, (4) sub-agent objectives -> two lines, (5) working memory -> compress. **Never cut:** execution loop, autonomy tiers, definition of done.
 
 **Quarterly audit:** re-count, check for stale rules, ask "if I removed this, would the model still do the right thing?" The system is designed to get smaller over time, not larger.
+
+**Model-version gating:** Before removing any rule, run the agent eval suite on the current model version. Process: (1) run evals, (2) if all pass, identify removal candidates, (3) remove, (4) re-run evals to confirm, (5) maintain rollback plan. Shrink based on tooling improvements (better linters, better hooks, better CI) and rules never triggered in 90+ days -- not assumptions about model capability.

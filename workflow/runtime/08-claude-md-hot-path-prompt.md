@@ -1,5 +1,7 @@
 # Prompt: Generate CLAUDE.md Hot-Path Structure
 
+> **Legacy note:** This prompt predates the GOAT Flow 5-layer system. The current system's Layer 1 runtime file (CLAUDE.md) includes the execution loop, autonomy tiers, DoD, and router table -- which is more comprehensive than the hot-path router model described here. See `workflow/_reference/system-spec.md` for the current specification. This prompt remains available for projects that want a lighter-weight instruction file without the full execution loop.
+
 > **When to use:** After creating your [code map](05-code-map-prompt.md), [architecture diagrams](06-system-architecture-prompt.md), and [domain instruction files](07-domain-instruction-files-prompt.md). This prompt creates the lean router that ties them together.
 >
 > **What it creates:** Your project's hot-path context file (CLAUDE.md / AGENTS.md / GEMINI.md — whichever your AI tool uses). This file is loaded into every AI conversation, so every line must earn its place.

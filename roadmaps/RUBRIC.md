@@ -1,7 +1,7 @@
-# Scoring Rubric — @blundergoat/ai-workflow-goat
+# Scoring Rubric — @blundergoat/goat-flow
 
 **Rubric version:** ai-workflow-improvement-plan-prime v1.5
-**Total checks:** 65 sub-checks + 9 anti-patterns
+**Total checks:** 65 sub-checks + 11 anti-patterns
 
 ---
 
@@ -271,15 +271,17 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 
 | ID | Anti-Pattern | Detection | Deduction | Agent Scope |
 |----|-------------|-----------|-----------|-------------|
-| AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -5 | All |
+| AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 | All |
 | AP2 | `/review` skill shadows built-in | `{skills_dir}/review` exists (not `code-review`) | -3 | All |
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 | All |
-| AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -3 | All |
-| AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -3 | Claude Code only |
-| AP6 | Stop hook exits non-zero | Last exit in stop hook is not `exit 0` | -2 | All |
+| AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 | All |
+| AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 | Claude Code only |
+| AP6 | Stop hook exits non-zero | Last exit in stop hook is not `exit 0` | -5 | All |
 | AP7 | Local instruction file over 20 lines | Any local file `wc -l` > 20 | -2 | All |
 | AP8 | Generic Ask First boundaries | Ask First section matches known template text verbatim | -2 | All |
 | AP9 | settings.local.json committed | `git ls-files .claude/settings.local.json` returns match | -2 | Claude Code, git repos only |
+| AP10 | Incident without footgun/lesson entry | Real incident occurred but no corresponding entry added to learning loop | -2 | All |
+| AP11 | Mandatory-but-dead artifacts | Required file exists but empty after 6+ months of active development | -2 | All |
 
 ---
 

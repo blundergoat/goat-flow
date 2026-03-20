@@ -1,4 +1,4 @@
-# AI Workflow Framework -- Getting Started
+# GOAT Flow -- Getting Started
 
 **Version:** 1.5 | 2026-03-15
 **Companion to:** `workflow/runtime/` (prompts -- `claude-code-prompts.md` for Claude Code, `codex-prompts.md` for Codex) and `workflow/_reference/system-spec.md` (plan)
@@ -76,7 +76,7 @@ Just want the bare minimum to try it?
 **After Phase 1c:**
 - [ ] `.claude/settings.json` is valid JSON
 - [ ] Permissions deny list includes `*git commit*` and `*git push*`
-- [ ] Test the deny-dangerous hook: ask Claude Code to run `rm -rf /` -- it should be blocked
+- [ ] Test the deny-dangerous hook: ask Claude Code to run `git push --force origin main` -- it should be blocked by the deny-dangerous hook
 - [ ] Stop hook exits 0 even when it finds issues (non-zero = infinite loops)
 - [ ] If no formatter configured: PostToolUse hook was skipped (not created as a linter duplicate)
 
@@ -94,9 +94,11 @@ You don't have to do everything. Pick your tier:
 | **Standard** | Phase 1a + 1b + 1c | Active development |
 | **Full** | Phase 1 + Phase 2 | Long-lived project with incident history |
 
+**When to graduate:** Phase 0 is for experiments. Move to the full system when: first production user, first team contributor, first real incident, or first month of active development.
+
 ## Ongoing Maintenance
 
-**Weekly:** Run `/insights` in Claude Code (analyses your recent session history for recurring patterns). Look for friction that could become a new rule or footgun.
+**Weekly:** Run Claude Code's `/insights` to review learning loop patterns (analyses your recent session history for recurring patterns). Look for friction that could become a new rule or footgun. For other agents: Gemini CLI uses `/memories`, Cursor users should review their rules periodically.
 
 **When something breaks:** After Claude causes a bug, add it to `docs/lessons.md` (behavioural) or `docs/footguns.md` (architectural). If it's worth regression-testing, create an agent eval in `agent-evals/`.
 
@@ -108,10 +110,13 @@ You don't have to do everything. Pick your tier:
 
 - **Consider separate sessions per phase.** The prompts were split to stay within instruction budget. One session per phase is safest. If context budget allows (smaller codebases), running all phases sequentially in one session can work -- the medical scribe did this successfully.
 - **The migration (Prompt B) drops content silently.** Sections that partially overlap with your guidelines file get cut without warning. Always diff.
+  - Fix: Compare original CLAUDE.md + new CLAUDE.md + domain-reference.md against the original. Check nothing was silently dropped.
 - **Prompt B can miss sections (f)-(i).** Sub-Agent Objectives and Communication When Blocked are easy to skip when Prompt B cross-references Prompt A by letter. The v1.5 prompts list them explicitly, but verify all sections exist after Phase 1a.
 - **First-pass CLAUDE.md is usually over target.** Budget a compression pass. The plan has a cut priority list -- essential commands go first, execution loop never gets cut.
+  - Fix: Apply the cut priority list from the system spec. Cut verbose examples first, then explanatory paragraphs, then duplicated content. Never cut execution loop, autonomy tiers, or DoD.
 - **Hooks must use absolute paths.** All hook commands use `git rev-parse --show-toplevel`. Relative paths break when the working directory changes.
 - **Stop hooks must exit 0.** Even when they find errors. Non-zero exit codes trap Claude in infinite fix loops.
+  - Fix: Verify the hook exits 0 even on errors. Add the infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
 - **Secret scanning is manual.** The `gitleaks` setup requires `git config --global` which affects all repos. Do it yourself, don't let Claude Code do it. Document it in README, not CLAUDE.md.
 - **Pre-existing footguns don't need replacement.** If docs/footguns.md already exists with real entries, the implementation should merge, not replace. Some projects need zero new footguns -- that's fine.
 - **Pre-existing hooks need migration.** If .claude/settings.json already has inline hook commands, migrate them to external scripts under .claude/hooks/ during Phase 1c.
@@ -145,6 +150,10 @@ tasks/handoff-template.md
 agent-evals/                           <- Phase 2
 .github/workflows/context-validation.yml  <- Phase 2
 ```
+
+## Implementation Evidence
+
+**Implementation evidence:** GOAT Flow has been implemented across 6 projects: 1 fully public (devgoat-bash-scripts), 3 private (DevGoat Tauri app, ambient-scribe, sus-form-detector), and 2 in progress (strands-php-client, the-summit-chatroom). The public implementation at devgoat-bash-scripts has a 100-line CLAUDE.md, 135-line AGENTS.md, full enforcement, and both agent-evals/ and codex-evals/.
 
 ## Further Reading
 

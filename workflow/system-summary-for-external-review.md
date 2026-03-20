@@ -1,8 +1,8 @@
-# AI Workflow Framework — Complete System Summary
+# GOAT Flow — Complete System Summary
 
-This document describes the complete AI Workflow Framework system for reviewers who do not have access to the source files. It is intended to be self-contained — you should be able to understand, critique, and suggest improvements to the system from this summary alone.
+This document describes the complete GOAT Flow system for reviewers who do not have access to the source files. It is intended to be self-contained — you should be able to understand, critique, and suggest improvements to the system from this summary alone.
 
-**Repository:** `ai-workflow-framework`
+**Repository:** `goat-flow`
 **Author:** Matt Hansen (BlunderGOAT)
 **Version:** v1.5 (2026-03-15)
 **Agents supported:** Claude Code (Anthropic), Codex (OpenAI)

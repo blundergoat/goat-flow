@@ -24,6 +24,11 @@ Create with this format header and empty sections:
 <!-- Recurring themes extracted from entries above -->
 <!-- Review entries monthly. When 3+ entries share a theme, extract the pattern here -->
 
+Every entry added by the agent must include this flag at the start:
+> [!WARNING] AI-GENERATED: UNVERIFIED
+The human removes this flag after reviewing the entry. CI will fail
+if this flag exists on the main branch.
+
 The file starts EMPTY. Do NOT invent entries. Entries are added after
 real mistakes occur during coding sessions. Example of a real entry:
 

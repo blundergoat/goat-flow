@@ -1,0 +1,77 @@
+# Prompt: RFC 2119 Pass on CLAUDE.md
+
+Paste this into your coding agent to apply RFC 2119 priority language to your CLAUDE.md and compress it in the same pass.
+
+---
+
+## When to Use
+
+Run this in Phase 2 (after the base workflow is established and you've been using it for a while). This pass does two things simultaneously:
+1. Applies MUST/SHOULD/MAY to every rule so priority is visible
+2. Compresses prose to reclaim line budget
+
+---
+
+## The Prompt
+
+```
+Read CLAUDE.md and apply an RFC 2119 pass. This means adding
+MUST/SHOULD/MAY/MUST NOT to every rule so the agent can see priority
+at a glance. Compress prose in the same pass.
+
+RFC 2119 priority mapping for this project:
+
+MUST (non-negotiable — the system breaks without these):
+- Execution loop steps (READ, CLASSIFY, ACT, VERIFY, LOG)
+- Autonomy tier boundaries (Always / Ask First / Never)
+- Definition of Done gates (all 6)
+- State declaration before acting
+- Stop-the-line escalation at Level 2
+
+SHOULD (important — skip only with good reason):
+- Log hygiene (update lessons.md, footguns.md after tasks)
+- Working memory escalation (scratchpad → handoff → ask human)
+- Session handoff protocol
+- Footgun propagation to local CLAUDE.md files
+- Anti-BDUF guard
+- Question vs directive disambiguation
+
+MAY (optional — use when helpful):
+- Structural debt trigger (complexity threshold warning)
+- Communication when blocked (one question with recommended default)
+- Sub-agent 5-call budget (soft limit)
+
+MUST NOT (hard prohibitions):
+- Fabricate codebase facts without reading files
+- Act outside declared state without announcing the switch
+- Skip Phase 2 verification on cross-boundary changes
+- Report preflight complete if any MUST item fails
+
+In the same pass, compress prose:
+- Convert paragraphs to bullet points
+- Remove explanatory text where the rule is self-evident
+- Replace multi-sentence descriptions with one-liners
+- Keep examples (BAD/GOOD patterns) — they're high-signal
+- Remove any content that duplicates what's in other docs
+
+CONSTRAINTS:
+- CLAUDE.md MUST stay under the line target after this pass
+  ([120 for apps / 100 for libraries])
+- Do NOT add new content — this is a compression + prioritisation pass
+- Do NOT remove any rules — only change how they're expressed
+- Preserve the execution loop structure (READ → CLASSIFY → ACT → VERIFY → LOG)
+
+If CLAUDE.md is currently OVER the line target, use this pass to
+get it under. Apply the cut priority from the system spec:
+1. Cut: verbose examples (keep one BAD/GOOD per section)
+2. Cut: explanatory paragraphs (replace with terse rules)
+3. Cut: content that duplicates other docs
+4. Never cut: execution loop, autonomy tiers, definition of done
+
+VERIFICATION:
+- Count CLAUDE.md lines before and after
+- Verify MUST/SHOULD/MAY appears on every rule
+- Verify no rules were removed (only reformatted)
+- Verify line count is under target
+- Report: before line count, after line count, reduction
+```

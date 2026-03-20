@@ -90,18 +90,36 @@ GOOD: "EmailNotifier handles notifications. Extract interface when second provid
 
 ---
 
+## SCOPE
+
+**The problem it prevents:** Agent touches files and systems outside the task's intended boundary. A "Standard Feature" task silently modifies auth code, deployment config, or unrelated modules.
+
+**The rule:** After classifying, declare scope before acting.
+
+```
+Scope:
+- Files: [list files/directories allowed to change]
+- Systems: [list systems allowed to touch]
+- Non-goals: [what this task explicitly does NOT do]
+- Max blast radius: [escalate if changes spread beyond this boundary]
+```
+
+If changes need to extend beyond declared scope, stop and re-scope with the human before proceeding. Do not silently expand.
+
+---
+
 ## ACT
 
 **The problem it prevents:** Planning loops and premature fixes. In Plan mode, Claude reads file after file without producing an artifact. In Debug mode, Claude starts fixing before understanding the bug.
 
-**The calibration:** The "4th file read without writing = stop exploring, start coding" heuristic was calibrated from repeated planning loops where Claude read 8-12 files and produced nothing.
+**The calibration:** The read budget (see below) was calibrated from repeated planning loops where Claude read 8-12 files and produced nothing.
 
 **The rule:** Each mode has explicit behaviour constraints.
 
 | Mode | Behaviour | Exit condition |
 |------|-----------|---------------|
 | Plan | Produce artifact. No application code. | "LGTM" or "implement" from human |
-| Implement | Write code within 2-3 turns. 4th file read without writing = stop exploring, start coding. | Task complete, tests pass |
+| Implement | Write code within 2-3 turns. Hit read budget without writing = stop exploring, start coding. | Task complete, tests pass |
 | Explain | Walkthrough only. No code changes unless explicitly asked. | Explanation delivered |
 | Debug | Diagnosis first with file:line evidence. No fixes until human reviews. | Human approves fix plan |
 | Review | Investigate independently. Never blindly apply external suggestions. | Findings delivered |
@@ -114,11 +132,49 @@ State: [MODE] | Goal: [one line] | Exit: [condition]
 
 No actions outside the declared state without announcing the switch and why.
 
+**Read budget (scaled by complexity):**
+
+| Complexity | Max reads before writing |
+|-----------|------------------------|
+| Hotfix | 2 |
+| Standard Feature | 4 |
+| System Change | 6 |
+| Infrastructure | 8 |
+
+If the read limit is hit, trigger re-classification before escalating.
+
+**Turn budget (scaled by complexity):**
+
+| Complexity | Max turns | Over-budget action |
+|-----------|----------|-------------------|
+| Hotfix | 3 | Re-classify or escalate |
+| Standard Feature | 10 | Re-classify or escalate |
+| System Change | 20 | Re-classify or escalate |
+| Infrastructure | 25 | Re-classify or escalate |
+
+Stop if: over turn budget AND no reduction in uncertainty over the last 2 turns. If over budget but making clear progress, re-classify before stopping.
+
+### Re-Classification Protocol
+
+If the agent hits the read limit or turn budget for its current complexity tier, it does NOT automatically escalate to the human. Instead:
+
+1. Stop and declare `State: RE-CLASSIFY`
+2. Explain why the scope has expanded based on evidence discovered
+3. Upgrade the complexity tier and its associated budgets
+4. Continue working under the new tier's limits
+
+Only escalate to the human if:
+- The task exceeds the highest tier (Infrastructure) budget
+- The scope expansion crosses an Ask First boundary
+- Two re-classifications have already occurred on the same task
+
 ---
 
 ## VERIFY
 
 **The problem it prevents:** Claude declares victory early. Tests pass, but the old function name still appears in three files because nobody grepped after the rename.
+
+**Absence verification principle:** After any replacement (rename, migration, deprecation, config change, dependency swap), verify the absence of the old pattern — not just the presence of the new one. Use workspace-wide `grep` or `rg` for this — the agent's localised file awareness is unreliable for confirming something is gone.
 
 **The incident:** A post-rename grep revealed stale references — the specific failure that led to Definition of Done gate #6 ("after bulk renames/refactors: grep for old pattern, zero remaining").
 
@@ -166,9 +222,30 @@ When a fix isn't working:
 | `docs/footguns.md` | Architectural landmine (cross-domain coupling) | "Auth nonce spans 4 components; breaking any one silently breaks login" |
 | `docs/confusion-log.md` | Structural confusion (hard to navigate) | "Unclear which module owns session validation" |
 
+**Agent-authored entries:** All entries added by the agent during the LOG step must be flagged:
+
+```
+> [!WARNING] AI-GENERATED: UNVERIFIED
+```
+
+The human must remove this flag after reviewing the entry. CI should fail if this flag exists in `docs/footguns.md` or `docs/lessons.md` on the main branch.
+
 **Footguns require evidence.** Every entry in `docs/footguns.md` must include file:line references to real code. Footguns without evidence are likely fabricated (anti-pattern AP4, -3 deduction).
 
 **Loading rules:** `docs/footguns.md` is referenced from the router table and loaded on demand. Footguns mapped to specific directories are propagated as one-line summaries into Layer 2 local context files (e.g., `src/auth/CLAUDE.md`). The central file remains the source of truth.
+
+---
+
+## Context Health
+
+Four failure modes to watch for during any task. Named so the agent and human have shared vocabulary for diagnosing problems.
+
+| Pathology | Symptom | Mitigation |
+|-----------|---------|------------|
+| **Context Poisoning** | Errors compound as the agent reuses contaminated context from a failed approach | `/clear` and start fresh. The revert-and-rescope tactic addresses this mechanically. |
+| **Context Distraction** | Agent repeats behaviour patterns from earlier in the conversation instead of reading current state | Re-read the relevant files. State: RE-CLASSIFY to reset. |
+| **Context Confusion** | Irrelevant tools or docs in context misdirect the agent | Check the router table. Load only what's needed for this task. |
+| **Context Clash** | Contradictory information in loaded files creates inconsistent behaviour | Check for overlapping rules between CLAUDE.md and guidelines. Apply the ownership split test. |
 
 ---
 
@@ -211,7 +288,7 @@ The execution loop doesn't end when code is written. A task is done when all six
 3. New tests cover the change
 4. Preflight checks pass (`/preflight` or `preflight-checks.sh`)
 5. Learning loop files updated (if applicable)
-6. After bulk renames/refactors: grep for old pattern, zero remaining
+6. After any replacement (rename, migration, deprecation, config change): grep for old pattern, zero remaining
 
 Gates 5 and 6 are the ones most often skipped. They exist because of specific incidents where "tests pass" was not sufficient — stale references and unlogged footguns caused repeated failures in later sessions.
 

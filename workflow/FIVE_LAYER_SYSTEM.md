@@ -108,6 +108,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Planning tools loaded on demand when the developer needs to plan, scope, or break down work. These are not agent-runtime files — they're methodology templates the developer uses to structure thinking before giving the agent a task.
 
+**Note:** Layer 4 is human-invoked methodology, not agent-loaded context. Unlike Layers 1-3 (which the agent reads and follows) and Layer 5 (which validates the agent's work), Layer 4 structures how humans plan before giving the agent a task. It lives in the framework because it's used alongside agent work and references the same architecture.
+
 **The planning sequence:**
 
 | Step | Playbook | What it produces |
@@ -135,6 +137,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **Agent evals** | Regression tests from real incidents — replay prompts that verify the agent handles known failure modes correctly | On demand, or after CLAUDE.md changes |
 | **CI context validation** | Automated checks: instruction file line count, router reference resolution, skill completeness | On every PR |
 | **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed), `docs/confusion-log.md` (where the agent got confused) | Updated after every task |
+
+**Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), `.claude/profiles/` (create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
 
 **The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers — automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
 
@@ -170,7 +174,22 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, permission profiles, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
 
+**Quarterly shrink:** Model-version gating required before removing rules. Run the eval suite on the current model version first. Shrink based on tooling improvements and rules never triggered in 90+ days.
+
 **Layer 2** (local context) and **Layer 4** (playbooks) are created as needed, not in a specific phase. Local context files appear when a directory accumulates enough footguns. Playbooks are used whenever planning is needed.
+
+### Graduation: Experiment → Maintained Project
+
+Phase 0 (bootstrap) is the experiment tier — minimal setup for prototypes and weekend projects. The full system is the maintained project tier.
+
+**Graduation triggers** (any one of these means it's time for the full system):
+- First production user
+- First team contributor beyond the original developer
+- First real incident or regression
+- First month of active development
+- Structural complexity threshold (multiple modules, cross-boundary dependencies)
+
+Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 
 ---
 

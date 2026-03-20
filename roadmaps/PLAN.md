@@ -1,6 +1,6 @@
-# Implementation Plan — @blundergoat/ai-workflow-goat
+# Implementation Plan — @blundergoat/goat-flow
 
-**Package:** `@blundergoat/ai-workflow-goat`
+**Package:** `@blundergoat/goat-flow`
 **Rubric:** ai-workflow-improvement-plan-prime v1.5
 **Scoring reference:** [RUBRIC.md](./RUBRIC.md)
 **Working documents:** [draft/](./draft/)
@@ -12,7 +12,7 @@
 A standalone CLI tool published on npm that audits the quality of AI coding agent workflow configurations. It reads the filesystem — instruction files, settings, hooks, skills, playbooks, docs — scores the setup against a structured rubric, and produces a report with prioritised recommendations and copy-paste-ready fix prompts.
 
 ```bash
-npx @blundergoat/ai-workflow-goat .
+npx @blundergoat/goat-flow .
 ```
 
 No install required. No API key. No agent session. Zero runtime dependencies.
@@ -35,7 +35,7 @@ Nothing scores AGENTS.md setups. Nothing handles dual-agent projects. Nothing ge
 - Correctly scores all 8+ BlunderGOAT repos (known-good setups score B or above)
 - Zero false positives on anti-pattern deductions for known-good setups
 - Produces actionable recommendations pointing to exact fix prompts
-- `npx @blundergoat/ai-workflow-goat .` works without prior installation on macOS, Linux, Windows (WSL)
+- `npx @blundergoat/goat-flow .` works without prior installation on macOS, Linux, Windows (WSL)
 - Zero runtime dependencies
 - Deterministic scoring (same project = same score every time)
 
@@ -54,7 +54,7 @@ Nothing scores AGENTS.md setups. Nothing handles dual-agent projects. Nothing ge
 ### Repo Structure
 
 ```
-ai-workflow-framework/
+goat-flow/
 ├── planning/                          ← Methodology templates (01-09)
 ├── workflow/                          ← AI workflow system docs
 ├── auditor/                           ← TypeScript CLI
@@ -93,7 +93,7 @@ Runtime: prompts resolve plan files via path.join(__dirname, 'workflow/...')
 ### CLI Interface
 
 ```bash
-npx @blundergoat/ai-workflow-goat [project-path] [flags]
+npx @blundergoat/goat-flow [project-path] [flags]
 ```
 
 | Flag | Values | Default | Effect |
@@ -115,10 +115,10 @@ npx @blundergoat/ai-workflow-goat [project-path] [flags]
 
 | Invocation | Output |
 |-----------|--------|
-| `npx @blundergoat/ai-workflow-goat .` | Coloured text to terminal |
-| `npx @blundergoat/ai-workflow-goat . \| jq` | JSON to stdout (auto-detect) |
-| `npx @blundergoat/ai-workflow-goat . --format html` | `workflow-audit.html` in cwd |
-| `npx @blundergoat/ai-workflow-goat . --min-score 75` | Text output + exit 0 or 1 |
+| `npx @blundergoat/goat-flow .` | Coloured text to terminal |
+| `npx @blundergoat/goat-flow . \| jq` | JSON to stdout (auto-detect) |
+| `npx @blundergoat/goat-flow . --format html` | `workflow-audit.html` in cwd |
+| `npx @blundergoat/goat-flow . --min-score 75` | Text output + exit 0 or 1 |
 
 ### Prompt Generator
 
@@ -181,7 +181,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 - [ ] Update cross-references between migrated files
 - [ ] Deprecate `ai-planning-playbook`: update README with redirect, archive
 - [ ] Update blundergoat.com article links to new repo
-- [ ] TypeScript auditor scaffold: `tsconfig.json` (ESM, strict), `package.json` (`@blundergoat/ai-workflow-goat`), `bin/goat.js`
+- [ ] TypeScript auditor scaffold: `tsconfig.json` (ESM, strict), `package.json` (`@blundergoat/goat-flow`), `bin/goat.js`
 - [ ] Agent detection module: `{instruction_file}` path resolution per agent type
 - [ ] Shape detection module: app / library / collection heuristics
 - [ ] Section parser: split markdown by `##` headings, return `Map<string, string>`
@@ -305,7 +305,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 - [ ] Build step includes `cp -r ../workflow dist/workflow`
 - [ ] `npm publish --dry-run` — verify package contents include `dist/` with `workflow/`
 - [ ] `npm publish` — first public release
-- [ ] Verify `npx @blundergoat/ai-workflow-goat .` on fresh machine
+- [ ] Verify `npx @blundergoat/goat-flow .` on fresh machine
 
 **Exit criteria:**
 - Package published on npm and installable

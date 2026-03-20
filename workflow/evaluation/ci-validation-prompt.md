@@ -55,6 +55,19 @@ The workflow should run these checks:
      reference pattern
    - Warn if zero evidence references found
 
+7. Pending review flag check
+   - Grep docs/footguns.md and docs/lessons.md for the string
+     "> [!WARNING] AI-GENERATED: UNVERIFIED"
+   - FAIL if found (agent-authored entries must be reviewed before merge)
+   - WARN for entries with this flag older than 14 days
+
+8. Layer 2 staleness and contradiction detection
+   - Find all local instruction files (*/CLAUDE.md, .github/instructions/*.md)
+   - WARN if any local file hasn't been modified in 90+ days but the
+     directory it covers has been actively changed (check git log)
+   - WARN if two local files contain contradictory guidance
+   - WARN if a local file duplicates content from the root instruction file
+
 Use bash steps (no external actions needed). Each check should output
 a clear pass/fail with details. The workflow should fail (exit 1) if
 any error-level check fails. Warnings should be reported but not fail

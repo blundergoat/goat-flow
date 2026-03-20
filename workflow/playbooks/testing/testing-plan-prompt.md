@@ -32,7 +32,7 @@ List every automated check to run, in order. Include:
 - Unit/integration tests
 - E2E tests (if applicable — quick suite first, full suite second)
 - Any project-specific test scripts or scenarios
-- Expected pass/fail for each (are any tests expected to be new/changed?)
+- List every test command and what it validates. Do not predict pass/fail outcomes -- that's for the verifier to determine.
 
 ## Track 2 — AI Verification
 Write two ready-to-paste prompts:

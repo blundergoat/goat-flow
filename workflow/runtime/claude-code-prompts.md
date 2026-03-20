@@ -130,7 +130,9 @@ DOCS (seed files):
    existing entries, add new footguns discovered from reading the codebase.
    If the file doesn't exist, create it and seed with real footguns only.
    Do NOT invent hypothetical ones. Do NOT replace existing entries.
-4. docs/confusion-log.md -- Format header
+4. docs/confusion-log.md -- Format header.
+   Create on first use -- materialise this file when the first real
+   confusion incident occurs, not pre-created empty.
 5. tasks/handoff-template.md -- Status, Current State, Key Decisions,
    Known Risks, Next Step
 
@@ -143,6 +145,8 @@ ARCHITECTURE DOCS:
 7. docs/decisions/ directory with ADR template.
    If you can identify 1-2 real architectural decisions from the code,
    create ADR files. Do NOT invent decisions.
+   Create on first use -- materialise this file when the first real
+   architectural decision occurs, not pre-created empty.
 
 OWNERSHIP SPLIT REPORT:
 8. If a guidelines file was trimmed in the pre-audit step, create
@@ -235,6 +239,8 @@ STEP 3 -- Docs seed files:
    If the file doesn't exist, create and seed with real footguns only.
    Do NOT invent hypothetical ones. Do NOT replace existing entries.
 7. docs/confusion-log.md
+   Create on first use -- materialise this file when the first real
+   confusion incident occurs, not pre-created empty.
 8. tasks/handoff-template.md
 
 STEP 4 -- Ownership split report:
@@ -420,6 +426,8 @@ PER-ROLE PERMISSION PROFILES:
 5. Create .claude/profiles/ with profiles adapted to your stack.
    Each profile restricts Edit and Bash permissions. Always Read: **.
    Add to CLAUDE.md router table.
+   Create on first use -- materialise this file when the first real
+   role separation need occurs, not pre-created empty.
 
 CI VALIDATION:
 6. If not created in Phase 1c, create context-validation.yml.

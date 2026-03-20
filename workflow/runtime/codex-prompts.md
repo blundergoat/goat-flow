@@ -11,7 +11,7 @@ Paste this first:
 ```text
 I have an AI workflow system designed for Claude Code that I want to adapt
 for Codex. The core idea: instead of a wall of rules, give the agent a
-5-step execution loop (READ -> CLASSIFY -> ACT -> VERIFY -> RECORD) with
+5-step execution loop (READ -> CLASSIFY -> ACT -> VERIFY -> LOG) with
 autonomy tiers, a definition of done, and a learning loop.
 
 Read this file for the full system design:
@@ -51,7 +51,7 @@ WHAT TO BUILD (in this order):
 1. AGENTS.md (root runtime file)
    - Keep it concise. Do not fetishise a line count, but keep the runtime
      file short with referenced docs for detail.
-   - Default execution loop: READ -> CLASSIFY -> ACT -> VERIFY -> RECORD
+   - Default execution loop: READ -> CLASSIFY -> ACT -> VERIFY -> LOG
      - READ: read relevant files first, never fabricate. Include bad/good example
      - CLASSIFY: declare mode (Answer, Plan, Implement, Debug, Review) +
        complexity. Question vs directive disambiguation. State declaration
@@ -62,7 +62,7 @@ WHAT TO BUILD (in this order):
      - VERIFY: run tests after meaningful changes. Two-level escalation
        (isolated -> note and continue; cross-boundary -> full stop + diagnosis).
        Two failed approaches on same fix = stop and report.
-     - RECORD: docs/lessons.md (behavioural mistakes) + docs/footguns.md
+     - LOG: docs/lessons.md (behavioural mistakes) + docs/footguns.md
        (architectural landmines). Context-based loading rules.
        Footgun propagation rule: when adding a footgun that maps to a
        specific directory, note the directory in the entry.
