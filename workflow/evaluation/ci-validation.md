@@ -8,7 +8,7 @@ Paste this into your coding agent to create the GitHub Actions workflow that val
 
 ```
 Create a GitHub Actions CI workflow that validates the AI workflow
-configuration on every pull request. This catches drift — CLAUDE.md
+configuration on every pull request. This catches drift - CLAUDE.md
 growing past the line target, broken router references, missing skills.
 
 Create .github/workflows/context-validation.yml:

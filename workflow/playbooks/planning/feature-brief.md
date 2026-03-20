@@ -1,8 +1,8 @@
 # Template: Feature Brief
 
-> **When to use:** At the start of any new feature or project, before involving AI agents. This is the human-only stage — the coding agent didn't attend your meetings, so this is how you tell it what matters.
+> **When to use:** At the start of any new feature or project, before involving AI agents. This is the human-only stage - the coding agent didn't attend your meetings, so this is how you tell it what matters.
 
-Create a `requirements-<feature-name>.md` file using the template below. A brain dump is fine to start — the most important thing is capturing *why* this feature was requested and how it benefits users.
+Create a `requirements-<feature-name>.md` file using the template below. A brain dump is fine to start - the most important thing is capturing *why* this feature was requested and how it benefits users.
 
 ---
 

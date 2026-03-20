@@ -11,7 +11,7 @@ Create the /goat-review skill for this project.
 
 Purpose: structured review of code changes with RFC 2119 severity levels
 and respect for the project's autonomy tiers. The agent reviews
-independently — it investigates the code, doesn't blindly apply
+independently - it investigates the code, doesn't blindly apply
 external suggestions.
 
 Write the skill file to: .claude/skills/goat-review/SKILL.md
@@ -26,19 +26,19 @@ on a change set.
 
 The skill follows this process:
 
-1. Scope — Identify what changed:
+1. Scope - Identify what changed:
    - Read the diff or list of changed files
    - Understand the intent: what was this change trying to do?
    - Identify the blast radius: what else could be affected?
 
-2. Review — Independent investigation of each change:
+2. Review - Independent investigation of each change:
    - Read the changed code in context (not just the diff)
    - Check for: correctness, security, test coverage, edge cases,
      consistency with existing patterns, autonomy tier violations
    - Cross-reference with docs/footguns.md for known landmines
    - Check that the Definition of Done gates are met
 
-3. Report — Structured findings:
+3. Report - Structured findings:
    - Severity using RFC 2119: MUST fix / SHOULD fix / MAY improve
    - Every finding backed by file:line evidence
    - Separate blocking issues from suggestions
@@ -67,16 +67,16 @@ Output format:
 ## Code Review: [change description]
 
 ### Changes Reviewed
-- [file] — [what changed and why]
+- [file] - [what changed and why]
 
 ### Blocking Issues (MUST fix before merge)
-- **[title]** — [file:line] — [what's wrong and why it matters]
+- **[title]** - [file:line] - [what's wrong and why it matters]
 
 ### Recommended Changes (SHOULD fix)
-- **[title]** — [file:line] — [suggestion with reasoning]
+- **[title]** - [file:line] - [suggestion with reasoning]
 
 ### Optional Improvements (MAY improve)
-- **[title]** — [file:line] — [nice-to-have with reasoning]
+- **[title]** - [file:line] - [nice-to-have with reasoning]
 
 ### What's Good
 - [positive observation about the change]

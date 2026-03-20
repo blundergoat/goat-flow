@@ -2,7 +2,7 @@
 
 > **When to use:** After writing your [feature brief](01-feature-brief-template.md) and optionally running [Mob Elaboration](02-mob-elaboration-prompt.md). Use this to generate and refine a technical plan before breaking it into [milestones](04-milestone-planning-prompt.md).
 
-Signal-Based Adaptive Orchestration — ask multiple AI coding agents for competing plans, then have them rank and critique each other.
+Signal-Based Adaptive Orchestration - ask multiple AI coding agents for competing plans, then have them rank and critique each other.
 
 **Triangulation.** Triple check if the first two differ.
 **Context sanitisation.** Asking the same question with no context, a litmus test for context rot.

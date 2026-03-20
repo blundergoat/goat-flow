@@ -8,7 +8,7 @@ Paste this into your coding agent to create the lessons learned file for the lea
 
 ```
 Create docs/lessons.md for this project. This file captures behavioural
-mistakes the agent makes — things it did wrong that should not be
+mistakes the agent makes - things it did wrong that should not be
 repeated in future sessions. It's part of the learning loop (LOG step
 of the execution loop).
 

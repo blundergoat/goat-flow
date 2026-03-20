@@ -4,23 +4,23 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 1 — Runtime                              ALWAYS ON   │
+│  Layer 1 - Runtime                              ALWAYS ON   │
 │  CLAUDE.md / AGENTS.md (~100-120 lines)                     │
 │  Execution loop, autonomy tiers, DoD, router table          │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 2 — Local Context                        AUTO-LOAD   │
+│  Layer 2 - Local Context                        AUTO-LOAD   │
 │  Directory-level instruction files                          │
 │  High-risk boundaries, module-specific gotchas              │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 3 — Skills                               ON DEMAND   │
+│  Layer 3 - Skills                               ON DEMAND   │
 │  /goat-preflight, /goat-debug, /goat-audit,                 │
 │  /goat-research, /goat-review                               │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 4 — Playbooks                            ON DEMAND   │
+│  Layer 4 - Playbooks                            ON DEMAND   │
 │  Feature briefs, mob elaboration, SBAO ranking,             │
 │  milestone planning                                         │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 5 — Evaluation                           ON DEMAND   │
+│  Layer 5 - Evaluation                           ON DEMAND   │
 │  Agent eval suite, CI context validation,                   │
 │  doer-verifier testing workflow                             │
 └─────────────────────────────────────────────────────────────┘
@@ -28,9 +28,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ---
 
-## Layer 1 — Runtime
+## Layer 1 - Runtime
 
-**What:** The root instruction file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex). This is the agent's operating system — it loads every session, so every line must earn its place.
+**What:** The root instruction file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex). This is the agent's operating system - it loads every session, so every line must earn its place.
 
 **Line budget:** ~100 lines for libraries/collections, ~120 lines for apps. Beyond 150 triggers an anti-pattern deduction. Evidence: auto-generated context beyond this range reduces agent success rates by ~3% and increases cost by 20%+ (HumanLayer, Philipp Schmid instruction limits research).
 
@@ -41,20 +41,20 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **Execution loop** | READ → CLASSIFY → ACT → VERIFY → LOG. The 5-step behaviour loop that prevents fabrication, mode drift, early victory declarations, and silent failures. |
 | **Autonomy tiers** | Always (safe, reversible) / Ask First (project-specific boundaries) / Never (destructive, irreversible). Each tier maps to an enforcement layer. |
 | **Definition of Done** | 6 explicit gates. A task is not done until all gates pass. Includes the grep-after-rename gate and log-update gate. |
-| **Router table** | Points to everything below — skills, local context files, docs, architecture. This is the highest-leverage section (tools mentioned here get 160x more usage — GitHub 2,500-repo analysis). |
+| **Router table** | Points to everything below - skills, local context files, docs, architecture. This is the highest-leverage section (tools mentioned here get 160x more usage - GitHub 2,500-repo analysis). |
 | **Stack definition** | Build, test, lint, format commands. The agent's cheat sheet for the project's toolchain. |
 | **Working memory** | Escalation ladder for long tasks: scratchpad → handoff file → ask human. |
 
 **Enforcement:** Three layers protect the Runtime rules:
-1. **Permissions deny list** (`.claude/settings.json`) — hardest enforcement, blocks commands before they run
-2. **Hooks** (`.claude/hooks/`) — PreToolUse deny-dangerous, Stop lint, PostToolUse format
-3. **Instruction file rules** — behavioural guidance the agent follows (softest layer, ~70% compliance)
+1. **Permissions deny list** (`.claude/settings.json`) - hardest enforcement, blocks commands before they run
+2. **Hooks** (`.claude/hooks/`) - PreToolUse deny-dangerous, Stop lint, PostToolUse format
+3. **Instruction file rules** - behavioural guidance the agent follows (softest layer, ~70% compliance)
 
 **This folder:** `workflow/runtime/`
 
 ---
 
-## Layer 2 — Local Context
+## Layer 2 - Local Context
 
 **What:** Directory-level instruction files that auto-load when the agent works in that directory. A file at `src/auth/CLAUDE.md` loads every time the agent touches auth code.
 
@@ -75,9 +75,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ---
 
-## Layer 3 — Skills
+## Layer 3 - Skills
 
-**What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked — they stay out of the instruction budget.
+**What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
 **The five skills:**
 
@@ -104,9 +104,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ---
 
-## Layer 4 — Playbooks
+## Layer 4 - Playbooks
 
-**What:** Planning tools loaded on demand when the developer needs to plan, scope, or break down work. These are not agent-runtime files — they're methodology templates the developer uses to structure thinking before giving the agent a task.
+**What:** Planning tools loaded on demand when the developer needs to plan, scope, or break down work. These are not agent-runtime files - they're methodology templates the developer uses to structure thinking before giving the agent a task.
 
 **Note:** Layer 4 is human-invoked methodology, not agent-loaded context. Unlike Layers 1-3 (which the agent reads and follows) and Layer 5 (which validates the agent's work), Layer 4 structures how humans plan before giving the agent a task. It lives in the framework because it's used alongside agent work and references the same architecture.
 
@@ -125,7 +125,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ---
 
-## Layer 5 — Evaluation
+## Layer 5 - Evaluation
 
 **What:** Quality infrastructure that verifies the agent's work and catches drift over time. Includes the doer-verifier testing workflow, agent eval regression suites, CI context validation, and the learning loop (footguns, lessons).
 
@@ -134,13 +134,13 @@ AI coding agents need structure, not just rules. This system organises everythin
 | Component | Purpose | When it runs |
 |-----------|---------|-------------|
 | **Doer-verifier testing** | Three parallel verification tracks (automated tests, AI verification, human testing) after every milestone or 30-60 minutes of coding | After every coding session |
-| **Agent evals** | Regression tests from real incidents — replay prompts that verify the agent handles known failure modes correctly | On demand, or after CLAUDE.md changes |
+| **Agent evals** | Regression tests from real incidents - replay prompts that verify the agent handles known failure modes correctly | On demand, or after CLAUDE.md changes |
 | **CI context validation** | Automated checks: instruction file line count, router reference resolution, skill completeness | On every PR |
 | **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed), `docs/confusion-log.md` (where the agent got confused) | Updated after every task |
 
 **Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), `.claude/profiles/` (create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
 
-**The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers — automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
+**The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers - automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
 
 **This folder:** `workflow/evaluation/`
 
@@ -150,7 +150,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 ```mermaid
 graph TD
-    L1["Layer 1: Runtime<br/>CLAUDE.md — always loaded"] --> |router table points to| L2["Layer 2: Local Context<br/>auto-loaded per directory"]
+    L1["Layer 1: Runtime<br/>CLAUDE.md - always loaded"] --> |router table points to| L2["Layer 2: Local Context<br/>auto-loaded per directory"]
     L1 --> |router table points to| L3["Layer 3: Skills<br/>loaded via slash commands"]
     L1 --> |router table points to| L4["Layer 4: Playbooks<br/>loaded on demand"]
     L5["Layer 5: Evaluation<br/>testing + evals + CI"] --> |validates| L1
@@ -180,7 +180,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 
 ### Graduation: Experiment → Maintained Project
 
-Phase 0 (bootstrap) is the experiment tier — minimal setup for prototypes and weekend projects. The full system is the maintained project tier.
+Phase 0 (bootstrap) is the experiment tier - minimal setup for prototypes and weekend projects. The full system is the maintained project tier.
 
 **Graduation triggers** (any one of these means it's time for the full system):
 - First production user
@@ -195,7 +195,7 @@ Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 
 ## Project Shape Adaptation
 
-The system adapts to three project shapes. The layers stay the same — only the content and line budgets change.
+The system adapts to three project shapes. The layers stay the same - only the content and line budgets change.
 
 | Aspect | App | Library | Script Collection |
 |--------|-----|---------|-------------------|

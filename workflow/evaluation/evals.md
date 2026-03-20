@@ -8,7 +8,7 @@ Paste this into your coding agent to create the agent eval suite for your projec
 
 ```
 Create an agent eval regression suite for this project. Agent evals are
-replay tests — each one recreates a real incident and verifies the agent
+replay tests - each one recreates a real incident and verifies the agent
 handles it correctly. They catch regressions when CLAUDE.md changes.
 
 This project is a [APP / LIBRARY / SCRIPT COLLECTION].
@@ -35,18 +35,18 @@ This project is a [APP / LIBRARY / SCRIPT COLLECTION].
    ## Replay Prompt
    ```
    [The exact prompt to paste into a fresh agent session that recreates
-   the scenario. Should be self-contained — the agent should be able to
+   the scenario. Should be self-contained - the agent should be able to
    encounter the same failure mode from this prompt alone.]
    ```
 
    ## Expected Outcome
-   [What the agent should do correctly — specific, verifiable actions]
+   [What the agent should do correctly - specific, verifiable actions]
 
    ## Known Failure Mode
    [What the agent did wrong originally, so you know what to watch for]
 
    ## Origin
-   [git hash, issue number, or "real-history" — proves this is from
+   [git hash, issue number, or "real-history" - proves this is from
    a real incident, not fabricated]
 
 4. If the project has fewer than 3 qualifying incidents in git history,

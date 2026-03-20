@@ -10,7 +10,7 @@ Paste this into your coding agent to create the confusion log.
 Create docs/confusion-log.md for this project.
 
 This file records where the agent (or human) got confused by the
-codebase structure — areas that are hard to navigate, have unclear
+codebase structure - areas that are hard to navigate, have unclear
 ownership, or have surprising behaviour. Unlike footguns (architectural
 landmines) and lessons (behavioural mistakes), confusion entries signal
 areas that need better documentation or structural refactoring.

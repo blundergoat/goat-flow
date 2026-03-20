@@ -1,4 +1,4 @@
-# GOAT Flow — Workflow System
+# GOAT Flow - Workflow System
 
 A full-stack AI engineering system for planning, executing, verifying, and learning with coding agents.
 

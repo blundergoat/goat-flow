@@ -20,12 +20,12 @@ Create per-role permission profiles for this project. These restrict
 which files the agent can edit and which commands it can run, based
 on the current task.
 
-This project is a [APP TYPE — e.g., Tauri app, web app, API service].
+This project is a [APP TYPE - e.g., Tauri app, web app, API service].
 
 The codebase has these major areas:
-- [area 1, e.g., frontend — src/components/, src/pages/]
-- [area 2, e.g., backend — src/api/, src/services/]
-- [area 3, e.g., infrastructure — docker/, .github/, terraform/]
+- [area 1, e.g., frontend - src/components/, src/pages/]
+- [area 2, e.g., backend - src/api/, src/services/]
+- [area 3, e.g., infrastructure - docker/, .github/, terraform/]
 
 Create .claude/profiles/ directory with one JSON file per role:
 
@@ -61,7 +61,7 @@ Each profile JSON should follow this structure:
 After creating profiles:
 - Update the CLAUDE.md router table to reference .claude/profiles/
 - Add a one-line note in CLAUDE.md: "Permission profiles available
-  in .claude/profiles/ — load per task type"
+  in .claude/profiles/ - load per task type"
 
 VERIFICATION:
 - Verify each profile JSON is valid

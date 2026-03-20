@@ -2,7 +2,7 @@
 
 > **When to use:** When setting up context files for a new or existing project. Creates a scannable reference for AI agents and developers to quickly understand the repo layout.
 >
-> **Output:** `docs/code-map.md` — reference this from your instruction file (CLAUDE.md / AGENTS.md).
+> **Output:** `docs/code-map.md` - reference this from your instruction file (CLAUDE.md / AGENTS.md).
 
 ```
 Create docs/code-map.md: a quick-reference tree map of the repository layout.

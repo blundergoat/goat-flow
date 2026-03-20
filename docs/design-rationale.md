@@ -305,15 +305,15 @@ flowchart TD
 
 **Incident:** On the Tauri app, a rule change that improved one workflow broke another. (BlunderGOAT CC)
 
-**Design decision:** Flat .md files in `agent-evals/`, each containing a replay prompt from a real incident. When CLAUDE.md or skills change, replay the prompts and verify the agent still handles them correctly. Why flat files, not folders: each eval is a single .md file with no supporting assets — the folder structure added navigation friction with no benefit.
+**Design decision:** Flat .md files in `agent-evals/`, each containing a replay prompt from a real incident. When CLAUDE.md or skills change, replay the prompts and verify the agent still handles them correctly. Why flat files, not folders: each eval is a single .md file with no supporting assets - the folder structure added navigation friction with no benefit.
 
 ---
 
 ## Phase 2: RFC 2119 Pass
 
-**Problem:** All rules treated as equally important. The agent can't distinguish "you MUST run tests" from "you MAY skip the formatter during debugging." Without priority markers, the model allocates equal attention to everything — and when budget is tight, drops important rules as readily as optional ones.
+**Problem:** All rules treated as equally important. The agent can't distinguish "you MUST run tests" from "you MAY skip the formatter during debugging." Without priority markers, the model allocates equal attention to everything - and when budget is tight, drops important rules as readily as optional ones.
 
-**Design decision:** MUST for the execution loop, autonomy tiers, and definition of done. SHOULD for log hygiene, working memory, session handoffs, footgun propagation. MAY for structural debt trigger, communication when blocked. Applied in the same pass as prose compression — two birds, one edit.
+**Design decision:** MUST for the execution loop, autonomy tiers, and definition of done. SHOULD for log hygiene, working memory, session handoffs, footgun propagation. MAY for structural debt trigger, communication when blocked. Applied in the same pass as prose compression - two birds, one edit.
 
 ---
 
@@ -321,7 +321,7 @@ flowchart TD
 
 **Problem:** Different team roles need different permission scopes. A frontend developer shouldn't be editing backend files. Without profiles, the agent has full access regardless of the task.
 
-**Design decision:** Each profile restricts Edit and Bash permissions to relevant file patterns. Always allows Read everywhere — restricting reads prevents the agent from understanding context.
+**Design decision:** Each profile restricts Edit and Bash permissions to relevant file patterns. Always allows Read everywhere - restricting reads prevents the agent from understanding context.
 
 ---
 

@@ -1,4 +1,4 @@
-# AI Workflow Scanner — Checklist Structure
+# AI Workflow Scanner - Checklist Structure
 
 **Purpose:** Map every checkable item from the AI workflow plan to a detection method and score.
 **Scanner output:** JSON (machine) + HTML report (human).
@@ -11,7 +11,7 @@
 
 | Tier | Points Available | What It Covers |
 |------|-----------------|----------------|
-| Foundation (Minimal) | 40 | The stuff that matters most — instruction file, execution loop, enforcement |
+| Foundation (Minimal) | 40 | The stuff that matters most - instruction file, execution loop, enforcement |
 | Standard | 35 | Skills, hooks, local context, learning loop |
 | Full | 25 | Evals, CI, profiles, hygiene |
 
@@ -19,11 +19,11 @@ Each check is PASS (full points), PARTIAL (half points), or FAIL (0).
 Anti-pattern deductions subtract from the total (can't go below 0).
 
 **Letter grades:**
-- 90–100: A — Production-grade workflow
-- 75–89: B — Solid, minor gaps
-- 60–74: C — Functional but missing enforcement or learning loop
-- 40–59: D — Basics present, significant gaps
-- 0–39: F — No meaningful workflow system
+- 90–100: A - Production-grade workflow
+- 75–89: B - Solid, minor gaps
+- 60–74: C - Functional but missing enforcement or learning loop
+- 40–59: D - Basics present, significant gaps
+- 0–39: F - No meaningful workflow system
 
 ---
 
@@ -51,7 +51,7 @@ If dual-agent, score both independently and report side by side.
 
 ---
 
-## Tier 1 — Foundation (40 points)
+## Tier 1 - Foundation (40 points)
 
 ### 1.1 Instruction File Exists and Is Sized Correctly (8 pts)
 
@@ -101,7 +101,7 @@ If dual-agent, score both independently and report side by side.
 
 ---
 
-## Tier 2 — Standard (35 points)
+## Tier 2 - Standard (35 points)
 
 ### 2.1 Skills / Playbooks (8 pts)
 
@@ -130,7 +130,7 @@ If dual-agent, score both independently and report side by side.
 |-------|-----------|--------|-------|
 | lessons.md exists | `test -f docs/lessons.md` | 1 | |
 | lessons.md has format header | First 5 lines contain section structure | 1 | |
-| footguns.md exists | `test -f docs/footguns.md` | 2 | Higher value — architectural knowledge |
+| footguns.md exists | `test -f docs/footguns.md` | 2 | Higher value - architectural knowledge |
 | footguns have evidence | `grep -cE '(file:|line:|src/|lib/)' docs/footguns.md` > 0 | 2 | file:line refs = real, not invented |
 | confusion-log.md exists (apps) | `test -f docs/confusion-log.md` | 1 | Skip for libraries |
 
@@ -160,7 +160,7 @@ If dual-agent, score both independently and report side by side.
 
 ---
 
-## Tier 3 — Full (25 points)
+## Tier 3 - Full (25 points)
 
 ### 3.1 Agent Evals (8 pts)
 
@@ -291,16 +291,16 @@ Each FAIL or PARTIAL check generates a recommendation. Priority based on:
 
 | Priority | Criteria |
 |----------|----------|
-| **Critical** | Foundation check failed — the system won't work without this |
-| **High** | Standard check failed — significant gap in enforcement or learning |
-| **Medium** | Full tier check failed — polish and maturity |
-| **Low** | Partial passes — improvement opportunity, not a gap |
+| **Critical** | Foundation check failed - the system won't work without this |
+| **High** | Standard check failed - significant gap in enforcement or learning |
+| **Medium** | Full tier check failed - polish and maturity |
+| **Low** | Partial passes - improvement opportunity, not a gap |
 
 Recommendations should reference the specific prompt or section from the plan that fixes the gap. Example:
 
 > **Critical:** No execution loop detected in CLAUDE.md. Run Phase 1a (Prompt A) from `ai-workflow-implement-prompts-prime.md` to generate the foundation.
 
-> **High:** Footguns file has no file:line evidence — entries may be fabricated. Re-run the footgun seeding step or manually verify each entry against the codebase.
+> **High:** Footguns file has no file:line evidence - entries may be fabricated. Re-run the footgun seeding step or manually verify each entry against the codebase.
 
 > **Medium:** No agent evals found. Run Phase 2 to create regression tests from git history: `git log --oneline --all | grep -iE 'fix|revert|bug|broke|regression'`
 
@@ -308,14 +308,14 @@ Recommendations should reference the specific prompt or section from the plan th
 
 ## Similar Projects & Inspiration
 
-Nothing does exactly what this scanner does — scoring AI workflow *design quality* rather than platform feature adoption. But these projects are worth studying for mechanics, UX patterns, and rubric design.
+Nothing does exactly what this scanner does - scoring AI workflow *design quality* rather than platform feature adoption. But these projects are worth studying for mechanics, UX patterns, and rubric design.
 
 ### Closest: Configuration Auditors
 
 | Project | What It Does | What to Learn From It |
 |---------|-------------|----------------------|
 | **[audit-scan.sh](https://github.com/FlorianBruniaux/claude-code-ultimate-guide)** (Florian Bruniaux) | Bash script scanning Claude Code config. Detects stack (60+ integration patterns), checks CLAUDE.md at global/project levels, counts extensions (agents, commands, skills, hooks), flags quality patterns. Warns if CLAUDE.md >100 lines without `@` references. Terminal + `--json` output. | Best mechanical reference. Same "bash reads filesystem and scores" approach. Stack detection heuristics are solid. The >100 line refactoring warning is close to our line target check. Study the JSON output structure and the two-mode (human/machine) output pattern. |
-| **[claude-health](https://github.com/tw93/claude-health)** | Claude Code skill auditing config across six layers: CLAUDE.md → rules → skills → hooks → subagents → verifiers. Auto-detects project tier (Simple/Standard/Complex) and calibrates checks. Security-focused (injection, exfiltration, destructive commands). | Tier-adaptive scoring is the same concept as our app/library/collection shape detection. Study how it calibrates expectations per tier — we do the same but for workflow maturity instead of config completeness. |
+| **[claude-health](https://github.com/tw93/claude-health)** | Claude Code skill auditing config across six layers: CLAUDE.md → rules → skills → hooks → subagents → verifiers. Auto-detects project tier (Simple/Standard/Complex) and calibrates checks. Security-focused (injection, exfiltration, destructive commands). | Tier-adaptive scoring is the same concept as our app/library/collection shape detection. Study how it calibrates expectations per tier - we do the same but for workflow maturity instead of config completeness. |
 | **[claude-code-excellence-audit](https://lobehub.com/skills/romiluz13-claude-code-excellence-audit)** (Smithery/LobeHub) | 100-point rubric across memory, rules, settings, subagents, commands, hooks, MCP, skills. Visual report with per-category progress bars, strengths, gaps, prioritised remediation. | The visual report format (progress bars per category, prioritised action plan) is exactly the UX pattern we want for the HTML report. Study the rubric weighting and how recommendations are structured with code snippets. |
 
 ### Adjacent: Code & Security Auditors
@@ -331,9 +331,9 @@ Nothing does exactly what this scanner does — scoring AI workflow *design qual
 
 | Project | What It Does | What to Learn From It |
 |---------|-------------|----------------------|
-| **[awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)** | Curated list of skills, hooks, commands, agents, and plugins for Claude Code. | Landscape awareness. Check periodically for new audit/scoring tools entering the space. Also a good distribution channel — get listed here. |
+| **[awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)** | Curated list of skills, hooks, commands, agents, and plugins for Claude Code. | Landscape awareness. Check periodically for new audit/scoring tools entering the space. Also a good distribution channel - get listed here. |
 | **[AGENTS.md spec](https://agents.md/)** | Open format for guiding coding agents, used by 60k+ open-source projects. | The spec itself and the GitHub blog post analysing 2,500 repos. The finding that tools mentioned in AGENTS.md get 160x usage uplift validates our "essential commands" check. |
-| **[Simone](https://github.com/hesreallyhim/awesome-claude-code)** (referenced in awesome-claude-code) | Project management workflow for Claude Code — documents, guidelines, processes for planning and execution. | Similar "structured workflow" philosophy to our execution loop. Different approach (project management vs agent behaviour) but the same insight: structure beats ad-hoc rules. |
+| **[Simone](https://github.com/hesreallyhim/awesome-claude-code)** (referenced in awesome-claude-code) | Project management workflow for Claude Code - documents, guidelines, processes for planning and execution. | Similar "structured workflow" philosophy to our execution loop. Different approach (project management vs agent behaviour) but the same insight: structure beats ad-hoc rules. |
 
 ### What None of Them Do (Our Gap)
 
@@ -342,7 +342,7 @@ Nothing does exactly what this scanner does — scoring AI workflow *design qual
 - Check learning loop quality (footguns with file:line evidence, not fabricated)
 - Work across agents (CLAUDE.md + AGENTS.md, dual-agent detection)
 - Tie recommendations to specific implementation prompts from a playbook
-- Score as a standalone CLI with HTML report (existing tools are all Claude Code skills or GitHub Actions — they require the agent to run them)
+- Score as a standalone CLI with HTML report (existing tools are all Claude Code skills or GitHub Actions - they require the agent to run them)
 
 ---
 
@@ -357,7 +357,7 @@ Nothing does exactly what this scanner does — scoring AI workflow *design qual
 - Default: `--text` when stdout is a terminal, `--json` when piped
 
 **HTML report:** Static single file. Heredoc template or PHP renderer.
-Same pattern as DevGoat AWS cost feature — bash scanner produces JSON,
+Same pattern as DevGoat AWS cost feature - bash scanner produces JSON,
 rendering layer consumes it.
 
 **Dashboard (future):** PHP frontend matching devgoat-bash-scripts dashboard

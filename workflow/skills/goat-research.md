@@ -23,24 +23,24 @@ or mapping dependencies before a refactor.
 
 The skill follows this process:
 
-1. Scope — Define what's being researched and why:
+1. Scope - Define what's being researched and why:
    - What question are we answering?
    - What files/directories are in scope?
    - What's explicitly out of scope?
 
-2. Read — Systematic deep read of the scoped area:
+2. Read - Systematic deep read of the scoped area:
    - Read every file in scope, not just the obvious ones
    - Follow imports, dependencies, and cross-references
    - Note data flow paths and ownership boundaries
    - Note anything surprising or undocumented
 
-3. Document — Write findings to a research document:
+3. Document - Write findings to a research document:
    - Structure: Overview → Components → Data Flow → Findings → Questions
    - Every claim backed by file:line reference
    - Flag unknowns explicitly: "I couldn't determine X because Y"
    - Note cross-boundary dependencies and coupling points
 
-4. Gate — Stop and wait for human review:
+4. Gate - Stop and wait for human review:
    - Present the research document
    - Do NOT proceed to planning or implementation
    - Wait for human to confirm understanding is correct
@@ -49,7 +49,7 @@ The skill follows this process:
 The skill MUST:
 - Complete the read phase before writing findings
 - Provide file:line evidence for every claim
-- Stop after presenting findings — no planning until human reviews
+- Stop after presenting findings - no planning until human reviews
 - Flag uncertainties and unknowns explicitly
 
 The skill MUST NOT:
@@ -85,7 +85,7 @@ Output format:
 - [thing I couldn't determine and why]
 
 ### Recommendation
-[What to do next — pending human review]
+[What to do next - pending human review]
 
 VERIFICATION:
 - Verify skill file exists at the correct path

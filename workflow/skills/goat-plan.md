@@ -1,6 +1,6 @@
 # Prompt: Create /goat-plan Skill
 
-Paste this into your coding agent to create the `/goat-plan` skill — an agent-invocable planning workflow that guides through the full planning playbook sequence with human checkpoints.
+Paste this into your coding agent to create the `/goat-plan` skill - an agent-invocable planning workflow that guides through the full planning playbook sequence with human checkpoints.
 
 ---
 
@@ -16,8 +16,8 @@ Before any non-trivial implementation. Instead of manually pasting 4 separate pl
 Create the /goat-plan skill for this project.
 
 Purpose: guide the developer through the full GOAT Flow planning
-sequence — feature brief, mob elaboration, SBAO ranking, and milestone
-planning — as a single agent-driven workflow with human checkpoints
+sequence - feature brief, mob elaboration, SBAO ranking, and milestone
+planning - as a single agent-driven workflow with human checkpoints
 between each phase.
 
 Write the skill file to: .claude/skills/goat-plan/SKILL.md
@@ -25,7 +25,7 @@ Write the skill file to: .claude/skills/goat-plan/SKILL.md
 
 The skill follows a 4-phase process with mandatory human gates:
 
-## Phase 1 — Feature Brief
+## Phase 1 - Feature Brief
 
 Ask the developer for:
 - What are we building? (one sentence)
@@ -46,7 +46,7 @@ Output: `requirements-<feature-name>.md`
 **HUMAN GATE:** Present the brief. Wait for approval before Phase 2.
 "Review this feature brief. Approve, or tell me what to change."
 
-## Phase 2 — Mob Elaboration
+## Phase 2 - Mob Elaboration
 
 Read the approved feature brief. Then generate clarifying questions
 from multiple perspectives:
@@ -67,7 +67,7 @@ Output: append elaboration to the requirements doc or create
 **HUMAN GATE:** Present all questions with recommendations.
 "Review these questions. Answer each, or accept the recommendations."
 
-## Phase 3 — SBAO Ranking (if complexity warrants)
+## Phase 3 - SBAO Ranking (if complexity warrants)
 
 For System Change or Infrastructure complexity:
 - Generate 3 competing implementation plans
@@ -84,7 +84,7 @@ Output: `TODO_<feature-name>_prime.md`
 **HUMAN GATE:** Present the prime plan.
 "Review this plan. Approve, modify, or ask me to regenerate."
 
-## Phase 4 — Milestone Planning
+## Phase 4 - Milestone Planning
 
 Read the approved plan. Break into phased milestones:
 

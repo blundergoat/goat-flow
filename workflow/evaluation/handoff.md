@@ -9,7 +9,7 @@ Paste this into your coding agent to create the session handoff template. Used w
 ```
 Create tasks/handoff-template.md for this project.
 
-This is a session handoff template — used when work stops mid-task
+This is a session handoff template - used when work stops mid-task
 and needs to be resumed later (by the same agent in a new session,
 a different agent, or a human). The template is copied for each
 handoff. The original stays as a reusable template.

@@ -13,7 +13,7 @@ When to use: before starting any task, after meaningful code changes,
 or as a final gate before declaring a task complete.
 
 Purpose: mechanical build verification before any task begins or after
-any meaningful change. This is a hard gate — the task is not done if
+any meaningful change. This is a hard gate - the task is not done if
 preflight fails.
 
 Stack:
@@ -40,7 +40,7 @@ The skill MAY:
 
 The skill MUST NOT:
 - Report "complete" or "all clear" if any MUST item fails
-- Skip steps silently — every step must be shown with its result
+- Skip steps silently - every step must be shown with its result
 - Modify any code (preflight is read-only verification)
 
 Use RFC 2119 language (MUST/SHOULD/MAY/MUST NOT) in the skill file.

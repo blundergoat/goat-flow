@@ -1,4 +1,4 @@
-# Implementation Plan — @blundergoat/goat-flow
+# Implementation Plan - @blundergoat/goat-flow
 
 **Package:** `@blundergoat/goat-flow`
 **Rubric:** ai-workflow-improvement-plan-prime v1.5
@@ -9,7 +9,7 @@
 
 ## Product
 
-A standalone CLI tool published on npm that audits the quality of AI coding agent workflow configurations. It reads the filesystem — instruction files, settings, hooks, skills, playbooks, docs — scores the setup against a structured rubric, and produces a report with prioritised recommendations and copy-paste-ready fix prompts.
+A standalone CLI tool published on npm that audits the quality of AI coding agent workflow configurations. It reads the filesystem - instruction files, settings, hooks, skills, playbooks, docs - scores the setup against a structured rubric, and produces a report with prioritised recommendations and copy-paste-ready fix prompts.
 
 ```bash
 npx @blundergoat/goat-flow .
@@ -25,7 +25,7 @@ Nothing scores AGENTS.md setups. Nothing handles dual-agent projects. Nothing ge
 
 ### Users
 
-**Primary:** Matt Hansen — dogfooding across 8+ BlunderGOAT repos after every AI workflow implementation to verify completeness and detect drift.
+**Primary:** Matt Hansen - dogfooding across 8+ BlunderGOAT repos after every AI workflow implementation to verify completeness and detect drift.
 
 **Secondary:** Developers who've read "Stop Writing Rules. Build a Workflow." or cloned the ai-planning-playbook repo and want to verify their implementation.
 
@@ -45,7 +45,7 @@ Nothing scores AGENTS.md setups. Nothing handles dual-agent projects. Nothing ge
 - Zero runtime npm dependencies (stdlib only)
 - Read-only filesystem access (never modifies target project)
 - Rubric version-locked to plan v1.5
-- v1 scores the BlunderGOAT workflow system only — explicit in README
+- v1 scores the BlunderGOAT workflow system only - explicit in README
 
 ---
 
@@ -59,19 +59,19 @@ goat-flow/
 ├── workflow/                          ← AI workflow system docs
 ├── auditor/                           ← TypeScript CLI
 │   ├── src/
-│   │   ├── scanner.ts                 — Orchestrator
-│   │   ├── types.ts                   — CheckResult, AuditReport, Recommendation
-│   │   ├── checks/                    — One module per check category (1.1–3.5 + anti-patterns)
-│   │   ├── detection/                 — agent.ts + shape.ts
-│   │   ├── formatters/                — text.ts, json.ts, markdown.ts, html.ts
-│   │   ├── prompts/                   — generator.ts, stack-detector.ts, templates/
-│   │   ├── utils/                     — file-reader.ts, section-parser.ts, scoring.ts
-│   │   └── templates/report.html      — HTML template (embedded at build)
-│   ├── bin/goat.js                    — CLI entry point
+│   │   ├── scanner.ts                 - Orchestrator
+│   │   ├── types.ts                   - CheckResult, AuditReport, Recommendation
+│   │   ├── checks/                    - One module per check category (1.1–3.5 + anti-patterns)
+│   │   ├── detection/                 - agent.ts + shape.ts
+│   │   ├── formatters/                - text.ts, json.ts, markdown.ts, html.ts
+│   │   ├── prompts/                   - generator.ts, stack-detector.ts, templates/
+│   │   ├── utils/                     - file-reader.ts, section-parser.ts, scoring.ts
+│   │   └── templates/report.html      - HTML template (embedded at build)
+│   ├── bin/goat.js                    - CLI entry point
 │   ├── tests/
-│   │   ├── checks/                    — Unit tests per check module
-│   │   ├── fixtures/                  — Grade A/B/D/F synthetic projects
-│   │   └── snapshots/                 — Real repo regression snapshots
+│   │   ├── checks/                    - Unit tests per check module
+│   │   ├── fixtures/                  - Grade A/B/D/F synthetic projects
+│   │   └── snapshots/                 - Real repo regression snapshots
 │   ├── package.json
 │   └── tsconfig.json
 ├── roadmaps/                          ← This plan + rubric + working drafts
@@ -104,10 +104,10 @@ npx @blundergoat/goat-flow [project-path] [flags]
 | `--shape` | `app` `library` `collection` | Auto-detect | Override project shape |
 | `--agent` | `claude` `codex` `both` | Auto-detect | Override agent targeting for prompts |
 | `--prompts` | boolean flag | off | Generate fix prompts for all failures |
-| `--min-score` | 0–100 | — | CI gate: exit 1 if below threshold |
-| `--min-grade` | `A` `B` `C` `D` | — | CI gate alias (A=90, B=75, C=60, D=40) |
-| `--help` | — | — | Usage information |
-| `--version` | — | — | Auditor version + rubric version |
+| `--min-score` | 0–100 | - | CI gate: exit 1 if below threshold |
+| `--min-grade` | `A` `B` `C` `D` | - | CI gate alias (A=90, B=75, C=60, D=40) |
+| `--help` | - | - | Usage information |
+| `--version` | - | - | Auditor version + rubric version |
 
 **Exit codes:** `0` success or score >= threshold. `1` score below threshold or runtime error. `2` invalid arguments or missing directory.
 
@@ -130,7 +130,7 @@ Generates copy-paste-ready prompts that fix identified gaps. One prompt per plan
 
 **Plan file handling:** Adaptive. If `workflow/ai-workflow-improvement-plan-prime.md` exists in the target project, prompts reference it (shorter, always current). If not, prompts are self-contained (full instructions inlined).
 
-**PARTIAL handling:** Full phase prompt with warning: "These sections partially exist — review before running."
+**PARTIAL handling:** Full phase prompt with warning: "These sections partially exist - review before running."
 
 **Templates:**
 
@@ -153,7 +153,7 @@ These resolve all contradictions identified during planning review (by Claude an
 |---|----------|-----------|
 | D1 | **Scoring is percentage-based.** N/A checks reduce the denominator. A library with 70/85 (82%) gets a B. An app with 70/100 (70%) gets a C. | Libraries and collections should not be penalised for checks that don't apply. A perfect library and a perfect app both score 100%. Resolves the contradiction between the brief (N/A reduces denominator) and SBAO ("always out of 100"). |
 | D2 | **Default output is `text` for terminal, `json` for piped.** HTML and markdown require explicit `--format`. | Matches UNIX convention. Resolves the contradiction between draft M1 (HTML default) and draft M3 (text/json auto-detect). Text is the right interactive default. |
-| D3 | **Workflow files are copied into `dist/workflow/` at build time.** Prompts resolve plan files via `__dirname`. | `npm pack` cannot traverse parent directories (`../workflow/` fails — verified with `npm pack --dry-run`). Resolves the broken publish strategy in the draft milestones. |
+| D3 | **Workflow files are copied into `dist/workflow/` at build time.** Prompts resolve plan files via `__dirname`. | `npm pack` cannot traverse parent directories (`../workflow/` fails - verified with `npm pack --dry-run`). Resolves the broken publish strategy in the draft milestones. |
 | D4 | **All checks are agent-aware.** Detection determines the instruction file, settings, skills, and hooks paths. Checks use these abstractions, not hardcoded `CLAUDE.md`. | Draft hardcoded CLAUDE.md in grep patterns. A Codex-only repo would be detected then unfairly scored against CLAUDE.md patterns. See [RUBRIC.md agent file mapping](./RUBRIC.md#agent-file-mapping). |
 | D5 | **Fixture projects with pinned expected scores are created before implementing checks.** Part of M1 Phase A. | "Scores correctly" is unmeasurable without baselines. Fixtures define what correct means and catch scoring bugs immediately. Resolves the "no golden baseline" concern. |
 | D6 | **Modular internals** (`src/checks/`, `src/formatters/`, `src/prompts/`), single compiled entry point. | Testable per check. One file per check category. |
@@ -170,7 +170,7 @@ These resolve all contradictions identified during planning review (by Claude an
 
 No time estimates. Each milestone has a theme, scope, and measurable exit criteria.
 
-### M1 — Prove It Works
+### M1 - Prove It Works
 
 **Theme:** Full scoring engine + HTML report. Validated against fixture baselines and real repos.
 
@@ -187,10 +187,10 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 - [ ] Section parser: split markdown by `##` headings, return `Map<string, string>`
 - [ ] Scoring engine: percentage-based calculation, N/A handling, grade assignment
 - [ ] **Golden baseline fixtures:**
-  - [ ] `tests/fixtures/grade-a/` — full workflow setup, expected: 90–100%
-  - [ ] `tests/fixtures/grade-b/` — good setup, missing evals + CI, expected: 75–89%
-  - [ ] `tests/fixtures/grade-d/` — basic instruction file, little else, expected: 40–59%
-  - [ ] `tests/fixtures/grade-f/` — empty or no workflow, expected: 0–39%
+  - [ ] `tests/fixtures/grade-a/` - full workflow setup, expected: 90–100%
+  - [ ] `tests/fixtures/grade-b/` - good setup, missing evals + CI, expected: 75–89%
+  - [ ] `tests/fixtures/grade-d/` - basic instruction file, little else, expected: 40–59%
+  - [ ] `tests/fixtures/grade-f/` - empty or no workflow, expected: 0–39%
 - [ ] CLAUDE.md for the framework repo itself (dogfood from day one)
 
 **Exit criteria:**
@@ -202,9 +202,9 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 #### Phase B: Scoring Engine
 
-- [ ] Implement all Tier 1 checks (Foundation — 40 pts, 21 sub-checks per [RUBRIC.md](./RUBRIC.md#tier-1--foundation-40-points))
-- [ ] Implement all Tier 2 checks (Standard — 35 pts, 25 sub-checks)
-- [ ] Implement all Tier 3 checks (Full — 25 pts, 19 sub-checks)
+- [ ] Implement all Tier 1 checks (Foundation - 40 pts, 21 sub-checks per [RUBRIC.md](./RUBRIC.md#tier-1--foundation-40-points))
+- [ ] Implement all Tier 2 checks (Standard - 35 pts, 25 sub-checks)
+- [ ] Implement all Tier 3 checks (Full - 25 pts, 19 sub-checks)
 - [ ] Implement all 9 anti-pattern deductions (max -15)
 - [ ] Recommendation engine: map FAIL/PARTIAL → priority + message + action reference
 - [ ] Dual-agent support: run checks independently per agent, merge shared file checks, report side-by-side
@@ -246,7 +246,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 ---
 
-### M2 — Make It Prescriptive
+### M2 - Make It Prescriptive
 
 **Theme:** Prompt generator + testing foundation.
 
@@ -272,7 +272,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 ---
 
-### M3 — Make It Flexible
+### M3 - Make It Flexible
 
 **Theme:** Text, JSON, markdown output formats.
 
@@ -293,7 +293,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 ---
 
-### M4 — Make It Public
+### M4 - Make It Public
 
 **Theme:** Open source preparation + npm publish.
 
@@ -303,8 +303,8 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 - [ ] LICENSE (MIT)
 - [ ] package.json metadata: description, keywords, repository, homepage, engines `>=18.3.0`
 - [ ] Build step includes `cp -r ../workflow dist/workflow`
-- [ ] `npm publish --dry-run` — verify package contents include `dist/` with `workflow/`
-- [ ] `npm publish` — first public release
+- [ ] `npm publish --dry-run` - verify package contents include `dist/` with `workflow/`
+- [ ] `npm publish` - first public release
 - [ ] Verify `npx @blundergoat/goat-flow .` on fresh machine
 
 **Exit criteria:**
@@ -315,7 +315,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 ---
 
-### M5 — Make It Robust
+### M5 - Make It Robust
 
 **Theme:** CI mode + edge cases + hardening.
 
@@ -334,7 +334,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 
 ---
 
-### M6 — Make It Known
+### M6 - Make It Known
 
 **Theme:** Promotion + distribution.
 
@@ -357,7 +357,7 @@ No time estimates. Each milestone has a theme, scope, and measurable exit criter
 | Regex patterns produce false positives on diverse instruction file styles | Score trust erosion | Conservative patterns. Test against 8+ real repos. Log unexpected matches |
 | HTML template embedding adds build complexity | Build friction | Fallback: read template from filesystem at runtime |
 | Plan v1.6 drops before auditor ships | Rubric drift | Version-lock to v1.5. Update as separate post-ship task |
-| Adoption is near-zero | None — personally useful first | Design for dogfooding. Open source adoption is bonus |
+| Adoption is near-zero | None - personally useful first | Design for dogfooding. Open source adoption is bonus |
 | Repo consolidation breaks existing links | Broken references | Update articles in M1 Phase A. Deprecate old repo with redirect |
 
 ## Assumptions

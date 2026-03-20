@@ -15,32 +15,32 @@ releases, or when investigating a class of issues across the codebase.
 Purpose: multi-pass codebase quality review. The skill uses 4 passes to
 find real issues, eliminate false positives, rank by severity, and
 self-check for fabrication. This is more thorough than a normal code
-review — it's a systematic audit.
+review - it's a systematic audit.
 
 Write the skill file to: .claude/skills/goat-audit/SKILL.md
 (For Codex: docs/codex-playbooks/goat-audit.md)
 
 The skill follows a strict 4-pass process:
 
-Pass 1 — Scan:
+Pass 1 - Scan:
 - Read the target files/directories systematically
 - Log every potential finding with file:line evidence
-- Cast a wide net — include anything that might be an issue
+- Cast a wide net - include anything that might be an issue
 - Categories: security, correctness, performance, maintainability,
   test coverage gaps, architectural concerns
 
-Pass 2 — Verify:
+Pass 2 - Verify:
 - Re-read each finding from Pass 1 against the actual code
 - Remove false positives (findings that don't hold up on second look)
 - Remove duplicate findings
 - Strengthen evidence for remaining findings
 
-Pass 3 — Rank:
+Pass 3 - Rank:
 - Rank surviving findings by severity (Critical / High / Medium / Low)
 - Rank by blast radius (how many components are affected)
 - Group related findings
 
-Pass 4 — Self-check:
+Pass 4 - Self-check:
 - For each remaining finding, ask: "Did I fabricate this?"
 - Re-verify file:line references are correct and current
 - Remove any finding where the evidence doesn't hold up
@@ -49,7 +49,7 @@ Pass 4 — Self-check:
 The skill MUST:
 - Complete all 4 passes in order
 - Provide file:line evidence for every finding
-- Include the self-check pass (Pass 4) — this catches fabrication
+- Include the self-check pass (Pass 4) - this catches fabrication
 - Report how many findings were removed in each pass
 
 The skill MUST NOT:
@@ -68,16 +68,16 @@ Output format:
 - Pass 4: [N] after self-check (-[N] fabrication removed)
 
 ### Critical
-- **[title]** — [file:line] — [description + evidence]
+- **[title]** - [file:line] - [description + evidence]
 
 ### High
-- **[title]** — [file:line] — [description + evidence]
+- **[title]** - [file:line] - [description + evidence]
 
 ### Medium
-- **[title]** — [file:line] — [description + evidence]
+- **[title]** - [file:line] - [description + evidence]
 
 ### Low
-- **[title]** — [file:line] — [description + evidence]
+- **[title]** - [file:line] - [description + evidence]
 
 VERIFICATION:
 - Verify skill file exists at the correct path

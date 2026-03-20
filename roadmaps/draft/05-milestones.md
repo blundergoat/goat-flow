@@ -1,4 +1,4 @@
-# Milestone Plan — @blundergoat/ai-workflow-goat
+# Milestone Plan - @blundergoat/ai-workflow-goat
 
 **Repo:** `blundergoat/ai-workflow-framework` (consolidated: planning methodology + workflow system + auditor CLI)
 **npm package:** `@blundergoat/ai-workflow-goat` (publishes from `auditor/`)
@@ -43,7 +43,7 @@ ai-workflow-framework/
 
 ---
 
-## M1 — Prove It Works (2-3 weekends)
+## M1 - Prove It Works (2-3 weekends)
 
 **Theme:** Full scoring engine + HTML report. Validated against real repos. Dogfooded from day one.
 
@@ -64,23 +64,23 @@ ai-workflow-framework/
   ```
   auditor/
     src/
-      scanner.ts          — orchestrator: detect agent, detect shape, run checks, score
-      types.ts            — CheckResult, TierScore, AuditReport, Recommendation interfaces
+      scanner.ts          - orchestrator: detect agent, detect shape, run checks, score
+      types.ts            - CheckResult, TierScore, AuditReport, Recommendation interfaces
       checks/
-        instruction-file.ts   — 1.1 (exists, line count, version header, commands)
-        execution-loop.ts     — 1.2 (READ, CLASSIFY, ACT, VERIFY, LOG)
-        autonomy-tiers.ts     — 1.3 (three tiers, specificity heuristic, guards, micro-checklist)
-        definition-of-done.ts — 1.4 (section exists, gate count, grep gate, log gate)
-        enforcement.ts        — 1.5 (settings.json, deny list, git blocks, deny-dangerous)
+        instruction-file.ts   - 1.1 (exists, line count, version header, commands)
+        execution-loop.ts     - 1.2 (READ, CLASSIFY, ACT, VERIFY, LOG)
+        autonomy-tiers.ts     - 1.3 (three tiers, specificity heuristic, guards, micro-checklist)
+        definition-of-done.ts - 1.4 (section exists, gate count, grep gate, log gate)
+        enforcement.ts        - 1.5 (settings.json, deny list, git blocks, deny-dangerous)
       detection/
-        agent.ts              — CLAUDE.md / AGENTS.md / both / neither
-        shape.ts              — app / library / collection heuristic
+        agent.ts              - CLAUDE.md / AGENTS.md / both / neither
+        shape.ts              - app / library / collection heuristic
       utils/
-        file-reader.ts        — read file, check exists, count lines
-        section-parser.ts     — split markdown by ## headings, extract section content
-        scoring.ts            — points calculation, grade assignment
+        file-reader.ts        - read file, check exists, count lines
+        section-parser.ts     - split markdown by ## headings, extract section content
+        scoring.ts            - points calculation, grade assignment
     bin/
-      goat.js               — CLI entry point
+      goat.js               - CLI entry point
     tests/
     package.json
     tsconfig.json
@@ -91,12 +91,12 @@ ai-workflow-framework/
 - [ ] Implement Tier 1 checks (1.1–1.5, 40 points):
   - [ ] 1.1 Instruction file (4 sub-checks, 8 pts)
   - [ ] 1.2 Execution loop (5 sub-checks, 10 pts)
-  - [ ] 1.3 Autonomy tiers (4 sub-checks, 8 pts) — including length heuristic for specificity
+  - [ ] 1.3 Autonomy tiers (4 sub-checks, 8 pts) - including length heuristic for specificity
   - [ ] 1.4 Definition of Done (4 sub-checks, 6 pts)
   - [ ] 1.5 Enforcement baseline (4 sub-checks, 8 pts)
 - [ ] Scoring engine: sum points per tier, calculate grade, assemble AuditReport object
 - [ ] Basic terminal output: score, grade, tier breakdown (console.log, no formatting yet)
-- [ ] CLAUDE.md for the framework repo itself (dogfood — own AI workflow setup)
+- [ ] CLAUDE.md for the framework repo itself (dogfood - own AI workflow setup)
 - [ ] Manual test: run against 2-3 BlunderGOAT repos, verify Foundation tier scores make sense
 
 **Exit criteria:**
@@ -111,17 +111,17 @@ ai-workflow-framework/
 **Tasks:**
 
 - [ ] Implement Tier 2 checks (2.1–2.6, 35 points):
-  - [ ] 2.1 Skills/playbooks (5 sub-checks, 8 pts) — Claude Code paths + Codex paths
-  - [ ] 2.2 Hooks/verification scripts (6 sub-checks, 7 pts) — settings.json parse, stop hook exit analysis
-  - [ ] 2.3 Learning loop files (5 sub-checks, 7 pts) — footgun evidence detection (file:line regex)
-  - [ ] 2.4 Router table (3 sub-checks, 5 pts) — extract references, resolve each to filesystem
+  - [ ] 2.1 Skills/playbooks (5 sub-checks, 8 pts) - Claude Code paths + Codex paths
+  - [ ] 2.2 Hooks/verification scripts (6 sub-checks, 7 pts) - settings.json parse, stop hook exit analysis
+  - [ ] 2.3 Learning loop files (5 sub-checks, 7 pts) - footgun evidence detection (file:line regex)
+  - [ ] 2.4 Router table (3 sub-checks, 5 pts) - extract references, resolve each to filesystem
   - [ ] 2.5 Architecture docs (3 sub-checks, 4 pts)
-  - [ ] 2.6 Local context (3 sub-checks, 4 pts) — find local CLAUDE.md files, check sizes, detect duplication
+  - [ ] 2.6 Local context (3 sub-checks, 4 pts) - find local CLAUDE.md files, check sizes, detect duplication
 - [ ] Implement Tier 3 checks (3.1–3.5, 25 points):
   - [ ] 3.1 Agent evals (5 sub-checks, 8 pts)
   - [ ] 3.2 CI validation (4 sub-checks, 5 pts)
   - [ ] 3.3 Permission profiles (3 sub-checks, 4 pts)
-  - [ ] 3.4 Guidelines ownership (4 sub-checks, 5 pts) — cross-file overlap detection
+  - [ ] 3.4 Guidelines ownership (4 sub-checks, 5 pts) - cross-file overlap detection
   - [ ] 3.5 Hygiene (3 sub-checks, 3 pts)
 - [ ] Anti-pattern deductions (all 9, max -15):
   - [ ] CLAUDE.md over 150 lines (-5)
@@ -132,7 +132,7 @@ ai-workflow-framework/
   - [ ] Stop hook exits non-zero (-2)
   - [ ] Local CLAUDE.md over 20 lines (-2)
   - [ ] Generic Ask First boundaries (-2)
-  - [ ] settings.local.json committed (-2) — requires `git ls-files` check
+  - [ ] settings.local.json committed (-2) - requires `git ls-files` check
 - [ ] Recommendation engine: map each FAIL/PARTIAL to priority (Critical/High/Medium/Low) + message + action reference
 - [ ] Dual-agent support: when both detected, run full check suite independently per agent, merge shared file checks (footguns, lessons, architecture), report side by side
 - [ ] Manual validation against all 8 BlunderGOAT repos
@@ -159,7 +159,7 @@ ai-workflow-framework/
   - [ ] Inline CSS: BlunderGOAT brand styling, dark theme default, responsive
   - [ ] Inline JS: collapsible sections, no external dependencies
 - [ ] Template compilation: read .html at build time, embed as string in output JS
-- [ ] `--format html` flag: writes `workflow-audit.html` to current directory (not project directory — read-only principle for the target)
+- [ ] `--format html` flag: writes `workflow-audit.html` to current directory (not project directory - read-only principle for the target)
 - [ ] CLI argument parsing: `util.parseArgs` for path, --format, --shape
 - [ ] Default behaviour: `npx @blundergoat/ai-workflow-goat .` runs with HTML output
 - [ ] Build pipeline: `tsc` → compiled JS in `dist/`, HTML template embedded
@@ -181,13 +181,13 @@ ai-workflow-framework/
 - [ ] Agent detection, shape detection, dual-agent all working
 - [ ] Anti-pattern deductions working with zero false positives on known-good setups
 - [ ] Framework repo has its own CLAUDE.md (dogfooded)
-- [ ] Manual validation against all 8+ BlunderGOAT repos — known-good setups score B or above
+- [ ] Manual validation against all 8+ BlunderGOAT repos - known-good setups score B or above
 
 ---
 
-## M2 — Make It Prescriptive (1-2 weekends)
+## M2 - Make It Prescriptive (1-2 weekends)
 
-**Theme:** Prompt generator + testing foundation. The auditor doesn't just diagnose — it prescribes.
+**Theme:** Prompt generator + testing foundation. The auditor doesn't just diagnose - it prescribes.
 
 ### Tasks
 
@@ -197,16 +197,16 @@ ai-workflow-framework/
   ```
   auditor/src/prompts/
     templates/
-      phase-1a-new.ts       — missing execution loop, autonomy, DoD (no existing CLAUDE.md)
-      phase-1a-existing.ts  — gaps in existing CLAUDE.md (partial failures)
-      phase-1b-skills.ts    — missing skills
-      phase-1c-hooks.ts     — missing hooks, enforcement gaps
-      phase-2.ts            — missing evals, CI, profiles, RFC 2119
-      getting-started.ts    — no AI workflow detected at all
-    generator.ts            — maps failures to templates, batches by phase
-    stack-detector.ts       — detect languages/build/test/lint/format from filesystem
+      phase-1a-new.ts       - missing execution loop, autonomy, DoD (no existing CLAUDE.md)
+      phase-1a-existing.ts  - gaps in existing CLAUDE.md (partial failures)
+      phase-1b-skills.ts    - missing skills
+      phase-1c-hooks.ts     - missing hooks, enforcement gaps
+      phase-2.ts            - missing evals, CI, profiles, RFC 2119
+      getting-started.ts    - no AI workflow detected at all
+    generator.ts            - maps failures to templates, batches by phase
+    stack-detector.ts       - detect languages/build/test/lint/format from filesystem
   ```
-- [ ] Prompts reference workflow files from `workflow/` directory (same repo — no bundling needed, prompts can say "Read workflow/ai-workflow-improvement-plan-prime.md")
+- [ ] Prompts reference workflow files from `workflow/` directory (same repo - no bundling needed, prompts can say "Read workflow/ai-workflow-improvement-plan-prime.md")
 - [ ] Stack detection from filesystem:
   - [ ] package.json → Node/TypeScript, extract scripts (test, lint, build, format)
   - [ ] composer.json → PHP, extract scripts
@@ -219,7 +219,7 @@ ai-workflow-framework/
   - [ ] Claude Code prompts: reference CLAUDE.md, .claude/skills/, .claude/hooks/, .claude/settings.json
   - [ ] Codex prompts: reference AGENTS.md, docs/codex-playbooks/, scripts/
   - [ ] Auto-select based on detected agent, overridable with `--agent`
-- [ ] PARTIAL handling: full phase prompt with warning "These sections partially exist — review what's already there before running"
+- [ ] PARTIAL handling: full phase prompt with warning "These sections partially exist - review what's already there before running"
 - [ ] Prompt includes: detected stack pre-filled, detected shape, specific gaps, agent-appropriate file references
 - [ ] `--prompts` flag: generates `workflow-fix-prompts.md` with fenced code blocks per phase
 - [ ] HTML report integration: "Fix It" section with prompt cards, copy-to-clipboard button (inline JS)
@@ -232,12 +232,12 @@ ai-workflow-framework/
   - [ ] Test section parser: heading splits, nested headings, empty sections
   - [ ] Test scoring engine: point calculation, grade boundaries, deduction caps
 - [ ] Integration test fixtures:
-  - [ ] `auditor/tests/fixtures/grade-a/` — full workflow setup, should score 90+
-  - [ ] `auditor/tests/fixtures/grade-b/` — good setup, missing evals and CI, should score 75-89
-  - [ ] `auditor/tests/fixtures/grade-d/` — CLAUDE.md exists with basic content, little else, should score 40-59
-  - [ ] `auditor/tests/fixtures/grade-f/` — empty project or CLAUDE.md with no workflow structure, should score 0-39
+  - [ ] `auditor/tests/fixtures/grade-a/` - full workflow setup, should score 90+
+  - [ ] `auditor/tests/fixtures/grade-b/` - good setup, missing evals and CI, should score 75-89
+  - [ ] `auditor/tests/fixtures/grade-d/` - CLAUDE.md exists with basic content, little else, should score 40-59
+  - [ ] `auditor/tests/fixtures/grade-f/` - empty project or CLAUDE.md with no workflow structure, should score 0-39
 - [ ] Regression snapshots: copy current CLAUDE.md + supporting files from 3-4 BlunderGOAT repos into `auditor/tests/snapshots/`
-- [ ] Test runner: vitest (dev dependency only — doesn't affect zero runtime deps)
+- [ ] Test runner: vitest (dev dependency only - doesn't affect zero runtime deps)
 
 **Exit criteria:**
 - [ ] `--prompts` generates usable prompts for every failure pattern
@@ -250,7 +250,7 @@ ai-workflow-framework/
 
 ---
 
-## M3 — Make It Flexible (1 weekend)
+## M3 - Make It Flexible (1 weekend)
 
 **Theme:** Text, JSON, markdown output formats. The auditor speaks every format.
 
@@ -287,9 +287,9 @@ ai-workflow-framework/
 
 ---
 
-## M4 — Make It Public (1 weekend)
+## M4 - Make It Public (1 weekend)
 
-**Theme:** Open source preparation. README, docs, metadata, first publish. The repo is already public (it holds the planning and workflow docs that articles link to) — this milestone is about the auditor being ready for public use.
+**Theme:** Open source preparation. README, docs, metadata, first publish. The repo is already public (it holds the planning and workflow docs that articles link to) - this milestone is about the auditor being ready for public use.
 
 ### Tasks
 
@@ -307,7 +307,7 @@ ai-workflow-framework/
   - [ ] Screenshot of HTML report
   - [ ] Scoring rubric overview (tiers, grades, what each tier covers)
   - [ ] CLI reference (all flags and options)
-  - [ ] "What this scores" section — explicit that it's the BlunderGOAT workflow methodology
+  - [ ] "What this scores" section - explicit that it's the BlunderGOAT workflow methodology
   - [ ] "What this doesn't do" section
 - [ ] CONTRIBUTING.md: how to add checks, how to run tests, how to update rubric
 - [ ] LICENSE: MIT (top-level, covers everything)
@@ -318,8 +318,8 @@ ai-workflow-framework/
   - [ ] `files` field: ship dist/ and workflow/ (prompt generator references plan files)
   - [ ] `engines`: `"node": ">=18.3.0"`
 - [ ] .npmignore or package.json `files`: exclude tests, fixtures, snapshots, src/, planning/
-- [ ] `npm publish --dry-run` from `auditor/` — verify package contents
-- [ ] `npm publish` from `auditor/` — first public release
+- [ ] `npm publish --dry-run` from `auditor/` - verify package contents
+- [ ] `npm publish` from `auditor/` - first public release
 - [ ] Verify: `npx @blundergoat/ai-workflow-goat .` works from a fresh machine with no prior install
 - [ ] Deprecate `ai-planning-playbook` if not already done: archive repo, README redirect to `ai-workflow-framework`
 
@@ -331,7 +331,7 @@ ai-workflow-framework/
 
 ---
 
-## M5 — Make It Robust (1 weekend)
+## M5 - Make It Robust (1 weekend)
 
 **Theme:** CI mode, edge cases, hardening.
 
@@ -356,7 +356,7 @@ ai-workflow-framework/
 - [ ] Performance validation:
   - [ ] Time execution against largest BlunderGOAT repo
   - [ ] Confirm <3 seconds
-  - [ ] Profile if slow — likely culprit is router table reference resolution or local CLAUDE.md scanning
+  - [ ] Profile if slow - likely culprit is router table reference resolution or local CLAUDE.md scanning
 - [ ] Error handling:
   - [ ] Graceful failure for unreadable files (warn, don't crash)
   - [ ] Clear error message for missing project path argument
@@ -376,7 +376,7 @@ ai-workflow-framework/
 
 ---
 
-## M6 — Make It Known (1 weekend)
+## M6 - Make It Known (1 weekend)
 
 **Theme:** Promotion and distribution.
 
@@ -418,7 +418,7 @@ ai-workflow-framework/
 | # | Assumption | Validated by |
 |---|-----------|-------------|
 | A1 | 50+ regex checks can run in under 3 seconds | M5 performance test |
-| A2 | Section parser (split by ##) is sufficient for content analysis | M1 Weekend 1 — if not, upgrade to more sophisticated parser |
+| A2 | Section parser (split by ##) is sufficient for content analysis | M1 Weekend 1 - if not, upgrade to more sophisticated parser |
 | A3 | Known-good repos score B or above | M1 Weekend 2 manual validation |
 | A4 | Length heuristic for Ask First specificity avoids false positives | M1 Weekend 2 manual validation against 8 repos |
 | A5 | Stack detection covers the 5 main ecosystems (Node, PHP, Rust, Python, bash) | M2 testing |
@@ -438,5 +438,5 @@ ai-workflow-framework/
 | Template embedding at build time adds complexity | Low | Build friction | Fallback: read template from filesystem at runtime (slightly slower, simpler build) | M1 |
 | Plan v1.6 drops before auditor ships | Low | Rubric drift | Version-lock rubric, update as separate task post-ship | Any |
 | npm publish from monorepo subdirectory has path issues | Medium | Distribution blocked | Dry-run in M4. The `files` field in package.json needs to include `../workflow/` for prompt generator. Test that npm pack resolves correctly. Fallback: copy workflow files into auditor/dist/ at build time | M4 |
-| Nobody besides Matt uses it | Expected | None — personally useful first | Design for dogfooding. Open source adoption is a bonus | M6 |
+| Nobody besides Matt uses it | Expected | None - personally useful first | Design for dogfooding. Open source adoption is a bonus | M6 |
 | Consolidation breaks existing links to ai-planning-playbook | Medium | Broken links in articles, other repos | Update articles in M1 Weekend 1. Deprecate old repo with clear redirect. Search for references across BlunderGOAT repos | M1 |

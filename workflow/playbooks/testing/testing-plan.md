@@ -26,15 +26,15 @@ I've just completed a coding milestone. Here's the context:
 
 Generate a testing plan with these sections:
 
-## Track 1 — Automated Tests
+## Track 1 - Automated Tests
 List every automated check to run, in order. Include:
 - Preflight (lint, types, format)
 - Unit/integration tests
-- E2E tests (if applicable — quick suite first, full suite second)
+- E2E tests (if applicable - quick suite first, full suite second)
 - Any project-specific test scripts or scenarios
 - List every test command and what it validates. Do not predict pass/fail outcomes -- that's for the verifier to determine.
 
-## Track 2 — AI Verification
+## Track 2 - AI Verification
 Write two ready-to-paste prompts:
 
 ### 2a. Functional Verification Prompt
@@ -47,11 +47,11 @@ A prompt for a SEPARATE fresh AI agent to test the system as a user would.
 A prompt for a SEPARATE fresh AI agent to review the code changes read-only.
 - Tell it which files/areas changed
 - Tell it what to look for (regressions, security, architectural issues, logic gaps)
-- Tell it to NOT make any changes — review only
+- Tell it to NOT make any changes - review only
 
-## Track 3 — Human Testing
+## Track 3 - Human Testing
 List specific manual testing tasks for the developer, based on what changed:
-- Step-by-step instructions (not vague — "click X, expect Y")
+- Step-by-step instructions (not vague - "click X, expect Y")
 - Focus on things automated tests and AI can't catch (visual, UX, domain edge cases)
 - Note which items are critical vs nice-to-verify
 - If the project has a UI, include browser testing steps
@@ -60,13 +60,13 @@ List specific manual testing tasks for the developer, based on what changed:
 Generate a checklist specific to this milestone:
 - [ ] Preflight passes
 - [ ] Unit/integration tests pass
-- [ ] [E2E tests pass — if applicable]
+- [ ] [E2E tests pass - if applicable]
 - [ ] AI functional verification: no issues found (or issues fixed and re-verified)
 - [ ] AI code review: no blockers found (or blockers addressed)
 - [ ] Human testing: all critical items pass
 - [ ] [Any milestone-specific gates based on what changed]
 
-Keep it concise. Don't explain the methodology — just produce the plan.
+Keep it concise. Don't explain the methodology - just produce the plan.
 ```
 
 ---

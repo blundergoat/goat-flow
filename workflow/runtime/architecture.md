@@ -2,11 +2,11 @@
 
 > **When to use:** When setting up context files, especially for multi-service or full-stack projects. Gives AI agents a visual map of how the system is wired before they make changes.
 >
-> **Output:** `docs/architecture.md` — reference this from your instruction file (CLAUDE.md / AGENTS.md).
+> **Output:** `docs/architecture.md` - reference this from your instruction file (CLAUDE.md / AGENTS.md).
 
 ```
 Create docs/architecture.md with mermaid diagrams showing how this system works.
-Include the following diagrams where applicable — skip any that don't apply to this project:
+Include the following diagrams where applicable - skip any that don't apply to this project:
 1. System overview: all major components and how they connect
 2. Request flow: how a user request travels through the system
 3. Authentication flow: how auth works end-to-end

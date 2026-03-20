@@ -6,7 +6,7 @@ Every task the AI coding agent performs follows the same loop:
 READ → CLASSIFY → ACT → VERIFY → LOG
 ```
 
-This isn't a suggestion — it's the agent's operating procedure. Each step exists because a specific failure mode kept occurring without it. The loop lives in Layer 1 (the root instruction file) and loads every session.
+This isn't a suggestion - it's the agent's operating procedure. Each step exists because a specific failure mode kept occurring without it. The loop lives in Layer 1 (the root instruction file) and loads every session.
 
 ```mermaid
 graph LR
@@ -36,7 +36,7 @@ graph LR
 |---------------|-------------|
 | Apps | Both sides of cross-boundary changes (frontend + backend, API + consumer) |
 | Libraries | Tests alongside implementation, data files alongside code |
-| Script collections | Source chains — which shared files are sourced and how |
+| Script collections | Source chains - which shared files are sourced and how |
 
 ```
 BAD:  "acme-client is a local path dependency" (fabricated without reading composer.json)
@@ -48,14 +48,14 @@ GOOD: Read composer.json first → "acme-client is installed via Packagist at ^1
 ## CLASSIFY
 
 **The problems it prevents:**
-1. **Question/directive confusion** — "Did you also improve X?" gets treated as "improve X" when the user was just asking.
-2. **Silent mode drift** — the agent slides from explaining into implementing without announcing the switch.
+1. **Question/directive confusion** - "Did you also improve X?" gets treated as "improve X" when the user was just asking.
+2. **Silent mode drift** - the agent slides from explaining into implementing without announcing the switch.
 
-**The incident:** The question/directive confusion was exposed by the anti-rationalisation hook. A correct "No — want me to?" answer was rejected as "asking permission instead of implementing." The hook couldn't tell questions from directives either.
+**The incident:** The question/directive confusion was exposed by the anti-rationalisation hook. A correct "No - want me to?" answer was rejected as "asking permission instead of implementing." The hook couldn't tell questions from directives either.
 
 **The rule:** Classify the task on two axes before acting.
 
-**Axis 1 — Complexity:**
+**Axis 1 - Complexity:**
 
 | Level | Examples |
 |-------|---------|
@@ -64,7 +64,7 @@ GOOD: Read composer.json first → "acme-client is installed via Packagist at ^1
 | System Change | Architecture refactor, migration, new integration |
 | Infrastructure Change | CI/CD, deployment, build system |
 
-**Axis 2 — Mode:**
+**Axis 2 - Mode:**
 
 | Mode | What the agent does |
 |------|-------------------|
@@ -174,7 +174,7 @@ Only escalate to the human if:
 
 **The problem it prevents:** Claude declares victory early. Tests pass, but the old function name still appears in three files because nobody grepped after the rename.
 
-**Absence verification principle:** After any replacement (rename, migration, deprecation, config change, dependency swap), verify the absence of the old pattern — not just the presence of the new one. Use workspace-wide `grep` or `rg` for this — the agent's localised file awareness is unreliable for confirming something is gone.
+**Absence verification principle:** After any replacement (rename, migration, deprecation, config change, dependency swap), verify the absence of the old pattern - not just the presence of the new one. Use workspace-wide `grep` or `rg` for this - the agent's localised file awareness is unreliable for confirming something is gone.
 
 **Absence verification applies to:**
 - **Renames:** grep for the old function/variable/class name
@@ -183,27 +183,27 @@ Only escalate to the human if:
 - **Config changes:** verify old config key/env var is no longer read anywhere
 - **Dependency swaps:** verify old import/require is no longer present in any file
 
-**The incident:** A post-rename grep revealed stale references — the specific failure that led to Definition of Done gate #6 ("after bulk renames/refactors: grep for old pattern, zero remaining").
+**The incident:** A post-rename grep revealed stale references - the specific failure that led to Definition of Done gate #6 ("after bulk renames/refactors: grep for old pattern, zero remaining").
 
 **The rule:** Run tests after each meaningful code change, not just at the end.
 
 ### Two-level escalation
 
 ```
-Level 1 — Stop and Note (isolated failures):
+Level 1 - Stop and Note (isolated failures):
   Flaky test, unrelated failure, non-blocking lint warning.
   → Note in Working Notes. Continue with caution.
 
-Level 2 — Stop and Escalate (cross-boundary or security):
+Level 2 - Stop and Escalate (cross-boundary or security):
   Apps: auth, routing, deployment, API contracts, DB integrity.
   Libraries: public API changes, data file corruption, thresholds.
   Collections: shared source file breakage, cross-domain output contracts.
   → Full stop. Preserve error output. Write diagnosis with file:line. Wait for human.
 ```
 
-*These are examples — adapt to your project's actual risk boundaries.*
+*These are examples - adapt to your project's actual risk boundaries.*
 
-This borrows from Toyota's "stop the line" principle — anyone on the line can halt production when they see a defect. Level 2 failures are the equivalent: the agent stops, preserves context, and escalates rather than attempting to fix a cross-boundary issue alone.
+This borrows from Toyota's "stop the line" principle - anyone on the line can halt production when they see a defect. Level 2 failures are the equivalent: the agent stops, preserves context, and escalates rather than attempting to fix a cross-boundary issue alone.
 
 ### Revert-and-rescope
 
@@ -263,26 +263,26 @@ Four failure modes to watch for during any task. Named so the agent and human ha
 A typical task flows like this:
 
 ```
-1. READ    — Read the 3 files involved in the change.
+1. READ    - Read the 3 files involved in the change.
              Discover that auth.ts imports from session.ts (not obvious from the task).
 
-2. CLASSIFY — This is a Standard Feature in Implement mode.
+2. CLASSIFY - This is a Standard Feature in Implement mode.
               State: Implement | Goal: add rate limiting to login endpoint | Exit: tests pass
 
-3. ACT     — Write the rate limiter. Hit a question about the session store.
-              "Switching to Explain mode — I need to understand the session TTL before implementing."
+3. ACT     - Write the rate limiter. Hit a question about the session store.
+              "Switching to Explain mode - I need to understand the session TTL before implementing."
               Read session.ts. Switch back to Implement.
               Write the code.
 
-4. VERIFY  — Run tests. Login test passes. Session test fails (Level 2 — auth boundary).
+4. VERIFY  - Run tests. Login test passes. Session test fails (Level 2 - auth boundary).
               → Full stop. Preserve error. Diagnosis: rate limiter conflicts with session
               renewal window. Wait for human.
 
               Human: "good catch, the renewal window is 5 min, rate limit window should match"
 
-              Fix applied. All tests pass. Grep for old function name — zero hits.
+              Fix applied. All tests pass. Grep for old function name - zero hits.
 
-5. LOG     — docs/footguns.md: "Rate limit window must match session renewal window
+5. LOG     - docs/footguns.md: "Rate limit window must match session renewal window
               (auth.ts:47, session.ts:112). Mismatched windows cause silent auth failures."
 ```
 
@@ -299,7 +299,7 @@ The execution loop doesn't end when code is written. A task is done when all six
 5. Learning loop files updated (if applicable)
 6. After any replacement (rename, migration, deprecation, config change): grep for old pattern, zero remaining
 
-Gates 5 and 6 are the ones most often skipped. They exist because of specific incidents where "tests pass" was not sufficient — stale references and unlogged footguns caused repeated failures in later sessions.
+Gates 5 and 6 are the ones most often skipped. They exist because of specific incidents where "tests pass" was not sufficient - stale references and unlogged footguns caused repeated failures in later sessions.
 
 ---
 

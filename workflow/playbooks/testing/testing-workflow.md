@@ -1,6 +1,6 @@
-# Testing AI-Driven Development — Doer-Verifier Workflow
+# Testing AI-Driven Development - Doer-Verifier Workflow
 
-The coding agent is the **doer**. Testing uses independent **verifiers** — automated suites, separate AI agents, and the developer — to catch what the doer missed. Never trust the coding agent's self-assessment.
+The coding agent is the **doer**. Testing uses independent **verifiers** - automated suites, separate AI agents, and the developer - to catch what the doer missed. Never trust the coding agent's self-assessment.
 
 ```mermaid
 graph TD
@@ -25,14 +25,14 @@ Test after every milestone or every 30–60 minutes of coding agent work, whiche
 
 ---
 
-## Track 1 — Automated Tests
+## Track 1 - Automated Tests
 
 Run the project's existing test suite. This is the fastest feedback loop.
 
-1. **Preflight checks** — linting, type checking, formatting (`preflight-checks.sh` or equivalent)
-2. **Unit + integration tests** — the project's standard test command
-3. **E2E tests** — if the project has them, run the quick suite first
-4. **Scenario/demo tests** — run the full batch or a random sample. Export results for the review phase
+1. **Preflight checks** - linting, type checking, formatting (`preflight-checks.sh` or equivalent)
+2. **Unit + integration tests** - the project's standard test command
+3. **E2E tests** - if the project has them, run the quick suite first
+4. **Scenario/demo tests** - run the full batch or a random sample. Export results for the review phase
 
 **What this catches:** Regressions, type errors, broken contracts, failing assertions.
 
@@ -40,16 +40,16 @@ Run the project's existing test suite. This is the fastest feedback loop.
 
 ---
 
-## Track 2 — AI Verification
+## Track 2 - AI Verification
 
-Use a **separate, fresh AI agent** (not the coding agent) to verify the work. This agent has no context about what "should" have changed — it reviews what actually changed.
+Use a **separate, fresh AI agent** (not the coding agent) to verify the work. This agent has no context about what "should" have changed - it reviews what actually changed.
 
 ### 2a. Functional verification (interactive)
 
-Open a fresh AI session (browser, separate CLI instance, or different agent) and test the system as a user would. Don't follow the coding agent's test plan — approach it independently.
+Open a fresh AI session (browser, separate CLI instance, or different agent) and test the system as a user would. Don't follow the coding agent's test plan - approach it independently.
 
 Example prompt for the verifier agent:
-> "Manually test this system from a user perspective. Don't follow any existing test scripts — I want you to explore naturally and report anything that feels wrong, broken, or unexpected."
+> "Manually test this system from a user perspective. Don't follow any existing test scripts - I want you to explore naturally and report anything that feels wrong, broken, or unexpected."
 
 Verifier prompt template (fill in the blanks):
 ```
@@ -69,7 +69,7 @@ Reviewer prompt template (fill in the blanks):
 ```
 Review the code changes since [LAST COMMIT/MILESTONE]. Focus on:
 [AREAS OF CHANGE]. Look for regressions, security issues, logic gaps,
-or architectural concerns. Do not make any code changes — review only.
+or architectural concerns. Do not make any code changes - review only.
 ```
 
 **What this catches:** Logic gaps the coding agent was blind to, architectural issues, security problems, inconsistencies between what was asked and what was built.
@@ -78,7 +78,7 @@ or architectural concerns. Do not make any code changes — review only.
 
 ---
 
-## Track 3 — Human Testing
+## Track 3 - Human Testing
 
 The developer manually tests the changes. Focus on what automated tests and AI agents can't easily verify.
 
@@ -101,8 +101,8 @@ Once all three tracks complete:
    - What needs to change
    - Which fixes can run in parallel (sub-agents)
    - Which model/agent is best suited for each fix
-3. **Review the fix plan** before executing — don't let the agent self-direct fixes
-4. **Execute fixes**, then re-run all three tracks (abbreviated — focus on the areas that were fixed)
+3. **Review the fix plan** before executing - don't let the agent self-direct fixes
+4. **Execute fixes**, then re-run all three tracks (abbreviated - focus on the areas that were fixed)
 
 ---
 

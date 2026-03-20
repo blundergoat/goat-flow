@@ -22,19 +22,19 @@ Write the skill file to: .claude/skills/goat-debug/SKILL.md
 
 The skill follows a strict 3-phase process:
 
-Phase 1 — Investigate (no fixes):
+Phase 1 - Investigate (no fixes):
 - Read the actual code paths involved, tracing end-to-end
 - Identify the failure point with file:line evidence
 - Check related files for cross-boundary effects
 - Document the chain: trigger → propagation → symptom
 
-Phase 2 — Report findings:
+Phase 2 - Report findings:
 - Write diagnosis with file:line evidence for every claim
 - State the root cause (not just the symptom)
 - List affected files and components
 - Note any uncertainty: "I believe X because Y, but haven't verified Z"
 
-Phase 3 — Propose fix (only after human reviews Phase 2):
+Phase 3 - Propose fix (only after human reviews Phase 2):
 - Wait for human to review the diagnosis
 - Only then propose a fix plan
 - If the human disagrees with the diagnosis, return to Phase 1
@@ -58,18 +58,18 @@ Output format:
 [One sentence with file:line reference]
 
 ### Evidence Trail
-1. [file:line] — [what this code does and why it matters]
-2. [file:line] — [how the failure propagates]
-3. [file:line] — [where the symptom appears]
+1. [file:line] - [what this code does and why it matters]
+2. [file:line] - [how the failure propagates]
+3. [file:line] - [where the symptom appears]
 
 ### Affected Components
-- [component] — [how it's affected]
+- [component] - [how it's affected]
 
 ### Confidence
-[High/Medium/Low] — [what's verified vs what's hypothesised]
+[High/Medium/Low] - [what's verified vs what's hypothesised]
 
 ### Proposed Fix (pending human review)
-[Fix plan — only populated after human approves the diagnosis]
+[Fix plan - only populated after human approves the diagnosis]
 
 VERIFICATION:
 - Verify skill file exists at the correct path

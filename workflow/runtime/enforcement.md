@@ -14,7 +14,7 @@ what CLAUDE.md rules alone can enforce.
 This project is a [APP / LIBRARY / SCRIPT COLLECTION].
 Stack:
 - Lint: [your lint command]
-- Format: [your format command, or "none — no formatter configured"]
+- Format: [your format command, or "none - no formatter configured"]
 - Test: [your test command]
 
 PRE-EXISTING HOOKS:
@@ -72,14 +72,14 @@ Create the following:
    Stack-adaptive: check git diff for modified file types, run relevant
    lint/type checks only for changed file types.
 
-   MUST exit 0 even when errors are found (informational only — non-zero
+   MUST exit 0 even when errors are found (informational only - non-zero
    causes infinite fix loops).
 
    Include:
    - Guard against missing tools: command -v check before running
    - Infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
      export STOP_HOOK_ACTIVE=1
-   - Exclude slow checks (>10 seconds) — those go in /goat-preflight
+   - Exclude slow checks (>10 seconds) - those go in /goat-preflight
    - Run lint and type-check only for file types that changed
 
 4. .claude/hooks/format-file.sh (PostToolUse hook)
@@ -89,7 +89,7 @@ Create the following:
 
    SKIP THIS HOOK ENTIRELY if no formatter is configured for the
    project stack (e.g., shell scripts with no formatter). Do NOT
-   create a format hook that re-runs the linter — that duplicates
+   create a format hook that re-runs the linter - that duplicates
    the stop hook.
 
 5. .gitignore additions
@@ -102,7 +102,7 @@ Create the following:
 AGENT IGNORE FILES:
 6. Create agent ignore files to prevent reading sensitive files:
 
-   For GitHub Copilot — create `.copilotignore`:
+   For GitHub Copilot - create `.copilotignore`:
    .env*
    **/secrets/
    **/*.pem
@@ -110,9 +110,9 @@ AGENT IGNORE FILES:
    **/credentials*
    **/.git/
 
-   For Cursor — create `.cursorignore` with the same patterns.
+   For Cursor - create `.cursorignore` with the same patterns.
 
-   For Claude Code — add Read deny patterns to .claude/settings.json:
+   For Claude Code - add Read deny patterns to .claude/settings.json:
    "deny": [...existing entries..., "Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)"]
 
 CONTENT-PRESERVING WRITE GUARD:
@@ -127,13 +127,13 @@ CONTENT-PRESERVING WRITE GUARD:
    - Exit 0 for all other writes
 
 HOOK CONFIGURATION PITFALLS:
-- Use $(git rev-parse --show-toplevel) for ALL paths — relative
+- Use $(git rev-parse --show-toplevel) for ALL paths - relative
   paths break when the working directory changes
-- Put each Stop hook in its own array entry — combining command
+- Put each Stop hook in its own array entry - combining command
   and prompt hooks in one entry causes double-firing
-- Verify hooks exist at the project root — stale working directories
+- Verify hooks exist at the project root - stale working directories
   can create hooks in subdirectories instead of the project root
-- Check git diff before running expensive checks — don't lint
+- Check git diff before running expensive checks - don't lint
   unchanged files
 
 VERIFICATION:

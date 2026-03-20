@@ -1,4 +1,4 @@
-# SBAO Competitive Plans — @blundergoat/ai-workflow-goat
+# SBAO Competitive Plans - @blundergoat/ai-workflow-goat
 
 **Method:** Three independent plans generated, ranked against criteria, synthesised into prime.
 
@@ -21,7 +21,7 @@
 
 ---
 
-## Plan A — "Scanner-First, Polish Later"
+## Plan A - "Scanner-First, Polish Later"
 
 **Philosophy:** Get the scoring engine perfect first. Every check working, every point calibrated. HTML report is functional but minimal. Prompt generator and output formats are separate layers added after the core is proven.
 
@@ -119,7 +119,7 @@
 
 ---
 
-## Plan B — "HTML Report as the Hero"
+## Plan B - "HTML Report as the Hero"
 
 **Philosophy:** The HTML report IS the product. People share reports, not JSON. Build the visual experience first and let it drive what data the scanner needs to produce. The report design dictates the scanner architecture.
 
@@ -137,7 +137,7 @@
 - THEN build the scanner to produce exactly the data the report needs
 - All 50+ checks, anti-patterns, agent detection, shape detection
 - `--format html` writes file (workflow-audit.html)
-- Manual validation against 8 repos — focus on report clarity as much as score accuracy
+- Manual validation against 8 repos - focus on report clarity as much as score accuracy
 
 **Exit criteria:** Report looks good enough to screenshot for a blog post. Scores are correct.
 
@@ -145,7 +145,7 @@
 
 ### M2: Prompt Generator (1-2 weekends)
 
-**Goal:** Close the loop — report shows what's wrong, prompts fix it.
+**Goal:** Close the loop - report shows what's wrong, prompts fix it.
 
 - Plan files bundled
 - Prompt templates per phase, batched
@@ -179,7 +179,7 @@
 
 ---
 
-## Plan C — "Ship Fast, Iterate in Public"
+## Plan C - "Ship Fast, Iterate in Public"
 
 **Philosophy:** Get to npm publish as fast as possible. A working tool with rough edges is more valuable than a polished tool that doesn't exist yet. Ship M1-M4 as one sprint, iterate based on real usage.
 
@@ -188,7 +188,7 @@
 **Goal:** `npx @blundergoat/ai-workflow-goat .` works and produces useful output.
 
 - Project scaffolding + npm package setup from day 1
-- Scanner with Tier 1 checks only (Foundation — 40 points). Tiers 2-3 flagged as "not yet scored"
+- Scanner with Tier 1 checks only (Foundation - 40 points). Tiers 2-3 flagged as "not yet scored"
 - Agent detection, shape detection (basic)
 - HTML report: functional but spartan (no fancy CSS, no expandable sections)
 - Anti-pattern deductions (top 5 only, not all 9)
@@ -249,9 +249,9 @@ Criteria weighted by Matt's stated priorities: personally useful first, cut scop
 | **Scope creep resistance** | HIGH | ⭐⭐⭐ Clear boundaries per milestone | ⭐⭐ Design phase can expand | ⭐⭐⭐ Aggressive cuts keep scope tight |
 | **Testing built in early** | MEDIUM | ⭐⭐ M2 for tests | ⭐⭐ M2 for tests | ⭐ M5 for tests (late) |
 | **Prompt generator timing** | MEDIUM | ⭐⭐⭐ M2, after scanner proven | ⭐⭐⭐ M2, integrated into HTML | ⭐⭐ M3, after rubric complete |
-| **Risk of wrong scores** | HIGH | ⭐⭐⭐ Low — all checks in M1, tested against 8 repos | ⭐⭐ Medium — design may distract from accuracy | ⭐ High — shipping partial rubric means incomplete picture |
+| **Risk of wrong scores** | HIGH | ⭐⭐⭐ Low - all checks in M1, tested against 8 repos | ⭐⭐ Medium - design may distract from accuracy | ⭐ High - shipping partial rubric means incomplete picture |
 | **Open source readiness path** | MEDIUM | ⭐⭐⭐ Clear M4 prep milestone | ⭐⭐⭐ Clear M4 prep milestone | ⭐⭐ Early publish means rough edges public |
-| **Matches M1 scope decision** | HIGH | ⭐⭐⭐ Exact match | ⭐⭐⭐ Exact match (different order) | ⭐ Partial match — splits M1 scope across M1+M2 |
+| **Matches M1 scope decision** | HIGH | ⭐⭐⭐ Exact match | ⭐⭐⭐ Exact match (different order) | ⭐ Partial match - splits M1 scope across M1+M2 |
 
 ### Scores
 
@@ -267,7 +267,7 @@ Criteria weighted by Matt's stated priorities: personally useful first, cut scop
 
 **Take from Plan A:** Scanner-first architecture. All 50+ checks in M1. Correctness over beauty. Modular `src/checks/` structure. Clear testing in M2.
 
-**Take from Plan B:** HTML report as a first-class output from M1, not an afterthought. Design the report layout early (even if simple) — it's the thing people see. Prompt generator integrated into the HTML report (copy buttons) in M2.
+**Take from Plan B:** HTML report as a first-class output from M1, not an afterthought. Design the report layout early (even if simple) - it's the thing people see. Prompt generator integrated into the HTML report (copy buttons) in M2.
 
 **Take from Plan C:** Nothing. The partial-rubric approach contradicts the M1 scope decision. The "ship fast" instinct is good but M1 already includes the full rubric.
 
@@ -298,7 +298,7 @@ These decisions carry into the detailed milestone breakdown:
 2. Plan files location in package: `plans/` directory at package root
 3. npm org `@blundergoat` confirmed as existing
 4. Fixture project structure: 4 directories (grade A, B, D, F) with synthetic CLAUDE.md and supporting files
-5. Regression test approach: snapshots from real repos vs git submodules (snapshots preferred — repos change)
+5. Regression test approach: snapshots from real repos vs git submodules (snapshots preferred - repos change)
 6. The auditor's own CLAUDE.md: created as part of M4 (open source prep) or M1 (dogfooding)?
 
-Ready for step 04 — detailed milestone breakdown with exit criteria?
+Ready for step 04 - detailed milestone breakdown with exit criteria?

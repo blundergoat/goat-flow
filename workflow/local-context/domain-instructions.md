@@ -41,15 +41,15 @@ This works with Claude Code, GitHub Copilot, and Codex. For agents that don't su
 
 ```
 Create domain-specific instruction files for this project. These are
-Layer 2 (Local Context) — they load automatically when the agent works
+Layer 2 (Local Context) - they load automatically when the agent works
 in a specific area, keeping deep domain knowledge out of the root
 instruction file's line budget.
 
 All files go in .github/instructions/
 
-STEP 1 — DISCOVER DOMAINS
+STEP 1 - DISCOVER DOMAINS
 
-Read the entire codebase first. Do NOT invent conventions — extract
+Read the entire codebase first. Do NOT invent conventions - extract
 rules from what the code already does.
 
 Look for these natural boundaries:
@@ -64,7 +64,7 @@ Look for these natural boundaries:
 Only create files for domains that genuinely exist. A small project
 may need 2-3 files. A large multi-language app may need 6-8.
 
-STEP 2 — CREATE DOMAIN FILES
+STEP 2 - CREATE DOMAIN FILES
 
 For each domain, create .github/instructions/{domain}.instructions.md
 
@@ -79,24 +79,24 @@ Each file MUST have:
    ---
 
 2. SECTIONS:
-   - **Overview** — what this area does (2-3 sentences)
-   - **Key files** — which files own what responsibility
-   - **Conventions** — patterns extracted from existing code
-   - **Gotchas** — "never do this" warnings with file:line evidence
-   - **Cross-boundary dependencies** — what breaks if you change here
-   - **Code example** — one concise example showing the correct pattern
-   - **See also** — link to root instruction file and relevant
+   - **Overview** - what this area does (2-3 sentences)
+   - **Key files** - which files own what responsibility
+   - **Conventions** - patterns extracted from existing code
+   - **Gotchas** - "never do this" warnings with file:line evidence
+   - **Cross-boundary dependencies** - what breaks if you change here
+   - **Code example** - one concise example showing the correct pattern
+   - **See also** - link to root instruction file and relevant
      docs/footguns.md entries
 
 Rules:
-- Each file MUST be self-contained — an agent reading only this file
+- Each file MUST be self-contained - an agent reading only this file
   should be able to work correctly in that area
 - Target 200-400 lines per file
 - Every gotcha must reference real code (file:line where possible)
 - Extract patterns from what the code already does
-- Cross-reference docs/footguns.md — summarise relevant footguns here
+- Cross-reference docs/footguns.md - summarise relevant footguns here
 
-STEP 3 — UPDATE ROUTER TABLE
+STEP 3 - UPDATE ROUTER TABLE
 
 Add all created files to the root instruction file's router table:
 
@@ -108,7 +108,7 @@ VERIFICATION:
 - Verify each file has valid YAML frontmatter with applyTo glob
 - Verify applyTo globs match actual paths in the project
 - Verify each file is self-contained (overview, conventions, gotchas)
-- Verify no invented conventions — all extracted from existing code
+- Verify no invented conventions - all extracted from existing code
 - Verify router table updated
 - Report: number of files created and which domains they cover
 ```

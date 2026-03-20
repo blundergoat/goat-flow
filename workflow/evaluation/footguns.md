@@ -1,6 +1,6 @@
 # Prompt: Create or Seed docs/footguns.md
 
-Paste this into your coding agent to create or update the footguns file. Footguns are architectural landmines — cross-domain coupling points where changing one thing silently breaks another.
+Paste this into your coding agent to create or update the footguns file. Footguns are architectural landmines - cross-domain coupling points where changing one thing silently breaks another.
 
 ---
 
@@ -28,13 +28,13 @@ WHAT TO LOOK FOR:
 - Environment variables used across multiple services
 - Shared source files (scripts that are sourced by multiple parents)
 
-FORMAT — every entry MUST follow this structure:
+FORMAT - every entry MUST follow this structure:
 
 # Footguns
 
 ## [descriptive title]
 **Files:** `path/to/file.ext:NN`, `path/to/other.ext:NN`
-**Risk:** [what breaks and why — be specific]
+**Risk:** [what breaks and why - be specific]
 **Mitigation:** [how to avoid triggering it]
 
 Every entry added by the agent must include this flag at the start:
@@ -56,7 +56,7 @@ RULES:
 
 PROPAGATION:
 After creating footguns, check if any map to specific directories.
-If a directory has 2+ footgun entries, note this — a local CLAUDE.md
+If a directory has 2+ footgun entries, note this - a local CLAUDE.md
 file may be needed for that directory (Layer 2 local context).
 
 VERIFICATION:

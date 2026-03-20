@@ -1,4 +1,4 @@
-# Real-World Implementations — GOAT Flow
+# Real-World Implementations - GOAT Flow
 
 Six BlunderGOAT projects scanned for workflow framework adoption. These serve as reference implementations showing how the system adapts across project shapes and stacks.
 
@@ -17,7 +17,7 @@ Six BlunderGOAT projects scanned for workflow framework adoption. These serve as
 
 ---
 
-## ambient-scribe — Full Tier, Dual Agent
+## ambient-scribe - Full Tier, Dual Agent
 
 **Shape:** App (PHP + TypeScript + Python + NeMo GPU + Mercure, Docker Compose)
 **Agents:** Claude Code + Codex
@@ -52,7 +52,7 @@ The most complete implementation. Has every artifact the framework defines.
 
 ---
 
-## devgoat — Standard Tier, Dual Agent
+## devgoat - Standard Tier, Dual Agent
 
 **Shape:** App (Tauri desktop app, TypeScript + Rust)
 **Agents:** Claude Code + Codex
@@ -82,11 +82,11 @@ The most complete implementation. Has every artifact the framework defines.
 - No scripts/deny-dangerous.sh or scripts/context-validate.sh
 - No docs/codex-playbooks/
 
-**What makes this notable:** Largest footguns.md (202 lines) — reflects the cross-domain complexity of a Tauri app (TypeScript frontend + Rust backend). Most active lessons.md (47 lines). The Tauri app referenced in the design rationale as the project where dual DoD files caused unpredictable agent behaviour.
+**What makes this notable:** Largest footguns.md (202 lines) - reflects the cross-domain complexity of a Tauri app (TypeScript frontend + Rust backend). Most active lessons.md (47 lines). The Tauri app referenced in the design rationale as the project where dual DoD files caused unpredictable agent behaviour.
 
 ---
 
-## devgoat-bash-scripts — Full Tier, Dual Agent
+## devgoat-bash-scripts - Full Tier, Dual Agent
 
 **Shape:** Script Collection (Bash + PHP utilities)
 **Agents:** Claude Code + Codex
@@ -114,11 +114,11 @@ The most complete implementation. Has every artifact the framework defines.
 | **CI** | .github/workflows/context-validation.yml | 60 | Automated checks |
 | **Handoff** | tasks/handoff-template.md | 24 | Template present |
 
-**What makes this notable:** AGENTS.md is 135 lines vs CLAUDE.md at 100 — confirms the 35% increase documented in the cross-agent comparison (Codex has no hook offloading). Full tier despite being a script collection. The bash collection referenced in the article as the project where the line count trade-off was measured.
+**What makes this notable:** AGENTS.md is 135 lines vs CLAUDE.md at 100 - confirms the 35% increase documented in the cross-agent comparison (Codex has no hook offloading). Full tier despite being a script collection. The bash collection referenced in the article as the project where the line count trade-off was measured.
 
 ---
 
-## sus-form-detector — Standard Tier, Dual Agent
+## sus-form-detector - Standard Tier, Dual Agent
 
 **Shape:** Library (PHP + Python)
 **Agents:** Claude Code + Codex
@@ -148,11 +148,11 @@ The most complete implementation. Has every artifact the framework defines.
 - No scripts/deny-dangerous.sh or scripts/context-validate.sh
 - No docs/codex-playbooks/
 
-**What makes this notable:** Only 3 skills currently installed — /goat-research and /goat-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) — opposite ratio from the bash collection.
+**What makes this notable:** Only 3 skills currently installed - /goat-research and /goat-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) - opposite ratio from the bash collection.
 
 ---
 
-## blundergoat-platform — Minimal Tier, Claude Code Only
+## blundergoat-platform - Minimal Tier, Claude Code Only
 
 **Shape:** App (TypeScript, Docker Compose)
 **Agents:** Claude Code only
@@ -177,7 +177,7 @@ The most complete implementation. Has every artifact the framework defines.
 
 ---
 
-## the-summit-chatroom — Minimal Tier, Dual Agent
+## the-summit-chatroom - Minimal Tier, Dual Agent
 
 **Shape:** App (PHP + Python, Docker Compose)
 **Agents:** Claude Code + Codex (minimal)
@@ -202,7 +202,7 @@ The most complete implementation. Has every artifact the framework defines.
 - No handoff template
 - No deny-dangerous script
 
-**What makes this notable:** CLAUDE.md at 152 lines triggers anti-pattern AP1 (-5 deduction). Good example of a project that needs the framework's governance — has skills and domain instructions but no learning loop or enforcement. Would benefit from running Phase 1a to restructure the instruction file.
+**What makes this notable:** CLAUDE.md at 152 lines triggers anti-pattern AP1 (-5 deduction). Good example of a project that needs the framework's governance - has skills and domain instructions but no learning loop or enforcement. Would benefit from running Phase 1a to restructure the instruction file.
 
 ---
 
@@ -254,7 +254,7 @@ The most complete implementation. Has every artifact the framework defines.
 This is the complete CLAUDE.md from a real Script Collection project implementing the full GOAT Flow system. It scores 100 on the line target and contains all Layer 1 sections: execution loop, autonomy tiers, DoD, router table, stack definition, and working memory.
 
 ```markdown
-# CLAUDE.md — v1.0 (2026-03-15)
+# CLAUDE.md - v1.0 (2026-03-15)
 
 Shell script library. Drop-in or template scripts under `lib/`. Bats test suite under `tests/`.
 
@@ -269,15 +269,15 @@ bats tests/ --recursive              # Run test suite
 
 ## Execution Loop: READ → CLASSIFY → ACT → VERIFY → LOG
 
-**READ** — MUST read relevant files before changes. Cross-domain: MUST read both sides.
+**READ** - MUST read relevant files before changes. Cross-domain: MUST read both sides.
 ```
 ❌ "The _common.sh uses parent traversal" (guessed)
 ✅ Read lib/stacks/_common.sh → confirmed: source "../_common.sh"
 ```
 
-**CLASSIFY** — MUST declare mode (Plan/Implement/Explain/Debug/Review) before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
+**CLASSIFY** - MUST declare mode (Plan/Implement/Explain/Debug/Review) before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
 
-**ACT** — MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
+**ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 
 | Mode | Behaviour |
 |------|-----------|
@@ -292,12 +292,12 @@ bats tests/ --recursive              # Run test suite
 ✅ Inline functions. Extract when second consumer appears
 ```
 
-**VERIFY** — MUST run after each change: `bash -n` → `shellcheck` → `bats tests/ --recursive`
+**VERIFY** - MUST run after each change: `bash -n` → `shellcheck` → `bats tests/ --recursive`
 - Level 1 (isolated failure): note, continue
 - Level 2 (cross-domain/security): MUST full stop, diagnosis with file:line, wait for human
 - Two corrections on same approach = MUST rewind
 
-**LOG** — SHOULD append to `docs/lessons.md` (behavioural mistakes) or `docs/footguns.md` (cross-domain traps with file:line evidence). SHOULD load footguns.md when touching Ask First boundaries.
+**LOG** - SHOULD append to `docs/lessons.md` (behavioural mistakes) or `docs/footguns.md` (cross-domain traps with file:line evidence). SHOULD load footguns.md when touching Ask First boundaries.
 
 ## Autonomy Tiers
 

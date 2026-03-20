@@ -1,4 +1,4 @@
-# Feature Brief — @blundergoat/ai-workflow-goat
+# Feature Brief - @blundergoat/ai-workflow-goat
 
 **Author:** Matt Hansen
 **Date:** 2026-03-19
@@ -10,19 +10,19 @@
 
 A standalone CLI tool published on npm that audits the quality of AI coding agent workflow configurations in any project. It reads the filesystem (CLAUDE.md, AGENTS.md, .claude/settings.json, hooks, skills, playbooks, docs), scores the setup against a structured rubric derived from the AI Workflow Improvement Plan (v1.5), and produces a scored report with prioritised recommendations for improvement.
 
-Run it with `npx @blundergoat/ai-workflow-goat .` — no install required.
+Run it with `npx @blundergoat/ai-workflow-goat .` - no install required.
 
 ## Why
 
 The AI workflow system (READ → CLASSIFY → ACT → VERIFY → LOG) exists as a plan and a set of implementation prompts in the [ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook) repo. But after running those prompts, there's no way to verify the output is correct, complete, or hasn't drifted over time. You can't answer "how good is my setup?" without manually checking 50+ things across a dozen files.
 
-Existing tools check for Claude Code *feature adoption* — "do you have hooks?" — not *workflow design quality* — "does your execution loop have all five steps? Are your Ask First boundaries project-specific? Do your footguns have file:line evidence?"
+Existing tools check for Claude Code *feature adoption* - "do you have hooks?" - not *workflow design quality* - "does your execution loop have all five steps? Are your Ask First boundaries project-specific? Do your footguns have file:line evidence?"
 
 Nobody scores AGENTS.md setups. Nobody handles dual-agent projects. Nobody ties recommendations back to specific implementation prompts. Nobody runs standalone without an active agent session or API key.
 
 ## Who
 
-**Primary user:** Matt (dogfooding — run after every AI workflow implementation across 8+ BlunderGOAT repos to verify completeness and detect drift).
+**Primary user:** Matt (dogfooding - run after every AI workflow implementation across 8+ BlunderGOAT repos to verify completeness and detect drift).
 
 **Secondary users:** Developers who've read the "Stop Writing Rules. Build a Workflow." article or cloned the ai-planning-playbook repo and want to verify their implementation. Open source contributors who want to check a project's AI workflow maturity before contributing.
 
@@ -30,7 +30,7 @@ Nobody scores AGENTS.md setups. Nobody handles dual-agent projects. Nobody ties 
 
 1. As a developer who just ran the implementation prompts, I want to verify nothing was dropped or misconfigured, so I don't discover gaps during a real coding session.
 
-2. As a developer maintaining a project over months, I want to detect drift — CLAUDE.md grew past the line target, router references broke, footguns went stale — before it degrades agent performance.
+2. As a developer maintaining a project over months, I want to detect drift - CLAUDE.md grew past the line target, router references broke, footguns went stale - before it degrades agent performance.
 
 3. As a developer evaluating a new project, I want a quick read on how well its AI workflow is set up, so I know what I'm working with.
 
@@ -113,35 +113,35 @@ Each check: PASS (full points), PARTIAL (half points), or FAIL (0).
 Anti-pattern deductions subtract from total (capped at -15, can't go below 0).
 
 **Letter grades:**
-- 90–100: A — Production-grade workflow
-- 75–89: B — Solid, minor gaps
-- 60–74: C — Functional but missing enforcement or learning loop
-- 40–59: D — Basics present, significant gaps
-- 0–39: F — No meaningful workflow system
+- 90–100: A - Production-grade workflow
+- 75–89: B - Solid, minor gaps
+- 60–74: C - Functional but missing enforcement or learning loop
+- 40–59: D - Basics present, significant gaps
+- 0–39: F - No meaningful workflow system
 
 ### Check Categories (50+ individual checks)
 
-**Tier 1 — Foundation (40 pts):**
-- 1.1 Instruction file exists and sized correctly (8 pts) — file exists, under line target, version header, essential commands section
-- 1.2 Execution loop present (10 pts) — READ step, CLASSIFY step, ACT step, VERIFY step, LOG step with appropriate patterns
-- 1.3 Autonomy tiers (8 pts) — three tiers present, project-specific Ask First boundaries (not generic template), Never tier with destructive guards, micro-checklist
-- 1.4 Definition of Done (6 pts) — DoD section exists, 4+ explicit gates, grep-after-rename gate, log-update gate
-- 1.5 Enforcement baseline (8 pts) — permissions deny list in settings.json, git commit blocked, git push blocked, deny-dangerous hook/script exists
+**Tier 1 - Foundation (40 pts):**
+- 1.1 Instruction file exists and sized correctly (8 pts) - file exists, under line target, version header, essential commands section
+- 1.2 Execution loop present (10 pts) - READ step, CLASSIFY step, ACT step, VERIFY step, LOG step with appropriate patterns
+- 1.3 Autonomy tiers (8 pts) - three tiers present, project-specific Ask First boundaries (not generic template), Never tier with destructive guards, micro-checklist
+- 1.4 Definition of Done (6 pts) - DoD section exists, 4+ explicit gates, grep-after-rename gate, log-update gate
+- 1.5 Enforcement baseline (8 pts) - permissions deny list in settings.json, git commit blocked, git push blocked, deny-dangerous hook/script exists
 
-**Tier 2 — Standard (35 pts):**
-- 2.1 Skills/playbooks (8 pts) — preflight, debug-investigate, audit, research (optional for single-domain libs), code-review (optional, not named "review")
-- 2.2 Hooks or verification scripts (7 pts) — settings.json valid, stop hook registered and exits 0, PostToolUse hook or documented skip, preflight script, context validation
-- 2.3 Learning loop files (7 pts) — lessons.md exists with format header, footguns.md exists with file:line evidence, confusion-log.md for apps
-- 2.4 Router table (5 pts) — section exists, references resolve to real files, skills referenced
-- 2.5 Architecture & domain docs (4 pts) — architecture.md exists and under 100 lines, domain-reference.md if migration path
-- 2.6 Local context (4 pts) — local CLAUDE.md files where warranted, under 20 lines, no duplicated project-wide rules
+**Tier 2 - Standard (35 pts):**
+- 2.1 Skills/playbooks (8 pts) - preflight, debug-investigate, audit, research (optional for single-domain libs), code-review (optional, not named "review")
+- 2.2 Hooks or verification scripts (7 pts) - settings.json valid, stop hook registered and exits 0, PostToolUse hook or documented skip, preflight script, context validation
+- 2.3 Learning loop files (7 pts) - lessons.md exists with format header, footguns.md exists with file:line evidence, confusion-log.md for apps
+- 2.4 Router table (5 pts) - section exists, references resolve to real files, skills referenced
+- 2.5 Architecture & domain docs (4 pts) - architecture.md exists and under 100 lines, domain-reference.md if migration path
+- 2.6 Local context (4 pts) - local CLAUDE.md files where warranted, under 20 lines, no duplicated project-wide rules
 
-**Tier 3 — Full (25 pts):**
-- 3.1 Agent evals (8 pts) — directory exists, README, 3+ eval files, replay prompts, real incident references
-- 3.2 CI validation (5 pts) — workflow exists, checks line count, checks router references, checks skill completeness
-- 3.3 Permission profiles (4 pts, apps only) — directory exists, 2+ profiles, referenced in router
-- 3.4 Guidelines ownership (5 pts) — no DoD overlap, no execution loop overlap, guidelines-ownership-split.md exists
-- 3.5 Hygiene (3 pts) — handoff template exists, RFC 2119 language present, version/changelog in instruction file
+**Tier 3 - Full (25 pts):**
+- 3.1 Agent evals (8 pts) - directory exists, README, 3+ eval files, replay prompts, real incident references
+- 3.2 CI validation (5 pts) - workflow exists, checks line count, checks router references, checks skill completeness
+- 3.3 Permission profiles (4 pts, apps only) - directory exists, 2+ profiles, referenced in router
+- 3.4 Guidelines ownership (5 pts) - no DoD overlap, no execution loop overlap, guidelines-ownership-split.md exists
+- 3.5 Hygiene (3 pts) - handoff template exists, RFC 2119 language present, version/changelog in instruction file
 
 **Anti-Pattern Deductions (max -15):**
 - CLAUDE.md over 150 lines (-5)
@@ -165,11 +165,11 @@ Each FAIL or PARTIAL generates a recommendation with:
 Example recommendations:
 > **Critical:** No execution loop detected in CLAUDE.md. Run Phase 1a (Prompt A) from `ai-workflow-implement-prompts-prime.md` to generate the foundation.
 
-> **High:** Footguns file has no file:line evidence — entries may be fabricated. Re-run the footgun seeding step or manually verify each entry against the codebase.
+> **High:** Footguns file has no file:line evidence - entries may be fabricated. Re-run the footgun seeding step or manually verify each entry against the codebase.
 
 > **Medium:** No agent evals found. Run Phase 2 to create regression tests from git history: `git log --oneline --all | grep -iE 'fix|revert|bug|broke|regression'`
 
-> **Low:** CLAUDE.md has no version header. Add `## v1.0 — YYYY-MM-DD` and a brief changelog.
+> **Low:** CLAUDE.md has no version header. Add `## v1.0 - YYYY-MM-DD` and a brief changelog.
 
 ### Output Formats
 
@@ -183,11 +183,11 @@ Full structured output including every individual check, anti-pattern evaluation
 `workflow-score.md` formatted report. Renders in GitHub, Obsidian, VS Code preview. Contains score summary, tier breakdowns with individual check results, anti-pattern findings, and prioritised recommendation list. Readable raw in terminal via `cat`.
 
 **HTML:**
-Self-contained single-file HTML report with inline CSS and JS. No external dependencies, no server needed — open directly in a browser. Visual score dashboard with tier progress bars, colour-coded check results (green/amber/red), expandable recommendation cards, and anti-pattern warnings. Styled to match the BlunderGOAT brand. Shareable — drop it in a PR comment, attach to an issue, or host on a static site. Think Lighthouse report but for AI workflow quality.
+Self-contained single-file HTML report with inline CSS and JS. No external dependencies, no server needed - open directly in a browser. Visual score dashboard with tier progress bars, colour-coded check results (green/amber/red), expandable recommendation cards, and anti-pattern warnings. Styled to match the BlunderGOAT brand. Shareable - drop it in a PR comment, attach to an issue, or host on a static site. Think Lighthouse report but for AI workflow quality.
 
 ### Prompt Generator
 
-The killer feature that closes the loop. The auditor doesn't just tell you what's wrong — it generates ready-to-paste prompts that fix each gap using the exact implementation prompts from the ai-planning-playbook.
+The killer feature that closes the loop. The auditor doesn't just tell you what's wrong - it generates ready-to-paste prompts that fix each gap using the exact implementation prompts from the ai-planning-playbook.
 
 **How it works:**
 
@@ -196,7 +196,7 @@ The killer feature that closes the loop. The auditor doesn't just tell you what'
 3. `--prompts` flag generates a tailored prompt for each failure, pre-filled with:
    - The project's detected stack (languages, build/test/lint/format commands)
    - The project's detected shape (app/library/collection)
-   - The specific gap to fix (not the whole phase — just the missing piece)
+   - The specific gap to fix (not the whole phase - just the missing piece)
    - Agent-appropriate framing (CLAUDE.md instructions for Claude Code, AGENTS.md instructions for Codex)
 
 **Agent targeting:**
@@ -269,9 +269,9 @@ The existing tools say "CLAUDE.md is missing." The auditor says "CLAUDE.md is mi
 
 - Modifying any files in the target project
 - Requiring an AI agent session or API key to run
-- *Executing* the generated prompts (the auditor generates them, the user pastes them — no agent orchestration)
+- *Executing* the generated prompts (the auditor generates them, the user pastes them - no agent orchestration)
 - Auditing code quality, security, or test coverage (those are different tools)
-- Supporting non-Claude-Code / non-Codex agent configurations (Cursor rules, Copilot instructions, Windsurf, etc.) — may revisit later
+- Supporting non-Claude-Code / non-Codex agent configurations (Cursor rules, Copilot instructions, Windsurf, etc.) - may revisit later
 - Dashboard / web UI / history tracking (future, possibly DevGoat integration)
 - Auto-fixing configuration (the auditor diagnoses, generates prompts, but the user decides what to run)
 - Scoring projects that use completely different workflow systems (non-BlunderGOAT)
@@ -291,7 +291,7 @@ The existing tools say "CLAUDE.md is missing." The auditor says "CLAUDE.md is mi
 - Non-invasive (read-only filesystem access)
 - Must work on macOS, Linux, and Windows (WSL and native)
 - Score must be deterministic (same project = same score every time)
-- The scoring rubric is derived from ai-workflow-improvement-plan-prime v1.5 — changes to the plan may require rubric updates
+- The scoring rubric is derived from ai-workflow-improvement-plan-prime v1.5 - changes to the plan may require rubric updates
 - Must support Node.js 18+ (for built-in `parseArgs`)
 
 ## Risks & Assumptions
@@ -324,13 +324,13 @@ The existing tools say "CLAUDE.md is missing." The auditor says "CLAUDE.md is mi
 
 ## Similar Projects & Competitive Landscape
 
-Nothing does exactly what this auditor does — scoring AI workflow *design quality* rather than platform feature adoption. The landscape breaks into four categories: configuration auditors, security auditors, workflow frameworks, and ecosystem resources.
+Nothing does exactly what this auditor does - scoring AI workflow *design quality* rather than platform feature adoption. The landscape breaks into four categories: configuration auditors, security auditors, workflow frameworks, and ecosystem resources.
 
 ### Category 1: Configuration Auditors (Closest Competitors)
 
 | Project | Stack | What It Does | Gap vs ai-workflow-goat |
 |---------|-------|-------------|------------------------|
-| **[audit-scan.sh](https://github.com/FlorianBruniaux/claude-code-ultimate-guide)** (Florian Bruniaux) | Bash. Zero deps (grep, find, wc, optional jq). ~2 second scan. | The most similar tool mechanically. Scans Claude Code config: detects stack (60+ integration patterns), checks CLAUDE.md at global/project levels, counts extensions (agents, commands, skills, hooks), flags quality patterns like security hooks and test frameworks. Warns if CLAUDE.md >100 lines without `@` references. Terminal + `--json` output. Part of the claude-code-ultimate-guide repo. | Scores feature *presence* not content *quality*. Doesn't check execution loop completeness, autonomy tier specificity, DoD gate count, or footgun evidence quality. Claude Code only — no AGENTS.md support. No scoring rubric or letter grade. No recommendations tied to implementation prompts. |
+| **[audit-scan.sh](https://github.com/FlorianBruniaux/claude-code-ultimate-guide)** (Florian Bruniaux) | Bash. Zero deps (grep, find, wc, optional jq). ~2 second scan. | The most similar tool mechanically. Scans Claude Code config: detects stack (60+ integration patterns), checks CLAUDE.md at global/project levels, counts extensions (agents, commands, skills, hooks), flags quality patterns like security hooks and test frameworks. Warns if CLAUDE.md >100 lines without `@` references. Terminal + `--json` output. Part of the claude-code-ultimate-guide repo. | Scores feature *presence* not content *quality*. Doesn't check execution loop completeness, autonomy tier specificity, DoD gate count, or footgun evidence quality. Claude Code only - no AGENTS.md support. No scoring rubric or letter grade. No recommendations tied to implementation prompts. |
 | **[claude-health](https://github.com/tw93/claude-health)** (tw93) | Claude Code skill (Markdown SKILL.md). Requires active Claude Code session. | Audits config health across six-layer framework: CLAUDE.md → rules → skills → hooks → subagents → verifiers. Auto-detects project tier (Simple/Standard/Complex) and calibrates checks. Checks signal-to-noise ratio, prose bloat, trigger clarity, frequency-based optimisation. Security checks for prompt injection, data exfiltration, destructive commands. | Requires Claude Code to run (burns API credits). Not standalone. Doesn't score workflow design quality. Doesn't check execution loop, autonomy tiers, DoD, or learning loop files. Claude Code only. No AGENTS.md support. |
 | **[claude-code-excellence-audit](https://lobehub.com/skills/romiluz13-claude-code-excellence-audit)** (romiluz13) | Claude Code skill (Markdown). Available on Smithery and LobeHub. | 100-point rubric across memory, rules, settings, subagents, commands, hooks, MCP, skills. Visual report with per-category progress bars, strengths, gaps, prioritised remediation with code snippets. | Requires Claude Code session. Rubric measures feature adoption, not workflow quality. No execution loop, autonomy tier, or DoD checking. No AGENTS.md support. No standalone CLI. Good UX inspiration for report format. |
 | **[ccboard](https://github.com/FlorianBruniaux/ccboard)** (Florian Bruniaux) | Rust binary. TUI + Web interface. SQLite cache. Published on crates.io. | Monitors Claude Code sessions, costs, config, hooks, agents, MCP servers. 11 tabs including config audit, security audit, analytics. Activity security audit: credential access detection, destructive command alerts. FTS5 search across sessions. | Session analytics and cost tracking tool, not workflow quality auditor. Different purpose entirely but polished UX worth studying. Shows Rust distribution pattern (Homebrew, cargo install, GitHub releases). |
@@ -358,26 +358,26 @@ Nothing does exactly what this auditor does — scoring AI workflow *design qual
 | Project | Stack | What It Does | Relevance |
 |---------|-------|-------------|-----------|
 | **[AGENTS.md spec](https://agents.md/)** | Open standard (Markdown format). | Open format for guiding coding agents. Used by 60k+ open-source projects. Backed by GitHub's analysis of 2,500 repos. Finding: tools mentioned get 160x usage uplift. | The spec the auditor validates against (alongside CLAUDE.md). The 160x finding validates the "essential commands" check in the rubric. |
-| **[awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)** | Curated list (Markdown). | Curated list of skills, hooks, commands, agents, and plugins for Claude Code. Regularly updated. | Landscape awareness. Check periodically for new audit/scoring tools. Good distribution channel — get listed here after launch. |
+| **[awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)** | Curated list (Markdown). | Curated list of skills, hooks, commands, agents, and plugins for Claude Code. Regularly updated. | Landscape awareness. Check periodically for new audit/scoring tools. Good distribution channel - get listed here after launch. |
 | **[claude-code-ultimate-guide](https://github.com/FlorianBruniaux/claude-code-ultimate-guide)** (Florian Bruniaux) | Documentation repo. Markdown + bash scripts + YAML machine-readable data. | Comprehensive Claude Code guide. 172 production-ready templates. 30 production hooks. Machine-readable reference.yaml. Threat intelligence database (24 CVEs, 655 malicious skills). Six-layer framework. 11 whitepapers. | The most comprehensive Claude Code documentation project. The audit-scan.sh script lives here. The six-layer framework is a different conceptual model from the five-step execution loop but covers similar ground. The guide's rubric for "quality patterns" informed several checks in our rubric. |
 | **[GitHub's AGENTS.md analysis](https://github.blog/ai-and-ml/github-copilot/how-to-write-a-great-agents-md-lessons-from-over-2500-repositories/)** | Blog post / research. | Analysis of 2,500+ repositories using agents.md. Key findings: tool mentions get 160x usage uplift, structured formats work better than prose, essential commands are highest-signal section. | Research backing several scoring decisions in the rubric. Validates the heavy weighting on essential commands and router table checks. |
 | **[Claude Code Best Practices](https://code.claude.com/docs/en/best-practices)** (Anthropic) | Official documentation. | Anthropic's official guidance on CLAUDE.md structure, hooks, skills, subagents, verification patterns. Includes Plan Mode workflow, subagent patterns, slash command creation. | Official source. The auditor's checks should be consistent with (but more opinionated than) official best practices. |
 
 ### What None of Them Do (Our Differentiation)
 
-1. **Score workflow design quality** — not just "do you have hooks?" but "does your execution loop have all five steps with appropriate patterns?"
-2. **Validate enforcement matches rules** — check that the permissions deny list actually covers what the Never tier claims
-3. **Check learning loop quality** — footguns with real file:line evidence, not fabricated. Lessons file with format header. Propagation to local files
-4. **Work across agents** — CLAUDE.md + AGENTS.md detection and scoring, dual-agent project support
-5. **Generate fix-it prompts** — not just "this is missing" but "here's the exact prompt, pre-filled with your stack, ready to paste into Claude Code or Codex"
-6. **Run standalone** — no agent session, no API key, no CI pipeline. `npx` and done
-7. **Produce a visual HTML report** — self-contained single file, branded, shareable, attachable to PRs
-8. **Score content quality** — detect generic/template Ask First boundaries, check DoD gate count, verify router references resolve
-9. **Detect anti-patterns** — not just missing things, but actively harmful configurations (stop hook exiting non-zero, skill name conflicts with built-in, DoD overlap between files)
+1. **Score workflow design quality** - not just "do you have hooks?" but "does your execution loop have all five steps with appropriate patterns?"
+2. **Validate enforcement matches rules** - check that the permissions deny list actually covers what the Never tier claims
+3. **Check learning loop quality** - footguns with real file:line evidence, not fabricated. Lessons file with format header. Propagation to local files
+4. **Work across agents** - CLAUDE.md + AGENTS.md detection and scoring, dual-agent project support
+5. **Generate fix-it prompts** - not just "this is missing" but "here's the exact prompt, pre-filled with your stack, ready to paste into Claude Code or Codex"
+6. **Run standalone** - no agent session, no API key, no CI pipeline. `npx` and done
+7. **Produce a visual HTML report** - self-contained single file, branded, shareable, attachable to PRs
+8. **Score content quality** - detect generic/template Ask First boundaries, check DoD gate count, verify router references resolve
+9. **Detect anti-patterns** - not just missing things, but actively harmful configurations (stop hook exiting non-zero, skill name conflicts with built-in, DoD overlap between files)
 
 ## Related
 
-- [ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook) — the plan and prompts this auditor validates against
-- [AI Workflow Scanner — Checklist Structure](./scanner-checklist.md) — the 50+ check rubric (already drafted)
-- [blundergoat.com](https://blundergoat.com) — blog and portfolio home
-- [Stop Writing Rules. Build a Workflow.](https://blundergoat.com) — the article explaining the workflow system
+- [ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook) - the plan and prompts this auditor validates against
+- [AI Workflow Scanner - Checklist Structure](./scanner-checklist.md) - the 50+ check rubric (already drafted)
+- [blundergoat.com](https://blundergoat.com) - blog and portfolio home
+- [Stop Writing Rules. Build a Workflow.](https://blundergoat.com) - the article explaining the workflow system

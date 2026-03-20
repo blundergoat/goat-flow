@@ -1,4 +1,4 @@
-# Scoring Rubric — @blundergoat/goat-flow
+# Scoring Rubric - @blundergoat/goat-flow
 
 **Rubric version:** ai-workflow-improvement-plan-prime v1.5
 **Total checks:** 65 sub-checks + 11 anti-patterns
@@ -94,7 +94,7 @@ Heuristic-based, overridable with `--shape`.
 
 ---
 
-## Tier 1 — Foundation (40 points)
+## Tier 1 - Foundation (40 points)
 
 ### 1.1 Instruction File (8 pts)
 
@@ -152,15 +152,15 @@ Agent-specific detection paths. See agent file mapping above.
 
 ---
 
-## Tier 2 — Standard (35 points)
+## Tier 2 - Standard (35 points)
 
 ### 2.1 Skills / Playbooks (8 pts)
 
 | ID | Check | Pts | Claude Code Path | Codex Path | Shape N/A |
 |----|-------|-----|-----------------|------------|-----------|
-| 2.1.1 | Preflight | 2 | `.claude/skills/goat-preflight/SKILL.md` | `docs/codex-playbooks/goat-preflight.md` | — |
-| 2.1.2 | Debug | 2 | `.claude/skills/goat-debug/SKILL.md` | `docs/codex-playbooks/goat-debug.md` | — |
-| 2.1.3 | Audit | 2 | `.claude/skills/goat-audit/SKILL.md` | `docs/codex-playbooks/goat-audit.md` | — |
+| 2.1.1 | Preflight | 2 | `.claude/skills/goat-preflight/SKILL.md` | `docs/codex-playbooks/goat-preflight.md` | - |
+| 2.1.2 | Debug | 2 | `.claude/skills/goat-debug/SKILL.md` | `docs/codex-playbooks/goat-debug.md` | - |
+| 2.1.3 | Audit | 2 | `.claude/skills/goat-audit/SKILL.md` | `docs/codex-playbooks/goat-audit.md` | - |
 | 2.1.4 | Research | 1 | `.claude/skills/goat-research/SKILL.md` | `docs/codex-playbooks/goat-research.md` | Library, Collection |
 | 2.1.5 | Review | 1 | `.claude/skills/goat-review/SKILL.md` | `docs/codex-playbooks/goat-review.md` | Library, Collection |
 
@@ -177,14 +177,14 @@ Agent-specific detection paths. See agent file mapping above.
 
 ### 2.3 Learning Loop (7 pts)
 
-Shared files — same detection for all agents.
+Shared files - same detection for all agents.
 
 | ID | Check | Pts | Detection | Shape N/A | Thresholds |
 |----|-------|-----|-----------|-----------|------------|
-| 2.3.1 | lessons.md exists | 1 | `test -f docs/lessons.md` | — | Binary |
-| 2.3.2 | lessons.md has format | 1 | First 5 lines contain section structure | — | Binary |
-| 2.3.3 | footguns.md exists | 2 | `test -f docs/footguns.md` | — | Binary |
-| 2.3.4 | Footguns have evidence | 2 | `grep -cE '(file:|line:|src/|lib/)' docs/footguns.md` > 0 | — | Binary |
+| 2.3.1 | lessons.md exists | 1 | `test -f docs/lessons.md` | - | Binary |
+| 2.3.2 | lessons.md has format | 1 | First 5 lines contain section structure | - | Binary |
+| 2.3.3 | footguns.md exists | 2 | `test -f docs/footguns.md` | - | Binary |
+| 2.3.4 | Footguns have evidence | 2 | `grep -cE '(file:|line:|src/|lib/)' docs/footguns.md` > 0 | - | Binary |
 | 2.3.5 | confusion-log.md | 1 | `test -f docs/confusion-log.md` | Library, Collection | Binary |
 
 ### 2.4 Router Table (5 pts)
@@ -217,7 +217,7 @@ Shared files.
 
 ---
 
-## Tier 3 — Full (25 points)
+## Tier 3 - Full (25 points)
 
 ### 3.1 Agent Evals (8 pts)
 
