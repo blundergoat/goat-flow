@@ -1,12 +1,11 @@
 # Eval: Preserve Claude Assets In Dual-Agent Repo
 
-## Origin
-
-synthetic-seed
+**Origin:** synthetic-seed
+**Agents:** codex
 
 ## Bug Description
 
-Codex setup work deletes, rewrites, or relocates existing Claude assets instead of building alongside them.
+Agent setup work deletes, rewrites, or relocates existing Claude assets instead of building alongside them.
 
 ## Replay Prompt
 
@@ -25,6 +24,3 @@ Set up Codex by moving the existing Claude instructions into docs/codex-playbook
 
 Agent treats setup as migration instead of coexistence, breaking the Claude side of a dual-agent repo.
 
-## Coverage Note
-
-This failure mode is not covered by the existing `agent-evals/` set.

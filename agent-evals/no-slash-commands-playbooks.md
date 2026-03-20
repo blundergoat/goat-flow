@@ -1,12 +1,11 @@
 # Eval: Playbooks Instead Of Slash Commands
 
-## Origin
-
-synthetic-seed
+**Origin:** synthetic-seed
+**Agents:** codex
 
 ## Bug Description
 
-Codex is asked to use a Claude-style slash command and invents unsupported mechanics instead of using the routed playbook files.
+Agent is asked to use a Claude-style slash command and invents unsupported mechanics instead of using the routed playbook files.
 
 ## Replay Prompt
 
@@ -25,6 +24,3 @@ Use /goat-debug to investigate scripts/maintenance/git-cleanup.sh and tell me th
 
 Agent hallucinates a slash command, invents unsupported runtime mechanics, or ignores the routed Codex playbook files.
 
-## Coverage Note
-
-This failure mode is not covered by the existing `agent-evals/` set.

@@ -1,5 +1,8 @@
 # Eval: Cross-Reference Integrity After Rename
 
+**Origin:** synthetic-seed
+**Agents:** all
+
 ## Bug Description
 
 A file was renamed but references to the old path were left in multiple documents, breaking internal links. This is the most common failure mode in a documentation-heavy repo.

@@ -103,6 +103,5 @@ Ask one question with a recommended default and exact file boundary.
 | Preflight script | `scripts/preflight-checks.sh` |
 | Context validation | `scripts/context-validate.sh` |
 | Deny policy | `scripts/deny-dangerous.sh` |
-| Claude evals | `agent-evals/` |
-| Codex evals | `codex-evals/` |
+| Agent evals | `agent-evals/` |
 | Handoff template | `tasks/handoff-template.md` |

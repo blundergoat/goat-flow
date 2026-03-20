@@ -62,7 +62,7 @@ INSTRUCTION FILE:
 
 PRE-CHECK: If AGENTS.md exists, this is a dual-agent project. Include
    dual-agent coordination rules in LOG. Router table MUST reference
-   AGENTS.md and codex-evals/ if they exist. Check scripts/ for existing
+   AGENTS.md if it exists. Check scripts/ for existing
    preflight or validation scripts — use them instead of writing new ones.
 
 DOCS SEED FILES:

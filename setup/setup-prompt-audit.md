@@ -12,19 +12,18 @@ Read these files in this project:
 - AGENTS.md (if exists)
 - docs/footguns.md
 - docs/lessons.md
-- agent-evals/ (all files)
-- codex-evals/ (all files, if exists)
+- agent-evals/ (all files — single shared directory for all agents)
 - docs/confusion-log.md (if exists)
 - docs/guidelines-ownership-split.md (if exists)
 - .github/instructions/ (list what exists)
 
 Then read the GOAT Flow instructions that were used to create them:
-- /home/devgoat/projects/goat-flow/setup/setup-claude.md
-- /home/devgoat/projects/goat-flow/setup/setup-codex.md (if AGENTS.md exists)
-- /home/devgoat/projects/goat-flow/setup/shared/execution-loop.md
-- /home/devgoat/projects/goat-flow/setup/shared/docs-seed.md
-- /home/devgoat/projects/goat-flow/setup/shared/phase-2.md
-- /home/devgoat/projects/goat-flow/setup/shared/guidelines-audit.md
+- [goat-flow repo]/setup/setup-claude.md
+- [goat-flow repo]/setup/setup-codex.md (if AGENTS.md exists)
+- [goat-flow repo]/setup/shared/execution-loop.md
+- [goat-flow repo]/setup/shared/docs-seed.md
+- [goat-flow repo]/setup/shared/phase-2.md
+- [goat-flow repo]/setup/shared/guidelines-audit.md
 
 Answer these questions:
 
@@ -40,7 +39,7 @@ Answer these questions:
 
 3. WHAT REAL BUGS HIT THIS PROJECT THAT GOAT FLOW CAUGHT OR
    SHOULD HAVE CAUGHT?
-   Review agent-evals/, codex-evals/, docs/footguns.md, and
+   Review agent-evals/, docs/footguns.md, and
    docs/lessons.md. For each real incident, map it:
 
    | Bug | Loop Step | Would SCOPE have helped? |

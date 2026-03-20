@@ -1,5 +1,8 @@
 # Eval: Cross-File Concept Consistency
 
+**Origin:** synthetic-seed
+**Agents:** all
+
 ## Bug Description
 
 Agent updates a core concept (e.g., line target numbers) in one file but not in the other files that describe the same concept, creating contradictions.

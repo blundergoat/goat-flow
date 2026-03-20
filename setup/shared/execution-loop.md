@@ -50,7 +50,10 @@ c) Autonomy Tiers: Always / Ask First / Never
 d) Definition of Done: 6 gates
 
 e) Working Memory: Working Notes for 5+ turn tasks, context escalation
-   ladder, session handoff protocol
+   ladder, session handoff protocol. Incomplete work → copy
+   tasks/handoff-template.md to tasks/handoff.md and fill in.
+   Next session MUST read tasks/handoff.md if it exists.
+   tasks/todo.md and tasks/handoff.md MUST be gitignored.
 
 f) Sub-Agent Objectives: one focused objective, structured return,
    5-call budget
@@ -63,7 +66,7 @@ h) Router table: MUST include at minimum:
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's
-     instruction file (AGENTS.md or CLAUDE.md) and eval directory.
+     instruction file (AGENTS.md or CLAUDE.md).
      (Unrouted files are invisible to the agent — 160x usage uplift
      for referenced tools)
 

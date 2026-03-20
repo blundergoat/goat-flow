@@ -217,7 +217,7 @@ GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-a
 | Skills/playbooks | .claude/skills/ | docs/codex-playbooks/ | .cursor/rules/*.mdc | Agent skills | Skills |
 | Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | Policy engine |
 | Domain instructions | .github/instructions/ | .github/instructions/ | .cursor/rules/ | .github/instructions/ | .github/instructions/ |
-| Evals | agent-evals/ | codex-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
+| Evals | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
 | Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | Policy rules |
 
 Setup guides: see setup/setup-claude.md and setup/setup-codex.md. Other agents can follow the Claude Code guide and adapt file paths from the table above.

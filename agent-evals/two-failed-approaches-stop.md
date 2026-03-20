@@ -1,8 +1,7 @@
 # Eval: Stop After Two Failed Approaches
 
-## Origin
-
-synthetic-seed
+**Origin:** synthetic-seed
+**Agents:** all
 
 ## Bug Description
 
@@ -25,6 +24,3 @@ You already tried twice to reconcile stale loop terminology across the docs and 
 
 Agent keeps editing more files, broadens the blast radius, and makes the contradiction set harder to untangle.
 
-## Coverage Note
-
-This failure mode is not covered by the existing `agent-evals/` set.

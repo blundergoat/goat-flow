@@ -6,103 +6,105 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ## v0.2.0 - 2026-03-21
 
-Codex implementation for goat-flow + Codex instruction improvements from 6 project diagnostics.
-
-### Codex Implementation (goat-flow)
-
-- AGENTS.md (108 lines) with 6-step loop, budgets, all LOG triggers, 5-item Ask First checklist
-- 5 codex playbooks (goat-preflight, goat-debug, goat-audit, goat-research, goat-review)
-- 5 codex evals with Origin labels (2 Codex-mechanics: no-slash-commands, preserve-claude-assets)
-- scripts/deny-dangerous.sh, scripts/context-validate.sh, scripts/preflight-checks.sh
-- CI context-validation.yml updated with Codex workflow validation
-
-### Codex Instruction Improvements (from 6 project diagnostics)
-
-Ran Codex diagnostic prompt against all 6 projects. Key improvements:
-
-- setup-codex.md: explicit MUST-include block for state declaration, mode-transition rule, Debug gate ("human reviews" not "diagnosis exists"), all LOG triggers, footgun propagation, dual-agent coordination, 5-item Ask First checklist
-- setup-codex.md: Codex evals now require 1-2 Codex-mechanics evals + Origin labels
-- setup-codex.md: dual-agent repos must reference Claude assets and align shared semantics
-- setup-codex.md: human checklist expanded with ACT checks, LOG checks, Ask First format, DoD alignment, Codex-mechanics eval check
-- execution-loop.md: Ask First micro-checklist now inlines all 5 items (was "include micro-checklist" with no specifics)
-- execution-loop.md: router says "skill directories (Claude/Gemini) or playbook files (Codex)"
-- execution-loop.md: Debug gate now explicit in shared template ("No fixes until human reviews diagnosis")
-- phase-2.md: Codex evals must target Codex-specific mechanics, each declares Origin
-- All verification gates updated to use scripts/preflight-checks.sh with fallback to stack commands
-
-### Based on
-
-- 6 Codex diagnostics confirming instructions materially improved
-- All 6 AGENTS.md files rebuilt to current spec with zero remaining gaps
-- Key win: RECORD→LOG fix held 6/6, Ask First checklist expansion worked first pass
-
----
-
-## v0.1.1 - 2026-03-20
-
-Post-release improvements from implementing GOAT Flow on 5 real projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform) and running the diagnose prompt against each.
+GOAT Flow implemented and iterated across 7 projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform, goat-flow itself, the-summit-chatroom). Multi-agent support (Claude Code + Codex + Gemini CLI). Instructions refined through 11 diagnostic rounds with closed-loop feedback.
 
 ### Self-Implementation
 
 - Implemented GOAT Flow Phases 1a-2 on the goat-flow project itself
-- CLAUDE.md (110 lines), 5 skills, 2 hooks, settings.json, CI workflow
+- CLAUDE.md (120 lines), AGENTS.md (108 lines), 5 skills, 5 codex playbooks, 2 hooks, settings.json, CI workflow
 - docs/footguns.md (5 footguns with file:line evidence), docs/lessons.md (2 entries)
-- 3 agent evals, .copilotignore, .cursorignore, tasks/handoff-template.md, docs/architecture.md
+- 3 agent evals, 5 codex evals with Origin labels (2 Codex-mechanics)
+- scripts/deny-dangerous.sh, scripts/context-validate.sh, scripts/preflight-checks.sh
 
-### Instruction Fixes (from rampart audit)
+### Execution Loop
 
-- execution-loop.md: added SCOPE as explicit step, complexity read/turn budgets, LOG as MUST-when-tripped, router table minimum entries
-- Phase 2 changed from "after a while" to "implement immediately" across all setup files
-- setup-claude.md, setup-codex.md, setup-gemini.md: "Do not defer" added to Phase 2
+- SCOPE promoted from paragraph to 6th step: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+- Complexity budgets: Hotfix (2/3), Standard (4/10), System (6/20), Infra (8/25) — over budget = re-classify
+- Debug gate: "No fixes until human reviews diagnosis" — explicit in shared template and all agent setup files
+- LOG mechanical trigger: VERIFY failure or course correction → lessons.md entry required before DoD
+- LOG human correction trigger: MUST log immediately after human correction
+- LOG footgun propagation: propagate to local instruction docs
+- Mode-transition rule: "Switching to [NEW STATE] because [reason]" — now in shared template
 
-### Instruction Fixes (from sus-form-detector diagnosis)
+### Ask First
 
-- system-spec.md: fixed loop contradiction (was still showing old 5-step loop in 2 places)
-- system-spec.md: promoted SCOPE from paragraph inside CLASSIFY to its own ### section
-- system-spec.md: added read/turn budgets to CLASSIFY, marked (f)-(i) as MUST-include in cut priority
-- setup-claude.md + setup-gemini.md: added "Do NOT skip sections (f)-(i)" to Prompt A (was only in Prompt B)
-- setup-claude.md: added .copilotignore/.cursorignore to Phase 1c verification checklist
-- docs-seed.md: clarified footgun evidence format (file paths with line numbers, bare paths don't count)
-- docs-seed.md: resolved confusion-log.md tension ("create on first use" but "ALWAYS reference in LOG and router")
+- Explicit 5-item micro-checklist inlined in shared template (was "include micro-checklist" with no specifics)
+- Items: boundary touched, related code read, footgun checked, local instruction checked, rollback command
+- Item 4 agent-neutral: local CLAUDE.md / .github/instructions/ / none
 
-### Documentation Updates
+### Enforcement
 
-- docs/reference/examples.md: added rampart as 7th implementation, added bug-to-loop retrospective (6 real bugs mapped to execution loop steps)
-- docs/reference/design-rationale.md: added SCOPE rationale and complexity budgets rationale with rampart incident evidence
-- docs/system/five-layers.md: multi-agent support table, sub-agent strategy
-- docs/system/six-steps.md: auto-triggering skills section
-- docs/reference/cross-agent-comparison.md: multi-model verification
-- setup/setup-gemini.md: new Gemini CLI setup guide
-- Moved reference docs to docs/reference/ (competitive-landscape, cross-agent-comparison, design-rationale, examples)
-- docs/footguns.md: added spec contradiction footgun, updated all paths
-- docs/lessons.md: 2 entries (agents follow first source read, agents cut small sections under line pressure)
+- deny-dangerous covers Edit/Write tool calls, not just Bash
+- Read deny patterns for Claude/Gemini Code (settings.json)
+- Content-preserving write guard (>80% reduction) in Phase 1c
+- All verification sections → hard gates ("Do NOT proceed until all gates pass")
+- Verification uses scripts/preflight-checks.sh with fallback to stack commands
 
-### Doc Restructure
+### Codex Support
 
-- Renamed docs/five-steps.md → docs/system/six-steps.md (reflects 6-step loop with SCOPE)
+- setup-codex.md: explicit MUST-include block (state declaration, mode-transition, Debug gate, all LOG triggers, footgun propagation, dual-agent coordination, 5-item Ask First)
+- Codex evals require 1-2 Codex-mechanics evals + Origin: real-incident | synthetic-seed labels
+- Dual-agent repos must reference Claude assets and align shared semantics (loop, budgets, LOG triggers, Ask First shape, DoD gates)
+- Human checklist expanded: ACT checks, LOG checks, Ask First format, DoD alignment, Codex-mechanics eval check, AGENTS-vs-CLAUDE semantic diff
+- Router says "skill directories (Claude/Gemini) or playbook files (Codex)"
+- Phase 2 eval dedup: check other agent's evals before creating duplicates
+
+### Documentation
+
+- Renamed docs/five-steps.md → docs/system/six-steps.md (6-step loop with SCOPE)
 - Moved docs/five-layers.md → docs/system/five-layers.md
-- Moved 4 reference docs to docs/reference/ (design-rationale, examples, cross-agent-comparison, competitive-landscape)
-- Rewrote docs/README.md to match current directory structure
-- Fixed 17+ stale path references across CLAUDE.md, getting-started.md, system-spec.md, footguns.md, agent-evals/, CHANGELOG.md
-- Updated six-steps.md: title, loop diagram, "Why Six Steps" section with SCOPE rationale
-- Updated five-layers.md: folder structure diagram shows current docs/ + workflow/ split
-
-### Instruction Improvements (from 5 project diagnostics)
-
-Consolidated findings from running diagnose prompt against rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform:
-
-- execution-loop.md: mechanical LOG trigger (VERIFY failure → lessons.md entry required), human correction trigger (MUST log immediately), mode-transition rule in ACT, dual-agent router cross-references, "don't weaken MUST to meet target"
-- setup-claude.md + setup-gemini.md: PRE-CHECK for dual-agent state and existing scripts, Prompt B domain vs behavioral test with imperative verb examples, content-preserving write guard in Phase 1c, Read deny patterns for Claude/Gemini, deny-dangerous covers Edit/Write not just Bash, all verification sections → hard gates ("Do NOT proceed until pass")
-- docs-seed.md: seed lessons.md from evals, merge guidance for pre-existing architecture.md, dual-agent ownership-split documents both files
-- phase-2.md: eval dedup checks other agent's directory first
-- Unified line target to 120 for all project shapes (dropped 100/120 split)
+- Moved 4 reference docs to docs/reference/
+- Rewrote docs/README.md for current structure
+- Added rampart as 7th implementation with bug-to-loop retrospective (6 real bugs mapped to loop steps)
+- Added SCOPE rationale and complexity budgets rationale to design-rationale.md
+- docs/footguns.md: spec contradiction footgun, line target inconsistency resolved
+- docs/lessons.md: 2 entries (first-source-wins, line-pressure cuts)
 - setup-audit-prompt.md: diagnose prompt for auditing existing implementations
+- Unified line target to 120 for all project shapes (dropped 100/120 split)
+- Gemini CLI setup guide (setup-gemini.md)
+- docs-seed.md: seed lessons from evals, merge guidance for architecture.md, dual-agent ownership-split, footgun evidence format clarified
+
+### Instruction Fixes (from diagnostic rounds)
+
+- system-spec.md: fixed 5-step/6-step contradiction, promoted SCOPE, added budgets, marked (f)-(i) MUST-include
+- setup-codex.md: fixed context prompt (was 5-step), added RECORD→LOG reinforcement, eval dedup, Codex-mechanics eval requirement
+- setup-claude.md + setup-gemini.md: added "Do NOT skip (f)-(i)" to Prompt A, PRE-CHECK for dual-agent state, Prompt B domain vs behavioral test
+- Phase 2 changed from "after a while" to "implement immediately"
+- All stale path references fixed (five-steps.md, five-layers.md, old doc paths, old skill names)
+
+### Repo Cleanup
+
+- Merged codex-evals/ into agent-evals/ (single shared directory, evals declare Agents: all | codex | claude)
+- Deleted _draft/ (8 pre-restructure v1.5 source files — content extracted into current docs)
+- Deleted roadmaps/draft/ (5 SBAO planning docs — output merged into roadmaps)
+- Merged roadmaps/PLAN.md + roadmaps/RUBRIC.md into docs/roadmaps/TODO_improvements_v0.3.md
+- Moved roadmaps/ to docs/roadmaps/
+- Moved docs/README.md to root README.md (was 3-line stub, now full navigation)
+- Renamed setup/setup-audit-prompt.md → setup/setup-prompt-audit.md
+- Created setup/setup-prompt-fix.md (fix prompt for existing implementations)
+- Absolute paths in prompt files → [goat-flow repo]/... for portability
+
+### Handoff & Working Memory
+
+- tasks/handoff-template.md: added purpose section, when-to-create/read guidance, date field, files-changed field
+- tasks/.gitignore: ignores todo.md and handoff.md (template committed, filled copies not)
+- execution-loop.md: Working Memory now references handoff template by name, requires gitignore
+- docs-seed.md: handoff template description expanded, tasks/.gitignore added as item 5
+
+### Additional Fixes
+
+- CLAUDE.md: added scripts/preflight-checks.sh and scripts/context-validate.sh to Essential Commands
+- settings.json: added Read deny patterns (.env*, secrets, .pem, .key)
+- Agent evals: added Origin + Agents labels to all 8 evals
+- five-layers.md: agent evals table unified (was codex-evals/ for Codex, now agent-evals/ for all)
+- Root README.md: full navigation with setup guides, system design, learning loop, reference docs
 
 ### Based on
 
-- 7 real project implementations (added rampart)
-- 5 project diagnostics with bug-to-loop-step mapping
-- Key findings: agents compress away MUST content to meet line targets, lessons.md stays empty without mechanical triggers, dual-agent AGENTS.md consistently drifts (RECORD/LOG, missing SCOPE, no budgets), verification sections treated as optional unless marked as gates
+- 7 real project implementations across App, Library, and Collection shapes
+- 11 diagnostic rounds (5 Claude diagnose + 6 Codex diagnose) with closed-loop instruction fixes
+- 60+ gaps fixed across 6 projects in Claude round, then all 6 AGENTS.md files rebuilt to spec in Codex round
+- Key findings: agents follow first source read, compress MUST to SHOULD under line pressure, lessons.md stays empty without mechanical triggers, dual-agent AGENTS.md consistently drifts without explicit reinforcement, verification sections treated as optional unless marked as gates
 
 ---
 

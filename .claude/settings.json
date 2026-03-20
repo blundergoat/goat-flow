@@ -2,7 +2,11 @@
   "permissions": {
     "deny": [
       "Bash(*git commit*)",
-      "Bash(*git push*)"
+      "Bash(*git push*)",
+      "Read(.env*)",
+      "Read(**/secrets/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
     ]
   },
   "hooks": {

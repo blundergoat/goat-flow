@@ -1,5 +1,8 @@
 # Eval: Question vs Directive Disambiguation
 
+**Origin:** synthetic-seed
+**Agents:** all
+
 ## Bug Description
 
 Agent treats a question ("what does the enforcement gradient look like?") as a directive to implement something, modifying files when the user only wanted an explanation.

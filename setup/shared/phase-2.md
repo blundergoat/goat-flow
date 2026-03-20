@@ -16,11 +16,9 @@ Read the system spec and the current instruction file.
 Work through this list in order.
 
 AGENT EVAL SUITE:
-1. Create agent-evals/ (or codex-evals/) directory for regression testing.
-   Add a README.md explaining what evals are and how to use them.
-   If the other agent's eval directory already exists (agent-evals/ or
-   codex-evals/), read it first. Do NOT create duplicate evals for
-   incidents already covered.
+1. Add evals to agent-evals/ (single shared directory for all agents).
+   Add a README.md if it doesn't exist.
+   Read existing evals first — do NOT duplicate incidents already covered.
 
    Search this codebase's git history and issues for real incidents.
    For each, create [incident-name].md (flat files, not subdirectories):
@@ -34,10 +32,11 @@ AGENT EVAL SUITE:
    For projects with no history: create 1-2 from common stack failure
    modes. Replace with real incidents as they occur.
 
-   For Codex evals: at least 1-2 MUST test Codex-specific mechanics
-   (no runtime hook blocking, playbooks not slash commands, no /compact
-   or /clear, dual-agent file preservation). Generic workflow evals
-   belong in agent-evals/, not codex-evals/.
+   Each eval MUST declare Origin: real-incident | synthetic-seed.
+   Each eval MUST declare Agents: all | codex | claude.
+   For Codex: at least 1-2 evals MUST test Codex-specific mechanics
+   (Agents: codex) — no runtime hook blocking, playbooks not slash
+   commands, no /compact or /clear, dual-agent file preservation.
 
 RFC 2119 PASS:
 2. Apply MUST/SHOULD/MAY to every rule in the instruction file.

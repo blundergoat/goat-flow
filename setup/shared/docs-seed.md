@@ -25,8 +25,18 @@ These files are created during Phase 1a regardless of which agent you use. They 
    However, ALWAYS reference it in the LOG section and router table so
    agents know the destination exists when they need it.
 
-4. tasks/handoff-template.md - Status, Current State, Key Decisions,
-   Known Risks, Next Step. Template is copied for each handoff.
+4. tasks/handoff-template.md - Template for session handoffs. MUST
+   include a purpose section explaining: when to create (incomplete
+   work or two-correction stop), when to read (start of every session,
+   check if tasks/handoff.md exists), and how to use (copy template
+   to tasks/handoff.md, fill in). Sections: Date, Status, Current
+   State (including files changed), Key Decisions, Known Risks,
+   Next Step.
+
+5. tasks/.gitignore - Ignore runtime working files:
+   todo.md
+   handoff.md
+   (The template is committed; the filled-in copies are not.)
 ```
 
 ## Architecture Docs

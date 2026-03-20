@@ -7,6 +7,8 @@ Documentation framework for AI coding agent workflows. Markdown docs + Bash main
 ```bash
 shellcheck scripts/maintenance/*.sh      # Lint shell scripts
 bash -n scripts/maintenance/*.sh          # Syntax-check scripts
+bash scripts/preflight-checks.sh         # Full preflight gate
+bash scripts/context-validate.sh         # Validate GOAT Flow structure
 ```
 
 ## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
@@ -45,12 +47,11 @@ BAD:  Created abstract template system (one format exists)
 GOOD: Inline format. Extract when second format needed
 ```
 
-**VERIFY** - MUST run `shellcheck` on changed .sh files. MUST check cross-references after renaming/moving files.
-- Level 1 (isolated): note, continue
-- Level 2 (cross-doc inconsistency, broken refs, evidence corruption): MUST full stop, file:line diagnosis, wait for human
+**VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
+- Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
 - Two corrections on same approach = MUST rewind
 
-**LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. Footguns mapped to specific directories: propagate one-line summary to local CLAUDE.md.
+**LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure in your code, or you corrected course: lessons.md entry required before DoD. After human correction: MUST log immediately. Propagate footguns to local CLAUDE.md.
 
 | File | When to update |
 |------|---------------|
@@ -62,7 +63,14 @@ GOOD: Inline format. Extract when second format needed
 
 **Always:** Read any file, lint scripts, edit within assigned scope, append to log files
 
-**Ask First** (MUST: name boundary, confirm related files read, check footguns, state rollback command):
+**Ask First** (MUST complete before proceeding):
+- [ ] Boundary touched: [name]
+- [ ] Related code read: [yes/no]
+- [ ] Footgun entry checked: [relevant entry, or "none"]
+- [ ] Local instruction checked: [local CLAUDE.md / .github/instructions/ / none]
+- [ ] Rollback command: [exact command]
+
+Boundaries:
 - `docs/system-spec.md` changes (canonical spec, referenced everywhere)
 - `docs/system/five-layers.md`, `docs/system/six-steps.md` (core architecture docs)
 - `setup/` prompt changes (affects what users generate)
@@ -71,7 +79,7 @@ GOOD: Inline format. Extract when second format needed
 - Adding, removing, or renaming any file (breaks cross-references)
 - Changes spanning 3+ documentation files
 
-**Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push. Commit unless asked. Invent hypothetical examples (all must trace to real incidents)
+**Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push. Commit unless asked. Invent hypothetical examples
 
 ## Definition of Done
 
@@ -81,15 +89,12 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples
-- MUST use real incidents for all examples, never hypothetical
-- MUST keep docs/system-spec.md as canonical source of truth
+- MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
 
-Sub-agents: ONE focused objective, structured return (paths, evidence, confidence, next step), 5-call budget.
-When blocked: ask one question with recommended default.
-
+Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. When blocked: one question with recommended default.
 ## Working Memory
 
-SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` before ending incomplete work. `/compact` after 15+ turns → split if two compactions → `/clear` between unrelated tasks.
+5+ turn tasks → `tasks/todo.md`. Incomplete work → `tasks/handoff.md`. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Router Table
 
@@ -101,20 +106,15 @@ SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` be
 | Design rationale | `docs/reference/design-rationale.md` |
 | Getting started | `docs/getting-started.md` |
 | Real examples | `docs/reference/examples.md` |
-| Setup - Claude Code | `setup/setup-claude.md` |
-| Setup - Codex | `setup/setup-codex.md` |
+| Setup prompts | `setup/` |
 | Skill templates | `workflow/skills/` |
 | Playbooks | `workflow/playbooks/` |
-| Evaluation templates | `workflow/evaluation/` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Confusion log | `docs/confusion-log.md` |
 | Architecture | `docs/architecture.md` |
 | Maintenance scripts | `scripts/maintenance/` |
-| Preflight skill | `.claude/skills/goat-preflight/` |
-| Debug skill | `.claude/skills/goat-debug/` |
-| Audit skill | `.claude/skills/goat-audit/` |
-| Research skill | `.claude/skills/goat-research/` |
-| Review skill | `.claude/skills/goat-review/` |
+| Skills | `.claude/skills/goat-*/` |
 | Agent evals | `agent-evals/` |
+| Codex runtime | `AGENTS.md` |
 | Handoff template | `tasks/handoff-template.md` |

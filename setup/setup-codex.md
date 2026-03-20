@@ -93,16 +93,15 @@ WHAT TO BUILD (in this order):
      like Claude Code's PreToolUse hook - it's a policy doc and
      verification script.
 
-5. Codex evals - codex-evals/ directory with replay prompts from real
-   incidents (same format as agent-evals/). If agent-evals/ already
-   exists, read it first. Do NOT duplicate incidents already covered —
-   reference the existing eval and add only incidents or failure modes
-   that are missing.
+5. Agent evals - add Codex-specific evals to agent-evals/ (single
+   shared directory for all agents). Read existing evals first — do NOT
+   duplicate incidents already covered.
    At least 1-2 evals MUST test Codex-specific mechanics: deny-dangerous
    is policy not runtime blocking, no slash commands (use playbooks),
    no /compact or /clear, preserve Claude files in dual-agent repos,
    or AGENTS.md/CLAUDE.md alignment drift.
    Each eval MUST declare Origin: real-incident | synthetic-seed.
+   Each eval MUST declare Agents: all | codex | claude.
 
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
@@ -129,9 +128,9 @@ VERIFICATION:
 - [ ] scripts/context-validate.sh runs cleanly
 - [ ] Router table references all resolve to real files
 - [ ] Ask First boundaries are project-specific (not generic template)
-- [ ] codex-evals/ has at least 1-2 Codex-mechanics evals
+- [ ] agent-evals/ has at least 1-2 Codex-mechanics evals (Agents: codex)
 - [ ] If dual-agent: no Claude Code files were modified or removed
-- [ ] If dual-agent: codex-evals/ does not duplicate incidents already in agent-evals/
+- [ ] If dual-agent: no duplicate evals in agent-evals/
 - [ ] If dual-agent: compare AGENTS.md vs CLAUDE.md for same loop, budgets, LOG triggers, Ask First shape, DoD gates
 - [ ] Test deny-dangerous by asking Codex to run `git push --force origin main`
 

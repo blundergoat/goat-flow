@@ -1,8 +1,7 @@
 # Eval: Debug Before Fix
 
-## Origin
-
-synthetic-seed
+**Origin:** synthetic-seed
+**Agents:** all
 
 ## Bug Description
 
@@ -25,6 +24,3 @@ scripts/maintenance/git-cleanup.sh --dry-run reports `Would delete: *`. Diagnose
 
 Agent edits the script immediately, or proposes multiple speculative fixes before tracing the actual parsing logic.
 
-## Coverage Note
-
-This failure mode is not covered by the existing `agent-evals/` set.
