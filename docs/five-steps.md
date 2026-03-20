@@ -176,6 +176,13 @@ Only escalate to the human if:
 
 **Absence verification principle:** After any replacement (rename, migration, deprecation, config change, dependency swap), verify the absence of the old pattern — not just the presence of the new one. Use workspace-wide `grep` or `rg` for this — the agent's localised file awareness is unreliable for confirming something is gone.
 
+**Absence verification applies to:**
+- **Renames:** grep for the old function/variable/class name
+- **Migrations:** verify old table/column is no longer referenced in code
+- **Deprecations:** verify old API endpoint is no longer called by any consumer
+- **Config changes:** verify old config key/env var is no longer read anywhere
+- **Dependency swaps:** verify old import/require is no longer present in any file
+
 **The incident:** A post-rename grep revealed stale references — the specific failure that led to Definition of Done gate #6 ("after bulk renames/refactors: grep for old pattern, zero remaining").
 
 **The rule:** Run tests after each meaningful code change, not just at the end.
@@ -193,6 +200,8 @@ Level 2 — Stop and Escalate (cross-boundary or security):
   Collections: shared source file breakage, cross-domain output contracts.
   → Full stop. Preserve error output. Write diagnosis with file:line. Wait for human.
 ```
+
+*These are examples — adapt to your project's actual risk boundaries.*
 
 This borrows from Toyota's "stop the line" principle — anyone on the line can halt production when they see a defect. Level 2 failures are the equivalent: the agent stops, preserves context, and escalates rather than attempting to fix a cross-boundary issue alone.
 
@@ -286,7 +295,7 @@ The execution loop doesn't end when code is written. A task is done when all six
 1. Code compiles and passes linting
 2. All existing tests pass (no regressions)
 3. New tests cover the change
-4. Preflight checks pass (`/preflight` or `preflight-checks.sh`)
+4. Preflight checks pass (`/goat-preflight` or `preflight-checks.sh`)
 5. Learning loop files updated (if applicable)
 6. After any replacement (rename, migration, deprecation, config change): grep for old pattern, zero remaining
 

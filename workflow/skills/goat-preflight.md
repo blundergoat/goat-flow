@@ -1,13 +1,13 @@
-# Prompt: Create /preflight Skill
+# Prompt: Create /goat-preflight Skill
 
-Paste this into your coding agent to create the `/preflight` skill for your project.
+Paste this into your coding agent to create the `/goat-preflight` skill for your project.
 
 ---
 
 ## The Prompt
 
 ```
-Create the /preflight skill for this project.
+Create the /goat-preflight skill for this project.
 
 When to use: before starting any task, after meaningful code changes,
 or as a final gate before declaring a task complete.
@@ -23,8 +23,8 @@ Stack:
 - Test: [your command, e.g., npm test, composer test, cargo test]
 - Format check: [your command, e.g., npm run format:check, composer cs:check]
 
-Write the skill file to: .claude/skills/preflight/SKILL.md
-(For Codex: docs/codex-playbooks/preflight.md)
+Write the skill file to: .claude/skills/goat-preflight/SKILL.md
+(For Codex: docs/codex-playbooks/goat-preflight.md)
 
 The skill MUST:
 - Run type-check + lint + compile (in that order)

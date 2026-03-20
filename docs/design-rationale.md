@@ -39,7 +39,7 @@ flowchart TB
     end
 
     subgraph DEMAND["ON-DEMAND (via router table / slash commands)"]
-        L3["<b>Layer 3 -- Skills</b><br/>/preflight - /debug-investigate - /audit<br/>/research - /code-review"]
+        L3["<b>Layer 3 -- Skills</b><br/>/goat-preflight - /goat-debug - /goat-audit<br/>/goat-research - /goat-review"]
         L4["<b>Layer 4 -- Playbooks</b><br/>Mob Elaboration - SBAO Planning - Milestone Planning"]
     end
 
@@ -248,6 +248,8 @@ flowchart TD
 | v0.6    | Pasted content detection              | Best version, but JSON schema fragile across reimplementations |
 
 **Design decision:** Removed entirely. Deterministic command hooks for mechanical enforcement. CLAUDE.md rules for behavioural guidance. Prompt hooks for semantic judgement are structurally unsound with current hook architecture.
+
+**Unexplored alternative:** "Flag, don't block" -- instead of the hook deciding to reject, it surfaces suspicious patterns to the human as highlights. The hook flags, the human decides. This avoids the ~30% false positive rate that killed autonomous semantic hooks while preserving awareness. Consistent with the Ask First trust model. Not yet implemented.
 
 ---
 

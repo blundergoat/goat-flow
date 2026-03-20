@@ -281,20 +281,18 @@ that don't exist yet. This is update-and-extend, not replace.
 
 Create these 5 skills under .claude/skills/:
 
-1. preflight/SKILL.md -- RFC 2119 constraints. MUST run your stack's
+1. goat-preflight/SKILL.md -- RFC 2119 constraints. MUST run your stack's
    build/lint checks. SHOULD run formatter, full test suite. MAY skip
    formatter when debugging. Include dependency audit.
-2. research/SKILL.md -- Minimum template: Files Involved, Request Flow,
+2. goat-research/SKILL.md -- Minimum template: Files Involved, Request Flow,
    Boundaries Touched, Risks/Gotchas (min 3 with file:line evidence).
    Hard gate: no planning until human reviews research.md.
-3. debug-investigate/SKILL.md -- Diagnosis-first. Include: "If you want
+3. goat-debug/SKILL.md -- Diagnosis-first. Include: "If you want
    to 'just try something' before tracing the code path, STOP."
    Include diagnosis output template.
-4. audit/SKILL.md -- 4-pass: Discovery -> Verification -> Prioritisation ->
+4. goat-audit/SKILL.md -- 4-pass: Discovery -> Verification -> Prioritisation ->
    Self-Check. Pass 4 fabrication gate. MUST NOT propose fixes.
-5. code-review/SKILL.md -- Structured review with RFC 2119 constraints.
-   Do NOT name this skill "review" -- it shadows Claude Code's
-   built-in /review command. Always use "code-review".
+5. goat-review/SKILL.md -- Structured review with RFC 2119 constraints.
 
 VERIFICATION:
 - Verify all skill files exist with required sections.
@@ -341,7 +339,7 @@ HOOKS:
    - MUST exit 0 even when errors found (informational only)
    - Guard against missing tools (command -v check)
    - Infinite loop guard (STOP_HOOK_ACTIVE check)
-   - Exclude slow checks (>10s) -- those go in /preflight
+   - Exclude slow checks (>10s) -- those go in /goat-preflight
 
    PostToolUse hook: .claude/hooks/format-file.sh
    - Matcher: "Edit|Write"

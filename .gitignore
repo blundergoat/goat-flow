@@ -74,6 +74,7 @@ TODO_*.md
 docs_*.md
 tasks/todo.md
 tasks/handoff.md
+commit.md
 
 # Build output
 dist

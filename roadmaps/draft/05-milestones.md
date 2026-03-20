@@ -125,7 +125,7 @@ ai-workflow-framework/
   - [ ] 3.5 Hygiene (3 sub-checks, 3 pts)
 - [ ] Anti-pattern deductions (all 9, max -15):
   - [ ] CLAUDE.md over 150 lines (-5)
-  - [ ] /review skill shadows built-in (-3)
+  - [ ] Skill name conflicts with built-in (-3)
   - [ ] DoD in both instruction file and guidelines (-3)
   - [ ] Footguns without evidence (-3)
   - [ ] settings.json invalid JSON (-3)

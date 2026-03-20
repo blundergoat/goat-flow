@@ -13,8 +13,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 │  High-risk boundaries, module-specific gotchas              │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 3 — Skills                               ON DEMAND   │
-│  /preflight, /debug-investigate, /audit,                    │
-│  /research, /code-review                                    │
+│  /goat-preflight, /goat-debug, /goat-audit,                 │
+│  /goat-research, /goat-review                               │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 4 — Playbooks                            ON DEMAND   │
 │  Feature briefs, mob elaboration, SBAO ranking,             │
@@ -83,15 +83,15 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
-| `/preflight` | Mechanical build verification (type-check, lint, compile, test) | Pass/fail checklist |
-| `/debug-investigate` | Root cause analysis when a bug is reported or test fails | Diagnosis with evidence trail |
-| `/audit` | Codebase quality review on demand or before major changes | Findings ranked by severity |
-| `/research` | Deep investigation of unfamiliar areas or domains | Research summary with sources |
-| `/code-review` | Structured review of changes before merging | Findings ranked by severity |
+| `/goat-preflight` | Mechanical build verification (type-check, lint, compile, test) | Pass/fail checklist |
+| `/goat-debug` | Root cause analysis when a bug is reported or test fails | Diagnosis with evidence trail |
+| `/goat-audit` | Codebase quality review on demand or before major changes | Findings ranked by severity |
+| `/goat-research` | Deep investigation of unfamiliar areas or domains | Research summary with sources |
+| `/goat-review` | Structured review of changes before merging | Findings ranked by severity |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
-**Naming:** Use `/code-review`, not `/review`. The name `/review` conflicts with built-in agent commands.
+**Naming:** All skills use the `goat-` prefix to avoid conflicts with built-in agent commands.
 
 **File locations:**
 
@@ -156,7 +156,7 @@ graph TD
     L5["Layer 5: Evaluation<br/>testing + evals + CI"] --> |validates| L1
     L5 --> |catches drift in| L2
     L5 --> |regression tests| L3
-    L3 --> |/preflight verifies| L1
+    L3 --> |/goat-preflight verifies| L1
     L2 --> |footgun propagation| L1
 ```
 
@@ -170,7 +170,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 |-------|---------------|--------|
 | Phase 0 (bootstrap) | Minimal CLAUDE.md + deny-dangerous hook + settings.json | Layer 1 (minimal) |
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
-| Phase 1b | Skills: /preflight, /debug-investigate, /audit, /research, /code-review | Layer 3 |
+| Phase 1b | Skills: /goat-preflight, /goat-debug, /goat-audit, /goat-research, /goat-review | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, permission profiles, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
 

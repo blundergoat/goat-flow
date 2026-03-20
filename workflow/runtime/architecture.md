@@ -2,7 +2,7 @@
 
 > **When to use:** When setting up context files, especially for multi-service or full-stack projects. Gives AI agents a visual map of how the system is wired before they make changes.
 >
-> **Output:** `docs/architecture.md` — reference this from your [hot-path context file](08-claude-md-hot-path-prompt.md).
+> **Output:** `docs/architecture.md` — reference this from your instruction file (CLAUDE.md / AGENTS.md).
 
 ```
 Create docs/architecture.md with mermaid diagrams showing how this system works.

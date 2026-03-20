@@ -24,7 +24,7 @@ On the shell script collection, both agents found the same 5 qualifying incident
 | Stop hooks (lint after every turn) | Preflight script, run manually or in CI | Claude Code catches formatting issues continuously. Codex catches them at checkpoints. |
 | PostToolUse hooks (auto-format) | Nothing -- manual or preflight | No auto-formatting on edit. Skip if no formatter configured. |
 | Local CLAUDE.md (directory auto-load) | Centralised footguns.md + router references | Claude Code loads warnings automatically when entering a directory. Codex requires the agent to check the router table. |
-| Slash commands (/preflight, /debug) | Playbook files in `docs/codex-playbooks/` | Same content, different loading mechanism. 5 playbooks mapped to 5 skills on the shell script collection. |
+| Slash commands (/goat-preflight, /goat-debug) | Playbook files in `docs/codex-playbooks/` | Same content, different loading mechanism. 5 playbooks mapped to 5 skills on the shell script collection. |
 | Permission profiles (.claude/profiles/) | Behavioural guidance in AGENTS.md only | No tool-level scoping. |
 | Permissions deny (settings.json) | AGENTS.md Never rules + deny-dangerous script + CI | No pre-execution blocking. Three layers of documentation vs one layer of enforcement. |
 | /compact, /insights | No equivalent | Codex context is per-task, not per-session. No session management needed -- but no session learning either. |
@@ -78,3 +78,23 @@ The system's core -- the execution loop, autonomy tiers, definition of done, lea
 For solo developers who trust their agent and verify with preflight, the Codex model is sufficient. For teams, long-lived projects, or codebases where a single bad command has high blast radius, Claude Code's hooks provide a safety net that behavioural guidance alone can't match.
 
 The workflow system is portable. The enforcement model is not.
+
+**Recommended enforcement for agents without hooks:** Run the agent inside a sandboxed environment with explicit command allow-listing.
+
+Reference pattern:
+```
+Allowed commands:
+- [project test command] (e.g., npm test, composer test)
+- [project build command] (e.g., npm run build)
+- [project lint command]
+- git add, git status, git diff, git log
+- safe file operations (read, write within project directory)
+
+Blocked (OS-level):
+- rm -rf outside project directory
+- git push (require explicit human action)
+- network access beyond package registries
+- file access outside project root
+```
+
+Implementation options: Docker container with restricted user, rbash (restricted bash), or project-level command wrapper script. The framework cannot enforce this directly -- it must be configured in the agent's deployment environment.

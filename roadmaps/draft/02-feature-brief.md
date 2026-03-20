@@ -145,7 +145,7 @@ Anti-pattern deductions subtract from total (capped at -15, can't go below 0).
 
 **Anti-Pattern Deductions (max -15):**
 - CLAUDE.md over 150 lines (-5)
-- `/review` skill shadows built-in (-3)
+- Skill name conflicts with built-in (-3)
 - DoD in both instruction file and guidelines (-3)
 - Footguns without file:line evidence (-3)
 - settings.json invalid JSON (-3)
@@ -373,7 +373,7 @@ Nothing does exactly what this auditor does — scoring AI workflow *design qual
 6. **Run standalone** — no agent session, no API key, no CI pipeline. `npx` and done
 7. **Produce a visual HTML report** — self-contained single file, branded, shareable, attachable to PRs
 8. **Score content quality** — detect generic/template Ask First boundaries, check DoD gate count, verify router references resolve
-9. **Detect anti-patterns** — not just missing things, but actively harmful configurations (stop hook exiting non-zero, /review shadowing built-in, DoD overlap between files)
+9. **Detect anti-patterns** — not just missing things, but actively harmful configurations (stop hook exiting non-zero, skill name conflicts with built-in, DoD overlap between files)
 
 ## Related
 

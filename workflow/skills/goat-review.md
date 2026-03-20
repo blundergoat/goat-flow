@@ -1,24 +1,24 @@
-# Prompt: Create /code-review Skill
+# Prompt: Create /goat-review Skill
 
-Paste this into your coding agent to create the `/code-review` skill for your project.
+Paste this into your coding agent to create the `/goat-review` skill for your project.
 
 ---
 
 ## The Prompt
 
 ```
-Create the /code-review skill for this project.
+Create the /goat-review skill for this project.
 
 Purpose: structured review of code changes with RFC 2119 severity levels
 and respect for the project's autonomy tiers. The agent reviews
 independently — it investigates the code, doesn't blindly apply
 external suggestions.
 
-Write the skill file to: .claude/skills/code-review/SKILL.md
-(For Codex: docs/codex-playbooks/code-review.md)
+Write the skill file to: .claude/skills/goat-review/SKILL.md
+(For Codex: docs/codex-playbooks/goat-review.md)
 
-IMPORTANT: Name this skill "code-review", NOT "review". The name
-"/review" conflicts with built-in agent commands.
+The goat- prefix ensures this skill name does not conflict with
+built-in agent commands or other user-defined skills.
 
 When to use: before merging significant changes, after receiving an
 external PR review, or when the developer wants a second opinion
@@ -61,7 +61,7 @@ The skill MUST NOT:
 - Apply fixes directly (this is a review, not an implementation)
 - Blindly agree with external review suggestions
 - Report findings without reading the actual code
-- Name itself "/review" (conflicts with built-in commands)
+- Use a name that conflicts with built-in commands
 
 Output format:
 ## Code Review: [change description]
@@ -93,5 +93,5 @@ VERIFICATION:
 - Verify skill file exists at the correct path
 - Verify RFC 2119 severity levels (MUST/SHOULD/MAY)
 - Verify DoD checklist is included
-- Verify skill is named "code-review" not "review"
+- Verify skill is named "goat-review"
 ```

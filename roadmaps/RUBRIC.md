@@ -158,11 +158,11 @@ Agent-specific detection paths. See agent file mapping above.
 
 | ID | Check | Pts | Claude Code Path | Codex Path | Shape N/A |
 |----|-------|-----|-----------------|------------|-----------|
-| 2.1.1 | Preflight | 2 | `.claude/skills/preflight/SKILL.md` | `docs/codex-playbooks/preflight.md` | — |
-| 2.1.2 | Debug-investigate | 2 | `.claude/skills/debug-investigate/SKILL.md` | `docs/codex-playbooks/debug-investigate.md` | — |
-| 2.1.3 | Audit | 2 | `.claude/skills/audit/SKILL.md` | `docs/codex-playbooks/audit.md` | — |
-| 2.1.4 | Research | 1 | `.claude/skills/research/SKILL.md` | `docs/codex-playbooks/research.md` | Library, Collection |
-| 2.1.5 | Code-review (not "review") | 1 | `.claude/skills/code-review/SKILL.md` | `docs/codex-playbooks/code-review.md` | Library, Collection |
+| 2.1.1 | Preflight | 2 | `.claude/skills/goat-preflight/SKILL.md` | `docs/codex-playbooks/goat-preflight.md` | — |
+| 2.1.2 | Debug | 2 | `.claude/skills/goat-debug/SKILL.md` | `docs/codex-playbooks/goat-debug.md` | — |
+| 2.1.3 | Audit | 2 | `.claude/skills/goat-audit/SKILL.md` | `docs/codex-playbooks/goat-audit.md` | — |
+| 2.1.4 | Research | 1 | `.claude/skills/goat-research/SKILL.md` | `docs/codex-playbooks/goat-research.md` | Library, Collection |
+| 2.1.5 | Review | 1 | `.claude/skills/goat-review/SKILL.md` | `docs/codex-playbooks/goat-review.md` | Library, Collection |
 
 ### 2.2 Hooks / Verification Scripts (7 pts)
 
@@ -272,7 +272,7 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 | ID | Anti-Pattern | Detection | Deduction | Agent Scope |
 |----|-------------|-----------|-----------|-------------|
 | AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 | All |
-| AP2 | `/review` skill shadows built-in | `{skills_dir}/review` exists (not `code-review`) | -3 | All |
+| AP2 | Skill name conflicts with built-in | `{skills_dir}` contains a skill name that shadows a built-in agent command | -3 | All |
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 | All |
 | AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 | All |
 | AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 | Claude Code only |

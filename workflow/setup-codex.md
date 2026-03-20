@@ -126,19 +126,19 @@ WHAT TO BUILD (in this order):
 4. Codex playbooks (docs/codex-playbooks/)
    Create these as standalone .md files the agent reads on demand:
 
-   - preflight.md - mechanical verification with priority markers.
+   - goat-preflight.md - mechanical verification with priority markers.
      MUST: build + lint + type-check when applicable.
      SHOULD: full test suite, formatter.
      Include dependency audit step.
-   - research.md - deep-read template: Files Involved, Request Flow,
+   - goat-research.md - deep-read template: Files Involved, Request Flow,
      Boundaries Touched, Risks/Gotchas (min 3 with file:line evidence).
      Hard gate: no planning until human reviews output.
-   - debug-investigate.md - diagnosis-first. "If you want to just try
+   - goat-debug.md - diagnosis-first. "If you want to just try
      something before tracing the code path, STOP." Diagnosis output
      template with file:line evidence. No fixes until human reviews.
-   - audit.md - 4-pass: Discovery -> Verification -> Prioritisation ->
+   - goat-audit.md - 4-pass: Discovery -> Verification -> Prioritisation ->
      Self-Check ("did I fabricate this?"). MUST NOT propose fixes.
-   - code-review.md - structured review with priority markers and
+   - goat-review.md - structured review with priority markers and
      autonomy tier awareness.
 
    Create all 5 playbooks regardless of project type.

@@ -1,7 +1,7 @@
 # GOAT Flow -- Getting Started
 
 **Version:** 1.5 | 2026-03-15
-**Companion to:** `workflow/runtime/` (prompts -- `claude-code-prompts.md` for Claude Code, `codex-prompts.md` for Codex) and `workflow/_reference/system-spec.md` (plan)
+**Companion to:** `workflow/` (prompts -- `setup-claude.md` for Claude Code, `setup-codex.md` for Codex) and `workflow/_reference/system-spec.md` (plan)
 
 ---
 
@@ -21,7 +21,7 @@ A system that gives Claude Code a 5-step execution loop (READ -> CLASSIFY -> ACT
 
 1. **Copy the system spec and setup prompts into your project root.**
    - `workflow/_reference/system-spec.md`
-   - The prompts from `workflow/runtime/` -- use `claude-code-prompts.md` for Claude Code or `codex-prompts.md` for Codex
+   - The prompts from `workflow/` -- use `setup-claude.md` for Claude Code or `setup-codex.md` for Codex
 
 2. **Rename if needed.** The prompts reference the system spec by exact filename. If your copies have prefixes or version suffixes, rename them to match.
 
@@ -130,11 +130,11 @@ After full implementation, your project will have:
 ```
 CLAUDE.md                              <- Layer 1: the loop (~100-120 lines)
 src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying dirs exist)
-.claude/skills/preflight/SKILL.md      <- Layer 3: skills
-.claude/skills/debug-investigate/SKILL.md
-.claude/skills/audit/SKILL.md
-.claude/skills/research/SKILL.md
-.claude/skills/code-review/SKILL.md
+.claude/skills/goat-preflight/SKILL.md  <- Layer 3: skills
+.claude/skills/goat-debug/SKILL.md
+.claude/skills/goat-audit/SKILL.md
+.claude/skills/goat-research/SKILL.md
+.claude/skills/goat-review/SKILL.md
 .claude/hooks/deny-dangerous.sh        <- enforcement
 .claude/hooks/stop-lint.sh
 .claude/hooks/format-file.sh           <- skip if no formatter configured

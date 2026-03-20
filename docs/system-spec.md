@@ -21,7 +21,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     High-risk boundaries, module-specific gotchas, local conventions
 
 Layer 3 -- Skills (loaded via slash commands)
-    /preflight, /debug-investigate, /audit, /research, /code-review
+    /goat-preflight, /goat-debug, /goat-audit, /goat-research, /goat-review
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -43,6 +43,8 @@ CLAUDE.md and shared coding standards (`.github/instructions/ai-agent-guidelines
 **The test:** if a rule would be identical across every project, it belongs in guidelines. If it changes per project, it belongs in CLAUDE.md.
 
 **When adopting with existing guidelines:** audit for overlap. Remove execution loop, DoD, stop-the-line, working memory, or autonomy tier content from the guidelines file. Create `docs/guidelines-ownership-split.md` documenting what was moved and why.
+
+**Sharpening the boundary for fuzzy cases:** Some rules sit at the boundary (e.g., "git hygiene: one logical change per commit"). Apply this test: does the rule change HOW THE AGENT BEHAVES (workflow -> CLAUDE.md) or does it define WHAT GOOD CODE LOOKS LIKE (engineering -> guidelines)? "One logical change per commit" defines good code practices -> guidelines. "Always run tests before declaring done" defines agent behaviour -> CLAUDE.md.
 
 ### Layer 2: Local CLAUDE.md Files
 
@@ -74,13 +76,11 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 
 | Skill                | Justification                    | Projects |
 | -------------------- | -------------------------------- | -------- |
-| `/preflight`         | Repeatable structured output     | All      |
-| `/debug-investigate` | Special failure mode + hard gate | All      |
-| `/audit`             | Distinct artefact + hard gate    | All      |
-| `/research`          | Distinct artefact + hard gate    | All      |
-| `/code-review`       | Repeatable structured output     | All      |
-
-**Naming conflict:** Claude Code has a built-in `/review`. Use `/code-review` to avoid shadowing.
+| `/goat-preflight` | Repeatable structured output     | All      |
+| `/goat-debug`     | Special failure mode + hard gate | All      |
+| `/goat-audit`     | Distinct artefact + hard gate    | All      |
+| `/goat-research`  | Distinct artefact + hard gate    | All      |
+| `/goat-review`    | Repeatable structured output     | All      |
 
 | Former Skill        | Now Lives                                | Why downgraded                               |
 | ------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -202,6 +202,8 @@ Level 2 -- Stop and Escalate (cross-boundary or security):
   -> Full stop. Preserve error output. Write diagnosis with file:line. Wait for human.
 ```
 
+These are examples. Adapt to your project's actual risk boundaries during Phase 1a setup.
+
 Revert-and-rescope: (1) Esc + restate approach, (2) git revert + rescope, (3) /clear + handoff. Two corrections on the same issue = cut your losses (applies to _approach_, not legitimate multi-step work).
 
 ### LOG
@@ -285,7 +287,7 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 | ID | Anti-Pattern | Detection | Deduction |
 |----|-------------|-----------|-----------|
 | AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 |
-| AP2 | `/review` skill shadows built-in | `{skills_dir}/review` exists (not `code-review`) | -3 |
+| AP2 | Skill name conflicts with built-in | `{skills_dir}` contains a skill name that shadows a built-in agent command | -3 |
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 |
 | AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 |
 | AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 |
@@ -344,15 +346,15 @@ stack:
 
 ## Phase 1 Skills
 
-**`/preflight`** -- Mechanical build verification. MUST: type-check + lint + compile. SHOULD: full test suite, formatter check. MAY: skip formatter during debugging. MUST NOT: report complete if any MUST item fails.
+**`/goat-preflight`** -- Mechanical build verification. MUST: type-check + lint + compile. SHOULD: full test suite, formatter check. MAY: skip formatter during debugging. MUST NOT: report complete if any MUST item fails.
 
-**`/debug-investigate`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix.
+**`/goat-debug`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix.
 
-**`/audit`** -- Multi-pass codebase audit. Pass 1: scan, log with file:line evidence. Pass 2: re-read each finding, remove false positives. Pass 3: rank by severity/blast radius. Pass 4: self-check -- "did I fabricate this?"
+**`/goat-audit`** -- Multi-pass codebase audit. Pass 1: scan, log with file:line evidence. Pass 2: re-read each finding, remove false positives. Pass 3: rank by severity/blast radius. Pass 4: self-check -- "did I fabricate this?"
 
-**`/research`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
+**`/goat-research`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
 
-**`/code-review`** -- Structured review with RFC 2119 constraints and autonomy tiers. Do NOT name `review` (shadows built-in).
+**`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers.
 
 ---
 
@@ -468,7 +470,7 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 | Permissions deny | `*git commit*`, `*git push*`          | Always            |
 | Deny rules       | PreToolUse hooks                        | Phase 1           |
 | Secret scanning  | gitleaks pre-commit                     | Phase 1 (manual)  |
-| Dependency audit | npm/composer/cargo audit in /preflight  | Phase 1           |
+| Dependency audit | npm/composer/cargo audit in /goat-preflight  | Phase 1           |
 | Git hygiene      | Block force-push, feature branches      | Phase 1           |
 
 ---
@@ -492,3 +494,7 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 **Quarterly audit:** re-count, check for stale rules, ask "if I removed this, would the model still do the right thing?" The system is designed to get smaller over time, not larger.
 
 **Model-version gating:** Before removing any rule, run the agent eval suite on the current model version. Process: (1) run evals, (2) if all pass, identify removal candidates, (3) remove, (4) re-run evals to confirm, (5) maintain rollback plan. Shrink based on tooling improvements (better linters, better hooks, better CI) and rules never triggered in 90+ days -- not assumptions about model capability.
+
+**Model version transitions:** When upgrading the model (e.g., Claude 3.5 -> Claude 4), before using the new version on real work: (1) re-run the full agent eval suite, (2) check for behavioural regressions on known failure modes, (3) adjust instruction file language if the new model handles certain patterns differently, (4) verify enforcement hooks still work correctly with the new model's tool-calling behaviour.
+
+**AGENTS.md compatibility:** GOAT Flow's instruction file format is compatible with the AGENTS.md open standard (used by 60k+ repos). GOAT Flow extends beyond the spec with: the 5-step execution loop, autonomy tiers with micro-checklist, 6-gate Definition of Done, enforcement gradient, and learning loop files. Projects using GOAT Flow can also create a standard AGENTS.md for interoperability with tools that don't support the full framework.

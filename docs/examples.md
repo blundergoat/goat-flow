@@ -132,7 +132,7 @@ The most complete implementation. Has every artifact the framework defines.
 | **Enforcement** | .claude/settings.json | 42 | Permissions deny list |
 | **Enforcement** | .claude/hooks/ | 3 files | Hooks present |
 | **Enforcement** | scripts/preflight-checks.sh | 482 | Preflight |
-| **Skills** | .claude/skills/ | 3 files | Missing /research, /code-review |
+| **Skills** | .claude/skills/ | 3 files | Missing /goat-research, /goat-review |
 | **Learning Loop** | docs/lessons.md | 16 | Active |
 | **Learning Loop** | docs/footguns.md | 82 | With evidence |
 | **Local Context** | .github/instructions/ | 2 files | Minimal domain files |
@@ -148,7 +148,7 @@ The most complete implementation. Has every artifact the framework defines.
 - No scripts/deny-dangerous.sh or scripts/context-validate.sh
 - No docs/codex-playbooks/
 
-**What makes this notable:** Only 3 skills currently installed — /research and /code-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) — opposite ratio from the bash collection.
+**What makes this notable:** Only 3 skills currently installed — /goat-research and /goat-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) — opposite ratio from the bash collection.
 
 ---
 
@@ -244,3 +244,192 @@ The most complete implementation. Has every artifact the framework defines.
 | Architecture doc over 100 lines | blundergoat-platform | docs/architecture.md at 148 lines |
 | CLAUDE.md over line target | devgoat | 121 lines (target: 120 for app) |
 | CLAUDE.md over line target | sus-form-detector | 107 lines (target: 100 for library) |
+
+---
+
+## Real Example Artifacts
+
+### Example CLAUDE.md (devgoat-bash-scripts, 100 lines)
+
+This is the complete CLAUDE.md from a real Script Collection project implementing the full GOAT Flow system. It scores 100 on the line target and contains all Layer 1 sections: execution loop, autonomy tiers, DoD, router table, stack definition, and working memory.
+
+```markdown
+# CLAUDE.md — v1.0 (2026-03-15)
+
+Shell script library. Drop-in or template scripts under `lib/`. Bats test suite under `tests/`.
+
+## Essential Commands
+
+```bash
+bash -n path/to/script.sh            # Syntax-check
+shellcheck path/to/script.sh         # Lint
+bats tests/ --recursive              # Run test suite
+./preflight-checks.sh                # Quality gate
+```
+
+## Execution Loop: READ → CLASSIFY → ACT → VERIFY → LOG
+
+**READ** — MUST read relevant files before changes. Cross-domain: MUST read both sides.
+```
+❌ "The _common.sh uses parent traversal" (guessed)
+✅ Read lib/stacks/_common.sh → confirmed: source "../_common.sh"
+```
+
+**CLASSIFY** — MUST declare mode (Plan/Implement/Explain/Debug/Review) before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
+
+**ACT** — MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
+
+| Mode | Behaviour |
+|------|-----------|
+| Plan | Produce artefact only. No app code. Exit on LGTM |
+| Implement | Code in 2-3 turns. 4th read without writing = stop |
+| Explain | Walkthrough only. No code changes unless asked |
+| Debug | Diagnosis with file:line first. Fixes after human reviews |
+| Review | Investigate first. Never blindly apply suggestions |
+
+```
+❌ Created abstract logging base class (one implementation)
+✅ Inline functions. Extract when second consumer appears
+```
+
+**VERIFY** — MUST run after each change: `bash -n` → `shellcheck` → `bats tests/ --recursive`
+- Level 1 (isolated failure): note, continue
+- Level 2 (cross-domain/security): MUST full stop, diagnosis with file:line, wait for human
+- Two corrections on same approach = MUST rewind
+
+**LOG** — SHOULD append to `docs/lessons.md` (behavioural mistakes) or `docs/footguns.md` (cross-domain traps with file:line evidence). SHOULD load footguns.md when touching Ask First boundaries.
+
+## Autonomy Tiers
+
+**Always:** Run tests/lint, read any file, write scripts, append to log files
+
+**Ask First** (MUST complete micro-checklist: boundary, related code read, footgun checked, rollback command):
+- `_common.sh` / `_aws-common.sh` changes (sourced by many scripts)
+- CONFIGURATION block interface changes (adding/removing variables)
+- Scripts in `lib/ai-cli/` that sanitise WSL PATH
+- Adding new domains/directories under `lib/`
+- Changing a script's logging paradigm (must match siblings)
+- Editing `.github/instructions/` files
+- Cross-domain changes. Strict mode exception changes
+
+**Never:** Delete tests to pass builds. Modify .env/secrets. Push to main. Force push. Change CONFIGURATION block values. Commit unless asked
+
+## Definition of Done
+
+MUST confirm ALL: (1) `bash -n` + `shellcheck` pass (2) `bats tests/` green (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
+
+## Hard Rules
+
+- MUST use `#!/usr/bin/env bash` + `set -euo pipefail` (exceptions: `docs/footguns.md`)
+- MUST match sibling logging paradigm (`docs/domain-reference.md`). `_common.sh` patterns are not interchangeable
+- MUST use short imperative commits. One per script. Never commit credentials
+- MUST append cross-domain bugs to `docs/footguns.md` before closing
+
+Sub-agents: ONE focused objective, structured return (paths, evidence, confidence, next step), 5-call budget.
+When blocked: ask exactly one question with a recommended default. If not blocked, decide and note assumption.
+
+## Working Memory
+
+SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` before ending incomplete work. Context escalation: `/compact` after 15+ turns → split if two compactions → `/clear` between unrelated tasks.
+
+## Router Table
+
+| Resource | Path |
+|----------|------|
+| Domain reference | `docs/domain-reference.md` |
+| Architecture | `docs/architecture.md` |
+| Code map | `docs/code-map.md` |
+| Footguns | `docs/footguns.md` |
+| Lessons | `docs/lessons.md` |
+| Bats guide | `docs/bats-core.md` |
+| Shell conventions | `.github/instructions/shell-conventions.instructions.md` |
+| ai-cli domain | `.github/instructions/ai-cli.instructions.md` |
+| AWS domain | `.github/instructions/aws.instructions.md` |
+| Stacks domain | `.github/instructions/stacks.instructions.md` |
+| Standalone domains | `.github/instructions/dev.instructions.md` |
+| Preflight skill | `.claude/skills/goat-preflight/` |
+| Code review skill | `.claude/skills/goat-review/` |
+| Debug skill | `.claude/skills/goat-debug/` |
+| Audit skill | `.claude/skills/goat-audit/` |
+| Research skill | `.claude/skills/goat-research/` |
+| Agent evals | `agent-evals/` |
+| Handoff template | `tasks/handoff-template.md` |
+```
+
+### Example footguns.md (first 5 entries from devgoat-bash-scripts)
+
+Real footgun entries with file:line evidence. Every entry references actual code -- no hypothetical examples.
+
+```markdown
+# Footguns
+
+Cross-domain gotchas confirmed in this codebase. Add entries only when the repo itself demonstrates the behaviour.
+
+## Footgun: Helper sourcing is directory-specific
+
+**Symptoms:** A copied script cannot find its helper library, or it sources the wrong shared file after being moved.
+
+**Why it happens:** `ai-cli`, `stacks`, and `aws` each resolve shared helpers differently, and the patterns are tied to the directory layout.
+
+**Evidence:**
+- `lib/ai-cli/install-claude.sh:11`
+- `lib/stacks/node/setup.sh:17`
+- `lib/aws/aws-cli.sh:13`
+
+**Prevention:** Match the helper source pattern used by sibling files in the same domain. Do not swap `SCRIPT_DIR/_common.sh` and `../_common.sh`.
+
+## Footgun: Only ai-cli sanitises WSL PATH
+
+**Symptoms:** A script resolves Windows binaries from `/mnt/*` inside WSL and then fails in confusing ways.
+
+**Why it happens:** `ai-cli/_common.sh` rejects `/mnt/*` binaries and strips those PATH entries before Node/npm checks. Other domains rely on plain `command -v`.
+
+**Evidence:**
+- `lib/ai-cli/_common.sh:54`
+- `lib/ai-cli/_common.sh:65`
+- `lib/aws/_aws-common.sh:101`
+- `lib/workflow/git-status.sh:44`
+
+**Prevention:** If a non-ai-cli script must be WSL-safe, add an explicit native-binary check or document the assumption instead of assuming shared sanitisation exists.
+
+## Footgun: Strict-mode exceptions are intentional
+
+**Symptoms:** Adding `set -e` to a verify or preflight script causes it to abort before reporting the full failure summary.
+
+**Why it happens:** Some scripts intentionally use `set -uo pipefail` so they can accumulate failures. The root preflight script hard-codes these exceptions.
+
+**Evidence:**
+- `lib/stacks/php/verify.sh:12`
+- `lib/stacks/node/preflight-checks.sh:8`
+- `lib/health/check-gpu.sh:21`
+- `preflight-checks.sh:251`
+
+**Prevention:** Before changing strict mode, check whether the script is expected to keep running after a failed check and whether `preflight-checks.sh` already treats it as an exception.
+
+## Footgun: Logging style is domain-scoped
+
+**Symptoms:** A new script looks out of place because the log format, colours, or helper names do not match its neighbours.
+
+**Why it happens:** The repo uses at least three logging styles: ai-cli colour output, stacks `step`/`pass` helpers, and standalone inline log functions.
+
+**Evidence:**
+- `lib/ai-cli/install-claude.sh:16`
+- `lib/stacks/node/setup.sh:45`
+- `lib/aws/cloudfront-invalidate.sh:56`
+- `lib/maintenance/git-cleanup.sh:8`
+
+**Prevention:** Read one sibling script in the touched directory before introducing a new logging helper or output style.
+
+## Footgun: Root preflight only scans lib scripts
+
+**Symptoms:** A root shell entrypoint, dashboard launcher, or workflow helper passes unnoticed even though it has syntax or lint issues.
+
+**Why it happens:** `preflight-checks.sh` discovers scripts only under `lib/`, while valid shell entrypoints also exist at the repo root and under `dashboard/`.
+
+**Evidence:**
+- `preflight-checks.sh:242`
+- `help.sh:1`
+- `dashboard/start-dev.sh:1`
+
+**Prevention:** When changing shell files outside `lib/`, run explicit `bash -n` and `shellcheck` on them or use `scripts/preflight-checks.sh`.
+```

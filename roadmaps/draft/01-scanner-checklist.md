@@ -107,11 +107,11 @@ If dual-agent, score both independently and report side by side.
 
 | Check | Detection | Points | Notes |
 |-------|-----------|--------|-------|
-| Preflight skill exists | `test -f .claude/skills/preflight/SKILL.md` OR `test -f docs/codex-playbooks/preflight.md` | 2 | |
-| Debug-investigate exists | Similar path check | 2 | |
+| Preflight skill exists | `test -f .claude/skills/goat-preflight/SKILL.md` OR `test -f docs/codex-playbooks/goat-preflight.md` | 2 | |
+| Debug skill exists | Similar path check | 2 | |
 | Audit skill exists | Similar path check | 2 | |
 | Research skill exists | Similar path check | 1 | Optional for single-domain libs |
-| Code-review skill exists | Similar path check, NOT named just "review" | 1 | Optional for single-domain libs |
+| Review skill exists | Similar path check | 1 | Optional for single-domain libs |
 
 ### 2.2 Hooks (Claude Code) or Verification Scripts (Codex) (7 pts)
 
@@ -215,7 +215,7 @@ These subtract from the total score. Capped at -15.
 | Anti-Pattern | Detection | Deduction | Notes |
 |--------------|-----------|-----------|-------|
 | CLAUDE.md over 150 lines | `wc -l` | -5 | Hard ceiling in the plan |
-| `/review` skill shadows built-in | `test -d .claude/skills/review` (not code-review) | -3 | Known naming conflict |
+| Skill name conflicts with built-in | `{skills_dir}` contains a skill name that shadows a built-in agent command | -3 | Use goat- prefix for all skills |
 | DoD in both CLAUDE.md and guidelines | DoD/done section in both files | -3 | Agent follows whichever read last |
 | Footguns without evidence | footguns.md exists but zero file:line references | -3 | Likely fabricated |
 | settings.json invalid JSON | `jq` parse failure | -3 | Hooks won't load |

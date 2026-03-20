@@ -1,13 +1,13 @@
-# Prompt: Create /debug-investigate Skill
+# Prompt: Create /goat-debug Skill
 
-Paste this into your coding agent to create the `/debug-investigate` skill for your project.
+Paste this into your coding agent to create the `/goat-debug` skill for your project.
 
 ---
 
 ## The Prompt
 
 ```
-Create the /debug-investigate skill for this project.
+Create the /goat-debug skill for this project.
 
 When to use: when a bug or test failure needs diagnosis, especially
 when the root cause is unclear or spans multiple components.
@@ -17,8 +17,8 @@ failure and produces a diagnosis with evidence BEFORE proposing any fix.
 This prevents the common failure mode of the agent jumping straight to
 fixing without understanding the root cause.
 
-Write the skill file to: .claude/skills/debug-investigate/SKILL.md
-(For Codex: docs/codex-playbooks/debug-investigate.md)
+Write the skill file to: .claude/skills/goat-debug/SKILL.md
+(For Codex: docs/codex-playbooks/goat-debug.md)
 
 The skill follows a strict 3-phase process:
 

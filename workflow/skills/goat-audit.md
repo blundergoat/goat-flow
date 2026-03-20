@@ -1,13 +1,13 @@
-# Prompt: Create /audit Skill
+# Prompt: Create /goat-audit Skill
 
-Paste this into your coding agent to create the `/audit` skill for your project.
+Paste this into your coding agent to create the `/goat-audit` skill for your project.
 
 ---
 
 ## The Prompt
 
 ```
-Create the /audit skill for this project.
+Create the /goat-audit skill for this project.
 
 When to use: for systematic codebase quality review, before major
 releases, or when investigating a class of issues across the codebase.
@@ -17,8 +17,8 @@ find real issues, eliminate false positives, rank by severity, and
 self-check for fabrication. This is more thorough than a normal code
 review — it's a systematic audit.
 
-Write the skill file to: .claude/skills/audit/SKILL.md
-(For Codex: docs/codex-playbooks/audit.md)
+Write the skill file to: .claude/skills/goat-audit/SKILL.md
+(For Codex: docs/codex-playbooks/goat-audit.md)
 
 The skill follows a strict 4-pass process:
 
