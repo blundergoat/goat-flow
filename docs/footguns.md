@@ -12,7 +12,7 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 - `docs/getting-started.md:162` → references `workflow/_reference/system-spec.md` (stale path, file is at `docs/system-spec.md`)
 - `docs/getting-started.md:163` → references `workflow/_draft/00-1-ai-workflow-ARTICLE-prime_v1.5.md`
 - `docs/getting-started.md:15` → references `workflow/_draft/00-1-ai-workflow-ARTICLE-prime_v1.5.md`
-- `docs/five-layers.md:274` → references `FIVE_LAYER_SYSTEM.md` (old filename)
+- `docs/system/five-layers.md:274` → references `FIVE_LAYER_SYSTEM.md` (old filename)
 
 **Prevention:** After any file rename or move, grep the entire repo for the old path. Use `grep -r "old-filename" --include="*.md"` before declaring done. This is DoD gate #6.
 
@@ -20,13 +20,13 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 **Symptoms:** A user reads conflicting descriptions of the same concept in different files. An agent follows a rule from one file that contradicts another.
 
-**Why it happens:** The execution loop, autonomy tiers, anti-pattern table, and other core concepts are described in `docs/system-spec.md`, `docs/five-steps.md`, `docs/five-layers.md`, `docs/getting-started.md`, and `docs/design-rationale.md`. Updating one without updating the others creates drift.
+**Why it happens:** The execution loop, autonomy tiers, anti-pattern table, and other core concepts are described in `docs/system-spec.md`, `docs/system/six-steps.md`, `docs/system/five-layers.md`, `docs/getting-started.md`, and `docs/reference/design-rationale.md`. Updating one without updating the others creates drift.
 
 **Evidence:**
 - `docs/system-spec.md:126` → execution loop definition
-- `docs/five-steps.md:7` → execution loop definition (detailed version)
+- `docs/system/six-steps.md:7` → execution loop definition (detailed version)
 - `docs/getting-started.md:10` → execution loop summary
-- `docs/design-rationale.md:194` → execution loop rationale with repeated content
+- `docs/reference/design-rationale.md:194` → execution loop rationale with repeated content
 
 **Prevention:** When editing a core concept, grep for the concept name across all docs and update every occurrence. `docs/system-spec.md` is the canonical source of truth.
 
@@ -37,11 +37,27 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 **Why it happens:** Line budget targets for project shapes appear in multiple files and have drifted apart during edits.
 
 **Evidence:**
-- `docs/examples.md:218` → shows devgoat-bash-scripts target as "80" for Collection shape
-- `docs/five-layers.md:201` → shows "~100" for Script Collection shape
+- `docs/reference/examples.md:218` → shows devgoat-bash-scripts target as "80" for Collection shape
+- `docs/system/five-layers.md:201` → shows "~100" for Script Collection shape
 - `docs/system-spec.md:104` → shows "~100" for libraries/collections
 
 **Prevention:** Line targets MUST only be authoritatively stated in `docs/system-spec.md`. Other files should reference the spec rather than restate the numbers.
+
+## Footgun: Setup instructions contradict spec on execution loop steps
+
+**Symptoms:** Agents implementing GOAT Flow produce a CLAUDE.md with the old 5-step loop (READ → CLASSIFY → ACT → VERIFY → LOG), missing SCOPE and complexity budgets. Cascades into missing sections (f)-(g) because agents under line pressure cut what the spec doesn't reinforce.
+
+**Why it happens:** `setup/setup-claude.md` tells agents to "Read docs/system-spec.md" FIRST. If system-spec.md shows a different loop than `setup/shared/execution-loop.md`, agents absorb whichever they read first and can't reconcile the contradiction. This caused 7 of 8 gaps in the sus-form-detector implementation.
+
+**Evidence:**
+- `docs/system-spec.md:15` → loop definition in Layer 1 architecture diagram
+- `docs/system-spec.md:126` → loop definition in execution loop section
+- `setup/shared/execution-loop.md:14` → updated loop definition (authoritative)
+- `setup/setup-claude.md:43` → "Read docs/system-spec.md" as first instruction
+
+**Prevention:** After updating `setup/shared/execution-loop.md`, ALWAYS update the same concept in `docs/system-spec.md`, `docs/system/six-steps.md`, and `docs/system/five-layers.md`. The spec is read first by agents — it must match. This is a specific instance of the "concept duplication" footgun above, but critical enough to track separately because it directly causes broken implementations.
+
+**Created:** 2026-03-20
 
 ## Footgun: Stale references from old project structure
 

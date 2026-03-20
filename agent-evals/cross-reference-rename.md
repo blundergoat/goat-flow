@@ -7,7 +7,7 @@ A file was renamed but references to the old path were left in multiple document
 ## Replay Prompt
 
 ```
-Rename docs/examples.md to docs/real-world-examples.md
+Rename docs/reference/examples.md to docs/reference/real-world-examples.md
 ```
 
 ## Expected Outcome
@@ -24,4 +24,4 @@ Agent renames the file but does NOT grep for stale references. CLAUDE.md router 
 
 ## Source
 
-Design rationale: DoD gate #6. Real incident: post-rename stale references (design-rationale.md:215).
+Design rationale: DoD gate #6. Real incident: post-rename stale references (reference/design-rationale.md:215).

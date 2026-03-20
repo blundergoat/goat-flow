@@ -12,7 +12,7 @@ Five layers. Only Layer 1 loads every session. Everything else loads on demand.
 
 ```
 Layer 1 -- Runtime (CLAUDE.md, ~100-120 lines)
-    READ -> CLASSIFY -> ACT -> VERIFY -> LOG loop
+    READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG loop
     Autonomy tiers, stop-the-line, mode switch, definition of done
     Router table pointing to everything below
 
@@ -115,7 +115,7 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 4. Sub-agent objectives -> compress to two lines
 5. Working memory details -> compress, keep handoff protocol
 
-**Never cut:** The execution loop, autonomy tiers, or definition of done.
+**Never cut:** The execution loop, autonomy tiers, or definition of done. Sections (f)–(i) (sub-agent objectives, communication when blocked, router table, essential commands) are MUST-include even when compressing — compress them, but do not remove them.
 
 **Router table placement:** The router table should be positioned at the END of the instruction file. Research shows the beginning and end of the context window receive higher attention than the middle. The router table is the highest-leverage section (160x usage uplift) -- placing it at the end exploits the end-of-context attention zone.
 
@@ -123,7 +123,7 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 
 ## The Default Execution Loop
 
-Every task follows: READ -> CLASSIFY -> ACT -> VERIFY -> LOG
+Every task follows: READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG
 
 ### READ
 
@@ -143,7 +143,7 @@ GOOD: Read composer.json first -> "acme-client is installed via Packagist at ^1.
 
 **Problem:** Agent confuses questions with directives and drifts between modes silently.
 
-Complexity: Hotfix / Standard Feature / System Change / Infrastructure Change
+Complexity (with read/turn budgets): Hotfix (2 reads / 3 turns) / Standard Feature (4 / 10) / System Change (6 / 20) / Infrastructure Change (8 / 25). Over budget = re-classify before continuing.
 Mode: Plan / Implement / Explain / Debug / Review
 
 ```
@@ -162,7 +162,11 @@ BAD:  "Created INotificationProvider interface" (only one implementation exists)
 GOOD: "EmailNotifier handles notifications. Extract interface when second provider needed."
 ```
 
-After classifying, declare SCOPE before acting: files allowed to change, systems allowed to change, explicit non-goals, max blast radius before escalation. See FIVE_STEP_LOOP.md for full detail.
+### SCOPE
+
+**Problem:** Agent touches files and systems outside the task's intended boundary without declaring intent.
+
+MUST declare before acting: files allowed to change, systems allowed to change, explicit non-goals, max blast radius before escalation. If changes need to extend beyond declared scope, stop and re-scope with the human. Do not silently expand.
 
 ### ACT
 
@@ -313,7 +317,7 @@ For within-session state persistence, use `.claude/tasks/session-current.md`. Th
 
 One focused objective per sub-agent with concrete deliverable format. Required return: paths, evidence, confidence, next step. Tool call budget: 5 per sub-agent.
 
-**Sub-agent patterns:** Fresh-context (recommended default), parallel teams (independent tasks), role-based delegation (SDLC phases). See docs/five-layers.md for full strategy.
+**Sub-agent patterns:** Fresh-context (recommended default), parallel teams (independent tasks), role-based delegation (SDLC phases). See docs/system/five-layers.md for full strategy.
 
 ## Stack Definition
 

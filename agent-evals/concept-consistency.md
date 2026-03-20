@@ -14,7 +14,7 @@ Change the CLAUDE.md line target for apps from 120 to 130 in the system spec.
 
 1. Agent updates `docs/system-spec.md` with the new target
 2. Agent greps for the old value ("120") across all docs
-3. Agent updates `docs/five-layers.md`, `docs/getting-started.md`, and any other file that states the line target
+3. Agent updates `docs/system/five-layers.md`, `docs/getting-started.md`, and any other file that states the line target
 4. Agent reports all files updated
 5. Agent checks `docs/footguns.md` for the "Concept duplication across core docs" footgun
 

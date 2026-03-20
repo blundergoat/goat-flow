@@ -4,6 +4,63 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
+## v0.1.1 - 2026-03-20
+
+Post-release improvements from implementing GOAT Flow on two real projects (rampart, sus-form-detector) and auditing the results.
+
+### Self-Implementation
+
+- Implemented GOAT Flow Phases 1a-2 on the goat-flow project itself
+- CLAUDE.md (110 lines), 5 skills, 2 hooks, settings.json, CI workflow
+- docs/footguns.md (5 footguns with file:line evidence), docs/lessons.md (2 entries)
+- 3 agent evals, .copilotignore, .cursorignore, tasks/handoff-template.md, docs/architecture.md
+
+### Instruction Fixes (from rampart audit)
+
+- execution-loop.md: added SCOPE as explicit step, complexity read/turn budgets, LOG as MUST-when-tripped, router table minimum entries
+- Phase 2 changed from "after a while" to "implement immediately" across all setup files
+- setup-claude.md, setup-codex.md, setup-gemini.md: "Do not defer" added to Phase 2
+
+### Instruction Fixes (from sus-form-detector diagnosis)
+
+- system-spec.md: fixed loop contradiction (was still showing old 5-step loop in 2 places)
+- system-spec.md: promoted SCOPE from paragraph inside CLASSIFY to its own ### section
+- system-spec.md: added read/turn budgets to CLASSIFY, marked (f)-(i) as MUST-include in cut priority
+- setup-claude.md + setup-gemini.md: added "Do NOT skip sections (f)-(i)" to Prompt A (was only in Prompt B)
+- setup-claude.md: added .copilotignore/.cursorignore to Phase 1c verification checklist
+- docs-seed.md: clarified footgun evidence format (file paths with line numbers, bare paths don't count)
+- docs-seed.md: resolved confusion-log.md tension ("create on first use" but "ALWAYS reference in LOG and router")
+
+### Documentation Updates
+
+- docs/reference/examples.md: added rampart as 7th implementation, added bug-to-loop retrospective (6 real bugs mapped to execution loop steps)
+- docs/reference/design-rationale.md: added SCOPE rationale and complexity budgets rationale with rampart incident evidence
+- docs/system/five-layers.md: multi-agent support table, sub-agent strategy
+- docs/system/six-steps.md: auto-triggering skills section
+- docs/reference/cross-agent-comparison.md: multi-model verification
+- setup/setup-gemini.md: new Gemini CLI setup guide
+- Moved reference docs to docs/reference/ (competitive-landscape, cross-agent-comparison, design-rationale, examples)
+- docs/footguns.md: added spec contradiction footgun, updated all paths
+- docs/lessons.md: 2 entries (agents follow first source read, agents cut small sections under line pressure)
+
+### Doc Restructure
+
+- Renamed docs/five-steps.md → docs/system/six-steps.md (reflects 6-step loop with SCOPE)
+- Moved docs/five-layers.md → docs/system/five-layers.md
+- Moved 4 reference docs to docs/reference/ (design-rationale, examples, cross-agent-comparison, competitive-landscape)
+- Rewrote docs/README.md to match current directory structure
+- Fixed 17+ stale path references across CLAUDE.md, getting-started.md, system-spec.md, footguns.md, agent-evals/, CHANGELOG.md
+- Updated six-steps.md: title, loop diagram, "Why Six Steps" section with SCOPE rationale
+- Updated five-layers.md: folder structure diagram shows current docs/ + workflow/ split
+
+### Based on
+
+- 7 real project implementations (added rampart)
+- sus-form-detector agent diagnosed 7 of 8 gaps as instruction failures, not agent failures
+- Root cause: system-spec.md contradicted execution-loop.md on the execution loop
+
+---
+
 ## v0.1.0 - 2026-03-20
 
 First public release. Complete workflow system with docs, prompts, and reference material.
@@ -66,14 +123,14 @@ First public release. Complete workflow system with docs, prompts, and reference
 
 ### Documentation
 
-- docs/five-layers.md - architecture overview
-- docs/five-steps.md - execution loop deep dive
+- docs/system/five-layers.md - architecture overview
+- docs/system/six-steps.md - execution loop deep dive
 - docs/getting-started.md - onboarding with troubleshooting recipes
 - docs/system-spec.md - full technical specification
-- docs/design-rationale.md - why behind every decision
-- docs/cross-agent-comparison.md - Claude Code vs Codex analysis
-- docs/competitive-landscape.md - 12 competitor systems compared
-- docs/examples.md - real implementation data from 6 projects + example artifacts
+- docs/reference/design-rationale.md - why behind every decision
+- docs/reference/cross-agent-comparison.md - Claude Code vs Codex analysis
+- docs/reference/competitive-landscape.md - 12 competitor systems compared
+- docs/reference/examples.md - real implementation data from 7 projects + example artifacts
 
 ### Based on
 

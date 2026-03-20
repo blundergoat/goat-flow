@@ -1,27 +1,27 @@
 # GOAT Flow -- Getting Started
 
 **Version:** 1.5 | 2026-03-15
-**Companion to:** `workflow/` (prompts -- `setup-claude.md` for Claude Code, `setup-codex.md` for Codex) and `workflow/_reference/system-spec.md` (plan)
+**Companion to:** `setup/` (agent setup guides) and `docs/system-spec.md` (plan)
 
 ---
 
 ## What This Is
 
-A system that gives Claude Code a 5-step execution loop (READ -> CLASSIFY -> ACT -> VERIFY -> LOG) instead of a wall of rules. Two files do the work -- a design doc (the system spec) and a set of prompts you feed to Claude Code. You run the prompts; Claude Code builds the system for your project.
+A system that gives Claude Code a 6-step execution loop (READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG) instead of a wall of rules. Two files do the work -- a design doc (the system spec) and a set of prompts you feed to Claude Code. You run the prompts; Claude Code builds the system for your project.
 
 ## Reading Order
 
 1. **This file** -- how to start
-2. **The article** (`workflow/_draft/00-1-ai-workflow-ARTICLE-prime_v1.5.md`) -- why this exists, real implementation data
-3. **The prompts** (`workflow/runtime/`) -- what you run
-4. **The plan** (`workflow/_reference/system-spec.md`) -- full reference for every design decision
-5. **The rationale** (`workflow/_reference/design-rationale.md`) -- deep dives on why each section exists
+2. **The spec** (`docs/system-spec.md`) -- full reference for every design decision
+3. **The setup** (`setup/setup-claude.md` or `setup/setup-codex.md`) -- what you run
+4. **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
+5. **The examples** (`docs/reference/examples.md`) -- real implementation data from 7 projects
 
 ## Before You Start
 
 1. **Copy the system spec and setup prompts into your project root.**
-   - `workflow/_reference/system-spec.md`
-   - The prompts from `workflow/` -- use `setup-claude.md` for Claude Code or `setup-codex.md` for Codex
+   - `docs/system-spec.md`
+   - The setup guide from `setup/` -- use `setup-claude.md` for Claude Code or `setup-codex.md` for Codex
 
 2. **Rename if needed.** The prompts reference the system spec by exact filename. If your copies have prefixes or version suffixes, rename them to match.
 
@@ -159,10 +159,10 @@ agent-evals/                           <- Phase 2
 
 ## Further Reading
 
-- **The plan** (`workflow/_reference/system-spec.md`) -- full system design, rationale for every section, hook design patterns, security hardening details
-- **The article** (`workflow/_draft/00-1-ai-workflow-ARTICLE-prime_v1.5.md`) -- narrative version with real implementation data from four projects
-- **The rationale** (`workflow/_reference/design-rationale.md`) -- deep dives on why each section exists
-- **Cross-agent comparison** (`workflow/_reference/cross-agent-comparison.md`) -- how this adapts across Claude Code and Codex
-- **The playbook repo** ([ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook)) -- planning prompts (mob elaboration, SBAO ranking, milestone planning) that feed into Phase 2 playbook updates
-- **Scaffold prompts** (`workflow/runtime/`) -- project scaffolding prompts (prompts 05-08)
+- **The spec** (`docs/system-spec.md`) -- full system design, rationale for every section, hook design patterns, security hardening details
+- **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
+- **Cross-agent comparison** (`docs/reference/cross-agent-comparison.md`) -- how this adapts across Claude Code and Codex
+- **Real examples** (`docs/reference/examples.md`) -- implementation data from 7 projects
+- **The playbook repo** ([ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook)) -- planning prompts (mob elaboration, SBAO ranking, milestone planning)
+- **Scaffold prompts** (`workflow/runtime/`) -- project scaffolding prompts
 - **Testing workflow** (`workflow/playbooks/testing/`) -- testing-related workflow files

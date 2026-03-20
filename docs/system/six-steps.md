@@ -1,9 +1,9 @@
-# The 5-Step Execution Loop
+# The 6-Step Execution Loop
 
 Every task the AI coding agent performs follows the same loop:
 
 ```
-READ → CLASSIFY → ACT → VERIFY → LOG
+READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 ```
 
 This isn't a suggestion - it's the agent's operating procedure. Each step exists because a specific failure mode kept occurring without it. The loop lives in Layer 1 (the root instruction file) and loads every session.
@@ -320,11 +320,10 @@ Gates 5 and 6 are the ones most often skipped. They exist because of specific in
 
 ---
 
-## Why Five Steps, Not Three or Seven
+## Why Six Steps, Not Three or Seven
 
-The loop started as READ → ACT → VERIFY (three steps). Two steps were added after real failures:
+The loop started as READ → ACT → VERIFY (three steps). Three steps were added after real failures:
 
 - **CLASSIFY was added** because the agent kept confusing questions with directives and drifting between modes silently. Without an explicit classification step, mode drift happened on ~30% of tasks.
 - **LOG was added** because the same mistakes kept recurring across sessions. A 14-footgun discovery on a Tauri app was lost between sessions twice before the logging step was formalised.
-
-No step has been added since v1.2 of the plan. The loop is stable.
+- **SCOPE was added** (v0.1.1) because agents touched files outside the task's intended boundary without declaring intent. On the Rampart project, 2 of 6 real bugs were scope violations — a circular dependency went undetected because neither file was in the original task boundary, and an unwanted feature was built without approval. SCOPE was initially a paragraph inside CLASSIFY but the retrospective showed scope violations were the most common preventable failure mode.

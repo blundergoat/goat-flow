@@ -1,40 +1,45 @@
-# GOAT Flow - Workflow System
-
-A full-stack AI engineering system for planning, executing, verifying, and learning with coding agents.
+# GOAT Flow - Documentation
 
 **Start here:** [getting-started.md](./getting-started.md)
 
 ---
 
-## System Overview
+## Core
 
 | Document | What it covers |
 |----------|---------------|
-| [FIVE_LAYER_SYSTEM.md](./FIVE_LAYER_SYSTEM.md) | The 5-layer architecture (Runtime, Local Context, Skills, Playbooks, Evaluation) |
-| [FIVE_STEP_LOOP.md](./FIVE_STEP_LOOP.md) | The execution loop (READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG) |
+| [system-spec.md](./system-spec.md) | Full technical specification (canonical source of truth) |
 | [getting-started.md](./getting-started.md) | Reading order, setup checklist, adoption tiers, maintenance, gotchas |
 
----
+## System Design
 
-## Folders (mapped to the 5-layer architecture)
+| Document | What it covers |
+|----------|---------------|
+| [system/five-layers.md](./system/five-layers.md) | The 5-layer architecture (Runtime, Local Context, Skills, Playbooks, Evaluation) |
+| [system/six-steps.md](./system/six-steps.md) | The 6-step execution loop (READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG) |
 
-| Folder | Layer | What it contains |
-|--------|-------|-----------------|
-| [runtime/](./runtime/) | Layer 1 | Setup prompts for CLAUDE.md/AGENTS.md, enforcement hooks, project scaffolding |
-| [local-context/](./local-context/) | Layer 2 | Domain instruction file prompts (auto-loaded per directory) |
-| [skills/](./skills/) | Layer 3 | Skill reference + creation prompts (/goat-preflight, /goat-debug, /goat-audit, /goat-research, /goat-review) |
-| [playbooks/](./playbooks/) | Layer 4 | Planning methodology (feature brief → SBAO → milestones) + doer-verifier testing |
-| [evaluation/](./evaluation/) | Layer 5 | Agent evals, CI validation, learning loop files (footguns, lessons, confusion-log, handoff) |
+## Learning Loop
 
----
+| Document | What it covers |
+|----------|---------------|
+| [footguns.md](./footguns.md) | Cross-domain architectural traps with file:line evidence |
+| [lessons.md](./lessons.md) | Agent behavioural mistakes and prevention rules |
+| [architecture.md](./architecture.md) | Project architecture overview |
 
-## Reference (not part of the layer system)
+## Reference
 
-| Folder/File | What it contains |
-|-------------|-----------------|
-| [_reference/system-spec.md](./_reference/system-spec.md) | Full technical specification |
-| [_reference/design-rationale.md](./_reference/design-rationale.md) | Why behind every design decision |
-| [_reference/cross-agent-comparison.md](./_reference/cross-agent-comparison.md) | Claude Code vs Codex analysis |
-| [_reference/examples.md](./_reference/examples.md) | Real project implementation data |
-| [_reference/competitive-landscape.md](./_reference/competitive-landscape.md) | GOAT Flow vs 12 competitor systems |
-| [system-summary-for-external-review.md](./system-summary-for-external-review.md) | Self-contained summary for external reviewers |
+| Document | What it covers |
+|----------|---------------|
+| [reference/design-rationale.md](./reference/design-rationale.md) | Why behind every design decision |
+| [reference/examples.md](./reference/examples.md) | Real project implementation data (7 projects) |
+| [reference/cross-agent-comparison.md](./reference/cross-agent-comparison.md) | Claude Code vs Codex analysis |
+| [reference/competitive-landscape.md](./reference/competitive-landscape.md) | GOAT Flow vs 12 competitor systems |
+
+## Related Directories
+
+| Directory | What it contains |
+|-----------|-----------------|
+| [../setup/](../setup/) | Agent-specific setup guides (Claude Code, Codex, Gemini CLI) |
+| [../workflow/](../workflow/) | Skill templates, playbooks, evaluation templates, runtime scaffolding |
+| [../agent-evals/](../agent-evals/) | Regression tests from real incidents |
+| [../roadmaps/](../roadmaps/) | CLI auditor spec and scoring rubric |

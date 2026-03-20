@@ -55,10 +55,10 @@ GOOD: Inline format. Extract when second format needed
 
 **Ask First** (MUST: name boundary, confirm related files read, check footguns, state rollback command):
 - `docs/system-spec.md` changes (canonical spec, referenced everywhere)
-- `docs/five-layers.md`, `docs/five-steps.md` (core architecture docs)
+- `docs/system/five-layers.md`, `docs/system/six-steps.md` (core architecture docs)
 - `setup/` prompt changes (affects what users generate)
 - `workflow/skills/` template changes (affects user skill creation)
-- `docs/design-rationale.md` (evidence citations, source attributions)
+- `docs/reference/design-rationale.md` (evidence citations, source attributions)
 - Adding, removing, or renaming any file (breaks cross-references)
 - Changes spanning 3+ documentation files
 
@@ -87,11 +87,11 @@ SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` be
 | Resource | Path |
 |----------|------|
 | System spec (canonical) | `docs/system-spec.md` |
-| 5-layer architecture | `docs/five-layers.md` |
-| 5-step execution loop | `docs/five-steps.md` |
-| Design rationale | `docs/design-rationale.md` |
+| 5-layer architecture | `docs/system/five-layers.md` |
+| 6-step execution loop | `docs/system/six-steps.md` |
+| Design rationale | `docs/reference/design-rationale.md` |
 | Getting started | `docs/getting-started.md` |
-| Real examples | `docs/examples.md` |
+| Real examples | `docs/reference/examples.md` |
 | Setup - Claude Code | `setup/setup-claude.md` |
 | Setup - Codex | `setup/setup-codex.md` |
 | Skill templates | `workflow/skills/` |

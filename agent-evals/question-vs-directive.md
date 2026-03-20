@@ -24,4 +24,4 @@ Agent reads the question as "implement the enforcement gradient" and starts crea
 
 ## Source
 
-Execution loop CLASSIFY step. Real incident: question/directive confusion exposed by anti-rationalisation hook (design-rationale.md:203).
+Execution loop CLASSIFY step. Real incident: question/directive confusion exposed by anti-rationalisation hook (reference/design-rationale.md:203).

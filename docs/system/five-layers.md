@@ -267,17 +267,24 @@ When to use: large projects with distinct SDLC phases. The /goat-plan skill hand
 
 ## Folder Structure
 
-This `workflow/` directory mirrors the 5-layer architecture:
+Documentation is split across `docs/` (specs, learning loop) and `workflow/` (templates, prompts):
 
 ```
-workflow/
-├── FIVE_LAYER_SYSTEM.md      ← You are here
+docs/
+├── system-spec.md            ← Canonical specification
 ├── getting-started.md        ← Entry point and reading order
+├── system/
+│   ├── five-layers.md        ← You are here
+│   └── six-steps.md          ← 6-step execution loop
+├── reference/                ← Design rationale, examples, competitive analysis
+├── footguns.md               ← Cross-domain architectural traps
+├── lessons.md                ← Agent behavioural mistakes
+└── architecture.md           ← Project architecture overview
+
+workflow/
 ├── runtime/                  ← Layer 1: setup prompts + project scaffolding
 ├── local-context/            ← Layer 2: domain instruction file prompts
 ├── skills/                   ← Layer 3: skill reference and justification
 ├── playbooks/                ← Layer 4: planning methodology prompts
-├── evaluation/               ← Layer 5: testing workflow + footguns + evals
-├── _reference/               ← System spec, design rationale, cross-agent comparison, examples
-└── _draft/                   ← Archived raw source files
+└── evaluation/               ← Layer 5: testing workflow + evals
 ```

@@ -56,6 +56,7 @@ INSTRUCTION FILE:
 1. Create GEMINI.md with the sections listed in setup/shared/execution-loop.md.
    Target: under [120 for apps / 100 for libraries] lines.
    Adapt all examples and Ask First boundaries for THIS project.
+   Do NOT skip sections (f)–(i) - they are small but required.
 
 DOCS SEED FILES:
 2. Create the files listed in setup/shared/docs-seed.md.
