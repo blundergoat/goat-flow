@@ -161,7 +161,8 @@ Create these 5 skills under .claude/skills/:
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
 - GATE: Verify all skill files exist with required sections.
 - GATE: Verify CLAUDE.md router table references the skill directories.
-- GATE: Run preflight checks.
+- GATE: Run scripts/preflight-checks.sh if it exists. Otherwise run the
+  project's lint + test commands from Essential Commands.
 Do NOT proceed to Phase 1c until all gates pass.
 ```
 
@@ -216,7 +217,8 @@ VERIFICATION (all MUST pass before proceeding to Phase 2):
 - GATE: Verify deny-dangerous blocks expected commands.
 - GATE: Verify stop hook exits 0 even on errors.
 - GATE: Verify .copilotignore and .cursorignore exist with secret patterns.
-- GATE: Run preflight checks.
+- GATE: Run scripts/preflight-checks.sh if it exists. Otherwise run the
+  project's lint + test commands from Essential Commands.
 Do NOT proceed to Phase 2 until all gates pass.
 ```
 

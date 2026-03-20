@@ -22,6 +22,7 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      max blast radius. Expanding beyond scope = stop and re-scope
    - ACT: behaviour per mode as a table. State declaration rule.
      Mode-transition rule: "Switching to [NEW STATE] because [reason]."
+     Debug mode: "No fixes until human reviews diagnosis."
      Anti-planning-loop rule. Anti-BDUF guard with BAD/GOOD example
    - VERIFY: continuous test loop. Stop-the-line with two-level
      escalation. Revert-and-rescope tactic
@@ -39,7 +40,12 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
 
 c) Autonomy Tiers: Always / Ask First / Never
    - Adapt Ask First boundaries for THIS project's specific risks
-   - Include micro-checklist for Ask First items
+   - Include micro-checklist for Ask First items. MUST include:
+     1. Boundary touched: [name it]
+     2. Related code read: [yes/no]
+     3. Footgun entry checked: [relevant entry, or "none"]
+     4. Local instruction checked: [local CLAUDE.md / .github/instructions/ / none]
+     5. Rollback command: [exact command]
 
 d) Definition of Done: 6 gates
 
@@ -52,7 +58,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 5 skill directories
+     - All 5 skill directories (Claude/Gemini) or playbook files (Codex)
      - Learning loop files (footguns, lessons, confusion-log)
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project

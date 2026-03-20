@@ -4,8 +4,13 @@ on:
   pull_request:
     paths:
       - 'CLAUDE.md'
+      - 'AGENTS.md'
       - '.claude/**'
       - 'docs/**'
+      - 'setup/**'
+      - 'workflow/**'
+      - 'scripts/**'
+      - 'codex-evals/**'
 
 jobs:
   validate:
@@ -74,4 +79,10 @@ jobs:
               exit 1
             }
             echo "settings.json is valid JSON"
+          fi
+
+      - name: Validate Codex workflow
+        run: |
+          if [ -f AGENTS.md ] && [ -f scripts/context-validate.sh ]; then
+            bash scripts/context-validate.sh
           fi

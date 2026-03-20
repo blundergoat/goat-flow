@@ -54,6 +54,26 @@ WHAT TO BUILD (in this order):
    The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
    CLASSIFY MUST include read/turn budgets per complexity tier.
 
+   MUST include these exact rules (agents skip them without reinforcement):
+   - ACT: state declaration "State: [MODE] | Goal: [one line] | Exit: [condition]"
+     AND mode-transition rule "Switching to [NEW STATE] because [reason]."
+   - ACT Debug mode: "No fixes until human reviews diagnosis" (not just
+     "until diagnosis exists")
+   - LOG: mechanical trigger (VERIFY failure or course correction →
+     lessons.md entry required before DoD)
+   - LOG: human correction trigger (MUST log immediately)
+   - LOG: footgun propagation rule (propagate to nearest routed
+     domain/instruction doc for Codex, local CLAUDE.md for Claude)
+   - LOG: dual-agent coordination (read shared files before appending)
+   - Ask First: use the explicit 5-item micro-checklist from the spec
+     (item 4 = relevant local instruction checked: .github/instructions/<file> / CLAUDE.md / none)
+
+   DUAL-AGENT REPOS: Do not create Codex assets under .claude/, but
+   AGENTS.md MUST reference existing Claude assets (CLAUDE.md, agent-evals/)
+   in the router table and SHOULD align shared semantics (loop, budgets,
+   LOG triggers, Ask First checklist shape) unless a Codex mechanic
+   requires divergence.
+
 2. Docs seed files - Create the files listed in setup/shared/docs-seed.md.
 
 3. Codex playbooks - docs/codex-playbooks/:
@@ -78,6 +98,11 @@ WHAT TO BUILD (in this order):
    exists, read it first. Do NOT duplicate incidents already covered —
    reference the existing eval and add only incidents or failure modes
    that are missing.
+   At least 1-2 evals MUST test Codex-specific mechanics: deny-dangerous
+   is policy not runtime blocking, no slash commands (use playbooks),
+   no /compact or /clear, preserve Claude files in dual-agent repos,
+   or AGENTS.md/CLAUDE.md alignment drift.
+   Each eval MUST declare Origin: real-incident | synthetic-seed.
 
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
@@ -92,16 +117,22 @@ VERIFICATION:
 
 ## After Codex Runs - Human Checklist
 
-- [ ] AGENTS.md has execution loop, autonomy tiers, DoD, router table
+- [ ] AGENTS.md has 6-step loop (with SCOPE), autonomy tiers, DoD, router table
+- [ ] AGENTS.md ACT has state declaration AND mode-transition rule
+- [ ] AGENTS.md LOG has mechanical trigger, human correction trigger, footgun propagation
+- [ ] AGENTS.md Ask First has explicit 5-item micro-checklist (not compressed prose)
+- [ ] AGENTS.md uses LOG (not RECORD)
 - [ ] docs/footguns.md entries have file:line evidence (not fabricated)
 - [ ] docs/guidelines-ownership-split.md exists (if guidelines were trimmed)
-- [ ] All 5 playbooks exist in docs/codex-playbooks/
+- [ ] All 5 playbooks exist in docs/codex-playbooks/ with goat-* prefix
 - [ ] scripts/deny-dangerous.sh --self-test passes
 - [ ] scripts/context-validate.sh runs cleanly
 - [ ] Router table references all resolve to real files
 - [ ] Ask First boundaries are project-specific (not generic template)
+- [ ] codex-evals/ has at least 1-2 Codex-mechanics evals
 - [ ] If dual-agent: no Claude Code files were modified or removed
 - [ ] If dual-agent: codex-evals/ does not duplicate incidents already in agent-evals/
+- [ ] If dual-agent: compare AGENTS.md vs CLAUDE.md for same loop, budgets, LOG triggers, Ask First shape, DoD gates
 - [ ] Test deny-dangerous by asking Codex to run `git push --force origin main`
 
 ---

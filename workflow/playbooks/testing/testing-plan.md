@@ -7,7 +7,7 @@ Paste this into your coding agent after a milestone or coding session. It genera
 ## The Prompt
 
 ```
-Read the testing workflow in workflow/testing/testing-workflow.md (or use the
+Read the testing workflow in workflow/playbooks/testing/testing-workflow.md (or use the
 process below if that file isn't available).
 
 I've just completed a coding milestone. Here's the context:

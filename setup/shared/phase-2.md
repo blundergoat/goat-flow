@@ -29,9 +29,15 @@ AGENT EVAL SUITE:
    - Expected outcome
    - Known failure mode tested
 
+   Each eval MUST declare Origin: real-incident | synthetic-seed.
    If fewer than 5 qualifying incidents, create as many as exist.
    For projects with no history: create 1-2 from common stack failure
    modes. Replace with real incidents as they occur.
+
+   For Codex evals: at least 1-2 MUST test Codex-specific mechanics
+   (no runtime hook blocking, playbooks not slash commands, no /compact
+   or /clear, dual-agent file preservation). Generic workflow evals
+   belong in agent-evals/, not codex-evals/.
 
 RFC 2119 PASS:
 2. Apply MUST/SHOULD/MAY to every rule in the instruction file.
@@ -57,6 +63,7 @@ CI VALIDATION:
 VERIFICATION:
 - Count instruction file lines. MUST stay under target after RFC 2119 pass.
 - Verify permission profile files are valid (if created).
-- Run preflight.
+- Run scripts/preflight-checks.sh if it exists. Otherwise run the
+  project's lint + test commands.
 - Report instruction file line count.
 ```

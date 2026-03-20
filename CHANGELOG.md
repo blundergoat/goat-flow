@@ -4,6 +4,40 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
+## v0.2.0 - 2026-03-21
+
+Codex implementation for goat-flow + Codex instruction improvements from 6 project diagnostics.
+
+### Codex Implementation (goat-flow)
+
+- AGENTS.md (108 lines) with 6-step loop, budgets, all LOG triggers, 5-item Ask First checklist
+- 5 codex playbooks (goat-preflight, goat-debug, goat-audit, goat-research, goat-review)
+- 5 codex evals with Origin labels (2 Codex-mechanics: no-slash-commands, preserve-claude-assets)
+- scripts/deny-dangerous.sh, scripts/context-validate.sh, scripts/preflight-checks.sh
+- CI context-validation.yml updated with Codex workflow validation
+
+### Codex Instruction Improvements (from 6 project diagnostics)
+
+Ran Codex diagnostic prompt against all 6 projects. Key improvements:
+
+- setup-codex.md: explicit MUST-include block for state declaration, mode-transition rule, Debug gate ("human reviews" not "diagnosis exists"), all LOG triggers, footgun propagation, dual-agent coordination, 5-item Ask First checklist
+- setup-codex.md: Codex evals now require 1-2 Codex-mechanics evals + Origin labels
+- setup-codex.md: dual-agent repos must reference Claude assets and align shared semantics
+- setup-codex.md: human checklist expanded with ACT checks, LOG checks, Ask First format, DoD alignment, Codex-mechanics eval check
+- execution-loop.md: Ask First micro-checklist now inlines all 5 items (was "include micro-checklist" with no specifics)
+- execution-loop.md: router says "skill directories (Claude/Gemini) or playbook files (Codex)"
+- execution-loop.md: Debug gate now explicit in shared template ("No fixes until human reviews diagnosis")
+- phase-2.md: Codex evals must target Codex-specific mechanics, each declares Origin
+- All verification gates updated to use scripts/preflight-checks.sh with fallback to stack commands
+
+### Based on
+
+- 6 Codex diagnostics confirming instructions materially improved
+- All 6 AGENTS.md files rebuilt to current spec with zero remaining gaps
+- Key win: RECORD→LOG fix held 6/6, Ask First checklist expansion worked first pass
+
+---
+
 ## v0.1.1 - 2026-03-20
 
 Post-release improvements from implementing GOAT Flow on 5 real projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform) and running the diagnose prompt against each.
