@@ -72,6 +72,8 @@ Review the code changes since [LAST COMMIT/MILESTONE]. Focus on:
 or architectural concerns. Do not make any code changes - review only.
 ```
 
+**Multi-model verification (recommended):** When possible, use a DIFFERENT model for Track 2 verification than the coding agent used. Claude reviewing Codex's work catches different issues than Claude reviewing Claude's work. Model-specific blind spots are real - cross-model verification catches them.
+
 **What this catches:** Logic gaps the coding agent was blind to, architectural issues, security problems, inconsistencies between what was asked and what was built.
 
 **What this misses:** Visual/UX issues that require a browser, performance under real load, environment-specific bugs.

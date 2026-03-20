@@ -98,3 +98,17 @@ Blocked (OS-level):
 ```
 
 Implementation options: Docker container with restricted user, rbash (restricted bash), or project-level command wrapper script. The framework cannot enforce this directly -- it must be configured in the agent's deployment environment.
+
+## Multi-Model Verification
+
+The doer-verifier testing model recommends using a DIFFERENT model for verification than the coding agent:
+
+| Coding Agent | Recommended Verifier |
+|-------------|---------------------|
+| Claude Code | Codex, Gemini CLI, or Copilot |
+| Codex | Claude Code or Gemini CLI |
+| Cursor | Claude Code or Codex |
+
+Cross-model verification catches model-specific blind spots. Claude reviewing Claude's work misses the same classes of errors that Claude makes. A different model brings different failure modes - and different strengths.
+
+This is consistent with the framework's doer-verifier principle: the entity that did the work should not verify it.

@@ -304,9 +304,16 @@ For tasks exceeding 5 turns: maintain Working Notes in tasks/todo.md. Context es
 
 For within-session state persistence, use `.claude/tasks/session-current.md`. This complements the escalation ladder (scratchpad -> handoff -> ask human) by providing a file the agent can read and write during the session that persists across tool calls.
 
+**Multi-agent contention:** When multiple developers have agents running against the same codebase concurrently:
+- Learning loop files (footguns.md, lessons.md) may have merge conflicts. Use git's merge resolution - entries are append-only, so conflicts are additive.
+- Avoid concurrent edits to the same files. Use git worktrees for isolation when possible.
+- If two agents edit docs/footguns.md simultaneously, both sets of entries should be kept. Review for duplicates after merge.
+
 ## Sub-Agent Objectives
 
 One focused objective per sub-agent with concrete deliverable format. Required return: paths, evidence, confidence, next step. Tool call budget: 5 per sub-agent.
+
+**Sub-agent patterns:** Fresh-context (recommended default), parallel teams (independent tasks), role-based delegation (SDLC phases). See docs/five-layers.md for full strategy.
 
 ## Stack Definition
 

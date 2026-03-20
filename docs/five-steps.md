@@ -168,6 +168,21 @@ Only escalate to the human if:
 - The scope expansion crosses an Ask First boundary
 - Two re-classifications have already occurred on the same task
 
+### Auto-Triggering Skills (future)
+
+Skills can be configured to trigger automatically based on context instead of manual invocation:
+
+| Trigger | Skill | When |
+|---------|-------|------|
+| Pre-commit | /goat-preflight | Before any git commit attempt |
+| Test failure | /goat-debug | When a test fails during VERIFY |
+| PR creation | /goat-review | When creating or updating a pull request |
+| New area | /goat-research | When working in a directory for the first time |
+
+Implementation: map triggers to the agent's hook system (Claude Code: PostToolUse on git commit, Stop hook on test failure. Codex: verification scripts. Cursor: rule triggers).
+
+Auto-triggering eliminates the "forgot to run preflight" failure mode. The agent doesn't need to remember - the system enforces it.
+
 ---
 
 ## VERIFY
@@ -300,6 +315,8 @@ The execution loop doesn't end when code is written. A task is done when all six
 6. After any replacement (rename, migration, deprecation, config change): grep for old pattern, zero remaining
 
 Gates 5 and 6 are the ones most often skipped. They exist because of specific incidents where "tests pass" was not sufficient - stale references and unlogged footguns caused repeated failures in later sessions.
+
+**Planning scale:** For Hotfix complexity, /goat-plan can compress to a single feature brief (skip elaboration, SBAO, milestones). For Standard Feature, skip SBAO. Full 4-phase planning is for System Change and Infrastructure complexity only.
 
 ---
 

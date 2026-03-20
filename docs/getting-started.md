@@ -45,7 +45,7 @@ Run these in Claude Code. Copy each prompt from the runtime directory, fill in t
 
 **Skip Phase 0** if you're running Phase 1 (Phase 0 is a minimal bootstrap for when you want just the basics).
 
-**Phase 2 can run immediately after Phase 1** -- the medical scribe ran all phases in one session. Waiting gives you more real incidents for evals, but even early-stage projects with a short git history can seed useful evals.
+**Phase 2 should run immediately after Phase 1** -- do not defer. When asked to implement GOAT Flow, coding agents should complete all phases (1a through 2) in the same session. Early-stage projects with a short git history can seed evals from common stack failure modes and replace with real incidents as they occur.
 
 ## Choosing Your Path
 
@@ -92,7 +92,7 @@ You don't have to do everything. Pick your tier:
 |------|-------------|----------|
 | **Minimal** | Phase 0 only | Trying it out, solo project |
 | **Standard** | Phase 1a + 1b + 1c | Active development |
-| **Full** | Phase 1 + Phase 2 | Long-lived project with incident history |
+| **Full** | Phase 1 + Phase 2 | All projects (implement both phases together) |
 
 **When to graduate:** Phase 0 is for experiments. Move to the full system when: first production user, first team contributor, first real incident, or first month of active development.
 
@@ -154,6 +154,8 @@ agent-evals/                           <- Phase 2
 ## Implementation Evidence
 
 **Implementation evidence:** GOAT Flow has been implemented across 6 projects: 1 fully public (devgoat-bash-scripts), 3 private (DevGoat Tauri app, ambient-scribe, sus-form-detector), and 2 in progress (strands-php-client, the-summit-chatroom). The public implementation at devgoat-bash-scripts has a 100-line CLAUDE.md, 135-line AGENTS.md, full enforcement, and both agent-evals/ and codex-evals/.
+
+**File paths:** All paths in this documentation use forward slashes from the repo root (e.g., `docs/system-spec.md`, `setup/setup-claude.md`). If a referenced file doesn't exist at the stated path, check that you have the latest version of the repo.
 
 ## Further Reading
 

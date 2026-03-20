@@ -1,0 +1,77 @@
+name: Context Validation
+
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - '.claude/**'
+      - 'docs/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CLAUDE.md line count
+        run: |
+          LINES=$(wc -l < CLAUDE.md)
+          echo "CLAUDE.md: $LINES lines"
+          if [ "$LINES" -gt 150 ]; then
+            echo "::error::CLAUDE.md exceeds 150 lines ($LINES). Anti-pattern AP1."
+            exit 1
+          elif [ "$LINES" -gt 100 ]; then
+            echo "::warning::CLAUDE.md exceeds 100-line library target ($LINES lines)"
+          fi
+
+      - name: Check router table references exist
+        run: |
+          MISSING=0
+          # Extract paths from router table (lines with | ... | `path` |)
+          grep -oP '`[^`]+`' CLAUDE.md | tr -d '`' | while read -r ref; do
+            # Skip patterns with wildcards
+            echo "$ref" | grep -q '\*' && continue
+            if [ ! -e "$ref" ]; then
+              echo "::warning::Router table references missing path: $ref"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          echo "Router table check complete"
+
+      - name: Check skills exist
+        run: |
+          EXPECTED_SKILLS="goat-preflight goat-debug goat-audit goat-research goat-review"
+          for skill in $EXPECTED_SKILLS; do
+            if [ ! -f ".claude/skills/$skill/SKILL.md" ]; then
+              echo "::error::Missing skill: .claude/skills/$skill/SKILL.md"
+              exit 1
+            fi
+          done
+          echo "All 5 skills present"
+
+      - name: Check local CLAUDE.md file sizes
+        run: |
+          find . -name 'CLAUDE.md' -not -path './CLAUDE.md' -not -path './.git/*' | while read -r f; do
+            LINES=$(wc -l < "$f")
+            if [ "$LINES" -gt 20 ]; then
+              echo "::warning::Local instruction file $f exceeds 20 lines ($LINES). Anti-pattern AP7."
+            fi
+          done
+
+      - name: Check for unreviewed AI-generated entries
+        run: |
+          if grep -r 'AI-GENERATED: UNVERIFIED' docs/footguns.md docs/lessons.md 2>/dev/null; then
+            echo "::error::Unreviewed AI-generated entries found in learning loop files"
+            exit 1
+          fi
+          echo "No unreviewed AI-generated entries"
+
+      - name: Validate settings.json
+        run: |
+          if [ -f .claude/settings.json ]; then
+            python3 -c "import json; json.load(open('.claude/settings.json'))" 2>&1 || {
+              echo "::error::.claude/settings.json is not valid JSON. Anti-pattern AP5."
+              exit 1
+            }
+            echo "settings.json is valid JSON"
+          fi

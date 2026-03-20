@@ -1,0 +1,6 @@
+.env*
+**/secrets/
+**/*.pem
+**/*.key
+**/credentials*
+**/.git/

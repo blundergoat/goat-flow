@@ -114,4 +114,6 @@ VERIFICATION:
 
 ## Phase 2
 
-See [shared/phase-2.md](shared/phase-2.md) - applies to both Claude Code and Codex.
+**Implement immediately after Phase 1.** Do not defer.
+
+See [shared/phase-2.md](shared/phase-2.md) for the full prompt.

@@ -207,6 +207,64 @@ The system adapts to three project shapes. The layers stay the same - only the c
 
 ---
 
+## Multi-Agent Support
+
+GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-agnostic. The enforcement and file structure differ per agent.
+
+| Concept | Claude Code | Codex | Cursor | Copilot | Gemini CLI |
+|---------|------------|-------|--------|---------|------------|
+| Instruction file | CLAUDE.md | AGENTS.md | .cursor/rules/ | .github/copilot-instructions.md | GEMINI.md |
+| Skills/playbooks | .claude/skills/ | docs/codex-playbooks/ | .cursor/rules/*.mdc | Agent skills | Skills |
+| Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | Policy engine |
+| Domain instructions | .github/instructions/ | .github/instructions/ | .cursor/rules/ | .github/instructions/ | .github/instructions/ |
+| Evals | agent-evals/ | codex-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
+| Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | Policy rules |
+
+Setup guides: see setup/setup-claude.md and setup/setup-codex.md. Other agents can follow the Claude Code guide and adapt file paths from the table above.
+
+---
+
+## Sub-Agent Strategy
+
+Three patterns for using sub-agents (supported by Claude Code Agent Teams, Codex parallel tasks, and similar):
+
+### Fresh-context sub-agents (recommended default)
+
+Each task gets a new agent instance with a clean context window. Prevents context rot mechanically. The orchestrator delegates tasks and collects results.
+
+When to use: any task that can be scoped to a single focused objective. Most implementation tasks, code reviews, research tasks.
+
+Pattern:
+```
+Orchestrator: "Implement the auth middleware. Scope: src/auth/. Exit: tests pass."
+Sub-agent: gets clean context, reads only what it needs, returns result.
+Orchestrator: integrates result, moves to next task.
+```
+
+### Parallel agent teams
+
+Multiple agents work simultaneously, each in their own git worktree. Coordinated through shared state (GitHub Issues, task files, git).
+
+When to use: independent tasks with no shared file dependencies. Multiple features in parallel, parallel code reviews, test writing alongside implementation.
+
+Coordination rule: agents MUST NOT edit the same files. Use git worktrees for isolation.
+
+### Role-based delegation
+
+Specialised agents for specific roles (planning, implementation, review, testing). Each role has constrained permissions and focused context.
+
+When to use: large projects with distinct SDLC phases. The /goat-plan skill handles the planning role. /goat-review handles the review role.
+
+### Sub-agent rules
+
+- One focused objective per sub-agent
+- Structured return: paths changed, evidence found, confidence level, next step
+- 5-call budget (soft limit - re-classify if exceeded)
+- Sub-agents inherit the parent's autonomy tiers and Never list
+- Sub-agents do NOT inherit working memory - they start clean
+
+---
+
 ## Folder Structure
 
 This `workflow/` directory mirrors the 5-layer architecture:

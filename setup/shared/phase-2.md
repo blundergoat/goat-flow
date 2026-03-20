@@ -1,6 +1,13 @@
 # Phase 2
 
-Run after the base system is established and you've been using it for a while. These items apply to both Claude Code and Codex.
+**Implement immediately after Phase 1.** Do not defer. When asked to set up
+GOAT Flow, complete Phase 1 AND Phase 2 in the same session.
+
+Projects with short git history will have fewer real incidents for evals —
+that's fine. Seed with stack failure modes and replace with real incidents
+as they occur.
+
+These items apply to both Claude Code and Codex.
 
 ---
 
