@@ -39,7 +39,7 @@ Run these in Claude Code. Copy each prompt from the runtime directory, fill in t
 |------|--------|-----------------|------|
 | **Phase 0** | Phase 0 bootstrap | CLAUDE.md + deny-dangerous hook + settings.json | ~5 min |
 | **Phase 1a** | Prompt A (new) or Prompt B (existing CLAUDE.md) | CLAUDE.md, docs seed files, architecture.md, local CLAUDE.md files, guidelines-ownership-split.md | ~15 min |
-| **Phase 1b** | Phase 1b -- Skills | 5 skill files under `.claude/skills/` | ~10 min |
+| **Phase 1b** | Phase 1b -- Skills | 7 skill files under `.claude/skills/` | ~10 min |
 | **Phase 1c** | Phase 1c -- Enforcement | Hooks, CI workflow, gitignore additions | ~10 min |
 | **Phase 2** | Phase 2 | Agent evals, RFC 2119 pass, permission profiles | ~15 min |
 
@@ -133,7 +133,7 @@ src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying 
 .claude/skills/goat-preflight/SKILL.md  <- Layer 3: skills
 .claude/skills/goat-debug/SKILL.md
 .claude/skills/goat-audit/SKILL.md
-.claude/skills/goat-research/SKILL.md
+.claude/skills/goat-investigate/SKILL.md
 .claude/skills/goat-review/SKILL.md
 .claude/hooks/deny-dangerous.sh        <- enforcement
 .claude/hooks/stop-lint.sh

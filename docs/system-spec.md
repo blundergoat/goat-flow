@@ -21,7 +21,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     High-risk boundaries, module-specific gotchas, local conventions
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-preflight, /goat-debug, /goat-audit, /goat-research, /goat-review
+    /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -79,7 +79,7 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 | `/goat-preflight` | Repeatable structured output     | All      |
 | `/goat-debug`     | Special failure mode + hard gate | All      |
 | `/goat-audit`     | Distinct artefact + hard gate    | All      |
-| `/goat-research`  | Distinct artefact + hard gate    | All      |
+| `/goat-investigate`  | Distinct artefact + hard gate    | All      |
 | `/goat-review`    | Repeatable structured output     | All      |
 
 | Former Skill        | Now Lives                                | Why downgraded                               |
@@ -363,7 +363,7 @@ stack:
 
 **`/goat-audit`** -- Multi-pass codebase audit. Pass 1: scan, log with file:line evidence. Pass 2: re-read each finding, remove false positives. Pass 3: rank by severity/blast radius. Pass 4: self-check -- "did I fabricate this?"
 
-**`/goat-research`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
+**`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
 
 **`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers.
 

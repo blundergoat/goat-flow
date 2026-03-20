@@ -1,6 +1,6 @@
 # Prompt: SBAO Ranking
 
-> **When to use:** After writing your [feature brief](01-feature-brief-template.md) and optionally running [Mob Elaboration](02-mob-elaboration-prompt.md). Use this to generate and refine a technical plan before breaking it into [milestones](04-milestone-planning-prompt.md).
+> **When to use:** After writing your [feature brief](feature-brief.md) and optionally running [Mob Elaboration](mob-elaboration.md). Use this to generate and refine a technical plan before breaking it into [milestones](milestone-planning.md).
 
 Signal-Based Adaptive Orchestration - ask multiple AI coding agents for competing plans, then have them rank and critique each other.
 

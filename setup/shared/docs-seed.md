@@ -17,7 +17,10 @@ These files are created during Phase 1a regardless of which agent you use. They 
    existing entries, add new footguns from reading the codebase.
    If the file doesn't exist, create and seed with real footguns only.
    Do NOT invent hypothetical ones. Do NOT replace existing entries.
-   Every entry MUST cite specific file paths with line numbers
+   Every entry MUST cite specific file paths with line numbers.
+   Evidence labels: use ACTUAL_MEASURED for real data with source,
+   DESIGN_TARGET for intended values, HYPOTHETICAL_EXAMPLE for
+   illustrative only. Bare claims without labels are not acceptable
    (e.g., src/Auth.php:42). Bare paths without line numbers do not count.
 
 3. docs/confusion-log.md - Create on first use. Materialise this file
@@ -53,6 +56,11 @@ These files are created during Phase 1a regardless of which agent you use. They 
    when the first real architectural decision worth recording occurs.
    If you can identify 1-2 real decisions from the code, create them.
    Do NOT invent decisions.
+
+7. CHANGELOG.md - If the project has a CHANGELOG, update it when making
+   functional changes. If it doesn't exist, consider creating one.
+   Agents frequently forget CHANGELOG updates — if the project uses one,
+   reference it in the Definition of Done.
 ```
 
 ## Ownership Split Report

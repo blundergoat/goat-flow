@@ -1,21 +1,21 @@
-# Prompt: Create /goat-research Skill
+# Prompt: Create /goat-investigate Skill
 
-Paste this into your coding agent to create the `/goat-research` skill for your project.
+Paste this into your coding agent to create the `/goat-investigate` skill for your project.
 
 ---
 
 ## The Prompt
 
 ```
-Create the /goat-research skill for this project.
+Create the /goat-investigate skill for this project.
 
 Purpose: deep codebase investigation producing a structured research
 document. The agent reads thoroughly and reports findings before any
 planning or implementation begins. The hard gate is that no planning
 happens until the human reviews the research output.
 
-Write the skill file to: .claude/skills/goat-research/SKILL.md
-(For Codex: docs/codex-playbooks/goat-research.md)
+Write the skill file to: .claude/skills/goat-investigate/SKILL.md
+(For Codex: docs/codex-playbooks/goat-investigate.md)
 
 When to use: exploring an unfamiliar area of the codebase, investigating
 a new domain, understanding how a system works before changing it,
@@ -49,6 +49,11 @@ The skill follows this process:
 The skill MUST:
 - Complete the read phase before writing findings
 - Provide file:line evidence for every claim
+- Rate source quality for each finding:
+  PRIMARY (read the actual source code),
+  INFERRED (conclusion drawn from code patterns),
+  DOCUMENTED (from project docs, may be stale),
+  ASSUMED (not verified — flag explicitly)
 - Stop after presenting findings - no planning until human reviews
 - Flag uncertainties and unknowns explicitly
 

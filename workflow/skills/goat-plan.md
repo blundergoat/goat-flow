@@ -69,7 +69,20 @@ Output: append elaboration to the requirements doc or create
 
 ## Phase 3 - SBAO Ranking (if complexity warrants)
 
-For System Change or Infrastructure complexity:
+For System Change or Infrastructure complexity, run the Triangular
+Tension Pass — each lens MUST complete before the next begins:
+
+1. **SKEPTIC** — Challenge assumptions: "What could go wrong? What are
+   we not seeing? Where will this break in 6 months?"
+2. **ANALYST** — Evaluate evidence: "What does the codebase actually say?
+   What data supports each approach? Where are the unknowns?"
+3. **STRATEGIST** — Align long-term: "Which approach opens the most doors?
+   What does this look like at 2x scale?"
+
+If all three agree, consensus is earned. If not, present the dissent
+transparently — don't collapse disagreement into fake consensus.
+
+Then:
 - Generate 3 competing implementation plans
 - Rank them against criteria: risk, effort, maintainability, scope fit
 - Synthesise a prime plan taking the best from each

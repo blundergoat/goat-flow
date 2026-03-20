@@ -45,14 +45,14 @@ jobs:
 
       - name: Check skills exist
         run: |
-          EXPECTED_SKILLS="goat-preflight goat-debug goat-audit goat-research goat-review"
+          EXPECTED_SKILLS="goat-preflight goat-debug goat-audit goat-investigate goat-review goat-plan goat-test"
           for skill in $EXPECTED_SKILLS; do
             if [ ! -f ".claude/skills/$skill/SKILL.md" ]; then
               echo "::error::Missing skill: .claude/skills/$skill/SKILL.md"
               exit 1
             fi
           done
-          echo "All 5 skills present"
+          echo "All 7 skills present"
 
       - name: Check local CLAUDE.md file sizes
         run: |

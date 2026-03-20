@@ -78,10 +78,14 @@ WHAT TO BUILD (in this order):
 
 3. Codex playbooks - docs/codex-playbooks/:
    - goat-preflight.md - RFC 2119 constraints for build verification
-   - goat-research.md - Deep-read template with hard gate
+   - goat-investigate.md - Deep-read template with hard gate
    - goat-debug.md - Diagnosis-first with file:line evidence
    - goat-audit.md - 4-pass with fabrication self-check
    - goat-review.md - Structured review with RFC 2119 severity
+   - goat-plan.md - 4-phase planning (brief → elaboration → SBAO → milestones)
+     with human gates between phases
+   - goat-test.md - Generate testing instructions: automated test commands,
+     AI verification prompts, and manual testing steps for the human
 
 4. Verification scripts - scripts/:
    - scripts/preflight-checks.sh - Build, lint, test for the stack.
@@ -123,7 +127,7 @@ VERIFICATION:
 - [ ] AGENTS.md uses LOG (not RECORD)
 - [ ] docs/footguns.md entries have file:line evidence (not fabricated)
 - [ ] docs/guidelines-ownership-split.md exists (if guidelines were trimmed)
-- [ ] All 5 playbooks exist in docs/codex-playbooks/ with goat-* prefix
+- [ ] All 7 playbooks exist in docs/codex-playbooks/ with goat-* prefix
 - [ ] scripts/deny-dangerous.sh --self-test passes
 - [ ] scripts/context-validate.sh runs cleanly
 - [ ] Router table references all resolve to real files

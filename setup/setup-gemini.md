@@ -145,11 +145,11 @@ PRE-EXISTING SKILLS:
 If skills already exist in .gemini/skills/, do NOT delete them.
 Review and update-and-extend, not replace.
 
-Create these 5 skills under .gemini/skills/:
+Create these 7 skills under .gemini/skills/:
 
 1. goat-preflight/SKILL.md - RFC 2119 constraints. MUST run build/lint.
    SHOULD run formatter, full test suite. MAY skip formatter when debugging.
-2. goat-research/SKILL.md - Minimum template: Files Involved, Request Flow,
+2. goat-investigate/SKILL.md - Minimum template: Files Involved, Request Flow,
    Boundaries Touched, Risks/Gotchas (min 3 with file:line evidence).
    Hard gate: no planning until human reviews.
 3. goat-debug/SKILL.md - Diagnosis-first. "If you want to 'just try
@@ -157,6 +157,13 @@ Create these 5 skills under .gemini/skills/:
 4. goat-audit/SKILL.md - 4-pass: Discovery → Verification → Prioritisation →
    Self-Check. Pass 4 fabrication gate. MUST NOT propose fixes.
 5. goat-review/SKILL.md - Structured review with RFC 2119 constraints.
+6. goat-plan/SKILL.md - 4-phase planning workflow (feature brief → mob
+   elaboration → SBAO ranking → milestones). Human gate between each phase.
+   Skip SBAO for Standard features. Compress to single brief for Hotfixes.
+7. goat-test/SKILL.md - Generate testing instructions after a milestone or
+   coding session. Produces: automated test commands for the agent to run,
+   AI verification prompts for a separate agent, and manual testing steps
+   for the human. Based on the doer-verifier principle.
 
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
 - GATE: Verify all skill files exist with required sections.

@@ -1,6 +1,6 @@
 # Prompt: Mob Elaboration
 
-> **When to use:** After drafting your [feature brief](01-feature-brief-template.md). Use this to validate requirements and expose hidden complexities before construction begins.
+> **When to use:** After drafting your [feature brief](feature-brief.md). Use this to validate requirements and expose hidden complexities before construction begins.
 >
 > **Tip:** Rule #3 below tells the AI to separate outputs into your instruction file (CLAUDE.md / AGENTS.md) and reference docs. If your project doesn't have an instruction file yet, run the Phase 1a setup prompts in `workflow/runtime/` first.
 

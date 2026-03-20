@@ -32,7 +32,9 @@ The skill follows this process:
    - Identify the blast radius: what else could be affected?
 
 2. Review - Independent investigation of each change:
-   - Read the changed code in context (not just the diff)
+   - Read the actual source code in full context (not just the diff,
+     not just plan docs — open the files and read the implementation)
+   - Find real bugs with file:line evidence, not surface-level observations
    - Check for: correctness, security, test coverage, edge cases,
      consistency with existing patterns, autonomy tier violations
    - Cross-reference with docs/footguns.md for known landmines

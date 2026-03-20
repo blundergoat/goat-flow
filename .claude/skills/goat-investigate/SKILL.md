@@ -1,6 +1,6 @@
-# /goat-research
+# /goat-investigate
 
-Deep investigation producing a structured research document. No planning until human reviews.
+Deep investigation producing a structured investigation document. No planning until human reviews.
 
 ## When to Use
 

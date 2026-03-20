@@ -1,6 +1,6 @@
 # Prompt: Milestone Planning
 
-> **When to use:** After [SBAO](03-sbao-ranking-prompt.md) produces a prime plan. Use this to break that plan into phased milestones with clear exit criteria.
+> **When to use:** After [SBAO](sbao-ranking.md) produces a prime plan. Use this to break that plan into phased milestones with clear exit criteria.
 >
 > **Input:** Attach your `requirements-<feature-name>.md` and/or `TODO_feature-name_prime.md` at the end of this prompt.
 

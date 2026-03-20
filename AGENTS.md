@@ -94,7 +94,7 @@ Ask one question with a recommended default and exact file boundary.
 | Preflight playbook | `docs/codex-playbooks/goat-preflight.md` |
 | Debug playbook | `docs/codex-playbooks/goat-debug.md` |
 | Audit playbook | `docs/codex-playbooks/goat-audit.md` |
-| Research playbook | `docs/codex-playbooks/goat-research.md` |
+| Research playbook | `docs/codex-playbooks/goat-investigate.md` |
 | Review playbook | `docs/codex-playbooks/goat-review.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |

@@ -164,7 +164,7 @@ The most complete implementation. Has every artifact the framework defines.
 | **Enforcement** | .claude/settings.json | 42 | Permissions deny list |
 | **Enforcement** | .claude/hooks/ | 3 files | Hooks present |
 | **Enforcement** | scripts/preflight-checks.sh | 482 | Preflight |
-| **Skills** | .claude/skills/ | 3 files | Missing /goat-research, /goat-review |
+| **Skills** | .claude/skills/ | 3 files | Missing /goat-investigate, /goat-review |
 | **Learning Loop** | docs/lessons.md | 16 | Active |
 | **Learning Loop** | docs/footguns.md | 82 | With evidence |
 | **Local Context** | .github/instructions/ | 2 files | Minimal domain files |
@@ -180,7 +180,7 @@ The most complete implementation. Has every artifact the framework defines.
 - No scripts/deny-dangerous.sh or scripts/context-validate.sh
 - No docs/codex-playbooks/
 
-**What makes this notable:** Only 3 skills currently installed - /goat-research and /goat-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) - opposite ratio from the bash collection.
+**What makes this notable:** Only 3 skills currently installed - /goat-investigate and /goat-review should be added to reach the full 5-skill set. AGENTS.md is minimal (43 lines) compared to CLAUDE.md (107 lines) - opposite ratio from the bash collection.
 
 ---
 

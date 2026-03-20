@@ -40,7 +40,7 @@ ASK FIRST:
 
 SECTIONS:
 - (f) Sub-Agent Objectives and (g) Communication When Blocked MUST exist
-- Router MUST include all 5 skill directories, learning loop files, architecture,
+- Router MUST include all 7 skill directories, learning loop files, architecture,
   handoff template, agent evals
 - Dual-agent: router MUST include AGENTS.md
 

@@ -99,6 +99,28 @@ GOAT Flow implemented and iterated across 7 projects (rampart, sus-form-detector
 - five-layers.md: agent evals table unified (was codex-evals/ for Codex, now agent-evals/ for all)
 - Root README.md: full navigation with setup guides, system design, learning loop, reference docs
 
+### Skills (7 total, renamed + 2 new)
+
+- Renamed /goat-research → /goat-investigate (the skill investigates codebases, not "researches")
+- Added /goat-plan: 4-phase planning workflow (brief → elaboration → SBAO → milestones) with Triangular Tension Pass (SKEPTIC → ANALYST → STRATEGIST) for System/Infra complexity
+- Added /goat-test: 3-track testing instructions (automated, AI verification, human testing) based on doer-verifier principle
+- Created docs/system/skills.md: summary table, when-to-use guide, decision table, design rationale, skill justification test
+- goat-investigate: added source quality levels (PRIMARY / INFERRED / DOCUMENTED / ASSUMED)
+- goat-review: explicit depth requirement ("read actual source code, find real bugs with file:line evidence")
+- Fixed broken markdown links in planning playbooks (old numbered filenames)
+
+### System Improvements (from goat-system analysis)
+
+Seven improvements adopted from the goat-system project's architecture:
+
+1. **Data honesty labeling** — footgun evidence must be labeled ACTUAL_MEASURED / DESIGN_TARGET / HYPOTHETICAL_EXAMPLE (docs-seed.md)
+2. **Truth order / precedence** — explicit priority when sources conflict: user > CLAUDE.md > execution-loop > system-spec > skills (execution-loop.md)
+3. **Recovery protocols** — first-class section in VERIFY: 2-3 common failure patterns with fixes (execution-loop.md)
+4. **Triangular Tension Pass** — SKEPTIC → ANALYST → STRATEGIST sequential challenge for /goat-plan Phase 3 (goat-plan.md)
+5. **Source quality levels** — PRIMARY / INFERRED / DOCUMENTED / ASSUMED for /goat-investigate findings (goat-investigate.md)
+6. **Signal-based CLASSIFY** — three explicit signals (intent, complexity, mode) before acting (execution-loop.md)
+7. **Decisions as 4th learning loop file** — docs/decisions/ for significant technical decisions with context/rationale (execution-loop.md LOG)
+
 ### Based on
 
 - 7 real project implementations across App, Library, and Collection shapes
