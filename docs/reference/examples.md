@@ -6,15 +6,15 @@ Seven projects scanned for workflow framework adoption. These serve as reference
 
 ## Summary
 
-| Project | Shape | Stack | Agent | CLAUDE.md | AGENTS.md | Adoption Tier |
-|---------|-------|-------|-------|-----------|-----------|---------------|
-| **ambient-scribe** | App | PHP, TypeScript, Python, Docker | Dual | 53 lines | 119 lines | Full |
-| **devgoat** | App (Tauri) | TypeScript, Rust | Dual | 121 lines | 153 lines | Standard |
-| **devgoat-bash-scripts** | Collection | Bash, PHP | Dual | 100 lines | 135 lines | Full |
-| **sus-form-detector** | Library | PHP, Python | Dual | 107 lines | 43 lines | Standard |
-| **blundergoat-platform** | App | TypeScript, Docker | Claude Code only | 62 lines | -- | Minimal |
-| **the-summit-chatroom** | App | PHP, Python, Docker | Dual | 152 lines | 37 lines | Minimal |
-| **rampart** | App (Tauri 2) | TypeScript, Rust, Python, Docker | Claude Code only | 118 lines | -- | Full |
+| Project | Shape | Stack | Agent | CLAUDE.md | AGENTS.md | Tier |
+|---------|-------|-------|-------|-----------|-----------|------|
+| **rampart** | App (Tauri 2) | TypeScript, Rust, Python, Docker | Dual | 120 | 123 | Full |
+| **ambient-scribe** | App | PHP, TypeScript, Python, Docker | Dual | 119 | 124 | Full |
+| **sus-form-detector** | Library | PHP, Python | Dual | 109 | 111 | Full |
+| **devgoat-bash-scripts** | Collection | Bash, PHP | Dual | 119 | 133 | Full |
+| **blundergoat-platform** | App | Go, TypeScript | Dual | 116 | 125 | Full |
+| **goat-flow** | Library | Markdown, Bash | Dual | 120 | 108 | Full |
+| **the-summit-chatroom** | App | PHP, Python, Docker | Dual | 152 | 37 | Minimal |
 
 ---
 
@@ -251,31 +251,30 @@ The most complete implementation. Has every artifact the framework defines.
 | blundergoat-platform | App | 62 | 120 | -- | -- |
 | the-summit-chatroom | App | 152 | 120 | 37 | 0.2x |
 
-### Adoption Tier Distribution
+### Adoption Tier Distribution (post v0.2)
 
 | Tier | Projects | Common Pattern |
 |------|----------|----------------|
-| **Full** | ambient-scribe, devgoat-bash-scripts | Both are dual-agent with all enforcement layers, evals, CI, codex-playbooks |
-| **Standard** | devgoat, sus-form-detector | Have skills, hooks, learning loop, evals, but missing some docs and codex coverage |
-| **Minimal** | blundergoat-platform, the-summit-chatroom | CLAUDE.md + some supporting files, no enforcement deny list, no learning loop |
+| **Full** | rampart, ambient-scribe, sus-form-detector, devgoat-bash-scripts, blundergoat-platform, goat-flow | Dual-agent (CLAUDE.md + AGENTS.md), all enforcement layers, shared agent-evals/, codex-playbooks, CI validation |
+| **Minimal** | the-summit-chatroom | CLAUDE.md exists but predates GOAT Flow v0.2, no enforcement |
 
-### What Full Tier Projects Have That Others Don't
+### What Full Tier Projects Have
 
-1. Both agent-evals/ AND codex-evals/
-2. scripts/deny-dangerous.sh + scripts/context-validate.sh
+1. agent-evals/ with Origin + Agents labels (single shared directory)
+2. scripts/deny-dangerous.sh + scripts/context-validate.sh + scripts/preflight-checks.sh
 3. docs/guidelines-ownership-split.md
-4. docs/codex-playbooks/ (5 files)
-5. Complete .claude/hooks/ set
+4. docs/codex-playbooks/ (5 goat-* files)
+5. Complete .claude/hooks/ set (deny-dangerous, stop-lint, format-file where applicable)
 6. CI context-validation workflow
+7. .copilotignore + .cursorignore
+8. settings.json with Read deny patterns
+9. Both CLAUDE.md and AGENTS.md with 6-step loop, SCOPE, budgets, 5-item Ask First checklist
 
 ### Anti-Patterns Observed
 
 | Anti-Pattern | Project | Detail |
 |-------------|---------|--------|
-| AP1: Instruction file over 150 lines | the-summit-chatroom | CLAUDE.md at 152 lines |
-| Architecture doc over 100 lines | blundergoat-platform | docs/architecture.md at 148 lines |
-| CLAUDE.md over line target | devgoat | 121 lines (target: 120 for app) |
-| CLAUDE.md over line target | sus-form-detector | 107 lines (under 120 target) |
+| AP1: Instruction file over 150 lines | the-summit-chatroom | CLAUDE.md at 152 lines (not yet updated to v0.2) |
 
 ---
 
@@ -304,112 +303,11 @@ Real bugs from the Rampart project (Tauri 2 + React 19 + Python FastAPI, App sha
 
 ## Real Example Artifacts
 
-### Example CLAUDE.md (devgoat-bash-scripts, pre-v0.1.1 snapshot)
+### Example CLAUDE.md (goat-flow, 120 lines — current v0.2 spec)
 
-This is the CLAUDE.md from a real Script Collection project before the v0.1.1 updates (SCOPE step, complexity budgets, unified 120-line target). Shown as a reference for structure and style — the current version of this file has been updated to the 6-step loop.
+This is the complete CLAUDE.md from the goat-flow project itself. It demonstrates the full v0.2 spec: 6-step loop with SCOPE, complexity budgets, 5-item Ask First checklist, mechanical LOG trigger, human correction trigger, footgun propagation, dual-agent router references, and all required sections (a)-(i).
 
-```markdown
-# CLAUDE.md - v1.0 (2026-03-15)
-
-Shell script library. Drop-in or template scripts under `lib/`. Bats test suite under `tests/`.
-
-## Essential Commands
-
-```bash
-bash -n path/to/script.sh            # Syntax-check
-shellcheck path/to/script.sh         # Lint
-bats tests/ --recursive              # Run test suite
-./preflight-checks.sh                # Quality gate
-```
-
-## Execution Loop: READ → CLASSIFY → ACT → VERIFY → LOG
-
-**READ** - MUST read relevant files before changes. Cross-domain: MUST read both sides.
-```
-❌ "The _common.sh uses parent traversal" (guessed)
-✅ Read lib/stacks/_common.sh → confirmed: source "../_common.sh"
-```
-
-**CLASSIFY** - MUST declare mode (Plan/Implement/Explain/Debug/Review) before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
-
-**ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
-
-| Mode | Behaviour |
-|------|-----------|
-| Plan | Produce artefact only. No app code. Exit on LGTM |
-| Implement | Code in 2-3 turns. 4th read without writing = stop |
-| Explain | Walkthrough only. No code changes unless asked |
-| Debug | Diagnosis with file:line first. Fixes after human reviews |
-| Review | Investigate first. Never blindly apply suggestions |
-
-```
-❌ Created abstract logging base class (one implementation)
-✅ Inline functions. Extract when second consumer appears
-```
-
-**VERIFY** - MUST run after each change: `bash -n` → `shellcheck` → `bats tests/ --recursive`
-- Level 1 (isolated failure): note, continue
-- Level 2 (cross-domain/security): MUST full stop, diagnosis with file:line, wait for human
-- Two corrections on same approach = MUST rewind
-
-**LOG** - SHOULD append to `docs/lessons.md` (behavioural mistakes) or `docs/footguns.md` (cross-domain traps with file:line evidence). SHOULD load footguns.md when touching Ask First boundaries.
-
-## Autonomy Tiers
-
-**Always:** Run tests/lint, read any file, write scripts, append to log files
-
-**Ask First** (MUST complete micro-checklist: boundary, related code read, footgun checked, rollback command):
-- `_common.sh` / `_aws-common.sh` changes (sourced by many scripts)
-- CONFIGURATION block interface changes (adding/removing variables)
-- Scripts in `lib/ai-cli/` that sanitise WSL PATH
-- Adding new domains/directories under `lib/`
-- Changing a script's logging paradigm (must match siblings)
-- Editing `.github/instructions/` files
-- Cross-domain changes. Strict mode exception changes
-
-**Never:** Delete tests to pass builds. Modify .env/secrets. Push to main. Force push. Change CONFIGURATION block values. Commit unless asked
-
-## Definition of Done
-
-MUST confirm ALL: (1) `bash -n` + `shellcheck` pass (2) `bats tests/` green (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
-
-## Hard Rules
-
-- MUST use `#!/usr/bin/env bash` + `set -euo pipefail` (exceptions: `docs/footguns.md`)
-- MUST match sibling logging paradigm (`docs/domain-reference.md`). `_common.sh` patterns are not interchangeable
-- MUST use short imperative commits. One per script. Never commit credentials
-- MUST append cross-domain bugs to `docs/footguns.md` before closing
-
-Sub-agents: ONE focused objective, structured return (paths, evidence, confidence, next step), 5-call budget.
-When blocked: ask exactly one question with a recommended default. If not blocked, decide and note assumption.
-
-## Working Memory
-
-SHOULD use `tasks/todo.md` for 5+ turn tasks. SHOULD write `tasks/handoff.md` before ending incomplete work. Context escalation: `/compact` after 15+ turns → split if two compactions → `/clear` between unrelated tasks.
-
-## Router Table
-
-| Resource | Path |
-|----------|------|
-| Domain reference | `docs/domain-reference.md` |
-| Architecture | `docs/architecture.md` |
-| Code map | `docs/code-map.md` |
-| Footguns | `docs/footguns.md` |
-| Lessons | `docs/lessons.md` |
-| Bats guide | `docs/bats-core.md` |
-| Shell conventions | `.github/instructions/shell-conventions.instructions.md` |
-| ai-cli domain | `.github/instructions/ai-cli.instructions.md` |
-| AWS domain | `.github/instructions/aws.instructions.md` |
-| Stacks domain | `.github/instructions/stacks.instructions.md` |
-| Standalone domains | `.github/instructions/dev.instructions.md` |
-| Preflight skill | `.claude/skills/goat-preflight/` |
-| Code review skill | `.claude/skills/goat-review/` |
-| Debug skill | `.claude/skills/goat-debug/` |
-| Audit skill | `.claude/skills/goat-audit/` |
-| Research skill | `.claude/skills/goat-research/` |
-| Agent evals | `agent-evals/` |
-| Handoff template | `tasks/handoff-template.md` |
-```
+See the actual file at the project root for the live version.
 
 ### Example footguns.md (first 5 entries from devgoat-bash-scripts)
 
