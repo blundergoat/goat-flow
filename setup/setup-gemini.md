@@ -40,7 +40,9 @@ After creating the files, count GEMINI.md lines and report the count.
 ### Prompt A - New GEMINI.md
 
 ```
-Read docs/system-spec.md. This is the GOAT Flow system spec.
+Read setup/shared/execution-loop.md FIRST — this is the authoritative
+template for instruction file sections. Then read docs/system-spec.md
+for background context. If they conflict, execution-loop.md wins.
 Phase 1 builds Layers 1-3 (runtime, local context, and skills).
 
 This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:
@@ -85,7 +87,9 @@ Do NOT proceed to Phase 1b until all gates pass.
 ### Prompt B - Existing GEMINI.md (migrate domain content)
 
 ```
-Read docs/system-spec.md. This is the GOAT Flow system spec.
+Read setup/shared/execution-loop.md FIRST — this is the authoritative
+template for instruction file sections. Then read docs/system-spec.md
+for background context. If they conflict, execution-loop.md wins.
 Phase 1 builds Layers 1-3 (runtime, local context, and skills).
 
 This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:

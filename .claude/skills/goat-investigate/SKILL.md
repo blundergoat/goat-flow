@@ -18,6 +18,8 @@ Exploring an unfamiliar area of the repo, understanding how a subsystem works be
 - Follow cross-references and internal links
 - Note data flow paths and ownership boundaries
 - Note anything surprising or undocumented
+- Noise awareness: are search results adding signal or distractors?
+  Drop irrelevant results rather than accumulating them in context
 
 ### 3. Document
 - Structure: Overview → Components → Data Flow → Findings → Questions

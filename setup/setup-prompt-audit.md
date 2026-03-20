@@ -1,6 +1,6 @@
 # Prompt: Diagnose GOAT Flow Implementation
 
-Paste into Claude Code in any project with an existing GOAT Flow implementation to understand what went wrong and get suggestions for improving the goat-flow instructions.
+Paste into any AI coding agent (Claude Code, Codex, or Gemini CLI) in any project with an existing GOAT Flow implementation to understand what went wrong and get suggestions for improving the goat-flow instructions.
 
 ---
 
@@ -8,8 +8,9 @@ Paste into Claude Code in any project with an existing GOAT Flow implementation 
 
 ```
 Read these files in this project:
-- CLAUDE.md
+- CLAUDE.md (if exists)
 - AGENTS.md (if exists)
+- GEMINI.md (if exists)
 - docs/footguns.md
 - docs/lessons.md
 - agent-evals/ (all files — single shared directory for all agents)
@@ -18,8 +19,9 @@ Read these files in this project:
 - .github/instructions/ (list what exists)
 
 Then read the GOAT Flow instructions that were used to create them:
-- [goat-flow repo]/setup/setup-claude.md
+- [goat-flow repo]/setup/setup-claude.md (if CLAUDE.md exists)
 - [goat-flow repo]/setup/setup-codex.md (if AGENTS.md exists)
+- [goat-flow repo]/setup/setup-gemini.md (if GEMINI.md exists)
 - [goat-flow repo]/setup/shared/execution-loop.md
 - [goat-flow repo]/setup/shared/docs-seed.md
 - [goat-flow repo]/setup/shared/phase-2.md
@@ -47,17 +49,17 @@ Answer these questions:
 
 4. GUIDELINES AUDIT
    If this project has .github/instructions/ files or a shared
-   guidelines file alongside CLAUDE.md:
+   guidelines file alongside the instruction file:
    - Was the ownership split clean? Any overlap remaining?
-   - Did anything that should be in CLAUDE.md (workflow) stay in
-     guidelines (engineering practices), or vice versa?
+   - Did anything that should be in the instruction file (workflow)
+     stay in guidelines (engineering practices), or vice versa?
    - Does docs/guidelines-ownership-split.md exist and accurately
      document what was moved?
 
-5. DUAL-AGENT COORDINATION (skip if single-agent)
-   If both CLAUDE.md and AGENTS.md exist:
+5. MULTI-AGENT COORDINATION (skip if single-agent)
+   If multiple instruction files exist (CLAUDE.md, AGENTS.md, GEMINI.md):
    - Do they use the same terminology (LOG vs RECORD)?
-   - Do they have the same loop steps (SCOPE in both)?
+   - Do they have the same loop steps (SCOPE in all)?
    - Do they classify complexity the same way (budgets vs labels)?
    - Any evidence of coordination issues (duplicate entries,
      conflicting evals, one agent overwriting the other)?

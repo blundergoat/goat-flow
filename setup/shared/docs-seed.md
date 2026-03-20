@@ -22,6 +22,9 @@ These files are created during Phase 1a regardless of which agent you use. They 
    DESIGN_TARGET for intended values, HYPOTHETICAL_EXAMPLE for
    illustrative only. Bare claims without labels are not acceptable
    (e.g., src/Auth.php:42). Bare paths without line numbers do not count.
+   Also audit config files (.json, .yaml, .sh) for stale project names,
+   hardcoded absolute paths, or outdated references. Seed these as
+   footguns if found.
 
 3. docs/confusion-log.md - Create on first use. Materialise this file
    when the first real confusion incident occurs, not pre-created empty.

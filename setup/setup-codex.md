@@ -17,8 +17,9 @@ I have the GOAT Flow system - a 6-step execution loop (READ → CLASSIFY →
 SCOPE → ACT → VERIFY → LOG) with autonomy tiers, a definition of done,
 and a learning loop. I want to set it up for Codex.
 
-Read this file for the full system design:
-- docs/system-spec.md
+Read these files for the system design:
+- setup/shared/execution-loop.md (authoritative template — read FIRST)
+- docs/system-spec.md (background context — if they conflict, execution-loop.md wins)
 
 Now adapt this system for Codex. NOT a copy - a Codex-native implementation
 that respects how Codex actually works.

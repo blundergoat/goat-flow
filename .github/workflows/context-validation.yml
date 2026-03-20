@@ -5,12 +5,15 @@ on:
     paths:
       - 'CLAUDE.md'
       - 'AGENTS.md'
+      - 'GEMINI.md'
       - '.claude/**'
+      - '.gemini/**'
       - 'docs/**'
       - 'setup/**'
       - 'workflow/**'
       - 'scripts/**'
       - 'codex-evals/**'
+      - 'agent-evals/**'
 
 jobs:
   validate:
@@ -18,16 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check CLAUDE.md line count
+      - name: Check CLAUDE.md / GEMINI.md line count
         run: |
-          LINES=$(wc -l < CLAUDE.md)
-          echo "CLAUDE.md: $LINES lines"
-          if [ "$LINES" -gt 150 ]; then
-            echo "::error::CLAUDE.md exceeds 150 lines ($LINES). Anti-pattern AP1."
-            exit 1
-          elif [ "$LINES" -gt 100 ]; then
-            echo "::warning::CLAUDE.md exceeds 100-line library target ($LINES lines)"
-          fi
+          for f in CLAUDE.md GEMINI.md; do
+            if [ -f "$f" ]; then
+              LINES=$(wc -l < "$f")
+              echo "$f: $LINES lines"
+              if [ "$LINES" -gt 150 ]; then
+                echo "::error::$f exceeds 150 lines ($LINES). Anti-pattern AP1."
+                exit 1
+              elif [ "$LINES" -gt 120 ]; then
+                echo "::warning::$f exceeds 120-line app target ($LINES lines)"
+              fi
+            fi
+          done
 
       - name: Check router table references exist
         run: |
@@ -73,13 +80,15 @@ jobs:
 
       - name: Validate settings.json
         run: |
-          if [ -f .claude/settings.json ]; then
-            python3 -c "import json; json.load(open('.claude/settings.json'))" 2>&1 || {
-              echo "::error::.claude/settings.json is not valid JSON. Anti-pattern AP5."
-              exit 1
-            }
-            echo "settings.json is valid JSON"
-          fi
+          for f in .claude/settings.json .gemini/settings.json; do
+            if [ -f "$f" ]; then
+              python3 -c "import json; json.load(open('$f'))" 2>&1 || {
+                echo "::error::$f is not valid JSON. Anti-pattern AP5."
+                exit 1
+              }
+              echo "$f is valid JSON"
+            fi
+          done
 
       - name: Validate Codex workflow
         run: |

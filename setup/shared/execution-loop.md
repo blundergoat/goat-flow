@@ -63,6 +63,9 @@ e) Working Memory: Working Notes for 5+ turn tasks, context escalation
    tasks/handoff-template.md to tasks/handoff.md and fill in.
    Next session MUST read tasks/handoff.md if it exists.
    Multi-task sessions: re-read CLAUDE.md constraints before starting.
+   Context health: compact at 60% utilization (not 90%). Remove
+   failed attempts and superseded reasoning before compacting (noise
+   pruning). Use /clear between unrelated tasks for fresh context.
    tasks/todo.md and tasks/handoff.md MUST be gitignored.
 
 f) Sub-Agent Objectives: one focused objective, structured return,

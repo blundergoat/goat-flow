@@ -262,7 +262,35 @@ The human must remove this flag after reviewing the entry. CI should fail if thi
 
 ## Context Health
 
-Four failure modes to watch for during any task. Named so the agent and human have shared vocabulary for diagnosing problems.
+### Context Rot
+
+Context rot is the measurable degradation in agent output quality as context grows — even when the context window isn't close to full. A model with a 200K token window can start degrading at 50K tokens. The window tells you what fits, not what the model will use effectively.
+
+Three mechanisms cause context rot, and they compound superlinearly:
+
+1. **Lost-in-the-Middle** — Models attend well to the start and end of context but poorly to the middle. Critical information placed in the middle of a long conversation effectively becomes invisible. This is why the router table is positioned at the END of the instruction file.
+
+2. **Attention Dilution** — As context grows, the attention weight per token decreases proportionally. At 5K tokens the model has a focused beam; at 100K tokens it's a floodlight where everything is dimmer.
+
+3. **Distractor Interference** — Semantically similar but irrelevant content actively misleads the model. Failed search results, superseded reasoning, and verbose error tracebacks are worse than random noise because they pull reasoning off track.
+
+**The 40-60% Rule:** Keep context utilization in the 40-60% range. Compact at 60%, not 90%. This is much more aggressive than the default but dramatically reduces rot. (Source: HumanLayer)
+
+**Instruction Centrifugation:** As conversation grows, the system prompt fades. By turn 50, CLAUDE.md rules have low influence. By turn 100, almost invisible. This is why agents weaken MUST to SHOULD on long tasks — the instruction literally fades from attention.
+
+### Defenses
+
+| Defense | How | When |
+|---------|-----|------|
+| **Aggressive compaction** | `/compact` at 60% utilization, not 90% | During any long task |
+| **Noise pruning** | Remove failed attempts, superseded reasoning, verbose tracebacks. Keep the result, drop the noise | Before compaction |
+| **Fresh starts** | `/clear` between phases. New context for new work | Between unrelated tasks |
+| **Sub-agent delegation** | Spawn sub-agents for search/exploration. Their noise stays in their context, only clean results return | When exploring |
+| **Task scoping** | SCOPE declaration anchors the agent to its boundary. "If working on something not in scope, STOP" | Every task (this is the SCOPE step) |
+
+### Context Pathologies
+
+Four named failure modes for diagnosing problems:
 
 | Pathology | Symptom | Mitigation |
 |-----------|---------|------------|

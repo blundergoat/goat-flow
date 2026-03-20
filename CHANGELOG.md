@@ -11,7 +11,7 @@ GOAT Flow implemented and iterated across 7 projects (rampart, sus-form-detector
 ### Self-Implementation
 
 - Implemented GOAT Flow Phases 1a-2 on the goat-flow project itself
-- CLAUDE.md (120 lines), AGENTS.md (108 lines), 5 skills, 5 codex playbooks, 2 hooks, settings.json, CI workflow
+- CLAUDE.md (120 lines), AGENTS.md (108 lines), GEMINI.md (84 lines), 7 skills per agent, codex playbooks, hooks, settings, CI workflow
 - docs/footguns.md (5 footguns with file:line evidence), docs/lessons.md (2 entries)
 - 3 agent evals, 5 codex evals with Origin labels (2 Codex-mechanics)
 - scripts/deny-dangerous.sh, scripts/context-validate.sh, scripts/preflight-checks.sh
@@ -121,12 +121,34 @@ Seven improvements adopted from the goat-system project's architecture:
 6. **Signal-based CLASSIFY** — three explicit signals (intent, complexity, mode) before acting (execution-loop.md)
 7. **Decisions as 4th learning loop file** — docs/decisions/ for significant technical decisions with context/rationale (execution-loop.md LOG)
 
+### Gemini CLI Support
+
+- GEMINI.md (84 lines) with full v0.2 spec: 6-step loop, 3-signal CLASSIFY, truth order, recovery protocols, 4 LOG files, context health
+- 7 Gemini skills (.gemini/skills/goat-*) including goat-plan and goat-test
+- .gemini/settings.json with Read deny patterns
+- .gemini/hooks/ (deny-dangerous.sh, stop-lint.sh)
+- .geminiignore for secret protection
+- CI validation updated to check GEMINI.md and .gemini/settings.json
+
+### Context Rot Defense (from Comprehensive Agent Engineering Guide analysis)
+
+- docs/system/six-steps.md: expanded Context Health with 3 rot mechanisms (lost-in-the-middle, attention dilution, distractor interference), 40-60% rule, instruction centrifugation, 5 defenses table
+- execution-loop.md Working Memory: compact at 60% utilization, noise pruning, fresh context between tasks
+- goat-investigate skill: noise awareness ("are search results adding signal or distractors?")
+
+### Instruction Quality
+
+- Setup prompts now read execution-loop.md FIRST (authoritative template), system-spec.md for background. Explicit "if they conflict, execution-loop.md wins"
+- docs-seed.md: audit config files (.json, .yaml, .sh) for stale names/paths as footguns
+- setup-prompt-audit.md + setup-prompt-fix.md: now agent-agnostic (Claude, Codex, Gemini)
+- Gemini diagnostic confirmed "first-read bias" — agents follow whichever source they read first
+
 ### Based on
 
 - 7 real project implementations across App, Library, and Collection shapes
-- 11 diagnostic rounds (5 Claude diagnose + 6 Codex diagnose) with closed-loop instruction fixes
-- 60+ gaps fixed across 6 projects in Claude round, then all 6 AGENTS.md files rebuilt to spec in Codex round
-- Key findings: agents follow first source read, compress MUST to SHOULD under line pressure, lessons.md stays empty without mechanical triggers, dual-agent AGENTS.md consistently drifts without explicit reinforcement, verification sections treated as optional unless marked as gates
+- 11+ diagnostic rounds (Claude + Codex + Gemini) with closed-loop instruction fixes
+- 60+ gaps fixed across 6 projects, all instruction files rebuilt to current spec
+- Key findings: agents follow first source read, compress MUST to SHOULD under line pressure, lessons.md stays empty without mechanical triggers, context rot degrades quality superlinearly, instruction centrifugation fades rules after ~50 turns
 
 ---
 

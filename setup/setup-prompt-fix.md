@@ -1,64 +1,78 @@
 # Prompt: Fix GOAT Flow Implementation
 
-Paste into Claude Code in any project with an existing GOAT Flow implementation to update it to the current spec.
+Paste into any AI coding agent (Claude Code, Codex, or Gemini CLI) in any project with an existing GOAT Flow implementation to update it to the current spec.
 
 ---
 
 ## The Prompt
 
 ```
-Read CLAUDE.md and AGENTS.md (if exists).
+Read CLAUDE.md, AGENTS.md, and GEMINI.md (whichever exist in this project).
 
 Read the CURRENT GOAT Flow spec:
 - [goat-flow repo]/setup/shared/execution-loop.md
 - [goat-flow repo]/docs/system-spec.md
 
-Fix every gap in CLAUDE.md against the current spec. Check ALL of these:
+Fix every gap in this project's instruction file(s) against the current
+spec. Check ALL of these:
+
+SKILL RENAME + NEW SKILLS:
+- goat-research is now goat-investigate. Rename if old name exists.
+- 7 skills must exist: goat-preflight, goat-debug, goat-audit,
+  goat-investigate, goat-review, goat-plan, goat-test
+- Create any missing skills. goat-plan = 4-phase planning with human
+  gates and Triangular Tension Pass. goat-test = 3-track testing
+  (automated, AI verification, human testing) based on doer-verifier.
 
 EXECUTION LOOP:
 - Loop MUST be 6 steps: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
-- CLASSIFY MUST have budgets: Hotfix (2/3), Standard (4/10), System (6/20), Infra (8/25)
-- ACT MUST have state declaration: "State: [MODE] | Goal: [one line] | Exit: [condition]"
-- ACT MUST have mode-transition rule: "Switching to [NEW STATE] because [reason]"
-- ACT Debug mode MUST say: "No fixes until human reviews diagnosis"
-- LOG MUST say "MUST update when tripped (DoD gate #4), SHOULD after routine sessions"
-- LOG MUST have mechanical trigger: "If VERIFY caught a failure in code you wrote, or
-  you corrected course, lessons.md entry required before DoD satisfied"
-- LOG MUST have human correction trigger: "After human correction, MUST log immediately"
-- LOG MUST have footgun propagation rule (propagate to local CLAUDE.md)
-- LOG MUST reference all 3 files: lessons.md, footguns.md, confusion-log.md
-- LOG MUST have dual-agent coordination (if AGENTS.md exists): "Read shared files
-  before appending"
+- CLASSIFY: 3 signals (intent, complexity with budgets, mode)
+- ACT: state declaration, mode-transition rule, Debug "human reviews diagnosis"
+- VERIFY: two-level escalation, revert-and-rescope, recovery protocols
+  (2-3 common failure patterns with fixes)
+- LOG: MUST-when-tripped, mechanical trigger, human correction trigger,
+  footgun propagation, references 4 files (lessons, footguns, confusion-log,
+  decisions/), dual-agent coordination if applicable
+
+WORKING MEMORY:
+- Context health: compact at 60% utilization (not 90%). Noise pruning.
+  Fresh context between unrelated tasks.
+
+TRUTH ORDER (add if missing):
+1. User's explicit instruction (this session)
+2. Instruction file (CLAUDE.md / AGENTS.md / GEMINI.md)
+3. Shared setup templates
+4. System spec (canonical reference)
+5. Skills / playbooks (on-demand context)
 
 ASK FIRST:
-- MUST have explicit 5-item micro-checklist (not compressed prose):
+- MUST have explicit 5-item micro-checklist:
   1. Boundary touched: [name]
   2. Related code read: [yes/no]
   3. Footgun entry checked: [relevant entry, or "none"]
-  4. Local instruction checked: [local CLAUDE.md / .github/instructions/<file> / none]
+  4. Local instruction checked: [local instruction file / .github/instructions/ / none]
   5. Rollback command: [exact command]
 
 SECTIONS:
 - (f) Sub-Agent Objectives and (g) Communication When Blocked MUST exist
-- Router MUST include all 7 skill directories, learning loop files, architecture,
-  handoff template, agent evals
-- Dual-agent: router MUST include AGENTS.md
+- Router MUST include all 7 skill/playbook entries, learning loop files,
+  architecture, handoff template, agent evals
+- Multi-agent: router MUST include other agents' instruction files
 
 ENFORCEMENT:
-- settings.json MUST have Read deny patterns:
-  "Read(.env*)", "Read(**/secrets/**)", "Read(**/*.pem)", "Read(**/*.key)"
-  Add them if missing.
+- Settings/config MUST have Read deny patterns for secrets if applicable
 
 AGENT EVALS:
-- Each eval file MUST declare Origin: real-incident | synthetic-seed
-  Add labels if missing.
+- Each eval MUST have Origin: real-incident | synthetic-seed
+- Each eval MUST have Agents: all | codex | claude | gemini
 
 CONSTRAINTS:
-- CLAUDE.md MUST stay at or under 120 lines — compress if needed
+- Instruction files MUST stay at or under 120 lines — compress if needed
+- AGENTS.md MUST stay at or under 135 lines
 - If you must weaken a MUST to meet the line target, the target is wrong —
   raise it, don't weaken the rule
 - Do NOT change Ask First boundaries, DoD gates, or Essential Commands
-- Do NOT modify AGENTS.md or any Codex files
-- After editing, count CLAUDE.md lines and report total
+- Only fix YOUR agent's instruction file — do not modify other agents' files
+- After editing, count lines and report totals
 - Report what you fixed and what was already compliant
 ```

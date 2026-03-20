@@ -19,7 +19,7 @@ BAD:  "The spec says 100 lines for apps" (guessed without reading)
 GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
 ```
 
-**CLASSIFY** - MUST declare complexity and mode before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.
+**CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
 
 | Complexity | Read budget | Turn budget |
 |------------|-------------|-------------|
@@ -28,7 +28,7 @@ GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
 | System Change | 6 reads | 20 turns |
 | Infrastructure | 8 reads | 25 turns |
 
-Over budget = re-classify before continuing. Mode: Plan / Implement / Explain / Debug / Review.
+Over budget = re-classify before continuing.
 
 **SCOPE** - MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
 
@@ -50,6 +50,7 @@ GOOD: Inline format. Extract when second format needed
 **VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
 - Two corrections on same approach = MUST rewind
+- Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 **LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure in your code, or you corrected course: lessons.md entry required before DoD. After human correction: MUST log immediately. Propagate footguns to local CLAUDE.md.
 
@@ -58,6 +59,7 @@ GOOD: Inline format. Extract when second format needed
 | `docs/lessons.md` | Behavioural mistake (agent did something wrong) |
 | `docs/footguns.md` | Cross-doc architectural trap (with file:line evidence) |
 | `docs/confusion-log.md` | Structural navigation difficulty |
+| `docs/decisions/` | Significant technical decision with context/rationale |
 
 ## Autonomy Tiers
 
@@ -103,16 +105,14 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | System spec (canonical) | `docs/system-spec.md` |
 | 5-layer architecture | `docs/system/five-layers.md` |
 | 6-step execution loop | `docs/system/six-steps.md` |
-| Design rationale | `docs/reference/design-rationale.md` |
-| Getting started | `docs/getting-started.md` |
-| Real examples | `docs/reference/examples.md` |
+| Reference docs | `docs/reference/` |
 | Setup prompts | `setup/` |
-| Skill templates | `workflow/skills/` |
-| Playbooks | `workflow/playbooks/` |
+| Skill/playbook templates | `workflow/` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Confusion log | `docs/confusion-log.md` |
 | Architecture | `docs/architecture.md` |
+| Decisions | `docs/decisions/` |
 | Maintenance scripts | `scripts/maintenance/` |
 | Skills | `.claude/skills/goat-*/` |
 | Agent evals | `agent-evals/` |

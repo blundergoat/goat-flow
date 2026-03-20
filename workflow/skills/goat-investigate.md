@@ -31,6 +31,8 @@ The skill follows this process:
 2. Read - Systematic deep read of the scoped area:
    - Read every file in scope, not just the obvious ones
    - Follow imports, dependencies, and cross-references
+   - Noise awareness: drop irrelevant search results rather than
+     accumulating them (semantic noise is worse than no results)
    - Note data flow paths and ownership boundaries
    - Note anything surprising or undocumented
 
