@@ -204,6 +204,22 @@ flowchart TD
 
 **Incident:** The question/directive confusion was exposed by the anti-rationalisation hook. A correct "No -- want me to?" answer was rejected as "asking permission instead of implementing." (BlunderGOAT CC, Oruç)
 
+### SCOPE (v0.1 addition)
+
+**Problem:** Agent touches files and systems outside the task's intended boundary. A "Standard Feature" task silently modifies auth code, deployment config, or unrelated modules. On the Rampart project, the agent changed 57 files across 3 codebases without declaring scope — a circular dependency between `agentStore.ts` and `agentBridge.ts` went undetected because neither file was in the original task's intended boundary. In the same session, the agent built a pre-commit hook feature nobody asked for — a non-goal that would have been surfaced by a scope declaration.
+
+**Design decision:** After classifying, declare scope before acting: files allowed to change, non-goals, max blast radius. If changes need to extend beyond declared scope, stop and re-scope with the human. This was initially part of CLASSIFY but the Rampart retrospective showed that scope violations were the single most common preventable failure mode (2 of 6 real bugs). Promoting SCOPE to its own step makes it harder to skip.
+
+**Source:** ChatGPT external review (round 2), Rampart retrospective (2026-03-20).
+
+### CLASSIFY: Complexity Budgets (v0.1 addition)
+
+**Problem:** Complexity tiers (Hotfix / Standard / System / Infrastructure) were labels with no mechanical consequence. On the Rampart project, the initial implementation was an Infrastructure-level change but the agent never re-classified — it blew past any reasonable read or turn budget without checkpoints.
+
+**Design decision:** Each complexity tier now has explicit read and turn budgets: Hotfix (2 reads / 3 turns), Standard (4 / 10), System Change (6 / 20), Infrastructure (8 / 25). Over budget = re-classify before continuing. Budgets are soft limits — the agent doesn't stop automatically, but exceeding them forces a conscious decision to upgrade the complexity tier rather than silently expanding.
+
+**Source:** Claude external review (round 1), Gemini external review (round 2), Rampart retrospective.
+
 ### ACT
 
 **Problem:** Planning loops and premature fixes. In Plan mode, Claude reads file after file without producing an artefact. In Debug mode, Claude starts fixing before understanding the bug.

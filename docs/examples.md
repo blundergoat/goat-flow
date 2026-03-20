@@ -1,6 +1,6 @@
 # Real-World Implementations - GOAT Flow
 
-Six BlunderGOAT projects scanned for workflow framework adoption. These serve as reference implementations showing how the system adapts across project shapes and stacks.
+Seven projects scanned for workflow framework adoption. These serve as reference implementations showing how the system adapts across project shapes and stacks.
 
 ---
 
@@ -14,6 +14,38 @@ Six BlunderGOAT projects scanned for workflow framework adoption. These serve as
 | **sus-form-detector** | Library | PHP, Python | Dual | 107 lines | 43 lines | Standard |
 | **blundergoat-platform** | App | TypeScript, Docker | Claude Code only | 62 lines | -- | Minimal |
 | **the-summit-chatroom** | App | PHP, Python, Docker | Dual | 152 lines | 37 lines | Minimal |
+| **rampart** | App (Tauri 2) | TypeScript, Rust, Python, Docker | Claude Code only | 118 lines | -- | Full |
+
+---
+
+## rampart - Full Tier, Claude Code Only
+
+**Shape:** App (Tauri 2 desktop app, React 19 + Rust + Python FastAPI agents in Docker)
+**Agents:** Claude Code only
+
+The most complete single-agent implementation. First project where GOAT Flow was set up by an agent using the setup prompts, then audited and gaps fixed. The retrospective produced the bug-to-loop-step mapping that led to adding SCOPE as an explicit step and complexity budgets to CLASSIFY.
+
+### Artifacts Found
+
+| Category | Artifact | Lines | Notes |
+|----------|----------|-------|-------|
+| **Layer 1** | CLAUDE.md | 118 | Under 120-line app target (post-fix) |
+| **Enforcement** | .claude/settings.json | 43 | Permissions deny + 3 hooks |
+| **Enforcement** | .claude/hooks/ | 3 files | deny-dangerous, stop-lint, format-file |
+| **Skills** | .claude/skills/ | 5 files | Full skill set |
+| **Learning Loop** | docs/footguns.md | 60 | 4 entries with file:line evidence |
+| **Learning Loop** | docs/lessons.md | 12 | Empty template (new project) |
+| **Learning Loop** | docs/confusion-log.md | 12 | 1 real entry (plugin API) |
+| **Docs** | docs/architecture.md | 51 | Component diagram + data flow |
+| **Docs** | docs/decisions/ | 3 ADRs | Agent-first UI, Tauri+Docker hybrid, run-scoped streaming |
+| **Local Context** | agents/CLAUDE.md | 9 | Python-specific, references ADR-012 |
+| **Local Context** | src-tauri/src/strands/CLAUDE.md | 8 | Rust-specific, references ADR-013 |
+| **Evals** | agent-evals/ | 4 files | All from real incidents |
+| **Profiles** | .claude/profiles/ | 3 files | frontend, backend, agents |
+| **CI** | .github/workflows/context-validation.yml | 87 | Full validation suite |
+| **Ignore** | .copilotignore + .cursorignore | 6 each | Standard secret patterns |
+
+**What makes this notable:** First implementation where the setup prompts were used end-to-end, then audited against the spec. The audit found 4 gaps (missing SCOPE, no complexity budgets, LOG severity wrong, router table incomplete) — all traced to instruction template gaps, not agent errors. The fixes were applied back to `setup/shared/execution-loop.md`, improving the instructions for all future implementations. The retrospective mapping 6 real bugs to execution loop steps is now in this document.
 
 ---
 
@@ -244,6 +276,29 @@ The most complete implementation. Has every artifact the framework defines.
 | Architecture doc over 100 lines | blundergoat-platform | docs/architecture.md at 148 lines |
 | CLAUDE.md over line target | devgoat | 121 lines (target: 120 for app) |
 | CLAUDE.md over line target | sus-form-detector | 107 lines (target: 100 for library) |
+
+---
+
+## Retrospective: Would GOAT Flow Have Prevented These Bugs?
+
+Real bugs from the Rampart project (Tauri 2 + React 19 + Python FastAPI, App shape) mapped to which execution loop step would have caught them. GOAT Flow was set up after implementation, so these are honest "would-have" assessments, not hindsight rewrites.
+
+| Bug | Root Cause | Loop Step | Would it have helped? |
+|-----|-----------|-----------|----------------------|
+| **Blank screen (circular dep)** | `agentStore.ts` imports `agentBridge.ts` imports `agentStore.ts` | **SCOPE** | Yes. Declaring the dependency graph before writing would have surfaced the cycle. Now documented as a footgun with `file:line` evidence. |
+| **OpenSSL build failure** | `setup-initial.sh` didn't install system libs for Tauri on Linux | **READ** | Yes. "MUST read relevant files first" — reading Tauri's Linux prerequisites docs before writing the setup script would have caught this. |
+| **AppHandle generic** | Used bare `AppHandle` not `AppHandle<tauri::Wry>` in Tauri 2 | None | No. Knowledge gap about Tauri 2 API changes. Footgun + agent eval prevent recurrence but couldn't have prevented the first hit. |
+| **sqlx vs tauri-plugin-sql** | Tried raw sqlx queries against plugin internals | **READ** | Yes. Reading the plugin's source before writing 50 lines of sqlx commands would have revealed the API is JS-first. |
+| **setup-verify.sh missing** | Script printed "run setup-verify.sh" without creating it | **VERIFY** | Yes. "MUST run tests after each meaningful change" — running the referenced script would have caught it instantly. |
+| **Pre-commit hooks (unwanted)** | Built a feature nobody asked for | **SCOPE** | Yes. "non-goals" declaration would have surfaced this. Also an Ask First boundary violation (new feature without approval). |
+
+**Takeaway:** 4 of 6 bugs were preventable by existing loop steps (READ, SCOPE, VERIFY). 1 was a knowledge gap (not preventable by process). 1 was an autonomy tier violation (SCOPE + Ask First). The execution loop doesn't eliminate bugs — it eliminates *categories* of bugs that stem from skipping investigation.
+
+**What the system provided after the fact:**
+- 4 footgun entries with `file:line` evidence → next agent won't hit the same traps
+- 4 agent evals → regression tests replay known failure modes after CLAUDE.md changes
+- 3 permission profiles (frontend/backend/agents) → scope future agents to one stack
+- deny-dangerous.sh → mechanically blocks destructive commands before execution
 
 ---
 
