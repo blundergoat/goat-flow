@@ -30,18 +30,11 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 **Prevention:** When editing a core concept, grep for the concept name across all docs and update every occurrence. `docs/system-spec.md` is the canonical source of truth.
 
-## Footgun: Line target inconsistency for project shapes
+## Footgun: Line target inconsistency for project shapes (RESOLVED)
 
-**Symptoms:** A user gets different advice about their target line count depending on which doc they read.
+**Status:** RESOLVED — unified to 120 lines for all project shapes in v0.1.1. The original 100/120 split was dropped after real implementations showed every project with the 6-step loop, budgets, and all required sections lands in the 100-120 range regardless of shape.
 
-**Why it happens:** Line budget targets for project shapes appear in multiple files and have drifted apart during edits.
-
-**Evidence:**
-- `docs/reference/examples.md:218` → shows devgoat-bash-scripts target as "80" for Collection shape
-- `docs/system/five-layers.md:201` → shows "~100" for Script Collection shape
-- `docs/system-spec.md:104` → shows "~100" for libraries/collections
-
-**Prevention:** Line targets MUST only be authoritatively stated in `docs/system-spec.md`. Other files should reference the spec rather than restate the numbers.
+**Prevention:** Line target is 120 for all shapes, stated in `docs/system-spec.md:104`. If this number appears differently in any other file, the spec is canonical.
 
 ## Footgun: Setup instructions contradict spec on execution loop steps
 

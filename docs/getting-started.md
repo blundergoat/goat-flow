@@ -63,7 +63,7 @@ Just want the bare minimum to try it?
 ## What to Check After Each Phase
 
 **After Phase 1a:**
-- [ ] CLAUDE.md line count reported -- under 120 (apps) or 100 (libraries/collections)?
+- [ ] CLAUDE.md line count reported -- under 120?
 - [ ] If Prompt B: open `docs/domain-reference.md` and verify nothing was silently dropped. Compare against the original CLAUDE.md
 - [ ] `docs/footguns.md` contains real footguns with file:line evidence, not hypothetical ones
 - [ ] `docs/guidelines-ownership-split.md` exists and documents the migration
@@ -128,7 +128,7 @@ You don't have to do everything. Pick your tier:
 After full implementation, your project will have:
 
 ```
-CLAUDE.md                              <- Layer 1: the loop (~100-120 lines)
+CLAUDE.md                              <- Layer 1: the loop (~120 lines)
 src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying dirs exist)
 .claude/skills/goat-preflight/SKILL.md  <- Layer 3: skills
 .claude/skills/goat-debug/SKILL.md
@@ -153,7 +153,7 @@ agent-evals/                           <- Phase 2
 
 ## Implementation Evidence
 
-**Implementation evidence:** GOAT Flow has been implemented across 6 projects: 1 fully public (devgoat-bash-scripts), 3 private (DevGoat Tauri app, ambient-scribe, sus-form-detector), and 2 in progress (strands-php-client, the-summit-chatroom). The public implementation at devgoat-bash-scripts has a 100-line CLAUDE.md, 135-line AGENTS.md, full enforcement, and both agent-evals/ and codex-evals/.
+**Implementation evidence:** GOAT Flow has been implemented across 7 projects: 1 fully public (devgoat-bash-scripts), 4 private (rampart, ambient-scribe, sus-form-detector, DevGoat Tauri app), and 2 in progress (strands-php-client, the-summit-chatroom).
 
 **File paths:** All paths in this documentation use forward slashes from the repo root (e.g., `docs/system-spec.md`, `setup/setup-claude.md`). If a referenced file doesn't exist at the stated path, check that you have the latest version of the repo.
 

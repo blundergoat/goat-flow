@@ -30,7 +30,7 @@
 ```mermaid
 flowchart TB
     subgraph ALWAYS["ALWAYS LOADED (every session)"]
-        L1["<b>Layer 1 -- Runtime</b><br/>CLAUDE.md ~100-120 lines<br/>Execution Loop - Autonomy Tiers - DoD - Router Table"]
+        L1["<b>Layer 1 -- Runtime</b><br/>CLAUDE.md ~120 lines<br/>Execution Loop - Autonomy Tiers - DoD - Router Table"]
         HOOKS["<b>Enforcement Hooks</b><br/>deny-dangerous (PreToolUse)<br/>stop-lint (Stop) - format-file (PostToolUse)"]
     end
 
@@ -131,7 +131,7 @@ flowchart TD
 - Frontier models follow ~150-200 instructions reliably; Claude Code's system prompt consumes ~50, leaving ~100-150 for CLAUDE.md (Philipp Schmid, HumanLayer)
 - Tools mentioned in AGENTS.md are used 160x more often than unmentioned ones (GitHub 2,500-repo)
 
-**Design decision:** Only Layer 1 (CLAUDE.md, ~100-120 lines) loads every session. Everything else loads on demand via the router table, slash commands, or automatic directory-level loading.
+**Design decision:** Only Layer 1 (CLAUDE.md, ~120 lines) loads every session. Everything else loads on demand via the router table, slash commands, or automatic directory-level loading.
 
 **Why 5 layers, not 3 or 7:** Each layer has a distinct loading trigger -- always (L1), automatic per-directory (L2), on-demand by user (L3/L4), or CI/regression (L5). Fewer layers would combine different loading semantics. More would create layers with no meaningful distinction.
 
@@ -184,9 +184,9 @@ flowchart TD
 
 **Sources:** HumanLayer (auto-generated context data), Philipp Schmid (instruction following limits), GitHub 2,500-repo analysis (tool mention uplift)
 
-**Design decision:** Hard line target (100 for libraries, 120 for apps, never over 150). Cut priority list for when you go over. "Never cut" list for the three things that matter most: execution loop, autonomy tiers, definition of done.
+**Design decision:** Hard line target (120 for all project shapes, never over 150). The original 100/120 split was dropped after real implementations showed libraries with real footguns and project-specific Ask First boundaries need the same budget as apps. Cut priority list for when you go over. "Never cut" list for the three things that matter most: execution loop, autonomy tiers, definition of done.
 
-**Why these specific targets:** The PHP library's first pass produced 127 lines (27 over the 100-line target). Compression got it to 99. The Tauri app stabilised at 121. The shell script collection landed at 89 on first pass, grew to 101, and compressed to 96 after the RFC 2119 pass.
+**Why 120:** The PHP library's first pass produced 127 lines. Compression got it to 99 but adding SCOPE and budgets brought it back to ~110. The Tauri app stabilised at 121. The shell script collection grew to 101. Every implementation with the 6-step loop, budgets, and all required sections lands in the 100-120 range regardless of project shape.
 
 ---
 

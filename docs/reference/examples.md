@@ -127,7 +127,7 @@ The most complete implementation. Has every artifact the framework defines.
 
 | Category | Artifact | Lines | Notes |
 |----------|----------|-------|-------|
-| **Layer 1** | CLAUDE.md | 100 | Exactly at 100-line library/collection target |
+| **Layer 1** | CLAUDE.md | 100 | Under 120-line target |
 | **Layer 1** | AGENTS.md | 135 | Codex (35% larger than CLAUDE.md, as expected) |
 | **Enforcement** | .claude/settings.json | 31 | Permissions deny list |
 | **Enforcement** | .claude/hooks/ | 2 files | Hooks present |
@@ -159,7 +159,7 @@ The most complete implementation. Has every artifact the framework defines.
 
 | Category | Artifact | Lines | Notes |
 |----------|----------|-------|-------|
-| **Layer 1** | CLAUDE.md | 107 | Over 100-line library target |
+| **Layer 1** | CLAUDE.md | 107 | Under 120-line target |
 | **Layer 1** | AGENTS.md | 43 | Minimal Codex file |
 | **Enforcement** | .claude/settings.json | 42 | Permissions deny list |
 | **Enforcement** | .claude/hooks/ | 3 files | Hooks present |
@@ -275,7 +275,7 @@ The most complete implementation. Has every artifact the framework defines.
 | AP1: Instruction file over 150 lines | the-summit-chatroom | CLAUDE.md at 152 lines |
 | Architecture doc over 100 lines | blundergoat-platform | docs/architecture.md at 148 lines |
 | CLAUDE.md over line target | devgoat | 121 lines (target: 120 for app) |
-| CLAUDE.md over line target | sus-form-detector | 107 lines (target: 100 for library) |
+| CLAUDE.md over line target | sus-form-detector | 107 lines (under 120 target) |
 
 ---
 
@@ -304,9 +304,9 @@ Real bugs from the Rampart project (Tauri 2 + React 19 + Python FastAPI, App sha
 
 ## Real Example Artifacts
 
-### Example CLAUDE.md (devgoat-bash-scripts, 100 lines)
+### Example CLAUDE.md (devgoat-bash-scripts, pre-v0.1.1 snapshot)
 
-This is the complete CLAUDE.md from a real Script Collection project implementing the full GOAT Flow system. It scores 100 on the line target and contains all Layer 1 sections: execution loop, autonomy tiers, DoD, router table, stack definition, and working memory.
+This is the CLAUDE.md from a real Script Collection project before the v0.1.1 updates (SCOPE step, complexity budgets, unified 120-line target). Shown as a reference for structure and style — the current version of this file has been updated to the 6-step loop.
 
 ```markdown
 # CLAUDE.md - v1.0 (2026-03-15)

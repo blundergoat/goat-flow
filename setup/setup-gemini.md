@@ -54,11 +54,16 @@ Implement Phase 1a now.
 
 INSTRUCTION FILE:
 1. Create GEMINI.md with the sections listed in setup/shared/execution-loop.md.
-   Target: under [120 for apps / 100 for libraries] lines.
+   Target: under 120 lines.
    Adapt all examples and Ask First boundaries for THIS project.
    Do NOT skip sections (f)–(i) - they are small but required.
    The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
    CLASSIFY MUST include read/turn budgets per complexity tier.
+
+PRE-CHECK: If AGENTS.md exists, this is a dual-agent project. Include
+   dual-agent coordination rules in LOG. Router table MUST reference
+   AGENTS.md and codex-evals/ if they exist. Check scripts/ for existing
+   preflight or validation scripts — use them instead of writing new ones.
 
 DOCS SEED FILES:
 2. Create the files listed in setup/shared/docs-seed.md.
@@ -70,10 +75,11 @@ LOCAL INSTRUCTION FILES (Layer 2):
    Skip directories already covered by .github/instructions/ files.
    If no directories qualify, create none and note why.
 
-VERIFICATION:
-- Count GEMINI.md lines. MUST be under target.
-- Verify all docs seed files exist.
-- Report GEMINI.md line count and number of local GEMINI.md files created.
+VERIFICATION (all MUST pass before proceeding to Phase 1b):
+- GATE: Count GEMINI.md lines. MUST be under 120.
+- GATE: Verify all docs seed files exist.
+- GATE: Report GEMINI.md line count and number of local GEMINI.md files created.
+Do NOT proceed to Phase 1b until all gates pass.
 ```
 
 ### Prompt B - Existing GEMINI.md (migrate domain content)
@@ -97,12 +103,15 @@ STEP 1 - Move domain content:
 2. Move ALL domain-specific reference content to docs/domain-reference.md.
    Domain content = anything describing HOW THE PROJECT WORKS rather than
    how the AGENT SHOULD BEHAVE.
+   Test: does the sentence command the agent with an imperative verb?
+   "Never create middleware.ts" = agent instruction (KEEP in GEMINI.md)
+   "The API uses chi router on port 8080" = domain knowledge (MOVE)
 3. Keep in GEMINI.md: project identity (one line), essential commands,
    and any agent-behavioural rules that already exist.
 
 STEP 2 - Rewrite GEMINI.md:
 4. Rebuild GEMINI.md with the sections listed in setup/shared/execution-loop.md.
-   Target: under [120/100] lines. Adapt for this project.
+   Target: under 120 lines. Adapt for this project.
    Do NOT skip sections (f)–(i) - they are small but required.
    The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
    CLASSIFY MUST include read/turn budgets per complexity tier.
@@ -117,11 +126,12 @@ STEP 5 - Local GEMINI.md files (Layer 2):
 7. For qualifying directories only (2+ footguns, Ask First boundaries,
    differing conventions). Under 20 lines each.
 
-VERIFICATION:
-- Count GEMINI.md lines. MUST be under target.
-- Verify docs/domain-reference.md contains all moved content.
-- Compare original vs new to check nothing was silently dropped.
-- Report GEMINI.md line count and domain-reference.md line count.
+VERIFICATION (all MUST pass before proceeding to Phase 1b):
+- GATE: Count GEMINI.md lines. MUST be under 120.
+- GATE: Verify docs/domain-reference.md contains all moved content.
+- GATE: Compare original vs new to check nothing was silently dropped.
+- GATE: Report GEMINI.md line count and domain-reference.md line count.
+Do NOT proceed to Phase 1b until all gates pass.
 ```
 
 ---
@@ -148,10 +158,11 @@ Create these 5 skills under .gemini/skills/:
    Self-Check. Pass 4 fabrication gate. MUST NOT propose fixes.
 5. goat-review/SKILL.md - Structured review with RFC 2119 constraints.
 
-VERIFICATION:
-- Verify all skill files exist with required sections.
-- Verify GEMINI.md router table references the skill directories.
-- Run preflight checks.
+VERIFICATION (all MUST pass before proceeding to Phase 1c):
+- GATE: Verify all skill files exist with required sections.
+- GATE: Verify GEMINI.md router table references the skill directories.
+- GATE: Run preflight checks.
+Do NOT proceed to Phase 1c until all gates pass.
 ```
 
 ---
@@ -172,9 +183,9 @@ HOOKS & POLICY:
    }
 
    PreToolUse hook: .gemini/hooks/deny-dangerous.sh
-   - Block: rm -rf, git push main, git push --force, chmod 777,
-     pipe-to-shell, .env modifications, --no-verify,
-     lockfile modifications, generated code modifications
+   - For Bash: block rm -rf, git push main, git push --force, chmod 777,
+     pipe-to-shell, --no-verify
+   - For Write/Edit: block .env files, lockfiles, generated code
    - Exit 0 for everything else
 
    Stop hook: .gemini/hooks/stop-lint.sh
@@ -184,6 +195,10 @@ HOOKS & POLICY:
 
    PostToolUse hook: .gemini/hooks/format-file.sh
    - Format by file extension. Skip if no formatter configured.
+
+   PreToolUse hook (optional): .gemini/hooks/guard-truncation.sh
+   - Block Write operations that reduce file size by >80%
+   - Catches agents emptying files during refactors
 
    ALL paths MUST use: bash "$(git rev-parse --show-toplevel)/..."
 
@@ -195,11 +210,13 @@ HOOKS & POLICY:
 4. CI: .github/workflows/context-validation.yml (line count, router refs,
    skills, local file sizes)
 
-VERIFICATION:
-- Verify settings.json is valid JSON.
-- Verify deny-dangerous blocks expected commands.
-- Verify stop hook exits 0 even on errors.
-- Run preflight checks.
+VERIFICATION (all MUST pass before proceeding to Phase 2):
+- GATE: Verify settings.json is valid JSON.
+- GATE: Verify deny-dangerous blocks expected commands.
+- GATE: Verify stop hook exits 0 even on errors.
+- GATE: Verify agent ignore files exist with secret patterns.
+- GATE: Run preflight checks.
+Do NOT proceed to Phase 2 until all gates pass.
 ```
 
 ---

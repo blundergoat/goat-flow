@@ -14,7 +14,7 @@ bash -n scripts/maintenance/*.sh          # Syntax-check scripts
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
 ```
 BAD:  "The spec says 100 lines for apps" (guessed without reading)
-GOOD: Read docs/system-spec.md:104 → "Target 100 (libraries) to 120 (apps)"
+GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
 ```
 
 **CLASSIFY** - MUST declare complexity and mode before acting. Question = answer it; directive = act on it. MUST NOT infer implementation from a question.

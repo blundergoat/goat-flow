@@ -18,6 +18,9 @@ Work through this list in order.
 AGENT EVAL SUITE:
 1. Create agent-evals/ (or codex-evals/) directory for regression testing.
    Add a README.md explaining what evals are and how to use them.
+   If the other agent's eval directory already exists (agent-evals/ or
+   codex-evals/), read it first. Do NOT create duplicate evals for
+   incidents already covered.
 
    Search this codebase's git history and issues for real incidents.
    For each, create [incident-name].md (flat files, not subdirectories):

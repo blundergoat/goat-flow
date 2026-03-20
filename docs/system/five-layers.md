@@ -5,7 +5,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 1 - Runtime                              ALWAYS ON   │
-│  CLAUDE.md / AGENTS.md (~100-120 lines)                     │
+│  CLAUDE.md / AGENTS.md (~120 lines)                         │
 │  Execution loop, autonomy tiers, DoD, router table          │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 2 - Local Context                        AUTO-LOAD   │
@@ -32,7 +32,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** The root instruction file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex). This is the agent's operating system - it loads every session, so every line must earn its place.
 
-**Line budget:** ~100 lines for libraries/collections, ~120 lines for apps. Beyond 150 triggers an anti-pattern deduction. Evidence: auto-generated context beyond this range reduces agent success rates by ~3% and increases cost by 20%+ (HumanLayer, Philipp Schmid instruction limits research).
+**Line budget:** ~120 lines for all project shapes. Beyond 150 triggers an anti-pattern deduction. Evidence: auto-generated context beyond this range reduces agent success rates by ~3% and increases cost by 20%+ (HumanLayer, Philipp Schmid instruction limits research).
 
 **What it contains:**
 
@@ -199,7 +199,7 @@ The system adapts to three project shapes. The layers stay the same - only the c
 
 | Aspect | App | Library | Script Collection |
 |--------|-----|---------|-------------------|
-| Layer 1 line target | ~120 | ~100 | ~100 |
+| Layer 1 line target | ~120 | ~120 | ~120 |
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
 | Layer 3 skills | All 5 | All 5 | All 5 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |

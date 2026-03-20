@@ -11,7 +11,7 @@
 Five layers. Only Layer 1 loads every session. Everything else loads on demand.
 
 ```
-Layer 1 -- Runtime (CLAUDE.md, ~100-120 lines)
+Layer 1 -- Runtime (CLAUDE.md, ~120 lines)
     READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG loop
     Autonomy tiers, stop-the-line, mode switch, definition of done
     Router table pointing to everything below
@@ -62,7 +62,7 @@ Claude Code auto-reads `CLAUDE.md` in the working directory plus ancestors up to
 
 | Aspect                  | App (e.g., Tauri, Symfony)             | Library (e.g., PHP package, npm module)                | Script Collection (e.g., domain-organised shell scripts) |
 | ----------------------- | -------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
-| CLAUDE.md line target   | ~120 lines                             | ~100 lines                                             | ~100 lines                                               |
+| CLAUDE.md line target   | ~120 lines                             | ~120 lines                                             | ~120 lines                                               |
 | Skills                  | 5 (all core)                           | 5 (all core)                                           | 5 (all core)                                             |
 | Ask First boundaries    | Auth, routing, deployment, API, DB     | Public API, dependencies, config/data files            | Shared sourced files, CONFIGURATION blocks, new domains  |
 | Local CLAUDE.md files   | Likely needed for high-risk dirs       | Create where needed                                    | Create where needed                                      |
@@ -101,7 +101,7 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 
 **Governance:**
 
-1. CLAUDE.md MUST stay under 150 lines. Target 100 (libraries) to 120 (apps). Count: `wc -l CLAUDE.md`.
+1. CLAUDE.md MUST stay under 150 lines. Target 120 lines for all project shapes. Count: `wc -l CLAUDE.md`.
 2. Every rule MUST apply to every session. Situation-specific guidance belongs in skills/playbooks/local files.
 3. Weekly /insights review. Quarterly audit: re-count, check for stale rules.
 4. Prefer pointers over copies. Prefer code examples over prose.
@@ -508,4 +508,4 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 
 **Model version transitions:** When upgrading the model (e.g., Claude 3.5 -> Claude 4), before using the new version on real work: (1) re-run the full agent eval suite, (2) check for behavioural regressions on known failure modes, (3) adjust instruction file language if the new model handles certain patterns differently, (4) verify enforcement hooks still work correctly with the new model's tool-calling behaviour.
 
-**AGENTS.md compatibility:** GOAT Flow's instruction file format is compatible with the AGENTS.md open standard (used by 60k+ repos). GOAT Flow extends beyond the spec with: the 5-step execution loop, autonomy tiers with micro-checklist, 6-gate Definition of Done, enforcement gradient, and learning loop files. Projects using GOAT Flow can also create a standard AGENTS.md for interoperability with tools that don't support the full framework.
+**AGENTS.md compatibility:** GOAT Flow's instruction file format is compatible with the AGENTS.md open standard (used by 60k+ repos). GOAT Flow extends beyond the spec with: the 6-step execution loop, autonomy tiers with micro-checklist, 6-gate Definition of Done, enforcement gradient, and learning loop files. Projects using GOAT Flow can also create a standard AGENTS.md for interoperability with tools that don't support the full framework.

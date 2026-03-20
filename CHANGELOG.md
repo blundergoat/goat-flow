@@ -68,7 +68,7 @@ First public release. Complete workflow system with docs, prompts, and reference
 ### System
 
 - 5-layer architecture: Runtime, Local Context, Skills, Playbooks, Evaluation
-- 5-step execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+- 6-step execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 - 3-layer enforcement gradient: permissions deny → hooks → instruction rules
 - Autonomy tiers (Always / Ask First / Never) with micro-checklist
 - Definition of Done (6 gates)
@@ -136,4 +136,4 @@ First public release. Complete workflow system with docs, prompts, and reference
 
 - 3 independent AI reviews (Gemini 88/100, ChatGPT 87/100, Claude 81/100)
 - Cross-referenced against Bruniaux 6 Pillars, BMad Method, and 21 other systems
-- 6 real project implementations (1 fully public, 3 private, 2 in progress)
+- 7 real project implementations (1 fully public, 4 private, 2 in progress)

@@ -10,11 +10,11 @@ Two projects now have both implementations. Different stacks, different complexi
 
 ### What Maps Cleanly
 
-The core system transfers without modification: the five-step loop, autonomy tiers, Definition of Done, footguns file, lessons file, router table, essential commands, and the eval concept. These aren't Claude Code features -- they're workflow patterns that work on any agent that reads a root instruction file.
+The core system transfers without modification: the six-step loop (READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, Definition of Done, footguns file, lessons file, router table, essential commands, and the eval concept. These aren't Claude Code features -- they're workflow patterns that work on any agent that reads a root instruction file.
 
 Both agents produced similar footgun counts from the same codebases. On the medical scribe: 8 from Claude Code, 7 from Codex, with overlapping findings (Mercure silent publish failure, three independent session state buckets, NeMo GPU singleton, DynamoDB provisioned-but-unused gap). On the shell script collection: 8 from Claude Code, 6 from Codex's rewrite, with 5 overlapping concepts (helper sourcing, WSL PATH sanitisation, strict-mode exceptions, logging paradigm, dashboard parsing). The convergence suggests the footgun-seeding approach works regardless of which agent does the reading.
 
-On the shell script collection, both agents found the same 5 qualifying incidents from git history using the same grep pattern (`fix|revert|bug|broke|regression`). Each mapped to a different workflow step (READ, CLASSIFY, ACT, VERIFY, RECORD). The eval seeding approach is agent-agnostic -- the git history is the source of truth, not the agent.
+On the shell script collection, both agents found the same 5 qualifying incidents from git history using the same grep pattern (`fix|revert|bug|broke|regression`). Each mapped to a different workflow step (READ, CLASSIFY, SCOPE, ACT, VERIFY, LOG). The eval seeding approach is agent-agnostic -- the git history is the source of truth, not the agent.
 
 ### What Had No Equivalent
 

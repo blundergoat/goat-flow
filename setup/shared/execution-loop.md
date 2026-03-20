@@ -2,7 +2,7 @@
 
 These sections go in every project's root instruction file (CLAUDE.md, AGENTS.md, or equivalent). They are the same regardless of which agent you use.
 
-Target: under 120 lines for apps, 100 for libraries/collections. Use BAD/GOOD examples not prose.
+Target: under 120 lines for all project shapes. Hard limit: 150. Use BAD/GOOD examples not prose.
 
 ---
 
@@ -21,6 +21,7 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
    - SCOPE: declare before acting — files allowed to change, non-goals,
      max blast radius. Expanding beyond scope = stop and re-scope
    - ACT: behaviour per mode as a table. State declaration rule.
+     Mode-transition rule: "Switching to [NEW STATE] because [reason]."
      Anti-planning-loop rule. Anti-BDUF guard with BAD/GOOD example
    - VERIFY: continuous test loop. Stop-the-line with two-level
      escalation. Revert-and-rescope tactic
@@ -28,6 +29,11 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      files: docs/lessons.md, docs/footguns.md, docs/confusion-log.md
      with when-to-use table. Footgun propagation rule.
      Context-based loading rules.
+     Mechanical trigger: if VERIFY caught a failure in code you wrote
+     this session, or you corrected course mid-task, a lessons.md
+     entry is required before DoD can be satisfied.
+     After human correction of agent behaviour, MUST log the lesson
+     immediately — do not wait for next session.
      Dual-agent projects: learning loop files are shared. Read the
      current file before appending to avoid duplicating entries.
 
@@ -50,11 +56,15 @@ h) Router table: MUST include at minimum:
      - Learning loop files (footguns, lessons, confusion-log)
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project
+     Dual-agent projects: router MUST include the other agent's
+     instruction file (AGENTS.md or CLAUDE.md) and eval directory.
      (Unrouted files are invisible to the agent — 160x usage uplift
      for referenced tools)
 
 i) Essential commands
 
 If over line target, apply cut priority from the system spec.
+If you must weaken a MUST to meet the line target, the target is
+wrong — raise it, don't weaken the rule.
 Do NOT skip sections (f)–(i) - they are small but required.
 ```
