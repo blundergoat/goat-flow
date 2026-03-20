@@ -6,7 +6,7 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ## v0.1.1 - 2026-03-20
 
-Post-release improvements from implementing GOAT Flow on two real projects (rampart, sus-form-detector) and auditing the results.
+Post-release improvements from implementing GOAT Flow on 5 real projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform) and running the diagnose prompt against each.
 
 ### Self-Implementation
 
@@ -53,11 +53,22 @@ Post-release improvements from implementing GOAT Flow on two real projects (ramp
 - Updated six-steps.md: title, loop diagram, "Why Six Steps" section with SCOPE rationale
 - Updated five-layers.md: folder structure diagram shows current docs/ + workflow/ split
 
+### Instruction Improvements (from 5 project diagnostics)
+
+Consolidated findings from running diagnose prompt against rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform:
+
+- execution-loop.md: mechanical LOG trigger (VERIFY failure → lessons.md entry required), human correction trigger (MUST log immediately), mode-transition rule in ACT, dual-agent router cross-references, "don't weaken MUST to meet target"
+- setup-claude.md + setup-gemini.md: PRE-CHECK for dual-agent state and existing scripts, Prompt B domain vs behavioral test with imperative verb examples, content-preserving write guard in Phase 1c, Read deny patterns for Claude/Gemini, deny-dangerous covers Edit/Write not just Bash, all verification sections → hard gates ("Do NOT proceed until pass")
+- docs-seed.md: seed lessons.md from evals, merge guidance for pre-existing architecture.md, dual-agent ownership-split documents both files
+- phase-2.md: eval dedup checks other agent's directory first
+- Unified line target to 120 for all project shapes (dropped 100/120 split)
+- setup-audit-prompt.md: diagnose prompt for auditing existing implementations
+
 ### Based on
 
 - 7 real project implementations (added rampart)
-- sus-form-detector agent diagnosed 7 of 8 gaps as instruction failures, not agent failures
-- Root cause: system-spec.md contradicted execution-loop.md on the execution loop
+- 5 project diagnostics with bug-to-loop-step mapping
+- Key findings: agents compress away MUST content to meet line targets, lessons.md stays empty without mechanical triggers, dual-agent AGENTS.md consistently drifts (RECORD/LOG, missing SCOPE, no budgets), verification sections treated as optional unless marked as gates
 
 ---
 
