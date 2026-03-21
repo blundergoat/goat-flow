@@ -4,6 +4,60 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
+## v0.4.0 - 2026-03-21
+
+CLI auditor and prompt generator. M1 (Scanner) and M2 (Prompts) complete. Project restructured from `cli/` subdirectory to unified root with `src/cli/` + `src/dashboard/`.
+
+### CLI Scanner (M1)
+
+- 69-check rubric across 3 tiers (Foundation 42pts, Standard 35pts, Full 25pts) + 9 anti-pattern deductions (max -15)
+- 6 generic evaluators: file_exists, dir_exists, line_count, grep, grep_count, json, count_items, composite, custom
+- Fact-based scoring: single filesystem pass, extracted facts reused by prompt generator
+- Multi-agent support: scores Claude Code, Codex, and Gemini CLI independently
+- N/A inflation guard: <10% applicable checks = "insufficient-data" instead of inflated grade
+- Confidence field (high/medium/low) on every check result
+- JSON and text renderers with `--verbose` per-check details and progress bars
+- `--shape` override (app/library/collection) and `--agent` filter
+- `--min-score` / `--min-grade` CI gate mode (exit 1 if below threshold)
+- 53 tests: 13 detection + 40 fixture manifests (10 scenarios including self-scan)
+
+### Prompt Generator (M2)
+
+- 71 fragments: one per recommendation key (62 checks + 9 anti-patterns), full coverage verified by tests
+- Three prompt modes: `fix` (failed checks only), `setup` (fresh project), `audit` (read-only diagnosis)
+- Variable substitution from scan facts: agent paths, stack commands, shape, grade — no manual fill needed
+- Agent-specific overrides for ~6 fragments (deny mechanisms, hooks, local context differ per agent)
+- Phase-grouped output: anti-pattern → foundation → standard → full
+- 29 tests: fragment registry coverage, composer output, variable substitution
+
+### Project Restructure
+
+- Moved `cli/` subdirectory to root: `src/cli/` (scanner) + `src/dashboard/` (M3 placeholder)
+- Single `package.json` at root — one `npm install`, one `npm test`
+- Self-scan changed from `node dist/cli.js ..` to `node dist/cli/cli.js .`
+- ADR-001 documents the decision and consequences
+
+### Scripts
+
+- `scripts/run-cli.sh`: interactive menu, passthrough to CLI commands, `test-all` runs 8 human testing gates
+- `scripts/setup-initial.sh`: first-time project setup (Node 22+ check, npm install, directory creation)
+- `scripts/start-dev.sh`: dev environment startup (typecheck, tests, preflight, self-scan)
+- `scripts/dependency-install.sh`: clean install from lockfile with build + test verification
+- `scripts/dependency-update.sh`: update deps with security audit and build verification
+
+### Milestones & Roadmap
+
+- `docs/roadmaps/`: M1-M4 milestone specs with task tracking
+- M3 spec updated with Tailwind CSS v4 + Tailwind UI Pro + Alpine.js design stack
+- `docs/decisions/ADR-001-monorepo-to-unified-root.md`: first ADR
+
+### Skill Updates
+
+- Updated `.claude/skills/` and `.agents/skills/` SKILL.md files
+- Updated `workflow/skills/` templates
+
+---
+
 ## v0.3.0 - 2026-03-21
 
 Multi-agent alignment release. First public release under MIT license. Tri-agent support (Claude Code, Gemini CLI, Codex), unified skills architecture, file-overwrite protection.

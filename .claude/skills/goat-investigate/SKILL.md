@@ -3,41 +3,75 @@ description: "Investigate a codebase area and report findings"
 ---
 # /goat-investigate
 
-Deep investigation producing a structured investigation document. No planning until human reviews.
+Deep investigation producing a structured research document. No planning until human reviews.
 
-## When to Use
+---
 
-Exploring an unfamiliar area of the repo, understanding how a subsystem works before changing it, mapping dependencies before a refactor, or investigating a domain for the competitive landscape.
+## Step 0 — Gather Context
 
-## Process
+Ask the user before investigating:
 
-### 1. Scope
-- Define what's being researched and why
-- List files/directories in scope
-- State what's explicitly out of scope
+1. **What are we investigating?** (subsystem, feature area, dependency, domain concept)
+2. **Why?** (planning a change, understanding before refactoring, onboarding, debugging)
+3. **What do you already know?** (so the agent doesn't waste time on known things)
+4. **Any specific questions?** (or "just map it out")
 
-### 2. Read
+Do NOT start reading until the user has answered. An investigation without a clear question produces noise, not signal.
+
+---
+
+## Phase 1 — Scope
+
+Based on the user's answers, define and present:
+- **Question:** what we're investigating (one clear sentence)
+- **In scope:** specific files/directories to read
+- **Out of scope:** what we're NOT looking at
+
+Ask the user: "Does this scope look right, or should I include/exclude anything?"
+
+Wait for confirmation before reading.
+
+---
+
+## Phase 2 — Read
+
+Systematic deep read of the scoped area:
 - Read every file in scope, not just the obvious ones
-- Follow cross-references and internal links
+- Follow cross-references, imports, and internal links
 - Note data flow paths and ownership boundaries
 - Note anything surprising or undocumented
-- Noise awareness: are search results adding signal or distractors?
-  Drop irrelevant results rather than accumulating them in context
+- **Noise awareness:** drop irrelevant results rather than accumulating them in context
 
-### 3. Document
-- Structure: Overview → Components → Data Flow → Findings → Questions
-- Every claim backed by file:line reference
-- Flag unknowns: "I couldn't determine X because Y"
-- Note cross-file dependencies and coupling points
+---
 
-### 4. Gate — Stop and wait for human review
-- Present findings
-- Do NOT proceed to planning or implementation
-- Wait for human to confirm understanding is correct
-- Human may redirect: "also look at X" or "that's wrong because Y"
+## Phase 3 — Document
+
+Present findings structured as:
+- **Overview** (2-3 sentence summary)
+- **Components** (table: component, location, purpose)
+- **Data Flow** (how information moves, with file:line references)
+- **Boundaries Touched** (what's a boundary and why)
+- **Risks / Gotchas** (minimum 3, with file:line evidence)
+- **Findings** (what we learned, with evidence)
+- **Open Questions** (what couldn't be determined and why)
+- **Recommendation** (what to do next — pending human review)
+
+Every claim backed by file:line reference. Flag unknowns explicitly: "I couldn't determine X because Y."
+
+---
+
+## Phase 4 — Gate
+
+**HUMAN GATE:** Present the research document. Ask: "Does this match your understanding? Anything I should also look at?"
+
+Do NOT proceed to planning or implementation. Wait for the human to confirm understanding is correct. The human may redirect: "also look at X" or "that's wrong because Y."
+
+---
 
 ## Constraints
 
+- MUST gather context before investigating (Step 0)
+- MUST confirm scope with user before reading (Phase 1)
 - MUST complete reading before writing findings
 - MUST provide file:line evidence for every claim
 - MUST stop after presenting findings — no planning until human reviews
@@ -45,43 +79,3 @@ Exploring an unfamiliar area of the repo, understanding how a subsystem works be
 - MUST NOT skip to planning before research is reviewed
 - MUST NOT fabricate file paths, content, or behaviour
 - MUST NOT produce vague summaries without file:line specifics
-
-## Output Format
-
-```
-## Research: [topic]
-
-### Scope
-- Question: [what we're investigating]
-- In scope: [files/directories]
-- Out of scope: [what we're not looking at]
-
-### Overview
-[2-3 sentence summary]
-
-### Components
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| [name] | [file:line] | [what it does] |
-
-### Data Flow
-[How information moves through the components, with file:line references]
-
-### Boundaries Touched
-- [boundary] - [file:line] - [why this is a boundary]
-
-### Risks / Gotchas (minimum 3, with file:line evidence)
-1. [risk with file:line evidence]
-2. [risk with file:line evidence]
-3. [risk with file:line evidence]
-
-### Findings
-1. [finding with file:line evidence]
-2. [finding with file:line evidence]
-
-### Open Questions
-- [thing I couldn't determine and why]
-
-### Recommendation
-[What to do next — pending human review]
-```

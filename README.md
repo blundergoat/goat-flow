@@ -83,10 +83,6 @@ scripts/                Validation and enforcement scripts (Codex)
 .agents/                Shared skills (Codex + Gemini CLI)
 ```
 
-## Implementation Evidence
-
-GOAT Flow has been implemented across 7 projects: devgoat-bash-scripts (public), rampart, ambient-scribe, sus-form-detector, blundergoat-platform, strands-php-client, and the-summit-chatroom. Design decisions are backed by real incidents from these implementations, not hypothetical scenarios.
-
 ## License
 
 [MIT](LICENSE)

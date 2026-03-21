@@ -153,11 +153,6 @@ agent-evals/                           <- Phase 2
 .github/workflows/context-validation.yml  <- Phase 2
 ```
 
-## Implementation Evidence
-
-**Implementation evidence:** GOAT Flow has been implemented across 7 projects: 1 fully public (devgoat-bash-scripts), 4 private (rampart, ambient-scribe, sus-form-detector, DevGoat Tauri app), and 2 in progress (strands-php-client, the-summit-chatroom).
-
-**File paths:** All paths in this documentation use forward slashes from the repo root (e.g., `docs/system-spec.md`, `setup/setup-claude.md`). If a referenced file doesn't exist at the stated path, check that you have the latest version of the repo.
 
 ## Further Reading
 
