@@ -1,4 +1,4 @@
-# Cross-Agent Comparison: Claude Code vs Codex
+# Cross-Agent Comparison: Claude Code vs Codex vs Gemini CLI
 
 This document compares the AI workflow system's behaviour when implemented on Claude Code versus OpenAI Codex, based on parallel deployments across a medical scribe (PHP + Python + NeMo GPU + Mercure) and a multi-domain shell script collection with a PHP dashboard.
 

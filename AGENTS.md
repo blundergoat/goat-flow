@@ -85,7 +85,6 @@ Ask one question with a recommended default and exact file boundary.
 | 6-step loop | `docs/system/six-steps.md` |
 | Getting started | `docs/getting-started.md` |
 | Design rationale | `docs/reference/design-rationale.md` |
-| Examples | `docs/reference/examples.md` |
 | Cross-agent comparison | `docs/reference/cross-agent-comparison.md` |
 | Claude instructions | `CLAUDE.md` |
 | Claude setup | `setup/setup-claude.md` |

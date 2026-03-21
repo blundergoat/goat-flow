@@ -99,8 +99,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 | Agent | Path |
 |-------|------|
-| Claude Code | `.claude/skills/{name}/SKILL.md` |
-| Gemini CLI | `.agents/skills/{name}/SKILL.md` |
+| Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
+| Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
 
 **This folder:** `workflow/skills/`

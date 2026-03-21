@@ -16,7 +16,7 @@ A documentation framework that provides structured AI coding agent workflows. No
 | Evaluation templates | `workflow/evaluation/` | Agent evals, CI validation, footguns/lessons templates |
 | Runtime templates | `workflow/runtime/` | Layer 1 setup, enforcement patterns, architecture scaffolding |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
-| Roadmaps | `roadmaps/` | CLI auditor spec (PLAN.md), scoring rubric (RUBRIC.md) |
+| Roadmaps | `docs/roadmaps/` | Prompt generator + scoring rubric (v0.3), cross-project learning (v0.4) |
 
 ## Data Flow
 

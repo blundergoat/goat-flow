@@ -82,7 +82,7 @@ required_skills=(
 for skill in "${required_skills[@]}"; do
     [[ -f "$skill" ]] || fail "Missing skill: $skill"
     grep -q '^## When to Use' "$skill" || fail "Missing '## When to Use' in $skill"
-    grep -q '^## Constraints\|^## Process' "$skill" || fail "Missing '## Constraints' or '## Process' in $skill"
+    grep -Eq '^## (Constraints|Process)' "$skill" || fail "Missing '## Constraints' or '## Process' in $skill"
     grep -q '^## Output' "$skill" || fail "Missing '## Output' in $skill"
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"

@@ -59,8 +59,7 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 **Why it happens:** The project was renamed from `ai-workflow-framework` to `goat-flow`. Not all references were updated.
 
 **Evidence:**
-- `.claude/settings.local.json:4` → references `/home/devgoat/projects/ai-workflow-framework/`
-- `.claude/settings.local.json:28` → references `//home/devgoat/projects/ai-workflow-framework/**`
+- `.claude/settings.local.json` → contained absolute paths referencing the old project name (file is gitignored, not tracked)
 
 **Prevention:** After any project-level rename, run `grep -r "old-name" --include="*.md" --include="*.json"` across the entire repo.
 

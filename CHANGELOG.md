@@ -52,6 +52,14 @@ Multi-agent alignment release. Fix Gemini CLI hook configuration, make shared do
 - Added YAML frontmatter descriptions to all 14 skill files (7 Claude + 7 shared .agents/)
 - Fixed stale `goat-research` heading in Gemini investigate skill
 
+### Public Release Prep
+
+- Added MIT LICENSE
+- Rewrote `README.md`: explains what GOAT Flow is, the problem it solves, quick start, architecture overview, multi-agent table, project structure
+- Updated `docs/getting-started.md`: tri-agent support (Claude Code + Gemini CLI + Codex), added goat-plan + goat-test to file reference
+- Updated `docs/reference/cross-agent-comparison.md` title to include Gemini CLI
+- Fixed `GEMINI.md` router bug: `decisions/` path expanded to invalid `decisions/.md`
+
 ### Housekeeping
 
 - `tasks/.gitignore`: ignore everything except `handoff-template.md` (prevents scratch files from being committed)

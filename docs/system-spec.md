@@ -1,6 +1,6 @@
 # AI Workflow System Specification
 
-**Version:** v0.7 | Based on ai-workflow-improvement-plan-prime v1.5
+**Version:** v0.3.0 | 2026-03-21
 
 **Implements:** 5-layer architecture with default execution loop
 

@@ -2,7 +2,7 @@
 
 Set up GOAT Flow for a project using Gemini CLI.
 
-**SCOPE CONSTRAINT:** Gemini CLI setup ONLY creates/modifies files under `.gemini/` and `GEMINI.md`. Do NOT modify files in `docs/`, `workflow/`, `setup/`, `.claude/`, or any shared documentation. Shared docs are already agent-neutral — changing them to Gemini-specific breaks the project for other agents.
+**SCOPE CONSTRAINT:** Gemini CLI setup creates/modifies files under `.gemini/`, `.agents/skills/`, and `GEMINI.md`. It may create new docs seed files listed in `setup/shared/docs-seed.md`. Do NOT modify existing files in `docs/`, `workflow/`, `setup/`, `.claude/`, or any shared documentation. Shared docs are already agent-neutral — changing them to Gemini-specific breaks the project for other agents.
 
 **Before you start:** Read [shared/guidelines-audit.md](shared/guidelines-audit.md) and do the audit if applicable.
 
