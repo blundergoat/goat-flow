@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: blocks dangerous commands before execution.
+# BeforeTool hook: blocks dangerous commands before execution.
 # Exit 0 = allow, Exit 2 = block (stderr shown as reason).
 
 set -uo pipefail
@@ -51,6 +51,11 @@ echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(package-lock\.json|pnpm-loc
 # Generated code / migration modifications
 echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(\.generated\.|\.g\.|migrations/)' && \
   block "Generated code / migration modification"
+
+# mv without -n (no-clobber) — can silently overwrite destination
+echo "$COMMAND" | grep -qP '^\s*mv\s+' && \
+  ! echo "$COMMAND" | grep -qP 'mv\b.*\s(-[^\s]*n[^\s]*|--no-clobber)\b' && \
+  block "Use 'mv -n' instead of 'mv' to prevent overwriting existing files"
 
 # All clear
 exit 0

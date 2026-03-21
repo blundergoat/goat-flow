@@ -1,4 +1,4 @@
-# Cross-Agent Comparison: Claude Code vs Codex
+# Cross-Agent Comparison: Claude Code vs Codex vs Gemini CLI
 
 This document compares the AI workflow system's behaviour when implemented on Claude Code versus OpenAI Codex, based on parallel deployments across a medical scribe (PHP + Python + NeMo GPU + Mercure) and a multi-domain shell script collection with a PHP dashboard.
 
@@ -24,7 +24,7 @@ On the shell script collection, both agents found the same 5 qualifying incident
 | Stop hooks (lint after every turn) | Preflight script, run manually or in CI | Claude Code catches formatting issues continuously. Codex catches them at checkpoints. |
 | PostToolUse hooks (auto-format) | Nothing -- manual or preflight | No auto-formatting on edit. Skip if no formatter configured. |
 | Local CLAUDE.md (directory auto-load) | Centralised footguns.md + router references | Claude Code loads warnings automatically when entering a directory. Codex requires the agent to check the router table. |
-| Slash commands (/goat-preflight, /goat-debug) | Playbook files in `docs/codex-playbooks/` | Same content, different loading mechanism. 5 playbooks mapped to 5 skills on the shell script collection. |
+| Slash commands (/goat-preflight, /goat-debug, etc.) | `.agents/skills/` with SKILL.md files, invoked via /skills or $skill-name | Same content, different loading mechanism. 7 skills per agent. |
 | Permission profiles (.claude/profiles/) | Behavioural guidance in AGENTS.md only | No tool-level scoping. |
 | Permissions deny (settings.json) | AGENTS.md Never rules + deny-dangerous script + CI | No pre-execution blocking. Three layers of documentation vs one layer of enforcement. |
 | /compact, /insights | No equivalent | Codex context is per-task, not per-session. No session management needed -- but no session learning either. |
@@ -41,7 +41,7 @@ No hooks isn't purely a loss. Five things work better in the Codex version:
 
 **Reused and wrapped existing infrastructure.** On the shell script collection, Codex created `scripts/preflight-checks.sh` as a wrapper around the project's existing root `preflight-checks.sh` rather than creating parallel machinery. It also closed a coverage gap the original missed -- root-level and dashboard scripts weren't being scanned. On the medical scribe, the deny policy became step 3 of the existing preflight script. Claude Code's hooks exist alongside preflight, creating two enforcement paths.
 
-**Deterministic validation.** `scripts/context-validate.sh` checks that AGENTS.md references exist, playbooks have required sections, footguns have evidence with valid file:line references, and task files exist. It's a local script you can run anytime -- no CI pipeline required. Claude Code's CI workflow does similar checks, but Codex's version is immediate.
+**Deterministic validation.** `scripts/context-validate.sh` checks that AGENTS.md references exist, skills have required sections, footguns have evidence with valid file:line references, and task files exist. It's a local script you can run anytime -- no CI pipeline required. Claude Code's CI workflow does similar checks, but Codex's version is immediate.
 
 **Committed overlap report.** Both Codex implementations created a persistent `guidelines-ownership-split.md` documenting what was removed from the original instruction file and why. Claude Code's split happens in a chat session and the reasoning evaporates when the session ends. This is now a recommended standard output.
 

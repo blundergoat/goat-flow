@@ -52,5 +52,10 @@ echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(package-lock\.json|pnpm-loc
 echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(\.generated\.|\.g\.|migrations/)' && \
   block "Generated code / migration modification"
 
+# mv without -n (no-clobber) — can silently overwrite destination
+echo "$COMMAND" | grep -qP '^\s*mv\s+' && \
+  ! echo "$COMMAND" | grep -qP 'mv\b.*\s(-[^\s]*n[^\s]*|--no-clobber)\b' && \
+  block "Use 'mv -n' instead of 'mv' to prevent overwriting existing files"
+
 # All clear
 exit 0

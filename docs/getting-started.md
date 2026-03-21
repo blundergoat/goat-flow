@@ -1,27 +1,27 @@
 # GOAT Flow -- Getting Started
 
-**Version:** 1.5 | 2026-03-15
-**Companion to:** `setup/` (agent setup guides) and `docs/system-spec.md` (plan)
+**Version:** v0.3.0 | 2026-03-21
+**Companion to:** `setup/` (agent setup guides) and `docs/system-spec.md` (canonical spec)
 
 ---
 
 ## What This Is
 
-A system that gives Claude Code a 6-step execution loop (READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG) instead of a wall of rules. Two files do the work -- a design doc (the system spec) and a set of prompts you feed to Claude Code. You run the prompts; Claude Code builds the system for your project.
+A structured workflow system for AI coding agents — Claude Code, Gemini CLI, and Codex. Gives your agent a 6-step execution loop (READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG) instead of a wall of rules. A design doc (the system spec) and a set of prompts do the work. You paste the prompts; your agent builds the system for your project.
 
 ## Reading Order
 
 1. **This file** -- how to start
 2. **The spec** (`docs/system-spec.md`) -- full reference for every design decision
-3. **The setup** (`setup/setup-claude.md` or `setup/setup-codex.md`) -- what you run
+3. **The setup** (`setup/setup-claude.md`, `setup/setup-gemini.md`, or `setup/setup-codex.md`) -- what you run
 4. **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
-5. **The examples** (`docs/reference/examples.md`) -- real implementation data from 7 projects
+5. **The skills** (`docs/system/skills.md`) -- all 7 skills with usage guidance
 
 ## Before You Start
 
 1. **Copy the system spec and setup prompts into your project root.**
    - `docs/system-spec.md`
-   - The setup guide from `setup/` -- use `setup-claude.md` for Claude Code or `setup-codex.md` for Codex
+   - The setup guide from `setup/` -- use `setup-claude.md` for Claude Code, `setup-gemini.md` for Gemini CLI, or `setup-codex.md` for Codex
 
 2. **Rename if needed.** The prompts reference the system spec by exact filename. If your copies have prefixes or version suffixes, rename them to match.
 
@@ -115,12 +115,12 @@ You don't have to do everything. Pick your tier:
 - **First-pass CLAUDE.md is usually over target.** Budget a compression pass. The plan has a cut priority list -- essential commands go first, execution loop never gets cut.
   - Fix: Apply the cut priority list from the system spec. Cut verbose examples first, then explanatory paragraphs, then duplicated content. Never cut execution loop, autonomy tiers, or DoD.
 - **Hooks must use absolute paths.** All hook commands use `git rev-parse --show-toplevel`. Relative paths break when the working directory changes.
-- **Stop hooks must exit 0.** Even when they find errors. Non-zero exit codes trap Claude in infinite fix loops.
+- **Post-turn hooks must exit 0.** Even when they find errors. Non-zero exit codes trap the agent in infinite fix loops.
   - Fix: Verify the hook exits 0 even on errors. Add the infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
 - **Secret scanning is manual.** The `gitleaks` setup requires `git config --global` which affects all repos. Do it yourself, don't let Claude Code do it. Document it in README, not CLAUDE.md.
 - **Pre-existing footguns don't need replacement.** If docs/footguns.md already exists with real entries, the implementation should merge, not replace. Some projects need zero new footguns -- that's fine.
 - **Pre-existing hooks need migration.** If .claude/settings.json already has inline hook commands, migrate them to external scripts under .claude/hooks/ during Phase 1c.
-- **Skip PostToolUse if no formatter.** Shell scripts, for example, have no standard formatter. Don't create a format hook that re-runs the linter.
+- **Skip post-tool hook if no formatter.** Shell scripts, for example, have no standard formatter. Don't create a format hook that re-runs the linter.
 - **Dual-agent repos need coordination.** If you run both Claude Code and Codex implementations on the same project, they share docs/footguns.md and docs/lessons.md. Changes by one agent affect the other. Run Claude Code first (it creates the shared docs), then Codex (it merges with existing files).
 
 ## File Reference
@@ -135,6 +135,8 @@ src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying 
 .claude/skills/goat-audit/SKILL.md
 .claude/skills/goat-investigate/SKILL.md
 .claude/skills/goat-review/SKILL.md
+.claude/skills/goat-plan/SKILL.md
+.claude/skills/goat-test/SKILL.md
 .claude/hooks/deny-dangerous.sh        <- enforcement
 .claude/hooks/stop-lint.sh
 .claude/hooks/format-file.sh           <- skip if no formatter configured
@@ -161,8 +163,8 @@ agent-evals/                           <- Phase 2
 
 - **The spec** (`docs/system-spec.md`) -- full system design, rationale for every section, hook design patterns, security hardening details
 - **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
-- **Cross-agent comparison** (`docs/reference/cross-agent-comparison.md`) -- how this adapts across Claude Code and Codex
-- **Real examples** (`docs/reference/examples.md`) -- implementation data from 7 projects
-- **The playbook repo** ([ai-planning-playbook](https://github.com/blundergoat/ai-planning-playbook)) -- planning prompts (mob elaboration, SBAO ranking, milestone planning)
+- **Cross-agent comparison** (`docs/reference/cross-agent-comparison.md`) -- how this adapts across Claude Code, Gemini CLI, and Codex
+- **Skills reference** (`docs/system/skills.md`) -- all 7 skills, when to use, hard gates
+- **Planning playbooks** (`workflow/playbooks/`) -- planning prompts (mob elaboration, SBAO ranking, milestone planning)
 - **Scaffold prompts** (`workflow/runtime/`) -- project scaffolding prompts
 - **Testing workflow** (`workflow/playbooks/testing/`) -- testing-related workflow files

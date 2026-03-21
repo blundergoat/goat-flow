@@ -1,6 +1,8 @@
-# /goat-plan
-
-4-phase planning workflow with human gates between each phase.
+---
+name: goat-plan
+description: "Plan a feature with phased human gates"
+---
+# GOAT Plan
 
 ## When to Use
 
@@ -45,3 +47,26 @@ Then generate 3 competing plans, rank them, synthesise a prime plan.
 - MUST reference docs/footguns.md and docs/architecture.md
 - MAY skip Phase 3 for Standard features
 - MAY compress Phases 1-2 into single brief for Hotfixes
+
+## Output
+
+```md
+## Plan: [feature name]
+
+### Brief
+[What, why, who benefits, success criteria]
+
+### Questions (Phase 2)
+1. [question] — recommended: [answer]
+
+### Competing Plans (Phase 3, if applicable)
+| Plan | Approach | Pros | Cons |
+|------|----------|------|------|
+
+### Prime Plan
+[Synthesised approach]
+
+### Milestones
+- [ ] M1: [description] — exit: [criteria]
+- [ ] M2: [description] — exit: [criteria]
+```

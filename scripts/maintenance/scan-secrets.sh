@@ -168,7 +168,7 @@ is_low_signal_match() {
     fi
 
     # Pattern list in this scanner can self-match.
-    if [[ "$file" == "lib/maintenance/scan-secrets.sh" ]]; then
+    if [[ "$file" == "scripts/maintenance/scan-secrets.sh" ]]; then
         MATCH_REASON="scanner pattern definition"
         return 0
     fi

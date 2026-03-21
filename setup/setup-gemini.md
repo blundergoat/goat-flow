@@ -2,6 +2,8 @@
 
 Set up GOAT Flow for a project using Gemini CLI.
 
+**SCOPE CONSTRAINT:** Gemini CLI setup creates/modifies files under `.gemini/`, `.agents/skills/`, and `GEMINI.md`. It may create new docs seed files listed in `setup/shared/docs-seed.md`. Do NOT modify existing files in `docs/`, `workflow/`, `setup/`, `.claude/`, or any shared documentation. Shared docs are already agent-neutral — changing them to Gemini-specific breaks the project for other agents.
+
 **Before you start:** Read [shared/guidelines-audit.md](shared/guidelines-audit.md) and do the audit if applicable.
 
 ---
@@ -21,9 +23,13 @@ I'm setting up AI workflow configuration for this project. The stack is:
 Read docs/system-spec.md. Generate the Minimal tier:
 1. GEMINI.md (under 120 lines) with the default execution loop, autonomy
    tiers, definition of done, and router table adapted to my project
-2. .gemini/hooks/deny-dangerous.sh (PreToolUse hook blocking dangerous commands)
-3. .gemini/settings.json with the deny-dangerous hook registered and
-   policy rules to deny git commit and git push
+2. .gemini/hooks/deny-dangerous.sh (BeforeTool hook blocking dangerous commands)
+3. .gemini/settings.json with the deny-dangerous hook registered under
+   the "BeforeTool" event (NOT "PreToolUse") and permissions deny list
+   for git commit and git push
+
+SCOPE: Only create files under .gemini/ and GEMINI.md. Do NOT modify
+any existing files in docs/, workflow/, setup/, or .claude/.
 
 Do NOT create skills, profiles, agent evals, or CI workflows yet.
 After creating the files, count GEMINI.md lines and report the count.
@@ -44,6 +50,10 @@ Read setup/shared/execution-loop.md FIRST — this is the authoritative
 template for instruction file sections. Then read docs/system-spec.md
 for background context. If they conflict, execution-loop.md wins.
 Phase 1 builds Layers 1-3 (runtime, local context, and skills).
+
+SCOPE: Only create/modify GEMINI.md, local GEMINI.md files, .gemini/*,
+and docs/ seed files listed below. Do NOT modify existing docs/ files,
+workflow/, setup/, or .claude/.
 
 This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:
 - Languages: [list]
@@ -91,6 +101,10 @@ Read setup/shared/execution-loop.md FIRST — this is the authoritative
 template for instruction file sections. Then read docs/system-spec.md
 for background context. If they conflict, execution-loop.md wins.
 Phase 1 builds Layers 1-3 (runtime, local context, and skills).
+
+SCOPE: Only create/modify GEMINI.md, local GEMINI.md files, .gemini/*,
+and docs/ seed files listed below. Do NOT modify existing docs/ files,
+workflow/, setup/, or .claude/.
 
 This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:
 - Languages: [list]
@@ -145,11 +159,18 @@ Do NOT proceed to Phase 1b until all gates pass.
 ```
 Read docs/system-spec.md and the GEMINI.md created in Phase 1a.
 
+SCOPE: Only create/modify files under .agents/skills/. Do NOT modify
+docs/, workflow/, or any shared documentation.
+
 PRE-EXISTING SKILLS:
-If skills already exist in .gemini/skills/, do NOT delete them.
+If skills already exist in .agents/skills/, do NOT delete them.
 Review and update-and-extend, not replace.
 
-Create these 7 skills under .gemini/skills/:
+Note: skills use YAML frontmatter with `name` and `description` fields.
+Read the detailed skill templates in workflow/skills/goat-*.md for each
+skill's full specification.
+
+Create these 7 skills under .agents/skills/:
 
 1. goat-preflight/SKILL.md - RFC 2119 constraints. MUST run build/lint.
    SHOULD run formatter, full test suite. MAY skip formatter when debugging.
@@ -184,31 +205,41 @@ Do NOT proceed to Phase 1c until all gates pass.
 ```
 Read docs/system-spec.md and the GEMINI.md created in Phase 1a.
 
+SCOPE: Only create/modify files under .gemini/. Do NOT modify docs/,
+workflow/runtime/enforcement.md, setup/, .claude/, or any shared docs.
+
+GEMINI CLI HOOK EVENTS (use these exact names in settings.json):
+  BeforeTool     — runs before a tool executes (guards, blockers)
+  AfterTool      — runs after a tool executes (formatting, logging)
+  AfterAgent     — runs after every agent turn (linting, stop-the-line)
+  SessionEnd     — runs when the session ends or is cleared (cleanup)
+Do NOT use Claude Code event names (PreToolUse, PostToolUse, Stop).
+
 PRE-EXISTING HOOKS:
 If hooks already exist in .gemini/settings.json, migrate them to
 external scripts under .gemini/hooks/ before adding new hooks.
 
 HOOKS & POLICY:
-1. .gemini/settings.json - Policy rules:
-   "policy": {
+1. .gemini/settings.json - Permissions deny list:
+   "permissions": {
      "deny": ["Bash(*git commit*)", "Bash(*git push*)"]
    }
 
-   PreToolUse hook: .gemini/hooks/deny-dangerous.sh
+   BeforeTool hook: .gemini/hooks/deny-dangerous.sh
    - For Bash: block rm -rf, git push main, git push --force, chmod 777,
      pipe-to-shell, --no-verify
    - For Write/Edit: block .env files, lockfiles, generated code
    - Exit 0 for everything else
 
-   Stop hook: .gemini/hooks/stop-lint.sh
+   AfterAgent hook: .gemini/hooks/stop-lint.sh
    - Stack-adaptive (check git diff for file types)
    - MUST exit 0 even on errors (non-zero causes infinite loops)
    - Infinite loop guard, missing tool checks
 
-   PostToolUse hook: .gemini/hooks/format-file.sh
+   AfterTool hook: .gemini/hooks/format-file.sh
    - Format by file extension. Skip if no formatter configured.
 
-   PreToolUse hook (optional): .gemini/hooks/guard-truncation.sh
+   BeforeTool hook (optional): .gemini/hooks/guard-truncation.sh
    - Block Write operations that reduce file size by >80%
    - Catches agents emptying files during refactors
 

@@ -18,6 +18,20 @@ Behavioural mistakes made by the agent during this project. Each entry describes
 
 **created_at:** 2026-03-20
 
+### Agents given broad setup tasks rewrite shared docs as agent-specific
+**What happened:** Gemini CLI was asked to set up GOAT Flow. It modified 6 shared documentation files (`docs/system-spec.md`, `docs/system/five-layers.md`, `docs/system/six-steps.md`, `docs/reference/design-rationale.md`, `docs/getting-started.md`, `workflow/runtime/enforcement.md`), replacing Claude Code references with Gemini-specific equivalents. The skills table in `five-layers.md` had its Claude Code row deleted. The enforcement template ended up in a hybrid state — half `.claude/` paths, half `.gemini/` paths.
+
+**Prevention:** Agent setup prompts must include explicit scope constraints. For Gemini: "Only create/modify files under `.gemini/` and `GEMINI.md`. Do NOT modify `docs/`, `workflow/`, or any file outside the `.gemini/` directory." For any agent: treat shared documentation as a boundary that requires Ask First permission.
+
+**created_at:** 2026-03-21
+
+### mv/rename overwrites destination file without checking if it exists
+**What happened:** User asked to rename `TODO_improvements_v0.3.md` to `TODO_improvements_v0.4.md`. Agent ran `mv v0.3 v0.4` without checking that v0.4 already existed. The mv overwrote v0.4 with v0.3's content. When the user said "undo", the agent moved v0.4 (now containing v0.3's content) back to v0.3, destroying v0.4's original content entirely. The file was untracked by git and unrecoverable.
+
+**Prevention:** Before any `mv`, `cp`, or Write that targets an existing path, MUST run `ls` on the destination first. If the destination exists, stop and ask the user. This applies to all file operations that can overwrite — not just mv. Add to the Never tier: "Overwrite existing files without confirming destination is safe."
+
+**created_at:** 2026-03-21
+
 ## Patterns
 
 _(Promote here when 3+ entries share a theme.)_

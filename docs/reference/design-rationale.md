@@ -31,7 +31,7 @@
 flowchart TB
     subgraph ALWAYS["ALWAYS LOADED (every session)"]
         L1["<b>Layer 1 -- Runtime</b><br/>CLAUDE.md ~120 lines<br/>Execution Loop - Autonomy Tiers - DoD - Router Table"]
-        HOOKS["<b>Enforcement Hooks</b><br/>deny-dangerous (PreToolUse)<br/>stop-lint (Stop) - format-file (PostToolUse)"]
+        HOOKS["<b>Enforcement Hooks</b><br/>deny-dangerous (pre-tool)<br/>stop-lint (post-turn) - format-file (post-tool)"]
     end
 
     subgraph AUTO["AUTO-LOADED (per directory)"]
@@ -174,7 +174,7 @@ flowchart TD
 | `/review-triage`    | Normal review behaviour, not a distinct mode           | Review branch of the ACT step       |
 | `/revert-rescope`   | Tactic (2 sentences), not a workflow                   | Paragraph in VERIFY/stop-the-line   |
 
-**v1.5 refinement:** Implementation data from the PHP library and shell script collection confirms all five skills add value across project shapes. All projects create all five skills.
+**v1.5 refinement:** Implementation data from the PHP library and shell script collection confirms all seven skills add value across project shapes. All projects create all seven skills (preflight, debug, audit, investigate, review, plan, test).
 
 ---
 
@@ -289,19 +289,19 @@ flowchart TD
 
 ## Phase 1 Hooks
 
-### deny-dangerous.sh (PreToolUse)
+### deny-dangerous.sh (pre-tool: Claude Code PreToolUse / Gemini CLI BeforeTool)
 
-**Problem:** CLAUDE.md "never" rules work ~70% of the time. A PreToolUse hook that blocks `rm -rf` before it executes works 100%.
+**Problem:** Instruction file "never" rules work ~70% of the time. A pre-tool hook that blocks `rm -rf` before it executes works 100%.
 
 **Source:** Trail of Bits claude-code-config
 
-### stop-lint.sh (Stop hook)
+### stop-lint.sh (post-turn: Claude Code Stop / Gemini CLI AfterAgent)
 
-**Why exit 0 on errors:** Stop hooks run after every Claude turn. A non-zero exit tells Claude "something failed, fix it." Claude tries to fix it. The hook runs again. If the fix doesn't clear the error, Claude loops forever. Exit 0 with errors to stderr makes the feedback informational, not imperative.
+**Why exit 0 on errors:** Post-turn hooks run after every agent turn. A non-zero exit tells the agent "something failed, fix it." The agent tries to fix it. The hook runs again. If the fix doesn't clear the error, the agent loops forever. Exit 0 with errors to stderr makes the feedback informational, not imperative.
 
-### format-file.sh (PostToolUse)
+### format-file.sh (post-tool: Claude Code PostToolUse / Gemini CLI AfterTool)
 
-**Skip when no formatter:** Projects without a configured formatter have no use for PostToolUse. Creating one that re-runs the linter duplicates the Stop hook. PostToolUse is only created when a real formatter exists (prettier, php-cs-fixer, rustfmt, gofmt, shfmt).
+**Skip when no formatter:** Projects without a configured formatter have no use for the post-tool hook. Creating one that re-runs the linter duplicates the post-turn hook. Only create when a real formatter exists (prettier, php-cs-fixer, rustfmt, gofmt, shfmt).
 
 ---
 

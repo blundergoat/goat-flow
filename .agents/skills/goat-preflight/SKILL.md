@@ -1,3 +1,7 @@
+---
+name: goat-preflight
+description: "Run preflight checks before starting or finishing work"
+---
 # GOAT Preflight
 
 ## When to Use

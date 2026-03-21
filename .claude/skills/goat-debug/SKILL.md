@@ -1,3 +1,6 @@
+---
+description: "Diagnose a bug with evidence before proposing fixes"
+---
 # /goat-debug
 
 Diagnosis-first debugging. Investigate before fixing.

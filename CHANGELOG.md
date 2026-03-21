@@ -4,6 +4,93 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
+## v0.3.0 - 2026-03-21
+
+Multi-agent alignment release. First public release under MIT license. Tri-agent support (Claude Code, Gemini CLI, Codex), unified skills architecture, file-overwrite protection.
+
+### Gemini CLI Fixes
+
+- Fixed hook event names in `.gemini/settings.json`: `PreToolUse` → `BeforeTool`, `Stop` → `AfterAgent`
+- Fixed hook script comments referencing Claude-specific terminology
+- Fixed `setup/setup-gemini.md` Phase 0 + Phase 1c: correct event names, `policy` → `permissions`
+- Added Gemini CLI hook event reference block to Phase 1c instructions
+- Added SCOPE constraints to every phase in `setup/setup-gemini.md` to prevent shared doc overwrites
+
+### Agent-Neutral Shared Docs
+
+- Reverted Gemini's overwrites of 6 shared docs that replaced Claude Code references with Gemini-specific ones
+- `docs/system-spec.md`: hook table uses concept names (pre-tool/post-tool/post-turn) with agent mapping table
+- `docs/system/five-layers.md`: restored Claude Code to skills table, multi-agent enforcement paths
+- `docs/system/six-steps.md`: both Claude Code and Gemini CLI hook examples listed
+- `docs/reference/design-rationale.md`: agent-neutral diagram and dual-agent hook section headers
+- `workflow/runtime/enforcement.md`: reverted to Claude Code template + header warning against global replacement
+
+### Unified Skills Architecture (.agents/skills/)
+
+- `.agents/skills/` is now the single source of truth for both Codex and Gemini CLI skills
+- Created 7 skills with YAML frontmatter (name + description): preflight, debug, audit, investigate, review, plan, test
+- Deleted `docs/codex-playbooks/` (migrated to `.agents/skills/`)
+- Deleted `.gemini/skills/` (redundant — Gemini CLI discovers `.agents/skills/` with higher precedence)
+- Created `goat-plan` and `goat-test` (full parity with Claude's 7 skills)
+- Renamed `goat-research` → `goat-investigate` with strengthened constraints and output template
+- Strengthened `goat-debug`, `goat-audit`, `goat-review` with missing constraints from Claude equivalents
+- Updated `AGENTS.md` and `GEMINI.md` router tables to point to `.agents/skills/`
+- Updated `scripts/context-validate.sh`: validates 7 skills at `.agents/skills/`, checks frontmatter, accepts `agent-evals/`
+- Updated `setup/setup-codex.md` and `setup/setup-gemini.md`: both instruct creation of `.agents/skills/` with frontmatter, reference `workflow/skills/` templates
+- Updated all "5 skills" references to "7 skills" across system-spec, five-layers, design-rationale, cross-agent-comparison
+- Updated all stale path references (`docs/codex-playbooks/`, `.gemini/skills/`) to `.agents/skills/` in live docs
+
+### File Overwrite Protection
+
+- Added `mv -n` enforcement to deny-dangerous hooks (both `.claude/` and `.gemini/`)
+- Added "overwrite existing files without checking destination" to Never tier in CLAUDE.md, GEMINI.md, AGENTS.md
+- Added to `docs/system-spec.md` Never list and `setup/shared/execution-loop.md` template
+- Added to `workflow/runtime/enforcement.md` deny-dangerous block list
+
+### Skill Descriptions
+
+- Added YAML frontmatter descriptions to all 14 skill files (7 Claude + 7 shared .agents/)
+- Fixed stale `goat-research` heading in Gemini investigate skill
+
+### Public Release Prep
+
+- Added MIT LICENSE
+- Rewrote `README.md`: problem statement, quick start, architecture overview, multi-agent table, project structure
+- Removed `docs/reference/examples.md` and `docs/reference/competitive-landscape.md` (contained private project details)
+- Updated `docs/getting-started.md`: tri-agent support, added goat-plan + goat-test to file reference, removed dead link to private ai-planning-playbook repo
+- Updated `docs/reference/cross-agent-comparison.md` title to include Gemini CLI
+- Unified version strings to v0.3.0 across system-spec and getting-started
+- Fixed `GEMINI.md` router bug: `decisions/` path expanded to invalid `decisions/.md`
+- Fixed `docs/architecture.md`: stale `roadmaps/` path
+- Fixed `docs/footguns.md`: removed hardcoded `/home/devgoat` paths
+- Fixed `docs/reference/competitive-landscape.md`: "internal" → "author" (before deletion)
+- Updated `agent-evals/cross-reference-rename.md` to reference an existing file
+- Updated remote URL from `ai-workflow-framework` to `goat-flow`
+
+### CI & Validation Fixes
+
+- `.github/workflows/context-validation.yml`: checks all 3 router tables (CLAUDE.md, AGENTS.md, GEMINI.md), validates both `.claude/skills/` and `.agents/skills/`, removed stale `codex-evals/**` trigger
+- `scripts/context-validate.sh`: portable `grep -Eq` instead of `\|` alternation
+- `scripts/maintenance/scan-secrets.sh`: fixed stale self-exclude path
+
+### Hook Improvements
+
+- `mv` guard accepts `-nv`, `-nT`, `--no-clobber` (not just bare `-n`)
+- Consistent `goat-{name}` prefix in `docs/system/five-layers.md` skill path table
+- `setup/setup-gemini.md` scope constraint clarified: allows creating new docs seed files
+
+### Housekeeping
+
+- `tasks/.gitignore`: ignore everything except `handoff-template.md` (prevents scratch files from being committed)
+
+### Incident Logging
+
+- `docs/footguns.md`: 3 new entries (agent-rewrite, vocabulary mismatch, mv overwrite)
+- `docs/lessons.md`: 2 new entries (broad setup rewrites shared docs, mv overwrites without checking)
+- `docs/architecture.md`: added Gemini CLI to agent list and setup flow
+
+---
+
 ## v0.2.0 - 2026-03-21
 
 GOAT Flow implemented and iterated across 7 projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform, goat-flow itself, the-summit-chatroom). Multi-agent support (Claude Code + Codex + Gemini CLI). Instructions refined through 11 diagnostic rounds with closed-loop feedback.

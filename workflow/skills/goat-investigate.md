@@ -15,7 +15,7 @@ planning or implementation begins. The hard gate is that no planning
 happens until the human reviews the research output.
 
 Write the skill file to: .claude/skills/goat-investigate/SKILL.md
-(For Codex: docs/codex-playbooks/goat-investigate.md)
+(For Codex: .agents/skills/goat-investigate/SKILL.md)
 
 When to use: exploring an unfamiliar area of the codebase, investigating
 a new domain, understanding how a system works before changing it,

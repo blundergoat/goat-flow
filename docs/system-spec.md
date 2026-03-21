@@ -1,6 +1,6 @@
 # AI Workflow System Specification
 
-**Version:** v0.7 | Based on ai-workflow-improvement-plan-prime v1.5
+**Version:** v0.3.0 | 2026-03-21
 
 **Implements:** 5-layer architecture with default execution loop
 
@@ -21,7 +21,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     High-risk boundaries, module-specific gotchas, local conventions
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review
+    /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -63,7 +63,7 @@ Claude Code auto-reads `CLAUDE.md` in the working directory plus ancestors up to
 | Aspect                  | App (e.g., Tauri, Symfony)             | Library (e.g., PHP package, npm module)                | Script Collection (e.g., domain-organised shell scripts) |
 | ----------------------- | -------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
 | CLAUDE.md line target   | ~120 lines                             | ~120 lines                                             | ~120 lines                                               |
-| Skills                  | 5 (all core)                           | 5 (all core)                                           | 5 (all core)                                             |
+| Skills                  | 7 (all core)                           | 7 (all core)                                           | 7 (all core)                                             |
 | Ask First boundaries    | Auth, routing, deployment, API, DB     | Public API, dependencies, config/data files            | Shared sourced files, CONFIGURATION blocks, new domains  |
 | Local CLAUDE.md files   | Likely needed for high-risk dirs       | Create where needed                                    | Create where needed                                      |
 | confusion-log.md        | Yes                                    | Yes                                                    | Yes                                                      |
@@ -258,8 +258,9 @@ Never do:
 - Edit files outside the current project repository
 - Modify lockfiles (package-lock.json, pnpm-lock.yaml, composer.lock, Cargo.lock)
 - Modify generated code, migration files, or compiled artifacts
+- Overwrite existing files without checking destination (ls before mv/cp/Write; use mv -n)
 
-Lockfile/generated rationale: agents hallucinate dependency version bumps to fix type errors.
+Lockfile/generated rationale: agents hallucinate dependency version bumps to fix type errors. Overwrite rationale: mv/cp silently destroy the destination file. Untracked files have no git recovery path.
 ```
 
 **Enforcement (strongest first):**
@@ -267,7 +268,7 @@ Lockfile/generated rationale: agents hallucinate dependency version bumps to fix
 | Layer | Mechanism | Scope | Bypass risk |
 |-------|-----------|-------|-------------|
 | 1. Permissions deny | `settings.json` tool-level block | `*git commit*`, `*git push*` blocked entirely | None |
-| 2. deny-dangerous.sh | PreToolUse hook pattern inspection | `--force`, `--no-verify`, `rm -rf`, `.env` edits | Low |
+| 2. deny-dangerous.sh | Pre-tool hook pattern inspection | `--force`, `--no-verify`, `rm -rf`, `.env` edits | Low |
 | 3. CLAUDE.md rules | Behavioural guidance | Everything else in the Never tier | Medium (~70%) |
 
 Binary prohibitions -> permissions deny. Pattern prohibitions -> hooks. Judgement calls -> CLAUDE.md rules.
@@ -295,7 +296,7 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 |
 | AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 |
 | AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 |
-| AP6 | Stop hook exits non-zero | Last exit in stop hook is not `exit 0` | -5 |
+| AP6 | Post-turn hook exits non-zero | Last exit in stop-lint hook is not `exit 0` | -5 |
 | AP7 | Local instruction file over 20 lines | Any local file `wc -l` > 20 | -2 |
 | AP8 | Generic Ask First boundaries | Ask First section matches known template text verbatim | -2 |
 | AP9 | settings.local.json committed | `git ls-files .claude/settings.local.json` returns match | -2 |
@@ -342,7 +343,7 @@ stack:
   languages: [bash]
   test: bats tests/ --recursive
   lint: shellcheck
-  format: # none (skip PostToolUse hook)
+  format: # none (skip post-tool format hook)
 ```
 
 ## Adoption Tiers
@@ -366,6 +367,10 @@ stack:
 **`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
 
 **`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers.
+
+**`/goat-plan`** -- 4-phase planning: feature brief → mob elaboration → SBAO ranking → milestones. Human gate between each phase. Skip SBAO for Standard features, compress to brief for Hotfixes.
+
+**`/goat-test`** -- Generate 3-track testing instructions (automated, AI verification, human checklist) after milestones. Doer-verifier principle: the coding agent MUST NOT verify its own work.
 
 ---
 
@@ -426,13 +431,21 @@ Blocks tool invocations before commands run, before hooks fire. Add `Bash(terraf
 
 | Hook                       | Type    | Trigger               | Purpose                                                        |
 | -------------------------- | ------- | --------------------- | -------------------------------------------------------------- |
-| Stop: build verification   | Command | Every Claude turn     | Stack-adaptive: git diff for modified types, run relevant checks |
-| PostToolUse: auto-format   | Command | After each Edit/Write | Format by extension. Skip if no formatter configured           |
-| PreToolUse: deny-dangerous | Command | Bash tool calls       | Block rm-rf, force push, pipe-to-shell, .env edits, hook bypass |
+| post-turn: build verification | Command | Every agent turn      | Stack-adaptive: git diff for modified types, run relevant checks |
+| post-tool: auto-format        | Command | After each Edit/Write | Format by extension. Skip if no formatter configured           |
+| pre-tool: deny-dangerous      | Command | Bash tool calls       | Block rm-rf, force push, pipe-to-shell, .env edits, hook bypass |
+
+Agent-specific hook event names:
+
+| Concept | Claude Code | Gemini CLI |
+|---------|------------|------------|
+| pre-tool | PreToolUse | BeforeTool |
+| post-tool | PostToolUse | AfterTool |
+| post-turn | Stop | AfterAgent |
 
 ### Hook Design Patterns
 
-**Exit code:** Stop hooks MUST exit 0 even on errors (non-zero causes infinite loops). Errors to stderr. Guard missing tools with `command -v`.
+**Exit code:** Post-turn hooks MUST exit 0 even on errors (non-zero causes infinite loops). Errors to stderr. Guard missing tools with `command -v`.
 
 **Infinite loop prevention:** `if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi; export STOP_HOOK_ACTIVE=1`
 
@@ -448,7 +461,7 @@ Blocks tool invocations before commands run, before hooks fire. Add `Bash(terraf
 | `.sh` | `bash -n` + `shellcheck` | <3s |
 | None changed | Skip (exit 0) | instant |
 
-**Path resolution:** ALL hooks MUST use `bash "$(git rev-parse --show-toplevel)/.claude/hooks/your-hook.sh"`
+**Path resolution:** ALL hooks MUST use `bash "$(git rev-parse --show-toplevel)/{agent_dir}/hooks/your-hook.sh"` where `{agent_dir}` is `.claude` (Claude Code) or `.gemini` (Gemini CLI).
 
 ### Deny Rules
 
@@ -461,6 +474,7 @@ Prevent agents from READING sensitive files. The deny-dangerous hook blocks writ
 | Agent | Ignore File |
 |-------|------------|
 | Claude Code | `permissions.deny` Read patterns in settings.json |
+| Gemini CLI | `permissions.deny` Read patterns in settings.json |
 | GitHub Copilot | `.copilotignore` |
 | Cursor | `.cursorignore` |
 
@@ -468,7 +482,7 @@ Standard patterns: `.env*`, `**/secrets/`, `**/*.pem`, `**/*.key`, `**/credentia
 
 ### Content-Preserving Write Guard
 
-PreToolUse hook: block any Write operation that would reduce a file's size by more than 80%. Catches agents emptying files during refactors.
+Pre-tool hook: block any Write operation that would reduce a file's size by more than 80%. Catches agents emptying files during refactors.
 
 ### Secret Scanning
 
@@ -479,7 +493,7 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 | Layer            | What                                    | When              |
 | ---------------- | --------------------------------------- | ----------------- |
 | Permissions deny | `*git commit*`, `*git push*`          | Always            |
-| Deny rules       | PreToolUse hooks                        | Phase 1           |
+| Deny rules       | Pre-tool hooks                          | Phase 1           |
 | Secret scanning  | gitleaks pre-commit                     | Phase 1 (manual)  |
 | Dependency audit | npm/composer/cargo audit in /goat-preflight  | Phase 1           |
 | Git hygiene      | Block force-push, feature branches      | Phase 1           |

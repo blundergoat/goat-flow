@@ -179,7 +179,7 @@ Skills can be configured to trigger automatically based on context instead of ma
 | PR creation | /goat-review | When creating or updating a pull request |
 | New area | /goat-investigate | When working in a directory for the first time |
 
-Implementation: map triggers to the agent's hook system (Claude Code: PostToolUse on git commit, Stop hook on test failure. Codex: verification scripts. Cursor: rule triggers).
+Implementation: map triggers to the agent's hook system (Claude Code: PostToolUse on git commit, Stop hook on test failure. Gemini CLI: AfterTool on git commit, AfterAgent on test failure. Codex: verification scripts. Cursor: rule triggers).
 
 Auto-triggering eliminates the "forgot to run preflight" failure mode. The agent doesn't need to remember - the system enforces it.
 

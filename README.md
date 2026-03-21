@@ -1,55 +1,92 @@
 # GOAT Flow
 
-A full-stack AI engineering system for planning, executing, verifying, and learning with coding agents.
+A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, and Codex a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop - instead of a wall of rules.
 
-**Start here:** [docs/getting-started.md](docs/getting-started.md)
+Implemented across 7 real projects. Open source under MIT.
 
----
+## The Problem
 
-## Core
+AI coding agents are powerful but unreliable without structure. They fabricate file paths, skip verification, expand scope without asking, declare tasks done when they're not, and repeat the same mistakes across sessions. Rules in instruction files help (~70% compliance), but rules alone aren't enough.
+
+## What GOAT Flow Does
+
+**A 6-step execution loop:** READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG. Every agent action follows this loop. SCOPE prevents scope creep. VERIFY catches errors before they ship. LOG captures lessons for next time.
+
+**Three autonomy tiers:** Always (safe, reversible), Ask First (boundaries with a checklist), Never (destructive actions blocked mechanically).
+
+**Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% compliance vs ~70% for rules). Post-turn hooks lint after every change. Format hooks clean up edits.
+
+**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes), `docs/confusion-log.md` (structural navigation issues). Real incidents, not hypothetical ones.
+
+**7 skills:** /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
+
+## Quick Start
+
+1. Clone this repo into your project (or copy `docs/system-spec.md` + `setup/`)
+2. Pick your agent: [Claude Code](setup/setup-claude.md) | [Gemini CLI](setup/setup-gemini.md) | [Codex](setup/setup-codex.md)
+3. Paste the setup prompts into your agent - it builds the system for your project
+
+**Minimal setup** (5 min): Phase 0 gives you an instruction file + deny-dangerous hook.
+**Full setup** (45 min): Phase 1a-2 gives you the complete system.
+
+See [docs/getting-started.md](docs/getting-started.md) for the full guide.
+
+## Architecture
+
+```
+Layer 1 - Runtime         Instruction file (~120 lines), hooks, settings
+Layer 2 - Local Context   Per-directory instruction files for high-risk areas
+Layer 3 - Skills          7 on-demand capabilities loaded via slash commands
+Layer 4 - Playbooks       Planning methodology templates
+Layer 5 - Evaluation      Agent evals, CI validation, learning loop
+```
+
+Details: [docs/system/five-layers.md](docs/system/five-layers.md)
+
+## Multi-Agent Support
+
+| | Claude Code | Gemini CLI | Codex |
+|---|---|---|---|
+| Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md |
+| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ |
+| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) |
+| Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) |
+
+All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files.
+
+## Documentation
 
 | Document | What it covers |
 |----------|---------------|
-| [docs/system-spec.md](docs/system-spec.md) | Full technical specification (canonical source of truth) |
-| [docs/getting-started.md](docs/getting-started.md) | Reading order, setup checklist, adoption tiers, maintenance, gotchas |
+| [Getting Started](docs/getting-started.md) | Reading order, setup checklist, adoption tiers, gotchas |
+| [System Spec](docs/system-spec.md) | Full technical specification (canonical source of truth) |
+| [5-Layer Architecture](docs/system/five-layers.md) | Runtime, Local Context, Skills, Playbooks, Evaluation |
+| [6-Step Execution Loop](docs/system/six-steps.md) | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG |
+| [Design Rationale](docs/reference/design-rationale.md) | Why behind every design decision |
+| [Cross-Agent Comparison](docs/reference/cross-agent-comparison.md) | Claude Code vs Codex vs Gemini CLI |
+| [Skills Reference](docs/system/skills.md) | All 7 skills: when to use, hard gates, output formats |
 
-## System Design
+## Project Structure
 
-| Document | What it covers |
-|----------|---------------|
-| [docs/system/five-layers.md](docs/system/five-layers.md) | The 5-layer architecture (Runtime, Local Context, Skills, Playbooks, Evaluation) |
-| [docs/system/six-steps.md](docs/system/six-steps.md) | The 6-step execution loop (READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG) |
+```
+setup/                  Setup guides + shared templates
+  setup-claude.md       Claude Code setup (Phases 0-2)
+  setup-gemini.md       Gemini CLI setup (Phases 0-2)
+  setup-codex.md        Codex setup
+  shared/               Cross-agent templates (execution loop, docs seed)
+docs/                   System design + reference documentation
+workflow/               Skill templates, playbooks, evaluation templates
+agent-evals/            Regression tests (real incidents + synthetic seeds)
+scripts/                Validation and enforcement scripts (Codex)
+.claude/                Claude Code runtime (hooks, settings, skills)
+.gemini/                Gemini CLI runtime (hooks, settings)
+.agents/                Shared skills (Codex + Gemini CLI)
+```
 
-## Setup Guides
+## Implementation Evidence
 
-| Agent | Guide |
-|-------|-------|
-| Claude Code | [setup/setup-claude.md](setup/setup-claude.md) |
-| Codex | [setup/setup-codex.md](setup/setup-codex.md) |
-| Gemini CLI | [setup/setup-gemini.md](setup/setup-gemini.md) |
+GOAT Flow has been implemented across 7 projects: devgoat-bash-scripts (public), rampart, ambient-scribe, sus-form-detector, blundergoat-platform, strands-php-client, and the-summit-chatroom. Design decisions are backed by real incidents from these implementations, not hypothetical scenarios.
 
-## Learning Loop
+## License
 
-| Document | What it covers |
-|----------|---------------|
-| [docs/footguns.md](docs/footguns.md) | Cross-domain architectural traps with file:line evidence |
-| [docs/lessons.md](docs/lessons.md) | Agent behavioural mistakes and prevention rules |
-| [docs/architecture.md](docs/architecture.md) | Project architecture overview |
-
-## Reference
-
-| Document | What it covers |
-|----------|---------------|
-| [docs/reference/design-rationale.md](docs/reference/design-rationale.md) | Why behind every design decision |
-| [docs/reference/examples.md](docs/reference/examples.md) | Real project implementation data (7 projects) |
-| [docs/reference/cross-agent-comparison.md](docs/reference/cross-agent-comparison.md) | Claude Code vs Codex analysis |
-| [docs/reference/competitive-landscape.md](docs/reference/competitive-landscape.md) | GOAT Flow vs 12 competitor systems |
-
-## Directories
-
-| Directory | What it contains |
-|-----------|-----------------|
-| [setup/](setup/) | Agent-specific setup guides + shared templates |
-| [workflow/](workflow/) | Skill templates, playbooks, evaluation templates, runtime scaffolding |
-| [agent-evals/](agent-evals/) | Regression tests from real incidents |
-| [docs/roadmaps/](docs/roadmaps/) | v0.3 prompt generator + v0.4 cross-project learning |
+[MIT](LICENSE)

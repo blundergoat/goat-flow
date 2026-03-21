@@ -48,6 +48,9 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      current file before appending to avoid duplicating entries.
 
 c) Autonomy Tiers: Always / Ask First / Never
+   - Never tier MUST include: overwrite existing files without checking
+     destination (ls before mv/cp/Write; use mv -n). Data destruction
+     from blind overwrites is unrecoverable for untracked files.
    - Adapt Ask First boundaries for THIS project's specific risks
    - Include micro-checklist for Ask First items. MUST include:
      1. Boundary touched: [name it]
@@ -74,7 +77,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 7 skill directories (Claude/Gemini) or playbook files (Codex)
+     - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
      - Learning loop files (footguns, lessons, confusion-log)
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project

@@ -58,7 +58,7 @@ Reference all 4: docs/lessons.md, docs/footguns.md, docs/confusion-log.md, docs/
 
 Boundaries: `docs/system-spec.md`, `docs/system/`, `setup/`, `workflow/skills/`, `docs/reference/design-rationale.md`, renaming/moving files, 3+ doc file changes.
 
-**Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config.
+**Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
 
 ## Definition of Done
 
@@ -75,9 +75,9 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 
 | Target | Path |
 |--------|------|
-| **Skills** | `.gemini/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
+| **Skills** | `.agents/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
 | **Playbooks** | `workflow/playbooks/` |
-| **Learning** | `docs/{lessons,footguns,confusion-log,decisions/}.md` |
+| **Learning** | `docs/{lessons,footguns,confusion-log}.md`, `docs/decisions/` |
 | **Architecture** | `docs/architecture.md` |
 | **Handoff** | `tasks/handoff-template.md` |
 | **Evals** | `agent-evals/` |

@@ -26,7 +26,9 @@ that respects how Codex actually works.
 
 CODEX MECHANICS (respect these):
 - AGENTS.md is the root instruction file (not CLAUDE.md)
-- No slash commands - use playbook .md files in docs/codex-playbooks/
+- Skills live in .agents/skills/{name}/SKILL.md (NOT docs/codex-playbooks/)
+  Each SKILL.md needs YAML frontmatter with name and description fields.
+  Codex discovers these via /skills or $skill-name at runtime.
 - No hooks system - use AGENTS.md rules + verification scripts
 - apply_patch for edits (not Edit/Write tool)
 - Codex may run in cloud sandboxes or local constrained shells
@@ -48,7 +50,7 @@ WHAT TO BUILD (in this order):
 
 1. AGENTS.md - Root instruction file with the sections listed in
    setup/shared/execution-loop.md. Adapt for Codex: use LOG (not RECORD),
-   reference playbook files instead of slash commands.
+   reference .agents/skills/ files instead of slash commands.
    Target: under 135 lines (Codex files run ~35% larger than Claude Code
    because enforcement can't be offloaded to hooks).
    Do NOT skip sections (f)–(i) - they are small but required.
@@ -77,22 +79,37 @@ WHAT TO BUILD (in this order):
 
 2. Docs seed files - Create the files listed in setup/shared/docs-seed.md.
 
-3. Codex playbooks - docs/codex-playbooks/:
-   - goat-preflight.md - RFC 2119 constraints for build verification
-   - goat-investigate.md - Deep-read template with hard gate
-   - goat-debug.md - Diagnosis-first with file:line evidence
-   - goat-audit.md - 4-pass with fabrication self-check
-   - goat-review.md - Structured review with RFC 2119 severity
-   - goat-plan.md - 4-phase planning (brief → elaboration → SBAO → milestones)
-     with human gates between phases
-   - goat-test.md - Generate testing instructions: automated test commands,
-     AI verification prompts, and manual testing steps for the human
+3. Codex skills - .agents/skills/ (Codex discovers these at runtime):
+   Each skill is a directory with a SKILL.md file containing YAML
+   frontmatter (name + description) followed by the skill instructions.
+
+   Read the detailed skill templates in workflow/skills/goat-*.md for
+   each skill's full specification. Adapt the content for this project.
+
+   Example frontmatter:
+   ---
+   name: goat-preflight
+   description: "Run preflight checks before starting or finishing work"
+   ---
+
+   Create these 7 skills under .agents/skills/:
+   - goat-preflight/SKILL.md (see workflow/skills/goat-preflight.md)
+   - goat-investigate/SKILL.md (see workflow/skills/goat-investigate.md)
+   - goat-debug/SKILL.md (see workflow/skills/goat-debug.md)
+   - goat-audit/SKILL.md (see workflow/skills/goat-audit.md)
+   - goat-review/SKILL.md (see workflow/skills/goat-review.md)
+   - goat-plan/SKILL.md (see workflow/skills/goat-plan.md)
+   - goat-test/SKILL.md (see workflow/skills/goat-test.md)
+
+   Each SKILL.md MUST have: YAML frontmatter (name + description),
+   When to Use, Process or Constraints, Output template.
+   Adapt stack-specific commands for THIS project.
 
 4. Verification scripts - scripts/:
    - scripts/preflight-checks.sh - Build, lint, test for the stack.
      Wrap existing preflight if one exists, don't replace it.
    - scripts/context-validate.sh - Instruction file line count, router
-     references resolve, playbook files exist.
+     references resolve, skill files exist.
    - scripts/deny-dangerous.sh - Policy documentation + verification.
      Include --self-test flag. Acknowledge this is NOT runtime blocking
      like Claude Code's PreToolUse hook - it's a policy doc and
@@ -102,7 +119,7 @@ WHAT TO BUILD (in this order):
    shared directory for all agents). Read existing evals first — do NOT
    duplicate incidents already covered.
    At least 1-2 evals MUST test Codex-specific mechanics: deny-dangerous
-   is policy not runtime blocking, no slash commands (use playbooks),
+   is policy not runtime blocking, no slash commands (use .agents/skills/),
    no /compact or /clear, preserve Claude files in dual-agent repos,
    or AGENTS.md/CLAUDE.md alignment drift.
    Each eval MUST declare Origin: real-incident | synthetic-seed.
@@ -111,7 +128,7 @@ WHAT TO BUILD (in this order):
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
 - All seed files exist
-- Playbooks exist with required sections
+- All 7 skills exist under .agents/skills/ with YAML frontmatter
 - Verification scripts are executable
 - Footguns are real with file:line evidence
 - Router table references resolve
@@ -128,7 +145,7 @@ VERIFICATION:
 - [ ] AGENTS.md uses LOG (not RECORD)
 - [ ] docs/footguns.md entries have file:line evidence (not fabricated)
 - [ ] docs/guidelines-ownership-split.md exists (if guidelines were trimmed)
-- [ ] All 7 playbooks exist in docs/codex-playbooks/ with goat-* prefix
+- [ ] All 7 skills exist in .agents/skills/goat-*/ with SKILL.md + frontmatter
 - [ ] scripts/deny-dangerous.sh --self-test passes
 - [ ] scripts/context-validate.sh runs cleanly
 - [ ] Router table references all resolve to real files
@@ -148,7 +165,7 @@ VERIFICATION:
 | PreToolUse hooks | Codex has no hook system. deny-dangerous.sh is policy doc, not runtime blocker. |
 | Permission profiles | Codex has no native profile support. Document roles in AGENTS.md if needed. |
 | Local CLAUDE.md files | Codex doesn't auto-load per-directory. Use .github/instructions/ with applyTo instead. |
-| Slash commands | Codex uses playbook .md files. Same content, different invocation. |
+| Slash commands | Codex uses .agents/skills/ with SKILL.md files. Invoked via /skills or $skill-name. |
 | Strict line target | AGENTS.md runs ~35% larger. No hard ceiling - aim for concise but don't sacrifice clarity. |
 | Permissions deny list | No equivalent in Codex. Behavioural guidance only (~30% compliance vs ~100% mechanical). |
 

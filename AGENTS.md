@@ -62,7 +62,7 @@ GOOD: Keep the current shape. Extract only when the second case exists
 - Adding, removing, or renaming files
 - Changes spanning 3+ docs/scripts
 - Edits to `.claude/` or other Claude-specific runtime files
-**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it.
+**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`).
 ## Definition of Done
 MUST confirm all 6 gates:
 1. `bash scripts/preflight-checks.sh` passes
@@ -85,17 +85,18 @@ Ask one question with a recommended default and exact file boundary.
 | 6-step loop | `docs/system/six-steps.md` |
 | Getting started | `docs/getting-started.md` |
 | Design rationale | `docs/reference/design-rationale.md` |
-| Examples | `docs/reference/examples.md` |
 | Cross-agent comparison | `docs/reference/cross-agent-comparison.md` |
 | Claude instructions | `CLAUDE.md` |
 | Claude setup | `setup/setup-claude.md` |
 | Codex setup | `setup/setup-codex.md` |
 | Shared execution template | `setup/shared/execution-loop.md` |
-| Preflight playbook | `docs/codex-playbooks/goat-preflight.md` |
-| Debug playbook | `docs/codex-playbooks/goat-debug.md` |
-| Audit playbook | `docs/codex-playbooks/goat-audit.md` |
-| Research playbook | `docs/codex-playbooks/goat-investigate.md` |
-| Review playbook | `docs/codex-playbooks/goat-review.md` |
+| Preflight skill | `.agents/skills/goat-preflight/SKILL.md` |
+| Debug skill | `.agents/skills/goat-debug/SKILL.md` |
+| Audit skill | `.agents/skills/goat-audit/SKILL.md` |
+| Investigate skill | `.agents/skills/goat-investigate/SKILL.md` |
+| Review skill | `.agents/skills/goat-review/SKILL.md` |
+| Plan skill | `.agents/skills/goat-plan/SKILL.md` |
+| Test skill | `.agents/skills/goat-test/SKILL.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Confusion log | `docs/confusion-log.md` |
