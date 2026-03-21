@@ -17,7 +17,7 @@ CLI auditor and prompt generator. M1 (Scanner) and M2 (Prompts) complete. Projec
 - N/A inflation guard: <10% applicable checks = "insufficient-data" instead of inflated grade
 - Confidence field (high/medium/low) on every check result
 - JSON and text renderers with `--verbose` per-check details and progress bars
-- `--shape` override (app/library/collection) and `--agent` filter
+- `--agent` filter to score a single agent
 - `--min-score` / `--min-grade` CI gate mode (exit 1 if below threshold)
 - 53 tests: 13 detection + 40 fixture manifests (10 scenarios including self-scan)
 
@@ -44,6 +44,37 @@ CLI auditor and prompt generator. M1 (Scanner) and M2 (Prompts) complete. Projec
 - `scripts/start-dev.sh`: dev environment startup (typecheck, tests, preflight, self-scan)
 - `scripts/dependency-install.sh`: clean install from lockfile with build + test verification
 - `scripts/dependency-update.sh`: update deps with security audit and build verification
+
+### Shape Removal (ADR-002)
+
+- Removed `ProjectShape` type, `detect/shape.ts`, and `--shape` CLI flag
+- Permission Profile checks (3.3.1-3.3.3) now always N/A — create-on-first-use for all projects
+- App and library produce identical scores — shape no longer affects rubric
+- Removed shape references from milestone docs, design-rationale, and prompt variables
+
+### Confusion Log Removal (ADR-003)
+
+- Removed `docs/confusion-log.md` from the entire workflow — never created on any project after 7+ implementations
+- Removed rubric check 2.3.5 (68 checks now, was 69)
+- Removed from all router tables (CLAUDE.md, AGENTS.md, GEMINI.md), spec docs, setup prompts, fragments, shared facts
+- Eliminated 3-point self-scan penalty (1 pt missing file + 2 pt router cascade)
+- Structural confusion is addressed by router table and architecture.md
+- Deleted `workflow/evaluation/confusion-log.md` template
+
+### CI & Preflight Hardening
+
+- Added `## When to Use` to 6 `.agents/skills/` SKILL.md files (CI requirement)
+- Added `## Output` to 3 skills (goat-investigate, goat-plan, goat-test)
+- Updated `workflow/skills/` templates to include CI-required sections
+- Broadened `context-validate.sh`: accepts `## Phase` as alternative to `## Process`
+- Fixed version hardcoding: `cli.ts` now imports from `version.ts` (single source of truth)
+- Preflight now runs: context validation, bash syntax, shellcheck, deny self-test, version consistency, typecheck, and full test suite
+
+### Multi-Agent Bug Review
+
+- Consolidated findings from 3 independent agent reviews into `docs/roadmaps/milestones/M2-fixes.md`
+- 18 bugs documented: 2 critical, 2 high, 5 medium scanner false-fails, 3 medium design, 6 low polish
+- Scanner false-fails account for 6 lost points — fixing these pushes all agents to A
 
 ### Milestones & Roadmap
 

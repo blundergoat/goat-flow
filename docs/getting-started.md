@@ -143,7 +143,6 @@ src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying 
 .claude/settings.json
 docs/lessons.md                        <- learning loop
 docs/footguns.md
-docs/confusion-log.md
 docs/architecture.md
 docs/domain-reference.md               <- Prompt B path only
 docs/guidelines-ownership-split.md     <- migration rationale

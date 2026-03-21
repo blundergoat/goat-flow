@@ -53,7 +53,7 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
 
 function buildSetupPreamble(vars: PromptVariables): string {
   return [
-    `Set up GOAT Flow for ${vars.agentName} on this ${vars.shape} project.`,
+    `Set up GOAT Flow for ${vars.agentName}.`,
     '',
     `**Stack:** ${vars.languages}`,
     `**Build:** \`${vars.buildCommand}\` | **Test:** \`${vars.testCommand}\` | **Lint:** \`${vars.lintCommand}\` | **Format:** \`${vars.formatCommand}\``,
@@ -81,7 +81,6 @@ function buildFreshVars(report: ScanReport, agentId: AgentId): PromptVariables {
     settingsFile: info.settings,
     skillsDir: info.skills,
     hooksDir: info.hooks,
-    shape: report.shape.value,
     languages: report.stack.languages.join(', ') || 'unknown',
     buildCommand: report.stack.buildCommand ?? 'none',
     testCommand: report.stack.testCommand ?? 'none',

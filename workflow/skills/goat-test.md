@@ -15,6 +15,10 @@ After a coding milestone or every 30-60 minutes of agent work. Generates testing
 ```
 Create the /goat-test skill for this project.
 
+## When to Use
+
+Use when generating testing instructions for changes.
+
 Purpose: generate testing instructions after a coding milestone or
 session. The coding agent is the doer — testing uses independent
 verifiers. This skill gathers context then produces instructions for
@@ -106,4 +110,8 @@ VERIFICATION:
 - Verify all three tracks are present
 - Verify Track 2 prompts are filled in with actual changes
 - Verify Track 3 has project-specific manual checks
+
+## Output
+
+Three verification tracks (automated tests, AI review prompts, human testing checklist) plus a Milestone Gate Checklist.
 ```

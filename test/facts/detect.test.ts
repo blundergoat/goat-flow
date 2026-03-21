@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockFS } from '../helpers/mock-fs.js';
 import { detectAgents } from '../../src/cli/detect/agents.js';
-import { detectShape } from '../../src/cli/detect/shape.js';
 import { detectStack } from '../../src/cli/detect/stack.js';
 
 describe('detectAgents', () => {
@@ -28,48 +27,6 @@ describe('detectAgents', () => {
     const fs = createMockFS({ 'README.md': '# Hello' });
     const agents = detectAgents(fs);
     assert.equal(agents.length, 0);
-  });
-});
-
-describe('detectShape', () => {
-  it('detects library from package.json with exports', () => {
-    const fs = createMockFS({
-      'package.json': JSON.stringify({ exports: { '.': './dist/index.js' } }),
-    });
-    assert.equal(detectShape(fs), 'library');
-  });
-
-  it('detects app from package.json with start script', () => {
-    const fs = createMockFS({
-      'package.json': JSON.stringify({ scripts: { start: 'node server.js' } }),
-    });
-    assert.equal(detectShape(fs), 'app');
-  });
-
-  it('detects library from composer.json type', () => {
-    const fs = createMockFS({
-      'composer.json': JSON.stringify({ type: 'library' }),
-    });
-    assert.equal(detectShape(fs), 'library');
-  });
-
-  it('detects library from Cargo.toml [lib]', () => {
-    const fs = createMockFS({
-      'Cargo.toml': '[package]\nname = "mylib"\n\n[lib]\nname = "mylib"\n',
-    });
-    assert.equal(detectShape(fs), 'library');
-  });
-
-  it('detects app from go.mod', () => {
-    const fs = createMockFS({
-      'go.mod': 'module github.com/user/app\n\ngo 1.21\n',
-    });
-    assert.equal(detectShape(fs), 'app');
-  });
-
-  it('defaults to app for unknown projects', () => {
-    const fs = createMockFS({ 'README.md': '# Hello' });
-    assert.equal(detectShape(fs), 'app');
   });
 });
 

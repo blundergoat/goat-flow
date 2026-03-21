@@ -158,16 +158,11 @@ describe('Fixture 1: empty project', () => {
     'README.md': '# My Project\n',
     'package.json': JSON.stringify({ name: 'my-project', scripts: { start: 'node index.js' } }),
   });
-  const report = scan(fs, '/test/empty', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/empty', { agentFilter: null });
 
   it('produces valid report with no agents', () => {
     assertValidReport(report, 'empty');
     assertNoAgents(report, 'empty');
-  });
-
-  it('detects shape as app', () => {
-    assert.equal(report.shape.value, 'app');
-    assert.equal(report.shape.source, 'auto');
   });
 });
 
@@ -176,7 +171,7 @@ describe('Fixture 2: minimal-claude', () => {
     'CLAUDE.md': MINIMAL_CLAUDE_MD,
     'package.json': JSON.stringify({ name: 'my-app', scripts: { start: 'node server.js', test: 'jest' } }),
   });
-  const report = scan(fs, '/test/minimal-claude', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/minimal-claude', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'minimal-claude');
@@ -202,7 +197,7 @@ describe('Fixture 3: minimal-codex', () => {
     'AGENTS.md': MINIMAL_AGENTS_MD,
     'package.json': JSON.stringify({ name: 'my-codex-app', scripts: { start: 'node app.js' } }),
   });
-  const report = scan(fs, '/test/minimal-codex', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/minimal-codex', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'minimal-codex');
@@ -244,7 +239,6 @@ describe('Fixture 4: full-claude', () => {
     // Learning loop
     'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
     'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod\n\n**created_at:** 2026-01-01\n',
-    'docs/confusion-log.md': '# Confusion Log\n\n## Entry 1\nGot confused about X.\n',
     // Architecture
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals
@@ -264,7 +258,7 @@ describe('Fixture 4: full-claude', () => {
     // Referenced router paths
     'docs/system-spec.md': '# System Spec\n',
   });
-  const report = scan(fs, '/test/full-claude', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/full-claude', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'full-claude');
@@ -314,7 +308,6 @@ describe('Fixture 5: full-multi-agent', () => {
     'scripts/stop-lint.sh': '#!/usr/bin/env bash\nexit 0\n',
     'docs/footguns.md': '# Footguns\n\n**Evidence:**\n- `src/a.ts:1`\n',
     'docs/lessons.md': '# Lessons\n\n### Entry 1\n**What happened:** x\n',
-    'docs/confusion-log.md': '# Confusion Log\n',
     'docs/architecture.md': '# Architecture\n\nOverview.\n',
     'agent-evals/README.md': '# Evals\n',
     'agent-evals/eval-1.md': '# E1\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\nx\n```\n',
@@ -326,7 +319,7 @@ describe('Fixture 5: full-multi-agent', () => {
     'tasks/handoff-template.md': '# Handoff\n',
     '.gitignore': '.env\nsettings.local.json\n',
   });
-  const report = scan(fs, '/test/multi', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/multi', { agentFilter: null });
 
   it('detects all 3 agents', () => {
     assert.equal(report.agents.length, 3);
@@ -343,13 +336,13 @@ describe('Fixture 5: full-multi-agent', () => {
   });
 
   it('--agent filter works', () => {
-    const filtered = scan(fs, '/test/multi', { shapeOverride: null, agentFilter: 'claude' });
+    const filtered = scan(fs, '/test/multi', { agentFilter: 'claude' });
     assert.equal(filtered.agents.length, 1);
     assert.equal(filtered.agents[0].agent, 'claude');
   });
 });
 
-describe('Fixture 6: library-shape', () => {
+describe('Fixture 6: N/A checks', () => {
   const fs = createMockFS({
     'CLAUDE.md': FULL_CLAUDE_MD,
     'package.json': JSON.stringify({
@@ -368,22 +361,12 @@ describe('Fixture 6: library-shape', () => {
     'docs/footguns.md': '# Footguns\n\n- `src/index.ts:10` - gotcha\n',
     'docs/lessons.md': '# Lessons\n\n### Entry 1\nStuff.\n',
   });
-  const report = scan(fs, '/test/library', { shapeOverride: null, agentFilter: null });
-
-  it('detects library shape', () => {
-    assert.equal(report.shape.value, 'library');
-  });
+  const report = scan(fs, '/test/library', { agentFilter: null });
 
   it('permission profile checks are N/A for libraries', () => {
     const profileChecks = report.agents[0].checks.filter(c => c.category === 'Permission Profiles');
     const naCount = profileChecks.filter(c => c.status === 'na').length;
     assert.ok(naCount >= 2, `Expected 2+ N/A profile checks for library, got ${naCount}`);
-  });
-
-  it('--shape override changes detection', () => {
-    const overridden = scan(fs, '/test/library', { shapeOverride: 'app', agentFilter: null });
-    assert.equal(overridden.shape.value, 'app');
-    assert.equal(overridden.shape.source, 'override');
   });
 });
 
@@ -395,7 +378,7 @@ describe('Fixture 7: anti-patterns', () => {
     'docs/footguns.md': '# Footguns\n\nSome footguns but no file:line evidence at all.\n',
     '.claude/skills/not-goat-prefixed/SKILL.md': '# bad skill\n',
   });
-  const report = scan(fs, '/test/anti-patterns', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/anti-patterns', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'anti-patterns');
@@ -454,7 +437,7 @@ describe('Fixture 8: partial-setup', () => {
     'docs/architecture.md': '# Architecture\n\nOverview.\n',
     '.gitignore': '.env\nnode_modules/\n',
   });
-  const report = scan(fs, '/test/partial', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/partial', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'partial');
@@ -500,14 +483,13 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     ),
     'docs/footguns.md': '# Footguns\n\n- `src/a.ts:5` - evidence\n',
     'docs/lessons.md': '# Lessons\n\n### E1\nStuff.\n',
-    'docs/confusion-log.md': '# Confusion\n',
     'docs/architecture.md': '# Arch\n\nOverview.\n',
     'tasks/handoff-template.md': '# Handoff\n',
     '.gitignore': '.env\nsettings.local.json\n',
   });
-  const report = scan(fs, '/test/allowed-missing', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/allowed-missing', { agentFilter: null });
 
-  it('library shape makes profile checks N/A', () => {
+  it('profile checks are always N/A', () => {
     const profileChecks = report.agents[0].checks.filter(c => c.category === 'Permission Profiles');
     assert.ok(profileChecks.some(c => c.status === 'na'), 'Expected at least one N/A profile check');
   });
@@ -555,7 +537,6 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     // Learning loop
     'docs/footguns.md': '# Footguns\n\n## Footgun: Auth\n\n**Evidence:**\n- `src/auth.ts:42` - broke login\n- `src/auth.ts:88` - missing lock\n',
     'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** something\n\n**created_at:** 2026-01-01\n',
-    'docs/confusion-log.md': '# Confusion Log\n',
     // Architecture
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals
@@ -574,7 +555,7 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'docs/system-spec.md': '# System Spec\n',
     'CHANGELOG.md': '# Changelog\n',
   });
-  const report = scan(fs, '/test/self-goat-flow', { shapeOverride: null, agentFilter: null });
+  const report = scan(fs, '/test/self-goat-flow', { agentFilter: null });
 
   it('all 3 agents detected', () => {
     assert.equal(report.agents.length, 3);

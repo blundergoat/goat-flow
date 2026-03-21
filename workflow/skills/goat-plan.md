@@ -15,6 +15,10 @@ Before any non-trivial implementation. Instead of manually pasting 4 separate pl
 ```
 Create the /goat-plan skill for this project.
 
+## When to Use
+
+Use when planning a feature or significant change.
+
 Purpose: guide the developer through the full GOAT Flow planning
 sequence — feature brief, mob elaboration, SBAO ranking, and milestone
 planning — as a single agent-driven workflow with human gates.
@@ -230,4 +234,8 @@ VERIFICATION:
 - Verify the skill references workflow/playbooks/planning/
 - Verify Step 0 context gathering is present
 - Verify "walk through interactively" constraint is present
+
+## Output
+
+Feature brief, optional prime plan, and milestone specs with tasks, exit criteria, and human testing gates.
 ```

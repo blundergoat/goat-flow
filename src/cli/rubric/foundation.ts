@@ -75,7 +75,7 @@ export const foundationChecks: CheckDef[] = [
     id: '1.2.6', name: 'LOG step', tier: 'foundation', category: 'Execution Loop',
     pts: 2, confidence: 'medium',
     detect: { type: 'grep', path: '{instruction_file}', section: 'LOG', pattern: 'lessons\\.md|footguns\\.md|MUST update when tripped' },
-    recommendation: 'Add LOG step referencing lessons.md, footguns.md, confusion-log.md',
+    recommendation: 'Add LOG step referencing lessons.md, footguns.md',
     recommendationKey: 'add-log-step',
   },
 

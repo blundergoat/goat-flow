@@ -139,9 +139,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **Doer-verifier testing** | Three parallel verification tracks (automated tests, AI verification, human testing) after every milestone or 30-60 minutes of coding | After every coding session |
 | **Agent evals** | Regression tests from real incidents - replay prompts that verify the agent handles known failure modes correctly | On demand, or after CLAUDE.md changes |
 | **CI context validation** | Automated checks: instruction file line count, router reference resolution, skill completeness | On every PR |
-| **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed), `docs/confusion-log.md` (where the agent got confused) | Updated after every task |
+| **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed) | Updated after every task |
 
-**Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), agent profiles directory (e.g., `.claude/profiles/` or `.gemini/profiles/`, create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
+**Create on first use:** Two artifacts materialise when first needed, not pre-created empty: agent profiles directory (e.g., `.claude/profiles/` or `.gemini/profiles/`, create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
 
 **The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers - automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
 
@@ -206,7 +206,6 @@ The system adapts to three project shapes. The layers stay the same - only the c
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
 | Layer 3 skills | All 7 | All 7 | All 7 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
-| Layer 5 confusion-log | Yes | Yes | Yes |
 
 ---
 

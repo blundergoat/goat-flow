@@ -1,12 +1,10 @@
-import type { ProjectFacts, ProjectShape, ReadonlyFS, AgentProfile } from '../types.js';
+import type { ProjectFacts, ReadonlyFS } from '../types.js';
 import { detectAgents } from '../detect/agents.js';
-import { detectShape } from '../detect/shape.js';
 import { detectStack } from '../detect/stack.js';
 import { extractSharedFacts } from './shared.js';
 import { extractAgentFacts } from './agent.js';
 
 export interface ExtractOptions {
-  shapeOverride: ProjectShape | null;
   agentFilter: string | null;
 }
 
@@ -18,10 +16,6 @@ export function extractFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFa
   if (options.agentFilter) {
     agents = agents.filter(a => a.id === options.agentFilter);
   }
-
-  // Detect shape
-  const shape = options.shapeOverride ?? detectShape(fs);
-  const shapeSource = options.shapeOverride ? 'override' as const : 'auto' as const;
 
   // Detect stack
   const stack = detectStack(fs);
@@ -54,8 +48,6 @@ export function extractFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFa
 
   return {
     root: '.',
-    shape,
-    shapeSource,
     stack,
     agents: agentFacts,
     shared,

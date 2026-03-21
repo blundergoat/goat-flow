@@ -14,7 +14,6 @@ Read these files in this project:
 - docs/footguns.md
 - docs/lessons.md
 - agent-evals/ (all files — single shared directory for all agents)
-- docs/confusion-log.md (if exists)
 - docs/guidelines-ownership-split.md (if exists)
 - .github/instructions/ (list what exists)
 

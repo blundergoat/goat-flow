@@ -51,7 +51,6 @@ export interface PromptVariables {
   settingsFile: string;
   skillsDir: string;
   hooksDir: string;
-  shape: string;
   languages: string;
   buildCommand: string;
   testCommand: string;

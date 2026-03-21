@@ -107,7 +107,7 @@ flowchart TD
     DOD -- "No" --> ACT
     DOD -- "Yes" --> LOG
 
-    LOG["<b>LOG</b><br/>lessons.md -- agent behavioural mistakes<br/>footguns.md -- cross-domain architectural traps<br/>confusion-log.md -- structural navigation difficulty"]
+    LOG["<b>LOG</b><br/>lessons.md -- agent behavioural mistakes<br/>footguns.md -- cross-domain architectural traps"]
     LOG --> PROPAGATE{"Footgun maps to<br/>specific directory?"}
     PROPAGATE -- "Yes" --> LOCAL["Propagate one-line summary<br/>to local CLAUDE.md"]
     PROPAGATE -- "No" --> DONE
@@ -151,13 +151,9 @@ flowchart TD
 
 ---
 
-## Project Shape: App vs Library vs Collection
+## Project Shape (Removed in v0.4.0)
 
-**Problem:** A one-size-fits-all plan wastes instruction budget on irrelevant content. Different project shapes have different Ask First boundaries, line targets, and agent eval strategies.
-
-**Source:** Cross-referencing four real implementations -- a Tauri app (121-line CLAUDE.md, 6 skills, 14 footguns), a PHP library (99-line CLAUDE.md, 3 skills, 6 footguns), a medical scribe (118-line CLAUDE.md, 5 skills, 8 footguns), and a shell script collection (96-line CLAUDE.md, 4 skills, 8 pre-existing footguns). The shell script collection exposed that the app/library binary was insufficient -- a multi-domain collection needs app-level Ask First boundaries but library-level line targets. (BlunderGOAT Scanner, BlunderGOAT CC)
-
-**Design decision:** Every section that differs by project shape includes explicit app/library/collection guidance. The three-column adaptation table makes this visible in one place.
+**Original rationale:** Different project shapes (app/library/collection) were expected to need different rubric checks. In practice, real implementations showed all projects need the same checks — the same execution loop, autonomy tiers, skills, and enforcement regardless of shape. Permission profiles were the only shape-gated checks, and they were reclassified as create-on-first-use (N/A for everyone). See ADR-002.
 
 ---
 
@@ -174,7 +170,7 @@ flowchart TD
 | `/review-triage`    | Normal review behaviour, not a distinct mode           | Review branch of the ACT step       |
 | `/revert-rescope`   | Tactic (2 sentences), not a workflow                   | Paragraph in VERIFY/stop-the-line   |
 
-**v1.5 refinement:** Implementation data from the PHP library and shell script collection confirms all seven skills add value across project shapes. All projects create all seven skills (preflight, debug, audit, investigate, review, plan, test).
+**v1.5 refinement:** Implementation data confirms all seven skills add value across all projects. All projects create all seven skills (preflight, debug, audit, investigate, review, plan, test).
 
 ---
 
@@ -184,9 +180,9 @@ flowchart TD
 
 **Sources:** HumanLayer (auto-generated context data), Philipp Schmid (instruction following limits), GitHub 2,500-repo analysis (tool mention uplift)
 
-**Design decision:** Hard line target (120 for all project shapes, never over 150). The original 100/120 split was dropped after real implementations showed libraries with real footguns and project-specific Ask First boundaries need the same budget as apps. Cut priority list for when you go over. "Never cut" list for the three things that matter most: execution loop, autonomy tiers, definition of done.
+**Design decision:** Hard line target (120, never over 150). The original 100/120 split was dropped after real implementations showed all projects need the same budget. Cut priority list for when you go over. "Never cut" list for the three things that matter most: execution loop, autonomy tiers, definition of done.
 
-**Why 120:** The PHP library's first pass produced 127 lines. Compression got it to 99 but adding SCOPE and budgets brought it back to ~110. The Tauri app stabilised at 121. The shell script collection grew to 101. Every implementation with the 6-step loop, budgets, and all required sections lands in the 100-120 range regardless of project shape.
+**Why 120:** The PHP library's first pass produced 127 lines. Compression got it to 99 but adding SCOPE and budgets brought it back to ~110. The Tauri app stabilised at 121. The shell script collection grew to 101. Every implementation with the 6-step loop, budgets, and all required sections lands in the 100-120 range.
 
 ---
 

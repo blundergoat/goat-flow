@@ -31,11 +31,10 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
-   - LOG: MUST update when tripped (DoD gate #4). Reference all four
+   - LOG: MUST update when tripped (DoD gate #4). Reference all three
      learning loop files:
      docs/lessons.md (behavioural mistakes),
      docs/footguns.md (architectural traps with file:line evidence),
-     docs/confusion-log.md (structural navigation difficulty),
      docs/decisions/ (significant technical decisions with context/rationale).
      When-to-use table. Footgun propagation rule.
      Context-based loading rules.
@@ -78,7 +77,7 @@ g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
      - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
-     - Learning loop files (footguns, lessons, confusion-log)
+     - Learning loop files (footguns, lessons)
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's

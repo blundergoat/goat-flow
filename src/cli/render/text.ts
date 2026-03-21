@@ -30,7 +30,6 @@ export function renderText(report: ScanReport, verbose: boolean): string {
   const lines: string[] = [];
 
   lines.push(`GOAT Flow Audit: ${report.target}`);
-  lines.push(`Shape: ${report.shape.value} (${report.shape.source})`);
   if (report.stack.languages.length > 0) {
     lines.push(`Stack: ${report.stack.languages.join(', ')}`);
   }

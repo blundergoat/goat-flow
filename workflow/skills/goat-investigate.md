@@ -9,6 +9,10 @@ Paste this into your coding agent to create the `/goat-investigate` skill for yo
 ```
 Create the /goat-investigate skill for this project.
 
+## When to Use
+
+Use when investigating a codebase area to understand how it works.
+
 Purpose: deep codebase investigation producing a structured research
 document. The agent gathers context, confirms scope with the user,
 reads thoroughly, and reports findings before any planning or
@@ -94,4 +98,8 @@ VERIFICATION:
 - Verify scope confirmation step (Phase 1)
 - Verify hard gate (no planning until human reviews)
 - Verify output format template is included
+
+## Output
+
+Structured research document with: Overview, Components table, Data Flow, Boundaries, Risks/Gotchas (3+), Findings, Open Questions, Recommendation. All claims backed by file:line references.
 ```

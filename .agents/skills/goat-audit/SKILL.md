@@ -4,6 +4,9 @@ description: "Run a multi-pass quality audit on the codebase"
 ---
 # GOAT Audit
 
+## When to Use
+Use when running a quality audit on the codebase.
+
 Multi-pass codebase quality review. More thorough than a normal review — a systematic audit.
 
 ---

@@ -19,7 +19,6 @@ export function extractVariables(report: ScanReport, agentReport: AgentReport): 
     settingsFile: paths.settingsFile,
     skillsDir: paths.skillsDir,
     hooksDir: paths.hooksDir,
-    shape: report.shape.value,
     languages: report.stack.languages.join(', ') || 'unknown',
     buildCommand: report.stack.buildCommand ?? 'none',
     testCommand: report.stack.testCommand ?? 'none',

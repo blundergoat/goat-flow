@@ -124,7 +124,7 @@ export const fullChecks: CheckDef[] = [
   {
     id: '3.3.1', name: 'Profiles directory', tier: 'full', category: 'Permission Profiles',
     pts: 1, confidence: 'high',
-    na: (ctx) => ctx.facts.shape === 'library' || ctx.facts.shape === 'collection',
+    na: () => true, // Profiles are create-on-first-use — N/A until role separation is needed
     detect: { type: 'dir_exists', path: '.claude/profiles' },
     recommendation: 'Create .claude/profiles/ directory',
     recommendationKey: 'create-profiles-dir',
@@ -132,7 +132,7 @@ export const fullChecks: CheckDef[] = [
   {
     id: '3.3.2', name: '2+ profile files', tier: 'full', category: 'Permission Profiles',
     pts: 2, partialPts: 1, confidence: 'high',
-    na: (ctx) => ctx.facts.shape === 'library' || ctx.facts.shape === 'collection',
+    na: () => true, // Profiles are create-on-first-use
     detect: {
       type: 'custom',
       fn: (): CheckResult => {
@@ -146,7 +146,7 @@ export const fullChecks: CheckDef[] = [
   {
     id: '3.3.3', name: 'Profiles referenced in router', tier: 'full', category: 'Permission Profiles',
     pts: 1, confidence: 'high',
-    na: (ctx) => ctx.facts.shape === 'library' || ctx.facts.shape === 'collection',
+    na: () => true, // Profiles are create-on-first-use
     detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'profile' },
     recommendation: 'Reference profiles in the router table',
     recommendationKey: 'route-profiles',

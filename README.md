@@ -16,7 +16,7 @@ AI coding agents are powerful but unreliable without structure. They fabricate f
 
 **Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% compliance vs ~70% for rules). Post-turn hooks lint after every change. Format hooks clean up edits.
 
-**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes), `docs/confusion-log.md` (structural navigation issues). Real incidents, not hypothetical ones.
+**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes). Real incidents, not hypothetical ones.
 
 **7 skills:** /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
 

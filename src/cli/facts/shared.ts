@@ -69,8 +69,7 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
   return {
     footguns: { exists: footgunsExists, hasEvidence: footgunsHasEvidence, dirMentions },
     lessons: { exists: lessonsExists, hasEntries: lessonsHasEntries },
-    confusionLog: { exists: fs.exists('docs/confusion-log.md') },
-    architecture: { exists: archExists, lineCount: archLineCount },
+architecture: { exists: archExists, lineCount: archLineCount },
     evals: { dirExists: evalsDir, count: evalCount, hasReadme, hasOriginLabels, hasReplayPrompts },
     ci: {
       workflowExists: ciExists,

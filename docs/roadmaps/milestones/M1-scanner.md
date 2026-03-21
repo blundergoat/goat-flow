@@ -21,11 +21,11 @@
 2. [x] `types.ts` — CheckDef, Detection, ProjectFacts, AgentProfile, CheckResult, ScanReport
 3. [x] `facts/fs.ts` — ReadonlyFS (exists, readFile, lineCount, readJson, glob, isExecutable)
 4. [x] `test/helpers/` — MockFs, TestProject builder, presets
-5. [x] `cli.ts` — parseArgs (`scan`, `--format`, `--shape`, `--agent`, `--verbose`, `--help`)
+5. [x] `cli.ts` — parseArgs (`scan`, `--format`, `--agent`, `--verbose`, `--help`)
 
 ### Phase B: Detection + Facts (1-2 sessions)
 6. [x] `detect/agents.ts` — find CLAUDE.md/AGENTS.md/GEMINI.md → AgentProfile[]
-7. [x] `detect/shape.ts` — package.json/composer.json/Cargo.toml/go.mod → App/Library/Collection
+7. [x] `detect/shape.ts` — removed in v0.4.0 (see ADR-002)
 8. [x] `detect/stack.ts` — languages, build/test/lint/format from manifests
 9. [x] `facts/extract.ts` + `facts/shared.ts` + `facts/agent.ts` — full fact extraction
 10. [x] Tests for detection and fact extraction (13 tests, all pass)
@@ -60,7 +60,6 @@
 - [x] Self-scan of goat-flow scores B (87-89% across agents)
 - [x] 10 fixture manifests pass with pinned expected scores (40 tests)
 - [x] Zero false positives on anti-pattern deductions against known-good setups
-- [x] `--shape` override works
 - [x] `--agent` filter works
 - [x] Each check result includes confidence field (high/medium/low)
 - [x] Recommendation keys are stable (documented, tested, used as M2 join key)
@@ -71,7 +70,7 @@
 |------|----------|
 | >10% of checks need `custom` evaluator (rubric-as-data doesn't scale) | Split complex checks into sub-checks that fit generic evaluators. Accept `custom` for router resolution and local context — those are genuinely structural. |
 | Section-scoped regex fails on instruction files with non-standard headings | Fall back to whole-file grep with narrower patterns. Accept lower confidence score on those checks. |
-| Shape detection wrong for Go projects (no `type` field in go.mod) | `--shape` override is the escape hatch. Go defaults to App. |
+| Shape detection wrong for Go projects (no `type` field in go.mod) | Removed — shape no longer affects scoring. |
 | Self-scan doesn't score B+ because the rubric is too strict against this repo | Tune the rubric, not the repo. The rubric is code — adjust point values or thresholds. |
 | `node:test` flaky on Node 22 for some edge case | Use `tsx --test` which wraps it. If still flaky, bump to Node 24. |
 
@@ -97,7 +96,6 @@ Before M1 is complete, the user MUST verify:
 - [ ] Run on a project with NO goat-flow setup — confirm it reports F / no score, not an error
 - [ ] Run on a project with partial setup — confirm partial scores make sense (not inflated, not zero)
 - [ ] Check 2-3 individual check results for accuracy — does the evidence match what's actually in the files?
-- [ ] Confirm `--shape` override changes the score (N/A checks shift)
 - [ ] Confirm `--agent` filter shows only the selected agent
 
 M1 is NOT complete until the user has run these checks and confirmed they pass.

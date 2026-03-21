@@ -96,7 +96,7 @@ function buildPreamble(vars: PromptVariables, agentReport: AgentReport): string 
     `This project scores **${vars.grade}** (${vars.percentage}%) for ${vars.agentName}.`,
     `**${vars.failedCount}** checks need attention out of ${vars.totalCount} total.`,
     '',
-    `**Project:** ${vars.shape} | **Stack:** ${vars.languages}`,
+    `**Stack:** ${vars.languages}`,
     `**Build:** \`${vars.buildCommand}\` | **Test:** \`${vars.testCommand}\` | **Lint:** \`${vars.lintCommand}\``,
     '',
     'Work through each section in order. Complete all foundation fixes before moving to standard.',

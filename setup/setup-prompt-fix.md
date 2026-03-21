@@ -31,8 +31,8 @@ EXECUTION LOOP:
 - VERIFY: two-level escalation, revert-and-rescope, recovery protocols
   (2-3 common failure patterns with fixes)
 - LOG: MUST-when-tripped, mechanical trigger, human correction trigger,
-  footgun propagation, references 4 files (lessons, footguns, confusion-log,
-  decisions/), dual-agent coordination if applicable
+  footgun propagation, references 3 files (lessons, footguns, decisions/),
+  dual-agent coordination if applicable
 
 WORKING MEMORY:
 - Context health: compact at 60% utilization (not 90%). Noise pruning.

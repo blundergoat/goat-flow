@@ -9,6 +9,10 @@ Paste this into your coding agent to create the `/goat-audit` skill for your pro
 ```
 Create the /goat-audit skill for this project.
 
+## When to Use
+
+Use when running a quality audit on the codebase.
+
 When to use: for systematic codebase quality review, before major
 releases, or when investigating a class of issues across the codebase.
 
@@ -87,4 +91,8 @@ VERIFICATION:
 - Verify 4-pass structure with fabrication self-check at pass 4
 - Verify MUST NOT propose fixes constraint is present
 - Verify output format template is included
+
+## Output
+
+Multi-pass audit report with findings grouped by severity (critical/high/medium/low), evidence for each finding, and prioritized fix recommendations.
 ```

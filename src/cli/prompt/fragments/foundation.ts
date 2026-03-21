@@ -188,7 +188,7 @@ Two corrections on same approach = MUST rewind.
     instruction: `The Ask First section in \`{{instructionFile}}\` is too generic. Replace template boundaries with real project paths:
 
 **Instead of:** "auth, routing, deployment, API, DB"
-**Write:** The actual files/directories that need approval before changes. For this {{shape}} project, consider which modules are high-risk or cross-cutting.
+**Write:** The actual files/directories that need approval before changes. Consider which modules are high-risk or cross-cutting.
 
 List 3-7 specific boundaries with actual file paths from this project.`,
     dependsOn: ['add-autonomy-tiers'],

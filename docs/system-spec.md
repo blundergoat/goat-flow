@@ -56,7 +56,7 @@ Claude Code auto-reads `CLAUDE.md` in the working directory plus ancestors up to
 
 **Relationship to footguns.md:** `docs/footguns.md` remains the central index. Footgun entries mapping to a specific directory are **propagated** (not moved) as one-line summaries. The central file is the source of truth.
 
-**Create when:** a module has 2+ footgun/confusion-log entries, is an Ask First boundary, or has conventions differing from default. **Do not create** for every directory, simple modules, flat-structure libraries, or directories already covered by instruction files.
+**Create when:** a module has 2+ footgun entries, is an Ask First boundary, or has conventions differing from default. **Do not create** for every directory, simple modules, flat-structure libraries, or directories already covered by instruction files.
 
 ### Project Shape: App vs Library vs Collection
 
@@ -66,7 +66,6 @@ Claude Code auto-reads `CLAUDE.md` in the working directory plus ancestors up to
 | Skills                  | 7 (all core)                           | 7 (all core)                                           | 7 (all core)                                             |
 | Ask First boundaries    | Auth, routing, deployment, API, DB     | Public API, dependencies, config/data files            | Shared sourced files, CONFIGURATION blocks, new domains  |
 | Local CLAUDE.md files   | Likely needed for high-risk dirs       | Create where needed                                    | Create where needed                                      |
-| confusion-log.md        | Yes                                    | Yes                                                    | Yes                                                      |
 | Agent evals             | Real incidents                         | Common stack failure modes                             | Real incidents (grep `fix:` in commit history)           |
 | Permission profiles     | Useful (frontend/backend/infra lanes)  | Useful                                                 | Useful                                                   |
 
@@ -218,8 +217,6 @@ Revert-and-rescope: (1) Esc + restate approach, (2) git revert + rescope, (3) /c
 | ----------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
 | `docs/lessons.md`       | Behavioural mistake (agent did wrong)   | "Assumed API contract without reading frontend"                         |
 | `docs/footguns.md`      | Architectural landmine (cross-domain)   | "Auth nonce spans 4 components; breaking any one silently breaks login" |
-| `docs/confusion-log.md` | Structural confusion (hard to navigate) | "Unclear which module owns session validation"                          |
-
 Log hygiene: `created_at` date on each entry. lessons.md max 15 active entries (3+ shared theme -> promote to Pattern). footguns.md: cross-domain only with real evidence. Quarterly: entries not triggered in >30 days -> propose archive. Contested entries: append `CONTESTED` with evidence. Footgun propagation: one-line summary to relevant local CLAUDE.md.
 
 **Dual-agent coordination:** If both CLAUDE.md and AGENTS.md share `docs/footguns.md`, define one agent as owner or adopt merge-and-flag. Simplest: run Claude Code first (creates docs), then Codex (merges with existing).
@@ -235,7 +232,7 @@ Always do (no confirmation needed):
 - Run tests, linting, formatting
 - Read any file in the codebase
 - Write to files within assigned scope
-- Append to lessons.md, footguns.md, confusion-log.md
+- Append to lessons.md, footguns.md
 
 Ask First (pause and confirm with human):
   Apps: auth, routing, deployment, API contracts, DB schemas, CI/CD, cross-boundary, new dirs
@@ -381,7 +378,6 @@ stack:
 | `docs/domain-reference.md`            | Project domain knowledge     | Migrated from existing CLAUDE.md (Prompt B only)    |
 | `docs/lessons.md`                     | Behavioural learning loop    | Format header + empty Entries/Patterns              |
 | `docs/footguns.md`                    | Architectural landmines      | Real footguns from codebase. Merge if file exists   |
-| `docs/confusion-log.md`              | Structural confusion signals | Format header                                       |
 | `docs/architecture.md`               | System overview              | Under 100 lines. What, why, how, constraints        |
 | `docs/decisions/`                     | Architecture Decision Records | ADR template + real decisions if discoverable (see template below) |
 | `docs/guidelines-ownership-split.md` | Migration rationale          | What was moved, removed, and why                    |

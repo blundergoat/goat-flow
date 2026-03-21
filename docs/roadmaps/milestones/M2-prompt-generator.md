@@ -103,14 +103,13 @@ interface Fragment {
 scripts/run-cli.sh test-all
 ```
 
-This runs all 8 human gate checks (JSON, text, verbose, no-setup project, shape overrides, agent filter, fix, setup, audit) in sequence. Review the output for each.
+This runs all 7 human gate checks (JSON, text, verbose, no-setup project, agent filter, fix, setup, audit) in sequence. Review the output for each.
 
 ### Individual commands
 
 ```bash
 scripts/run-cli.sh scan . --format json              # JSON output
 scripts/run-cli.sh scan . --format text --verbose     # text + per-check details
-scripts/run-cli.sh scan . --shape app --format text   # shape override
 scripts/run-cli.sh scan . --agent claude --format text # agent filter
 scripts/run-cli.sh fix . --agent claude               # fix prompt
 scripts/run-cli.sh setup /tmp/fresh --agent claude    # setup prompt
@@ -123,7 +122,6 @@ scripts/run-cli.sh audit . --agent claude             # audit prompt
 - [ ] Text output shows grade + tier breakdown + recommendations
 - [ ] `--verbose` shows per-check details with evidence
 - [ ] No-setup project reports gracefully (no crash, no inflated score)
-- [ ] `--shape` override changes which checks are N/A
 - [ ] `--agent` filter shows only the selected agent
 - [ ] Self-scan scores B+ across agents
 - [ ] Fix prompt targets only failed checks — passing checks are NOT included

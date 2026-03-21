@@ -244,7 +244,6 @@ When a fix isn't working:
 |------|---------------|---------------|
 | `docs/lessons.md` | Behavioural mistake (agent did something wrong) | "Assumed API contract without reading frontend" |
 | `docs/footguns.md` | Architectural landmine (cross-domain coupling) | "Auth nonce spans 4 components; breaking any one silently breaks login" |
-| `docs/confusion-log.md` | Structural confusion (hard to navigate) | "Unclear which module owns session validation" |
 
 **Agent-authored entries:** All entries added by the agent during the LOG step must be flagged:
 

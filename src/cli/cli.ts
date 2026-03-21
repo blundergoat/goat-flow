@@ -2,9 +2,8 @@
 
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import type { CLIOptions, Grade, ProjectShape, AgentId } from './types.js';
-
-const PACKAGE_VERSION = '0.1.0';
+import type { CLIOptions, Grade, AgentId } from './types.js';
+import { PACKAGE_VERSION } from './rubric/version.js';
 
 function printHelp(): void {
   console.log(`
@@ -24,7 +23,6 @@ Arguments:
 
 Flags:
   --format <type>   Output format: json, text, markdown (default: auto)
-  --shape <type>    Override shape detection: app, library, collection
   --agent <id>      Filter to one agent: claude, codex, gemini
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
@@ -33,12 +31,12 @@ Flags:
   --version, -v     Show version
 
 Examples:
-  goat-flow .                          Scan current directory
-  goat-flow scan --format json         Force JSON output
-  goat-flow fix --agent claude         Fix prompt for Claude only
-  goat-flow setup --agent codex        Setup prompt for Codex
-  goat-flow audit --agent gemini       Audit prompt for Gemini
-  goat-flow --min-score 75             CI gate: fail if below 75%
+  goat-flow .                        Scan current directory
+  goat-flow scan --format json       Force JSON output
+  goat-flow fix --agent claude       Fix prompt for Claude only
+  goat-flow setup --agent codex      Setup prompt for Codex
+  goat-flow audit --agent gemini     Audit prompt for Gemini
+  goat-flow --min-score 75           CI gate: fail if below 75%
 `);
 }
 
@@ -65,7 +63,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     args: filtered,
     options: {
       format: { type: 'string' },
-      shape: { type: 'string' },
       agent: { type: 'string' },
       verbose: { type: 'boolean', default: false },
       'min-score': { type: 'string' },
@@ -85,16 +82,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       process.exit(2);
     }
     format = values.format as CLIOptions['format'];
-  }
-
-  // Validate shape
-  let shape: ProjectShape | null = null;
-  if (values.shape) {
-    if (!['app', 'library', 'collection'].includes(values.shape)) {
-      console.error(`Invalid shape: ${values.shape}. Use: app, library, collection`);
-      process.exit(2);
-    }
-    shape = values.shape as ProjectShape;
   }
 
   // Validate agent
@@ -132,7 +119,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command,
     projectPath: resolve(positionals[0] ?? '.'),
     format,
-    shape,
     agent,
     verbose: values.verbose ?? false,
     minScore,
@@ -163,7 +149,6 @@ async function main(): Promise<void> {
 
   const fs = createFS(options.projectPath);
   const report = scan(fs, options.projectPath, {
-    shapeOverride: options.shape,
     agentFilter: options.agent,
   });
 

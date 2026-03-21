@@ -40,14 +40,13 @@ GOOD: Keep the current shape. Extract only when the second case exists
 - Level 1: isolated warning or missing optional tool -> note it, continue carefully
 - Level 2: broken refs, spec drift, evidence corruption, or policy-script failure -> full stop with file:line diagnosis
 - Two failed approaches on the same issue = stop, report, and wait
-**LOG** - MUST update when tripped (DoD gate #4). Load `docs/footguns.md` before Ask First or cross-doc work; load `docs/confusion-log.md` when routing is unclear.
+**LOG** - MUST update when tripped (DoD gate #4). Load `docs/footguns.md` before Ask First or cross-doc work.
 - If VERIFY caught a failure in code you wrote this session, or you corrected course mid-task, a `docs/lessons.md` entry is required before DoD is satisfied.
 - After human correction, MUST log immediately. Propagate confirmed footguns to the nearest routed instruction doc. Dual-agent shared files: read shared files before appending.
 | File | When to update |
 |------|----------------|
 | `docs/lessons.md` | Behavioural mistake by the agent |
 | `docs/footguns.md` | Cross-doc or cross-tool landmine with file:line evidence |
-| `docs/confusion-log.md` | Structural navigation confusion |
 ## Autonomy Tiers
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts, update shared learning-loop files with evidence.
 **Ask First**
@@ -99,7 +98,6 @@ Ask one question with a recommended default and exact file boundary.
 | Test skill | `.agents/skills/goat-test/SKILL.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
-| Confusion log | `docs/confusion-log.md` |
 | Architecture | `docs/architecture.md` |
 | Preflight script | `scripts/preflight-checks.sh` |
 | Context validation | `scripts/context-validate.sh` |

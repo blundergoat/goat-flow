@@ -218,20 +218,6 @@ Every footgun MUST have file:line evidence. No hypotheticals.`,
 
 Every footgun entry MUST have at least one \`file:line\` reference.`,
   },
-  {
-    key: 'create-confusion-log',
-    phase: 'standard',
-    category: 'Learning Loop',
-    instruction: `Create \`docs/confusion-log.md\`:
-
-\`\`\`markdown
-# Confusion Log
-
-Navigation difficulties and structural confusion. Create entries on first real incident.
-\`\`\`
-
-This file is referenced in the router table. It can start empty — entries appear when the agent gets genuinely confused about where to find something.`,
-  },
 
   // === Router Table ===
   {

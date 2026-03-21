@@ -4,6 +4,9 @@ description: "Investigate a codebase area and report findings"
 ---
 # GOAT Investigate
 
+## When to Use
+Use when investigating a codebase area to understand how it works.
+
 Deep investigation producing a structured research document. No planning until human reviews.
 
 ---
@@ -80,3 +83,7 @@ Do NOT proceed to planning or implementation. Wait for the human to confirm unde
 - MUST NOT skip to planning before research is reviewed
 - MUST NOT fabricate file paths, content, or behaviour
 - MUST NOT produce vague summaries without file:line specifics
+
+## Output
+
+Structured research document with: Overview, Components table, Data Flow, Boundaries, Risks/Gotchas (3+), Findings, Open Questions, Recommendation. All claims backed by file:line references.

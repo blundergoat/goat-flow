@@ -32,7 +32,6 @@ fi
 info "AGENTS.md line count: $agents_lines"
 
 allowed_missing_paths=(
-    "docs/confusion-log.md"
     "docs/decisions/"
 )
 
@@ -82,8 +81,8 @@ required_skills=(
 for skill in "${required_skills[@]}"; do
     [[ -f "$skill" ]] || fail "Missing skill: $skill"
     grep -q '^## When to Use' "$skill" || fail "Missing '## When to Use' in $skill"
-    grep -Eq '^## (Constraints|Process)' "$skill" || fail "Missing '## Constraints' or '## Process' in $skill"
-    grep -q '^## Output' "$skill" || fail "Missing '## Output' in $skill"
+    grep -Eq '^## (Constraints|Process|Phase)' "$skill" || fail "Missing '## Constraints', '## Process', or '## Phase' in $skill"
+    grep -Eq '^## Output' "$skill" || fail "Missing '## Output' or '## Output Format' in $skill"
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done

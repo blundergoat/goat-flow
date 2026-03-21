@@ -43,7 +43,7 @@ Anti-BDUF: Extract interface ONLY when second provider needed.
 Recovery: (a) missing context -> read X; (b) out-of-scope -> re-scope; (c) conflict -> ask.
 
 **LOG** - MUST update when tripped (DoD gate #4). Mechanical trigger: required if VERIFY caught your code failure or you corrected course mid-task. Human correction: MUST log lesson immediately.
-Reference all 4: docs/lessons.md, docs/footguns.md, docs/confusion-log.md, docs/decisions/.
+Reference all 3: docs/lessons.md, docs/footguns.md, docs/decisions/.
 
 ## Autonomy Tiers
 
@@ -77,7 +77,7 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 |--------|------|
 | **Skills** | `.agents/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
 | **Playbooks** | `workflow/playbooks/` |
-| **Learning** | `docs/{lessons,footguns,confusion-log}.md`, `docs/decisions/` |
+| **Learning** | `docs/{lessons,footguns}.md`, `docs/decisions/` |
 | **Architecture** | `docs/architecture.md` |
 | **Handoff** | `tasks/handoff-template.md` |
 | **Evals** | `agent-evals/` |

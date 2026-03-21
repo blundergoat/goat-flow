@@ -26,12 +26,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
    hardcoded absolute paths, or outdated references. Seed these as
    footguns if found.
 
-3. docs/confusion-log.md - Create on first use. Materialise this file
-   when the first real confusion incident occurs, not pre-created empty.
-   However, ALWAYS reference it in the LOG section and router table so
-   agents know the destination exists when they need it.
-
-4. tasks/handoff-template.md - Template for session handoffs. MUST
+3. tasks/handoff-template.md - Template for session handoffs. MUST
    include a purpose section explaining: when to create (incomplete
    work or two-correction stop), when to read (start of every session,
    check if tasks/handoff.md exists), and how to use (copy template
@@ -39,7 +34,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
    State (including files changed), Key Decisions, Known Risks,
    Next Step.
 
-5. tasks/.gitignore - Ignore runtime working files:
+4. tasks/.gitignore - Ignore runtime working files:
    todo.md
    handoff.md
    (The template is committed; the filled-in copies are not.)

@@ -1,7 +1,6 @@
 // === Agent Types ===
 
 export type AgentId = 'claude' | 'codex' | 'gemini';
-export type ProjectShape = 'app' | 'library' | 'collection';
 export type Tier = 'foundation' | 'standard' | 'full';
 export type CheckStatus = 'pass' | 'partial' | 'fail' | 'na';
 export type Confidence = 'high' | 'medium' | 'low';
@@ -119,8 +118,6 @@ export interface AntiPatternResult {
 
 export interface ProjectFacts {
   root: string;
-  shape: ProjectShape;
-  shapeSource: 'auto' | 'override';
   stack: StackInfo;
   agents: AgentFacts[];
   shared: SharedFacts;
@@ -137,8 +134,7 @@ export interface StackInfo {
 export interface SharedFacts {
   footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number> };
   lessons: { exists: boolean; hasEntries: boolean };
-  confusionLog: { exists: boolean };
-  architecture: { exists: boolean; lineCount: number };
+architecture: { exists: boolean; lineCount: number };
   evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean };
   handoffTemplate: { exists: boolean };
@@ -242,7 +238,6 @@ export interface ScanReport {
   packageVersion: string;
   rubricVersion: string;
   target: string;
-  shape: { value: ProjectShape; source: 'auto' | 'override' };
   stack: StackInfo;
   agents: AgentReport[];
   meta: {
@@ -269,7 +264,6 @@ export interface ReadonlyFS {
 export interface CLIOptions {
   projectPath: string;
   format: 'json' | 'text' | 'markdown';
-  shape: ProjectShape | null;
   agent: AgentId | null;
   verbose: boolean;
   minScore: number | null;

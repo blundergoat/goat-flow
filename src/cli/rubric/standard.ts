@@ -164,13 +164,6 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Add file:line evidence to footgun entries',
     recommendationKey: 'add-footgun-evidence',
   },
-  {
-    id: '2.3.5', name: 'confusion-log.md exists', tier: 'standard', category: 'Learning Loop',
-    pts: 1, confidence: 'high',
-    detect: { type: 'file_exists', path: 'docs/confusion-log.md' },
-    recommendation: 'Create docs/confusion-log.md (create on first real confusion incident)',
-    recommendationKey: 'create-confusion-log',
-  },
 
   // === 2.4 Router Table (5 pts) ===
   {

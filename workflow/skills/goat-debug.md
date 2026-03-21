@@ -9,6 +9,10 @@ Paste this into your coding agent to create the `/goat-debug` skill for your pro
 ```
 Create the /goat-debug skill for this project.
 
+## When to Use
+
+Use when diagnosing a bug or unexpected behavior.
+
 When to use: when a bug or test failure needs diagnosis, especially
 when the root cause is unclear or spans multiple components.
 
@@ -79,4 +83,8 @@ VERIFICATION:
 - Verify 3-phase structure (investigate, report, propose fix)
 - Verify hard gate between Phase 2 and Phase 3
 - Verify output format template is included
+
+## Output
+
+Structured diagnosis with symptom, evidence chain (file:line references), root cause, and proposed fix — presented for human review before any changes.
 ```

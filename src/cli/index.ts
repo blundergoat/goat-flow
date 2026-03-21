@@ -3,7 +3,6 @@
 
 export type {
   AgentId,
-  ProjectShape,
   Tier,
   CheckStatus,
   Confidence,

@@ -105,7 +105,7 @@ if [[ -z "$cmd" ]]; then
     printf "  \033[36m6\033[0m  audit . --agent claude          Read-only diagnosis prompt\n"
     echo ""
     printf "  \033[2mTest\033[0m\n"
-    printf "  \033[36m7\033[0m  test-all                        Run all 8 human testing gates\n"
+    printf "  \033[36m7\033[0m  test-all                        Run all 7 human testing gates\n"
     printf "  \033[36mh\033[0m  help                            Show full usage + examples\n"
     echo ""
     printf "  \033[1mPick:\033[0m "
@@ -147,7 +147,7 @@ case "$cmd" in
         else
             passed=0
             failed=0
-            total=8
+            total=7
 
             echo ""
             printf "\033[1m  GOAT Flow CLI — Human Testing Gate\033[0m\n"
@@ -167,25 +167,22 @@ case "$cmd" in
                 cli scan "$tmp" --format text
             rm -r "$tmp"
 
-            check 4 "Shape override (app vs library)" 4 \
-                cli scan . --shape app --agent claude --format text
-
-            check 5 "Agent filter (claude only)" 4 \
+            check 4 "Agent filter (claude only)" 4 \
                 cli scan . --agent claude --format text
 
             echo ""
             printf "\033[1m  Prompts\033[0m\n"
 
-            check 6 "Fix prompt generates" 6 \
+            check 5 "Fix prompt generates" 6 \
                 cli fix . --agent claude
 
             tmp=$(mktemp -d)
             echo '{"name":"fresh","scripts":{"start":"node ."}}' > "$tmp/package.json"
-            check 7 "Setup prompt (fresh project)" 6 \
+            check 6 "Setup prompt (fresh project)" 6 \
                 cli setup "$tmp" --agent claude
             rm -r "$tmp"
 
-            check 8 "Audit prompt (read-only)" 6 \
+            check 7 "Audit prompt (read-only)" 6 \
                 cli audit . --agent claude
 
             echo ""

@@ -9,6 +9,10 @@ Paste this into your coding agent to create the `/goat-review` skill for your pr
 ```
 Create the /goat-review skill for this project.
 
+## When to Use
+
+Use when reviewing changes before they ship.
+
 Purpose: structured review of code changes with RFC 2119 severity levels
 and respect for the project's autonomy tiers. The agent gathers context,
 then reviews independently — it investigates the code, doesn't blindly
@@ -89,4 +93,8 @@ VERIFICATION:
 - Verify Step 0 context gathering is present
 - Verify RFC 2119 severity levels (MUST/SHOULD/MAY)
 - Verify DoD checklist is included
+
+## Output
+
+Structured review with findings by severity, evidence, and clear accept/request-changes/block recommendation.
 ```

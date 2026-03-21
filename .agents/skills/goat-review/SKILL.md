@@ -4,6 +4,9 @@ description: "Review changes with structured severity levels"
 ---
 # GOAT Review
 
+## When to Use
+Use when reviewing changes before they ship.
+
 Structured review of changes with RFC 2119 severity levels. The agent reviews independently — it investigates the code, doesn't blindly apply external suggestions.
 
 ---

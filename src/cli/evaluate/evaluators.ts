@@ -331,8 +331,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
   const pathMap: Record<string, boolean> = {
     'docs/footguns.md': shared.footguns.exists,
     'docs/lessons.md': shared.lessons.exists,
-    'docs/confusion-log.md': shared.confusionLog.exists,
-    'docs/architecture.md': shared.architecture.exists,
+'docs/architecture.md': shared.architecture.exists,
     'docs/guidelines-ownership-split.md': shared.guidelinesOwnership.exists,
     'docs/domain-reference.md': shared.domainReference.exists,
     'tasks/handoff-template.md': shared.handoffTemplate.exists,

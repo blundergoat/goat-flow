@@ -4,6 +4,9 @@ description: "Plan a feature with phased human gates"
 ---
 # GOAT Plan
 
+## When to Use
+Use when planning a feature or significant change.
+
 Guide the user through the full planning workflow: Feature Brief → Mob Elaboration → SBAO Ranking → Milestone Planning. Each phase produces an artifact. Each phase ends with a human gate.
 
 Read the playbook templates in `workflow/playbooks/planning/` — they are the authoritative source for each phase's format.
@@ -230,3 +233,7 @@ Break the project into milestones using these archetypes. Adapt the number to th
 - MUST reference `docs/footguns.md` and `docs/architecture.md` during planning
 - MAY skip Phase 2 + 3 for Standard features
 - MAY compress to brief only for Hotfixes
+
+## Output
+
+Feature brief (`requirements-<feature-name>.md`), optional prime plan (`TODO_<feature-name>_prime.md`), and milestone specs with tasks, exit criteria, and human testing gates.

@@ -4,6 +4,9 @@ description: "Generate testing instructions across three verification tracks"
 ---
 # GOAT Test
 
+## When to Use
+Use when generating testing instructions for changes.
+
 Generate testing instructions for three parallel verification tracks. The coding agent MUST NOT verify its own work (doer-verifier principle).
 
 Read `workflow/playbooks/testing/testing-workflow.md` for the full testing methodology.
@@ -119,3 +122,7 @@ Tell the user: "Collect findings from all three tracks. If fixes are needed, I c
 - MUST NOT produce generic templates — every item must reference actual changes
 
 **Rule:** The coding agent should never run longer than the developer is willing to test. If you're not testing, the agent shouldn't be coding.
+
+## Output
+
+Three verification tracks (automated tests, AI review prompts, human testing checklist) plus a Milestone Gate Checklist. All items reference actual changes, not generic templates.

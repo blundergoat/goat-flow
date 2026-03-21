@@ -103,8 +103,7 @@ function buildFullProject() {
     '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nexit 0\n',
     'docs/footguns.md': '# Footguns\n\n- `src/auth.ts:42` - race\n',
     'docs/lessons.md': '# Lessons\n\n### Entry 1\nStuff.\n',
-    'docs/confusion-log.md': '# Confusion\n',
-    'docs/architecture.md': '# Architecture\n\nOverview.\n',
+'docs/architecture.md': '# Architecture\n\nOverview.\n',
     'agent-evals/README.md': '# Evals\n',
     'agent-evals/eval-1.md': '# E1\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\nx\n```\n',
     'agent-evals/eval-2.md': '# E2\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\ny\n```\n',
@@ -137,7 +136,7 @@ function buildEmptyProject() {
 describe('composeFix', () => {
   it('returns zero fragments for a high-scoring project', () => {
     const fs = buildFullProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     // A well-set-up project may still have a few failures, but sections should be minimal
@@ -147,7 +146,7 @@ describe('composeFix', () => {
 
   it('returns many fragments for a minimal project', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     const totalFragments = prompt.sections.reduce((sum, s) => sum + s.fragments.length, 0);
@@ -156,14 +155,14 @@ describe('composeFix', () => {
 
   it('returns null for nonexistent agent', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'gemini');
     assert.equal(prompt, null);
   });
 
   it('sections are ordered: anti-pattern → foundation → standard → full', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     const phaseOrder = ['anti-pattern', 'foundation', 'standard', 'full'];
@@ -177,7 +176,7 @@ describe('composeFix', () => {
 
   it('preamble includes grade and percentage', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     assert.ok(prompt.preamble.includes('%'), 'Preamble should include percentage');
@@ -186,7 +185,7 @@ describe('composeFix', () => {
 
   it('fragments contain filled variables (not raw {{placeholders}})', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     for (const section of prompt.sections) {
@@ -200,7 +199,7 @@ describe('composeFix', () => {
 
   it('renders to non-empty markdown', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeFix(report, 'claude');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -215,7 +214,7 @@ describe('composeFix', () => {
 describe('composeSetup', () => {
   it('works on a project with no agents', () => {
     const fs = buildEmptyProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeSetup(report, 'claude');
     assert.ok(prompt);
     assert.equal(prompt.mode, 'setup');
@@ -224,7 +223,7 @@ describe('composeSetup', () => {
 
   it('includes all three phases', () => {
     const fs = buildEmptyProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeSetup(report, 'claude');
     assert.ok(prompt);
     const phases = prompt.sections.map(s => s.phase);
@@ -235,7 +234,7 @@ describe('composeSetup', () => {
 
   it('pre-fills stack variables from detection', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeSetup(report, 'claude');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -245,7 +244,7 @@ describe('composeSetup', () => {
 
   it('uses agent-specific paths for codex', () => {
     const fs = buildEmptyProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeSetup(report, 'codex');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -255,7 +254,7 @@ describe('composeSetup', () => {
 
   it('renders to markdown with clear section structure', () => {
     const fs = buildEmptyProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeSetup(report, 'claude');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -271,14 +270,14 @@ describe('composeSetup', () => {
 describe('composeAudit', () => {
   it('returns null for nonexistent agent', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeAudit(report, 'gemini');
     assert.equal(prompt, null);
   });
 
   it('includes score overview', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeAudit(report, 'claude');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -288,7 +287,7 @@ describe('composeAudit', () => {
 
   it('includes failed checks section', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeAudit(report, 'claude');
     assert.ok(prompt);
     assert.ok(prompt.sections.some(s => s.heading === 'Failed Checks'), 'Should have Failed Checks section');
@@ -296,7 +295,7 @@ describe('composeAudit', () => {
 
   it('includes diagnostic questions', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeAudit(report, 'claude');
     assert.ok(prompt);
     const output = renderPrompt(prompt);
@@ -306,7 +305,7 @@ describe('composeAudit', () => {
 
   it('mode is audit', () => {
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const prompt = composeAudit(report, 'claude');
     assert.ok(prompt);
     assert.equal(prompt.mode, 'audit');
@@ -321,7 +320,7 @@ describe('Variable substitution', () => {
     const result = fillTemplate('Hello {{agentName}}, your file is {{instructionFile}}', {
       agentId: 'claude', agentName: 'Claude Code', instructionFile: 'CLAUDE.md',
       settingsFile: '.claude/settings.json', skillsDir: '.claude/skills',
-      hooksDir: '.claude/hooks', shape: 'app', languages: 'typescript',
+      hooksDir: '.claude/hooks', languages: 'typescript',
       buildCommand: 'tsc', testCommand: 'vitest', lintCommand: 'eslint .',
       formatCommand: 'prettier', grade: 'B', percentage: '87',
       failedCount: '5', passedCount: '57', totalCount: '62',
@@ -334,7 +333,7 @@ describe('Variable substitution', () => {
     const { fillTemplate } = await import('../../src/cli/prompt/variables.js');
     const result = fillTemplate('{{unknown}} stays', {
       agentId: 'claude', agentName: 'Claude Code', instructionFile: 'CLAUDE.md',
-      settingsFile: '', skillsDir: '', hooksDir: '', shape: 'app',
+      settingsFile: '', skillsDir: '', hooksDir: '',
       languages: '', buildCommand: '', testCommand: '', lintCommand: '',
       formatCommand: '', grade: '', percentage: '', failedCount: '',
       passedCount: '', totalCount: '', date: '',
@@ -345,13 +344,12 @@ describe('Variable substitution', () => {
   it('extractVariables fills all fields from scan report', async () => {
     const { extractVariables } = await import('../../src/cli/prompt/variables.js');
     const fs = buildMinimalProject();
-    const report = scan(fs, '/test', { shapeOverride: null, agentFilter: null });
+    const report = scan(fs, '/test', { agentFilter: null });
     const vars = extractVariables(report, report.agents[0]);
 
     assert.equal(vars.agentId, 'claude');
     assert.equal(vars.instructionFile, 'CLAUDE.md');
     assert.equal(vars.skillsDir, '.claude/skills');
-    assert.ok(vars.shape.length > 0, 'shape should be filled');
     assert.ok(vars.grade.length > 0, 'grade should be filled');
     assert.ok(vars.percentage.length > 0, 'percentage should be filled');
   });
