@@ -62,7 +62,7 @@ GOOD: Keep the current shape. Extract only when the second case exists
 - Adding, removing, or renaming files
 - Changes spanning 3+ docs/scripts
 - Edits to `.claude/` or other Claude-specific runtime files
-**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it.
+**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`).
 ## Definition of Done
 MUST confirm all 6 gates:
 1. `bash scripts/preflight-checks.sh` passes
@@ -94,8 +94,10 @@ Ask one question with a recommended default and exact file boundary.
 | Preflight playbook | `docs/codex-playbooks/goat-preflight.md` |
 | Debug playbook | `docs/codex-playbooks/goat-debug.md` |
 | Audit playbook | `docs/codex-playbooks/goat-audit.md` |
-| Research playbook | `docs/codex-playbooks/goat-investigate.md` |
+| Investigate playbook | `docs/codex-playbooks/goat-investigate.md` |
 | Review playbook | `docs/codex-playbooks/goat-review.md` |
+| Plan playbook | `docs/codex-playbooks/goat-plan.md` |
+| Test playbook | `docs/codex-playbooks/goat-test.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Confusion log | `docs/confusion-log.md` |

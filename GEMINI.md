@@ -58,7 +58,7 @@ Reference all 4: docs/lessons.md, docs/footguns.md, docs/confusion-log.md, docs/
 
 Boundaries: `docs/system-spec.md`, `docs/system/`, `setup/`, `workflow/skills/`, `docs/reference/design-rationale.md`, renaming/moving files, 3+ doc file changes.
 
-**Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config.
+**Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
 
 ## Definition of Done
 

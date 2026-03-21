@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: runs after every Claude turn.
+# AfterAgent hook: runs after every agent turn.
 # MUST exit 0 even on errors (non-zero causes infinite loops).
 # Errors go to stderr as informational feedback.
 

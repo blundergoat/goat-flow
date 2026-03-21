@@ -115,12 +115,12 @@ You don't have to do everything. Pick your tier:
 - **First-pass CLAUDE.md is usually over target.** Budget a compression pass. The plan has a cut priority list -- essential commands go first, execution loop never gets cut.
   - Fix: Apply the cut priority list from the system spec. Cut verbose examples first, then explanatory paragraphs, then duplicated content. Never cut execution loop, autonomy tiers, or DoD.
 - **Hooks must use absolute paths.** All hook commands use `git rev-parse --show-toplevel`. Relative paths break when the working directory changes.
-- **Stop hooks must exit 0.** Even when they find errors. Non-zero exit codes trap Claude in infinite fix loops.
+- **Post-turn hooks must exit 0.** Even when they find errors. Non-zero exit codes trap the agent in infinite fix loops.
   - Fix: Verify the hook exits 0 even on errors. Add the infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
 - **Secret scanning is manual.** The `gitleaks` setup requires `git config --global` which affects all repos. Do it yourself, don't let Claude Code do it. Document it in README, not CLAUDE.md.
 - **Pre-existing footguns don't need replacement.** If docs/footguns.md already exists with real entries, the implementation should merge, not replace. Some projects need zero new footguns -- that's fine.
 - **Pre-existing hooks need migration.** If .claude/settings.json already has inline hook commands, migrate them to external scripts under .claude/hooks/ during Phase 1c.
-- **Skip PostToolUse if no formatter.** Shell scripts, for example, have no standard formatter. Don't create a format hook that re-runs the linter.
+- **Skip post-tool hook if no formatter.** Shell scripts, for example, have no standard formatter. Don't create a format hook that re-runs the linter.
 - **Dual-agent repos need coordination.** If you run both Claude Code and Codex implementations on the same project, they share docs/footguns.md and docs/lessons.md. Changes by one agent affect the other. Run Claude Code first (it creates the shared docs), then Codex (it merges with existing files).
 
 ## File Reference

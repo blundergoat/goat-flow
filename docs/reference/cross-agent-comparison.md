@@ -24,7 +24,7 @@ On the shell script collection, both agents found the same 5 qualifying incident
 | Stop hooks (lint after every turn) | Preflight script, run manually or in CI | Claude Code catches formatting issues continuously. Codex catches them at checkpoints. |
 | PostToolUse hooks (auto-format) | Nothing -- manual or preflight | No auto-formatting on edit. Skip if no formatter configured. |
 | Local CLAUDE.md (directory auto-load) | Centralised footguns.md + router references | Claude Code loads warnings automatically when entering a directory. Codex requires the agent to check the router table. |
-| Slash commands (/goat-preflight, /goat-debug) | Playbook files in `docs/codex-playbooks/` | Same content, different loading mechanism. 5 playbooks mapped to 5 skills on the shell script collection. |
+| Slash commands (/goat-preflight, /goat-debug, etc.) | Playbook files in `docs/codex-playbooks/` | Same content, different loading mechanism. 7 playbooks mapped to 7 skills. |
 | Permission profiles (.claude/profiles/) | Behavioural guidance in AGENTS.md only | No tool-level scoping. |
 | Permissions deny (settings.json) | AGENTS.md Never rules + deny-dangerous script + CI | No pre-execution blocking. Three layers of documentation vs one layer of enforcement. |
 | /compact, /insights | No equivalent | Codex context is per-task, not per-session. No session management needed -- but no session learning either. |

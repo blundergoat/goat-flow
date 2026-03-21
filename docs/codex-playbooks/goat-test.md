@@ -1,13 +1,8 @@
----
-description: "Generate testing instructions across three verification tracks"
----
-# /goat-test
-
-Generate testing instructions for three parallel verification tracks. The coding agent MUST NOT verify its own work.
+# GOAT Test
 
 ## When to Use
 
-After a coding milestone or every 30-60 minutes of agent work. Produces instructions — does NOT execute tests.
+After a coding milestone or every 30-60 minutes of agent work. Produces testing instructions — does NOT execute tests. The coding agent MUST NOT verify its own work (doer-verifier principle).
 
 ## Process
 
@@ -46,3 +41,23 @@ Generate numbered steps the developer follows:
 - MUST NOT run tests itself (generates instructions only)
 - MUST NOT verify its own work (doer-verifier principle)
 - MUST reference docs/footguns.md for known landmines in changed areas
+
+## Output
+
+```md
+## Test Instructions: [milestone/change]
+
+### Track 1 — Automated
+1. `[command]` — validates: [what]
+2. `[command]` — validates: [what]
+
+### Track 2 — AI Verification
+**Paste into a fresh agent session:**
+> [pre-filled functional test prompt]
+
+> [pre-filled code review prompt]
+
+### Track 3 — Human Testing
+1. [what to test] — look for: [what good looks like]
+2. [what to test] — look for: [what good looks like]
+```

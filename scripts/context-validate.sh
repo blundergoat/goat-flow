@@ -73,8 +73,10 @@ required_playbooks=(
     "docs/codex-playbooks/goat-preflight.md"
     "docs/codex-playbooks/goat-debug.md"
     "docs/codex-playbooks/goat-audit.md"
-    "docs/codex-playbooks/goat-research.md"
+    "docs/codex-playbooks/goat-investigate.md"
     "docs/codex-playbooks/goat-review.md"
+    "docs/codex-playbooks/goat-plan.md"
+    "docs/codex-playbooks/goat-test.md"
 )
 
 for playbook in "${required_playbooks[@]}"; do
@@ -83,11 +85,17 @@ for playbook in "${required_playbooks[@]}"; do
     grep -q '^## Process' "$playbook" || fail "Missing '## Process' in $playbook"
     grep -q '^## Output' "$playbook" || fail "Missing '## Output' in $playbook"
 done
-info "All 5 Codex playbooks exist with required sections"
+info "All 7 Codex playbooks exist with required sections"
 
-[[ -d codex-evals ]] || fail "Missing codex-evals/"
-[[ -f codex-evals/README.md ]] || fail "Missing codex-evals/README.md"
-info "Codex eval directory exists"
+if [[ -d agent-evals ]]; then
+    [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"
+    info "Agent eval directory exists (agent-evals/)"
+elif [[ -d codex-evals ]]; then
+    [[ -f codex-evals/README.md ]] || fail "Missing codex-evals/README.md"
+    info "Codex eval directory exists (codex-evals/)"
+else
+    fail "Missing eval directory (agent-evals/ or codex-evals/)"
+fi
 
 if grep -qi 'none confirmed yet' docs/footguns.md; then
     info "docs/footguns.md explicitly states no confirmed footguns yet"

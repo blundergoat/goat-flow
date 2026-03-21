@@ -1,3 +1,6 @@
+---
+description: "Review changes with structured severity levels"
+---
 # /goat-review
 
 Structured code review of changes before merging.

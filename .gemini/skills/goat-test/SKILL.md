@@ -1,3 +1,6 @@
+---
+description: "Generate testing instructions across three verification tracks"
+---
 # /goat-test
 
 Generate testing instructions for three parallel verification tracks. The coding agent MUST NOT verify its own work.

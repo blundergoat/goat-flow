@@ -1,3 +1,6 @@
+---
+description: "Plan a feature with phased human gates"
+---
 # /goat-plan
 
 4-phase planning workflow with human gates between each phase.

@@ -46,8 +46,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **Working memory** | Escalation ladder for long tasks: scratchpad → handoff file → ask human. |
 
 **Enforcement:** Three layers protect the Runtime rules:
-1. **Permissions deny list** (`.claude/settings.json`) - hardest enforcement, blocks commands before they run
-2. **Hooks** (`.claude/hooks/`) - PreToolUse deny-dangerous, Stop lint, PostToolUse format
+1. **Permissions deny list** (`settings.json` in `.claude/` or `.gemini/`) - hardest enforcement, blocks commands before they run
+2. **Hooks** (`.claude/hooks/` or `.gemini/hooks/`) - pre-tool deny-dangerous, post-turn lint, post-tool format
 3. **Instruction file rules** - behavioural guidance the agent follows (softest layer, ~70% compliance)
 
 **This folder:** `workflow/runtime/`
@@ -79,7 +79,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
-**The five skills:**
+**The seven skills:**
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
@@ -88,6 +88,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 | `/goat-audit` | Codebase quality review on demand or before major changes | Findings ranked by severity |
 | `/goat-investigate` | Deep investigation of unfamiliar areas or domains | Research summary with sources |
 | `/goat-review` | Structured review of changes before merging | Findings ranked by severity |
+| `/goat-plan` | Feature planning with phased human gates | Plan with milestones |
+| `/goat-test` | Generate testing instructions across three verification tracks | Test instructions (automated, AI, human) |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
@@ -98,6 +100,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 | Agent | Path |
 |-------|------|
 | Claude Code | `.claude/skills/{name}/SKILL.md` |
+| Gemini CLI | `.gemini/skills/{name}/SKILL.md` |
 | Codex | `docs/codex-playbooks/{name}.md` |
 
 **This folder:** `workflow/skills/`
@@ -138,7 +141,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **CI context validation** | Automated checks: instruction file line count, router reference resolution, skill completeness | On every PR |
 | **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed), `docs/confusion-log.md` (where the agent got confused) | Updated after every task |
 
-**Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), `.claude/profiles/` (create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
+**Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), agent profiles directory (e.g., `.claude/profiles/` or `.gemini/profiles/`, create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
 
 **The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers - automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
 
@@ -170,7 +173,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 |-------|---------------|--------|
 | Phase 0 (bootstrap) | Minimal CLAUDE.md + deny-dangerous hook + settings.json | Layer 1 (minimal) |
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
-| Phase 1b | Skills: /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review | Layer 3 |
+| Phase 1b | Skills: /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, permission profiles, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
 
@@ -201,7 +204,7 @@ The system adapts to three project shapes. The layers stay the same - only the c
 |--------|-----|---------|-------------------|
 | Layer 1 line target | ~120 | ~120 | ~120 |
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
-| Layer 3 skills | All 5 | All 5 | All 5 |
+| Layer 3 skills | All 7 | All 7 | All 7 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
 | Layer 5 confusion-log | Yes | Yes | Yes |
 
@@ -214,13 +217,13 @@ GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-a
 | Concept | Claude Code | Codex | Cursor | Copilot | Gemini CLI |
 |---------|------------|-------|--------|---------|------------|
 | Instruction file | CLAUDE.md | AGENTS.md | .cursor/rules/ | .github/copilot-instructions.md | GEMINI.md |
-| Skills/playbooks | .claude/skills/ | docs/codex-playbooks/ | .cursor/rules/*.mdc | Agent skills | Skills |
-| Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | Policy engine |
+| Skills/playbooks | .claude/skills/ | docs/codex-playbooks/ | .cursor/rules/*.mdc | Agent skills | .gemini/skills/ |
+| Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | .gemini/hooks/ + settings.json |
 | Domain instructions | .github/instructions/ | .github/instructions/ | .cursor/rules/ | .github/instructions/ | .github/instructions/ |
 | Evals | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
-| Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | Policy rules |
+| Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | permissions.deny array |
 
-Setup guides: see setup/setup-claude.md and setup/setup-codex.md. Other agents can follow the Claude Code guide and adapt file paths from the table above.
+Setup guides: see `setup/setup-claude.md`, `setup/setup-gemini.md`, and `setup/setup-codex.md`.
 
 ---
 

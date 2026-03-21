@@ -10,7 +10,7 @@
     ]
   },
   "hooks": {
-    "PreToolUse": [
+    "BeforeTool": [
       {
         "matcher": "Bash",
         "hooks": [
@@ -21,7 +21,7 @@
         ]
       }
     ],
-    "Stop": [
+    "AfterAgent": [
       {
         "matcher": "",
         "hooks": [

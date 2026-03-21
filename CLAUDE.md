@@ -81,7 +81,7 @@ Boundaries:
 - Adding, removing, or renaming any file (breaks cross-references)
 - Changes spanning 3+ documentation files
 
-**Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push. Commit unless asked. Invent hypothetical examples
+**Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push. Commit unless asked. Invent hypothetical examples. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
 
 ## Definition of Done
 

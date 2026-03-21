@@ -63,3 +63,61 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 - `.claude/settings.local.json:28` → references `//home/devgoat/projects/ai-workflow-framework/**`
 
 **Prevention:** After any project-level rename, run `grep -r "old-name" --include="*.md" --include="*.json"` across the entire repo.
+
+## Footgun: Agent rewrites shared docs with agent-specific vocabulary
+
+**Symptoms:** Shared documentation files (`docs/`, `workflow/`) contain references to only one agent's hook names, paths, or terminology. Other agents reading these docs get incorrect instructions. Tables lose rows for other agents.
+
+**Why it happens:** When an agent is asked to set up or update its platform support, it replaces existing references wholesale instead of adding multi-agent support. The agent treats the task as find-and-replace: `.claude/` → `.gemini/`, `PreToolUse` → `BeforeTool`, "Every Claude turn" → "Every Gemini turn". It does not distinguish between agent-specific files (`setup/setup-gemini.md`) and shared files (`docs/system-spec.md`).
+
+**Evidence:**
+- `docs/system-spec.md:429` → "Every Gemini turn" replaced "Every Claude turn" (should be agent-neutral)
+- `docs/system/five-layers.md:100` → Claude Code row deleted from skills table, replaced with Gemini CLI only
+- `docs/system/five-layers.md:49-50` → `.gemini/settings.json` replaced `.claude/` equivalents
+- `docs/system/six-steps.md:182` → Claude Code hook example replaced with Gemini, not added alongside
+- `workflow/runtime/enforcement.md` → all `.claude/` paths replaced with `.gemini/`, creating hybrid state
+
+**Prevention:**
+- Agent-specific files (`setup/setup-*.md`, `.claude/`, `.gemini/`) — edits fine
+- Shared docs (`docs/`, `workflow/`) — MUST remain agent-neutral or list all agents
+- When adding agent support: ADD to tables and examples, never DELETE or REPLACE existing agent references
+- Setup prompts MUST include explicit scope constraints: "Do NOT modify files outside `.gemini/` and `GEMINI.md`"
+
+**Created:** 2026-03-21
+
+## Footgun: Multi-agent setup files share structure but not vocabulary
+
+**Symptoms:** Gemini CLI rejects hook event names with "Invalid hook event name" warnings. Hooks silently don't run. Users get a working `.claude/` setup but broken `.gemini/` setup from the same instructions.
+
+**Why it happens:** `setup/setup-gemini.md` was derived from `setup/setup-claude.md` by substituting paths (`.claude/` → `.gemini/`, `CLAUDE.md` → `GEMINI.md`) but CLI-specific vocabulary wasn't translated. Each CLI uses different hook event names:
+- Claude Code: `PreToolUse`, `PostToolUse`, `Stop`
+- Gemini CLI: `BeforeTool`, `AfterTool`, `AfterAgent`, `SessionEnd`
+
+Hook script comments also carried over Claude-specific language ("runs after every Claude turn").
+
+**Evidence:**
+- `setup/setup-gemini.md:188-193` → now has Gemini CLI event reference block (fix applied 2026-03-21)
+- `.gemini/hooks/deny-dangerous.sh:2` → updated to "BeforeTool hook" (fixed 2026-03-21)
+- `.gemini/hooks/stop-lint.sh:2` → updated to "AfterAgent hook" (fixed 2026-03-21)
+- `.gemini/settings.json:14,25` → updated to `BeforeTool` and `AfterAgent` event names (fixed 2026-03-21)
+
+**Prevention:** When creating or updating a setup file for a new CLI, diff it against the source file and check every CLI-specific term — not just paths. Maintain the event name reference block at the top of each CLI's Phase 1c section.
+
+**Created:** 2026-03-21
+
+## Footgun: mv/cp/Write overwrites existing files without checking
+
+**Symptoms:** A file that existed at the destination path is silently overwritten and its content is permanently lost. Especially dangerous for untracked files that have no git recovery path.
+
+**Why it happens:** `mv src dest` and `cp src dest` overwrite `dest` without warning if it already exists. The Write tool does the same. Agents treat rename/move as a single command without checking the destination. If the user then asks to "undo", the agent moves the overwritten content back to the source path — destroying the original destination content entirely.
+
+**Evidence:**
+- `docs/roadmaps/TODO_improvements_v0.4.md` → overwritten by `mv TODO_improvements_v0.3.md TODO_improvements_v0.4.md` (2026-03-21). The file was untracked and unrecoverable through git. Required extraction from Claude conversation logs to partially recover.
+
+**Prevention:**
+- Before ANY `mv`, `cp`, or Write to an existing path: run `ls` on the destination first
+- If the destination exists, STOP and ask the user before proceeding
+- For `mv`: use `mv -n` (no-clobber) instead of bare `mv`
+- This is a Never-tier rule — overwriting a file the user didn't ask to overwrite is data destruction
+
+**Created:** 2026-03-21

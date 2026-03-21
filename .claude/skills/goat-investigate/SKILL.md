@@ -1,3 +1,6 @@
+---
+description: "Investigate a codebase area and report findings"
+---
 # /goat-investigate
 
 Deep investigation producing a structured investigation document. No planning until human reviews.

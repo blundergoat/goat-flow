@@ -1,3 +1,6 @@
+---
+description: "Run preflight checks before starting or finishing work"
+---
 # /goat-preflight
 
 Mechanical verification before starting any task or declaring a task complete.

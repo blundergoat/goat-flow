@@ -1,3 +1,6 @@
+---
+description: "Run a multi-pass quality audit on the codebase"
+---
 # /goat-audit
 
 Systematic 4-pass codebase quality review.

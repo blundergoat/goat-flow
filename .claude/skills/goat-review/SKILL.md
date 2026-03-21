@@ -1,3 +1,6 @@
+---
+description: "Review changes with structured severity levels"
+---
 # /goat-review
 
 Structured review of changes with RFC 2119 severity levels.

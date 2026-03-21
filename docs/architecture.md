@@ -9,7 +9,7 @@ A documentation framework that provides structured AI coding agent workflows. No
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Core docs | `docs/` | System spec, architecture descriptions, design rationale, examples |
-| Setup prompts | `setup/` | Agent-specific setup instructions users paste into Claude Code or Codex |
+| Setup prompts | `setup/` | Agent-specific setup instructions for Claude Code, Gemini CLI, or Codex |
 | Shared setup | `setup/shared/` | Cross-agent setup fragments (execution loop, docs seed, Phase 2) |
 | Skill templates | `workflow/skills/` | Reference prompts for creating the 7 goat-* skills |
 | Playbook templates | `workflow/playbooks/` | Planning (feature brief → SBAO) and testing methodology |
@@ -22,7 +22,7 @@ A documentation framework that provides structured AI coding agent workflows. No
 
 ```
 User reads docs/getting-started.md
-  → Chooses agent (setup/setup-claude.md or setup/setup-codex.md)
+  → Chooses agent (setup/setup-claude.md, setup/setup-gemini.md, or setup/setup-codex.md)
   → Pastes Phase 0/1a/1b/1c/2 prompts into their agent
   → Agent reads docs/system-spec.md (canonical reference)
   → Agent generates project-specific files (CLAUDE.md, hooks, skills, etc.)

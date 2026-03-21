@@ -48,6 +48,9 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      current file before appending to avoid duplicating entries.
 
 c) Autonomy Tiers: Always / Ask First / Never
+   - Never tier MUST include: overwrite existing files without checking
+     destination (ls before mv/cp/Write; use mv -n). Data destruction
+     from blind overwrites is unrecoverable for untracked files.
    - Adapt Ask First boundaries for THIS project's specific risks
    - Include micro-checklist for Ask First items. MUST include:
      1. Boundary touched: [name it]

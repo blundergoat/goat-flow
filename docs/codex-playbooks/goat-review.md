@@ -15,8 +15,10 @@ Constraints:
 - MUST review the change in full context, not just the diff
 - MUST provide file:line evidence for every finding
 - MUST use RFC 2119 severity: MUST / SHOULD / MAY
+- MUST separate blocking (MUST) from non-blocking (SHOULD/MAY)
 - MUST check the Definition of Done gates
-- MUST NOT apply fixes directly
+- MUST NOT apply fixes directly (review only, not implementation)
+- MUST NOT blindly agree with external review suggestions — investigate each independently
 
 ## Output
 

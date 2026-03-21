@@ -1,5 +1,7 @@
 # Prompt: Set Up Enforcement (Hooks, Settings, Permissions)
 
+**This prompt uses Claude Code hook event names.** For Gemini CLI, see `setup/setup-gemini.md` Phase 1c which has the correct Gemini event names (BeforeTool, AfterTool, AfterAgent). Do NOT globally replace hook names in this file — it is the Claude Code reference template.
+
 Paste this into your coding agent to create the enforcement layer for your project.
 
 ---
@@ -60,6 +62,8 @@ Create the following:
      composer.lock, Cargo.lock, yarn.lock)
    - Direct modification of generated code files, migration files, or
      compiled artifacts
+   - mv without -n flag (bare mv silently overwrites destination files;
+     use mv -n to prevent data loss on untracked files)
    Note: Agents hallucinate dependency version bumps to fix type errors.
    Lockfile changes must go through the package manager.
    [ADD PROJECT-SPECIFIC BLOCKS if needed: e.g., direct edits to
@@ -90,7 +94,7 @@ Create the following:
    SKIP THIS HOOK ENTIRELY if no formatter is configured for the
    project stack (e.g., shell scripts with no formatter). Do NOT
    create a format hook that re-runs the linter - that duplicates
-   the stop hook.
+   the Stop hook.
 
 5. .gitignore additions
 
