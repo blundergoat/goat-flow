@@ -159,14 +159,18 @@ Do NOT proceed to Phase 1b until all gates pass.
 ```
 Read docs/system-spec.md and the GEMINI.md created in Phase 1a.
 
-SCOPE: Only create/modify files under .gemini/skills/. Do NOT modify
+SCOPE: Only create/modify files under .agents/skills/. Do NOT modify
 docs/, workflow/, or any shared documentation.
 
 PRE-EXISTING SKILLS:
-If skills already exist in .gemini/skills/, do NOT delete them.
+If skills already exist in .agents/skills/, do NOT delete them.
 Review and update-and-extend, not replace.
 
-Create these 7 skills under .gemini/skills/:
+Note: skills use YAML frontmatter with `name` and `description` fields.
+Read the detailed skill templates in workflow/skills/goat-*.md for each
+skill's full specification.
+
+Create these 7 skills under .agents/skills/:
 
 1. goat-preflight/SKILL.md - RFC 2119 constraints. MUST run build/lint.
    SHOULD run formatter, full test suite. MAY skip formatter when debugging.

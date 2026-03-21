@@ -77,7 +77,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .gemini/skills/, .agents/skills/)
+     - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
      - Learning loop files (footguns, lessons, confusion-log)
      - Architecture doc, handoff template, agent evals
      - Any playbooks, profiles, or domain docs relevant to project

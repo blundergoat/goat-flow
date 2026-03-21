@@ -25,19 +25,20 @@ Multi-agent alignment release. Fix Gemini CLI hook configuration, make shared do
 - `docs/reference/design-rationale.md`: agent-neutral diagram and dual-agent hook section headers
 - `workflow/runtime/enforcement.md`: reverted to Claude Code template + header warning against global replacement
 
-### Codex Skills Migration
+### Unified Skills Architecture (.agents/skills/)
 
-- Migrated Codex skills from `docs/codex-playbooks/` to `.agents/skills/goat-*/SKILL.md` (Codex CLI runtime discovery)
-- Deleted `docs/codex-playbooks/` — single source of truth is now `.agents/skills/`
-- Created `goat-plan` and `goat-test` skills (full parity with Claude's 7 skills)
+- `.agents/skills/` is now the single source of truth for both Codex and Gemini CLI skills
+- Created 7 skills with YAML frontmatter (name + description): preflight, debug, audit, investigate, review, plan, test
+- Deleted `docs/codex-playbooks/` (migrated to `.agents/skills/`)
+- Deleted `.gemini/skills/` (redundant — Gemini CLI discovers `.agents/skills/` with higher precedence)
+- Created `goat-plan` and `goat-test` (full parity with Claude's 7 skills)
 - Renamed `goat-research` → `goat-investigate` with strengthened constraints and output template
 - Strengthened `goat-debug`, `goat-audit`, `goat-review` with missing constraints from Claude equivalents
-- Added YAML frontmatter (name + description) to all 7 Codex skill files
-- Updated `AGENTS.md` router table to point to `.agents/skills/`
+- Updated `AGENTS.md` and `GEMINI.md` router tables to point to `.agents/skills/`
 - Updated `scripts/context-validate.sh`: validates 7 skills at `.agents/skills/`, checks frontmatter, accepts `agent-evals/`
-- Updated `setup/setup-codex.md`: instructs creation of `.agents/skills/` with frontmatter, references `workflow/skills/` templates
+- Updated `setup/setup-codex.md` and `setup/setup-gemini.md`: both instruct creation of `.agents/skills/` with frontmatter, reference `workflow/skills/` templates
 - Updated all "5 skills" references to "7 skills" across system-spec, five-layers, design-rationale, cross-agent-comparison
-- Updated all `docs/codex-playbooks/` references to `.agents/skills/` in live docs (setup/README, skills.md, five-layers, execution-loop, workflow templates, agent evals)
+- Updated all stale path references (`docs/codex-playbooks/`, `.gemini/skills/`) to `.agents/skills/` in live docs
 
 ### File Overwrite Protection
 
@@ -48,8 +49,12 @@ Multi-agent alignment release. Fix Gemini CLI hook configuration, make shared do
 
 ### Skill Descriptions
 
-- Added YAML frontmatter descriptions to all 21 skill files (7 Claude + 7 Gemini + 7 Codex)
-- Fixed stale `goat-research` heading in `.gemini/skills/goat-investigate/SKILL.md`
+- Added YAML frontmatter descriptions to all 14 skill files (7 Claude + 7 shared .agents/)
+- Fixed stale `goat-research` heading in Gemini investigate skill
+
+### Housekeeping
+
+- `tasks/.gitignore`: ignore everything except `handoff-template.md` (prevents scratch files from being committed)
 
 ### Incident Logging
 

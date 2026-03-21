@@ -1,3 +1,4 @@
-# Runtime working files — not committed
-todo.md
-handoff.md
+# Ignore everything in tasks/ except the template
+*
+!.gitignore
+!handoff-template.md

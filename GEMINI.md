@@ -75,9 +75,9 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 
 | Target | Path |
 |--------|------|
-| **Skills** | `.gemini/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
+| **Skills** | `.agents/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
 | **Playbooks** | `workflow/playbooks/` |
-| **Learning** | `docs/{lessons,footguns,confusion-log,decisions/}.md` |
+| **Learning** | `docs/{lessons,footguns,confusion-log}.md`, `docs/decisions/` |
 | **Architecture** | `docs/architecture.md` |
 | **Handoff** | `tasks/handoff-template.md` |
 | **Evals** | `agent-evals/` |

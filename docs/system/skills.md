@@ -112,7 +112,7 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 |-------|------|
 | Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
-| Gemini CLI | `.gemini/skills/goat-{name}/SKILL.md` |
+| Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
 
 Skills are created during Phase 1b of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them.
 
