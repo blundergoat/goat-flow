@@ -142,6 +142,8 @@ architecture: { exists: boolean; lineCount: number };
   gitignore: { exists: boolean; hasRequiredEntries: boolean };
   guidelinesOwnership: { exists: boolean };
   domainReference: { exists: boolean };
+  preflightScript: { exists: boolean };
+  changelog: { exists: boolean };
 }
 
 export interface AgentFacts {
@@ -263,7 +265,7 @@ export interface ReadonlyFS {
 
 export interface CLIOptions {
   projectPath: string;
-  format: 'json' | 'text' | 'markdown';
+  format: 'json' | 'text';
   agent: AgentId | null;
   verbose: boolean;
   minScore: number | null;

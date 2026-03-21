@@ -82,5 +82,7 @@ architecture: { exists: archExists, lineCount: archLineCount },
     gitignore: { exists: gitignoreExists, hasRequiredEntries },
     guidelinesOwnership: { exists: fs.exists('docs/guidelines-ownership-split.md') },
     domainReference: { exists: fs.exists('docs/domain-reference.md') },
+    preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
+    changelog: { exists: fs.exists('CHANGELOG.md') },
   };
 }

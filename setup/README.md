@@ -8,7 +8,7 @@ Pick your agent and follow the setup guide.
 | **Gemini CLI** | [setup-gemini.md](setup-gemini.md) | GEMINI.md, .gemini/hooks/, .agents/skills/, .gemini/settings.json |
 | **Codex** | [setup-codex.md](setup-codex.md) | AGENTS.md, .agents/skills/, scripts/ |
 
-Both agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks/handoff-template.md, .github/instructions/
+All agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks/handoff-template.md, .github/instructions/
 
 ## Before you start
 

@@ -71,7 +71,13 @@ check() {
 
     output=$("$@" 2>&1) || exit_code=$?
 
-    if [[ -n "$output" ]]; then
+    # Fail if: no output, non-zero exit, or output starts with error markers
+    local is_error=0
+    [[ -z "$output" ]] && is_error=1
+    [[ "$exit_code" -ne 0 ]] && is_error=1
+    echo "$output" | head -1 | grep -qiE '^(fatal error|error:|unknown)' && is_error=1
+
+    if [[ "$is_error" -eq 0 ]]; then
         printf "  \033[32m✓\033[0m %s. %s\n" "$num" "$name"
         if [[ "$preview_lines" -gt 0 ]]; then
             head -"$preview_lines" <<< "$output" | sed 's/^/    /'
@@ -83,7 +89,10 @@ check() {
         fi
         passed=$((passed + 1))
     else
-        printf "  \033[31m✗\033[0m %s. %s (exit %d, no output)\n" "$num" "$name" "$exit_code"
+        printf "  \033[31m✗\033[0m %s. %s (exit %d)\n" "$num" "$name" "$exit_code"
+        if [[ -n "$output" ]]; then
+            head -3 <<< "$output" | sed 's/^/    /'
+        fi
         failed=$((failed + 1))
     fi
 }

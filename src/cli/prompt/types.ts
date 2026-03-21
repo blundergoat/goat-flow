@@ -3,15 +3,17 @@ import type { AgentId, Tier } from '../types.js';
 export type PromptMode = 'fix' | 'setup' | 'audit';
 export type FragmentPhase = Tier | 'anti-pattern';
 
+export type FragmentKind = 'create' | 'fix';
+
 export interface Fragment {
   /** Must match a CheckDef.recommendationKey or AntiPatternDef.recommendationKey */
   key: string;
   phase: FragmentPhase;
   category: string;
+  /** 'create' = setup instruction, 'fix' = repair existing. Setup mode only emits 'create'. */
+  kind: FragmentKind;
   /** Markdown instruction for the agent to execute */
   instruction: string;
-  /** Keys of fragments that should come before this one */
-  dependsOn?: string[];
   /** Agent-specific instruction overrides (replaces `instruction` for that agent) */
   agentOverrides?: Partial<Record<AgentId, string>>;
 }

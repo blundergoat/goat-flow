@@ -54,19 +54,13 @@ describe('Fragment registry', () => {
     }
   });
 
-  it('dependsOn references exist', () => {
-    const allKeys = new Set(getFragmentKeys());
-    const broken: string[] = [];
+  it('every fragment has a valid kind', () => {
     for (const fragment of getAllFragments()) {
-      if (fragment.dependsOn) {
-        for (const dep of fragment.dependsOn) {
-          if (!allKeys.has(dep)) {
-            broken.push(`${fragment.key} depends on '${dep}' which doesn't exist`);
-          }
-        }
-      }
+      assert.ok(
+        fragment.kind === 'create' || fragment.kind === 'fix',
+        `Fragment '${fragment.key}' has invalid kind '${fragment.kind}'`,
+      );
     }
-    assert.equal(broken.length, 0, `Broken dependencies:\n  ${broken.join('\n  ')}`);
   });
 
   it('getFragment returns correct fragment', () => {

@@ -8,6 +8,7 @@ export const antiPatternFragments: Fragment[] = [
     key: 'ap-compress-instruction-file',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `**CRITICAL:** \`{{instructionFile}}\` is over 150 lines (hard limit). This is an anti-pattern that costs -3 points.
 
 Immediate actions:
@@ -22,6 +23,7 @@ Target: under 120 lines. Hard limit: 150.`,
     key: 'ap-fix-skill-names',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `Skills without the \`goat-\` prefix conflict with potential built-in commands. Rename:
 
 1. Find skills in \`{{skillsDir}}/\` that don't start with \`goat-\`
@@ -33,6 +35,7 @@ Target: under 120 lines. Hard limit: 150.`,
     key: 'ap-fix-dod-overlap',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `Definition of Done appears in both the instruction file and a guidelines file. This causes confusion about which is authoritative.
 
 Remove the DoD from the guidelines file. The DoD belongs only in \`{{instructionFile}}\`.`,
@@ -41,6 +44,7 @@ Remove the DoD from the guidelines file. The DoD belongs only in \`{{instruction
     key: 'ap-add-footgun-evidence',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `**CRITICAL:** \`docs/footguns.md\` has entries without file:line evidence. This is an anti-pattern that costs -5 points.
 
 For every footgun entry, add at least one \`file:line\` reference:
@@ -54,6 +58,7 @@ If the evidence no longer applies (code changed), either update the reference or
     key: 'ap-fix-settings-json',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `**CRITICAL:** \`{{settingsFile}}\` is invalid JSON. This is an anti-pattern that costs -5 points.
 
 1. Open the file and find the syntax error
@@ -64,6 +69,7 @@ If the evidence no longer applies (code changed), either update the reference or
     key: 'ap-fix-hook-exit',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `**CRITICAL:** The post-turn hook (stop-lint.sh) does not end with \`exit 0\`. Non-zero exit causes infinite retry loops. This costs -5 points.
 
 Fix: ensure the last line of the script is \`exit 0\`. If the script has conditional exits, ensure ALL code paths reach \`exit 0\`.`,
@@ -72,6 +78,7 @@ Fix: ensure the last line of the script is \`exit 0\`. If the script has conditi
     key: 'ap-compress-local-files',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `Local instruction files are over 20 lines. Compress each one:
 
 1. Keep only directory-specific context (3-5 lines of gotchas)
@@ -82,6 +89,7 @@ Fix: ensure the last line of the script is \`exit 0\`. If the script has conditi
     key: 'ap-fix-generic-ask-first',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `The Ask First section contains generic template text like "auth, routing, deployment, API, DB". This is an anti-pattern that costs -2 points.
 
 Replace with project-specific boundaries using actual file paths:
@@ -96,6 +104,7 @@ Replace with project-specific boundaries using actual file paths:
     key: 'ap-gitignore-settings-local',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
+    kind: 'fix',
     instruction: `\`settings.local.json\` should be in \`.gitignore\` to prevent committing personal settings.
 
 Add to \`.gitignore\`:

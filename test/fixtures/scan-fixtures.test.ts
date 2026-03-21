@@ -502,10 +502,9 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     }
   });
 
-  it('no local context = N/A for local context checks', () => {
+  it('no local context checks in rubric', () => {
     const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Context');
-    const naLocal = localChecks.filter(c => c.status === 'na');
-    assert.ok(naLocal.length >= 1, `Expected at least 1 N/A local context check, got ${naLocal.length}`);
+    assert.equal(localChecks.length, 0, 'Local context checks were removed from rubric');
   });
 });
 

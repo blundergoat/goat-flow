@@ -10,12 +10,14 @@ export const fullFragments: Fragment[] = [
     key: 'create-evals-dir',
     phase: 'full',
     category: 'Agent Evals',
+    kind: 'create',
     instruction: `Create the \`agent-evals/\` directory for agent evaluation scenarios.`,
   },
   {
     key: 'create-evals-readme',
     phase: 'full',
     category: 'Agent Evals',
+    kind: 'create',
     instruction: `Create \`agent-evals/README.md\`:
 
 \`\`\`markdown
@@ -34,12 +36,12 @@ Each eval file contains:
 
 Paste the Replay Prompt into the agent and verify it handles the scenario correctly.
 \`\`\``,
-    dependsOn: ['create-evals-dir'],
   },
   {
     key: 'add-evals',
     phase: 'full',
     category: 'Agent Evals',
+    kind: 'create',
     instruction: `Add 3+ eval files to \`agent-evals/\`. Each eval should capture a real incident:
 
 \`\`\`markdown
@@ -64,12 +66,12 @@ Paste the Replay Prompt into the agent and verify it handles the scenario correc
 \`\`\`
 
 Prefer real incidents over synthetic seeds. At least 3 evals required.`,
-    dependsOn: ['create-evals-dir'],
   },
   {
     key: 'add-replay-prompts',
     phase: 'full',
     category: 'Agent Evals',
+    kind: 'fix',
     instruction: `Eval files are missing \`## Replay Prompt\` sections. Add a replay prompt to each eval:
 
 \`\`\`markdown
@@ -84,6 +86,7 @@ Prefer real incidents over synthetic seeds. At least 3 evals required.`,
     key: 'add-origin-labels',
     phase: 'full',
     category: 'Agent Evals',
+    kind: 'fix',
     instruction: `Eval files are missing \`**Origin:**\` labels. Add to each eval:
 
 \`\`\`markdown
@@ -98,6 +101,7 @@ Use \`real-incident\` for evals from actual bugs/issues. Use \`synthetic-seed\` 
     key: 'create-ci-workflow',
     phase: 'full',
     category: 'CI Validation',
+    kind: 'create',
     instruction: `Create \`.github/workflows/context-validation.yml\`:
 
 \`\`\`yaml
@@ -128,6 +132,7 @@ jobs:
     key: 'ci-check-lines',
     phase: 'full',
     category: 'CI Validation',
+    kind: 'create',
     instruction: `Add a line count check step to \`.github/workflows/context-validation.yml\`:
 
 \`\`\`yaml
@@ -137,21 +142,20 @@ jobs:
       [ -f "$f" ] && lines=$(wc -l < "$f") && [ "$lines" -gt 150 ] && echo "::error::$f is $lines lines" && exit 1
     done
 \`\`\``,
-    dependsOn: ['create-ci-workflow'],
   },
   {
     key: 'ci-check-router',
     phase: 'full',
     category: 'CI Validation',
+    kind: 'create',
     instruction: `Add a router reference check to \`.github/workflows/context-validation.yml\`. This verifies all paths in the router table resolve to existing files.`,
-    dependsOn: ['create-ci-workflow'],
   },
   {
     key: 'ci-check-skills',
     phase: 'full',
     category: 'CI Validation',
+    kind: 'create',
     instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 7 goat-* skill directories have a SKILL.md.`,
-    dependsOn: ['create-ci-workflow'],
   },
 
   // === Permission Profiles ===
@@ -159,12 +163,14 @@ jobs:
     key: 'create-profiles-dir',
     phase: 'full',
     category: 'Permission Profiles',
+    kind: 'create',
     instruction: `Create \`.claude/profiles/\` directory for role-based permission profiles. Profiles allow different permission sets for different tasks (e.g., reviewer vs implementer).`,
   },
   {
     key: 'create-profiles',
     phase: 'full',
     category: 'Permission Profiles',
+    kind: 'create',
     instruction: `Create 2+ permission profiles in \`.claude/profiles/\`. Example:
 
 \`\`\`json
@@ -177,12 +183,12 @@ jobs:
 \`\`\`
 
 Common profiles: reviewer (read-only), implementer (edit within scope), admin (full access).`,
-    dependsOn: ['create-profiles-dir'],
   },
   {
     key: 'route-profiles',
     phase: 'full',
     category: 'Permission Profiles',
+    kind: 'create',
     instruction: `Add profiles to the router table in \`{{instructionFile}}\`:
 
 \`\`\`markdown
@@ -195,24 +201,28 @@ Common profiles: reviewer (read-only), implementer (edit within scope), admin (f
     key: 'fix-dod-overlap',
     phase: 'full',
     category: 'Guidelines Ownership',
+    kind: 'fix',
     instruction: `The Definition of Done appears in both the instruction file and a guidelines file. Remove the DoD from the guidelines file — it belongs only in \`{{instructionFile}}\`.`,
   },
   {
     key: 'fix-loop-overlap',
     phase: 'full',
     category: 'Guidelines Ownership',
+    kind: 'fix',
     instruction: `Execution loop content appears in both the instruction file and a guidelines file. Remove execution loop content from the guidelines file — it belongs only in \`{{instructionFile}}\`.`,
   },
   {
     key: 'create-ownership-split',
     phase: 'full',
     category: 'Guidelines Ownership',
+    kind: 'create',
     instruction: `Create \`docs/guidelines-ownership-split.md\` documenting what was migrated from guidelines to the instruction file and why.`,
   },
   {
     key: 'verify-separation',
     phase: 'full',
     category: 'Guidelines Ownership',
+    kind: 'fix',
     instruction: `Verify clean separation: autonomy tiers, stop-the-line rules, and DoD should only appear in \`{{instructionFile}}\`, not in any guidelines file.`,
   },
 
@@ -221,6 +231,7 @@ Common profiles: reviewer (read-only), implementer (edit within scope), admin (f
     key: 'create-handoff-template',
     phase: 'full',
     category: 'Hygiene',
+    kind: 'create',
     instruction: `Create \`tasks/handoff-template.md\`:
 
 \`\`\`markdown
@@ -246,6 +257,7 @@ Common profiles: reviewer (read-only), implementer (edit within scope), admin (f
     key: 'add-rfc2119',
     phase: 'full',
     category: 'Hygiene',
+    kind: 'create',
     instruction: `Use RFC 2119 language in \`{{instructionFile}}\`: MUST, SHOULD, MAY.
 
 - **MUST** — requirement, blocking
@@ -258,6 +270,7 @@ Ensure at least 3 instances across the instruction file. Use MUST for DoD gates 
     key: 'add-changelog',
     phase: 'full',
     category: 'Hygiene',
+    kind: 'create',
     instruction: `Add version tracking. Either:
 
 **Option A:** Add a version history section to \`{{instructionFile}}\`

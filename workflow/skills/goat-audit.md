@@ -94,5 +94,5 @@ VERIFICATION:
 
 ## Output
 
-Multi-pass audit report with findings grouped by severity (critical/high/medium/low), evidence for each finding, and prioritized fix recommendations.
+Multi-pass audit report with findings grouped by severity (critical/high/medium/low) and file:line evidence for each finding.
 ```

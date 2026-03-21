@@ -71,12 +71,10 @@ export function composeFix(report: ScanReport, agentId: AgentId): ComposedPrompt
     }
 
     if (fragments.length > 0) {
-      // Sort by dependency order within phase
-      const sorted = topoSort(fragments);
       sections.push({
         phase,
         heading: PHASE_HEADINGS[phase],
-        fragments: sorted,
+        fragments,
       });
     }
   }
@@ -114,10 +112,3 @@ function buildSummary(fixCount: number, vars: PromptVariables): string {
   return `${fixCount} fix${fixCount === 1 ? '' : 'es'} for ${vars.agentName}. After applying, re-run \`goat-flow scan .\` to verify.`;
 }
 
-/**
- * Simple topo sort by dependency. Falls back to original order for cycles.
- */
-function topoSort(fragments: ResolvedFragment[]): ResolvedFragment[] {
-  // For now, keep original order — dependency resolution is low-priority
-  return fragments;
-}

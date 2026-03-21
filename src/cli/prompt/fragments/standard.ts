@@ -10,6 +10,7 @@ export const standardFragments: Fragment[] = [
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
+    kind: 'create' as const,
     instruction: `Create \`{{skillsDir}}/goat-${skill}/SKILL.md\`.
 
 Use this structure:
@@ -40,6 +41,7 @@ Refer to the goat-flow documentation for the full skill template.`,
     key: 'create-all-skills',
     phase: 'standard',
     category: 'Skills',
+    kind: 'create',
     instruction: `Ensure all 7 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
 - goat-preflight, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test
@@ -52,12 +54,14 @@ Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, O
     key: 'fix-settings-json',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'fix',
     instruction: `\`{{settingsFile}}\` is invalid JSON. Open it, find the syntax error, and fix it. Common issues: trailing commas, missing quotes, unescaped characters.`,
   },
   {
     key: 'create-stop-lint',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'create',
     instruction: `Create a post-turn verification hook for {{agentName}}.`,
     agentOverrides: {
       claude: `Create \`.claude/hooks/stop-lint.sh\`:
@@ -90,6 +94,7 @@ exit 0
     key: 'fix-hook-exit',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'fix',
     instruction: `The post-turn hook (stop-lint.sh) may not exit 0. This causes infinite retry loops.
 
 Open the hook script and ensure the last line is \`exit 0\`. If the script has conditional exits, ensure all code paths eventually reach \`exit 0\`.`,
@@ -98,31 +103,35 @@ Open the hook script and ensure the last line is \`exit 0\`. If the script has c
     key: 'create-format-hook',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'create',
     instruction: `Create a post-tool formatting hook.`,
     agentOverrides: {
-      claude: `Create \`.claude/hooks/format-file.sh\`:
+      claude: `Create \`.claude/hooks/format-file.sh\` (skip if no formatter is configured):
 
 \`\`\`bash
 #!/usr/bin/env bash
 # PostToolUse hook — auto-format after file edits
-{{formatCommand}} "$1" 2>/dev/null || true
+# Replace YOUR_FORMATTER with your format command (e.g., prettier --write)
+YOUR_FORMATTER "$1" 2>/dev/null || true
 exit 0
 \`\`\``,
-      gemini: `Create \`.gemini/hooks/format-file.sh\`:
+      gemini: `Create \`.gemini/hooks/format-file.sh\` (skip if no formatter is configured):
 
 \`\`\`bash
 #!/usr/bin/env bash
 # AfterTool hook — auto-format after file edits
-{{formatCommand}} "$1" 2>/dev/null || true
+# Replace YOUR_FORMATTER with your format command (e.g., prettier --write)
+YOUR_FORMATTER "$1" 2>/dev/null || true
 exit 0
 \`\`\``,
-      codex: `No post-tool hook for Codex. If you have a formatter (\`{{formatCommand}}\`), document it in AGENTS.md under Essential Commands instead.`,
+      codex: `No post-tool hook for Codex. If you have a formatter, document it in AGENTS.md under Essential Commands instead.`,
     },
   },
   {
     key: 'create-preflight-script',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'create',
     instruction: `Create \`scripts/preflight-checks.sh\`:
 
 \`\`\`bash
@@ -131,24 +140,31 @@ set -euo pipefail
 
 echo "=== Preflight Checks ==="
 
-# 1. Lint
-{{lintCommand}} || { echo "FAIL: lint"; exit 1; }
+# Lint (skip if no linter configured)
+if command -v {{lintCommand}} >/dev/null 2>&1; then
+  {{lintCommand}} || { echo "FAIL: lint"; exit 1; }
+fi
 
-# 2. Tests
-{{testCommand}} || { echo "FAIL: tests"; exit 1; }
+# Tests (skip if no test command configured)
+if [ -n "{{testCommand}}" ]; then
+  {{testCommand}} || { echo "FAIL: tests"; exit 1; }
+fi
 
-# 3. Line count check
+# Line count check
 for f in CLAUDE.md AGENTS.md GEMINI.md; do
   [ -f "$f" ] && lines=$(wc -l < "$f") && [ "$lines" -gt 150 ] && echo "WARN: $f is $lines lines (limit 150)"
 done
 
 echo "=== All checks passed ==="
-\`\`\``,
+\`\`\`
+
+Adjust the lint and test commands to match your project. Remove steps that don't apply.`,
   },
   {
     key: 'create-context-validation',
     phase: 'standard',
     category: 'Hooks',
+    kind: 'create',
     instruction: `Create context validation. Either:
 
 **Option A:** \`scripts/context-validate.sh\` (local script)
@@ -162,6 +178,7 @@ The script should check: instruction file line counts, router table references r
     key: 'create-lessons',
     phase: 'standard',
     category: 'Learning Loop',
+    kind: 'create',
     instruction: `Create \`docs/lessons.md\`:
 
 \`\`\`markdown
@@ -176,6 +193,7 @@ The script should check: instruction file line counts, router table references r
     key: 'seed-lessons',
     phase: 'standard',
     category: 'Learning Loop',
+    kind: 'fix',
     instruction: `\`docs/lessons.md\` exists but has no entries. Add entries from real incidents:
 
 \`\`\`markdown
@@ -192,6 +210,7 @@ Only add entries from actual incidents. Never use hypothetical examples.`,
     key: 'create-footguns',
     phase: 'standard',
     category: 'Learning Loop',
+    kind: 'create',
     instruction: `Create \`docs/footguns.md\`:
 
 \`\`\`markdown
@@ -211,6 +230,7 @@ Every footgun MUST have file:line evidence. No hypotheticals.`,
     key: 'add-footgun-evidence',
     phase: 'standard',
     category: 'Learning Loop',
+    kind: 'fix',
     instruction: `\`docs/footguns.md\` exists but entries are missing file:line evidence. Update each entry:
 
 **Before:** "Auth module has race conditions"
@@ -224,6 +244,7 @@ Every footgun entry MUST have at least one \`file:line\` reference.`,
     key: 'add-router',
     phase: 'standard',
     category: 'Router Table',
+    kind: 'create',
     instruction: `Add a Router Table section to \`{{instructionFile}}\`:
 
 \`\`\`markdown
@@ -243,6 +264,7 @@ Every path in the router MUST resolve to an existing file or directory.`,
     key: 'fix-router-refs',
     phase: 'standard',
     category: 'Router Table',
+    kind: 'fix',
     instruction: `Some router table paths in \`{{instructionFile}}\` don't resolve. For each broken reference:
 
 1. Check if the file was renamed — update the path
@@ -255,6 +277,7 @@ Every router path MUST point to something that exists.`,
     key: 'route-skills',
     phase: 'standard',
     category: 'Router Table',
+    kind: 'create',
     instruction: `Add skill directories to the router table in \`{{instructionFile}}\`:
 
 \`\`\`markdown
@@ -267,6 +290,7 @@ Every router path MUST point to something that exists.`,
     key: 'create-architecture',
     phase: 'standard',
     category: 'Architecture',
+    kind: 'create',
     instruction: `Create \`docs/architecture.md\` — a concise system overview:
 
 \`\`\`markdown
@@ -288,6 +312,7 @@ Keep under 100 lines. This is for agent orientation, not exhaustive documentatio
     key: 'compress-architecture',
     phase: 'standard',
     category: 'Architecture',
+    kind: 'fix',
     instruction: `\`docs/architecture.md\` is over 100 lines. Compress:
 
 1. Remove implementation details — keep only architectural decisions
@@ -300,43 +325,10 @@ Target: under 100 lines.`,
     key: 'create-domain-reference',
     phase: 'standard',
     category: 'Architecture',
+    kind: 'create',
     instruction: `Create \`docs/domain-reference.md\` — domain terms and concepts that were migrated out of the instruction file.
 
 Only create this if domain content was extracted from \`{{instructionFile}}\` to reduce its line count.`,
   },
 
-  // === Local Context ===
-  {
-    key: 'create-local-context',
-    phase: 'standard',
-    category: 'Local Context',
-    instruction: `Directories with 2+ footgun mentions should have local instruction files. Create local context files for the flagged directories.`,
-    agentOverrides: {
-      claude: `Create local \`CLAUDE.md\` files in directories with 2+ footgun mentions. Each should be under 20 lines:
-
-\`\`\`markdown
-# Local context for [directory]
-
-[2-3 lines about directory-specific gotchas from footguns.md]
-\`\`\``,
-      codex: `Create local instruction files under \`.github/instructions/\` for directories with 2+ footgun mentions.`,
-      gemini: `Create local \`GEMINI.md\` files in directories with 2+ footgun mentions. Keep under 20 lines.`,
-    },
-  },
-  {
-    key: 'compress-local-files',
-    phase: 'standard',
-    category: 'Local Context',
-    instruction: `Local instruction files should be under 20 lines. Compress any that are over:
-
-1. Keep only directory-specific context
-2. Remove anything that duplicates the root instruction file
-3. Reference the root file instead of repeating content`,
-  },
-  {
-    key: 'check-local-duplicates',
-    phase: 'standard',
-    category: 'Local Context',
-    instruction: `Review local instruction files for content duplicated from \`{{instructionFile}}\`. Local files should contain ONLY directory-specific context, not repeated root rules.`,
-  },
 ];

@@ -4,6 +4,55 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
+## v0.4.1 - 2026-03-22
+
+Scanner bug fixes, prompt improvements, local context redesign. Multi-agent review identified 16 bugs — 12 fixed, 4 accepted. Self-scan: Claude 100%, Gemini 100%, Codex 98%.
+
+### Scanner Bug Fixes (M2.5)
+
+- Fixed line count off-by-one: `content.split('\n').length` counted trailing newline as extra line
+- Fixed Ask First detection: searches `**Ask First**` in body content, not just section headings
+- Added `scripts/preflight-checks.sh` and `CHANGELOG.md` to shared facts + `checkSharedPath()`
+- Broadened Codex log-gate pattern: accepts `update.*log|log.*update|MUST.*log`
+- Self-scan went from B (87%) to A (100%) for Claude and Gemini
+
+### Prompt Bug Fixes (M2.5)
+
+- Fixed setup emitting contradictory instructions: added `FragmentKind` (`create`/`fix`), setup mode only emits `create` fragments
+- Fixed literal `"none"` in generated shell scripts: empty string fallback, fragments guard with conditionals
+- Removed `--format markdown` from CLI: was silently returning JSON, now rejects with error
+- Added `[UNFILLED: name]` marker for unresolved template placeholders
+- Removed `dependsOn` from fragment model: was a no-op, removed the false promise
+
+### Local Context Heuristic Removed
+
+- Removed checks 2.6.1-2.6.3 (footgun-mention heuristic for local instruction files)
+- Heuristic flagged documentation directories that agents read but don't edit
+- Rubric now has 65 checks (was 68)
+
+### Local Context Redesign Planned (M2.6)
+
+- Hot path / cold path architecture: hot path (CLAUDE.md etc.) = agent behavior, cold path (`ai/instructions/`) = project coding guidelines
+- `ai/README.md` as router, domain-based organization (`backend.md` not `php.md` + `python.md`)
+- `setup/setup-copilot.md` planned as fourth equal agent guide
+- `.github/git-commit-instructions.md` for all git projects
+- `.github/instructions/` as Copilot-only bridges referencing `ai/instructions/`
+
+### Template Fixes (from deep review)
+
+- `setup/setup-claude.md`: added `workflow/skills/` template references in Phase 1b (parity with Codex/Gemini)
+- `workflow/skills/goat-audit.md`: fixed output section contradicting constraints
+- `workflow/evaluation/ci-validation.md`: removed stale shape-based line targets (per ADR-002)
+- `setup/README.md`: "Both agents" → "All agents"
+- `workflow/playbooks/planning/mob-elaboration.md`: fixed path reference (`workflow/runtime/` → `setup/`)
+- Created `workflow/README.md` mapping 6 subdirectories to their purpose
+
+### Script Improvements
+
+- `scripts/run-cli.sh`: improved test-all pass/fail logic (checks exit code + error markers, not just output presence)
+
+---
+
 ## v0.4.0 - 2026-03-21
 
 CLI auditor and prompt generator. M1 (Scanner) and M2 (Prompts) complete. Project restructured from `cli/` subdirectory to unified root with `src/cli/` + `src/dashboard/`.

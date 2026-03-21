@@ -106,7 +106,9 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   // Instruction file
   const content = fs.readFile(agent.instructionFile);
   const exists = content !== null;
-  const lineCount = exists ? content!.split('\n').length : 0;
+  const lineCount = exists
+    ? content!.split('\n').length - (content!.endsWith('\n') ? 1 : 0)
+    : 0;
   const sections = exists ? parseSections(content!) : new Map<string, string>();
 
   // Settings

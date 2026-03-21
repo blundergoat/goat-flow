@@ -99,12 +99,21 @@ export const foundationChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        const section = findSection(ctx, 'ask first');
+        // Search section headings first, then fall back to body content
+        let section = findSection(ctx, 'ask first');
+        if (!section) {
+          // Try finding "Ask First" as bold text in the full content
+          const content = ctx.agentFacts.instruction.content;
+          if (content) {
+            const match = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
+            if (match) section = match[0];
+          }
+        }
         if (!section) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: 'No Ask First section found' };
         }
         const lines = section.split('\n').filter(l => l.trim()).length;
-        const hasProjectPaths = /\.|\//.test(section); // Contains path-like references
+        const hasProjectPaths = /`[^`]*[./][^`]*`/.test(section); // Contains backtick-wrapped paths
         if (lines > 5 && hasProjectPaths) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Ask First has ${lines} lines with project-specific content`, evidence: 'Ask First section' };
         }
@@ -160,7 +169,7 @@ export const foundationChecks: CheckDef[] = [
   {
     id: '1.4.4', name: 'Log-update gate', tier: 'foundation', category: 'Definition of Done',
     pts: 1, confidence: 'high',
-    detect: { type: 'grep', path: '{instruction_file}', pattern: 'logs? updated|lessons.*updated|footguns.*updated' },
+    detect: { type: 'grep', path: '{instruction_file}', pattern: 'logs? updated|lessons.*updated|footguns.*updated|update.*log|log.*update|MUST.*log' },
     recommendation: 'Add log-update gate to DoD',
     recommendationKey: 'add-log-gate',
   },

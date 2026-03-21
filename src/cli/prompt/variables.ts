@@ -20,10 +20,10 @@ export function extractVariables(report: ScanReport, agentReport: AgentReport): 
     skillsDir: paths.skillsDir,
     hooksDir: paths.hooksDir,
     languages: report.stack.languages.join(', ') || 'unknown',
-    buildCommand: report.stack.buildCommand ?? 'none',
-    testCommand: report.stack.testCommand ?? 'none',
-    lintCommand: report.stack.lintCommand ?? 'none',
-    formatCommand: report.stack.formatCommand ?? 'none',
+    buildCommand: report.stack.buildCommand ?? '',
+    testCommand: report.stack.testCommand ?? '',
+    lintCommand: report.stack.lintCommand ?? '',
+    formatCommand: report.stack.formatCommand ?? '',
     grade: agentReport.score.grade,
     percentage: String(agentReport.score.percentage),
     failedCount: String(failed.length),
@@ -62,6 +62,6 @@ export function fillTemplate(template: string, vars: PromptVariables): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) => {
     const value = vars[name as keyof PromptVariables];
     if (value !== undefined) return value;
-    return match; // leave unresolved
+    return `[UNFILLED: ${name}]`;
   });
 }

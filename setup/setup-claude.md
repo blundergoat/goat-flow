@@ -149,6 +149,9 @@ PRE-EXISTING SKILLS:
 If skills already exist in .claude/skills/, do NOT delete them.
 Review and update-and-extend, not replace.
 
+Read the detailed skill templates in workflow/skills/goat-*.md for each
+skill's full specification before creating.
+
 Create these 7 skills under .claude/skills/:
 
 1. goat-preflight/SKILL.md - RFC 2119 constraints. MUST run build/lint.

@@ -22,7 +22,7 @@ Arguments:
   project-path    Target project directory (default: .)
 
 Flags:
-  --format <type>   Output format: json, text, markdown (default: auto)
+  --format <type>   Output format: json, text (default: auto)
   --agent <id>      Filter to one agent: claude, codex, gemini
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
@@ -77,8 +77,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Auto-detect format: text if TTY, json if piped
   let format: CLIOptions['format'] = process.stdout.isTTY ? 'text' : 'json';
   if (values.format) {
-    if (!['json', 'text', 'markdown'].includes(values.format)) {
-      console.error(`Invalid format: ${values.format}. Use: json, text, markdown`);
+    if (!['json', 'text'].includes(values.format)) {
+      console.error(`Invalid format: ${values.format}. Use: json, text`);
       process.exit(2);
     }
     format = values.format as CLIOptions['format'];
@@ -186,21 +186,9 @@ async function main(): Promise<void> {
   }
 
   // Render scan output
-  let output: string;
-  switch (options.format) {
-    case 'json':
-      output = renderJson(report);
-      break;
-    case 'text':
-      output = renderText(report, options.verbose);
-      break;
-    case 'markdown':
-      // TODO: M4 — markdown renderer
-      output = renderJson(report);
-      break;
-    default:
-      output = renderJson(report);
-  }
+  const output = options.format === 'text'
+    ? renderText(report, options.verbose)
+    : renderJson(report);
 
   process.stdout.write(output + '\n');
 

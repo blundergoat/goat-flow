@@ -342,6 +342,8 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.geminiignore': shared.ignoreFiles.geminiignore,
     '.github/workflows/context-validation.yml': shared.ci.workflowExists,
     '.gitignore': shared.gitignore.exists,
+    'scripts/preflight-checks.sh': shared.preflightScript.exists,
+    'CHANGELOG.md': shared.changelog.exists,
   };
 
   if (path in pathMap) return pathMap[path];

@@ -338,7 +338,7 @@ describe('Variable substitution', () => {
       formatCommand: '', grade: '', percentage: '', failedCount: '',
       passedCount: '', totalCount: '', date: '',
     });
-    assert.equal(result, '{{unknown}} stays');
+    assert.equal(result, '[UNFILLED: unknown] stays');
   });
 
   it('extractVariables fills all fields from scan report', async () => {

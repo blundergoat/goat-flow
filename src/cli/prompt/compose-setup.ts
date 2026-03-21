@@ -25,7 +25,7 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
 
   const sections: PromptSection[] = phases.map(({ phase, heading }) => {
     const fragments = allFragments
-      .filter(f => f.phase === phase)
+      .filter(f => f.phase === phase && f.kind === 'create')
       .map(f => {
         let instruction = f.instruction;
         if (f.agentOverrides?.[agentId]) {
@@ -82,10 +82,10 @@ function buildFreshVars(report: ScanReport, agentId: AgentId): PromptVariables {
     skillsDir: info.skills,
     hooksDir: info.hooks,
     languages: report.stack.languages.join(', ') || 'unknown',
-    buildCommand: report.stack.buildCommand ?? 'none',
-    testCommand: report.stack.testCommand ?? 'none',
-    lintCommand: report.stack.lintCommand ?? 'none',
-    formatCommand: report.stack.formatCommand ?? 'none',
+    buildCommand: report.stack.buildCommand ?? '',
+    testCommand: report.stack.testCommand ?? '',
+    lintCommand: report.stack.lintCommand ?? '',
+    formatCommand: report.stack.formatCommand ?? '',
     grade: 'F',
     percentage: '0',
     failedCount: '0',

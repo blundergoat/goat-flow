@@ -22,7 +22,7 @@ Full plan: [`TODO_cli-auditor_prime.md`](../../TODO_cli-auditor_prime.md)
 | # | Milestone | What it delivers | Spec |
 |---|-----------|-----------------|------|
 | M1 | **Scanner + Scoring Engine** | Rubric as typed data, 6 evaluators, fact model, 75+ checks, JSON output. Self-scan validates. | [M1-scanner.md](milestones/M1-scanner.md) |
-| M2 | **Prompt Generator** | Fragment-based templates. Fix/setup/audit prompts tailored to failed checks, stack, shape, agent. | [M2-prompt-generator.md](milestones/M2-prompt-generator.md) |
+| M2 | **Prompt Generator** | Fragment-based templates. Fix/setup/audit prompts tailored to failed checks, stack, shape, agent. | [M2-prompt-generator.md](milestones/M2.0-prompt-generator.md) |
 | M3 | **HTML Dashboard** | Interactive dashboard. Tier drill-down, multi-agent comparison, guided prompt wizard. | [M3-html-dashboard.md](milestones/M3-html-dashboard.md) |
 | M4 | **CLI Polish + npm Publish** | Text/markdown renderers, `--verbose`, CI gate mode, npm publish as `@blundergoat/goat-flow`. | [M4-cli-publish.md](milestones/M4-cli-publish.md) |
 
