@@ -1,3 +1,7 @@
+---
+name: goat-review
+description: "Review changes with structured severity levels"
+---
 # GOAT Review
 
 ## When to Use
@@ -11,7 +15,8 @@ Use before merging meaningful changes, after external review comments, or whenev
 3. Check correctness, cross-reference integrity, test/validation coverage, and autonomy-tier violations.
 4. If reviewing external comments, investigate each independently before agreeing.
 
-Constraints:
+## Constraints
+
 - MUST review the change in full context, not just the diff
 - MUST provide file:line evidence for every finding
 - MUST use RFC 2119 severity: MUST / SHOULD / MAY

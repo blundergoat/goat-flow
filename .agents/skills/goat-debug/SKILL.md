@@ -1,3 +1,7 @@
+---
+name: goat-debug
+description: "Diagnose a bug with evidence before proposing fixes"
+---
 # GOAT Debug
 
 ## When to Use

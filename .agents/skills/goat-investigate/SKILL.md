@@ -1,3 +1,7 @@
+---
+name: goat-investigate
+description: "Investigate a codebase area and report findings"
+---
 # GOAT Investigate
 
 ## When to Use

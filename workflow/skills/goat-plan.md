@@ -21,7 +21,7 @@ planning - as a single agent-driven workflow with human checkpoints
 between each phase.
 
 Write the skill file to: .claude/skills/goat-plan/SKILL.md
-(For Codex: docs/codex-playbooks/goat-plan.md)
+(For Codex: .agents/skills/goat-plan/SKILL.md)
 
 The skill follows a 4-phase process with mandatory human gates:
 

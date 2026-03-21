@@ -18,7 +18,7 @@ self-check for fabrication. This is more thorough than a normal code
 review - it's a systematic audit.
 
 Write the skill file to: .claude/skills/goat-audit/SKILL.md
-(For Codex: docs/codex-playbooks/goat-audit.md)
+(For Codex: .agents/skills/goat-audit/SKILL.md)
 
 The skill follows a strict 4-pass process:
 

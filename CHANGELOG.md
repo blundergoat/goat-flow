@@ -25,14 +25,19 @@ Multi-agent alignment release. Fix Gemini CLI hook configuration, make shared do
 - `docs/reference/design-rationale.md`: agent-neutral diagram and dual-agent hook section headers
 - `workflow/runtime/enforcement.md`: reverted to Claude Code template + header warning against global replacement
 
-### 7-Skill Parity (Codex)
+### Codex Skills Migration
 
-- Created `docs/codex-playbooks/goat-plan.md` and `goat-test.md` (full parity with Claude skills)
-- Renamed `goat-research.md` → `goat-investigate.md` with strengthened constraints and output template
-- Strengthened `goat-debug.md`, `goat-audit.md`, `goat-review.md` with missing constraints from Claude equivalents
-- Updated `AGENTS.md` router table: added goat-plan + goat-test entries
-- Updated `scripts/context-validate.sh`: 5 → 7 playbooks, `goat-research` → `goat-investigate`, accepts `agent-evals/`
+- Migrated Codex skills from `docs/codex-playbooks/` to `.agents/skills/goat-*/SKILL.md` (Codex CLI runtime discovery)
+- Deleted `docs/codex-playbooks/` — single source of truth is now `.agents/skills/`
+- Created `goat-plan` and `goat-test` skills (full parity with Claude's 7 skills)
+- Renamed `goat-research` → `goat-investigate` with strengthened constraints and output template
+- Strengthened `goat-debug`, `goat-audit`, `goat-review` with missing constraints from Claude equivalents
+- Added YAML frontmatter (name + description) to all 7 Codex skill files
+- Updated `AGENTS.md` router table to point to `.agents/skills/`
+- Updated `scripts/context-validate.sh`: validates 7 skills at `.agents/skills/`, checks frontmatter, accepts `agent-evals/`
+- Updated `setup/setup-codex.md`: instructs creation of `.agents/skills/` with frontmatter, references `workflow/skills/` templates
 - Updated all "5 skills" references to "7 skills" across system-spec, five-layers, design-rationale, cross-agent-comparison
+- Updated all `docs/codex-playbooks/` references to `.agents/skills/` in live docs (setup/README, skills.md, five-layers, execution-loop, workflow templates, agent evals)
 
 ### File Overwrite Protection
 
@@ -43,7 +48,7 @@ Multi-agent alignment release. Fix Gemini CLI hook configuration, make shared do
 
 ### Skill Descriptions
 
-- Added YAML frontmatter descriptions to all 14 skill files (7 Claude + 7 Gemini)
+- Added YAML frontmatter descriptions to all 21 skill files (7 Claude + 7 Gemini + 7 Codex)
 - Fixed stale `goat-research` heading in `.gemini/skills/goat-investigate/SKILL.md`
 
 ### Incident Logging

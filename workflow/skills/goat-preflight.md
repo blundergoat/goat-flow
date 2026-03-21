@@ -24,7 +24,7 @@ Stack:
 - Format check: [your command, e.g., npm run format:check, composer cs:check]
 
 Write the skill file to: .claude/skills/goat-preflight/SKILL.md
-(For Codex: docs/codex-playbooks/goat-preflight.md)
+(For Codex: .agents/skills/goat-preflight/SKILL.md)
 
 The skill MUST:
 - Run type-check + lint + compile (in that order)

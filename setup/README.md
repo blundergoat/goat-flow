@@ -6,7 +6,7 @@ Pick your agent and follow the setup guide.
 |-------|-------|----------------|
 | **Claude Code** | [setup-claude.md](setup-claude.md) | CLAUDE.md, .claude/hooks/, .claude/skills/, .claude/settings.json |
 | **Gemini CLI** | [setup-gemini.md](setup-gemini.md) | GEMINI.md, .gemini/hooks/, .gemini/skills/, .gemini/settings.json |
-| **Codex** | [setup-codex.md](setup-codex.md) | AGENTS.md, docs/codex-playbooks/, scripts/ |
+| **Codex** | [setup-codex.md](setup-codex.md) | AGENTS.md, .agents/skills/, scripts/ |
 
 Both agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks/handoff-template.md, .github/instructions/
 

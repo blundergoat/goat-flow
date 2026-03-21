@@ -1,3 +1,7 @@
+---
+name: goat-test
+description: "Generate testing instructions across three verification tracks"
+---
 # GOAT Test
 
 ## When to Use

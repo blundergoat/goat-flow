@@ -1,3 +1,7 @@
+---
+name: goat-plan
+description: "Plan a feature with phased human gates"
+---
 # GOAT Plan
 
 ## When to Use

@@ -69,23 +69,25 @@ done < <(
 (( router_errors == 0 )) || fail "Router table contains missing required paths"
 info "Router table references resolve"
 
-required_playbooks=(
-    "docs/codex-playbooks/goat-preflight.md"
-    "docs/codex-playbooks/goat-debug.md"
-    "docs/codex-playbooks/goat-audit.md"
-    "docs/codex-playbooks/goat-investigate.md"
-    "docs/codex-playbooks/goat-review.md"
-    "docs/codex-playbooks/goat-plan.md"
-    "docs/codex-playbooks/goat-test.md"
+required_skills=(
+    ".agents/skills/goat-preflight/SKILL.md"
+    ".agents/skills/goat-debug/SKILL.md"
+    ".agents/skills/goat-audit/SKILL.md"
+    ".agents/skills/goat-investigate/SKILL.md"
+    ".agents/skills/goat-review/SKILL.md"
+    ".agents/skills/goat-plan/SKILL.md"
+    ".agents/skills/goat-test/SKILL.md"
 )
 
-for playbook in "${required_playbooks[@]}"; do
-    [[ -f "$playbook" ]] || fail "Missing playbook: $playbook"
-    grep -q '^## When to Use' "$playbook" || fail "Missing '## When to Use' in $playbook"
-    grep -q '^## Process' "$playbook" || fail "Missing '## Process' in $playbook"
-    grep -q '^## Output' "$playbook" || fail "Missing '## Output' in $playbook"
+for skill in "${required_skills[@]}"; do
+    [[ -f "$skill" ]] || fail "Missing skill: $skill"
+    grep -q '^## When to Use' "$skill" || fail "Missing '## When to Use' in $skill"
+    grep -q '^## Constraints\|^## Process' "$skill" || fail "Missing '## Constraints' or '## Process' in $skill"
+    grep -q '^## Output' "$skill" || fail "Missing '## Output' in $skill"
+    grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
+    grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done
-info "All 7 Codex playbooks exist with required sections"
+info "All 7 Codex skills exist with required sections and frontmatter"
 
 if [[ -d agent-evals ]]; then
     [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"

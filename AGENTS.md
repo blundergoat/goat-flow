@@ -91,13 +91,13 @@ Ask one question with a recommended default and exact file boundary.
 | Claude setup | `setup/setup-claude.md` |
 | Codex setup | `setup/setup-codex.md` |
 | Shared execution template | `setup/shared/execution-loop.md` |
-| Preflight playbook | `docs/codex-playbooks/goat-preflight.md` |
-| Debug playbook | `docs/codex-playbooks/goat-debug.md` |
-| Audit playbook | `docs/codex-playbooks/goat-audit.md` |
-| Investigate playbook | `docs/codex-playbooks/goat-investigate.md` |
-| Review playbook | `docs/codex-playbooks/goat-review.md` |
-| Plan playbook | `docs/codex-playbooks/goat-plan.md` |
-| Test playbook | `docs/codex-playbooks/goat-test.md` |
+| Preflight skill | `.agents/skills/goat-preflight/SKILL.md` |
+| Debug skill | `.agents/skills/goat-debug/SKILL.md` |
+| Audit skill | `.agents/skills/goat-audit/SKILL.md` |
+| Investigate skill | `.agents/skills/goat-investigate/SKILL.md` |
+| Review skill | `.agents/skills/goat-review/SKILL.md` |
+| Plan skill | `.agents/skills/goat-plan/SKILL.md` |
+| Test skill | `.agents/skills/goat-test/SKILL.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Confusion log | `docs/confusion-log.md` |

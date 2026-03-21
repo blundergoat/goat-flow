@@ -101,7 +101,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 |-------|------|
 | Claude Code | `.claude/skills/{name}/SKILL.md` |
 | Gemini CLI | `.gemini/skills/{name}/SKILL.md` |
-| Codex | `docs/codex-playbooks/{name}.md` |
+| Codex | `.agents/skills/goat-{name}/SKILL.md` |
 
 **This folder:** `workflow/skills/`
 
@@ -217,7 +217,7 @@ GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-a
 | Concept | Claude Code | Codex | Cursor | Copilot | Gemini CLI |
 |---------|------------|-------|--------|---------|------------|
 | Instruction file | CLAUDE.md | AGENTS.md | .cursor/rules/ | .github/copilot-instructions.md | GEMINI.md |
-| Skills/playbooks | .claude/skills/ | docs/codex-playbooks/ | .cursor/rules/*.mdc | Agent skills | .gemini/skills/ |
+| Skills/playbooks | .claude/skills/ | .agents/skills/ | .cursor/rules/*.mdc | Agent skills | .gemini/skills/ |
 | Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | .gemini/hooks/ + settings.json |
 | Domain instructions | .github/instructions/ | .github/instructions/ | .cursor/rules/ | .github/instructions/ | .github/instructions/ |
 | Evals | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |

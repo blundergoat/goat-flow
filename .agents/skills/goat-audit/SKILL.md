@@ -1,3 +1,7 @@
+---
+name: goat-audit
+description: "Run a multi-pass quality audit on the codebase"
+---
 # GOAT Audit
 
 ## When to Use
@@ -11,7 +15,8 @@ Use for systematic repo review, before a release, or when a whole class of issue
 3. **Pass 3 - Rank:** group surviving issues by severity and blast radius.
 4. **Pass 4 - Self-check:** ask "did I fabricate this?" and remove anything unsupported.
 
-Constraints:
+## Constraints
+
 - MUST follow all 4 passes in order
 - MUST provide file:line evidence for every surviving finding
 - MUST include a fabrication self-check in Pass 4

@@ -15,7 +15,7 @@ independently - it investigates the code, doesn't blindly apply
 external suggestions.
 
 Write the skill file to: .claude/skills/goat-review/SKILL.md
-(For Codex: docs/codex-playbooks/goat-review.md)
+(For Codex: .agents/skills/goat-review/SKILL.md)
 
 The goat- prefix ensures this skill name does not conflict with
 built-in agent commands or other user-defined skills.

@@ -21,7 +21,7 @@ verifiers. This skill produces instructions for all three tracks,
 not the tests themselves.
 
 Write the skill file to: .claude/skills/goat-test/SKILL.md
-(For Codex: docs/codex-playbooks/goat-test.md)
+(For Codex: .agents/skills/goat-test/SKILL.md)
 
 The skill produces testing instructions across three tracks:
 

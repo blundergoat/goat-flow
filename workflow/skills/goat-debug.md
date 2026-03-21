@@ -18,7 +18,7 @@ This prevents the common failure mode of the agent jumping straight to
 fixing without understanding the root cause.
 
 Write the skill file to: .claude/skills/goat-debug/SKILL.md
-(For Codex: docs/codex-playbooks/goat-debug.md)
+(For Codex: .agents/skills/goat-debug/SKILL.md)
 
 The skill follows a strict 3-phase process:
 
