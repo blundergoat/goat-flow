@@ -107,8 +107,7 @@ fi
 # ── Tests ────────────────────────────────────────────────────────────
 if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
-    test_output=$(npm test 2>&1)
-    test_exit=$?
+    test_output=$(npm test 2>&1) && test_exit=0 || test_exit=$?
 
     test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
     pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
