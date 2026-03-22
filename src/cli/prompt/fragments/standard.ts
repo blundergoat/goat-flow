@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 2 — Standard fragments (21 check keys)
+ * Tier 2 — Standard fragments (38 check keys)
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
@@ -286,7 +286,7 @@ set -euo pipefail
 echo "=== Preflight Checks ==="
 
 # Lint (skip if no linter configured)
-if command -v {{lintCommand}} >/dev/null 2>&1; then
+if [ -n "{{lintCommand}}" ]; then
   {{lintCommand}} || { echo "FAIL: lint"; exit 1; }
 fi
 

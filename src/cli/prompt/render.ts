@@ -2,7 +2,6 @@ import type { ComposedPrompt } from './types.js';
 
 /**
  * Render a composed prompt as pasteable markdown.
- * Output is wrapped in a code fence for easy copy-paste.
  */
 export function renderPrompt(prompt: ComposedPrompt): string {
   const lines: string[] = [];

@@ -40,7 +40,8 @@ function checkDenyPatterns(fs: ReadonlyFS, agent: AgentProfile): { gitCommitBloc
     const parsed = fs.readJson(deny.path) as Record<string, unknown> | null;
     if (!parsed) return { gitCommitBlocked: false, gitPushBlocked: false };
     const permissions = parsed.permissions as Record<string, unknown> | undefined;
-    const denyList = (permissions?.deny as string[]) ?? [];
+    const rawDeny = permissions?.deny;
+    const denyList = Array.isArray(rawDeny) ? (rawDeny as string[]) : [];
     return {
       gitCommitBlocked: denyList.some(p => p.includes('git commit')),
       gitPushBlocked: denyList.some(p => p.includes('git push')),

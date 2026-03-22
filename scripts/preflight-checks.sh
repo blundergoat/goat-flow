@@ -20,28 +20,25 @@ fail() {
     errors=$((errors + 1))
 }
 
-run_check() {
-    local label="$1"
-    shift
-    info "Running: $label"
-    "$@"
-}
-
 # --- Context validation ---
-run_check "Context validation" bash scripts/context-validate.sh
+info "Running: Context validation"
+bash scripts/context-validate.sh || fail "Context validation failed"
 
 # --- Shell script checks ---
-run_check "Bash syntax" bash -n scripts/*.sh scripts/maintenance/*.sh
+info "Running: Bash syntax"
+bash -n scripts/*.sh scripts/maintenance/*.sh || fail "Bash syntax check failed"
 
 if command -v shellcheck >/dev/null 2>&1; then
     # Exclude style-only warnings (SC2001)
-    run_check "Shellcheck" shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh
+    info "Running: Shellcheck"
+    shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh || fail "Shellcheck failed"
 else
     warn "shellcheck not installed; skipping shell lint"
 fi
 
 # --- Deny policy ---
-run_check "Deny policy self-test" bash scripts/deny-dangerous.sh --self-test
+info "Running: Deny policy self-test"
+bash scripts/deny-dangerous.sh --self-test || fail "Deny policy self-test failed"
 
 # --- Version consistency ---
 info "Running: Version consistency"

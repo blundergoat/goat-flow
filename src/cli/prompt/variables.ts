@@ -56,7 +56,7 @@ const AGENT_PATHS = {
 
 /**
  * Replace {{variable}} placeholders in a template string.
- * Leaves unresolved placeholders as-is with a comment.
+ * Leaves unresolved placeholders with an [UNFILLED: name] marker.
  */
 export function fillTemplate(template: string, vars: PromptVariables): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) => {
