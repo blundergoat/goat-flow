@@ -30,7 +30,7 @@ graph LR
 
 **The incident:** Asked about a dependency, Claude said it was a local path dependency. It was actually installed from a package registry. It never read the manifest.
 
-**The rule:** Read the relevant files first. Never fabricate codebase facts.
+**The rule:** Read the relevant files first. Never fabricate codebase facts. When starting work in a specific domain, also read the relevant cold-path file from `ai/instructions/` (see `ai/README.md` for the routing map).
 
 | Project Shape | What to read |
 |---------------|-------------|

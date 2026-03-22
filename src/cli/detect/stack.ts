@@ -45,8 +45,8 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
     formatCommand = formatCommand ?? 'cargo fmt --check';
   }
 
-  // Go / go.mod
-  if (fs.exists('go.mod')) {
+  // Go / go.mod (root or subdirectory)
+  if (fs.exists('go.mod') || fs.glob('*/go.mod').length > 0 || fs.glob('*/*/go.mod').length > 0) {
     languages.push('go');
     buildCommand = buildCommand ?? 'go build ./...';
     testCommand = testCommand ?? 'go test ./...';
@@ -54,11 +54,37 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
     formatCommand = formatCommand ?? 'gofmt -l .';
   }
 
-  // Python / pyproject.toml
-  if (fs.exists('pyproject.toml') || fs.exists('setup.py') || fs.exists('requirements.txt')) {
+  // Python / pyproject.toml (root or subdirectory)
+  const hasPython = fs.exists('pyproject.toml') || fs.exists('setup.py') || fs.exists('requirements.txt')
+    || fs.glob('*/pyproject.toml').length > 0 || fs.glob('*/requirements.txt').length > 0;
+  if (hasPython) {
     languages.push('python');
     testCommand = testCommand ?? 'pytest';
     lintCommand = lintCommand ?? 'ruff check';
+  }
+
+  // Monorepo: check subdirectory manifests for languages not detected at root
+  if (!languages.includes('javascript')) {
+    const subPkg = fs.glob('*/package.json').length > 0 || fs.glob('*/*/package.json').length > 0;
+    if (subPkg) {
+      languages.push('javascript');
+      // Check for TypeScript in subdirs
+      if (!languages.includes('typescript') && (fs.glob('*/tsconfig.json').length > 0 || fs.glob('*/*/tsconfig.json').length > 0)) {
+        languages.push('typescript');
+      }
+    }
+  }
+
+  if (!languages.includes('php')) {
+    if (fs.glob('*/composer.json').length > 0) {
+      languages.push('php');
+    }
+  }
+
+  if (!languages.includes('rust')) {
+    if (fs.glob('*/Cargo.toml').length > 0) {
+      languages.push('rust');
+    }
   }
 
   // Shell scripts

@@ -67,13 +67,67 @@ fi
 if [[ -f tsconfig.json ]]; then
     info "Running: Typecheck"
     npx tsc --noEmit || fail "Typecheck failed"
+
+    # Build check — verify dist/ is producible
+    info "Running: Build"
+    npx tsc || fail "Build failed"
+
+    # Check for common code quality issues in TypeScript
+    info "Running: TypeScript quality checks"
+
+    # No console.log in source (except cli.ts which needs it)
+    console_hits=$(grep -rn 'console\.log' src/cli/ --include='*.ts' | grep -v 'cli.ts' | grep -v 'render/' || true)
+    if [[ -n "$console_hits" ]]; then
+        warn "console.log found outside cli.ts/render/:"
+        echo "$console_hits" | head -5 | sed 's/^/  /'
+    fi
+
+    # No any types (best effort — catches explicit 'any' annotations)
+    any_hits=$(grep -rn ': any\b' src/cli/ --include='*.ts' || true)
+    if [[ -n "$any_hits" ]]; then
+        warn "Explicit 'any' types found:"
+        echo "$any_hits" | head -5 | sed 's/^/  /'
+    fi
+
+    # No TODO/FIXME/HACK left unresolved
+    todo_hits=$(grep -rn 'TODO\|FIXME\|HACK' src/cli/ --include='*.ts' || true)
+    if [[ -n "$todo_hits" ]]; then
+        info "TODOs found ($(echo "$todo_hits" | wc -l) total):"
+        echo "$todo_hits" | head -5 | sed 's/^/  /'
+    fi
 fi
 
 # --- Tests ---
 if [[ -f package.json ]] && grep -q '"test"' package.json; then
     info "Running: Tests"
-    npm test || fail "Tests failed"
+    test_output=$(npm test 2>&1)
+    test_exit=$?
+    echo "$test_output"
+    if [[ "$test_exit" -ne 0 ]]; then
+        fail "Tests failed"
+    fi
+    test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
+    info "Tests: $test_count total"
 fi
+
+# --- Removed patterns (ADR enforcement) ---
+info "Running: Removed pattern check"
+# Patterns that should not exist anywhere in live files (per ADRs)
+removed_patterns=(
+    "APP.*LIBRARY.*SCRIPT COLLECTION"
+    "confusion.log\.md"
+    "ProjectShape"
+    "detectShape"
+    "--shape"
+)
+for pattern in "${removed_patterns[@]}"; do
+    hits=$(grep -rn "$pattern" setup/ workflow/ src/ test/ docs/ ai/ .github/ --include='*.md' --include='*.ts' --include='*.yml' 2>/dev/null \
+        | grep -v 'CHANGELOG\|TODO_\|ADR-\|design-rationale\|footguns.*RESOLVED\|decisions/\|preflight-checks' || true)
+    if [[ -n "$hits" ]]; then
+        fail "Removed pattern '$pattern' still found:"
+        echo "$hits" | head -5 | sed 's/^/  /'
+    fi
+done
 
 # --- Summary ---
 echo ""

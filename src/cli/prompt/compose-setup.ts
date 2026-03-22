@@ -52,11 +52,18 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
 }
 
 function buildSetupPreamble(vars: PromptVariables): string {
+  const cmds = [
+    vars.buildCommand && `**Build:** \`${vars.buildCommand}\``,
+    vars.testCommand && `**Test:** \`${vars.testCommand}\``,
+    vars.lintCommand && `**Lint:** \`${vars.lintCommand}\``,
+    vars.formatCommand && `**Format:** \`${vars.formatCommand}\``,
+  ].filter(Boolean).join(' | ');
+
   return [
     `Set up GOAT Flow for ${vars.agentName}.`,
     '',
     `**Stack:** ${vars.languages}`,
-    `**Build:** \`${vars.buildCommand}\` | **Test:** \`${vars.testCommand}\` | **Lint:** \`${vars.lintCommand}\` | **Format:** \`${vars.formatCommand}\``,
+    ...(cmds ? [cmds] : []),
     '',
     'Work through each phase in order. All Phase 1a gates must pass before starting Phase 1b.',
     '',

@@ -13,7 +13,6 @@ Set up the enforcement layer for this project. This creates the hooks,
 permissions deny list, and settings that provide hard guardrails beyond
 what CLAUDE.md rules alone can enforce.
 
-This project is a [APP / LIBRARY / SCRIPT COLLECTION].
 Stack:
 - Lint: [your lint command]
 - Format: [your format command, or "none - no formatter configured"]
@@ -140,6 +139,25 @@ HOOK CONFIGURATION PITFALLS:
 - Check git diff before running expensive checks - don't lint
   unchanged files
 
+4. Compaction hook (Notification, optional but recommended)
+
+Register a Notification hook that fires after context compaction.
+This re-injects key context that gets lost during long sessions:
+- Current task description (from tasks/todo.md if it exists)
+- List of modified files (git diff --name-only)
+- Hard constraints (Ask First boundaries, Never tier rules)
+- Active working notes
+
+In .claude/settings.json, add to the hooks array:
+{
+  "type": "Notification",
+  "matcher": "compact",
+  "command": "echo 'CONTEXT AFTER COMPACTION:' && echo 'Modified files:' && git diff --name-only 2>/dev/null && echo '---' && cat tasks/todo.md 2>/dev/null || echo 'No active tasks' && echo '---' && echo 'Constraints: read CLAUDE.md Autonomy Tiers before proceeding'"
+}
+
+This is most valuable during multi-hour sessions where losing the
+thread means repeating work or violating boundaries.
+
 VERIFICATION:
 - Verify .claude/settings.json is valid JSON (parse it)
 - Verify deny-dangerous.sh blocks: rm -rf, git push main,
@@ -148,5 +166,6 @@ VERIFICATION:
 - Verify stop-lint.sh has the infinite loop guard
 - Verify all hook paths use $(git rev-parse --show-toplevel)
 - If format hook was skipped, note why
+- If compaction hook was skipped, note why
 - Run the deny-dangerous hook against a test input to verify it works
 ```

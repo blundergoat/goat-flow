@@ -70,7 +70,9 @@ Report: "Pass 4 complete. [N] findings remain after removing [N] in self-check."
 
 ## Present Results
 
-Present the full audit to the user. Ask: "Any of these you want me to dig deeper on? Any that look like false positives?"
+Present the full audit to the user. Ask: "Want me to dig deeper on any of these? Any that look like false positives?"
+
+Do NOT auto-advance. Let the human ask follow-up questions, challenge findings, or redirect focus.
 
 Do NOT propose fixes. The audit reports — it does not fix.
 

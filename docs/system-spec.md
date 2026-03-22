@@ -1,6 +1,6 @@
 # AI Workflow System Specification
 
-**Version:** v0.3.0 | 2026-03-21
+**Version:** v0.4.0 | 2026-03-22
 
 **Implements:** 5-layer architecture with default execution loop
 
@@ -19,6 +19,8 @@ Layer 1 -- Runtime (CLAUDE.md, ~120 lines)
 Layer 2 -- Local Context (directory-level CLAUDE.md files)
     Auto-loaded when Claude works in that directory
     High-risk boundaries, module-specific gotchas, local conventions
+    Cold path: ai/instructions/ holds domain-specific coding guidelines
+    loaded on demand. Hot path (instruction files) stays under 120 lines.
 
 Layer 3 -- Skills (loaded via slash commands)
     /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test
@@ -58,16 +60,15 @@ Claude Code auto-reads `CLAUDE.md` in the working directory plus ancestors up to
 
 **Create when:** a module has 2+ footgun entries, is an Ask First boundary, or has conventions differing from default. **Do not create** for every directory, simple modules, flat-structure libraries, or directories already covered by instruction files.
 
-### Project Shape: App vs Library vs Collection
+### Ask First Boundary Examples
+
+> **Note:** Project shape (App / Library / Script Collection) does not affect scoring or setup. All projects follow the same rules. This table is retained as a reference for choosing Ask First boundaries.
 
 | Aspect                  | App (e.g., Tauri, Symfony)             | Library (e.g., PHP package, npm module)                | Script Collection (e.g., domain-organised shell scripts) |
 | ----------------------- | -------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
-| CLAUDE.md line target   | ~120 lines                             | ~120 lines                                             | ~120 lines                                               |
-| Skills                  | 7 (all core)                           | 7 (all core)                                           | 7 (all core)                                             |
 | Ask First boundaries    | Auth, routing, deployment, API, DB     | Public API, dependencies, config/data files            | Shared sourced files, CONFIGURATION blocks, new domains  |
 | Local CLAUDE.md files   | Likely needed for high-risk dirs       | Create where needed                                    | Create where needed                                      |
 | Agent evals             | Real incidents                         | Common stack failure modes                             | Real incidents (grep `fix:` in commit history)           |
-| Permission profiles     | Useful (frontend/backend/infra lanes)  | Useful                                                 | Useful                                                   |
 
 ### Skill Justification Test
 
@@ -100,7 +101,7 @@ Frontier models follow ~150-200 instructions. Claude Code's system prompt consum
 
 **Governance:**
 
-1. CLAUDE.md MUST stay under 150 lines. Target 120 lines for all project shapes. Count: `wc -l CLAUDE.md`.
+1. CLAUDE.md MUST stay under 150 lines. Target 120 lines. Count: `wc -l CLAUDE.md`.
 2. Every rule MUST apply to every session. Situation-specific guidance belongs in skills/playbooks/local files.
 3. Weekly /insights review. Quarterly audit: re-count, check for stale rules.
 4. Prefer pointers over copies. Prefer code examples over prose.
@@ -382,6 +383,10 @@ stack:
 | `docs/decisions/`                     | Architecture Decision Records | ADR template + real decisions if discoverable (see template below) |
 | `docs/guidelines-ownership-split.md` | Migration rationale          | What was moved, removed, and why                    |
 | `tasks/handoff-template.md`          | Session handoff              | Status, Current State, Decisions, Risks, Next Step  |
+| `ai/README.md`                       | Cold-path router (which instruction files to load) |                                  |
+| `ai/instructions/base.md`            | Universal project contract (conventions, commands, boundaries) |                     |
+| `ai/instructions/code-review.md`     | Review standards and approval criteria |                                             |
+| `ai/instructions/git-commit.md`      | Commit format, branch naming, PR workflow |                                          |
 
 ### ADR Template
 

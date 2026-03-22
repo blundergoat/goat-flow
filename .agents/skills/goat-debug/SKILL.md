@@ -45,9 +45,9 @@ Present the diagnosis to the user. For every claim, provide file:line evidence.
 - Note uncertainty: "I believe X because Y, but haven't verified Z"
 - Rate confidence: High / Medium / Low
 
-**HUMAN GATE:** Present the diagnosis. Ask: "Does this match what you're seeing? Should I investigate deeper, or does this diagnosis look right?"
+**HUMAN GATE:** Present your findings. Then ask: "Does this match what you're seeing? Want me to dig deeper on any part, or does this diagnosis look right?"
 
-Do NOT proceed to Phase 3 until the user confirms.
+Do NOT auto-advance to Phase 3. Let the human challenge the diagnosis, ask about alternatives, or redirect the investigation.
 
 ---
 

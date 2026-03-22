@@ -74,7 +74,7 @@ export const foundationChecks: CheckDef[] = [
   {
     id: '1.2.6', name: 'LOG step', tier: 'foundation', category: 'Execution Loop',
     pts: 2, confidence: 'medium',
-    detect: { type: 'grep', path: '{instruction_file}', section: 'LOG', pattern: 'lessons\\.md|footguns\\.md|MUST update when tripped' },
+    detect: { type: 'grep', path: '{instruction_file}', pattern: 'lessons\\.md|footguns\\.md|MUST update when tripped' },
     recommendation: 'Add LOG step referencing lessons.md, footguns.md',
     recommendationKey: 'add-log-step',
   },
@@ -125,6 +125,28 @@ export const foundationChecks: CheckDef[] = [
     },
     recommendation: 'Make Ask First boundaries project-specific with actual file paths and domain terms',
     recommendationKey: 'project-specific-ask-first',
+  },
+  {
+    id: '1.3.2a', name: 'Ask First paths resolve', tier: 'foundation', category: 'Autonomy Tiers',
+    pts: 2, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { paths, resolved, unresolved } = ctx.agentFacts.askFirst;
+        if (paths.length === 0) {
+          return { id: '1.3.2a', name: 'Ask First paths resolve', tier: 'foundation', category: 'Autonomy Tiers', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No backtick-wrapped paths in Ask First section' };
+        }
+        if (unresolved.length === 0) {
+          return { id: '1.3.2a', name: 'Ask First paths resolve', tier: 'foundation', category: 'Autonomy Tiers', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `All ${resolved} Ask First paths resolve` };
+        }
+        if (resolved > 0) {
+          return { id: '1.3.2a', name: 'Ask First paths resolve', tier: 'foundation', category: 'Autonomy Tiers', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${resolved}/${paths.length} resolve. Broken: ${unresolved.join(', ')}`, evidence: unresolved.join(', ') };
+        }
+        return { id: '1.3.2a', name: 'Ask First paths resolve', tier: 'foundation', category: 'Autonomy Tiers', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: `0/${paths.length} resolve. Broken: ${unresolved.join(', ')}`, evidence: unresolved.join(', ') };
+      },
+    },
+    recommendation: 'Fix broken paths in Ask First section — every referenced file/directory must exist on disk',
+    recommendationKey: 'fix-ask-first-paths',
   },
   {
     id: '1.3.3', name: 'Never tier destructive guards', tier: 'foundation', category: 'Autonomy Tiers',

@@ -197,6 +197,21 @@ This is the first step of the execution loop: READ → CLASSIFY → SCOPE → AC
 List 3-7 specific boundaries with actual file paths from this project.`,
   },
   {
+    key: 'fix-ask-first-paths',
+    phase: 'foundation',
+    category: 'Autonomy Tiers',
+    kind: 'fix',
+    instruction: `The Ask First section in \`{{instructionFile}}\` references file paths that don't exist on disk. For each broken path:
+
+1. Check if the file was renamed — update to the new path
+2. Check if the file was deleted — remove from the boundary list
+3. Check if it's a typo — fix the path
+
+**Every path in Ask First must resolve.** Phantom paths mislead agents — they'll look for files that don't exist and may create them (the exact anti-pattern this section is meant to prevent).
+
+Run \`ls\` on each backtick-wrapped path to verify.`,
+  },
+  {
     key: 'add-never-guards',
     phase: 'foundation',
     category: 'Autonomy Tiers',

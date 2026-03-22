@@ -35,6 +35,10 @@ User reads docs/getting-started.md
 - **Cross-references are fragile.** 60+ markdown files with dense internal linking. File renames require repo-wide grep.
 - **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file:line references.
 
+## Hot Path / Cold Path
+
+Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. `ai/instructions/` is the cold path -- domain-specific coding guidelines loaded on demand via `ai/README.md` router.
+
 ## Deliberate Trade-offs
 
 - **Redundancy across docs** — The same concepts appear in multiple files (spec, layers, steps, rationale) for different audiences. This is intentional: each file serves a different reading path. The cost is maintenance burden on edits.

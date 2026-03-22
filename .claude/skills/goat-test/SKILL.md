@@ -76,6 +76,10 @@ Focus on what automated tests and AI can't catch:
 
 Mark each item as **critical** (must check) or **nice-to-verify** (check if time allows).
 
+Present all three tracks. Then ask: "Want me to adjust any of these tracks? Any tests that seem redundant or missing?"
+
+Do NOT auto-advance. Let the human review the test plan, drop unnecessary items, or add edge cases before execution.
+
 ---
 
 ## Verification Ratio

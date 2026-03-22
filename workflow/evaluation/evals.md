@@ -11,8 +11,6 @@ Create an agent eval regression suite for this project. Agent evals are
 replay tests - each one recreates a real incident and verifies the agent
 handles it correctly. They catch regressions when CLAUDE.md changes.
 
-This project is a [APP / LIBRARY / SCRIPT COLLECTION].
-
 1. Create the agent-evals/ directory
 
 2. Create agent-evals/README.md explaining:

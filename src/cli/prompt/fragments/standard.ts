@@ -37,6 +37,98 @@ description: "${skill} skill for GOAT Flow"
 
 Refer to the goat-flow documentation for the full skill template.`,
   })),
+  // Skill quality fragments
+  {
+    key: 'add-skill-step0',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Most skills should include a Step 0 that gathers context before acting. Add to each skill:
+
+\`\`\`markdown
+## Step 0 — Gather Context
+
+Ask the user before starting:
+1. [What specific questions to ask for this skill]
+2. [What context the agent needs]
+
+Do NOT start until the user has answered.
+\`\`\`
+
+This prevents blind execution — the agent asks before it acts.`,
+  },
+  {
+    key: 'add-skill-human-gates',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should include HUMAN GATE checkpoints where the agent pauses for review before proceeding to the next phase. Add to each skill between major phases:
+
+\`\`\`markdown
+**HUMAN GATE:** Present findings. Ask "Does this look right?" Do NOT proceed until confirmed.
+\`\`\`
+
+This prevents the agent from auto-advancing through diagnosis → fix → deploy without human review.`,
+  },
+  {
+    key: 'add-skill-constraints',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should use MUST/MUST NOT constraints to enforce boundaries. Add a Constraints section:
+
+\`\`\`markdown
+## Constraints
+
+- MUST gather context before acting (Step 0)
+- MUST stop after presenting findings — no fixes until human reviews
+- MUST NOT skip phases
+- MUST NOT fabricate file paths or evidence
+\`\`\`
+
+Use RFC 2119 language. MUST = blocking, SHOULD = recommended, MAY = optional.`,
+  },
+  {
+    key: 'add-skill-conversational',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should be conversational, not one-shot. After each major phase, the agent should present findings and let the human drill in before proceeding.
+
+Add to each skill after the main output phase:
+
+\`\`\`markdown
+Present your findings. Then ask: "Want me to dig deeper on any of these? Any that look wrong?"
+
+Do NOT auto-advance to the next phase. Let the human:
+- Ask follow-up questions ("Walk me through the riskiest change")
+- Challenge findings ("That looks like a false positive")
+- Redirect ("Also check X")
+- Confirm ("Looks good, proceed")
+
+Conversational reviews catch architectural problems. One-shot dumps flag style nits.
+\`\`\``,
+  },
+  {
+    key: 'add-skill-phases',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should have a phased process that prevents step-skipping. Structure as:
+
+\`\`\`markdown
+## Phase 1 — [First step]
+[Instructions]
+
+## Phase 2 — [Second step]
+[Instructions — only after Phase 1 complete]
+
+## Phase 3 — [Third step]
+[Instructions — only after human reviews Phase 2]
+\`\`\`
+
+Each phase should have a clear entry condition (what must be done before starting it).`,
+  },
   {
     key: 'create-all-skills',
     phase: 'standard',
@@ -50,6 +142,59 @@ Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, O
   },
 
   // === Hooks ===
+  {
+    key: 'add-deny-blocks',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook exists but has no real blocking logic. A deny hook that just \`exit 0\` provides no protection.
+
+Add blocking patterns for dangerous commands. The hook should \`exit 2\` (with a message to stderr) for:
+- \`rm -rf\` without safe scoping
+- Direct push to main/master
+- Force push
+- \`chmod 777\`
+- Pipe to shell (\`curl | bash\`)
+- \`.env\` file modifications
+- \`--no-verify\` bypass
+
+See \`workflow/runtime/enforcement.md\` for the full deny pattern list.`,
+  },
+  {
+    key: 'add-compaction-hook',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'create',
+    instruction: `Register a Notification hook that fires after context compaction to re-inject key context.
+
+Add to \`{{settingsFile}}\` hooks array:
+
+\`\`\`json
+{
+  "type": "Notification",
+  "matcher": "compact",
+  "command": "echo 'CONTEXT AFTER COMPACTION:' && echo 'Modified files:' && git diff --name-only 2>/dev/null && echo '---' && cat tasks/todo.md 2>/dev/null || echo 'No active tasks' && echo '---' && echo 'Constraints: read {{instructionFile}} Autonomy Tiers before proceeding'"
+}
+\`\`\`
+
+This preserves context during long sessions — the agent gets reminded of current task, modified files, and constraints after compaction.`,
+  },
+  {
+    key: 'add-stop-lint-validation',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The post-turn hook (stop-lint.sh) exists but has no actual validation logic. It should run checks after each agent turn:
+
+- Shellcheck on changed \`.sh\` files
+- Typecheck (\`tsc --noEmit\`) on changed \`.ts\` files
+- Lint check on changed files (language-appropriate)
+- Format check (if formatter configured)
+
+The hook MUST exit 0 even if checks fail (non-zero causes infinite loops). Report issues to stderr as informational feedback.
+
+See \`workflow/runtime/enforcement.md\` for the full stop-lint template.`,
+  },
   {
     key: 'fix-settings-json',
     phase: 'standard',
@@ -331,4 +476,108 @@ Target: under 100 lines.`,
 Only create this if domain content was extracted from \`{{instructionFile}}\` to reduce its line count.`,
   },
 
+  // === Local Instructions (cold path) ===
+  {
+    key: 'create-instructions-dir',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create the \`ai/instructions/\` directory and \`ai/README.md\` router:
+
+\`\`\`markdown
+# Project Coding Guidelines
+
+Read \`instructions/base.md\` first for every task.
+
+Then load additional files based on the work:
+
+| Task | Load |
+|------|------|
+| Code review | \`instructions/code-review.md\` |
+| Committing code | \`instructions/git-commit.md\` |
+
+Precedence (highest first):
+1. security.md (if touching auth/secrets/validation)
+2. code-review.md (for review tasks only)
+3. domain file (frontend/backend)
+4. base.md (always loaded)
+
+Only load files that exist.
+\`\`\`
+
+Add rows for domain files as you create them (frontend.md, backend.md, security.md, testing.md).`,
+  },
+  {
+    key: 'create-instructions-router',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/README.md\` as the routing map for instruction files. This tells agents which files to load for which tasks. See the \`ai/instructions/\` directory for the files it references.`,
+  },
+  {
+    key: 'create-base-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/instructions/base.md\` — the universal project contract. Include:
+
+- What the repo is (one line)
+- Architecture overview (2-3 lines)
+- Build/test/lint commands
+- Coding conventions (5-8 concrete do/don't rules)
+- Generated files (never edit these)
+- Dangerous operations (list with reasons)
+
+Keep it concrete: "Use \`sqlc.arg(name)\` in queries" not "write clean SQL".`,
+  },
+  {
+    key: 'create-code-review-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/instructions/code-review.md\` — review standards for this project. Include:
+
+- Priority order: correctness > security > maintainability
+- Approval criteria (what must pass before merge)
+- 3-5 common anti-patterns to flag (with code examples)
+- What NOT to nitpick (style handled by linter)`,
+  },
+  {
+    key: 'create-git-commit-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/instructions/git-commit.md\` — commit conventions for this project. Include:
+
+- Commit message format (with good/bad examples)
+- Branch naming convention
+- PR workflow (draft → review → merge)
+- What to include in PR descriptions`,
+  },
+  {
+    key: 'create-github-git-commit',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`.github/git-commit-instructions.md\` — universal commit instructions for any tool or human making commits. Include the key rules from \`ai/instructions/git-commit.md\` inline (tools may not follow references to other files).`,
+  },
+  {
+    key: 'create-copilot-bridge',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`.github/instructions/\` bridge files for GitHub Copilot. For each file in \`ai/instructions/\`, create a matching \`.instructions.md\` file with:
+
+1. \`applyTo\` frontmatter scoping it to the relevant paths
+2. The content from the source file (Copilot needs inline content, not links)
+
+Example:
+\`\`\`markdown
+---
+applyTo: "src/frontend/**"
+---
+<!-- Source: ai/instructions/frontend.md — keep in sync -->
+[content from ai/instructions/frontend.md]
+\`\`\``,
+  },
 ];

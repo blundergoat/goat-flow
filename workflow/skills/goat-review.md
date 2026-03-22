@@ -37,6 +37,12 @@ Before reviewing, the skill MUST ask the user:
 Do NOT start reviewing until the user has answered. A review without
 scope is a waste of time.
 
+IMPORTANT: Reviews should be conversational, not one-shot. Present
+findings, then let the human drill in: "Walk me through the riskiest
+change." "What breaks if this runs concurrently?" "Is error handling
+consistent?" Conversational reviews catch architectural problems.
+One-shot reviews flag style nits and miss what matters.
+
 ## Phase 1 - Scope
 
 Identify what changed:

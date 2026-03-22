@@ -1,6 +1,10 @@
 import type { SharedFacts, ReadonlyFS } from '../types.js';
 
-const EVIDENCE_PATTERN = /`[^`]+:[0-9]+`/;
+// Matches file:line evidence in multiple formats:
+// - `src/auth.ts:42` (backtick-wrapped)
+// - (lines 866-880) or (line 52) (prose-style)
+// - `src/auth.ts` (lines 42-50) (backtick path + prose line)
+const EVIDENCE_PATTERN = /`[^`]+:[0-9]+`|\(lines?\s+[0-9]+/;
 
 export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
   // Footguns
@@ -69,7 +73,7 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
   return {
     footguns: { exists: footgunsExists, hasEvidence: footgunsHasEvidence, dirMentions },
     lessons: { exists: lessonsExists, hasEntries: lessonsHasEntries },
-architecture: { exists: archExists, lineCount: archLineCount },
+    architecture: { exists: archExists, lineCount: archLineCount },
     evals: { dirExists: evalsDir, count: evalCount, hasReadme, hasOriginLabels, hasReplayPrompts },
     ci: {
       workflowExists: ciExists,
@@ -84,5 +88,29 @@ architecture: { exists: archExists, lineCount: archLineCount },
     domainReference: { exists: fs.exists('docs/domain-reference.md') },
     preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
     changelog: { exists: fs.exists('CHANGELOG.md') },
+    localInstructions: extractLocalInstructions(fs),
+    gitCommitInstructions: { exists: fs.exists('.github/git-commit-instructions.md') },
   };
+}
+
+function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstructions'] {
+  // Check ai/instructions/ first, fall back to .github/instructions/
+  const aiDir = fs.exists('ai/instructions');
+  const ghDir = fs.exists('.github/instructions');
+
+  if (!aiDir && !ghDir) {
+    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasBase: false, hasCodeReview: false, hasGitCommit: false };
+  }
+
+  const location = aiDir ? 'ai' as const : 'github' as const;
+  const dir = aiDir ? 'ai/instructions' : '.github/instructions';
+  const files = fs.listDir(dir).filter(f => f.endsWith('.md'));
+  const hasRouter = aiDir ? fs.exists('ai/README.md') : false;
+
+  // Accept both .md and .instructions.md naming
+  const hasBase = files.some(f => f === 'base.md' || f === 'base.instructions.md');
+  const hasCodeReview = files.some(f => f === 'code-review.md' || f === 'code-review.instructions.md');
+  const hasGitCommit = files.some(f => f === 'git-commit.md' || f === 'git-commit.instructions.md');
+
+  return { dirExists: true, location, fileCount: files.length, hasRouter, hasBase, hasCodeReview, hasGitCommit };
 }

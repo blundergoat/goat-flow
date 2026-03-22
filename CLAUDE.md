@@ -107,6 +107,7 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Reference docs | `docs/reference/` |
 | Setup prompts | `setup/` |
 | Skill/playbook templates | `workflow/` |
+| Coding guidelines | `ai/README.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Architecture | `docs/architecture.md` |

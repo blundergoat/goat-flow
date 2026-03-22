@@ -61,10 +61,36 @@ These files are created during Phase 1a regardless of which agent you use. They 
    reference it in the Definition of Done.
 ```
 
+## Project Coding Guidelines (Cold Path)
+
+```
+7. ai/instructions/ - Project coding guidelines (cold path).
+   Create ai/README.md as routing map.
+   Create ai/instructions/base.md with project-wide conventions.
+   Create ai/instructions/code-review.md with review standards.
+   Create ai/instructions/git-commit.md with commit conventions.
+   If .github/instructions/ exists, migrate content to ai/instructions/
+   (group language files into domain files: php.md + python.md → backend.md).
+   Create .github/git-commit-instructions.md if .git/ exists.
+
+   VERIFICATION GATE — after creating ai/instructions/ files:
+   - Verify every file path referenced actually exists (ls/find)
+   - Verify every command listed actually runs (build, test, lint)
+   - Verify every architectural claim matches current code, not roadmap
+   - Remove any planned/aspirational features — only document current state
+   - If docs/architecture.md mentions something, confirm it in source before citing it
+
+   ALSO AUDIT EXISTING INSTRUCTION FILES:
+   - Read the Ask First section in the hot-path file (CLAUDE.md/AGENTS.md/GEMINI.md)
+   - Verify every path in Ask First exists on disk — stale paths mislead agents
+   - Check router table entries resolve — broken refs are common after renames
+   - If a path doesn't exist, fix it (don't copy it into ai/instructions/)
+```
+
 ## Ownership Split Report
 
 ```
-7. docs/guidelines-ownership-split.md - If a guidelines file was
+8. docs/guidelines-ownership-split.md - If a guidelines file was
    trimmed in the pre-audit step, create this file documenting what
    was moved, what was removed, and why. Preserves migration rationale.
    In dual-agent projects, document ownership for BOTH instruction

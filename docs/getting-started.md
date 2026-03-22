@@ -1,6 +1,6 @@
 # GOAT Flow -- Getting Started
 
-**Version:** v0.3.0 | 2026-03-21
+**Version:** v0.4.0 | 2026-03-22
 **Companion to:** `setup/` (agent setup guides) and `docs/system-spec.md` (canonical spec)
 
 ---
@@ -27,8 +27,7 @@ A structured workflow system for AI coding agents — Claude Code, Gemini CLI, a
 
 3. **Audit your existing guidelines file.** If you have an `ai-agent-guidelines.instructions.md` (or similar), open the prompts and read the "Before You Start: Guidelines Ownership Audit" section. Remove overlapping content from guidelines *manually* before running any prompts. This is the one step you do by hand. If your project uses domain-specific `.github/instructions/` files instead of a single shared file, skip this audit -- they don't overlap with CLAUDE.md.
 
-4. **Know your project shape.** You'll need to fill in blanks in the prompts:
-   - Is this an **APP**, **LIBRARY**, or **SCRIPT COLLECTION**?
+4. **Know your stack.** You'll need to fill in blanks in the prompts:
    - Languages, build command (or "none"), test command, lint command, format command (or "none")
 
 ## Implementation Order
@@ -148,6 +147,9 @@ docs/domain-reference.md               <- Prompt B path only
 docs/guidelines-ownership-split.md     <- migration rationale
 docs/decisions/
 tasks/handoff-template.md
+ai/README.md                           <- Cold-path router for project coding guidelines
+ai/instructions/                       <- Domain-specific coding guidelines (base, code-review, git-commit, frontend, backend, etc.)
+.github/git-commit-instructions.md     <- Universal commit instructions
 agent-evals/                           <- Phase 2
 .github/workflows/context-validation.yml  <- Phase 2
 ```

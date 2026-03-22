@@ -70,15 +70,57 @@ function extractRouterPaths(content: string): string[] {
   const routerSection = extractSection(content, 'router');
   if (!routerSection) return paths;
 
-  const matches = routerSection.matchAll(/`([^`]+)`/g);
-  for (const match of matches) {
+  // Match backtick-wrapped paths: `docs/footguns.md`
+  const backtickMatches = routerSection.matchAll(/`([^`]+)`/g);
+  for (const match of backtickMatches) {
     const path = match[1];
-    // Skip patterns with wildcards or braces
     if (path.includes('*') || path.includes('{')) continue;
-    // Skip inline code that isn't a path
     if (!path.includes('/') && !path.includes('.')) continue;
     paths.push(path);
   }
+
+  // Match markdown link paths: [text](path)
+  const linkMatches = routerSection.matchAll(/\]\(([^)]+)\)/g);
+  for (const match of linkMatches) {
+    const path = match[1];
+    if (path.includes('*') || path.includes('{')) continue;
+    if (path.startsWith('http')) continue;
+    if (!path.includes('/') && !path.includes('.')) continue;
+    // Avoid duplicates from paths already captured via backticks
+    if (!paths.includes(path)) paths.push(path);
+  }
+
+  return paths;
+}
+
+function extractAskFirstPaths(content: string): string[] {
+  const paths: string[] = [];
+
+  // Find the Ask First section — either as a heading or bold text
+  let section: string | null = null;
+  const headingMatch = content.match(/##\s+ask\s+first[\s\S]*?(?=\n##\s|$)/i);
+  if (headingMatch) {
+    section = headingMatch[0];
+  } else {
+    const boldMatch = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
+    if (boldMatch) section = boldMatch[0];
+  }
+
+  if (!section) return paths;
+
+  // Extract backtick-wrapped paths from the Ask First section
+  const backtickMatches = section.matchAll(/`([^`]+)`/g);
+  for (const match of backtickMatches) {
+    const path = match[1];
+    if (path.includes('*') || path.includes('{')) continue;
+    if (path.startsWith('http')) continue;
+    // Must look like a file/directory path
+    if (!path.includes('/') && !path.includes('.')) continue;
+    // Skip things that are clearly not paths (commands, patterns)
+    if (path.includes('|') || path.startsWith('-') || path.startsWith('$')) continue;
+    if (!paths.includes(path)) paths.push(path);
+  }
+
   return paths;
 }
 
@@ -125,25 +167,63 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     }
   }
 
-  // Skills
+  // Check for compaction notification hook in settings
+  let compactionHookExists = false;
+  if (settingsParsed && settingsValid) {
+    const settings = settingsParsed as Record<string, unknown>;
+    const hooks = settings.hooks as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(hooks)) {
+      compactionHookExists = hooks.some(h =>
+        (h.type === 'Notification' || h.event === 'Notification') &&
+        (String(h.matcher ?? '').includes('compact') || String(h.command ?? '').includes('compact'))
+      );
+    }
+  }
+
+  // Skills — existence + content quality
   const skillsFound: string[] = [];
   const skillsMissing: string[] = [];
+  let withStep0 = 0;
+  let withHumanGate = 0;
+  let withConstraints = 0;
+  let withPhases = 0;
+  let withConversational = 0;
   for (const skill of EXPECTED_SKILLS) {
-    if (fs.exists(`${agent.skillsDir}/${skill}/SKILL.md`)) {
+    const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
+    if (fs.exists(skillPath)) {
       skillsFound.push(skill);
+      const skillContent = fs.readFile(skillPath);
+      if (skillContent) {
+        if (/step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i.test(skillContent)) withStep0++;
+        if (/human\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
+        if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
+        if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
+        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow.up question/i.test(skillContent)) withConversational++;
+      }
     } else {
       skillsMissing.push(skill);
     }
   }
 
-  // Hooks
+  // Hooks — existence + content quality
   const denyHookPath = agent.hooksDir
     ? `${agent.hooksDir}/deny-dangerous.sh`
     : (agent.denyMechanism.type === 'deny-script' ? agent.denyMechanism.path : null);
   const denyExists = denyHookPath ? fs.exists(denyHookPath) : false;
 
+  // Check deny hook has actual blocking logic (not just exit 0)
+  let denyHasBlocks = false;
+  if (denyExists && denyHookPath) {
+    const denyContent = fs.readFile(denyHookPath);
+    if (denyContent) {
+      // Should have block/exit 2 patterns or case statements
+      denyHasBlocks = /exit\s+2|block|BLOCK/i.test(denyContent) && denyContent.split('\n').length > 5;
+    }
+  }
+
   let postTurnExists = false;
   let postTurnExitsZero = false;
+  let postTurnHasValidation = false;
   let postToolExists = false;
 
   if (agent.hooksDir) {
@@ -154,6 +234,8 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
       if (hookContent) {
         const lines = hookContent.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
         postTurnExitsZero = lines.length > 0 && lines[lines.length - 1].trim() === 'exit 0';
+        // Check for actual validation logic (not just exit 0)
+        postTurnHasValidation = /shellcheck|tsc|lint|fmt|check|test|wc -l/i.test(hookContent) && hookContent.split('\n').length > 10;
       }
     }
     postToolExists = fs.exists(`${agent.hooksDir}/format-file.sh`);
@@ -165,6 +247,7 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
       if (hookContent) {
         const lines = hookContent.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
         postTurnExitsZero = lines.length > 0 && lines[lines.length - 1].trim() === 'exit 0';
+        postTurnHasValidation = /shellcheck|tsc|lint|fmt|check|test|wc -l/i.test(hookContent) && hookContent.split('\n').length > 10;
       }
     }
   }
@@ -184,6 +267,18 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     }
   }
 
+  // Ask First path verification
+  const askFirstPaths = exists ? extractAskFirstPaths(content!) : [];
+  let askFirstResolved = 0;
+  const askFirstUnresolved: string[] = [];
+  for (const p of askFirstPaths) {
+    if (fs.exists(p)) {
+      askFirstResolved++;
+    } else {
+      askFirstUnresolved.push(p);
+    }
+  }
+
   // Local context
   const localFiles = agent.localPattern.includes('*')
     ? fs.glob(agent.localPattern)
@@ -200,10 +295,14 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     agent,
     instruction: { exists, content, lineCount, sections },
     settings: { exists: settingsExists, valid: settingsValid, parsed: settingsParsed, hasDenyPatterns },
-    skills: { found: skillsFound, missing: skillsMissing, allPresent: skillsMissing.length === 0 },
-    hooks: { denyExists, postTurnExists, postTurnExitsZero, postToolExists },
+    skills: {
+      found: skillsFound, missing: skillsMissing, allPresent: skillsMissing.length === 0,
+      quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, total: skillsFound.length },
+    },
+    hooks: { denyExists, denyHasBlocks, postTurnExists, postTurnExitsZero, postTurnHasValidation, postToolExists, compactionHookExists },
     deny: denyResults,
     router: { exists: routerPaths.length > 0, paths: routerPaths, resolved, unresolved },
+    askFirst: { exists: askFirstPaths.length > 0, paths: askFirstPaths, resolved: askFirstResolved, unresolved: askFirstUnresolved },
     localContext: { files: filteredLocal, warranted, missing },
   };
 }

@@ -66,9 +66,9 @@ Every claim backed by file:line reference. Flag unknowns explicitly: "I couldn't
 
 ## Phase 4 — Gate
 
-**HUMAN GATE:** Present the research document. Ask: "Does this match your understanding? Anything I should also look at?"
+**HUMAN GATE:** Present your findings. Then ask: "Want me to dig deeper on any of these? Anything that doesn't match your understanding, or areas I should also look at?"
 
-Do NOT proceed to planning or implementation. Wait for the human to confirm understanding is correct. The human may redirect: "also look at X" or "that's wrong because Y."
+Do NOT auto-advance to planning or implementation. Let the human drill into specific findings, challenge conclusions, or redirect: "also look at X" or "that's wrong because Y."
 
 ---
 

@@ -125,6 +125,31 @@ WHAT TO BUILD (in this order):
    Each eval MUST declare Origin: real-incident | synthetic-seed.
    Each eval MUST declare Agents: all | codex | claude.
 
+6. Cold path: project coding guidelines
+
+   If `.github/instructions/` exists:
+   - Read existing files and group by domain (e.g., `php.instructions.md` + `python.instructions.md` → `ai/instructions/backend.md`)
+   - Create `ai/README.md` as routing map
+   - Keep `.github/instructions/` as optional Copilot bridges
+
+   If no instruction files exist:
+   - Create `ai/README.md` (routing map — see `workflow/local-context/README.md` template)
+   - Create `ai/instructions/base.md` (project conventions — see `workflow/local-context/base.md` template)
+   - Create `ai/instructions/code-review.md` (review standards — see `workflow/local-context/code-review.md` template)
+   - Create `ai/instructions/git-commit.md` (commit format — see `workflow/local-context/git-commit.md` template)
+   - Create `.github/git-commit-instructions.md` if `.git/` exists
+
+   VERIFICATION: After creating ai/instructions/ files, the agent MUST:
+   1. Verify every file path exists: for each backtick-wrapped path, run `ls`
+   2. Verify commands work: run build/test/lint commands listed in base.md
+   3. Remove aspirational content: if a feature is planned but not implemented, remove it
+      Source of truth is the code, not docs/architecture.md or roadmaps.
+
+   Add to AGENTS.md Router Table:
+   | Project guidelines | `ai/README.md` |
+
+   Verification: `ls ai/instructions/` shows base.md, code-review.md, git-commit.md.
+
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
 - All seed files exist
@@ -132,6 +157,7 @@ VERIFICATION:
 - Verification scripts are executable
 - Footguns are real with file:line evidence
 - Router table references resolve
+- ai/instructions/ exists with base.md, code-review.md, git-commit.md
 ```
 
 ---

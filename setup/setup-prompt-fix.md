@@ -62,6 +62,13 @@ SECTIONS:
 ENFORCEMENT:
 - Settings/config MUST have Read deny patterns for secrets if applicable
 
+COLD PATH (ai/instructions/):
+- Check if `ai/instructions/` exists with base.md, code-review.md, git-commit.md
+- Check if `.github/git-commit-instructions.md` exists
+- If `.github/instructions/` exists without `ai/instructions/`, recommend migration
+  (group language files into domain files: php.md + python.md → backend.md)
+- Check if instruction file router table has `ai/README.md` entry
+
 AGENT EVALS:
 - Each eval MUST have Origin: real-incident | synthetic-seed
 - Each eval MUST have Agents: all | codex | claude | gemini

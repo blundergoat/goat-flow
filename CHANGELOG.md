@@ -4,9 +4,79 @@ All notable changes to GOAT Flow will be documented in this file.
 
 ---
 
-## v0.4.1 - 2026-03-22
+## v0.4.0 - 2026-03-22
 
-Scanner bug fixes, prompt improvements, local context redesign. Multi-agent review identified 16 bugs — 12 fixed, 4 accepted. Self-scan: Claude 100%, Gemini 100%, Codex 98%.
+CLI auditor and prompt generator (M1+M2), local context system (M2.6), 80-check rubric with quality scoring, multi-agent audit fixes across 6 projects. All projects score A (93-98%).
+
+### M2.6: Local Context — Cold Path Architecture
+
+- `ai/instructions/` as vendor-neutral source of truth for project coding guidelines
+- Hot path (CLAUDE.md etc.) = agent behavior under 120 lines. Cold path (`ai/instructions/`) = project code guidelines loaded on demand
+- `ai/README.md` as router with task-to-file mapping and precedence order
+- Created for goat-flow: `ai/instructions/base.md`, `code-review.md`, `git-commit.md`
+- `.github/copilot-instructions.md` as Copilot hot path (full execution loop, not a bridge)
+- `.github/instructions/` bridge files with full inline content for Copilot auto-discovery
+- `.github/git-commit-instructions.md` for universal commit guidance (every project with `.git/`)
+- `setup/setup-copilot.md` as fourth equal agent guide
+- 11 workflow templates in `workflow/local-context/` (base, code-review, git-commit, frontend, backend, security, testing, copilot-bridge, git-commit-github, README, domain-instructions)
+- `docs/guides/migrate-to-ai-instructions.md` with real examples (blundergoat-platform, ambient-scribe)
+- Scanner checks 2.6.1-2.6.6: directory exists, router exists, base.md, code-review.md, git-commit.md, .github/git-commit-instructions.md
+- Updated all 4 setup guides, shared docs, spec docs, architecture docs with hot/cold path architecture
+
+### Scanner Quality Checks (80 checks, was 71)
+
+- 2.1.9: Skills gather context — Step 0 / ask-before-acting pattern (80% threshold)
+- 2.1.10: Skills have human gates — HUMAN GATE / wait for approval pattern (50% threshold)
+- 2.1.11: Skills have MUST/MUST NOT constraints — RFC 2119 enforcement (80% threshold)
+- 2.1.12: Skills have phased process — Phase 1/2/3 structure prevents step-skipping (80% threshold)
+- 2.1.13: Skills are conversational — present findings then let human drill in (30% threshold)
+- 2.2.4a: Deny hook has real blocking logic — not just `exit 0` (checks for `exit 2`/`block` patterns)
+- 2.2.4b: Post-turn hook has validation logic — runs actual checks (lint/typecheck/format)
+- 2.2.4c: Compaction hook registered — Notification hook preserves context across long sessions
+- 1.3.2a: Ask First paths resolve on disk — every backtick-wrapped boundary path must exist
+
+### Multi-Agent Audit Fixes (6 projects)
+
+- **rampart**: Fixed phantom ADR-013/014 references (→ADR-003/002), SSE event list (6 types, 2 unused), redaction.rs→redaction.py, Playwright reference removed, CI triggers expanded
+- **blundergoat-platform**: Fixed middleware.ts→proxy.ts, sql/migrations→sql/schema, goat-research→goat-investigate, admin-actions.ts→admin-actions/ directory, GEMINI.md broken entry, CI router check expanded to all 3 agent files
+- **ambient-scribe**: Fixed PHPStan 8→10, security.yaml→framework.yaml, footgun entry #6→#3, strands-client→strands-php-client, commit-messages boilerplate replaced, code-review.md made project-specific
+- **sus-form-detector**: Fixed FieldMap path, stale class names (ScorerResult/Assessment/DetectorBuilder), codex-evals→agent-evals CI trigger, safe-name rule (lowercase only), absolute paths in AGENTS.md
+- **devgoat-bash-scripts**: Removed confusion-log from CLAUDE.md/AGENTS.md/GEMINI.md, fixed help.sh→help-index.sh, removed phantom deploy-ecr-ecs.sh, PHP file count corrected
+- **goat-flow**: Fixed hasRouter logic bug, indentation errors, CLAUDE.md router added ai/README.md
+
+### Scanner Bug Fixes
+
+- Monorepo stack detection: checks `*/go.mod`, `*/*/go.mod`, `*/package.json` for subdirectory manifests
+- Evidence regex: accepts `(lines N-M)` and `(line N)` prose format alongside backtick `file:line`
+- Router path extractor: handles both backtick `` `path` `` and markdown `[text](path)` formats
+- LOG step check: removed section scope that matched parent heading containing "LOG"
+- Line count in `fs.lineCount()`: now subtracts trailing newline consistently with `agent.ts`
+
+### Conversational Skills
+
+- All 6 non-plan skills updated: audit, debug, investigate, review, test, preflight
+- Pattern: "Present findings. Then ask: Want me to dig deeper? Do NOT auto-advance."
+- Updated both `.claude/skills/` and `.agents/skills/` (12 files)
+- `workflow/skills/goat-review.md` template updated with conversational guidance
+
+### Workflow Improvements
+
+- Verification gates in setup templates: "verify against actual code, not documentation"
+- "ALSO AUDIT EXISTING INSTRUCTION FILES" gate: verify Ask First paths before building cold path
+- Preflight: removed-pattern check (ADR enforcement), TypeScript quality checks, single test run
+- Compaction Notification hook documented in `enforcement.md` and `execution-loop.md`
+- Removed `[APP / LIBRARY / SCRIPT COLLECTION]` from all setup/workflow/docs (9 files)
+- Version updated to v0.4.1 in system-spec + getting-started
+- `five-layers.md`: shape section marked informational, domain instructions updated to `ai/instructions/`
+
+### Documentation
+
+- 8 new `docs/lessons.md` entries: sub-agent output auditing, "double check" means read files, full-repo grep for removals, aspirational content as current, propagating errors from existing files
+- New pattern: "Verification scope must match change scope"
+- `docs/decisions/ADR-003-remove-confusion-log.md` implemented across all projects
+- `M5-custom-subagents.md`: planned milestone for `.claude/agents/` integration
+- `M2.7-template-fixes.md`: completed (6 priority fixes)
+- `M2.8-next-round-fixes.md`: 11 findings tracked from final audit
 
 ### Scanner Bug Fixes (M2.5)
 
@@ -51,11 +121,6 @@ Scanner bug fixes, prompt improvements, local context redesign. Multi-agent revi
 
 - `scripts/run-cli.sh`: improved test-all pass/fail logic (checks exit code + error markers, not just output presence)
 
----
-
-## v0.4.0 - 2026-03-21
-
-CLI auditor and prompt generator. M1 (Scanner) and M2 (Prompts) complete. Project restructured from `cli/` subdirectory to unified root with `src/cli/` + `src/dashboard/`.
 
 ### CLI Scanner (M1)
 

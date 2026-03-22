@@ -15,7 +15,7 @@ All agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks
 1. Read [shared/guidelines-audit.md](shared/guidelines-audit.md) if you have an existing guidelines file
 2. `git stash` or `git commit` your current state
 3. Know your stack: build, test, lint, format commands
-4. Know your project shape: App, Library, or Script Collection
+4. Know your stack: languages, build/test/lint/format commands
 
 ## Phases
 

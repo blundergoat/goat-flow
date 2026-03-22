@@ -151,6 +151,50 @@ auth, routing, deployment, API, DB
 Shared sourced files, CONFIGURATION
 `;
 
+// Quality skill content for fixtures that expect high scores
+function qualitySkill(name: string): string {
+  return `---
+name: goat-${name}
+description: "${name} skill"
+---
+# goat-${name}
+
+## When to Use
+
+Use for ${name} tasks.
+
+## Step 0 — Gather Context
+
+Ask the user before starting:
+1. What is the scope?
+2. What do you already know?
+
+Do NOT start until the user has answered.
+
+## Phase 1 — Investigate
+
+Read relevant files. Collect evidence.
+
+## Phase 2 — Report
+
+Present findings with file:line evidence.
+
+**HUMAN GATE:** Present your findings. Then ask: "Want me to dig deeper on any of these?"
+
+Do NOT auto-advance. Let the human drill into findings, challenge conclusions, or redirect.
+
+## Constraints
+
+- MUST gather context before acting (Step 0)
+- MUST NOT skip phases
+- MUST provide file:line evidence
+
+## Output
+
+Structured report with findings.
+`;
+}
+
 // ─── Fixtures ───────────────────────────────────────────────────────
 
 describe('Fixture 1: empty project', () => {
@@ -224,12 +268,12 @@ describe('Fixture 4: full-claude', () => {
     }),
     '.claude/settings.json': JSON.stringify({
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+      hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
     // 7 skills
     ...Object.fromEntries(
       ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
-        `.claude/skills/goat-${s}/SKILL.md`,
-        `---\nname: goat-${s}\ndescription: "${s}"\n---\n# goat-${s}\n\n## When to Use\n\nUse for ${s}.\n\n## Process\n\n1. Do the thing.\n\n## Output\n\nResults.\n`,
+        `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
     // Hooks
@@ -288,8 +332,8 @@ describe('Fixture 4: full-claude', () => {
 describe('Fixture 5: full-multi-agent', () => {
   const skills = Object.fromEntries(
     ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].flatMap(s => [
-      [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\n---\n# goat-${s}\n`],
-      [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\n---\n# goat-${s}\n`],
+      [`.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s)],
+      [`.agents/skills/goat-${s}/SKILL.md`, qualitySkill(s)],
     ]),
   );
   const fs = createMockFS({
@@ -355,7 +399,7 @@ describe('Fixture 6: N/A checks', () => {
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
     ...Object.fromEntries(
       ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
-        `.claude/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`,
+        `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
     'docs/footguns.md': '# Footguns\n\n- `src/index.ts:10` - gotcha\n',
@@ -478,7 +522,7 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
     ...Object.fromEntries(
       ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
-        `.claude/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`,
+        `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
     'docs/footguns.md': '# Footguns\n\n- `src/a.ts:5` - evidence\n',
@@ -502,9 +546,79 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     }
   });
 
-  it('no local context checks in rubric', () => {
-    const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Context');
-    assert.equal(localChecks.length, 0, 'Local context checks were removed from rubric');
+  it('local instruction checks exist', () => {
+    const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Instructions');
+    assert.ok(localChecks.length >= 4, `Expected 4+ local instruction checks, got ${localChecks.length}`);
+  });
+});
+
+describe('Fixture 10a: project with ai/instructions/', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({ name: 'with-ai', scripts: { test: 'jest' } }),
+    '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
+    '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
+    'ai/README.md': '# Project Guidelines\n\nRead instructions/base.md first.\n',
+    'ai/instructions/base.md': '# Base\n\nProject conventions.\n',
+    'ai/instructions/code-review.md': '# Code Review\n\nReview standards.\n',
+    'ai/instructions/git-commit.md': '# Git Commit\n\nCommit format.\n',
+    '.github/git-commit-instructions.md': '# Git Commit\n\nCommit format.\n',
+  });
+  const report = scan(fs, '/test/ai-instructions', { agentFilter: null });
+
+  it('all local instruction checks pass', () => {
+    const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Instructions');
+    const failing = localChecks.filter(c => c.status === 'fail');
+    assert.equal(failing.length, 0, `Expected 0 failures, got: ${failing.map(c => c.id + ' ' + c.name).join(', ')}`);
+  });
+
+  it('detects ai/ location', () => {
+    const dirCheck = report.agents[0].checks.find(c => c.id === '2.6.1');
+    assert.ok(dirCheck);
+    assert.equal(dirCheck.status, 'pass');
+    assert.ok(dirCheck.message.includes('ai/instructions'), dirCheck.message);
+  });
+});
+
+describe('Fixture 10b: project with .github/instructions/ only', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({ name: 'gh-only', scripts: { test: 'jest' } }),
+    '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
+    '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
+    '.github/instructions/base.instructions.md': '# Base\n',
+    '.github/instructions/code-review.instructions.md': '# Review\n',
+    '.github/instructions/git-commit.instructions.md': '# Commit\n',
+    '.github/git-commit-instructions.md': '# Commit\n',
+  });
+  const report = scan(fs, '/test/gh-instructions', { agentFilter: null });
+
+  it('accepts .github/instructions/ as alternative', () => {
+    const dirCheck = report.agents[0].checks.find(c => c.id === '2.6.1');
+    assert.ok(dirCheck);
+    assert.equal(dirCheck.status, 'pass');
+  });
+
+  it('accepts .instructions.md extension', () => {
+    const baseCheck = report.agents[0].checks.find(c => c.id === '2.6.3');
+    assert.ok(baseCheck);
+    assert.equal(baseCheck.status, 'pass');
+  });
+});
+
+describe('Fixture 10c: project without instructions', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({ name: 'no-instructions', scripts: { test: 'jest' } }),
+    '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)'] } }),
+    '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
+  });
+  const report = scan(fs, '/test/no-instructions', { agentFilter: null });
+
+  it('local instruction checks fail', () => {
+    const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Instructions');
+    const failing = localChecks.filter(c => c.status === 'fail');
+    assert.ok(failing.length >= 4, `Expected 4+ failures, got ${failing.length}`);
   });
 });
 

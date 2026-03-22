@@ -66,7 +66,9 @@ Present findings with RFC 2119 severity:
 
 For each finding: file:line evidence + why it matters.
 
-Ask the user: "Any of these you want me to elaborate on, or should we proceed to fixing the MUST items?"
+Present your findings. Then ask: "Want me to elaborate on any of these, or should we proceed to fixing the MUST items?"
+
+Do NOT auto-advance. Let the human drill into specific findings, challenge severity levels, or redirect focus.
 
 ---
 

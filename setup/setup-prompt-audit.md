@@ -16,6 +16,9 @@ Read these files in this project:
 - agent-evals/ (all files — single shared directory for all agents)
 - docs/guidelines-ownership-split.md (if exists)
 - .github/instructions/ (list what exists)
+- ai/README.md (if exists)
+- ai/instructions/base.md (if exists)
+- Check if `.github/instructions/` exists without `ai/instructions/` (migration needed?)
 
 Then read the GOAT Flow instructions that were used to create them:
 - [goat-flow repo]/setup/setup-claude.md (if CLAUDE.md exists)

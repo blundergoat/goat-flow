@@ -134,7 +134,7 @@ export interface StackInfo {
 export interface SharedFacts {
   footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number> };
   lessons: { exists: boolean; hasEntries: boolean };
-architecture: { exists: boolean; lineCount: number };
+  architecture: { exists: boolean; lineCount: number };
   evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean };
   handoffTemplate: { exists: boolean };
@@ -144,6 +144,16 @@ architecture: { exists: boolean; lineCount: number };
   domainReference: { exists: boolean };
   preflightScript: { exists: boolean };
   changelog: { exists: boolean };
+  localInstructions: {
+    dirExists: boolean;
+    location: 'ai' | 'github' | null;
+    fileCount: number;
+    hasRouter: boolean;
+    hasBase: boolean;
+    hasCodeReview: boolean;
+    hasGitCommit: boolean;
+  };
+  gitCommitInstructions: { exists: boolean };
 }
 
 export interface AgentFacts {
@@ -164,18 +174,35 @@ export interface AgentFacts {
     found: string[];
     missing: string[];
     allPresent: boolean;
+    quality: {
+      withStep0: number;
+      withHumanGate: number;
+      withConstraints: number;
+      withPhases: number;
+      withConversational: number;
+      total: number;
+    };
   };
   hooks: {
     denyExists: boolean;
+    denyHasBlocks: boolean;
     postTurnExists: boolean;
     postTurnExitsZero: boolean;
+    postTurnHasValidation: boolean;
     postToolExists: boolean;
+    compactionHookExists: boolean;
   };
   deny: {
     gitCommitBlocked: boolean;
     gitPushBlocked: boolean;
   };
   router: {
+    exists: boolean;
+    paths: string[];
+    resolved: number;
+    unresolved: string[];
+  };
+  askFirst: {
     exists: boolean;
     paths: string[];
     resolved: number;

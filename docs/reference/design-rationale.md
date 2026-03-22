@@ -352,3 +352,13 @@ flowchart TD
 5. Maintain a rollback plan for the next model version
 
 Shrink based on **tooling improvements** (better linters, better hooks, better CI) and **rules never triggered** -- not assumptions about base model capability.
+
+---
+
+## Hot Path / Cold Path Architecture
+
+**Problem:** Instruction files must stay under 120 lines, but projects have domain-specific conventions (frontend patterns, backend rules, security constraints) that agents need when working in those areas.
+
+**Source:** 6 real implementations showed every project needs ~200-500 lines of domain guidance that doesn't fit in the hot path. Projects with `.github/instructions/` files had the right idea but were too file-scoped (one file per language instead of one per domain).
+
+**Design decision:** Split into hot path (agent behavior, 120 lines) and cold path (project coding guidelines, unlimited). Cold path lives at `ai/instructions/` with a router at `ai/README.md`. Domain-based organization (backend.md, frontend.md) not language-based (php.md, python.md). `.github/instructions/` serves as Copilot bridge files. `.github/git-commit-instructions.md` is universal for any git project.

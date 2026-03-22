@@ -30,7 +30,7 @@ export function createFS(rootPath: string): ReadonlyFS {
     lineCount(path: string): number {
       try {
         const content = readFileSync(resolvePath(path), 'utf-8');
-        return content.split('\n').length;
+        return content.split('\n').length - (content.endsWith('\n') ? 1 : 0);
       } catch {
         return 0;
       }

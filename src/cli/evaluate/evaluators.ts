@@ -2,7 +2,7 @@ import type { Detection, CheckResult, FactContext, Confidence } from '../types.j
 
 /**
  * Evaluate a Detection against extracted facts.
- * This is the core engine — 6 generic evaluators handle 90%+ of checks.
+ * This is the core engine — 10 evaluator types handle all checks.
  */
 export function evaluate(
   id: string,
@@ -331,7 +331,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
   const pathMap: Record<string, boolean> = {
     'docs/footguns.md': shared.footguns.exists,
     'docs/lessons.md': shared.lessons.exists,
-'docs/architecture.md': shared.architecture.exists,
+    'docs/architecture.md': shared.architecture.exists,
     'docs/guidelines-ownership-split.md': shared.guidelinesOwnership.exists,
     'docs/domain-reference.md': shared.domainReference.exists,
     'tasks/handoff-template.md': shared.handoffTemplate.exists,
@@ -344,6 +344,10 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.gitignore': shared.gitignore.exists,
     'scripts/preflight-checks.sh': shared.preflightScript.exists,
     'CHANGELOG.md': shared.changelog.exists,
+    'ai/instructions': shared.localInstructions.dirExists && shared.localInstructions.location === 'ai',
+    'ai/README.md': shared.localInstructions.hasRouter && shared.localInstructions.location === 'ai',
+    '.github/instructions': shared.localInstructions.dirExists && shared.localInstructions.location === 'github',
+    '.github/git-commit-instructions.md': shared.gitCommitInstructions.exists,
   };
 
   if (path in pathMap) return pathMap[path];

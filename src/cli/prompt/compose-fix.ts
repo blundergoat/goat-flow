@@ -90,12 +90,18 @@ export function composeFix(report: ScanReport, agentId: AgentId): ComposedPrompt
 }
 
 function buildPreamble(vars: PromptVariables, agentReport: AgentReport): string {
+  const cmds = [
+    vars.buildCommand && `**Build:** \`${vars.buildCommand}\``,
+    vars.testCommand && `**Test:** \`${vars.testCommand}\``,
+    vars.lintCommand && `**Lint:** \`${vars.lintCommand}\``,
+  ].filter(Boolean).join(' | ');
+
   const lines = [
     `This project scores **${vars.grade}** (${vars.percentage}%) for ${vars.agentName}.`,
     `**${vars.failedCount}** checks need attention out of ${vars.totalCount} total.`,
     '',
     `**Stack:** ${vars.languages}`,
-    `**Build:** \`${vars.buildCommand}\` | **Test:** \`${vars.testCommand}\` | **Lint:** \`${vars.lintCommand}\``,
+    ...(cmds ? [cmds] : []),
     '',
     'Work through each section in order. Complete all foundation fixes before moving to standard.',
   ];
