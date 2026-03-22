@@ -31,8 +31,8 @@ EXECUTION LOOP:
 - VERIFY: two-level escalation, revert-and-rescope, recovery protocols
   (2-3 common failure patterns with fixes)
 - LOG: MUST-when-tripped, mechanical trigger, human correction trigger,
-  footgun propagation, references 4 files (lessons, footguns, confusion-log,
-  decisions/), dual-agent coordination if applicable
+  footgun propagation, references 3 files (lessons, footguns, decisions/),
+  dual-agent coordination if applicable
 
 WORKING MEMORY:
 - Context health: compact at 60% utilization (not 90%). Noise pruning.
@@ -61,6 +61,13 @@ SECTIONS:
 
 ENFORCEMENT:
 - Settings/config MUST have Read deny patterns for secrets if applicable
+
+COLD PATH (ai/instructions/):
+- Check if `ai/instructions/` exists with base.md, code-review.md, git-commit.md
+- Check if `.github/git-commit-instructions.md` exists
+- If `.github/instructions/` exists without `ai/instructions/`, recommend migration
+  (group language files into domain files: php.md + python.md → backend.md)
+- Check if instruction file router table has `ai/README.md` entry
 
 AGENT EVALS:
 - Each eval MUST have Origin: real-incident | synthetic-seed

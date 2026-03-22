@@ -9,6 +9,10 @@ Paste this into your coding agent to create the `/goat-preflight` skill for your
 ```
 Create the /goat-preflight skill for this project.
 
+## When to Use
+
+Use before starting meaningful work, after meaningful changes, and before declaring a task complete.
+
 When to use: before starting any task, after meaningful code changes,
 or as a final gate before declaring a task complete.
 
@@ -60,4 +64,8 @@ VERIFICATION:
 - Verify MUST/SHOULD/MAY constraints are present
 - Verify output format template is included
 - Verify the skill references this project's actual commands
+
+## Output
+
+Preflight checklist with pass/fail for each gate, blocking issues listed first.
 ```

@@ -3,35 +3,61 @@ description: "Diagnose a bug with evidence before proposing fixes"
 ---
 # /goat-debug
 
-Diagnosis-first debugging. Investigate before fixing.
+Diagnosis-first debugging. Investigate before fixing. The agent MUST NOT propose fixes until the human reviews the diagnosis.
 
-## When to Use
+---
 
-When a bug, broken cross-reference, or inconsistency needs diagnosis — especially when the root cause is unclear or spans multiple files.
+## Step 0 — Gather Context
 
-## Process
+Ask the user before investigating:
 
-### Phase 1 — Investigate (no fixes)
+1. **What's the symptom?** (error message, unexpected behaviour, test failure)
+2. **How do you reproduce it?** (steps, command, or "it happens intermittently")
+3. **When did it start?** (after a specific change, always been there, or unknown)
+4. **What have you already tried?** (so the agent doesn't repeat dead ends)
+
+Do NOT start investigating until the user has answered. If the user says "it's broken, fix it", ask these questions first — blind debugging is the failure mode this skill prevents.
+
+---
+
+## Phase 1 — Investigate (no fixes)
+
+**If you want to "just try something" before tracing the code path, STOP.** That impulse is the failure mode this skill prevents.
+
 - Read the actual files involved, tracing references end-to-end
 - Identify the failure point with file:line evidence
 - Check related files for cascading effects
 - Document the chain: trigger → propagation → symptom
+- Check `docs/footguns.md` — has this area bitten someone before?
 
-### Phase 2 — Report findings
-- Write diagnosis with file:line evidence for every claim
+---
+
+## Phase 2 — Report findings
+
+Present the diagnosis to the user. For every claim, provide file:line evidence.
+
 - State the root cause (not just the symptom)
 - List all affected files
 - Note uncertainty: "I believe X because Y, but haven't verified Z"
+- Rate confidence: High / Medium / Low
 
-### Phase 3 — Propose fix (only after human reviews Phase 2)
-- Wait for human to review the diagnosis
-- Only then propose a fix plan
-- If human disagrees, return to Phase 1
+**HUMAN GATE:** Present your findings. Then ask: "Does this match what you're seeing? Want me to dig deeper on any part, or does this diagnosis look right?"
 
-**If you want to "just try something" before tracing the code path, STOP.** That impulse is the failure mode this skill prevents.
+Do NOT auto-advance to Phase 3. Let the human challenge the diagnosis, ask about alternatives, or redirect the investigation.
+
+---
+
+## Phase 3 — Propose fix (only after human approves Phase 2)
+
+- Propose a fix plan (not the fix itself — this is still Plan mode)
+- If the human disagrees with the diagnosis, return to Phase 1
+- If the human approves, ask: "Should I implement this fix, or do you want to do it?"
+
+---
 
 ## Constraints
 
+- MUST gather context before investigating (Step 0)
 - MUST read actual files before forming hypotheses
 - MUST provide file:line evidence for every finding
 - MUST complete Phase 2 before entering Phase 3

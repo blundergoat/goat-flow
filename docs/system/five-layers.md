@@ -32,7 +32,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** The root instruction file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex). This is the agent's operating system - it loads every session, so every line must earn its place.
 
-**Line budget:** ~120 lines for all project shapes. Beyond 150 triggers an anti-pattern deduction. Evidence: auto-generated context beyond this range reduces agent success rates by ~3% and increases cost by 20%+ (HumanLayer, Philipp Schmid instruction limits research).
+**Line budget:** ~120 lines. Beyond 150 triggers an anti-pattern deduction. Evidence: auto-generated context beyond this range reduces agent success rates by ~3% and increases cost by 20%+ (HumanLayer, Philipp Schmid instruction limits research).
 
 **What it contains:**
 
@@ -139,9 +139,11 @@ AI coding agents need structure, not just rules. This system organises everythin
 | **Doer-verifier testing** | Three parallel verification tracks (automated tests, AI verification, human testing) after every milestone or 30-60 minutes of coding | After every coding session |
 | **Agent evals** | Regression tests from real incidents - replay prompts that verify the agent handles known failure modes correctly | On demand, or after CLAUDE.md changes |
 | **CI context validation** | Automated checks: instruction file line count, router reference resolution, skill completeness | On every PR |
-| **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed), `docs/confusion-log.md` (where the agent got confused) | Updated after every task |
+| **Learning loop** | `docs/footguns.md` (cross-domain coupling with file:line evidence), `docs/lessons.md` (what worked/failed) | Updated after every task |
 
-**Create on first use:** Three artifacts materialise when first needed, not pre-created empty: `docs/confusion-log.md` (create after first real confusion incident), agent profiles directory (e.g., `.claude/profiles/` or `.gemini/profiles/`, create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
+**Cold path (ai/instructions/):** Project-specific coding guidelines organized by domain. Loaded on demand when the task matches -- frontend.md for frontend work, backend.md for backend work, etc. Router at `ai/README.md` tells agents what to load. Keeps the hot path under 120 lines by moving domain details to dedicated files.
+
+**Create on first use:** Two artifacts materialise when first needed, not pre-created empty: agent profiles directory (e.g., `.claude/profiles/` or `.gemini/profiles/`, create when meaningful role separation exists), and `docs/decisions/` (create when there's a real architectural decision worth recording). All other artifacts are created during initial setup.
 
 **The doer-verifier principle:** The coding agent is the doer. Testing uses independent verifiers - automated suites, separate AI agents, and the developer. Never trust the coding agent's self-assessment.
 
@@ -196,9 +198,9 @@ Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 
 ---
 
-## Project Shape Adaptation
+## Project Type Reference (informational)
 
-The system adapts to three project shapes. The layers stay the same - only the content and line budgets change.
+> **Note:** Project shape does not affect scoring or setup. All projects follow the same rules. This table is retained as a reference for Ask First boundary examples.
 
 | Aspect | App | Library | Script Collection |
 |--------|-----|---------|-------------------|
@@ -206,7 +208,6 @@ The system adapts to three project shapes. The layers stay the same - only the c
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
 | Layer 3 skills | All 7 | All 7 | All 7 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
-| Layer 5 confusion-log | Yes | Yes | Yes |
 
 ---
 
@@ -219,7 +220,7 @@ GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-a
 | Instruction file | CLAUDE.md | AGENTS.md | .cursor/rules/ | .github/copilot-instructions.md | GEMINI.md |
 | Skills/playbooks | .claude/skills/ | .agents/skills/ | .cursor/rules/*.mdc | Agent skills | .agents/skills/ |
 | Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | .gemini/hooks/ + settings.json |
-| Domain instructions | .github/instructions/ | .github/instructions/ | .cursor/rules/ | .github/instructions/ | .github/instructions/ |
+| Domain instructions | ai/instructions/ | ai/instructions/ | .cursor/rules/ | .github/instructions/ (bridges to ai/) | ai/instructions/ |
 | Evals | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
 | Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | permissions.deny array |
 

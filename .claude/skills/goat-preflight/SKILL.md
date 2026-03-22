@@ -45,3 +45,7 @@ Run each check in order. Report results for every step.
 
 Overall: PASS / FAIL ([N]/[N] checks passed)
 ```
+
+Present results. Then ask: "Any items you want me to investigate further, or any failures you want to discuss before proceeding?"
+
+Do NOT auto-advance. Let the human review results and decide next steps.

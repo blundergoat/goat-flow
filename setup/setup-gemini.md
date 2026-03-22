@@ -55,7 +55,7 @@ SCOPE: Only create/modify GEMINI.md, local GEMINI.md files, .gemini/*,
 and docs/ seed files listed below. Do NOT modify existing docs/ files,
 workflow/, setup/, or .claude/.
 
-This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:
+The stack is:
 - Languages: [list]
 - Build: [command, or "none - interpreted language"]
 - Test: [command]
@@ -106,7 +106,7 @@ SCOPE: Only create/modify GEMINI.md, local GEMINI.md files, .gemini/*,
 and docs/ seed files listed below. Do NOT modify existing docs/ files,
 workflow/, setup/, or .claude/.
 
-This project is a [APP / LIBRARY / SCRIPT COLLECTION]. The stack is:
+The stack is:
 - Languages: [list]
 - Build: [command, or "none - interpreted language"]
 - Test: [command]
@@ -253,11 +253,37 @@ HOOKS & POLICY:
 4. CI: .github/workflows/context-validation.yml (line count, router refs,
    skills, local file sizes)
 
+COLD PATH: PROJECT CODING GUIDELINES
+
+If `.github/instructions/` exists:
+- Read existing files and group by domain (e.g., `php.instructions.md` + `python.instructions.md` → `ai/instructions/backend.md`)
+- Create `ai/README.md` as routing map
+- Keep `.github/instructions/` as optional Copilot bridges
+
+If no instruction files exist:
+- Create `ai/README.md` (routing map — see `workflow/local-context/README.md` template)
+- Create `ai/instructions/base.md` (project conventions — see `workflow/local-context/base.md` template)
+- Create `ai/instructions/code-review.md` (review standards — see `workflow/local-context/code-review.md` template)
+- Create `ai/instructions/git-commit.md` (commit format — see `workflow/local-context/git-commit.md` template)
+- Create `.github/git-commit-instructions.md` if `.git/` exists
+
+VERIFICATION: After creating ai/instructions/ files, the agent MUST:
+1. Verify every file path exists: for each backtick-wrapped path, run `ls`
+2. Verify commands work: run build/test/lint commands listed in base.md
+3. Remove aspirational content: if a feature is planned but not implemented, remove it
+   Source of truth is the code, not docs/architecture.md or roadmaps.
+
+Add to GEMINI.md Router Table:
+| Project guidelines | `ai/README.md` |
+
+Verification: `ls ai/instructions/` shows base.md, code-review.md, git-commit.md.
+
 VERIFICATION (all MUST pass before proceeding to Phase 2):
 - GATE: Verify settings.json is valid JSON.
 - GATE: Verify deny-dangerous blocks expected commands.
 - GATE: Verify stop hook exits 0 even on errors.
 - GATE: Verify agent ignore files exist with secret patterns.
+- GATE: Verify ai/instructions/ exists with base.md, code-review.md, git-commit.md.
 - GATE: Run scripts/preflight-checks.sh if it exists. Otherwise run the
   project's lint + test commands from Essential Commands.
 Do NOT proceed to Phase 2 until all gates pass.

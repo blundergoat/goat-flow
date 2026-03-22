@@ -1,317 +1,153 @@
 # Changelog
 
-All notable changes to GOAT Flow will be documented in this file.
+---
+
+## v0.4.0 - 2026-03-22
+
+CLI scanner + prompt generator, local context system, 80-check rubric, multi-agent audit fixes across 6 projects. All projects score A (93-98%).
+
+### CLI Scanner & Prompt Generator
+- 80-check rubric across 3 tiers + 9 anti-pattern deductions
+- `scan`, `fix`, `setup`, `audit` CLI commands with `--agent` filter and `--min-score` CI gate
+- 90 prompt fragments with variable substitution, `create`/`fix` tagging
+- Monorepo stack detection, markdown link router extraction, `(lines N-M)` evidence format
+- 78 tests across 20 suites
+
+### Local Context (Cold Path)
+- `ai/instructions/` as vendor-neutral project coding guidelines (base.md, code-review.md, git-commit.md)
+- `ai/README.md` as cold-path router with precedence order
+- `.github/copilot-instructions.md` + `.github/instructions/` bridge files for Copilot
+- `setup/setup-copilot.md` as fourth agent setup guide
+- 11 workflow templates in `workflow/local-context/`
+- Migration guide with real project examples
+
+### Scanner Quality Checks (9 new)
+- Skill quality: Step 0, human gates, constraints, phased process, conversational pattern
+- Hook quality: deny has blocking logic, post-turn has validation, compaction hook registered
+- Ask First paths resolve on disk
+
+### Multi-Agent Audit Fixes
+- Fixed phantom paths, stale class names, wrong ADR references across all 6 projects
+- Fixed scanner bugs: line count off-by-one, Ask First detection, hasRouter logic, LOG section scope
+
+### Removals
+- Removed `ProjectShape` / `--shape` flag — all projects score identically
+- Removed `confusion-log.md` from entire workflow
+- Removed `[APP / LIBRARY / SCRIPT COLLECTION]` from all setup/workflow/docs
+
+### Other
+- All skills made conversational (12 files updated)
+- Restructured `cli/` → root: `src/cli/` + `src/dashboard/`
+- Preflight: removed-pattern enforcement, TypeScript quality checks, version consistency, compaction hook
+- Verification gates in setup templates: "verify against actual code, not documentation"
+- 8 new `docs/lessons.md` entries
+- `scripts/run-cli.sh` interactive menu + test-all gate
+- 5 new scripts: run-cli, setup-initial, start-dev, dependency-install, dependency-update
 
 ---
 
 ## v0.3.0 - 2026-03-21
 
-Multi-agent alignment release. First public release under MIT license. Tri-agent support (Claude Code, Gemini CLI, Codex), unified skills architecture, file-overwrite protection.
+Multi-agent alignment release. First public release under MIT license.
 
-### Gemini CLI Fixes
+### Tri-Agent Support
+- Claude Code, Gemini CLI, Codex with unified `.agents/skills/` architecture
+- 7 skills with YAML frontmatter across both `.claude/skills/` and `.agents/skills/`
+- Gemini CLI: GEMINI.md (84 lines), `.gemini/settings.json`, `.gemini/hooks/`, `.geminiignore`
+- Renamed `goat-research` → `goat-investigate`, created `goat-plan` and `goat-test`
 
-- Fixed hook event names in `.gemini/settings.json`: `PreToolUse` → `BeforeTool`, `Stop` → `AfterAgent`
-- Fixed hook script comments referencing Claude-specific terminology
-- Fixed `setup/setup-gemini.md` Phase 0 + Phase 1c: correct event names, `policy` → `permissions`
-- Added Gemini CLI hook event reference block to Phase 1c instructions
-- Added SCOPE constraints to every phase in `setup/setup-gemini.md` to prevent shared doc overwrites
-
-### Agent-Neutral Shared Docs
-
-- Reverted Gemini's overwrites of 6 shared docs that replaced Claude Code references with Gemini-specific ones
-- `docs/system-spec.md`: hook table uses concept names (pre-tool/post-tool/post-turn) with agent mapping table
-- `docs/system/five-layers.md`: restored Claude Code to skills table, multi-agent enforcement paths
-- `docs/system/six-steps.md`: both Claude Code and Gemini CLI hook examples listed
-- `docs/reference/design-rationale.md`: agent-neutral diagram and dual-agent hook section headers
-- `workflow/runtime/enforcement.md`: reverted to Claude Code template + header warning against global replacement
-
-### Unified Skills Architecture (.agents/skills/)
-
-- `.agents/skills/` is now the single source of truth for both Codex and Gemini CLI skills
-- Created 7 skills with YAML frontmatter (name + description): preflight, debug, audit, investigate, review, plan, test
-- Deleted `docs/codex-playbooks/` (migrated to `.agents/skills/`)
-- Deleted `.gemini/skills/` (redundant — Gemini CLI discovers `.agents/skills/` with higher precedence)
-- Created `goat-plan` and `goat-test` (full parity with Claude's 7 skills)
-- Renamed `goat-research` → `goat-investigate` with strengthened constraints and output template
-- Strengthened `goat-debug`, `goat-audit`, `goat-review` with missing constraints from Claude equivalents
-- Updated `AGENTS.md` and `GEMINI.md` router tables to point to `.agents/skills/`
-- Updated `scripts/context-validate.sh`: validates 7 skills at `.agents/skills/`, checks frontmatter, accepts `agent-evals/`
-- Updated `setup/setup-codex.md` and `setup/setup-gemini.md`: both instruct creation of `.agents/skills/` with frontmatter, reference `workflow/skills/` templates
-- Updated all "5 skills" references to "7 skills" across system-spec, five-layers, design-rationale, cross-agent-comparison
-- Updated all stale path references (`docs/codex-playbooks/`, `.gemini/skills/`) to `.agents/skills/` in live docs
+### Agent-Neutral Docs
+- Reverted Gemini overwrites of 6 shared docs
+- Hook table uses concept names with agent mapping table
+- Enforcement template labeled as Claude Code reference (not shared)
 
 ### File Overwrite Protection
+- `mv -n` enforcement in deny hooks
+- "Overwrite without checking" added to Never tier across all agent files
 
-- Added `mv -n` enforcement to deny-dangerous hooks (both `.claude/` and `.gemini/`)
-- Added "overwrite existing files without checking destination" to Never tier in CLAUDE.md, GEMINI.md, AGENTS.md
-- Added to `docs/system-spec.md` Never list and `setup/shared/execution-loop.md` template
-- Added to `workflow/runtime/enforcement.md` deny-dangerous block list
+### Public Release
+- MIT LICENSE, README rewrite
+- Removed private project details from reference docs
+- Unified version strings, fixed stale paths and router bugs
 
-### Skill Descriptions
+### CI & Validation
+- Context-validation.yml checks all 3 router tables and both skill directories
+- Portable grep in context-validate.sh
+- `tasks/.gitignore` blanket ignore with allowlist
 
-- Added YAML frontmatter descriptions to all 14 skill files (7 Claude + 7 shared .agents/)
-- Fixed stale `goat-research` heading in Gemini investigate skill
-
-### Public Release Prep
-
-- Added MIT LICENSE
-- Rewrote `README.md`: problem statement, quick start, architecture overview, multi-agent table, project structure
-- Removed `docs/reference/examples.md` and `docs/reference/competitive-landscape.md` (contained private project details)
-- Updated `docs/getting-started.md`: tri-agent support, added goat-plan + goat-test to file reference, removed dead link to private ai-planning-playbook repo
-- Updated `docs/reference/cross-agent-comparison.md` title to include Gemini CLI
-- Unified version strings to v0.3.0 across system-spec and getting-started
-- Fixed `GEMINI.md` router bug: `decisions/` path expanded to invalid `decisions/.md`
-- Fixed `docs/architecture.md`: stale `roadmaps/` path
-- Fixed `docs/footguns.md`: removed hardcoded `/home/devgoat` paths
-- Fixed `docs/reference/competitive-landscape.md`: "internal" → "author" (before deletion)
-- Updated `agent-evals/cross-reference-rename.md` to reference an existing file
-- Updated remote URL from `ai-workflow-framework` to `goat-flow`
-
-### CI & Validation Fixes
-
-- `.github/workflows/context-validation.yml`: checks all 3 router tables (CLAUDE.md, AGENTS.md, GEMINI.md), validates both `.claude/skills/` and `.agents/skills/`, removed stale `codex-evals/**` trigger
-- `scripts/context-validate.sh`: portable `grep -Eq` instead of `\|` alternation
-- `scripts/maintenance/scan-secrets.sh`: fixed stale self-exclude path
-
-### Hook Improvements
-
-- `mv` guard accepts `-nv`, `-nT`, `--no-clobber` (not just bare `-n`)
-- Consistent `goat-{name}` prefix in `docs/system/five-layers.md` skill path table
-- `setup/setup-gemini.md` scope constraint clarified: allows creating new docs seed files
-
-### Housekeeping
-
-- `tasks/.gitignore`: ignore everything except `handoff-template.md` (prevents scratch files from being committed)
-
-### Incident Logging
-
-- `docs/footguns.md`: 3 new entries (agent-rewrite, vocabulary mismatch, mv overwrite)
-- `docs/lessons.md`: 2 new entries (broad setup rewrites shared docs, mv overwrites without checking)
-- `docs/architecture.md`: added Gemini CLI to agent list and setup flow
+### Incidents
+- 3 new footguns (agent-rewrite, vocabulary mismatch, mv overwrite)
+- 2 new lessons (broad setup rewrites shared docs, mv overwrites without checking)
 
 ---
 
 ## v0.2.0 - 2026-03-21
 
-GOAT Flow implemented and iterated across 7 projects (rampart, sus-form-detector, devgoat-bash-scripts, ambient-scribe, blundergoat-platform, goat-flow itself, the-summit-chatroom). Multi-agent support (Claude Code + Codex + Gemini CLI). Instructions refined through 11 diagnostic rounds with closed-loop feedback.
-
-### Self-Implementation
-
-- Implemented GOAT Flow Phases 1a-2 on the goat-flow project itself
-- CLAUDE.md (120 lines), AGENTS.md (108 lines), GEMINI.md (84 lines), 7 skills per agent, codex playbooks, hooks, settings, CI workflow
-- docs/footguns.md (5 footguns with file:line evidence), docs/lessons.md (2 entries)
-- 3 agent evals, 5 codex evals with Origin labels (2 Codex-mechanics)
-- scripts/deny-dangerous.sh, scripts/context-validate.sh, scripts/preflight-checks.sh
+Workflow implemented across 7 projects. Multi-agent support. 11 diagnostic rounds with closed-loop feedback.
 
 ### Execution Loop
+- SCOPE promoted to 6th step: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+- Complexity budgets: Hotfix (2/3), Standard (4/10), System (6/20), Infra (8/25)
+- Debug gate: "No fixes until human reviews diagnosis"
+- LOG triggers: VERIFY failure → lessons.md required, human correction → log immediately
+- Mode-transition rule: "Switching to [NEW STATE] because [reason]"
 
-- SCOPE promoted from paragraph to 6th step: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
-- Complexity budgets: Hotfix (2/3), Standard (4/10), System (6/20), Infra (8/25) — over budget = re-classify
-- Debug gate: "No fixes until human reviews diagnosis" — explicit in shared template and all agent setup files
-- LOG mechanical trigger: VERIFY failure or course correction → lessons.md entry required before DoD
-- LOG human correction trigger: MUST log immediately after human correction
-- LOG footgun propagation: propagate to local instruction docs
-- Mode-transition rule: "Switching to [NEW STATE] because [reason]" — now in shared template
+### Skills (7 total)
+- Renamed /goat-research → /goat-investigate with source quality levels
+- Added /goat-plan: 4-phase planning with Triangular Tension Pass (SKEPTIC/ANALYST/STRATEGIST)
+- Added /goat-test: 3-track doer-verifier (automated, AI verification, human testing)
+- goat-review: explicit depth requirement ("read actual source code, find real bugs with file:line")
 
-### Ask First
-
-- Explicit 5-item micro-checklist inlined in shared template (was "include micro-checklist" with no specifics)
-- Items: boundary touched, related code read, footgun checked, local instruction checked, rollback command
-- Item 4 agent-neutral: local CLAUDE.md / .github/instructions/ / none
-
-### Enforcement
-
+### Ask First & Enforcement
+- 5-item micro-checklist: boundary, related code, footgun, local instruction, rollback
 - deny-dangerous covers Edit/Write tool calls, not just Bash
-- Read deny patterns for Claude/Gemini Code (settings.json)
-- Content-preserving write guard (>80% reduction) in Phase 1c
-- All verification sections → hard gates ("Do NOT proceed until all gates pass")
-- Verification uses scripts/preflight-checks.sh with fallback to stack commands
+- Content-preserving write guard (>80% reduction blocked)
+- All verification sections → hard gates
 
-### Codex Support
+### Multi-Agent
+- Codex support: setup-codex.md, eval requirements, dual-agent coordination
+- Gemini CLI: GEMINI.md, 7 skills, settings, hooks, .geminiignore
+- Truth order: user > CLAUDE.md > execution-loop > system-spec > skills
+- Context rot defense: 40-60% utilization rule, noise pruning
 
-- setup-codex.md: explicit MUST-include block (state declaration, mode-transition, Debug gate, all LOG triggers, footgun propagation, dual-agent coordination, 5-item Ask First)
-- Codex evals require 1-2 Codex-mechanics evals + Origin: real-incident | synthetic-seed labels
-- Dual-agent repos must reference Claude assets and align shared semantics (loop, budgets, LOG triggers, Ask First shape, DoD gates)
-- Human checklist expanded: ACT checks, LOG checks, Ask First format, DoD alignment, Codex-mechanics eval check, AGENTS-vs-CLAUDE semantic diff
-- Router says "skill directories (Claude/Gemini) or playbook files (Codex)"
-- Phase 2 eval dedup: check other agent's evals before creating duplicates
-
-### Documentation
-
-- Renamed docs/five-steps.md → docs/system/six-steps.md (6-step loop with SCOPE)
-- Moved docs/five-layers.md → docs/system/five-layers.md
-- Moved 4 reference docs to docs/reference/
-- Rewrote docs/README.md for current structure
-- Added rampart as 7th implementation with bug-to-loop retrospective (6 real bugs mapped to loop steps)
-- Added SCOPE rationale and complexity budgets rationale to design-rationale.md
-- docs/footguns.md: spec contradiction footgun, line target inconsistency resolved
-- docs/lessons.md: 2 entries (first-source-wins, line-pressure cuts)
-- setup-audit-prompt.md: diagnose prompt for auditing existing implementations
-- Unified line target to 120 for all project shapes (dropped 100/120 split)
-- Gemini CLI setup guide (setup-gemini.md)
-- docs-seed.md: seed lessons from evals, merge guidance for architecture.md, dual-agent ownership-split, footgun evidence format clarified
-
-### Instruction Fixes (from diagnostic rounds)
-
-- system-spec.md: fixed 5-step/6-step contradiction, promoted SCOPE, added budgets, marked (f)-(i) MUST-include
-- setup-codex.md: fixed context prompt (was 5-step), added RECORD→LOG reinforcement, eval dedup, Codex-mechanics eval requirement
-- setup-claude.md + setup-gemini.md: added "Do NOT skip (f)-(i)" to Prompt A, PRE-CHECK for dual-agent state, Prompt B domain vs behavioral test
-- Phase 2 changed from "after a while" to "implement immediately"
-- All stale path references fixed (five-steps.md, five-layers.md, old doc paths, old skill names)
+### System Improvements
+- Data honesty labeling (ACTUAL_MEASURED / DESIGN_TARGET / HYPOTHETICAL_EXAMPLE)
+- Recovery protocols in VERIFY
+- Signal-based CLASSIFY (intent, complexity, mode)
+- Decisions as 4th learning loop file (docs/decisions/)
 
 ### Repo Cleanup
-
-- Merged codex-evals/ into agent-evals/ (single shared directory, evals declare Agents: all | codex | claude)
-- Deleted _draft/ (8 pre-restructure v1.5 source files — content extracted into current docs)
-- Deleted roadmaps/draft/ (5 SBAO planning docs — output merged into roadmaps)
-- Merged roadmaps/PLAN.md + roadmaps/RUBRIC.md into docs/roadmaps/TODO_improvements_v0.3.md
-- Moved roadmaps/ to docs/roadmaps/
-- Moved docs/README.md to root README.md (was 3-line stub, now full navigation)
-- Renamed setup/setup-audit-prompt.md → setup/setup-prompt-audit.md
-- Created setup/setup-prompt-fix.md (fix prompt for existing implementations)
-- Absolute paths in prompt files → [goat-flow repo]/... for portability
-
-### Handoff & Working Memory
-
-- tasks/handoff-template.md: added purpose section, when-to-create/read guidance, date field, files-changed field
-- tasks/.gitignore: ignores todo.md and handoff.md (template committed, filled copies not)
-- execution-loop.md: Working Memory now references handoff template by name, requires gitignore
-- docs-seed.md: handoff template description expanded, tasks/.gitignore added as item 5
-
-### Additional Fixes
-
-- CLAUDE.md: added scripts/preflight-checks.sh and scripts/context-validate.sh to Essential Commands
-- settings.json: added Read deny patterns (.env*, secrets, .pem, .key)
-- Agent evals: added Origin + Agents labels to all 8 evals
-- five-layers.md: agent evals table unified (was codex-evals/ for Codex, now agent-evals/ for all)
-- Root README.md: full navigation with setup guides, system design, learning loop, reference docs
-
-### Skills (7 total, renamed + 2 new)
-
-- Renamed /goat-research → /goat-investigate (the skill investigates codebases, not "researches")
-- Added /goat-plan: 4-phase planning workflow (brief → elaboration → SBAO → milestones) with Triangular Tension Pass (SKEPTIC → ANALYST → STRATEGIST) for System/Infra complexity
-- Added /goat-test: 3-track testing instructions (automated, AI verification, human testing) based on doer-verifier principle
-- Created docs/system/skills.md: summary table, when-to-use guide, decision table, design rationale, skill justification test
-- goat-investigate: added source quality levels (PRIMARY / INFERRED / DOCUMENTED / ASSUMED)
-- goat-review: explicit depth requirement ("read actual source code, find real bugs with file:line evidence")
-- Fixed broken markdown links in planning playbooks (old numbered filenames)
-
-### System Improvements (from goat-system analysis)
-
-Seven improvements adopted from the goat-system project's architecture:
-
-1. **Data honesty labeling** — footgun evidence must be labeled ACTUAL_MEASURED / DESIGN_TARGET / HYPOTHETICAL_EXAMPLE (docs-seed.md)
-2. **Truth order / precedence** — explicit priority when sources conflict: user > CLAUDE.md > execution-loop > system-spec > skills (execution-loop.md)
-3. **Recovery protocols** — first-class section in VERIFY: 2-3 common failure patterns with fixes (execution-loop.md)
-4. **Triangular Tension Pass** — SKEPTIC → ANALYST → STRATEGIST sequential challenge for /goat-plan Phase 3 (goat-plan.md)
-5. **Source quality levels** — PRIMARY / INFERRED / DOCUMENTED / ASSUMED for /goat-investigate findings (goat-investigate.md)
-6. **Signal-based CLASSIFY** — three explicit signals (intent, complexity, mode) before acting (execution-loop.md)
-7. **Decisions as 4th learning loop file** — docs/decisions/ for significant technical decisions with context/rationale (execution-loop.md LOG)
-
-### Gemini CLI Support
-
-- GEMINI.md (84 lines) with full v0.2 spec: 6-step loop, 3-signal CLASSIFY, truth order, recovery protocols, 4 LOG files, context health
-- 7 Gemini skills (.gemini/skills/goat-*) including goat-plan and goat-test
-- .gemini/settings.json with Read deny patterns
-- .gemini/hooks/ (deny-dangerous.sh, stop-lint.sh)
-- .geminiignore for secret protection
-- CI validation updated to check GEMINI.md and .gemini/settings.json
-
-### Context Rot Defense (from Comprehensive Agent Engineering Guide analysis)
-
-- docs/system/six-steps.md: expanded Context Health with 3 rot mechanisms (lost-in-the-middle, attention dilution, distractor interference), 40-60% rule, instruction centrifugation, 5 defenses table
-- execution-loop.md Working Memory: compact at 60% utilization, noise pruning, fresh context between tasks
-- goat-investigate skill: noise awareness ("are search results adding signal or distractors?")
-
-### Instruction Quality
-
-- Setup prompts now read execution-loop.md FIRST (authoritative template), system-spec.md for background. Explicit "if they conflict, execution-loop.md wins"
-- docs-seed.md: audit config files (.json, .yaml, .sh) for stale names/paths as footguns
-- setup-prompt-audit.md + setup-prompt-fix.md: now agent-agnostic (Claude, Codex, Gemini)
-- Gemini diagnostic confirmed "first-read bias" — agents follow whichever source they read first
-
-### Based on
-
-- 7 real project implementations across App, Library, and Collection shapes
-- 11+ diagnostic rounds (Claude + Codex + Gemini) with closed-loop instruction fixes
-- 60+ gaps fixed across 6 projects, all instruction files rebuilt to current spec
-- Key findings: agents follow first source read, compress MUST to SHOULD under line pressure, lessons.md stays empty without mechanical triggers, context rot degrades quality superlinearly, instruction centrifugation fades rules after ~50 turns
+- Merged codex-evals/ into agent-evals/
+- Deleted _draft/ and roadmaps/draft/
+- Restructured docs: system/, reference/, roadmaps/
+- Handoff template with gitignored working copies
 
 ---
 
 ## v0.1.0 - 2026-03-20
 
-First public release. Complete workflow system with docs, prompts, and reference material.
+First release. Complete workflow system.
 
 ### System
-
 - 5-layer architecture: Runtime, Local Context, Skills, Playbooks, Evaluation
-- 6-step execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
-- 3-layer enforcement gradient: permissions deny → hooks → instruction rules
+- 6-step execution loop with SCOPE, complexity budgets, re-classification protocol
+- 3-layer enforcement: permissions deny → hooks → instruction rules
 - Autonomy tiers (Always / Ask First / Never) with micro-checklist
 - Definition of Done (6 gates)
-- Doer-verifier testing with risk-scaled ratios (1:1 for Ask First, 1:3 for Always)
-- Create-on-first-use for confusion-log, permission profiles, ADRs
-- Graduation gate: experiment (Phase 0) → maintained project (full system)
-
-### Execution Loop (v0.1 additions from external review)
-
-- SCOPE declaration between CLASSIFY and ACT
-- Absence verification principle (generalised from rename-only to all replacements)
-- Re-classification protocol (RE-CLASSIFY state instead of hard stop)
-- Complexity-scaled read budgets (2/4/6/8) and turn budgets (3/10/20/25)
-- Context pathologies: Poisoning, Distraction, Confusion, Clash
-- Progress-aware budgets (over budget + no uncertainty reduction = stop)
+- Doer-verifier testing with risk-scaled ratios
 
 ### Enforcement
+- Agent ignore files, content-preserving write guard
+- Lockfile + generated code + migrations in Never tier
+- Anti-patterns: AP1-AP11 with calibrated weights
+- CI pending review flags (AI-GENERATED: UNVERIFIED)
 
-- Agent ignore files (.copilotignore, .cursorignore, Read deny patterns)
-- Content-preserving write guard (block >80% file size reduction)
-- Lockfile + generated code + migrations added to Never tier
-- Anti-pattern weights recalibrated: AP1 -3, AP4 -5, AP5 -5, AP6 -5
-- New anti-patterns: AP10 (incident without entry, -2), AP11 (dead artifacts, -2)
-- CI pending review flags (AI-GENERATED: UNVERIFIED) with enforcement
-- Layer 2 staleness + contradiction detection in CI
-
-### Skills (7 total, goat-* prefix)
-
-- /goat-preflight - mechanical build verification
-- /goat-debug - diagnosis-first debugging
-- /goat-audit - 4-pass codebase review with fabrication self-check
-- /goat-research - deep investigation with human gate
-- /goat-review - structured code review with RFC 2119 severity
-- /goat-plan - 4-phase planning workflow (brief → elaboration → SBAO → milestones)
-
-### Playbooks
-
-- Planning: feature brief, mob elaboration, SBAO ranking, milestone planning
-- Testing: doer-verifier workflow with 3 parallel tracks, verifier prompt templates
-
-### Evaluation
-
-- Agent evals from real incidents
-- CI context validation (8 checks)
-- Learning loop: footguns (with file:line + timestamps), lessons, confusion-log, handoff
-
-### Governance
-
-- Model-version gated quarterly shrink (run evals before removing rules)
-- Shrink based on tooling improvements + rules never triggered in 90+ days
-- Model version transition guidance
+### Skills (6 total)
+- preflight, debug, audit, research, review, plan
+- Planning playbooks: feature brief, mob elaboration, SBAO ranking, milestone planning
+- Testing playbooks: doer-verifier workflow with 3 parallel tracks
 
 ### Documentation
-
-- docs/system/five-layers.md - architecture overview
-- docs/system/six-steps.md - execution loop deep dive
-- docs/getting-started.md - onboarding with troubleshooting recipes
-- docs/system-spec.md - full technical specification
-- docs/reference/design-rationale.md - why behind every decision
-- docs/reference/cross-agent-comparison.md - Claude Code vs Codex analysis
-- docs/reference/competitive-landscape.md - 12 competitor systems compared
-- docs/reference/examples.md - real implementation data from 7 projects + example artifacts
-
-### Based on
-
-- 3 independent AI reviews (Gemini 88/100, ChatGPT 87/100, Claude 81/100)
-- Cross-referenced against Bruniaux 6 Pillars, BMad Method, and 21 other systems
-- 7 real project implementations (1 fully public, 4 private, 2 in progress)
+- system-spec, five-layers, six-steps, getting-started, design-rationale
+- Cross-agent comparison, competitive landscape, implementation examples
+- Agent evals from real incidents, CI context validation

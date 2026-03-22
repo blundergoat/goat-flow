@@ -28,9 +28,8 @@ on:
 The workflow should run these checks:
 
 1. CLAUDE.md line count
-   - Read the project shape to determine target:
-     Apps: warn if >120, error if >150
-     Libraries/collections: warn if >100, error if >150
+   - Target: 120 lines for all projects, hard limit 150.
+     Warn if >120, error if >150.
    - Report the current line count in the workflow summary
 
 2. AGENTS.md line count (if exists)

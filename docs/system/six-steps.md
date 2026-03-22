@@ -30,7 +30,7 @@ graph LR
 
 **The incident:** Asked about a dependency, Claude said it was a local path dependency. It was actually installed from a package registry. It never read the manifest.
 
-**The rule:** Read the relevant files first. Never fabricate codebase facts.
+**The rule:** Read the relevant files first. Never fabricate codebase facts. When starting work in a specific domain, also read the relevant cold-path file from `ai/instructions/` (see `ai/README.md` for the routing map).
 
 | Project Shape | What to read |
 |---------------|-------------|
@@ -244,7 +244,6 @@ When a fix isn't working:
 |------|---------------|---------------|
 | `docs/lessons.md` | Behavioural mistake (agent did something wrong) | "Assumed API contract without reading frontend" |
 | `docs/footguns.md` | Architectural landmine (cross-domain coupling) | "Auth nonce spans 4 components; breaking any one silently breaks login" |
-| `docs/confusion-log.md` | Structural confusion (hard to navigate) | "Unclear which module owns session validation" |
 
 **Agent-authored entries:** All entries added by the agent during the LOG step must be flagged:
 

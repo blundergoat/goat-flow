@@ -2,7 +2,7 @@
 
 These sections go in every project's root instruction file (CLAUDE.md, AGENTS.md, or equivalent). They are the same regardless of which agent you use.
 
-Target: under 120 lines for all project shapes. Hard limit: 150. Use BAD/GOOD examples not prose.
+Target: under 120 lines. Hard limit: 150. Use BAD/GOOD examples not prose.
 
 ---
 
@@ -31,11 +31,10 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
-   - LOG: MUST update when tripped (DoD gate #4). Reference all four
+   - LOG: MUST update when tripped (DoD gate #4). Reference all three
      learning loop files:
      docs/lessons.md (behavioural mistakes),
      docs/footguns.md (architectural traps with file:line evidence),
-     docs/confusion-log.md (structural navigation difficulty),
      docs/decisions/ (significant technical decisions with context/rationale).
      When-to-use table. Footgun propagation rule.
      Context-based loading rules.
@@ -70,6 +69,9 @@ e) Working Memory: Working Notes for 5+ turn tasks, context escalation
    failed attempts and superseded reasoning before compacting (noise
    pruning). Use /clear between unrelated tasks for fresh context.
    tasks/todo.md and tasks/handoff.md MUST be gitignored.
+   Recommended: register a Notification hook for compaction that
+   re-injects current task, modified files, and constraints.
+   See workflow/runtime/enforcement.md for the hook configuration.
 
 f) Sub-Agent Objectives: one focused objective, structured return,
    5-call budget
@@ -78,8 +80,9 @@ g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
      - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
-     - Learning loop files (footguns, lessons, confusion-log)
+     - Learning loop files (footguns, lessons)
      - Architecture doc, handoff template, agent evals
+     - Project guidelines: `ai/README.md`
      - Any playbooks, profiles, or domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's
      instruction file (AGENTS.md or CLAUDE.md).

@@ -37,3 +37,7 @@ Use before starting meaningful work, after meaningful changes, and before declar
 
 Overall: PASS / FAIL
 ```
+
+Present results. Then ask: "Any items you want me to investigate further, or any failures you want to discuss before proceeding?"
+
+Do NOT auto-advance. Let the human review results and decide next steps.

@@ -26,12 +26,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
    hardcoded absolute paths, or outdated references. Seed these as
    footguns if found.
 
-3. docs/confusion-log.md - Create on first use. Materialise this file
-   when the first real confusion incident occurs, not pre-created empty.
-   However, ALWAYS reference it in the LOG section and router table so
-   agents know the destination exists when they need it.
-
-4. tasks/handoff-template.md - Template for session handoffs. MUST
+3. tasks/handoff-template.md - Template for session handoffs. MUST
    include a purpose section explaining: when to create (incomplete
    work or two-correction stop), when to read (start of every session,
    check if tasks/handoff.md exists), and how to use (copy template
@@ -39,7 +34,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
    State (including files changed), Key Decisions, Known Risks,
    Next Step.
 
-5. tasks/.gitignore - Ignore runtime working files:
+4. tasks/.gitignore - Ignore runtime working files:
    todo.md
    handoff.md
    (The template is committed; the filled-in copies are not.)
@@ -66,10 +61,36 @@ These files are created during Phase 1a regardless of which agent you use. They 
    reference it in the Definition of Done.
 ```
 
+## Project Coding Guidelines (Cold Path)
+
+```
+7. ai/instructions/ - Project coding guidelines (cold path).
+   Create ai/README.md as routing map.
+   Create ai/instructions/base.md with project-wide conventions.
+   Create ai/instructions/code-review.md with review standards.
+   Create ai/instructions/git-commit.md with commit conventions.
+   If .github/instructions/ exists, migrate content to ai/instructions/
+   (group language files into domain files: php.md + python.md → backend.md).
+   Create .github/git-commit-instructions.md if .git/ exists.
+
+   VERIFICATION GATE — after creating ai/instructions/ files:
+   - Verify every file path referenced actually exists (ls/find)
+   - Verify every command listed actually runs (build, test, lint)
+   - Verify every architectural claim matches current code, not roadmap
+   - Remove any planned/aspirational features — only document current state
+   - If docs/architecture.md mentions something, confirm it in source before citing it
+
+   ALSO AUDIT EXISTING INSTRUCTION FILES:
+   - Read the Ask First section in the hot-path file (CLAUDE.md/AGENTS.md/GEMINI.md)
+   - Verify every path in Ask First exists on disk — stale paths mislead agents
+   - Check router table entries resolve — broken refs are common after renames
+   - If a path doesn't exist, fix it (don't copy it into ai/instructions/)
+```
+
 ## Ownership Split Report
 
 ```
-7. docs/guidelines-ownership-split.md - If a guidelines file was
+8. docs/guidelines-ownership-split.md - If a guidelines file was
    trimmed in the pre-audit step, create this file documenting what
    was moved, what was removed, and why. Preserves migration rationale.
    In dual-agent projects, document ownership for BOTH instruction

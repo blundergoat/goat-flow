@@ -58,7 +58,6 @@ GOOD: Inline format. Extract when second format needed
 |------|---------------|
 | `docs/lessons.md` | Behavioural mistake (agent did something wrong) |
 | `docs/footguns.md` | Cross-doc architectural trap (with file:line evidence) |
-| `docs/confusion-log.md` | Structural navigation difficulty |
 | `docs/decisions/` | Significant technical decision with context/rationale |
 
 ## Autonomy Tiers
@@ -108,9 +107,9 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Reference docs | `docs/reference/` |
 | Setup prompts | `setup/` |
 | Skill/playbook templates | `workflow/` |
+| Coding guidelines | `ai/README.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
-| Confusion log | `docs/confusion-log.md` |
 | Architecture | `docs/architecture.md` |
 | Decisions | `docs/decisions/` |
 | Maintenance scripts | `scripts/maintenance/` |

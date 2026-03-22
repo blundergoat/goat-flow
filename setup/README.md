@@ -8,14 +8,14 @@ Pick your agent and follow the setup guide.
 | **Gemini CLI** | [setup-gemini.md](setup-gemini.md) | GEMINI.md, .gemini/hooks/, .agents/skills/, .gemini/settings.json |
 | **Codex** | [setup-codex.md](setup-codex.md) | AGENTS.md, .agents/skills/, scripts/ |
 
-Both agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks/handoff-template.md, .github/instructions/
+All agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks/handoff-template.md, .github/instructions/
 
 ## Before you start
 
 1. Read [shared/guidelines-audit.md](shared/guidelines-audit.md) if you have an existing guidelines file
 2. `git stash` or `git commit` your current state
 3. Know your stack: build, test, lint, format commands
-4. Know your project shape: App, Library, or Script Collection
+4. Know your stack: languages, build/test/lint/format commands
 
 ## Phases
 

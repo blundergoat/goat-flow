@@ -1,6 +1,6 @@
 # GOAT Flow
 
-A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, and Codex a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop - instead of a wall of rules.
+A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, Codex, and Copilot a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop - instead of a wall of rules.
 
 Implemented across 7 real projects. Open source under MIT.
 
@@ -16,14 +16,14 @@ AI coding agents are powerful but unreliable without structure. They fabricate f
 
 **Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% compliance vs ~70% for rules). Post-turn hooks lint after every change. Format hooks clean up edits.
 
-**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes), `docs/confusion-log.md` (structural navigation issues). Real incidents, not hypothetical ones.
+**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes). Real incidents, not hypothetical ones.
 
 **7 skills:** /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
 
 ## Quick Start
 
 1. Clone this repo into your project (or copy `docs/system-spec.md` + `setup/`)
-2. Pick your agent: [Claude Code](setup/setup-claude.md) | [Gemini CLI](setup/setup-gemini.md) | [Codex](setup/setup-codex.md)
+2. Pick your agent: [Claude Code](setup/setup-claude.md) | [Gemini CLI](setup/setup-gemini.md) | [Codex](setup/setup-codex.md) | [Copilot](setup/setup-copilot.md)
 3. Paste the setup prompts into your agent - it builds the system for your project
 
 **Minimal setup** (5 min): Phase 0 gives you an instruction file + deny-dangerous hook.
@@ -45,12 +45,12 @@ Details: [docs/system/five-layers.md](docs/system/five-layers.md)
 
 ## Multi-Agent Support
 
-| | Claude Code | Gemini CLI | Codex |
-|---|---|---|---|
-| Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md |
-| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ |
-| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) |
-| Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) |
+| | Claude Code | Gemini CLI | Codex | Copilot |
+|---|---|---|---|---|
+| Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md | .github/copilot-instructions.md |
+| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ | .github/instructions/ |
+| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) | — |
+| Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) | [setup-copilot.md](setup/setup-copilot.md) |
 
 All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files.
 
@@ -82,10 +82,6 @@ scripts/                Validation and enforcement scripts (Codex)
 .gemini/                Gemini CLI runtime (hooks, settings)
 .agents/                Shared skills (Codex + Gemini CLI)
 ```
-
-## Implementation Evidence
-
-GOAT Flow has been implemented across 7 projects: devgoat-bash-scripts (public), rampart, ambient-scribe, sus-form-detector, blundergoat-platform, strands-php-client, and the-summit-chatroom. Design decisions are backed by real incidents from these implementations, not hypothetical scenarios.
 
 ## License
 
