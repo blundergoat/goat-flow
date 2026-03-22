@@ -23,7 +23,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     loaded on demand. Hot path (instruction files) stays under 120 lines.
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test
+    /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -76,7 +76,7 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 
 | Skill                | Justification                    | Projects |
 | -------------------- | -------------------------------- | -------- |
-| `/goat-preflight` | Repeatable structured output     | All      |
+| `/goat-security` | Distinct artefact + hard gate    | All      |
 | `/goat-debug`     | Special failure mode + hard gate | All      |
 | `/goat-audit`     | Distinct artefact + hard gate    | All      |
 | `/goat-investigate`  | Distinct artefact + hard gate    | All      |
@@ -356,7 +356,7 @@ stack:
 
 ## Phase 1 Skills
 
-**`/goat-preflight`** -- Mechanical build verification. MUST: type-check + lint + compile. SHOULD: full test suite, formatter check. MAY: skip formatter during debugging. MUST NOT: report complete if any MUST item fails.
+**`/goat-security`** -- Security-focused review. MUST: audit dependencies for known CVEs, scan for leaked secrets, review permission boundaries. SHOULD: check auth flows, validate input sanitisation. MUST rank findings using severity scale: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE.
 
 **`/goat-debug`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix.
 
@@ -496,7 +496,7 @@ Gitleaks pre-commit hook. **Manual setup only** -- do not ask an AI agent to mod
 | Permissions deny | `*git commit*`, `*git push*`          | Always            |
 | Deny rules       | Pre-tool hooks                          | Phase 1           |
 | Secret scanning  | gitleaks pre-commit                     | Phase 1 (manual)  |
-| Dependency audit | npm/composer/cargo audit in /goat-preflight  | Phase 1           |
+| Dependency audit | npm/composer/cargo audit in /goat-security   | Phase 1           |
 | Git hygiene      | Block force-push, feature branches      | Phase 1           |
 
 ---

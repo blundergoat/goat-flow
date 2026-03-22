@@ -89,7 +89,7 @@ Ask one question with a recommended default and exact file boundary.
 | Claude setup | `setup/setup-claude.md` |
 | Codex setup | `setup/setup-codex.md` |
 | Shared execution template | `setup/shared/execution-loop.md` |
-| Preflight skill | `.agents/skills/goat-preflight/SKILL.md` |
+| Security skill | `.agents/skills/goat-security/SKILL.md` |
 | Debug skill | `.agents/skills/goat-debug/SKILL.md` |
 | Audit skill | `.agents/skills/goat-audit/SKILL.md` |
 | Investigate skill | `.agents/skills/goat-investigate/SKILL.md` |
@@ -104,3 +104,7 @@ Ask one question with a recommended default and exact file boundary.
 | Deny policy | `scripts/deny-dangerous.sh` |
 | Agent evals | `agent-evals/` |
 | Handoff template | `tasks/handoff-template.md` |
+
+## Hard Rules
+
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE

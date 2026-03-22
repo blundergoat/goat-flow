@@ -1,12 +1,15 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
+// All skills must be interactive — no exceptions, strict scoring
+const SKILL_QUALITY_THRESHOLD = 0.8;
+
 /**
  * Tier 2 — Standard (35 points)
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardChecks: CheckDef[] = [
   // === 2.1 Skills (8 pts) ===
-  ...['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map((skill, i) => ({
+  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map((skill, i) => ({
     id: `2.1.${i + 1}` as string,
     name: `goat-${skill} skill`,
     tier: 'standard' as const,
@@ -47,7 +50,7 @@ export const standardChecks: CheckDef[] = [
           return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
         }
         const ratio = quality.withStep0 / quality.total;
-        if (ratio >= 0.8) {
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
           return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withStep0}/${quality.total} skills ask questions before acting` };
         }
         return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withStep0}/${quality.total} skills gather context — most should ask before acting` };
@@ -67,7 +70,7 @@ export const standardChecks: CheckDef[] = [
           return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
         }
         const ratio = quality.withHumanGate / quality.total;
-        if (ratio >= 0.5) {
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
           return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withHumanGate}/${quality.total} skills include human gates` };
         }
         return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withHumanGate}/${quality.total} skills have human gates — agents should pause for review` };
@@ -87,7 +90,7 @@ export const standardChecks: CheckDef[] = [
           return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
         }
         const ratio = quality.withConstraints / quality.total;
-        if (ratio >= 0.8) {
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
           return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withConstraints}/${quality.total} skills have RFC 2119 constraints` };
         }
         return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withConstraints}/${quality.total} skills have MUST/MUST NOT constraints` };
@@ -107,7 +110,7 @@ export const standardChecks: CheckDef[] = [
           return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
         }
         const ratio = quality.withPhases / quality.total;
-        if (ratio >= 0.8) {
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
           return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withPhases}/${quality.total} skills have phased execution` };
         }
         return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withPhases}/${quality.total} skills have phased execution — structure prevents skipping steps` };
@@ -127,7 +130,7 @@ export const standardChecks: CheckDef[] = [
           return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withConversational / quality.total;
-        if (ratio >= 0.3) {
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
           return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConversational}/${quality.total} skills encourage conversational interaction` };
         }
         return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConversational}/${quality.total} skills are conversational — skills should present findings then let humans drill in, not dump one-shot output` };
@@ -135,6 +138,46 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Skills should be conversational — present findings, then let the human drill in with follow-up questions. One-shot dumps miss architectural problems.',
     recommendationKey: 'add-skill-conversational',
+  },
+  {
+    id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { quality } = ctx.agentFacts.skills;
+        if (quality.total === 0) {
+          return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+        }
+        const ratio = quality.withChaining / quality.total;
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
+          return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChaining}/${quality.total} skills link to related skills` };
+        }
+        return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChaining}/${quality.total} skills have chaining — skills should link to related skills` };
+      },
+    },
+    recommendation: 'Skills should include a "Chains with" footer linking to related skills',
+    recommendationKey: 'add-skill-chaining',
+  },
+  {
+    id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { quality } = ctx.agentFacts.skills;
+        if (quality.total === 0) {
+          return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+        }
+        const ratio = quality.withChoices / quality.total;
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
+          return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChoices}/${quality.total} skills offer choices at phase transitions` };
+        }
+        return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChoices}/${quality.total} skills have structured choices — use (a)/(b)/(c) options, not yes/no gates` };
+      },
+    },
+    recommendation: 'Skills should offer choices at phase transitions, not just yes/no gates',
+    recommendationKey: 'add-skill-choices',
   },
 
   // === 2.2 Hooks / Verification Scripts (7 pts) ===

@@ -66,6 +66,8 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-refs (3) no unapprov
 
 Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one question + default.
 
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+
 ## Working Memory
 
 5+ turns -> `tasks/todo.md`. Handoff -> `tasks/handoff.md` (read if exists).
@@ -75,7 +77,7 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 
 | Target | Path |
 |--------|------|
-| **Skills** | `.agents/skills/goat-{preflight,debug,audit,investigate,review,plan,test}` |
+| **Skills** | `.agents/skills/goat-{security,debug,audit,investigate,review,plan,test}` |
 | **Playbooks** | `workflow/playbooks/` |
 | **Learning** | `docs/{lessons,footguns}.md`, `docs/decisions/` |
 | **Architecture** | `docs/architecture.md` |

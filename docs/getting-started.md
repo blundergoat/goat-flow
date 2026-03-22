@@ -129,7 +129,7 @@ After full implementation, your project will have:
 ```
 CLAUDE.md                              <- Layer 1: the loop (~120 lines)
 src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying dirs exist)
-.claude/skills/goat-preflight/SKILL.md  <- Layer 3: skills
+.claude/skills/goat-security/SKILL.md   <- Layer 3: skills
 .claude/skills/goat-debug/SKILL.md
 .claude/skills/goat-audit/SKILL.md
 .claude/skills/goat-investigate/SKILL.md

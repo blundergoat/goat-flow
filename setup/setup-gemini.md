@@ -172,8 +172,8 @@ skill's full specification.
 
 Create these 7 skills under .agents/skills/:
 
-1. goat-preflight/SKILL.md - RFC 2119 constraints. MUST run build/lint.
-   SHOULD run formatter, full test suite. MAY skip formatter when debugging.
+1. goat-security/SKILL.md - Security-focused review skill. MUST check
+   dependencies, secrets, permissions. Severity scale ranking.
 2. goat-investigate/SKILL.md - Minimum template: Files Involved, Request Flow,
    Boundaries Touched, Risks/Gotchas (min 3 with file:line evidence).
    Hard gate: no planning until human reviews.

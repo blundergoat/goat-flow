@@ -18,7 +18,7 @@ AI coding agents are powerful but unreliable without structure. They fabricate f
 
 **A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes). Real incidents, not hypothetical ones.
 
-**7 skills:** /goat-preflight, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
+**7 skills:** /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
 
 ## Quick Start
 

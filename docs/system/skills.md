@@ -6,7 +6,7 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 | Skill | Purpose | Hard Gate | When to Use |
 |-------|---------|-----------|-------------|
-| /goat-preflight | Build verification | MUST NOT report complete if any MUST item fails | Before starting, after changes, before declaring done |
+| /goat-security | Security-focused review | MUST rank findings by severity scale | Before releases, after dependency changes, during audits |
 | /goat-debug | Diagnosis-first debugging | No fixes until human reviews diagnosis | Bug or test failure with unclear root cause |
 | /goat-audit | Multi-pass quality review | MUST NOT propose fixes; 4-pass with fabrication check | Systematic review before releases or major changes |
 | /goat-investigate | Deep codebase investigation | No planning until human reviews | Exploring unfamiliar code before changing it |
@@ -18,15 +18,15 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 ## When to Use Each Skill
 
-### /goat-preflight
+### /goat-security
 
-**When:** Before starting any task, after meaningful code changes, or as a final gate before declaring done.
+**When:** Before releases, after dependency changes, during security audits, or when reviewing code that handles secrets, auth, or permissions.
 
-**What it does:** Mechanical build verification. Runs type-check, lint, compile, tests in order. Produces a pass/fail checklist. No judgement calls — just runs commands and reports.
+**What it does:** Security-focused review. Checks dependencies for known vulnerabilities, scans for leaked secrets, reviews permission boundaries, and audits auth flows. Ranks all findings using the severity scale: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE.
 
-**Hard gate:** MUST NOT report "complete" if any MUST item fails.
+**Hard gate:** MUST rank findings by severity scale. MUST NOT skip dependency audit.
 
-**Invoke when:** You want a clean baseline before working, or you need to verify nothing is broken after changes.
+**Invoke when:** You need a security review before shipping, after adding new dependencies, or when working in auth/secrets/permissions code.
 
 ### /goat-debug
 
@@ -98,7 +98,7 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 | Situation | Skill | Why not the others |
 |-----------|-------|--------------------|
-| "Is the build clean?" | /goat-preflight | Mechanical check, no investigation needed |
+| "Are there security issues?" | /goat-security | Security review, dependency audit |
 | "This test is failing, why?" | /goat-debug | Need diagnosis before fixing |
 | "How healthy is this module?" | /goat-audit | Systematic scan, not a single bug |
 | "How does this subsystem work?" | /goat-investigate | Understanding before changing |
@@ -120,9 +120,9 @@ Skills are created during Phase 1b of the GOAT Flow setup. The skill templates i
 
 ## Why Each Skill Is Designed This Way
 
-### /goat-preflight
-**Problem:** Shipping broken builds. The agent says "done" without running the full check suite.
-**Design:** Mechanical, repeatable output with RFC 2119 priorities. MUST items cannot be skipped.
+### /goat-security
+**Problem:** Security gaps ship undetected. Dependencies have known CVEs, secrets leak into code, permission boundaries are misconfigured.
+**Design:** Security-focused review with severity scale ranking. MUST audit dependencies and scan for secrets.
 
 ### /goat-debug
 **Problem:** Agents guess fixes before understanding the bug. "Just try something" works ~30% of the time and creates confusing diffs the other 70%.

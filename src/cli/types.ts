@@ -180,6 +180,8 @@ export interface AgentFacts {
       withConstraints: number;
       withPhases: number;
       withConversational: number;
+      withChaining: number;
+      withChoices: number;
       total: number;
     };
   };

@@ -54,7 +54,7 @@ jobs:
 
       - name: Check skills exist
         run: |
-          EXPECTED_SKILLS="goat-preflight goat-debug goat-audit goat-investigate goat-review goat-plan goat-test"
+          EXPECTED_SKILLS="goat-security goat-debug goat-audit goat-investigate goat-review goat-plan goat-test"
           # Check Claude Code skills
           if [ -d ".claude/skills" ]; then
             for skill in $EXPECTED_SKILLS; do

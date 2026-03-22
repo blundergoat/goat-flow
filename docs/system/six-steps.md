@@ -174,7 +174,7 @@ Skills can be configured to trigger automatically based on context instead of ma
 
 | Trigger | Skill | When |
 |---------|-------|------|
-| Pre-commit | /goat-preflight | Before any git commit attempt |
+| Pre-commit | /goat-security | Before any git commit attempt |
 | Test failure | /goat-debug | When a test fails during VERIFY |
 | PR creation | /goat-review | When creating or updating a pull request |
 | New area | /goat-investigate | When working in a directory for the first time |
@@ -337,7 +337,7 @@ The execution loop doesn't end when code is written. A task is done when all six
 1. Code compiles and passes linting
 2. All existing tests pass (no regressions)
 3. New tests cover the change
-4. Preflight checks pass (`/goat-preflight` or `preflight-checks.sh`)
+4. Preflight checks pass (`/goat-security` or `preflight-checks.sh`)
 5. Learning loop files updated (if applicable)
 6. After any replacement (rename, migration, deprecation, config change): grep for old pattern, zero remaining
 

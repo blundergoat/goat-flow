@@ -2,7 +2,7 @@
 name: goat-plan
 description: "Plan a feature with phased human gates"
 ---
-# GOAT Plan
+# /goat-plan
 
 ## When to Use
 Use when planning a feature or significant change.
@@ -17,7 +17,14 @@ Read the playbook templates in `workflow/playbooks/planning/` — they are the a
 
 First, check for in-progress planning artifacts: look for `requirements-*.md` or `TODO_*_prime.md` in the repo root or `tasks/`. Also check conversation context for recent /goat-plan usage.
 
-If you find evidence of an in-progress plan, ask: **"Are we still planning [feature name from the artifact]? Or is this something new?"**
+If you find evidence of an in-progress plan, ask:
+
+> **"Are we still planning [feature name from the artifact]? What would you like to do?"**
+>
+> **(a)** Resume where we left off — pick up from the last completed phase
+> **(b)** Start over — scrap existing artifacts and restart from Phase 0
+> **(c)** Jump to a specific phase — I'll tell you which one
+> **(d)** Something new entirely — different feature
 
 If no evidence, ask: **"Where are we in the planning process? Pick a number or describe:"**
 
@@ -41,7 +48,11 @@ Ask the user these questions. Do NOT proceed until answered:
 
 1. **What are we planning?** (feature name, one-line description)
 2. **Why?** (business driver, user pain, or technical need)
-3. **Complexity?** Hotfix / Standard / System / Infrastructure
+3. **Complexity?** Classify scope using these thresholds:
+   - **Hotfix** — 1 file, <10 lines changed
+   - **Standard** — 2-5 files, single feature boundary
+   - **System** — crosses module/service boundaries, touches shared interfaces
+   - **Infrastructure** — CI/CD, builds, deploys, environment config
 4. **Any existing requirements?** (paste, point to a doc, or "starting from scratch")
 
 **Route based on complexity:**
@@ -58,6 +69,8 @@ Tell the user which phases apply to their complexity level before starting.
 **You are driving this.** Read `workflow/playbooks/planning/feature-brief.md` for the full template.
 
 Walk the user through each section interactively. Ask one section at a time — do not dump the entire template at once.
+
+**Risk-prioritize questions:** Within each section, ask the question whose answer would most change the overall plan first. If a single answer could invalidate the entire approach, surface it immediately rather than burying it at the end.
 
 **Section order:**
 
@@ -77,9 +90,20 @@ Walk the user through each section interactively. Ask one section at a time — 
 
 8. **Success criteria:** Ask: "How do we measure success? Give me 2-3 specific, testable metrics."
 
+**Forward-compatibility note:** Phase 1 output format must accommodate future spec artifact fields. Use extensible structure (YAML frontmatter + markdown sections) that won't need breaking changes when new fields are added.
+
 **Output:** Write `requirements-<feature-name>.md` with all sections filled in.
 
-**HUMAN GATE:** Present the brief. Ask: "Does this capture everything? Anything to add, change, or cut?" Do NOT proceed until the user approves.
+**HUMAN GATE:** Present the brief. Ask:
+
+> **"Does this capture everything?"**
+>
+> **(a)** Approved — move to next phase
+> **(b)** Needs changes — I'll tell you what to update
+> **(c)** Missing a section — let me add more context
+> **(d)** Start over — this isn't the right framing
+
+Do NOT proceed until the user approves.
 
 ---
 
@@ -101,7 +125,16 @@ After the user answers, either:
 
 Update `requirements-<feature-name>.md` with the elaboration results.
 
-**HUMAN GATE:** "Are requirements locked in, or do you want another round of questions?" Do NOT proceed until confirmed.
+**HUMAN GATE:** Ask:
+
+> **"Are requirements locked in?"**
+>
+> **(a)** Locked in — move to next phase
+> **(b)** Another round — I have more to clarify
+> **(c)** Back up — the brief itself needs changes based on what we found
+> **(d)** Pivot — these questions revealed we're solving the wrong problem
+
+Do NOT proceed until confirmed.
 
 ---
 
@@ -120,6 +153,25 @@ Ask the user: **"How do you want to generate competing plans?"**
 | **A. External sessions** | User opens 2-3 separate agent sessions (different models — Claude + Codex + Gemini) and pastes the prompt into each | Maximum diversity, different model blind spots |
 | **B. Sub-agents** | You spawn 3 sub-agents in parallel, each with fresh context and the same prompt | Fastest, no manual copy-paste, stays in one session |
 | **C. Mixed** | You spawn 1-2 sub-agents AND the user runs 1 external session (ideally a different model) | Balance of speed and cross-model diversity |
+| **D. Single-agent triangular tension** | You run three sequential passes: SKEPTIC, ANALYST, STRATEGIST (see below) | Multi-agent not available, solo planning session |
+
+**Option D — Lightweight SBAO Fallback:**
+
+If the user picks D (or multi-agent isn't feasible), run three passes with explicit role shifts:
+
+1. **SKEPTIC pass:** "What could go wrong? List every risk, failure mode, and assumption that hasn't been validated. Be adversarial."
+2. **ANALYST pass:** "What data, evidence, or prior art supports or contradicts the current approach? Reference specific files, metrics, or precedents."
+3. **STRATEGIST pass:** "Given the SKEPTIC's risks and the ANALYST's evidence, what's the best path forward? Recommend a single plan with rationale."
+
+Present all three passes to the user. Then proceed to Step 3b (Rank) using the STRATEGIST output as the candidate plan, with SKEPTIC and ANALYST outputs as the critique layer.
+
+**Worked example of triangular tension:**
+
+> **SKEPTIC:** "The plan assumes the external API returns <200ms. Our monitoring shows p95 at 340ms. If we build the sync path around that assumption, the entire UX degrades under load."
+>
+> **ANALYST:** "Logs from the last 30 days show the API averages 180ms at p50 but spikes to 400ms+ during peak hours (see `docs/monitoring/api-latency.md:47`). The competitor product uses an async queue pattern to decouple from API latency."
+>
+> **STRATEGIST:** "Build the async path from day one. Queue writes, process in background, show optimistic UI. This handles both the latency risk (SKEPTIC) and aligns with the proven pattern (ANALYST). Milestone 1 spike: measure actual p95 with a test harness before committing to the queue implementation."
 
 Give the user the prompt to use (for external sessions) or spawn directly (for sub-agents):
 
@@ -175,6 +227,17 @@ After writing the prime plan, present a **concise 10 bullet point summary** of t
 
 **You are structuring the work.** Read `workflow/playbooks/planning/milestone-planning.md` for the full prompt.
 
+### Kill Criteria
+
+Before defining milestones, define 2-3 **kill criteria** — conditions that would make us abandon this plan entirely. Write these into the plan document header.
+
+Examples:
+- "If the spike proves API latency exceeds 500ms at p95, abandon the real-time approach and switch to batch processing."
+- "If the third-party SDK doesn't support our auth flow, drop this integration and revisit in Q3."
+- "If estimated effort exceeds 3 sprints after M1, descope to the minimal version."
+
+Kill criteria force honest assessment of whether to continue at each milestone gate.
+
 ### The First Rule
 
 **Spikes before implementation.** Before writing real code for anything uncertain, write a throwaway script to explore it. Call an API. Profile memory. Benchmark the approach. A 30-minute spike can save days of rework.
@@ -190,6 +253,7 @@ Break the project into milestones using these archetypes. Adapt the number to th
 
 ### For each milestone, provide:
 
+- **Depends on** (prerequisite exit criteria from previous milestones — e.g., "Depends on: M1 exit criteria 'API latency confirmed <200ms at p95'". For M1, state "Depends on: plan approval")
 - **Objective** (1-2 sentences)
 - **Assumptions to validate** (checkboxes — what must be proven true, NOT task checkboxes)
   - Good: `[ ] S3 presigned URLs work with our CORS setup (untested)`
@@ -208,7 +272,8 @@ Break the project into milestones using these archetypes. Adapt the number to th
 - Every milestone ends with a **human testing gate** — the user verifies the work before sign-off
 - A milestone is NOT complete until the user confirms the testing gate passes
 - Do NOT start the next milestone until the current one is fully complete and user-approved
-- After completing a milestone, re-read the next milestone and rewrite it based on what you learned
+- After completing a milestone, re-read the next milestone and rewrite it based on what you learned. **Show what changed and why** — do not silently rewrite. Present a brief diff: "Changed: [what]. Reason: [why]."
+- At each milestone gate, check kill criteria — if any are met, surface them and ask the user whether to abandon, pivot, or continue with justification
 
 ### Planning Rules
 
@@ -218,7 +283,16 @@ Break the project into milestones using these archetypes. Adapt the number to th
 - Do NOT build for imagined requirements — hard-code it now, refactor when proven needed
 - Do NOT treat the plan as fixed
 
-**HUMAN GATE:** Present all milestones. Ask: "Ready to start M1, or does the plan need changes?" Do NOT proceed to implementation until approved.
+**HUMAN GATE:** Present all milestones. Ask:
+
+> **"Ready to start M1?"**
+>
+> **(a)** Approved — start M1 implementation
+> **(b)** Needs changes — I'll tell you what to adjust
+> **(c)** Reorder milestones — the risk priority is wrong
+> **(d)** Too much / too little — adjust scope before starting
+
+Do NOT proceed to implementation until approved.
 
 ---
 
@@ -233,6 +307,17 @@ Break the project into milestones using these archetypes. Adapt the number to th
 - MUST reference `docs/footguns.md` and `docs/architecture.md` during planning
 - MAY skip Phase 2 + 3 for Standard features
 - MAY compress to brief only for Hotfixes
+
+## Learning Loop
+
+If this planning run uncovered a lesson or footgun, update the relevant doc before closing:
+- Behavioural mistake (agent did something wrong) → `docs/lessons.md`
+- Architectural trap with file:line evidence → `docs/footguns.md`
+
+## Chains With
+
+- **goat-investigate** — research before planning (run first to gather codebase context)
+- **goat-test** — verify implementation against plan (run after milestones to generate test instructions)
 
 ## Output
 

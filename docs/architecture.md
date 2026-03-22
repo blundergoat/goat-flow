@@ -30,7 +30,7 @@ User reads docs/getting-started.md
 
 ## Key Constraints
 
-- **No runtime code exists.** The project is 100% documentation. The CLI tool (`npx goat-flow init`) is planned for v0.2.
+- **CLI scanner and prompt generator** in `src/cli/` with 80-check rubric, fragment-based prompts, and multi-agent scoring. Dashboard planned for `src/dashboard/`.
 - **docs/system-spec.md is canonical.** All other docs derive from or elaborate on it. Conflicts resolve in favour of the spec.
 - **Cross-references are fragile.** 60+ markdown files with dense internal linking. File renames require repo-wide grep.
 - **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file:line references.
@@ -42,4 +42,4 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- lo
 ## Deliberate Trade-offs
 
 - **Redundancy across docs** — The same concepts appear in multiple files (spec, layers, steps, rationale) for different audiences. This is intentional: each file serves a different reading path. The cost is maintenance burden on edits.
-- **No code yet** — v0.1 ships as pure documentation to validate the methodology before investing in tooling. The CLI is the highest-priority v0.2 item.
+- **CLI validates the methodology** — The scanner (`src/cli/`) scores projects against the rubric, confirming the workflow produces measurable results. Dashboard and `goat-flow init` are planned next.

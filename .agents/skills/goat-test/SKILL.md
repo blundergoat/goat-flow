@@ -2,10 +2,11 @@
 name: goat-test
 description: "Generate testing instructions across three verification tracks"
 ---
-# GOAT Test
+# /goat-test
 
 ## When to Use
-Use when generating testing instructions for changes.
+
+After a coding milestone or every 30-60 minutes of agent work. Generates testing instructions for three parallel verification tracks based on the doer-verifier principle: the coding agent MUST NOT verify its own work.
 
 Generate testing instructions for three parallel verification tracks. The coding agent MUST NOT verify its own work (doer-verifier principle).
 
@@ -26,6 +27,19 @@ Do NOT generate a testing plan until the user has answered. If the user says "ju
 
 ---
 
+## Track 0 — What Changed
+
+Summarize the changes being tested: files modified, components affected, risk areas. This gives context before generating test instructions.
+
+- List every file modified with a one-line summary of the change
+- Identify which components or modules are affected
+- Flag risk areas: new dependencies, changed interfaces, security-sensitive code
+- Note the verification ratio (see below) based on the autonomy tier of the changes
+
+This section is the foundation — Tracks 1-3 all reference it.
+
+---
+
 ## Track 1 — Automated (agent runs these)
 
 Generate the exact commands to run, in order:
@@ -42,9 +56,24 @@ For each command, state:
 
 ---
 
+## What ISN'T Tested?
+
+After generating Track 1, list areas the automated tests do not cover and why:
+- Not testable with current infrastructure
+- Out of scope for this milestone
+- Requires production data or environment
+- Requires manual interaction (covered in Track 3)
+- No existing test coverage for this area (flag as tech debt)
+
+This prevents false confidence from a green test suite that misses critical paths.
+
+---
+
 ## Track 2 — AI Verification (prompts for a SEPARATE agent)
 
 Generate two ready-to-paste prompts. Fill in ALL bracketed values from the user's answers — no unfilled placeholders.
+
+Reference specific Track 1 test failures in Track 2 prompts. Example: "Track 1 found a race condition in auth.ts — verify this is resolved in your manual testing."
 
 **2a. Functional verification:**
 ```
@@ -63,6 +92,11 @@ Do not make any code changes — review only.
 
 Ask the user: "Which model should run Track 2? Recommend a different model than the coding agent for cross-model verification." Suggest a specific alternative.
 
+**Verdict protocol** — Express each AI verification result as:
+- **MUST** — blocking: test fails without this
+- **SHOULD** — important: flag if missing
+- **MAY** — nice to have: note but don't block
+
 ---
 
 ## Track 3 — Human Testing (manual checklist)
@@ -78,9 +112,17 @@ Focus on what automated tests and AI can't catch:
 - UX flow ("this technically works but isn't what I wanted")
 - Domain-specific edge cases only the human would know
 
+If UI changes: "Compare the screen to the previous version. Note any visual regressions — shifted layouts, missing elements, font or color changes, broken responsive behavior."
+
 Mark each item as **critical** (must check) or **nice-to-verify** (check if time allows).
 
-Present all three tracks. Then ask: "Want me to adjust any of these tracks? Any tests that seem redundant or missing?"
+---
+
+## HUMAN GATE
+
+Present all three tracks. Then ask:
+
+> Want me to (a) adjust Track 1 automated test focus, (b) refine Track 2 AI verification prompts, (c) add Track 3 manual test items, (d) finalize test plan?
 
 Do NOT auto-advance. Let the human review the test plan, drop unnecessary items, or add edge cases before execution.
 
@@ -93,6 +135,16 @@ Scale effort to the autonomy tier of the changes:
 - **Always changes:** 1:3 (lighter — automated tests + quick human check)
 
 Tell the user which ratio applies based on what they described.
+
+---
+
+## Severity Scale
+
+Rank test failures by priority when reporting results:
+
+**SECURITY** > **CORRECTNESS** > **INTEGRATION** > **PERFORMANCE** > **STYLE**
+
+Address higher-severity failures first. A SECURITY failure blocks the milestone regardless of how many other tests pass.
 
 ---
 
@@ -111,6 +163,28 @@ After all three tracks complete, generate a **Milestone Gate Checklist**:
 ```
 
 Tell the user: "Collect findings from all three tracks. If fixes are needed, I can help create a fix plan — then re-run the tracks on the fixed areas."
+
+---
+
+## Closing Gate
+
+- **Issues found:** route to goat-debug for investigation. Re-run affected tracks after fixes.
+- **No issues:** milestone testing gate passed. Update task status and proceed.
+
+---
+
+## Learning Loop
+
+If this run uncovered a lesson or footgun, update the relevant doc before closing:
+- Behavioural mistake → `docs/lessons.md`
+- Architectural trap with file:line evidence → `docs/footguns.md`
+
+---
+
+## Chains With
+
+- **goat-debug** — investigate test failures
+- **goat-plan** — test plan verifies milestone acceptance criteria
 
 ---
 

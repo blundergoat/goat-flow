@@ -6,7 +6,7 @@ This folder contains the prompts used to create each skill during Phase 1b setup
 
 | Template | Creates |
 |----------|---------|
-| goat-preflight.md | Build verification skill |
+| goat-security.md | Security-focused review skill |
 | goat-debug.md | Diagnosis-first debugging skill |
 | goat-audit.md | Multi-pass quality review skill |
 | goat-investigate.md | Deep codebase investigation skill |
