@@ -1,30 +1,37 @@
-# Code Review — GOAT Flow
+# Code Review Standards
 
 ## Priority Order
 
-1. **Correctness** — Does it do what it claims? Are edge cases handled?
-2. **Cross-references** — Do renamed/moved files have all references updated?
-3. **Consistency** — Does the same concept use the same description everywhere?
-4. **Line budgets** — Are instruction files under 120 lines?
+1. **Correctness** -- Does the code do what it claims? Do checks detect what they say?
+2. **Cross-references** -- Do paths in docs resolve? Do recommendationKeys match between CheckDef and Fragment?
+3. **Consistency** -- Same concept described the same way across files? Version strings in sync?
+4. **Line budgets** -- Instruction files under 120 target / 150 hard limit?
 
 ## Approval Criteria
 
-- [ ] shellcheck passes on changed `.sh` files
-- [ ] `npx tsc --noEmit` passes
-- [ ] `npm test` passes
-- [ ] No broken cross-references introduced
-- [ ] Version strings consistent (check with preflight)
+All must pass before approving:
+- `npm run typecheck` (tsc --noEmit) clean
+- `npm test` passes
+- `shellcheck scripts/maintenance/*.sh` clean (if .sh files changed)
+- `bash scripts/preflight-checks.sh` passes
+- No broken cross-references introduced (paths in docs, router tables, Ask First boundaries)
+- Version consistency: `package.json` version matches `src/cli/rubric/version.ts` PACKAGE_VERSION
+- Every new `CheckDef.recommendationKey` has a matching `Fragment.key` in `prompt/fragments/`
 
 ## Anti-Patterns to Flag
 
-1. **Hypothetical examples** — footguns/lessons must use real incidents with `file:line` evidence, never invented examples
-2. **Duplicated content** — same rule in multiple instruction files. Should be in one place.
-3. **Generic Ask First boundaries** — "auth, routing, deployment" is template text. Must use actual project paths.
-4. **Shape/confusion-log references** — removed (ADR-002, ADR-003). Flag any reintroduction.
-5. **Hardcoded versions** — should import from `src/cli/rubric/version.ts`, not inline strings
+- **Hypothetical examples in docs**: CLAUDE.md says "MUST use real incidents, never hypothetical"
+- **Duplicated content**: same instructions in both CLAUDE.md and a doc file (causes drift)
+- **Generic Ask First boundaries**: template text like "auth, routing, deployment, API, DB" instead of actual project paths
+- **Removed patterns**: ProjectShape, detectShape, --shape, confusion-log (ADR enforced by preflight)
+- **Hardcoded versions**: version strings should import from `src/cli/rubric/version.ts`
+- **console.log outside cli.ts/render/**: preflight warns on this; flag it in review
+- **Explicit `any` types**: use `unknown` and narrow instead
+- **Missing .js in imports**: NodeNext requires `.js` extensions on relative imports
 
 ## Don't Nitpick
 
-- Formatting handled by shellcheck (scripts) and tsc (TypeScript)
-- Markdown style — no linter enforced, consistency is enough
-- Comment style — only flag missing comments where logic isn't self-evident
+- Formatting handled by tsc strict mode (no separate formatter configured)
+- Markdown style variations (preflight does not lint markdown)
+- Comment style (no jsdoc requirement beyond what exists)
+- Test naming conventions (node:test is flexible on describe/it nesting)

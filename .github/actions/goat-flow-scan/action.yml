@@ -1,0 +1,89 @@
+name: 'GOAT Flow Scan'
+description: 'Score AI workflow quality and comment results on PRs'
+inputs:
+  min-score:
+    description: 'Minimum passing score (0-100). PR fails if any agent scores below this.'
+    required: false
+    default: '0'
+  path:
+    description: 'Path to scan (defaults to repo root)'
+    required: false
+    default: '.'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+    - name: Install dependencies
+      shell: bash
+      run: cd ${{ github.action_path }}/../../.. && npm ci
+    - name: Build scanner
+      shell: bash
+      run: cd ${{ github.action_path }}/../../.. && npx tsc
+    - name: Run scan
+      id: scan
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}/../../..
+        output=$(node dist/cli/cli.js scan "${{ inputs.path }}" 2>&1)
+
+        # Extract scores and build markdown table rows
+        summary=$(echo "$output" | python3 -c "
+        import json, sys
+        data = json.load(sys.stdin)
+        min_score = int('${{ inputs.min-score }}')
+        lines = []
+        all_pass = True
+        for a in data['agents']:
+            s = a['score']
+            emoji = ':white_check_mark:' if s['percentage'] >= min_score else ':x:'
+            if s['percentage'] < min_score:
+                all_pass = False
+            lines.append(f'| {emoji} {a[\"agentName\"]} | {s[\"grade\"]} | {s[\"percentage\"]}% | {s[\"earned\"]}/{s[\"available\"]} |')
+            fails = [c for c in a['checks'] if c['status'] == 'fail']
+            for f in fails:
+                lines.append(f'|  | | :x: {f[\"id\"]} | {f[\"name\"]} |')
+        print('\n'.join(lines))
+        ")
+
+        all_pass=$(echo "$output" | python3 -c "
+        import json, sys
+        data = json.load(sys.stdin)
+        min_score = int('${{ inputs.min-score }}')
+        all_pass = all(a['score']['percentage'] >= min_score for a in data['agents'])
+        print('true' if all_pass else 'false')
+        ")
+
+        echo "summary<<EOF" >> $GITHUB_OUTPUT
+        echo "$summary" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "all_pass=$all_pass" >> $GITHUB_OUTPUT
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const summary = `${{ steps.scan.outputs.summary }}`;
+          const body = [
+            '## GOAT Flow Scan Results',
+            '',
+            '| Agent | Grade | Score | Details |',
+            '|-------|-------|-------|---------|',
+            summary,
+            '',
+            '<sub>Scanned by [GOAT Flow](https://github.com/blundergoat/goat-flow)</sub>'
+          ].join('\n');
+
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body
+          });
+    - name: Enforce min-score gate
+      if: steps.scan.outputs.all_pass == 'false'
+      shell: bash
+      run: |
+        echo "::error::One or more agents scored below the minimum threshold (${{ inputs.min-score }}%)"
+        exit 1

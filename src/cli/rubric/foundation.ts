@@ -1,11 +1,11 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
 /**
- * Tier 1 — Foundation (42 points)
+ * Tier 1 — Foundation (47 points)
  * Instruction file, execution loop, autonomy tiers, DoD, enforcement
  */
 export const foundationChecks: CheckDef[] = [
-  // === 1.1 Instruction File (8 pts) ===
+  // === 1.1 Instruction File (9 pts) ===
   {
     id: '1.1.1', name: 'Instruction file exists', tier: 'foundation', category: 'Instruction File',
     pts: 2, confidence: 'high',
@@ -35,7 +35,28 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-essential-commands',
   },
 
-  // === 1.2 Execution Loop (12 pts) ===
+  {
+    id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content;
+        if (!content) {
+          return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
+        }
+        const matches = content.match(/\bBAD\b|\bGOOD\b|\bDON'T\b|\bexample:/gi) ?? [];
+        if (matches.length >= 2) {
+          return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `Instruction file uses concrete DO/DON'T or BAD/GOOD examples (${matches.length} matches)` };
+        }
+        return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No concrete examples found' };
+      },
+    },
+    recommendation: 'Add concrete BAD/GOOD or DO/DON\'T examples to the instruction file — at least 2 pairs showing right vs wrong approaches',
+    recommendationKey: 'add-concrete-examples',
+  },
+
+  // === 1.2 Execution Loop (13 pts) ===
   {
     id: '1.2.1', name: 'READ step', tier: 'foundation', category: 'Execution Loop',
     pts: 2, confidence: 'high',
@@ -49,6 +70,26 @@ export const foundationChecks: CheckDef[] = [
     detect: { type: 'grep', path: '{instruction_file}', pattern: 'classify|complexity.*budget|Hotfix.*Standard' },
     recommendation: 'Add CLASSIFY step with complexity budgets (Hotfix/Standard/System/Infrastructure)',
     recommendationKey: 'add-classify-step',
+  },
+  {
+    id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content;
+        if (!content) {
+          return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
+        }
+        const hasBudgetTable = /Hotfix.*\d|Standard.*\d|read.*budget|turn.*budget/i.test(content);
+        if (hasBudgetTable) {
+          return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section includes complexity budgets with numbers' };
+        }
+        return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section has no complexity budget table' };
+      },
+    },
+    recommendation: 'Add a complexity budget table to the CLASSIFY step with read/turn budgets per complexity level (Hotfix, Standard, System, Infrastructure)',
+    recommendationKey: 'add-classify-budgets',
   },
   {
     id: '1.2.3', name: 'SCOPE step', tier: 'foundation', category: 'Execution Loop',
@@ -79,7 +120,7 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-log-step',
   },
 
-  // === 1.3 Autonomy Tiers (8 pts) ===
+  // === 1.3 Autonomy Tiers (10 pts) ===
   {
     id: '1.3.1', name: 'Three tiers present', tier: 'foundation', category: 'Autonomy Tiers',
     pts: 2, confidence: 'high',
@@ -163,7 +204,7 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-micro-checklist',
   },
 
-  // === 1.4 Definition of Done (6 pts) ===
+  // === 1.4 Definition of Done (7 pts) ===
   {
     id: '1.4.1', name: 'DoD section exists', tier: 'foundation', category: 'Definition of Done',
     pts: 2, confidence: 'high',
@@ -183,7 +224,7 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.4.3', name: 'Grep-after-rename gate', tier: 'foundation', category: 'Definition of Done',
-    pts: 1, confidence: 'high',
+    pts: 2, confidence: 'high',
     detect: { type: 'grep', path: '{instruction_file}', pattern: 'grep.*old.*pattern|zero.*remaining|grep.*rename' },
     recommendation: 'Add grep-after-rename gate to DoD',
     recommendationKey: 'add-grep-gate',
@@ -231,13 +272,13 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.5.2', name: 'git commit blocked', tier: 'foundation', category: 'Enforcement',
-    pts: 2, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '1.5.2', name: 'git commit blocked', tier: 'foundation', category: 'Enforcement',
         status: ctx.agentFacts.deny.gitCommitBlocked ? 'pass' : 'fail',
-        points: ctx.agentFacts.deny.gitCommitBlocked ? 2 : 0, maxPoints: 2, confidence: 'high',
+        points: ctx.agentFacts.deny.gitCommitBlocked ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.deny.gitCommitBlocked ? 'git commit is blocked' : 'git commit is not blocked',
       }),
     },
@@ -246,13 +287,13 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.5.3', name: 'git push blocked', tier: 'foundation', category: 'Enforcement',
-    pts: 1, confidence: 'high',
+    pts: 2, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '1.5.3', name: 'git push blocked', tier: 'foundation', category: 'Enforcement',
         status: ctx.agentFacts.deny.gitPushBlocked ? 'pass' : 'fail',
-        points: ctx.agentFacts.deny.gitPushBlocked ? 1 : 0, maxPoints: 1, confidence: 'high',
+        points: ctx.agentFacts.deny.gitPushBlocked ? 2 : 0, maxPoints: 2, confidence: 'high',
         message: ctx.agentFacts.deny.gitPushBlocked ? 'git push is blocked' : 'git push is not blocked',
       }),
     },

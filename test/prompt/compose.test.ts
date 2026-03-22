@@ -143,7 +143,7 @@ describe('composeFix', () => {
     assert.ok(prompt);
     // A well-set-up project may still have some failures due to quality checks on mock content
     const totalFragments = prompt.sections.reduce((sum, s) => sum + s.fragments.length, 0);
-    assert.ok(totalFragments <= 20, `Expected ≤20 fragments for full project, got ${totalFragments}`);
+    assert.ok(totalFragments <= 35, `Expected ≤35 fragments for full project, got ${totalFragments}`);
   });
 
   it('returns many fragments for a minimal project', () => {

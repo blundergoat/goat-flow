@@ -95,6 +95,20 @@ Walk the user through each section interactively. Ask one section at a time — 
 
 **Output:** Write `requirements-<feature-name>.md` with all sections filled in.
 
+### Spec Artifact Generation (Standard complexity or higher)
+
+If the feature is classified as **Standard**, **System**, or **Infrastructure** complexity, also generate a structured requirements section inside `requirements-<feature-name>.md` using the template at `workflow/templates/requirements-template.md`. This section:
+
+- Assigns each requirement a sequential ID (`REQ-001`, `REQ-002`, ...)
+- Includes a **Description** (what the system must do) and a **binary Acceptance Test** (how to verify pass/fail) for each requirement
+- Lists **Non-Requirements** (things explicitly scoped out, with reasons)
+- Includes a **Verification Summary** with counts of total/passing/failing/pending requirements
+- Sets all requirement statuses to `pending` at creation time
+
+This structured section is appended after the narrative brief sections (hypothesis, problem, scope, etc.) — it does not replace them. The `REQ-NNN` IDs and acceptance tests are designed to be consumed by goat-review's Phase 0 spec compliance check during later code review.
+
+**Hotfix** complexity features skip this — the compressed brief is sufficient.
+
 **HUMAN GATE:** Present the brief. Ask:
 
 > **"Does this capture everything?"**
@@ -305,6 +319,7 @@ Do NOT proceed to implementation until approved.
 - MUST complete each phase before moving to the next
 - MUST wait for human approval at every gate — never auto-advance
 - MUST NOT generate code during planning (Plan mode only)
+- MUST use `- [ ]` checkboxes in milestone task lists — these are ticked by the implementing agent as each task completes (not batched at the end)
 - MUST reference `docs/footguns.md` and `docs/architecture.md` during planning
 - MAY skip Phase 2 + 3 for Standard features
 - MAY compress to brief only for Hotfixes

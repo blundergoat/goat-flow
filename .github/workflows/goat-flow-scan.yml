@@ -1,0 +1,13 @@
+name: GOAT Flow Scan
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/goat-flow-scan
+        with:
+          min-score: '90'

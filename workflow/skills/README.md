@@ -13,3 +13,6 @@ This folder contains the prompts used to create each skill during Phase 1b setup
 | goat-review.md | Structured code review skill |
 | goat-plan.md | 4-phase planning workflow skill |
 | goat-test.md | 3-track testing instructions skill |
+| goat-reflect.md | Post-session reflection and lessons skill |
+| goat-onboard.md | Codebase onboarding and orientation skill |
+| goat-resume.md | Session resumption and context recovery skill |

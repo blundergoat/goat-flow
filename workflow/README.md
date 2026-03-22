@@ -8,7 +8,7 @@ Templates and prompts for the GOAT Flow workflow layers. See
 | Directory | Purpose |
 |-----------|---------|
 | `evaluation/` | Learning loop templates: footguns, lessons, evals, CI validation, handoff |
-| `local-context/` | Domain instruction file templates (per-directory CLAUDE.md / GEMINI.md) |
+| `coding-standards/` | Coding standards templates (conventions, code review, security, testing, git commit) |
 | `playbooks/planning/` | Feature brief, mob elaboration, SBAO ranking, milestone planning |
 | `playbooks/testing/` | Testing workflow methodology and test plan generation |
 | `runtime/` | Enforcement hooks, permission profiles, RFC 2119, code map, architecture, guidelines split |

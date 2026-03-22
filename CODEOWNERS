@@ -1,0 +1,9 @@
+# Default reviewers
+* @mattyhansen
+
+# Scanner code
+cli/ @mattyhansen
+
+# Workflow docs
+docs/ @mattyhansen
+workflow/ @mattyhansen

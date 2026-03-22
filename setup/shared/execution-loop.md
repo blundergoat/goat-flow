@@ -28,6 +28,8 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Anti-planning-loop rule. Anti-BDUF guard with BAD/GOOD example
    - VERIFY: continuous test loop. Stop-the-line with two-level
      escalation. Revert-and-rescope tactic.
+     Plan tracking: if working from a plan/milestone file, tick each
+     checkbox (`- [x]`) as the task is completed — not at the end.
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
@@ -79,7 +81,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
+     - All 10 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)
      - Learning loop files (footguns, lessons)
      - Architecture doc, handoff template, agent evals
      - Project guidelines: `ai/README.md`

@@ -18,7 +18,7 @@ AI coding agents are powerful but unreliable without structure. They fabricate f
 
 **A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes). Real incidents, not hypothetical ones.
 
-**7 skills:** /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
+**10 skills:** /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume. Each has a distinct artifact, a hard quality gate, and a repeatable output.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ See [docs/getting-started.md](docs/getting-started.md) for the full guide.
 ```
 Layer 1 - Runtime         Instruction file (~120 lines), hooks, settings
 Layer 2 - Local Context   Per-directory instruction files for high-risk areas
-Layer 3 - Skills          7 on-demand capabilities loaded via slash commands
+Layer 3 - Skills          10 on-demand capabilities loaded via slash commands
 Layer 4 - Playbooks       Planning methodology templates
 Layer 5 - Evaluation      Agent evals, CI validation, learning loop
 ```
@@ -48,8 +48,8 @@ Details: [docs/system/five-layers.md](docs/system/five-layers.md)
 | | Claude Code | Gemini CLI | Codex | Copilot |
 |---|---|---|---|---|
 | Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md | .github/copilot-instructions.md |
-| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ | .github/instructions/ |
-| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) | — |
+| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ | .github/skills/ |
+| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) | preToolUse/postToolUse |
 | Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) | [setup-copilot.md](setup/setup-copilot.md) |
 
 All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files.
@@ -64,7 +64,7 @@ All agents share the same execution loop, autonomy tiers, definition of done, an
 | [6-Step Execution Loop](docs/system/six-steps.md) | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG |
 | [Design Rationale](docs/reference/design-rationale.md) | Why behind every design decision |
 | [Cross-Agent Comparison](docs/reference/cross-agent-comparison.md) | Claude Code vs Codex vs Gemini CLI |
-| [Skills Reference](docs/system/skills.md) | All 7 skills: when to use, hard gates, output formats |
+| [Skills Reference](docs/system/skills.md) | All 10 skills: when to use, hard gates, output formats |
 
 ## Project Structure
 

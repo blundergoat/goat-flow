@@ -47,7 +47,7 @@ BAD:  Created abstract template system (one format exists)
 GOOD: Inline format. Extract when second format needed
 ```
 
-**VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
+**VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed — not at the end.
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
 - Two corrections on same approach = MUST rewind
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.

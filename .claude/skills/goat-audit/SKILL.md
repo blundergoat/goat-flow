@@ -12,16 +12,16 @@ Use when running a quality audit on the codebase: systematic codebase quality re
 
 ## Step 0 — Gather Context
 
-Ask the user before auditing:
+Before auditing, present these questions WITH suggested answers based on project state (read git log, changed files, current branch, recent milestones). The user confirms or overrides — don't make them fill in blanks.
 
-1. **What's the scope?** (whole repo, specific directory, specific concern like "security" or "cross-references")
-2. **Why now?** (pre-release, investigating a class of issues, routine quality check)
-3. **Any areas to focus on?** (or "cast a wide net")
-4. **Any known issues to skip?** (so the audit doesn't flag things already being tracked)
-5. **What's the purpose?** (security audit, pre-release quality gate, consistency check, etc. — this drives category weighting in Pass 1)
-6. **Any known false positives to skip?** Check `docs/audit-allowlist.md` if it exists.
+1. **What's the scope?** Suggest based on recent changes: "Whole repo" if on main/dev, or "src/ + docs/" if recent commits touch those areas. Example: "Suggested: whole repo (you're on dev branch with 60 changed files)"
+2. **Why now?** Suggest based on context: recent milestone completion, large diff, pre-merge. Example: "Suggested: post-M2.9 quality gate (milestone just completed)"
+3. **Any areas to focus on?** Suggest based on what changed: "Suggested: skill files + scanner code (most recent changes)" or "cast a wide net"
+4. **Any known issues to skip?** Check `docs/roadmaps/` for open tasks, check git for WIP. Example: "Suggested: skip Codex setup note (tracked in M2.8 #4)"
+5. **What's the purpose?** Suggest based on branch/milestone: "Suggested: pre-release quality gate" or "consistency check"
+6. **Any known false positives?** Check `docs/audit-allowlist.md` if it exists. If not: "No allowlist found — none to skip"
 
-Do NOT start scanning until the user has answered. An unscoped audit wastes passes on irrelevant areas.
+Do NOT start scanning until the user confirms or adjusts. An unscoped audit wastes passes on irrelevant areas.
 
 ---
 

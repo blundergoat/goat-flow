@@ -17,6 +17,7 @@ Commands:
   fix               Generate fix prompt for failed checks
   setup             Generate full setup prompt
   audit             Generate read-only audit prompt
+  eval              Parse and summarize agent evals
 
 Arguments:
   project-path    Target project directory (default: .)
@@ -37,6 +38,8 @@ Examples:
   goat-flow setup --agent codex      Setup prompt for Codex
   goat-flow audit --agent gemini     Audit prompt for Gemini
   goat-flow --min-score 75           CI gate: fail if below 75%
+  goat-flow eval                     Summarize agent evals
+  goat-flow eval --format json       Eval summary as JSON
 `);
 }
 
@@ -44,8 +47,8 @@ function printVersion(): void {
   console.log(`goat-flow v${PACKAGE_VERSION}`);
 }
 
-type Command = 'scan' | 'fix' | 'setup' | 'audit';
-const COMMANDS: Command[] = ['scan', 'fix', 'setup', 'audit'];
+type Command = 'scan' | 'fix' | 'setup' | 'audit' | 'eval';
+const COMMANDS: Command[] = ['scan', 'fix', 'setup', 'audit', 'eval'];
 
 export interface ParsedCLI extends CLIOptions {
   command: Command;
@@ -139,6 +142,21 @@ async function main(): Promise<void> {
   if (options.version) {
     printVersion();
     process.exit(0);
+  }
+
+  // Handle eval command separately (does not need project scanning)
+  if (options.command === 'eval') {
+    const { loadEvals, summarize, formatSummaryText, formatSummaryJson } =
+      await import('./eval/runner.js');
+    const evalsDir = resolve(options.projectPath, 'agent-evals');
+    const { evals, errors } = loadEvals(evalsDir);
+    const summary = summarize(evals, errors);
+    const output = options.format === 'json'
+      ? formatSummaryJson(summary)
+      : formatSummaryText(summary);
+    process.stdout.write(output + '\n');
+    if (errors.length > 0) process.exit(1);
+    return;
   }
 
   // Import dynamically to keep --help fast

@@ -33,12 +33,27 @@ export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
       };
     }
 
-    const result = evaluate(
-      check.id, check.name, check.tier, check.category,
-      check.pts, check.partialPts, check.detect, check.confidence, ctx,
-    );
-    result.recommendationKey = check.recommendationKey;
-    return result;
+    try {
+      const result = evaluate(
+        check.id, check.name, check.tier, check.category,
+        check.pts, check.partialPts, check.detect, check.confidence, ctx,
+      );
+      result.recommendationKey = check.recommendationKey;
+      return result;
+    } catch (err) {
+      return {
+        id: check.id,
+        name: check.name,
+        tier: check.tier,
+        category: check.category,
+        status: 'fail' as const,
+        points: 0,
+        maxPoints: check.pts,
+        confidence: check.confidence,
+        message: `Check crashed: ${err instanceof Error ? err.message : String(err)}`,
+        recommendationKey: check.recommendationKey,
+      };
+    }
   });
 }
 
@@ -54,7 +69,18 @@ export function runAntiPatterns(patterns: AntiPatternDef[], ctx: FactContext): A
         message: 'Not applicable',
       };
     }
-    return ap.evaluate(ctx);
+    try {
+      return ap.evaluate(ctx);
+    } catch (err) {
+      return {
+        id: ap.id,
+        name: ap.name,
+        triggered: false,
+        deduction: 0,
+        confidence: ap.confidence,
+        message: `Anti-pattern check crashed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   });
 }
 
@@ -101,10 +127,20 @@ export function computeScore(
 
 function scoreTier(results: CheckResult[], tier: string): TierScore {
   const tierResults = results.filter(r => r.tier === tier);
-  const earned = tierResults.reduce((sum, r) => sum + r.points, 0);
-  const available = tierResults.reduce((sum, r) => sum + r.maxPoints, 0);
-  const percentage = available > 0 ? Math.round((earned / available) * 100) : 0;
 
+  // Sum raw weighted values, round once at the end (not per-check)
+  // This ensures 1pt medium checks actually contribute 0.5, not 1.0
+  let rawEarned = 0;
+  let rawAvailable = 0;
+  for (const r of tierResults) {
+    const weight = r.confidence === 'medium' || r.confidence === 'low' ? 0.5 : 1.0;
+    rawEarned += r.points * weight;
+    rawAvailable += r.maxPoints * weight;
+  }
+  const earned = Math.round(rawEarned);
+  const available = Math.round(rawAvailable);
+
+  const percentage = available > 0 ? Math.round((earned / available) * 100) : 0;
   return { tier: tier as TierScore['tier'], earned, available, percentage };
 }
 

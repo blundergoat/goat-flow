@@ -8,6 +8,7 @@ _temp
 .claude/projects/
 .claude/worktrees/
 .claude/settings.local.json
+.codex/settings.local.toml
 .cursor/
 .grok/
 

@@ -2,7 +2,8 @@ import type { AgentProfile, AgentFacts, ReadonlyFS } from '../types.js';
 
 const EXPECTED_SKILLS = [
   'goat-security', 'goat-debug', 'goat-audit', 'goat-investigate',
-  'goat-review', 'goat-plan', 'goat-test',
+  'goat-review', 'goat-plan', 'goat-test', 'goat-reflect',
+  'goat-onboard', 'goat-resume',
 ];
 
 /**
@@ -160,12 +161,35 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   let settingsParsed: unknown | null = null;
   let hasDenyPatterns = false;
   if (agent.settingsFile) {
-    settingsParsed = fs.readJson(agent.settingsFile);
-    settingsValid = settingsParsed !== null;
-    if (settingsValid) {
+    if (agent.settingsFile.endsWith('.toml')) {
+      // TOML (Codex config.toml) — read as text, not JSON
+      const tomlContent = fs.readFile(agent.settingsFile);
+      settingsValid = tomlContent !== null && tomlContent.length > 0;
+      // settingsParsed stays null — TOML is inspected via text regex, not parsed object
+    } else {
+      settingsParsed = fs.readJson(agent.settingsFile);
+      settingsValid = settingsParsed !== null;
+    }
+    if (settingsValid && settingsParsed) {
       const perms = (settingsParsed as Record<string, unknown>)?.permissions as Record<string, unknown> | undefined;
       const denyArr = perms?.deny;
       hasDenyPatterns = Array.isArray(denyArr) && (denyArr as string[]).length > 0;
+    }
+  }
+
+  // Check read-deny covers common sensitive paths
+  let readDenyCoversSecrets = false;
+  if (hasDenyPatterns && settingsParsed) {
+    const perms = (settingsParsed as Record<string, unknown>)?.permissions as Record<string, unknown> | undefined;
+    const denyArr = perms?.deny;
+    if (Array.isArray(denyArr)) {
+      const denyStr = (denyArr as string[]).join(' ');
+      // Must cover at least: .env, .ssh, .aws, and one of .key/.pem/credentials
+      const hasEnv = /Read\(.*\.env/.test(denyStr);
+      const hasSsh = /Read\(.*\.ssh/.test(denyStr);
+      const hasAws = /Read\(.*\.aws/.test(denyStr);
+      const hasKeys = /Read\(.*\.(pem|key|pfx)\b/.test(denyStr) || /Read\(.*credentials/.test(denyStr);
+      readDenyCoversSecrets = hasEnv && hasSsh && hasAws && hasKeys;
     }
   }
 
@@ -176,14 +200,29 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   if (settingsParsed && settingsValid) {
     const settings = settingsParsed as Record<string, unknown>;
     const hooks = settings.hooks as Record<string, unknown> | undefined;
-    if (hooks && typeof hooks === 'object' && !Array.isArray(hooks)) {
-      // Nested format: hooks.Notification[{matcher: "compact"}]
-      const notifHooks = hooks.Notification as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(notifHooks)) {
-        compactionHookExists = notifHooks.some(h =>
-          String(h.matcher ?? '').includes('compact')
+    if (hooks && typeof hooks === 'object') {
+      if (Array.isArray(hooks)) {
+        // Array format: hooks: [{type: "Notification", matcher: "compact"}]
+        compactionHookExists = (hooks as Array<Record<string, unknown>>).some(h =>
+          h.type === 'Notification' && String(h.matcher ?? '').includes('compact')
         );
+      } else {
+        // Nested format: hooks.Notification[{matcher: "compact"}]
+        const notifHooks = (hooks as Record<string, unknown>).Notification as Array<Record<string, unknown>> | undefined;
+        if (Array.isArray(notifHooks)) {
+          compactionHookExists = notifHooks.some(h =>
+            String(h.matcher ?? '').includes('compact')
+          );
+        }
       }
+    }
+  }
+
+  // For Codex: session_start hook serves similar purpose to compaction
+  if (agent.id === 'codex' && !compactionHookExists) {
+    const configContent = fs.readFile('.codex/config.toml');
+    if (configContent && /\[hooks\.session_start\]/.test(configContent)) {
+      compactionHookExists = true; // SessionStart injects context like compaction hook
     }
   }
 
@@ -197,6 +236,7 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   let withConversational = 0;
   let withChaining = 0;
   let withChoices = 0;
+  let withOutputFormat = 0;
   for (const skill of EXPECTED_SKILLS) {
     const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
     if (fs.exists(skillPath)) {
@@ -210,6 +250,7 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
         if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question/i.test(skillContent)) withConversational++;
         if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
         if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
+        if (/##\s*(Output|Output Format)/i.test(skillContent)) withOutputFormat++;
       }
     } else {
       skillsMissing.push(skill);
@@ -220,15 +261,66 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   const denyHookPath = agent.hooksDir
     ? `${agent.hooksDir}/deny-dangerous.sh`
     : (agent.denyMechanism.type === 'deny-script' ? agent.denyMechanism.path : null);
-  const denyExists = denyHookPath ? fs.exists(denyHookPath) : false;
+  let denyExists = denyHookPath ? fs.exists(denyHookPath) : false;
 
-  // Check deny hook has actual blocking logic (not just exit 0)
+  // Check deny hook content quality
   let denyHasBlocks = false;
+  let denyUsesJq = false;
+  let denyHandlesChaining = false;
+  let denyBlocksRmRf = false;
+  let denyBlocksForcePush = false;
+  let denyBlocksChmod = false;
+
+  // First: check hook script content (if exists)
   if (denyExists && denyHookPath) {
     const denyContent = fs.readFile(denyHookPath);
     if (denyContent) {
-      // Should have block/exit 2 patterns or case statements
       denyHasBlocks = /exit\s+2|block|BLOCK/i.test(denyContent) && denyContent.split('\n').length > 5;
+      denyUsesJq = /\bjq\b/.test(denyContent) && !/grep\s+-[a-zA-Z]*P/.test(denyContent);
+      denyHandlesChaining = /&&|\|\||;/.test(denyContent) && /split|segment|chain/i.test(denyContent);
+      denyBlocksRmRf = /rm\s*.*-.*r.*f|rm\s*-rf/i.test(denyContent);
+      denyBlocksForcePush = /force.*push|--force/i.test(denyContent);
+      denyBlocksChmod = /chmod.*777/.test(denyContent);
+    }
+  }
+
+  // Second: also check settings.json Bash deny patterns (prevents N/A cascade
+  // for projects that use settings-based deny instead of a hook script)
+  if (hasDenyPatterns && settingsParsed) {
+    const perms = (settingsParsed as Record<string, unknown>)?.permissions as Record<string, unknown> | undefined;
+    const rawDeny = perms?.deny;
+    if (Array.isArray(rawDeny)) {
+      const denyStr = (rawDeny as string[]).join(' ');
+      // Settings deny counts as a deny mechanism existing
+      if (!denyExists && denyStr.includes('Bash(')) {
+        denyExists = true;
+        denyHasBlocks = true; // settings.json deny is mechanical blocking
+        denyUsesJq = true; // no JSON parsing needed — it's config, not a script
+        denyHandlesChaining = true; // settings.json matches substrings, handles chaining implicitly
+      }
+      // Check for specific dangerous patterns in Bash deny rules
+      if (/Bash\(.*rm -rf|Bash\(.*rm -fr/i.test(denyStr)) denyBlocksRmRf = true;
+      if (/Bash\(.*--force|Bash\(.*force.*push/i.test(denyStr)) denyBlocksForcePush = true;
+      if (/Bash\(.*chmod 777/i.test(denyStr)) denyBlocksChmod = true;
+    }
+  }
+
+  // For Codex: also check execpolicy rules
+  if (agent.id === 'codex') {
+    const execpolicyPath = '.codex/rules/deny-dangerous.star';
+    if (fs.exists(execpolicyPath)) {
+      const ruleContent = fs.readFile(execpolicyPath);
+      if (ruleContent) {
+        denyExists = true;
+        denyHasBlocks = /forbidden|prompt/i.test(ruleContent) && ruleContent.split('\n').length > 5;
+        denyBlocksRmRf = /rm.*-.*rf|rm.*-.*fr/i.test(ruleContent);
+        denyBlocksForcePush = /force.*push|--force/i.test(ruleContent);
+        denyBlocksChmod = /chmod.*777/.test(ruleContent);
+        // Execpolicy uses Starlark, not jq — mark as safe parsing
+        denyUsesJq = true; // Starlark is a proper parser, not regex
+        // Check if it handles chaining (Starlark processes the full command string)
+        denyHandlesChaining = true; // Starlark's string ops handle the full command
+      }
     }
   }
 
@@ -237,7 +329,31 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   let postTurnHasValidation = false;
   let postToolExists = false;
 
-  if (agent.hooksDir) {
+  // For Codex: detect config.toml and registered hooks
+  if (agent.id === 'codex') {
+    const configPath = '.codex/config.toml';
+    const configContent = fs.readFile(configPath);
+    if (configContent) {
+      // Check for Stop hook registration
+      if (/\[hooks\.stop\]/.test(configContent)) {
+        postTurnExists = true;
+        // Check what script it runs
+        const stopScript = configContent.match(/\[hooks\.stop\]\s*\n\s*command\s*=\s*\[.*?"([^"]+\.sh)"/);
+        if (stopScript) {
+          const hookContent = fs.readFile(stopScript[1]);
+          if (hookContent) {
+            const lines = hookContent.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+            postTurnExitsZero = lines.length > 0 && lines[lines.length - 1].trim() === 'exit 0';
+            postTurnHasValidation = /shellcheck|tsc|lint|fmt|check|test|wc -l/i.test(hookContent) && hookContent.split('\n').length > 10;
+          }
+        }
+      }
+      // Check for AfterToolUse hook registration
+      if (/\[hooks\.after_tool_use\]/.test(configContent)) {
+        postToolExists = true;
+      }
+    }
+  } else if (agent.hooksDir) {
     const stopLintPath = `${agent.hooksDir}/stop-lint.sh`;
     postTurnExists = fs.exists(stopLintPath);
     if (postTurnExists) {
@@ -250,17 +366,6 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
       }
     }
     postToolExists = fs.exists(`${agent.hooksDir}/format-file.sh`);
-  } else if (agent.id === 'codex') {
-    // Codex uses scripts/ instead of hooks
-    postTurnExists = fs.exists('scripts/stop-lint.sh');
-    if (postTurnExists) {
-      const hookContent = fs.readFile('scripts/stop-lint.sh');
-      if (hookContent) {
-        const lines = hookContent.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-        postTurnExitsZero = lines.length > 0 && lines[lines.length - 1].trim() === 'exit 0';
-        postTurnHasValidation = /shellcheck|tsc|lint|fmt|check|test|wc -l/i.test(hookContent) && hookContent.split('\n').length > 10;
-      }
-    }
   }
 
   // Deny patterns
@@ -308,9 +413,9 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     settings: { exists: settingsExists, valid: settingsValid, parsed: settingsParsed, hasDenyPatterns },
     skills: {
       found: skillsFound, missing: skillsMissing, allPresent: skillsMissing.length === 0,
-      quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, total: skillsFound.length },
+      quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, total: skillsFound.length },
     },
-    hooks: { denyExists, denyHasBlocks, postTurnExists, postTurnExitsZero, postTurnHasValidation, postToolExists, compactionHookExists },
+    hooks: { denyExists, denyHasBlocks, denyUsesJq, denyHandlesChaining, denyBlocksRmRf, denyBlocksForcePush, denyBlocksChmod, postTurnExists, postTurnExitsZero, postTurnHasValidation, postToolExists, compactionHookExists, readDenyCoversSecrets },
     deny: denyResults,
     router: { exists: routerPaths.length > 0, paths: routerPaths, resolved, unresolved },
     askFirst: { exists: askFirstPaths.length > 0, paths: askFirstPaths, resolved: askFirstResolved, unresolved: askFirstUnresolved },

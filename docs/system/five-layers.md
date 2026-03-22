@@ -14,7 +14,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 3 - Skills                               ON DEMAND   │
 │  /goat-security, /goat-debug, /goat-audit,                  │
-│  /goat-investigate, /goat-review                               │
+│  /goat-investigate, /goat-review, /goat-plan,               │
+│  /goat-test, /goat-reflect, /goat-onboard, /goat-resume     │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 4 - Playbooks                            ON DEMAND   │
 │  Feature briefs, mob elaboration, SBAO ranking,             │
@@ -71,7 +72,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 | Claude Code | `*/CLAUDE.md` (auto-loaded by directory) |
 | Codex | `.github/instructions/*.md` (with `applyTo` frontmatter) |
 
-**This folder:** `workflow/local-context/`
+**This folder:** `workflow/coding-standards/`
 
 ---
 
@@ -79,7 +80,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
-**The seven skills:**
+**The ten skills:**
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
@@ -90,6 +91,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 | `/goat-review` | Structured review of changes before merging | Findings ranked by severity |
 | `/goat-plan` | Feature planning with phased human gates | Plan with milestones |
 | `/goat-test` | Generate testing instructions across three verification tracks | Test instructions (automated, AI, human) |
+| `/goat-reflect` | Post-session reflection for the learning loop | Structured lessons entries |
+| `/goat-onboard` | Codebase onboarding for new contributors or agents | Orientation document |
+| `/goat-resume` | Session resumption from handoff state | Context reconstruction summary |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
@@ -102,6 +106,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 | Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
 | Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
+| Copilot CLI | `.github/skills/goat-{name}/SKILL.md` |
 
 **This folder:** `workflow/skills/`
 
@@ -175,7 +180,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 |-------|---------------|--------|
 | Phase 0 (bootstrap) | Minimal CLAUDE.md + deny-dangerous hook + settings.json | Layer 1 (minimal) |
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
-| Phase 1b | Skills: /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test | Layer 3 |
+| Phase 1b | Skills: /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, permission profiles, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
 
@@ -206,7 +211,7 @@ Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 |--------|-----|---------|-------------------|
 | Layer 1 line target | ~120 | ~120 | ~120 |
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
-| Layer 3 skills | All 7 | All 7 | All 7 |
+| Layer 3 skills | All 10 | All 10 | All 10 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
 
 ---
@@ -218,13 +223,13 @@ GOAT Flow's core (execution loop, autonomy tiers, DoD, learning loop) is agent-a
 | Concept | Claude Code | Codex | Cursor | Copilot | Gemini CLI |
 |---------|------------|-------|--------|---------|------------|
 | Instruction file | CLAUDE.md | AGENTS.md | .cursor/rules/ | .github/copilot-instructions.md | GEMINI.md |
-| Skills/playbooks | .claude/skills/ | .agents/skills/ | .cursor/rules/*.mdc | Agent skills | .agents/skills/ |
-| Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | - | .gemini/hooks/ + settings.json |
+| Skills/playbooks | .claude/skills/ | .agents/skills/ | .cursor/rules/*.mdc | .github/skills/ | .agents/skills/ |
+| Hooks/enforcement | .claude/hooks/ + settings.json | scripts/ (policy only) | - | preToolUse, postToolUse lifecycle | .gemini/hooks/ + settings.json |
 | Domain instructions | ai/instructions/ | ai/instructions/ | .cursor/rules/ | .github/instructions/ (bridges to ai/) | ai/instructions/ |
 | Evals | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ | agent-evals/ |
 | Deny mechanism | permissions.deny array | scripts/deny-dangerous.sh | - | - | permissions.deny array |
 
-Setup guides: see `setup/setup-claude.md`, `setup/setup-gemini.md`, and `setup/setup-codex.md`.
+Setup guides: see `setup/setup-claude.md`, `setup/setup-gemini.md`, `setup/setup-codex.md`, and `setup/setup-copilot.md`.
 
 ---
 
@@ -287,7 +292,7 @@ docs/
 
 workflow/
 ├── runtime/                  ← Layer 1: setup prompts + project scaffolding
-├── local-context/            ← Layer 2: domain instruction file prompts
+├── coding-standards/         ← Layer 2: domain instruction file prompts
 ├── skills/                   ← Layer 3: skill reference and justification
 ├── playbooks/                ← Layer 4: planning methodology prompts
 └── evaluation/               ← Layer 5: testing workflow + evals

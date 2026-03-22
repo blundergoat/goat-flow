@@ -170,7 +170,7 @@ Note: skills use YAML frontmatter with `name` and `description` fields.
 Read the detailed skill templates in workflow/skills/goat-*.md for each
 skill's full specification.
 
-Create these 7 skills under .agents/skills/:
+Create these 10 skills under .agents/skills/:
 
 1. goat-security/SKILL.md - Security-focused review skill. MUST check
    dependencies, secrets, permissions. Severity scale ranking.
@@ -189,6 +189,12 @@ Create these 7 skills under .agents/skills/:
    coding session. Produces: automated test commands for the agent to run,
    AI verification prompts for a separate agent, and manual testing steps
    for the human. Based on the doer-verifier principle.
+8. goat-reflect/SKILL.md - Post-session reflection. Reviews what happened
+   during a coding session and produces structured lessons for the learning loop.
+9. goat-onboard/SKILL.md - Codebase onboarding. Produces a structured
+   orientation document for new contributors or agents entering the project.
+10. goat-resume/SKILL.md - Session resumption. Reads handoff files and
+    session state to reconstruct context after a break or /clear.
 
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
 - GATE: Verify all skill files exist with required sections.
@@ -261,29 +267,29 @@ If `.github/instructions/` exists:
 - Keep `.github/instructions/` as optional Copilot bridges
 
 If no instruction files exist:
-- Create `ai/README.md` (routing map — see `workflow/local-context/README.md` template)
-- Create `ai/instructions/base.md` (project conventions — see `workflow/local-context/base.md` template)
-- Create `ai/instructions/code-review.md` (review standards — see `workflow/local-context/code-review.md` template)
-- Create `ai/instructions/git-commit.md` (commit format — see `workflow/local-context/git-commit.md` template)
+- Create `ai/README.md` (routing map — see `workflow/coding-standards/README.md` template)
+- Create `ai/instructions/conventions.md` (project conventions — see `workflow/coding-standards/conventions.md` template)
+- Create `ai/instructions/code-review.md` (review standards — see `workflow/coding-standards/code-review.md` template)
+- Create `ai/instructions/git-commit.md` (commit format — see `workflow/coding-standards/git-commit.md` template)
 - Create `.github/git-commit-instructions.md` if `.git/` exists
 
 VERIFICATION: After creating ai/instructions/ files, the agent MUST:
 1. Verify every file path exists: for each backtick-wrapped path, run `ls`
-2. Verify commands work: run build/test/lint commands listed in base.md
+2. Verify commands work: run build/test/lint commands listed in conventions.md
 3. Remove aspirational content: if a feature is planned but not implemented, remove it
    Source of truth is the code, not docs/architecture.md or roadmaps.
 
 Add to GEMINI.md Router Table:
 | Project guidelines | `ai/README.md` |
 
-Verification: `ls ai/instructions/` shows base.md, code-review.md, git-commit.md.
+Verification: `ls ai/instructions/` shows conventions.md, code-review.md, git-commit.md.
 
 VERIFICATION (all MUST pass before proceeding to Phase 2):
 - GATE: Verify settings.json is valid JSON.
 - GATE: Verify deny-dangerous blocks expected commands.
 - GATE: Verify stop hook exits 0 even on errors.
 - GATE: Verify agent ignore files exist with secret patterns.
-- GATE: Verify ai/instructions/ exists with base.md, code-review.md, git-commit.md.
+- GATE: Verify ai/instructions/ exists with conventions.md, code-review.md, git-commit.md.
 - GATE: Run scripts/preflight-checks.sh if it exists. Otherwise run the
   project's lint + test commands from Essential Commands.
 Do NOT proceed to Phase 2 until all gates pass.

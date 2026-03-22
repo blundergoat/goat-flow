@@ -18,8 +18,9 @@ spec. Check ALL of these:
 
 SKILL RENAME + NEW SKILLS:
 - goat-research is now goat-investigate. Rename if old name exists.
-- 7 skills must exist: goat-security, goat-debug, goat-audit,
-  goat-investigate, goat-review, goat-plan, goat-test
+- 10 skills must exist: goat-security, goat-debug, goat-audit,
+  goat-investigate, goat-review, goat-plan, goat-test,
+  goat-reflect, goat-onboard, goat-resume
 - Create any missing skills. goat-plan = 4-phase planning with human
   gates and Triangular Tension Pass. goat-test = 3-track testing
   (automated, AI verification, human testing) based on doer-verifier.
@@ -55,7 +56,7 @@ ASK FIRST:
 
 SECTIONS:
 - (f) Sub-Agent Objectives and (g) Communication When Blocked MUST exist
-- Router MUST include all 7 skill/playbook entries, learning loop files,
+- Router MUST include all 10 skill/playbook entries, learning loop files,
   architecture, handoff template, agent evals
 - Multi-agent: router MUST include other agents' instruction files
 
@@ -63,7 +64,7 @@ ENFORCEMENT:
 - Settings/config MUST have Read deny patterns for secrets if applicable
 
 COLD PATH (ai/instructions/):
-- Check if `ai/instructions/` exists with base.md, code-review.md, git-commit.md
+- Check if `ai/instructions/` exists with conventions.md, code-review.md, git-commit.md
 - Check if `.github/git-commit-instructions.md` exists
 - If `.github/instructions/` exists without `ai/instructions/`, recommend migration
   (group language files into domain files: php.md + python.md → backend.md)

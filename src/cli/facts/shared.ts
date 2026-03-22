@@ -40,6 +40,7 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
 
   let hasOriginLabels = false;
   let hasReplayPrompts = false;
+  let evalSkillCount = 0;
   if (evalCount > 0) {
     // Check first 3 evals for origin labels and replay prompts
     const sampled = evalFiles.slice(0, 3);
@@ -51,6 +52,19 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
       const content = fs.readFile(`agent-evals/${f}`);
       return content !== null && /## Replay Prompt/i.test(content);
     });
+    // Count distinct skills referenced across eval files
+    const skillNames = new Set<string>();
+    for (const f of evalFiles) {
+      const content = fs.readFile(`agent-evals/${f}`);
+      if (content) {
+        const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
+        for (const m of skillMatches) {
+          const name = (m[1] ?? m[2]).trim().toLowerCase();
+          if (name) skillNames.add(name);
+        }
+      }
+    }
+    evalSkillCount = skillNames.size;
   }
 
   // CI
@@ -74,12 +88,13 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     footguns: { exists: footgunsExists, hasEvidence: footgunsHasEvidence, dirMentions },
     lessons: { exists: lessonsExists, hasEntries: lessonsHasEntries },
     architecture: { exists: archExists, lineCount: archLineCount },
-    evals: { dirExists: evalsDir, count: evalCount, hasReadme, hasOriginLabels, hasReplayPrompts },
+    evals: { dirExists: evalsDir, count: evalCount, hasReadme, hasOriginLabels, hasReplayPrompts, evalSkillCount },
     ci: {
       workflowExists: ciExists,
       checksLineCount: ciExists && /wc -l/i.test(ciContent!),
       checksRouter: ciExists && /router/i.test(ciContent!),
       checksSkills: ciExists && /skills/i.test(ciContent!),
+      ciTriggersOnPRs: ciExists && /pull_request/i.test(ciContent!),
     },
     handoffTemplate: { exists: fs.exists('tasks/handoff-template.md') },
     ignoreFiles: { copilotignore, cursorignore, geminiignore },
@@ -99,7 +114,7 @@ function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstruction
   const ghDir = fs.exists('.github/instructions');
 
   if (!aiDir && !ghDir) {
-    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasBase: false, hasCodeReview: false, hasGitCommit: false };
+    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasConventions: false, conventionsHasContent: false, hasFrontend: false, hasBackend: false, hasCodeReview: false, hasGitCommit: false };
   }
 
   const location = aiDir ? 'ai' as const : 'github' as const;
@@ -108,9 +123,24 @@ function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstruction
   const hasRouter = aiDir ? fs.exists('ai/README.md') : false;
 
   // Accept both .md and .instructions.md naming
-  const hasBase = files.some(f => f === 'base.md' || f === 'base.instructions.md');
+  const hasConventions = files.some(f => f === 'conventions.md' || f === 'conventions.instructions.md');
+  const hasFrontend = files.some(f => f === 'frontend.md' || f === 'frontend.instructions.md');
+  const hasBackend = files.some(f => f === 'backend.md' || f === 'backend.instructions.md');
   const hasCodeReview = files.some(f => f === 'code-review.md' || f === 'code-review.instructions.md');
   const hasGitCommit = files.some(f => f === 'git-commit.md' || f === 'git-commit.instructions.md');
 
-  return { dirExists: true, location, fileCount: files.length, hasRouter, hasBase, hasCodeReview, hasGitCommit };
+  // Check conventions.md has real content (commands + conventions, not just a header)
+  let conventionsHasContent = false;
+  if (hasConventions) {
+    const conventionsPath = aiDir ? 'ai/instructions/conventions.md' : '.github/instructions/conventions.instructions.md';
+    const conventionsContent = fs.readFile(conventionsPath);
+    if (conventionsContent) {
+      const hasCommands = /##.*command|```bash|```sh/i.test(conventionsContent);
+      const hasConvRules = /##.*convention|do.*don't|do:.*don't:|good.*bad/i.test(conventionsContent);
+      const lineCount = conventionsContent.split('\n').length;
+      conventionsHasContent = hasCommands && hasConvRules && lineCount > 15;
+    }
+  }
+
+  return { dirExists: true, location, fileCount: files.length, hasRouter, hasConventions, conventionsHasContent, hasFrontend, hasBackend, hasCodeReview, hasGitCommit };
 }

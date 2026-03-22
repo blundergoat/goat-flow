@@ -170,7 +170,7 @@ flowchart TD
 | `/review-triage`    | Normal review behaviour, not a distinct mode           | Review branch of the ACT step       |
 | `/revert-rescope`   | Tactic (2 sentences), not a workflow                   | Paragraph in VERIFY/stop-the-line   |
 
-**v1.5 refinement:** Implementation data confirms all seven skills add value across all projects. All projects create all seven skills (security, debug, audit, investigate, review, plan, test).
+**v1.5 refinement:** Implementation data confirms all seven original skills add value across all projects. **v2.9 expansion:** Three additional skills added (reflect, onboard, resume), bringing the total to ten skills per agent (security, debug, audit, investigate, review, plan, test, reflect, onboard, resume).
 
 ---
 

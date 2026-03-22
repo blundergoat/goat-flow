@@ -5,6 +5,11 @@ set -euo pipefail
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT_DIR"
 
+# Auto-build if src/ is newer than dist/
+if [[ ! -f dist/cli/cli.js ]] || [[ -n "$(find src/cli -name '*.ts' -newer dist/cli/cli.js 2>/dev/null | head -1)" ]]; then
+    npx tsc 2>&1 || { echo "Build failed" >&2; exit 1; }
+fi
+
 cli() { node dist/cli/cli.js "$@"; }
 
 usage() {

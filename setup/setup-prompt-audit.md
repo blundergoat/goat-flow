@@ -17,7 +17,7 @@ Read these files in this project:
 - docs/guidelines-ownership-split.md (if exists)
 - .github/instructions/ (list what exists)
 - ai/README.md (if exists)
-- ai/instructions/base.md (if exists)
+- ai/instructions/conventions.md (if exists)
 - Check if `.github/instructions/` exists without `ai/instructions/` (migration needed?)
 
 Then read the GOAT Flow instructions that were used to create them:

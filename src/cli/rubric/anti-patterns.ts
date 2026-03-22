@@ -27,8 +27,11 @@ export const antiPatterns: AntiPatternDef[] = [
   },
   {
     id: 'AP3', name: 'DoD in both instruction file and guidelines', deduction: -3, confidence: 'low',
+    // TODO: v2 — implement when conventions.md content is available in SharedFacts
+    // Needs: grep conventions.md for "definition of done" text and compare with instruction file
+    na: () => true,
     evaluate: (): AntiPatternResult => {
-      return { id: 'AP3', name: 'DoD in both instruction file and guidelines', triggered: false, deduction: 0, confidence: 'low', message: 'Cannot verify without guidelines file (manual check recommended)' };
+      return { id: 'AP3', name: 'DoD in both instruction file and guidelines', triggered: false, deduction: 0, confidence: 'low', message: 'Not applicable — conventions.md content not yet available in facts' };
     },
     recommendation: 'Remove DoD from guidelines file',
     recommendationKey: 'ap-fix-dod-overlap',
@@ -66,8 +69,11 @@ export const antiPatterns: AntiPatternDef[] = [
   },
   {
     id: 'AP7', name: 'Local instruction file over 20 lines', deduction: -2, confidence: 'high',
+    // TODO: v2 — implement when per-file line counts are available in SharedFacts.localInstructions
+    // Needs: line count for each file in ai/instructions/ or .github/instructions/
+    na: () => true,
     evaluate: (): AntiPatternResult => {
-      return { id: 'AP7', name: 'Local instruction file over 20 lines', triggered: false, deduction: 0, confidence: 'high', message: 'Not checked in v1 (requires per-file line count)' };
+      return { id: 'AP7', name: 'Local instruction file over 20 lines', triggered: false, deduction: 0, confidence: 'high', message: 'Not applicable — per-file line counts not yet available in facts' };
     },
     recommendation: 'Compress local instruction files to under 20 lines',
     recommendationKey: 'ap-compress-local-files',
@@ -88,8 +94,11 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP9', name: 'settings.local.json committed', deduction: -2, confidence: 'high',
     na: (ctx) => ctx.agentFacts.agent.settingsFile === null,
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      const gitignored = ctx.facts.shared.gitignore.hasRequiredEntries;
-      return { id: 'AP9', name: 'settings.local.json committed', triggered: false, deduction: 0, confidence: 'high', message: gitignored ? 'settings.local.json is gitignored' : 'Cannot verify without git' };
+      if (!ctx.facts.shared.gitignore.exists) {
+        return { id: 'AP9', name: 'settings.local.json committed', triggered: true, deduction: -2, confidence: 'high', message: 'No .gitignore — settings.local.json is not protected' };
+      }
+      const triggered = !ctx.facts.shared.gitignore.hasRequiredEntries;
+      return { id: 'AP9', name: 'settings.local.json committed', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? 'settings.local.json not in .gitignore' : 'settings.local.json is gitignored' };
     },
     recommendation: 'Add settings.local.json to .gitignore',
     recommendationKey: 'ap-gitignore-settings-local',

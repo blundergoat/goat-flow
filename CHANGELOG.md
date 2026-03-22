@@ -14,7 +14,7 @@ CLI scanner + prompt generator, local context system, 80-check rubric, multi-age
 - 78 tests across 20 suites
 
 ### Local Context (Cold Path)
-- `ai/instructions/` as vendor-neutral project coding guidelines (base.md, code-review.md, git-commit.md)
+- `ai/instructions/` as vendor-neutral project coding guidelines (conventions.md, code-review.md, git-commit.md)
 - `ai/README.md` as cold-path router with precedence order
 - `.github/copilot-instructions.md` + `.github/instructions/` bridge files for Copilot
 - `setup/setup-copilot.md` as fourth agent setup guide

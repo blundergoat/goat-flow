@@ -31,34 +31,19 @@ export interface HookEvents {
   postTurn: string;
 }
 
-// === Detection ===
+// === Detection (discriminated union — each variant carries only its required fields) ===
 
-export interface Detection {
-  type: DetectionType;
-  path?: string;
-  pattern?: string;
-  section?: string;
-  field?: string;
-  pass?: number;
-  partial?: number;
-  fail?: number;
-  min?: number;
-  checks?: Detection[];
-  mode?: 'all' | 'any';
-  fn?: (ctx: FactContext) => CheckResult;
-}
-
-export type DetectionType =
-  | 'file_exists'
-  | 'dir_exists'
-  | 'line_count'
-  | 'grep'
-  | 'grep_count'
-  | 'json_valid'
-  | 'json_contains'
-  | 'count_items'
-  | 'composite'
-  | 'custom';
+export type Detection =
+  | { type: 'file_exists'; path: string }
+  | { type: 'dir_exists'; path: string }
+  | { type: 'grep'; path: string; pattern: string; section?: string }
+  | { type: 'grep_count'; path: string; pattern: string; min: number; section?: string }
+  | { type: 'line_count'; path: string; pass?: number; partial?: number; fail?: number }
+  | { type: 'json_valid'; path: string }
+  | { type: 'json_contains'; path: string; field: string; pattern?: string }
+  | { type: 'count_items'; path: string; pattern: string; pass: number; partial?: number; section?: string }
+  | { type: 'composite'; checks: Detection[]; mode: 'all' | 'any' }
+  | { type: 'custom'; fn: (ctx: FactContext) => CheckResult };
 
 // === Check Definition ===
 
@@ -135,8 +120,8 @@ export interface SharedFacts {
   footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number> };
   lessons: { exists: boolean; hasEntries: boolean };
   architecture: { exists: boolean; lineCount: number };
-  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean };
-  ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean };
+  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean; evalSkillCount: number };
+  ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
   handoffTemplate: { exists: boolean };
   ignoreFiles: { copilotignore: boolean; cursorignore: boolean; geminiignore: boolean };
   gitignore: { exists: boolean; hasRequiredEntries: boolean };
@@ -149,7 +134,10 @@ export interface SharedFacts {
     location: 'ai' | 'github' | null;
     fileCount: number;
     hasRouter: boolean;
-    hasBase: boolean;
+    hasConventions: boolean;
+    conventionsHasContent: boolean;
+    hasFrontend: boolean;
+    hasBackend: boolean;
     hasCodeReview: boolean;
     hasGitCommit: boolean;
   };
@@ -182,17 +170,24 @@ export interface AgentFacts {
       withConversational: number;
       withChaining: number;
       withChoices: number;
+      withOutputFormat: number;
       total: number;
     };
   };
   hooks: {
     denyExists: boolean;
     denyHasBlocks: boolean;
+    denyUsesJq: boolean;
+    denyHandlesChaining: boolean;
+    denyBlocksRmRf: boolean;
+    denyBlocksForcePush: boolean;
+    denyBlocksChmod: boolean;
     postTurnExists: boolean;
     postTurnExitsZero: boolean;
     postTurnHasValidation: boolean;
     postToolExists: boolean;
     compactionHookExists: boolean;
+    readDenyCoversSecrets: boolean;
   };
   deny: {
     gitCommitBlocked: boolean;

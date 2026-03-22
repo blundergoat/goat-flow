@@ -36,7 +36,7 @@ Mode transitions: `Switching to [NEW STATE] because [reason].`
 BAD:  Added a new abstraction because it "might help later"
 GOOD: Keep the current shape. Extract only when the second case exists
 ```
-**VERIFY** - MUST run `bash scripts/preflight-checks.sh` after meaningful changes. MUST grep for old paths or terms after renames/moves.
+**VERIFY** - MUST run `bash scripts/preflight-checks.sh` after meaningful changes. MUST grep for old paths or terms after renames/moves. If working from a plan/milestone: tick `- [x]` on each task as completed — not at the end.
 - Level 1: isolated warning or missing optional tool -> note it, continue carefully
 - Level 2: broken refs, spec drift, evidence corruption, or policy-script failure -> full stop with file:line diagnosis
 - Two failed approaches on the same issue = stop, report, and wait
@@ -47,6 +47,7 @@ GOOD: Keep the current shape. Extract only when the second case exists
 |------|----------------|
 | `docs/lessons.md` | Behavioural mistake by the agent |
 | `docs/footguns.md` | Cross-doc or cross-tool landmine with file:line evidence |
+| `docs/decisions/` | Significant technical decision with context/rationale |
 ## Autonomy Tiers
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts, update shared learning-loop files with evidence.
 **Ask First**
@@ -108,3 +109,6 @@ Ask one question with a recommended default and exact file boundary.
 ## Hard Rules
 
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- MUST maintain cross-file consistency: same concept, same description everywhere
+- MUST preserve file:line evidence format in footguns and examples
+- MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth

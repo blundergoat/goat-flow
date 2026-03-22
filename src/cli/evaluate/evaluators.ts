@@ -37,12 +37,7 @@ export function evaluate(
     case 'composite':
       return evalComposite(base, pts, partialPts, detect, confidence, ctx);
     case 'custom':
-      if (!detect.fn) {
-        return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Custom check has no function' };
-      }
       return detect.fn(ctx);
-    default:
-      return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Unknown detection type: ${detect.type}` };
   }
 }
 
@@ -72,13 +67,11 @@ function getDenyPath(ctx: FactContext): string {
 
 function getFileContent(path: string, ctx: FactContext): string | null {
   const resolved = resolvePath(path, ctx);
-  // Check if it's the instruction file (already in facts)
-  if (resolved === ctx.agentFacts.agent.instructionFile && ctx.agentFacts.instruction.content) {
+  if (resolved === ctx.agentFacts.agent.instructionFile) {
     return ctx.agentFacts.instruction.content;
   }
-  // Fall back to reading from facts.root — but we operate on facts, not filesystem
-  // For section-scoped grep, use the instruction sections
-  return ctx.agentFacts.instruction.content;
+  // Content not available in facts for non-instruction files
+  return null;
 }
 
 function getSectionContent(path: string, section: string | undefined, ctx: FactContext): string | null {
@@ -100,8 +93,8 @@ function getSectionContent(path: string, section: string | undefined, ctx: FactC
 
 // === Evaluators ===
 
-function evalFileExists(base: CheckBase, pts: number, detect: Detection, ctx: FactContext): CheckResult {
-  const path = resolvePath(detect.path!, ctx);
+function evalFileExists(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'file_exists' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
   // Check in agent facts first
   let exists = false;
 
@@ -124,8 +117,8 @@ function evalFileExists(base: CheckBase, pts: number, detect: Detection, ctx: Fa
   };
 }
 
-function evalDirExists(base: CheckBase, pts: number, detect: Detection, ctx: FactContext): CheckResult {
-  const path = resolvePath(detect.path!, ctx);
+function evalDirExists(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'dir_exists' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
   let exists = false;
 
   if (path === ctx.agentFacts.agent.skillsDir) {
@@ -146,8 +139,8 @@ function evalDirExists(base: CheckBase, pts: number, detect: Detection, ctx: Fac
   };
 }
 
-function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Detection, ctx: FactContext): CheckResult {
-  const path = resolvePath(detect.path!, ctx);
+function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'line_count' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
   let lineCount = 0;
 
   if (path === ctx.agentFacts.agent.instructionFile) {
@@ -174,13 +167,13 @@ function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefi
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${lineCount} lines (over ${failThreshold} limit)`, evidence: `${path}: ${lineCount} lines` };
 }
 
-function evalGrep(base: CheckBase, pts: number, detect: Detection, ctx: FactContext): CheckResult {
-  const content = getSectionContent(detect.path!, detect.section, ctx);
+function evalGrep(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'grep' }>, ctx: FactContext): CheckResult {
+  const content = getSectionContent(detect.path, detect.section, ctx);
   if (!content) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
-  const regex = new RegExp(detect.pattern!, 'im');
+  const regex = new RegExp(detect.pattern, 'im');
   const match = regex.test(content);
 
   return {
@@ -191,20 +184,20 @@ function evalGrep(base: CheckBase, pts: number, detect: Detection, ctx: FactCont
     message: match
       ? `Pattern found: /${detect.pattern}/`
       : `Pattern not found: /${detect.pattern}/`,
-    evidence: detect.section ? `${resolvePath(detect.path!, ctx)} [${detect.section}]` : resolvePath(detect.path!, ctx),
+    evidence: detect.section ? `${resolvePath(detect.path, ctx)} [${detect.section}]` : resolvePath(detect.path, ctx),
   };
 }
 
-function evalGrepCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Detection, ctx: FactContext): CheckResult {
-  const content = getSectionContent(detect.path!, detect.section, ctx);
+function evalGrepCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'grep_count' }>, ctx: FactContext): CheckResult {
+  const content = getSectionContent(detect.path, detect.section, ctx);
   if (!content) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
-  const regex = new RegExp(detect.pattern!, 'gim');
+  const regex = new RegExp(detect.pattern, 'gim');
   const matches = content.match(regex);
   const count = matches?.length ?? 0;
-  const min = detect.min!;
+  const min = detect.min;
 
   if (count >= min) {
     return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `Found ${count} matches (need ${min}+)` };
@@ -215,8 +208,8 @@ function evalGrepCount(base: CheckBase, pts: number, partialPts: number | undefi
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Found ${count} matches (need ${min}+)` };
 }
 
-function evalJsonValid(base: CheckBase, pts: number, detect: Detection, ctx: FactContext): CheckResult {
-  const path = resolvePath(detect.path!, ctx);
+function evalJsonValid(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'json_valid' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
 
   if (path === ctx.agentFacts.agent.settingsFile) {
     if (!ctx.agentFacts.settings.exists) {
@@ -235,12 +228,12 @@ function evalJsonValid(base: CheckBase, pts: number, detect: Detection, ctx: Fac
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `JSON check not implemented for ${path}` };
 }
 
-function evalJsonContains(base: CheckBase, pts: number, detect: Detection, ctx: FactContext): CheckResult {
-  const path = resolvePath(detect.path!, ctx);
+function evalJsonContains(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'json_contains' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
 
   if (path === ctx.agentFacts.agent.settingsFile && ctx.agentFacts.settings.parsed) {
     const obj = ctx.agentFacts.settings.parsed as Record<string, unknown>;
-    const fields = detect.field!.split('.');
+    const fields = detect.field.split('.');
     let current: unknown = obj;
     for (const field of fields) {
       if (current && typeof current === 'object' && field in (current as Record<string, unknown>)) {
@@ -275,16 +268,16 @@ function evalJsonContains(base: CheckBase, pts: number, detect: Detection, ctx: 
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Cannot check ${path}` };
 }
 
-function evalCountItems(base: CheckBase, pts: number, partialPts: number | undefined, detect: Detection, ctx: FactContext): CheckResult {
-  const content = getSectionContent(detect.path!, detect.section, ctx);
+function evalCountItems(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'count_items' }>, ctx: FactContext): CheckResult {
+  const content = getSectionContent(detect.path, detect.section, ctx);
   if (!content) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
-  const regex = new RegExp(detect.pattern!, 'gim');
+  const regex = new RegExp(detect.pattern, 'gim');
   const matches = content.match(regex);
   const count = matches?.length ?? 0;
-  const pass = detect.pass ?? 0;
+  const pass = detect.pass;
 
   if (count >= pass) {
     return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `Found ${count} items (need ${pass}+)` };
@@ -295,8 +288,8 @@ function evalCountItems(base: CheckBase, pts: number, partialPts: number | undef
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Found ${count} items (need ${pass}+)` };
 }
 
-function evalComposite(base: CheckBase, pts: number, partialPts: number | undefined, detect: Detection, confidence: Confidence, ctx: FactContext): CheckResult {
-  if (!detect.checks || detect.checks.length === 0) {
+function evalComposite(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'composite' }>, confidence: Confidence, ctx: FactContext): CheckResult {
+  if (detect.checks.length === 0) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Composite check has no sub-checks' };
   }
 

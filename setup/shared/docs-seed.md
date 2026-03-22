@@ -66,7 +66,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
 ```
 7. ai/instructions/ - Project coding guidelines (cold path).
    Create ai/README.md as routing map.
-   Create ai/instructions/base.md with project-wide conventions.
+   Create ai/instructions/conventions.md with project-wide conventions.
    Create ai/instructions/code-review.md with review standards.
    Create ai/instructions/git-commit.md with commit conventions.
    If .github/instructions/ exists, migrate content to ai/instructions/

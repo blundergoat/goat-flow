@@ -52,7 +52,7 @@ Behavioural mistakes made by the agent during this project. Each entry describes
 
 ### Sub-agents write aspirational content as current state
 **What happened:** Sub-agents creating ai/instructions/ files read docs/architecture.md and roadmap docs, then wrote coding guidelines that included planned features (Playwright browser, SQLite persistence, redaction.rs) as if they were current. Three external agent audits found 5+ inaccuracies per project.
-**Root cause:** The setup prompt said "Create base.md from project analysis" but didn't say "verify against actual code." Agents read documentation (which mixes current and planned) without checking the implementation.
+**Root cause:** The setup prompt said "Create conventions.md from project analysis" but didn't say "verify against actual code." Agents read documentation (which mixes current and planned) without checking the implementation.
 **Fix:** Added verification gates to workflow templates and setup guides. Templates now say: "Only document what currently exists. Verify by reading source files, not documentation."
 **created_at:** 2026-03-22
 
