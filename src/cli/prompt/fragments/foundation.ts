@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 1 — Foundation fragments (22 check keys)
+ * Tier 1 — Foundation fragments (23 check keys)
  * Instruction file, execution loop, autonomy tiers, DoD, enforcement
  */
 export const foundationFragments: Fragment[] = [

@@ -69,7 +69,7 @@ done < <(
 info "Router table references resolve"
 
 required_skills=(
-    ".agents/skills/goat-preflight/SKILL.md"
+    ".agents/skills/goat-security/SKILL.md"
     ".agents/skills/goat-debug/SKILL.md"
     ".agents/skills/goat-audit/SKILL.md"
     ".agents/skills/goat-investigate/SKILL.md"
@@ -86,7 +86,7 @@ for skill in "${required_skills[@]}"; do
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done
-info "All 7 Codex skills exist with required sections and frontmatter"
+info "All 7 skills exist with required sections and frontmatter"
 
 if [[ -d agent-evals ]]; then
     [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"

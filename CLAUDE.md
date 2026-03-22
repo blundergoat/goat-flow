@@ -1,4 +1,4 @@
-# CLAUDE.md - v1.0 (2026-03-20)
+# CLAUDE.md - v0.4.0 (2026-03-22)
 
 Documentation framework for AI coding agent workflows. Markdown docs + Bash maintenance scripts.
 
@@ -88,11 +88,12 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 
 ## Hard Rules
 
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples
 - MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
 
-Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. When blocked: one question with recommended default.
+Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 ## Working Memory
 
 5+ turn tasks → `tasks/todo.md`. Incomplete work → `tasks/handoff.md`. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
@@ -116,4 +117,3 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Skills | `.claude/skills/goat-*/` |
 | Agent evals | `agent-evals/` |
 | Codex runtime | `AGENTS.md` |
-| Handoff template | `tasks/handoff-template.md` |

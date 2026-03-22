@@ -88,12 +88,12 @@ WHAT TO BUILD (in this order):
 
    Example frontmatter:
    ---
-   name: goat-preflight
-   description: "Run preflight checks before starting or finishing work"
+   name: goat-security
+   description: "Security-focused review of dependencies, secrets, and permissions"
    ---
 
    Create these 7 skills under .agents/skills/:
-   - goat-preflight/SKILL.md (see workflow/skills/goat-preflight.md)
+   - goat-security/SKILL.md (see workflow/skills/goat-security.md)
    - goat-investigate/SKILL.md (see workflow/skills/goat-investigate.md)
    - goat-debug/SKILL.md (see workflow/skills/goat-debug.md)
    - goat-audit/SKILL.md (see workflow/skills/goat-audit.md)

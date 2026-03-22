@@ -1,12 +1,12 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 2 — Standard fragments (38 check keys)
+ * Tier 2 — Standard fragments (41 check keys)
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
   // === Skills (7 individual + 1 completeness) ===
-  ...['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(skill => ({
+  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(skill => ({
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
@@ -110,6 +110,49 @@ Conversational reviews catch architectural problems. One-shot dumps flag style n
 \`\`\``,
   },
   {
+    key: 'add-skill-chaining',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should include a "Chains with" footer linking to related skills. Add to each skill:
+
+\`\`\`markdown
+## Chains With
+
+- goat-[related-skill] — [why this skill chains to it]
+\`\`\`
+
+Common chains:
+- investigate → plan (investigated area needs work)
+- debug → test (regression test after fix)
+- audit → review (audit findings become review checklist)
+- security → review (security-specific PR review)
+- plan → test (verify implementation against plan)`,
+  },
+  {
+    key: 'add-skill-choices',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should offer structured choices at phase transitions instead of binary yes/no gates. Replace:
+
+\`\`\`
+"Does this look right?" → proceed
+\`\`\`
+
+With:
+
+\`\`\`
+"Want me to:
+  (a) [drill deeper on specific area]
+  (b) [check related concern]
+  (c) [shift focus]
+  (d) [proceed to next phase]"
+\`\`\`
+
+The human drives direction, not just pace.`,
+  },
+  {
     key: 'add-skill-phases',
     phase: 'standard',
     category: 'Skills',
@@ -136,7 +179,7 @@ Each phase should have a clear entry condition (what must be done before startin
     kind: 'create',
     instruction: `Ensure all 7 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
-- goat-preflight, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test
+- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
   },

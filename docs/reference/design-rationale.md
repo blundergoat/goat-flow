@@ -39,7 +39,7 @@ flowchart TB
     end
 
     subgraph DEMAND["ON-DEMAND (via router table / slash commands)"]
-        L3["<b>Layer 3 -- Skills</b><br/>/goat-preflight - /goat-debug - /goat-audit<br/>/goat-investigate - /goat-review"]
+        L3["<b>Layer 3 -- Skills</b><br/>/goat-security - /goat-debug - /goat-audit<br/>/goat-investigate - /goat-review"]
         L4["<b>Layer 4 -- Playbooks</b><br/>Mob Elaboration - SBAO Planning - Milestone Planning"]
     end
 
@@ -170,7 +170,7 @@ flowchart TD
 | `/review-triage`    | Normal review behaviour, not a distinct mode           | Review branch of the ACT step       |
 | `/revert-rescope`   | Tactic (2 sentences), not a workflow                   | Paragraph in VERIFY/stop-the-line   |
 
-**v1.5 refinement:** Implementation data confirms all seven skills add value across all projects. All projects create all seven skills (preflight, debug, audit, investigate, review, plan, test).
+**v1.5 refinement:** Implementation data confirms all seven skills add value across all projects. All projects create all seven skills (security, debug, audit, investigate, review, plan, test).
 
 ---
 

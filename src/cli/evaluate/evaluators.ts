@@ -162,8 +162,8 @@ function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefi
     }
   }
 
-  const passThreshold = detect.pass!;
-  const failThreshold = detect.fail!;
+  const passThreshold = detect.pass ?? 0;
+  const failThreshold = detect.fail ?? Infinity;
 
   if (lineCount < passThreshold) {
     return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${lineCount} lines (under ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
@@ -284,7 +284,7 @@ function evalCountItems(base: CheckBase, pts: number, partialPts: number | undef
   const regex = new RegExp(detect.pattern!, 'gim');
   const matches = content.match(regex);
   const count = matches?.length ?? 0;
-  const pass = detect.pass!;
+  const pass = detect.pass ?? 0;
 
   if (count >= pass) {
     return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `Found ${count} items (need ${pass}+)` };
@@ -354,7 +354,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
 
   // Check skill paths
   if (path.startsWith(ctx.agentFacts.agent.skillsDir)) {
-    const skillName = path.split('/').slice(-2, -1)[0]; // e.g. "goat-preflight"
+    const skillName = path.split('/').slice(-2, -1)[0]; // e.g. "goat-security"
     return ctx.agentFacts.skills.found.includes(skillName);
   }
 

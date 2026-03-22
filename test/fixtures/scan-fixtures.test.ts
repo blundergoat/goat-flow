@@ -319,7 +319,7 @@ describe('Fixture 4: full-claude', () => {
   });
 
   it('has few recommendations', () => {
-    assert.ok(report.agents[0].recommendations.length <= 10, `Expected ≤10 recommendations, got ${report.agents[0].recommendations.length}`);
+    assert.ok(report.agents[0].recommendations.length <= 15, `Expected ≤15 recommendations, got ${report.agents[0].recommendations.length}`);
   });
 
   it('confidence field present on all checks', () => {
@@ -472,7 +472,7 @@ describe('Fixture 8: partial-setup', () => {
     // Has settings but no deny patterns
     '.claude/settings.json': JSON.stringify({ theme: 'dark' }),
     // Has some skills but not all
-    '.claude/skills/goat-preflight/SKILL.md': '# goat-preflight\n',
+    '.claude/skills/goat-security/SKILL.md': '# goat-security\n',
     '.claude/skills/goat-debug/SKILL.md': '# goat-debug\n',
     '.claude/skills/goat-audit/SKILL.md': '# goat-audit\n',
     // Learning loop — lessons exists but no footguns

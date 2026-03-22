@@ -82,7 +82,7 @@ Create the following:
    - Guard against missing tools: command -v check before running
    - Infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
      export STOP_HOOK_ACTIVE=1
-   - Exclude slow checks (>10 seconds) - those go in /goat-preflight
+   - Exclude slow checks (>10 seconds) - those go in /goat-security
    - Run lint and type-check only for file types that changed
 
 4. .claude/hooks/format-file.sh (PostToolUse hook)

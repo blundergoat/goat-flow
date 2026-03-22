@@ -18,7 +18,7 @@ spec. Check ALL of these:
 
 SKILL RENAME + NEW SKILLS:
 - goat-research is now goat-investigate. Rename if old name exists.
-- 7 skills must exist: goat-preflight, goat-debug, goat-audit,
+- 7 skills must exist: goat-security, goat-debug, goat-audit,
   goat-investigate, goat-review, goat-plan, goat-test
 - Create any missing skills. goat-plan = 4-phase planning with human
   gates and Triangular Tension Pass. goat-test = 3-track testing

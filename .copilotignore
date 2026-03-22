@@ -4,3 +4,6 @@
 **/*.key
 **/credentials*
 **/.git/
+.claude/settings.local.json
+tasks/todo.md
+tasks/handoff.md

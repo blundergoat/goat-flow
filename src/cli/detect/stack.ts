@@ -46,6 +46,7 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
   }
 
   // Go / go.mod (root or subdirectory)
+  // Monorepo detection: checks */go.mod and */*/go.mod (2 levels deep). Deeper nesting not supported.
   if (fs.exists('go.mod') || fs.glob('*/go.mod').length > 0 || fs.glob('*/*/go.mod').length > 0) {
     languages.push('go');
     buildCommand = buildCommand ?? 'go build ./...';

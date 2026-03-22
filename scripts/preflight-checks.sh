@@ -3,113 +3,126 @@
 set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$ROOT_DIR"
+cd "$ROOT_DIR" || exit 1
 
-errors=0
-
-info() {
-    echo "INFO: $1"
-}
-
-warn() {
-    echo "WARN: $1" >&2
-}
-
-fail() {
-    echo "ERROR: $1" >&2
-    errors=$((errors + 1))
-}
-
-# --- Context validation ---
-info "Running: Context validation"
-bash scripts/context-validate.sh || fail "Context validation failed"
-
-# --- Shell script checks ---
-info "Running: Bash syntax"
-bash -n scripts/*.sh scripts/maintenance/*.sh || fail "Bash syntax check failed"
-
-if command -v shellcheck >/dev/null 2>&1; then
-    # Exclude style-only warnings (SC2001)
-    info "Running: Shellcheck"
-    shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh || fail "Shellcheck failed"
+# ── Colours (disabled if not a terminal) ─────────────────────────────
+if [[ -t 1 ]]; then
+    R='\033[0;31m' G='\033[0;32m' Y='\033[0;33m' B='\033[0;34m'
+    DIM='\033[2m' BOLD='\033[1m' RST='\033[0m'
 else
-    warn "shellcheck not installed; skipping shell lint"
+    R='' G='' Y='' B='' DIM='' BOLD='' RST=''
 fi
 
-# --- Deny policy ---
-info "Running: Deny policy self-test"
-bash scripts/deny-dangerous.sh --self-test || fail "Deny policy self-test failed"
+errors=0
+warnings=0
+checks=0
 
-# --- Version consistency ---
-info "Running: Version consistency"
+# ── Helpers ──────────────────────────────────────────────────────────
+section() { echo -e "\n${B}━━ $1${RST}"; }
+pass()    { checks=$((checks + 1)); echo -e "  ${G}✓${RST} $1"; }
+fail()    { checks=$((checks + 1)); errors=$((errors + 1)); echo -e "  ${R}✗${RST} $1" >&2; }
+skip()    { echo -e "  ${DIM}⊘ $1 (skipped)${RST}"; }
+note()    { warnings=$((warnings + 1)); echo -e "  ${Y}⚠${RST} $1"; }
+
+# ── Context Validation ───────────────────────────────────────────────
+section "Context Validation"
+if bash scripts/context-validate.sh >/dev/null 2>&1; then
+    pass "Router paths, skills, frontmatter"
+else
+    fail "Context validation — run scripts/context-validate.sh for details"
+fi
+
+# ── Shell Scripts ────────────────────────────────────────────────────
+section "Shell Scripts"
+if bash -n scripts/*.sh scripts/maintenance/*.sh 2>/dev/null; then
+    pass "Bash syntax"
+else
+    fail "Bash syntax check"
+fi
+
+if command -v shellcheck >/dev/null 2>&1; then
+    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh >/dev/null 2>&1; then
+        pass "Shellcheck"
+    else
+        fail "Shellcheck — run shellcheck scripts/*.sh for details"
+    fi
+else
+    skip "Shellcheck (not installed)"
+fi
+
+# ── Deny Policy ──────────────────────────────────────────────────────
+section "Deny Policy"
+if bash scripts/deny-dangerous.sh --self-test >/dev/null 2>&1; then
+    pass "Self-test ($(bash scripts/deny-dangerous.sh --self-test 2>&1 | grep -c PASS) assertions)"
+else
+    fail "Deny policy self-test"
+fi
+
+# ── Version Consistency ──────────────────────────────────────────────
+section "Version Consistency"
 if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
     pkg_version=$(node -e "console.log(require('./package.json').version)")
     ts_version=$(grep "PACKAGE_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
 
-    if [[ "$pkg_version" != "$ts_version" ]]; then
-        fail "Version mismatch: package.json=$pkg_version, version.ts=$ts_version"
+    if [[ "$pkg_version" == "$ts_version" ]]; then
+        pass "package.json ↔ version.ts ($pkg_version)"
     else
-        info "Versions match: $pkg_version"
+        fail "Version mismatch: package.json=$pkg_version, version.ts=$ts_version"
     fi
 
-    # Verify cli.ts imports from version.ts (not hardcoded)
     if grep -q "^const PACKAGE_VERSION" src/cli/cli.ts 2>/dev/null; then
         fail "cli.ts has hardcoded PACKAGE_VERSION — should import from rubric/version.ts"
     fi
 else
-    warn "Skipping version check (missing package.json or version.ts)"
+    skip "Version check (missing package.json or version.ts)"
 fi
 
-# --- TypeScript ---
+# ── TypeScript ───────────────────────────────────────────────────────
 if [[ -f tsconfig.json ]]; then
-    info "Running: Typecheck"
-    npx tsc --noEmit || fail "Typecheck failed"
+    section "TypeScript"
 
-    # Build check — verify dist/ is producible
-    info "Running: Build"
-    npx tsc || fail "Build failed"
+    if npx tsc --noEmit 2>/dev/null; then
+        pass "Typecheck"
+    else
+        fail "Typecheck — run npx tsc --noEmit for details"
+    fi
 
-    # Check for common code quality issues in TypeScript
-    info "Running: TypeScript quality checks"
+    if npx tsc 2>/dev/null; then
+        pass "Build (dist/ producible)"
+    else
+        fail "Build"
+    fi
 
-    # No console.log in source (except cli.ts which needs it)
+    # Quality checks (warnings, not failures)
     console_hits=$(grep -rn 'console\.log' src/cli/ --include='*.ts' | grep -v 'cli.ts' | grep -v 'render/' || true)
-    if [[ -n "$console_hits" ]]; then
-        warn "console.log found outside cli.ts/render/:"
-        echo "$console_hits" | head -5 | sed 's/^/  /'
-    fi
+    [[ -n "$console_hits" ]] && note "console.log outside cli.ts/render/ ($(echo "$console_hits" | wc -l) hits)"
 
-    # No any types (best effort — catches explicit 'any' annotations)
     any_hits=$(grep -rn ': any\b' src/cli/ --include='*.ts' || true)
-    if [[ -n "$any_hits" ]]; then
-        warn "Explicit 'any' types found:"
-        echo "$any_hits" | head -5 | sed 's/^/  /'
-    fi
+    [[ -n "$any_hits" ]] && note "Explicit 'any' types ($(echo "$any_hits" | wc -l) hits)"
 
-    # No TODO/FIXME/HACK left unresolved
     todo_hits=$(grep -rn 'TODO\|FIXME\|HACK' src/cli/ --include='*.ts' || true)
-    if [[ -n "$todo_hits" ]]; then
-        info "TODOs found ($(echo "$todo_hits" | wc -l) total):"
-        echo "$todo_hits" | head -5 | sed 's/^/  /'
-    fi
+    [[ -n "$todo_hits" ]] && note "TODOs ($(echo "$todo_hits" | wc -l) hits)"
 fi
 
-# --- Tests ---
+# ── Tests ────────────────────────────────────────────────────────────
 if [[ -f package.json ]] && grep -q '"test"' package.json; then
-    info "Running: Tests"
-    test_output=$(npm test 2>&1)
-    test_exit=$?
-    echo "$test_output"
-    if [[ "$test_exit" -ne 0 ]]; then
-        fail "Tests failed"
-    fi
+    section "Tests"
+    test_output=$(npm test 2>&1) && test_exit=0 || test_exit=$?
+
     test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
-    info "Tests: $test_count total"
+    pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
+    fail_count=$(echo "$test_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
+
+    if [[ "$test_exit" -eq 0 ]]; then
+        pass "All passing ($pass_count/$test_count)"
+    else
+        fail "Tests failed ($fail_count/$test_count failures)"
+        echo "$test_output" | grep 'not ok' | head -5 | sed 's/^/    /'
+    fi
 fi
 
-# --- Removed patterns (ADR enforcement) ---
-info "Running: Removed pattern check"
-# Patterns that should not exist anywhere in live files (per ADRs)
+# ── Removed Patterns (ADR Enforcement) ───────────────────────────────
+section "ADR Enforcement"
 removed_patterns=(
     "APP.*LIBRARY.*SCRIPT COLLECTION"
     "confusion.log\.md"
@@ -117,20 +130,23 @@ removed_patterns=(
     "detectShape"
     "--shape"
 )
+adr_clean=true
 for pattern in "${removed_patterns[@]}"; do
     hits=$(grep -rn "$pattern" setup/ workflow/ src/ test/ docs/ ai/ .github/ --include='*.md' --include='*.ts' --include='*.yml' 2>/dev/null \
         | grep -v 'CHANGELOG\|TODO_\|ADR-\|design-rationale\|footguns.*RESOLVED\|decisions/\|preflight-checks' || true)
     if [[ -n "$hits" ]]; then
-        fail "Removed pattern '$pattern' still found:"
-        echo "$hits" | head -5 | sed 's/^/  /'
+        fail "Removed pattern '$pattern' still found"
+        echo "$hits" | head -3 | sed 's/^/    /'
+        adr_clean=false
     fi
 done
+$adr_clean && pass "No removed patterns found"
 
-# --- Summary ---
+# ── Summary ──────────────────────────────────────────────────────────
 echo ""
+echo -e "${DIM}─────────────────────────────────────────────────${RST}"
 if [[ "$errors" -gt 0 ]]; then
-    echo "ERROR: Preflight failed with $errors error(s)" >&2
+    echo -e "${BOLD}${R}PREFLIGHT FAILED${RST}  ${errors} error(s), ${warnings} warning(s), ${checks} checks"
     exit 1
 fi
-
-info "Preflight checks passed"
+echo -e "${BOLD}${G}PREFLIGHT PASSED${RST}  ${checks} checks, ${warnings} warning(s)"

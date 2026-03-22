@@ -1,7 +1,7 @@
 import type { AgentProfile, AgentFacts, ReadonlyFS } from '../types.js';
 
 const EXPECTED_SKILLS = [
-  'goat-preflight', 'goat-debug', 'goat-audit', 'goat-investigate',
+  'goat-security', 'goat-debug', 'goat-audit', 'goat-investigate',
   'goat-review', 'goat-plan', 'goat-test',
 ];
 
@@ -164,20 +164,26 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     settingsValid = settingsParsed !== null;
     if (settingsValid) {
       const perms = (settingsParsed as Record<string, unknown>)?.permissions as Record<string, unknown> | undefined;
-      hasDenyPatterns = Array.isArray(perms?.deny) && (perms!.deny as string[]).length > 0;
+      const denyArr = perms?.deny;
+      hasDenyPatterns = Array.isArray(denyArr) && (denyArr as string[]).length > 0;
     }
   }
 
   // Check for compaction notification hook in settings
+  // Claude Code format: hooks.Notification[].matcher = "compact"
+  // Gemini format: hooks.Notification[].matcher = "compact"
   let compactionHookExists = false;
   if (settingsParsed && settingsValid) {
     const settings = settingsParsed as Record<string, unknown>;
-    const hooks = settings.hooks as Array<Record<string, unknown>> | undefined;
-    if (Array.isArray(hooks)) {
-      compactionHookExists = hooks.some(h =>
-        (h.type === 'Notification' || h.event === 'Notification') &&
-        (String(h.matcher ?? '').includes('compact') || String(h.command ?? '').includes('compact'))
-      );
+    const hooks = settings.hooks as Record<string, unknown> | undefined;
+    if (hooks && typeof hooks === 'object' && !Array.isArray(hooks)) {
+      // Nested format: hooks.Notification[{matcher: "compact"}]
+      const notifHooks = hooks.Notification as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(notifHooks)) {
+        compactionHookExists = notifHooks.some(h =>
+          String(h.matcher ?? '').includes('compact')
+        );
+      }
     }
   }
 
@@ -189,6 +195,8 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   let withConstraints = 0;
   let withPhases = 0;
   let withConversational = 0;
+  let withChaining = 0;
+  let withChoices = 0;
   for (const skill of EXPECTED_SKILLS) {
     const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
     if (fs.exists(skillPath)) {
@@ -199,7 +207,9 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
         if (/human\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
         if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
         if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
-        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow.up question/i.test(skillContent)) withConversational++;
+        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question/i.test(skillContent)) withConversational++;
+        if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
+        if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
       }
     } else {
       skillsMissing.push(skill);
@@ -298,7 +308,7 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
     settings: { exists: settingsExists, valid: settingsValid, parsed: settingsParsed, hasDenyPatterns },
     skills: {
       found: skillsFound, missing: skillsMissing, allPresent: skillsMissing.length === 0,
-      quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, total: skillsFound.length },
+      quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, total: skillsFound.length },
     },
     hooks: { denyExists, denyHasBlocks, postTurnExists, postTurnExitsZero, postTurnHasValidation, postToolExists, compactionHookExists },
     deny: denyResults,
