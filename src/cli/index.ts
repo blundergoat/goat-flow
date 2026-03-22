@@ -1,5 +1,7 @@
-// Library entry point for programmatic consumers (M2, M3)
-// Re-exports the scan engine, types, and utilities
+/**
+ * Library entry point for programmatic consumers (M2, M3).
+ * Re-exports the scan engine, types, and utilities.
+ */
 
 export type {
   AgentId,

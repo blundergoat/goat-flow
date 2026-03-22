@@ -1,11 +1,15 @@
 import type { ScanReport, AgentReport, CheckResult, AntiPatternResult } from '../types.js';
 
+/** Render a text-based progress bar using block characters */
 function progressBar(percentage: number, width: number = 20): string {
+  /** Number of filled blocks proportional to the percentage */
   const filled = Math.round((percentage / 100) * width);
+  /** Remaining empty blocks */
   const empty = width - filled;
   return '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
 }
 
+/** Map a check status to its 4-character display label */
 function statusIcon(status: string): string {
   switch (status) {
     case 'pass': return 'PASS';
@@ -16,6 +20,7 @@ function statusIcon(status: string): string {
   }
 }
 
+/** Map a priority level to its fixed-width display label */
 function priorityLabel(priority: string): string {
   switch (priority) {
     case 'critical': return 'CRITICAL';
@@ -26,7 +31,9 @@ function priorityLabel(priority: string): string {
   }
 }
 
+/** Render a scan report as human-readable plain text */
 export function renderText(report: ScanReport, verbose: boolean): string {
+  /** Accumulated output lines joined into the final text */
   const lines: string[] = [];
 
   lines.push(`GOAT Flow Audit: ${report.target}`);
@@ -43,6 +50,7 @@ export function renderText(report: ScanReport, verbose: boolean): string {
     return lines.join('\n');
   }
 
+  // Iterate over each detected agent to render its report section
   for (const agent of report.agents) {
     lines.push(renderAgent(agent, verbose));
     lines.push('');
@@ -53,8 +61,11 @@ export function renderText(report: ScanReport, verbose: boolean): string {
   return lines.join('\n');
 }
 
+/** Render a single agent's report including grade, tiers, and recommendations */
 function renderAgent(agent: AgentReport, verbose: boolean): string {
+  /** Accumulated output lines for this agent */
   const lines: string[] = [];
+  /** Destructured score summary for the agent */
   const { score } = agent;
 
   lines.push(`--- ${agent.agentName} ---`);
@@ -69,7 +80,7 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
   lines.push(`Grade: ${score.grade} (${score.percentage}%)`);
   lines.push('');
 
-  // Tier breakdown
+  /** Destructured tier scores for foundation, standard, and full */
   const { foundation, standard, full } = score.tiers;
   lines.push(`  Foundation:  ${String(foundation.earned).padStart(3)}/${foundation.available}  ${progressBar(foundation.percentage)}  ${foundation.percentage}%`);
   lines.push(`  Standard:    ${String(standard.earned).padStart(3)}/${standard.available}  ${progressBar(standard.percentage)}  ${standard.percentage}%`);
@@ -81,9 +92,10 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
 
   lines.push('');
 
-  // Recommendations (always show)
+  // Recommendations (always shown when present)
   if (agent.recommendations.length > 0) {
     lines.push('Recommendations:');
+    // Iterate over the top 10 recommendations to display priority and action
     for (const rec of agent.recommendations.slice(0, 10)) {
       lines.push(`  [${priorityLabel(rec.priority)}] ${rec.checkId}: ${rec.action}`);
     }
@@ -93,9 +105,10 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
     lines.push('');
   }
 
-  // Verbose: per-check details
+  // Verbose mode: per-check details
   if (verbose) {
     lines.push('Check Details:');
+    // Iterate over every check to render its detailed result
     for (const check of agent.checks) {
       lines.push(renderCheck(check));
     }
@@ -103,6 +116,7 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
 
     if (agent.antiPatterns.some(ap => ap.triggered)) {
       lines.push('Anti-Pattern Deductions:');
+      // Iterate over triggered anti-patterns to render their deductions
       for (const ap of agent.antiPatterns.filter(a => a.triggered)) {
         lines.push(renderAntiPattern(ap));
       }
@@ -113,15 +127,20 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
   return lines.join('\n');
 }
 
+/** Format a single check result as a bracketed status line */
 function renderCheck(check: CheckResult): string {
+  /** 4-character status label */
   const status = statusIcon(check.status);
+  /** Points display, or N/A for non-applicable checks */
   const points = check.status === 'na'
     ? 'N/A'
     : `${check.points}/${check.maxPoints}`;
+  /** Optional evidence suffix */
   const evidence = check.evidence ? ` (${check.evidence})` : '';
   return `  [${status}] ${check.id} ${check.name}: ${points}${evidence}`;
 }
 
+/** Format a single triggered anti-pattern as a bracketed deduction line */
 function renderAntiPattern(ap: AntiPatternResult): string {
   return `  [${ap.id}] ${ap.name}: ${ap.deduction} — ${ap.message}`;
 }

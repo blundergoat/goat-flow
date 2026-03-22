@@ -7,14 +7,20 @@ import { extractVariables } from './variables.js';
  * The agent reads and diagnoses without making changes.
  */
 export function composeAudit(report: ScanReport, agentId: AgentId): ComposedPrompt | null {
+  /** Agent-specific report extracted from the scan */
   const agentReport = report.agents.find(a => a.agent === agentId);
-  if (!agentReport) return null;
+  if (agentReport === undefined) return null;
 
+  /** Template variables derived from the scan report */
   const vars = extractVariables(report, agentReport);
+  /** Checks with a fail status */
   const failed = agentReport.checks.filter(c => c.status === 'fail');
+  /** Checks with a partial status */
   const partial = agentReport.checks.filter(c => c.status === 'partial');
+  /** Anti-patterns that fired during the scan */
   const triggered = agentReport.antiPatterns.filter(ap => ap.triggered);
 
+  /** Accumulated prompt sections built up below */
   const sections: PromptSection[] = [];
 
   // Section 1: Score Overview

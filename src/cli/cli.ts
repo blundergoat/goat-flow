@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import type { CLIOptions, Grade, AgentId } from './types.js';
 import { PACKAGE_VERSION } from './rubric/version.js';
 
+/** Print usage instructions and available commands to stdout */
 function printHelp(): void {
   console.log(`
 goat-flow — GOAT Flow CLI Auditor + Scoring Engine
@@ -43,25 +44,31 @@ Examples:
 `);
 }
 
+/** Print the current package version to stdout */
 function printVersion(): void {
   console.log(`goat-flow v${PACKAGE_VERSION}`);
 }
 
 type Command = 'scan' | 'fix' | 'setup' | 'audit' | 'eval';
+
+/** List of recognized CLI subcommands */
 const COMMANDS: Command[] = ['scan', 'fix', 'setup', 'audit', 'eval'];
 
 export interface ParsedCLI extends CLIOptions {
   command: Command;
 }
 
+/** Parse raw CLI argv into a structured ParsedCLI options object */
 export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Extract command if first positional is a known command
   let command: Command = 'scan';
+  /** Mutable copy of argv for shifting the command token */
   const filtered = [...argv];
   if (filtered.length > 0 && COMMANDS.includes(filtered[0] as Command)) {
     command = filtered.shift() as Command;
   }
 
+  /** Destructured parseArgs result containing option values and positional arguments */
   const { values, positionals } = parseArgs({
     args: filtered,
     options: {
@@ -80,7 +87,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Auto-detect format: text if TTY, json if piped
   let format: CLIOptions['format'] = process.stdout.isTTY ? 'text' : 'json';
   if (values.format) {
-    if (!['json', 'text'].includes(values.format)) {
+    if (['json', 'text'].includes(values.format) === false) {
       console.error(`Invalid format: ${values.format}. Use: json, text`);
       process.exit(2);
     }
@@ -90,7 +97,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Validate agent
   let agent: AgentId | null = null;
   if (values.agent) {
-    if (!['claude', 'codex', 'gemini'].includes(values.agent)) {
+    if (['claude', 'codex', 'gemini'].includes(values.agent) === false) {
       console.error(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`);
       process.exit(2);
     }
@@ -110,8 +117,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Parse min-grade
   let minGrade: Grade | null = null;
   if (values['min-grade']) {
+    /** Allowed grade values for the CI gate threshold */
     const valid = ['A', 'B', 'C', 'D'];
-    if (!valid.includes(values['min-grade'].toUpperCase())) {
+    if (valid.includes(values['min-grade'].toUpperCase()) === false) {
       console.error(`Invalid min-grade: ${values['min-grade']}. Use: A, B, C, D`);
       process.exit(2);
     }
@@ -131,7 +139,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   };
 }
 
+/** Entry point that dispatches to the appropriate command handler */
 async function main(): Promise<void> {
+  /** Parsed CLI options derived from process.argv */
   const options = parseCLIArgs(process.argv.slice(2));
 
   if (options.help) {
@@ -148,9 +158,12 @@ async function main(): Promise<void> {
   if (options.command === 'eval') {
     const { loadEvals, summarize, formatSummaryText, formatSummaryJson } =
       await import('./eval/runner.js');
+    /** Resolved path to the agent-evals directory */
     const evalsDir = resolve(options.projectPath, 'agent-evals');
     const { evals, errors } = loadEvals(evalsDir);
+    /** Aggregated eval summary grouped by skill, agent, difficulty, and origin */
     const summary = summarize(evals, errors);
+    /** Formatted output string in the requested format */
     const output = options.format === 'json'
       ? formatSummaryJson(summary)
       : formatSummaryText(summary);
@@ -165,7 +178,9 @@ async function main(): Promise<void> {
   const { renderJson } = await import('./render/json.js');
   const { renderText } = await import('./render/text.js');
 
+  /** Virtual filesystem scoped to the target project path */
   const fs = createFS(options.projectPath);
+  /** Full scan report containing per-agent scores and check results */
   const report = scan(fs, options.projectPath, {
     agentFilter: options.agent,
   });
@@ -178,6 +193,7 @@ async function main(): Promise<void> {
     const { renderPrompt } = await import('./prompt/render.js');
 
     // Determine which agents to generate prompts for
+    /** List of agent IDs to generate prompts for (filtered or all detected) */
     const agentIds = options.agent
       ? [options.agent]
       : report.agents.map(a => a.agent);
@@ -187,6 +203,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
+    // Iterate over each agent ID to compose and render the appropriate prompt
     for (const agentId of agentIds) {
       let prompt;
       switch (options.command) {
@@ -204,6 +221,7 @@ async function main(): Promise<void> {
   }
 
   // Render scan output
+  /** Formatted scan output string in the requested format */
   const output = options.format === 'text'
     ? renderText(report, options.verbose)
     : renderJson(report);
@@ -212,14 +230,18 @@ async function main(): Promise<void> {
 
   // CI gate
   if (options.minScore !== null || options.minGrade !== null) {
+    /** Numeric ordering of grades for comparison (higher is better) */
     const gradeOrder: Record<string, number> = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1, 'insufficient-data': 0 };
 
+    // Iterate over each agent report to check against CI gate thresholds
     for (const agent of report.agents) {
       if (options.minScore !== null && agent.score.percentage < options.minScore) {
         process.exit(1);
       }
       if (options.minGrade !== null) {
+        /** Numeric value of the agent's grade for threshold comparison */
         const agentGradeValue = gradeOrder[agent.score.grade] ?? 0;
+        /** Numeric value of the minimum required grade */
         const minGradeValue = gradeOrder[options.minGrade] ?? 0;
         if (agentGradeValue < minGradeValue) {
           process.exit(1);
@@ -229,7 +251,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   console.error('Fatal error:', err instanceof Error ? err.message : err);
   process.exit(1);
 });

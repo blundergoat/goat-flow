@@ -2,7 +2,8 @@ import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
 /**
  * Tier 3 — Full (16 points)
- * Agent evals, CI validation, hygiene
+ * Agent evals, CI validation, hygiene.
+ * These checks represent mature GOAT Flow adoption with CI integration.
  */
 export const fullChecks: CheckDef[] = [
   // === 3.1 Agent Evals (7 pts: 1 existence + 2 count + 2 replay + 1 origin + 1 coverage) ===
@@ -19,6 +20,7 @@ export const fullChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Number of eval files found in agent-evals/
         const count = ctx.facts.shared.evals.count;
         if (count >= 3) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `${count} eval files` };
         if (count >= 1) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 3+)` };
@@ -64,6 +66,7 @@ export const fullChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Number of distinct skill names referenced across all eval files
         const count = ctx.facts.shared.evals.evalSkillCount;
         if (ctx.facts.shared.evals.count === 0) {
           return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No eval files' };
@@ -137,7 +140,7 @@ export const fullChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.facts.shared.ci.workflowExists) {
+        if (ctx.facts.shared.ci.workflowExists === false) {
           return { id: '3.2.5', name: 'CI triggers on PRs', tier: 'full', category: 'CI Validation', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No CI workflow' };
         }
         return {

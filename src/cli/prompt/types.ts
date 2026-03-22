@@ -1,8 +1,11 @@
 import type { AgentId, Tier } from '../types.js';
 
+/** The three modes a composed prompt can operate in */
 export type PromptMode = 'fix' | 'setup' | 'audit';
+/** Phase a fragment belongs to: one of the scoring tiers or anti-pattern */
 export type FragmentPhase = Tier | 'anti-pattern';
 
+/** Whether a fragment creates new content or fixes existing content */
 export type FragmentKind = 'create' | 'fix';
 
 export interface Fragment {
@@ -18,12 +21,14 @@ export interface Fragment {
   agentOverrides?: Partial<Record<AgentId, string>>;
 }
 
+/** Options controlling prompt composition mode and target agent */
 export interface PromptOptions {
   mode: PromptMode;
   agent: AgentId | null;
   selfContained: boolean;
 }
 
+/** A fully assembled prompt ready for rendering */
 export interface ComposedPrompt {
   mode: PromptMode;
   agent: AgentId;
@@ -33,12 +38,14 @@ export interface ComposedPrompt {
   summary: string;
 }
 
+/** A phase-grouped section within a composed prompt */
 export interface PromptSection {
   phase: FragmentPhase;
   heading: string;
   fragments: ResolvedFragment[];
 }
 
+/** A fragment after template variables have been substituted */
 export interface ResolvedFragment {
   key: string;
   category: string;

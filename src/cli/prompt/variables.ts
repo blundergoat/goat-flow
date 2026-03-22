@@ -6,10 +6,12 @@ import type { PromptVariables } from './types.js';
  * These replace {{variable}} placeholders in fragment instructions.
  */
 export function extractVariables(report: ScanReport, agentReport: AgentReport): PromptVariables {
+  /** Checks that failed or partially passed */
   const failed = agentReport.checks.filter(c => c.status === 'fail' || c.status === 'partial');
+  /** Checks that fully passed */
   const passed = agentReport.checks.filter(c => c.status === 'pass');
 
-  // Agent-specific paths
+  /** File paths specific to the detected agent, with claude as fallback */
   const paths = AGENT_PATHS[agentReport.agent] ?? AGENT_PATHS.claude;
 
   return {
@@ -33,6 +35,7 @@ export function extractVariables(report: ScanReport, agentReport: AgentReport): 
   };
 }
 
+/** Per-agent file path defaults for instruction file, settings, skills, and hooks */
 const AGENT_PATHS = {
   claude: {
     instructionFile: 'CLAUDE.md',
@@ -59,7 +62,7 @@ const AGENT_PATHS = {
  * Leaves unresolved placeholders with an [UNFILLED: name] marker.
  */
 export function fillTemplate(template: string, vars: PromptVariables): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (match, name: string) => {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => {
     const value = vars[name as keyof PromptVariables];
     if (value !== undefined) return value;
     return `[UNFILLED: ${name}]`;

@@ -93,6 +93,35 @@ if [[ -f tsconfig.json ]]; then
         fail "Build"
     fi
 
+    # ESLint (type-checked rules)
+    if command -v npx >/dev/null 2>&1 && [[ -f eslint.config.mjs ]]; then
+        lint_output=$(npx eslint src/cli/ 2>&1) && lint_exit=0 || lint_exit=$?
+        lint_errors=$(echo "$lint_output" | grep -c ' error ' || echo "0")
+        lint_warnings=$(echo "$lint_output" | grep -c ' warning ' || echo "0")
+        if [[ "$lint_exit" -eq 0 ]]; then
+            pass "ESLint ($lint_warnings warnings)"
+        elif [[ "$lint_errors" -gt 0 ]]; then
+            fail "ESLint ($lint_errors errors, $lint_warnings warnings) — run npx eslint src/cli/"
+        else
+            pass "ESLint (0 errors, $lint_warnings warnings)"
+        fi
+    else
+        skip "ESLint (not configured)"
+    fi
+
+    # Knip (unused exports, dead code)
+    if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
+        knip_output=$(npx knip --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
+        if [[ "$knip_exit" -eq 0 ]]; then
+            pass "Knip (no unused exports or deps)"
+        else
+            unused_count=$(echo "$knip_output" | grep -c '^[A-Za-z].*  ' || echo "?")
+            note "Knip: $unused_count unused exports/types — run npx knip for details"
+        fi
+    else
+        skip "Knip (not installed)"
+    fi
+
     # Quality checks (warnings, not failures)
     console_hits=$(grep -rn 'console\.log' src/cli/ --include='*.ts' | grep -v 'cli.ts' | grep -v 'render/' || true)
     [[ -n "$console_hits" ]] && note "console.log outside cli.ts/render/ ($(echo "$console_hits" | wc -l) hits)"

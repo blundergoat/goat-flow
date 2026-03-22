@@ -5,6 +5,7 @@ import type { AntiPatternDef, FactContext, AntiPatternResult } from '../types.js
  * AP1-AP9 in v1. AP10 + AP11 deferred to v2 (require git history).
  */
 export const antiPatterns: AntiPatternDef[] = [
+  // === AP1-AP3: Instruction File Anti-Patterns ===
   {
     id: 'AP1', name: 'Instruction file over 150 lines', deduction: -3, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
@@ -18,7 +19,8 @@ export const antiPatterns: AntiPatternDef[] = [
   {
     id: 'AP2', name: 'Skill name conflicts with built-in', deduction: -3, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      const nonGoat = ctx.agentFacts.skills.found.filter(s => !s.startsWith('goat-'));
+      // Filter skills that lack the required goat- prefix
+      const nonGoat = ctx.agentFacts.skills.found.filter(s => s.startsWith('goat-') === false);
       const triggered = nonGoat.length > 0;
       return { id: 'AP2', name: 'Skill name conflicts with built-in', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `Skills without goat- prefix: ${nonGoat.join(', ')}` : 'All skills use goat- prefix' };
     },
@@ -36,11 +38,13 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: 'Remove DoD from guidelines file',
     recommendationKey: 'ap-fix-dod-overlap',
   },
+
+  // === AP4-AP6: Settings and Hooks Anti-Patterns ===
   {
     id: 'AP4', name: 'Footguns without file:line evidence', deduction: -5, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const { exists, hasEvidence } = ctx.facts.shared.footguns;
-      const triggered = exists && !hasEvidence;
+      const triggered = exists && hasEvidence === false;
       return { id: 'AP4', name: 'Footguns without file:line evidence', triggered, deduction: triggered ? -5 : 0, confidence: 'high', message: triggered ? 'footguns.md has no file:line evidence' : (exists ? 'Footguns have evidence' : 'No footguns.md') };
     },
     recommendation: 'Add file:line evidence to all footgun entries',
@@ -50,8 +54,8 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP5', name: 'settings.json invalid JSON', deduction: -5, confidence: 'high',
     na: (ctx) => ctx.agentFacts.agent.settingsFile === null,
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      if (!ctx.agentFacts.settings.exists) return { id: 'AP5', name: 'settings.json invalid JSON', triggered: false, deduction: 0, confidence: 'high', message: 'No settings file' };
-      const triggered = !ctx.agentFacts.settings.valid;
+      if (ctx.agentFacts.settings.exists === false) return { id: 'AP5', name: 'settings.json invalid JSON', triggered: false, deduction: 0, confidence: 'high', message: 'No settings file' };
+      const triggered = ctx.agentFacts.settings.valid === false;
       return { id: 'AP5', name: 'settings.json invalid JSON', triggered, deduction: triggered ? -5 : 0, confidence: 'high', message: triggered ? 'settings.json is invalid JSON' : 'settings.json is valid', evidence: ctx.agentFacts.agent.settingsFile ?? undefined };
     },
     recommendation: 'Fix settings.json — invalid JSON',
@@ -60,13 +64,15 @@ export const antiPatterns: AntiPatternDef[] = [
   {
     id: 'AP6', name: 'Post-turn hook exits non-zero', deduction: -5, confidence: 'medium',
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      if (!ctx.agentFacts.hooks.postTurnExists) return { id: 'AP6', name: 'Post-turn hook exits non-zero', triggered: false, deduction: 0, confidence: 'medium', message: 'No post-turn hook' };
-      const triggered = !ctx.agentFacts.hooks.postTurnExitsZero;
+      if (ctx.agentFacts.hooks.postTurnExists === false) return { id: 'AP6', name: 'Post-turn hook exits non-zero', triggered: false, deduction: 0, confidence: 'medium', message: 'No post-turn hook' };
+      const triggered = ctx.agentFacts.hooks.postTurnExitsZero === false;
       return { id: 'AP6', name: 'Post-turn hook exits non-zero', triggered, deduction: triggered ? -5 : 0, confidence: 'medium', message: triggered ? 'Post-turn hook may not exit 0 (causes infinite loops)' : 'Post-turn hook exits 0' };
     },
     recommendation: 'Ensure stop-lint hook ends with exit 0',
     recommendationKey: 'ap-fix-hook-exit',
   },
+
+  // === AP7-AP9: Local Files and Gitignore Anti-Patterns ===
   {
     id: 'AP7', name: 'Local instruction file over 20 lines', deduction: -2, confidence: 'high',
     // TODO: v2 — implement when per-file line counts are available in SharedFacts.localInstructions
@@ -82,7 +88,8 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP8', name: 'Generic Ask First boundaries', deduction: -2, confidence: 'medium',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const section = findSection(ctx, 'ask first');
-      if (!section) return { id: 'AP8', name: 'Generic Ask First boundaries', triggered: false, deduction: 0, confidence: 'medium', message: 'No Ask First section' };
+      if (section === null) return { id: 'AP8', name: 'Generic Ask First boundaries', triggered: false, deduction: 0, confidence: 'medium', message: 'No Ask First section' };
+      // Known template text that indicates the boundaries were not customized
       const genericMarkers = ['auth, routing, deployment, API, DB', 'Public API, dependencies, config', 'Shared sourced files, CONFIGURATION'];
       const triggered = genericMarkers.some(m => section.includes(m));
       return { id: 'AP8', name: 'Generic Ask First boundaries', triggered, deduction: triggered ? -2 : 0, confidence: 'medium', message: triggered ? 'Ask First matches template text' : 'Ask First appears project-specific' };
@@ -94,10 +101,10 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP9', name: 'settings.local.json committed', deduction: -2, confidence: 'high',
     na: (ctx) => ctx.agentFacts.agent.settingsFile === null,
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      if (!ctx.facts.shared.gitignore.exists) {
+      if (ctx.facts.shared.gitignore.exists === false) {
         return { id: 'AP9', name: 'settings.local.json committed', triggered: true, deduction: -2, confidence: 'high', message: 'No .gitignore — settings.local.json is not protected' };
       }
-      const triggered = !ctx.facts.shared.gitignore.hasRequiredEntries;
+      const triggered = ctx.facts.shared.gitignore.hasRequiredEntries === false;
       return { id: 'AP9', name: 'settings.local.json committed', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? 'settings.local.json not in .gitignore' : 'settings.local.json is gitignored' };
     },
     recommendation: 'Add settings.local.json to .gitignore',
@@ -105,7 +112,12 @@ export const antiPatterns: AntiPatternDef[] = [
   },
 ];
 
+/**
+ * Search the instruction file sections for a heading containing the given name.
+ * Returns the section body text, or null if no matching heading is found.
+ */
 function findSection(ctx: FactContext, name: string): string | null {
+  // Iterate over all parsed section headings in the instruction file
   for (const [heading, content] of ctx.agentFacts.instruction.sections) {
     if (heading.includes(name.toLowerCase())) return content;
   }

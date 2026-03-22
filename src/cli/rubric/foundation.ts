@@ -2,7 +2,8 @@ import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
 /**
  * Tier 1 — Foundation (47 points)
- * Instruction file, execution loop, autonomy tiers, DoD, enforcement
+ * Instruction file, execution loop, autonomy tiers, DoD, enforcement.
+ * These are baseline requirements every GOAT Flow project must satisfy.
  */
 export const foundationChecks: CheckDef[] = [
   // === 1.1 Instruction File (9 pts) ===
@@ -42,7 +43,7 @@ export const foundationChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const content = ctx.agentFacts.instruction.content;
-        if (!content) {
+        if (content === null) {
           return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
         }
         const matches = content.match(/\bBAD\b|\bGOOD\b|\bDON'T\b|\bexample:/gi) ?? [];
@@ -78,7 +79,7 @@ export const foundationChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const content = ctx.agentFacts.instruction.content;
-        if (!content) {
+        if (content === null) {
           return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
         }
         const hasBudgetTable = /Hotfix.*\d|Standard.*\d|read.*budget|turn.*budget/i.test(content);
@@ -142,19 +143,20 @@ export const foundationChecks: CheckDef[] = [
       fn: (ctx: FactContext): CheckResult => {
         // Search section headings first, then fall back to body content
         let section = findSection(ctx, 'ask first');
-        if (!section) {
+        if (section === null) {
           // Try finding "Ask First" as bold text in the full content
           const content = ctx.agentFacts.instruction.content;
-          if (content) {
+          if (content !== null) {
             const match = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
             if (match) section = match[0];
           }
         }
-        if (!section) {
+        if (section === null) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: 'No Ask First section found' };
         }
         const lines = section.split('\n').filter(l => l.trim()).length;
-        const hasProjectPaths = /`[^`]*[./][^`]*`/.test(section); // Contains backtick-wrapped paths
+        // Check whether the section contains backtick-wrapped file paths
+        const hasProjectPaths = /`[^`]*[./][^`]*`/.test(section);
         if (lines > 5 && hasProjectPaths) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Ask First has ${lines} lines with project-specific content`, evidence: 'Ask First section' };
         }
@@ -245,7 +247,9 @@ export const foundationChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const deny = ctx.agentFacts.agent.denyMechanism;
+        // Whether any deny mechanism was found for this agent
         let exists = false;
+        // Path(s) where the deny mechanism was detected
         let evidence = '';
 
         if (deny.type === 'settings-deny') {
@@ -306,6 +310,7 @@ export const foundationChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Whether a deny-dangerous script exists in the hooks directory
         const exists = ctx.agentFacts.hooks.denyExists;
         return {
           id: '1.5.4', name: 'Deny hook/script exists', tier: 'foundation', category: 'Enforcement',
@@ -319,7 +324,12 @@ export const foundationChecks: CheckDef[] = [
   },
 ];
 
+/**
+ * Search the instruction file sections for a heading containing the given name.
+ * Returns the section body text, or null if no matching heading is found.
+ */
 function findSection(ctx: FactContext, name: string): string | null {
+  // Iterate over all parsed section headings in the instruction file
   for (const [heading, content] of ctx.agentFacts.instruction.sections) {
     if (heading.includes(name.toLowerCase())) return content;
   }

@@ -9,8 +9,10 @@ Agents: read this file to identify the backend stack, then load the matching fil
 | go.mod | go.md |
 | pyproject.toml/requirements.txt + "django" | python-django.md |
 | pyproject.toml/requirements.txt + "fastapi" | python-fastapi.md |
+| pyproject.toml/requirements.txt (no django/fastapi/flask) | python.md |
 | composer.json + "laravel/framework" | php-laravel.md |
 | composer.json + "symfony/framework-bundle" | php-symfony.md |
+| composer.json (no laravel/symfony) | php.md |
 | Cargo.toml | rust.md |
 | build.gradle/pom.xml + "spring-boot" | java-spring.md |
 | Gemfile + "rails" | ruby-rails.md |

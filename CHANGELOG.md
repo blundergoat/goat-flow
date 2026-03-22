@@ -2,6 +2,103 @@
 
 ---
 
+## v0.6.0 - 2026-03-23
+
+Expanded to 10 skills, 47 coding standards templates, eval runner, TypeScript quality hardening, and multi-agent infrastructure (Codex, Copilot).
+
+### Skills (10 total)
+- Added goat-onboard (codebase mapping + ai/instructions/ generation), goat-reflect (session friction → instruction file edits), goat-resume (session state reconstruction)
+- All 10 skills deployed to .claude/skills/, .agents/skills/, .github/skills/
+- Skill quality checks 2.1.12–2.1.19: Step 0 context gathering, human gates, MUST/MUST NOT constraints, phased process, conversational interaction, chaining, structured choices, output format
+
+### Scanner & Rubric
+- Rebalanced weights: grep-after-rename 1→2 pts, git push 1→2 pts, git commit 2→1 pt
+- Demoted existence-only checks: architecture.md 2→1 pt, evals directory 2→1 pt
+- Removed dead checks: permission profiles (3.3.1–3), guidelines ownership (3.4.1–4), domain-reference (2.5.3)
+- Added deny hook security audit: blocking logic, jq JSON parsing, command chaining bypass, rm -rf, force push, chmod 777, read-deny sensitive paths
+- Added instruction file quality: concrete examples (1.1.5), CLASSIFY budgets (1.2.2a)
+- Added CI PR trigger (3.2.5), eval skill coverage (3.1.6)
+- Implemented confidence-weighted scoring (medium/low checks contribute 50%)
+
+### Coding Standards Library (49 templates)
+- `workflow/coding-standards/` with backend (13 stacks), frontend (14 frameworks), security (12 topics), plus conventions, code-review, testing, git-commit
+- Backend: Go, Rust, TypeScript/Node, Python (Django, FastAPI, vanilla), PHP (Laravel, Symfony, vanilla), Java Spring, Ruby Rails, C# .NET, Bash
+- Frontend: React, Vue, Angular, Svelte, React Native, SwiftUI, Kotlin/Compose, Flutter, Blade, Twig, Jinja, ERB, Blazor
+- Security: web-common, SQL injection, API auth, secrets, file upload, infrastructure, supply chain + 6 framework-specific
+
+### Eval System
+- New `src/cli/eval/` module: YAML frontmatter parser, eval loader, skill/agent/difficulty summarizer
+- `goat-flow eval` command with text and JSON output
+- agent-evals/FORMAT.md specification
+
+### TypeScript Quality Hardening
+- Added eslint.config.mjs: strictTypeChecked, complexity (max 15), no-floating-promises, consistent-type-imports
+- Tightened tsconfig.json: noUncheckedIndexedAccess, noUnusedLocals, noUnusedParameters, noImplicitOverride, verbatimModuleSyntax, target ES2023
+- Added JSDoc comments to all 35 src/cli/ files
+- Replaced `!x` with `x === false` (project preference), `== null` for null checks
+- Added eslint, typescript-eslint, knip as devDependencies
+- M2.10 plan: dead code cleanup, ESLint warnings, anti-pattern implementation, complexity reduction, version management, self-documenting names
+
+### Multi-Agent Infrastructure
+- Added .codex/ directory: config.toml, hooks (after-tool-use, session-start), deny-dangerous.star
+- Added .github/actions/goat-flow-scan/ composite action + workflow
+- Added .github/PULL_REQUEST_TEMPLATE.md
+- Improved deny hooks across all agents: jq-based JSON parsing, command chaining detection, expanded block patterns
+- Added CODEOWNERS, CONTRIBUTING.md, SECURITY.md
+
+### Cold Path
+- Replaced ai/instructions/base.md with conventions.md (project-specific)
+- Added ai/instructions/frontend.md
+- Consolidated workflow/local-context/ into workflow/coding-standards/
+- Updated ai/instructions/code-review.md
+
+### Docs
+- Added ADR-005 spec artifacts, docs/examples/ (typescript-cli, multi-agent-setup)
+- Added M2.9 competitive additions roadmap, M2.10 CLI improvements plan
+- Updated system-spec, five-layers, skills reference, getting-started
+
+---
+
+## v0.5.0 - 2026-03-22
+
+Skill system upgrade. Replaced goat-preflight with goat-security. All 7 skills rewritten with failure-mode prevention, conversational structure, and cross-cutting patterns. Scanner expanded to 84 checks. All 3 agents score A 100%.
+
+### Skills
+- Replaced goat-preflight with goat-security (ADR-004): 4-phase threat-model-driven, OWASP-aware, framework-specific verification
+- All 7 skills rewritten with: conversational choices (a/b/c/d) at every phase, "Chains with" footer, learning loop integration, severity scale
+- goat-debug: recurrence detection, calibrated confidence, hypothesis tracking, time budget, Phase 4 post-fix verification
+- goat-audit: Pass 0 scope declaration, negative verification, scope creep detector, pattern rollup
+- goat-plan: risk-prioritized questions, kill criteria, milestone dependency mapping, SBAO fallback with worked example
+- goat-test: Track 0 "What Changed", Track 2 adapts to Track 1, MUST/SHOULD/MAY verdict, coverage gaps, closing gate
+- goat-review: conditional spec compliance phase, diff-aware mode, pattern drift detection, external review triage, DoD gate check
+- goat-investigate: progressive depth with read budget, summary-first output, "What I didn't read", evidence quality tags
+- `## When to Use` + YAML `name:` frontmatter added to all .claude/skills/ and .agents/skills/
+
+### Scanner (84 checks)
+- New checks 2.1.14 (skill chaining ≥80%) and 2.1.15 (structured choices ≥80%)
+- `SKILL_QUALITY_THRESHOLD = 0.8` constant for all 7 quality checks
+- Human gates threshold raised 0.5 → 0.8, conversational 0.3 → 0.8
+- Fixed compaction hook detection for nested Claude Code settings format
+- Fixed non-null assertions in evaluators.ts
+- Compaction hooks registered in .claude/settings.json and .gemini/settings.json
+
+### Infrastructure
+- `scripts/stop-lint.sh` for Codex post-turn verification
+- `scripts/preflight-checks.sh` rewritten with colour-coded output, section grouping, check counts
+- `.github/instructions/git-commit.instructions.md` Copilot bridge file
+- Severity scale added to CLAUDE.md, AGENTS.md, GEMINI.md
+- `.copilotignore` and `.cursorignore` aligned with `.geminiignore`
+- CLAUDE.md compressed to 119 lines
+- VERIFY step: "tick checkboxes as completed, not at the end"
+
+### Fixes
+- Copilot PR review: Array.isArray guard, fillTemplate comment, fragment counts, lint command fragment, preflight set-e/fail aggregation
+- `docs/architecture.md` stale "no runtime code" fixed
+- Monorepo depth documented, compaction hook field corrected
+
+
+---
+
 ## v0.4.0 - 2026-03-22
 
 CLI scanner + prompt generator, local context system, 80-check rubric, multi-agent audit fixes across 6 projects. All projects score A (93-98%).

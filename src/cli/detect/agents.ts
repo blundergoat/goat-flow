@@ -1,5 +1,6 @@
 import type { AgentProfile, AgentId, ReadonlyFS } from '../types.js';
 
+/** Configuration profiles for all supported AI coding agents */
 const PROFILES: Record<AgentId, AgentProfile> = {
   claude: {
     id: 'claude',
@@ -36,14 +37,19 @@ const PROFILES: Record<AgentId, AgentProfile> = {
   },
 };
 
+/** Return the agent profile for a given agent ID */
 export function getProfile(id: AgentId): AgentProfile {
   return PROFILES[id];
 }
 
+/** Detect which AI coding agents are configured in the project */
 export function detectAgents(fs: ReadonlyFS): AgentProfile[] {
+  /** Accumulator for agents whose instruction files exist in the project */
   const agents: AgentProfile[] = [];
 
+  // Iterate over each known agent ID to check for its instruction file
   for (const id of ['claude', 'codex', 'gemini'] as const) {
+    /** Profile configuration for the current agent */
     const profile = PROFILES[id];
     if (fs.exists(profile.instructionFile)) {
       agents.push(profile);

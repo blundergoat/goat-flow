@@ -8,8 +8,9 @@ export interface ExtractOptions {
   agentFilter: string | null;
 }
 
+/** Orchestrate full fact extraction: detect agents, detect stack, gather shared and per-agent facts. */
 export function extractFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFacts {
-  // Detect agents
+  /** All detected agent profiles in the project */
   let agents = detectAgents(fs);
 
   // Filter to specific agent if requested
@@ -17,25 +18,30 @@ export function extractFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFa
     agents = agents.filter(a => a.id === options.agentFilter);
   }
 
-  // Detect stack
+  /** Detected technology stack (language, framework, etc.) */
   const stack = detectStack(fs);
 
-  // Extract shared facts (docs, evals, CI, etc.)
+  /** Shared facts covering docs, evals, CI, and other project-wide resources */
   const shared = extractSharedFacts(fs);
 
-  // Extract per-agent facts
+  /** Per-agent facts including instruction, settings, skills, and hooks */
   const agentFacts = agents.map(agent => {
+    /** Extracted facts for this specific agent */
     const facts = extractAgentFacts(fs, agent);
 
     // Cross-reference: populate warranted local context from footgun dir mentions
+    /** Directories warranting local context files */
     const warranted: string[] = [];
+    /** Warranted directories that lack a local context file */
     const missing: string[] = [];
+    // Iterate over footgun directory mentions to identify warranted local context
     for (const [dir, count] of shared.footguns.dirMentions) {
       if (count >= 2) {
         warranted.push(dir);
         // Check if a local instruction file exists for this dir
+        /** Whether a local instruction file already exists for this directory */
         const hasLocal = facts.localContext.files.some(f => f.startsWith(dir));
-        if (!hasLocal) {
+        if (hasLocal === false) {
           missing.push(dir);
         }
       }

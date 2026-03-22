@@ -23,7 +23,7 @@ All must pass before approving:
 - **Hypothetical examples in docs**: CLAUDE.md says "MUST use real incidents, never hypothetical"
 - **Duplicated content**: same instructions in both CLAUDE.md and a doc file (causes drift)
 - **Generic Ask First boundaries**: template text like "auth, routing, deployment, API, DB" instead of actual project paths
-- **Removed patterns**: ProjectShape, detectShape, --shape, confusion-log (ADR enforced by preflight)
+- **Removed patterns**: references to removed ADR concepts (see `scripts/preflight-checks.sh` for the enforced list)
 - **Hardcoded versions**: version strings should import from `src/cli/rubric/version.ts`
 - **console.log outside cli.ts/render/**: preflight warns on this; flag it in review
 - **Explicit `any` types**: use `unknown` and narrow instead

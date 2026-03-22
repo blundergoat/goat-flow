@@ -15,6 +15,7 @@ export function evaluate(
   confidence: Confidence,
   ctx: FactContext,
 ): CheckResult {
+  /** Common fields shared by all check results */
   const base = { id, name, tier, category, confidence };
 
   switch (detect.type) {
@@ -49,6 +50,7 @@ interface CheckBase {
   confidence: Confidence;
 }
 
+/** Resolve template placeholders in a path using agent facts. */
 function resolvePath(path: string, ctx: FactContext): string {
   return path
     .replace('{instruction_file}', ctx.agentFacts.agent.instructionFile)
@@ -58,14 +60,18 @@ function resolvePath(path: string, ctx: FactContext): string {
     .replace('{deny_path}', getDenyPath(ctx));
 }
 
+/** Return the filesystem path for the agent's deny mechanism. */
 function getDenyPath(ctx: FactContext): string {
+  /** Deny mechanism configuration for the current agent */
   const deny = ctx.agentFacts.agent.denyMechanism;
   if (deny.type === 'settings-deny') return deny.path;
   if (deny.type === 'deny-script') return deny.path;
   return deny.settingsPath;
 }
 
+/** Retrieve file content from facts if the path matches the instruction file. */
 function getFileContent(path: string, ctx: FactContext): string | null {
+  /** Resolved path with all template placeholders expanded */
   const resolved = resolvePath(path, ctx);
   if (resolved === ctx.agentFacts.agent.instructionFile) {
     return ctx.agentFacts.instruction.content;
@@ -74,12 +80,14 @@ function getFileContent(path: string, ctx: FactContext): string | null {
   return null;
 }
 
+/** Retrieve content for a specific section within a file, or the whole file if no section given. */
 function getSectionContent(path: string, section: string | undefined, ctx: FactContext): string | null {
-  if (!section) return getFileContent(path, ctx);
+  if (section == null) return getFileContent(path, ctx);
 
+  /** Resolved path with all template placeholders expanded */
   const resolved = resolvePath(path, ctx);
   if (resolved === ctx.agentFacts.agent.instructionFile) {
-    // Look up in parsed sections
+    // Iterate over parsed heading-content pairs to find the matching section
     for (const [heading, content] of ctx.agentFacts.instruction.sections) {
       if (heading.includes(section.toLowerCase())) {
         return content;
@@ -93,9 +101,11 @@ function getSectionContent(path: string, section: string | undefined, ctx: FactC
 
 // === Evaluators ===
 
+/** Check whether a specific file exists in the project. */
 function evalFileExists(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'file_exists' }>, ctx: FactContext): CheckResult {
+  /** Resolved target file path */
   const path = resolvePath(detect.path, ctx);
-  // Check in agent facts first
+  /** Whether the file was found in agent or shared facts */
   let exists = false;
 
   if (path === ctx.agentFacts.agent.instructionFile) {
@@ -117,8 +127,11 @@ function evalFileExists(base: CheckBase, pts: number, detect: Extract<Detection,
   };
 }
 
+/** Check whether a specific directory exists in the project. */
 function evalDirExists(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'dir_exists' }>, ctx: FactContext): CheckResult {
+  /** Resolved target directory path */
   const path = resolvePath(detect.path, ctx);
+  /** Whether the directory was found in agent or shared facts */
   let exists = false;
 
   if (path === ctx.agentFacts.agent.skillsDir) {
@@ -139,23 +152,28 @@ function evalDirExists(base: CheckBase, pts: number, detect: Extract<Detection, 
   };
 }
 
+/** Evaluate a file's line count against pass/fail thresholds. */
 function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'line_count' }>, ctx: FactContext): CheckResult {
+  /** Resolved target file path */
   const path = resolvePath(detect.path, ctx);
+  /** Number of lines in the target file */
   let lineCount = 0;
 
   if (path === ctx.agentFacts.agent.instructionFile) {
     lineCount = ctx.agentFacts.instruction.lineCount;
-    if (!ctx.agentFacts.instruction.exists) {
+    if (ctx.agentFacts.instruction.exists === false) {
       return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${path} not found` };
     }
   } else if (path === 'docs/architecture.md') {
     lineCount = ctx.facts.shared.architecture.lineCount;
-    if (!ctx.facts.shared.architecture.exists) {
+    if (ctx.facts.shared.architecture.exists === false) {
       return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${path} not found` };
     }
   }
 
+  /** Line count at or below which the check passes */
   const passThreshold = detect.pass ?? 0;
+  /** Line count at or above which the check fails */
   const failThreshold = detect.fail ?? Infinity;
 
   if (lineCount < passThreshold) {
@@ -167,13 +185,17 @@ function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefi
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${lineCount} lines (over ${failThreshold} limit)`, evidence: `${path}: ${lineCount} lines` };
 }
 
+/** Check whether a regex pattern matches within file or section content. */
 function evalGrep(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'grep' }>, ctx: FactContext): CheckResult {
+  /** Content from the target file or section */
   const content = getSectionContent(detect.path, detect.section, ctx);
-  if (!content) {
+  if (content == null) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
+  /** Case-insensitive multiline regex from the detection pattern */
   const regex = new RegExp(detect.pattern, 'im');
+  /** Whether the pattern was found in the content */
   const match = regex.test(content);
 
   return {
@@ -188,15 +210,21 @@ function evalGrep(base: CheckBase, pts: number, detect: Extract<Detection, { typ
   };
 }
 
+/** Count regex matches and compare against a minimum threshold. */
 function evalGrepCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'grep_count' }>, ctx: FactContext): CheckResult {
+  /** Content from the target file or section */
   const content = getSectionContent(detect.path, detect.section, ctx);
-  if (!content) {
+  if (content == null) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
+  /** Global case-insensitive regex from the detection pattern */
   const regex = new RegExp(detect.pattern, 'gim');
+  /** All regex matches found in the content */
   const matches = content.match(regex);
+  /** Total number of matches found */
   const count = matches?.length ?? 0;
+  /** Minimum number of matches required to pass */
   const min = detect.min;
 
   if (count >= min) {
@@ -208,11 +236,13 @@ function evalGrepCount(base: CheckBase, pts: number, partialPts: number | undefi
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Found ${count} matches (need ${min}+)` };
 }
 
+/** Validate that a JSON file exists and parses successfully. */
 function evalJsonValid(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'json_valid' }>, ctx: FactContext): CheckResult {
+  /** Resolved target file path */
   const path = resolvePath(detect.path, ctx);
 
   if (path === ctx.agentFacts.agent.settingsFile) {
-    if (!ctx.agentFacts.settings.exists) {
+    if (ctx.agentFacts.settings.exists === false) {
       return { ...base, status: 'na', points: 0, maxPoints: 0, message: 'No settings file for this agent' };
     }
     return {
@@ -228,13 +258,19 @@ function evalJsonValid(base: CheckBase, pts: number, detect: Extract<Detection, 
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `JSON check not implemented for ${path}` };
 }
 
+/** Check whether a JSON file contains a specific field, optionally matching a pattern. */
 function evalJsonContains(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'json_contains' }>, ctx: FactContext): CheckResult {
+  /** Resolved target file path */
   const path = resolvePath(detect.path, ctx);
 
   if (path === ctx.agentFacts.agent.settingsFile && ctx.agentFacts.settings.parsed) {
+    /** Parsed JSON object from the settings file */
     const obj = ctx.agentFacts.settings.parsed as Record<string, unknown>;
+    /** Dot-separated field segments to traverse */
     const fields = detect.field.split('.');
+    /** Current value being traversed through nested fields */
     let current: unknown = obj;
+    // Iterate over field segments to drill into the nested JSON structure
     for (const field of fields) {
       if (current && typeof current === 'object' && field in (current as Record<string, unknown>)) {
         current = (current as Record<string, unknown>)[field];
@@ -249,8 +285,11 @@ function evalJsonContains(base: CheckBase, pts: number, detect: Extract<Detectio
     }
 
     if (detect.pattern) {
+      /** Case-insensitive regex from the detection pattern */
       const regex = new RegExp(detect.pattern, 'i');
-      const value = Array.isArray(current) ? current.join(' ') : String(current);
+      /** Stringified value for regex matching — arrays are joined, objects are serialized */
+      const value = Array.isArray(current) ? current.join(' ') : (typeof current === 'string' ? current : JSON.stringify(current));
+      /** Whether the pattern was found in the stringified value */
       const match = regex.test(value);
       return {
         ...base,
@@ -268,15 +307,21 @@ function evalJsonContains(base: CheckBase, pts: number, detect: Extract<Detectio
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Cannot check ${path}` };
 }
 
+/** Count distinct items matching a pattern and compare against a pass threshold. */
 function evalCountItems(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'count_items' }>, ctx: FactContext): CheckResult {
+  /** Content from the target file or section */
   const content = getSectionContent(detect.path, detect.section, ctx);
-  if (!content) {
+  if (content == null) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Content not available' };
   }
 
+  /** Global case-insensitive regex from the detection pattern */
   const regex = new RegExp(detect.pattern, 'gim');
+  /** All items matching the pattern */
   const matches = content.match(regex);
+  /** Total number of matching items found */
   const count = matches?.length ?? 0;
+  /** Minimum item count required to pass */
   const pass = detect.pass;
 
   if (count >= pass) {
@@ -288,16 +333,20 @@ function evalCountItems(base: CheckBase, pts: number, partialPts: number | undef
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Found ${count} items (need ${pass}+)` };
 }
 
+/** Run multiple sub-checks and aggregate results using 'all' or 'any' mode. */
 function evalComposite(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'composite' }>, confidence: Confidence, ctx: FactContext): CheckResult {
   if (detect.checks.length === 0) {
     return { ...base, status: 'fail', points: 0, maxPoints: pts, message: 'Composite check has no sub-checks' };
   }
 
+  /** Results from evaluating each sub-check independently */
   const results = detect.checks.map(sub =>
     evaluate(base.id, base.name, base.tier, base.category, 1, undefined, sub, confidence, ctx)
   );
 
+  /** Number of sub-checks that passed */
   const passed = results.filter(r => r.status === 'pass').length;
+  /** Total number of sub-checks */
   const total = results.length;
 
   if (detect.mode === 'all') {
@@ -319,8 +368,11 @@ function evalComposite(base: CheckBase, pts: number, partialPts: number | undefi
 
 // === Helpers ===
 
+/** Look up whether a path exists in shared project facts. */
 function checkSharedPath(path: string, ctx: FactContext): boolean {
+  /** Shared facts covering docs, evals, CI, and other project-wide resources */
   const shared = ctx.facts.shared;
+  /** Map of known paths to their existence status from shared facts */
   const pathMap: Record<string, boolean> = {
     'docs/footguns.md': shared.footguns.exists,
     'docs/lessons.md': shared.lessons.exists,
@@ -343,11 +395,13 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.github/git-commit-instructions.md': shared.gitCommitInstructions.exists,
   };
 
-  if (path in pathMap) return pathMap[path];
+  if (path in pathMap) return pathMap[path]!;
 
   // Check skill paths
   if (path.startsWith(ctx.agentFacts.agent.skillsDir)) {
-    const skillName = path.split('/').slice(-2, -1)[0]; // e.g. "goat-security"
+    /** Skill directory name extracted from the path (e.g. "goat-security") */
+    const skillName = path.split('/').slice(-2, -1)[0];
+    if (skillName === undefined) return false;
     return ctx.agentFacts.skills.found.includes(skillName);
   }
 

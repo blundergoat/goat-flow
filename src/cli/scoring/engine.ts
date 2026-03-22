@@ -4,6 +4,7 @@ import type {
 } from '../types.js';
 import { evaluate } from '../evaluate/evaluators.js';
 
+/** Percentage thresholds mapped to letter grades, checked top-down */
 const GRADE_THRESHOLDS: [number, Grade][] = [
   [90, 'A'],
   [75, 'B'],
@@ -12,9 +13,12 @@ const GRADE_THRESHOLDS: [number, Grade][] = [
   [0, 'F'],
 ];
 
+/** Floor for total anti-pattern deductions to prevent runaway penalties */
 const MAX_DEDUCTION = -15;
-const INFLATION_THRESHOLD = 0.10; // <10% applicable = insufficient data
+/** Minimum ratio of applicable checks before grading; below this yields insufficient-data */
+const INFLATION_THRESHOLD = 0.10;
 
+/** Execute all check definitions against the fact context and return results */
 export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
   return checks.map(check => {
     // Check N/A condition
@@ -34,6 +38,7 @@ export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
     }
 
     try {
+      /** Evaluation result from running the check's detect function */
       const result = evaluate(
         check.id, check.name, check.tier, check.category,
         check.pts, check.partialPts, check.detect, check.confidence, ctx,
@@ -57,6 +62,7 @@ export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
   });
 }
 
+/** Execute all anti-pattern definitions against the fact context and return results */
 export function runAntiPatterns(patterns: AntiPatternDef[], ctx: FactContext): AntiPatternResult[] {
   return patterns.map(ap => {
     if (ap.na && ap.na(ctx)) {
@@ -84,33 +90,41 @@ export function runAntiPatterns(patterns: AntiPatternDef[], ctx: FactContext): A
   });
 }
 
+/** Compute the overall score summary from check results and anti-pattern results */
 export function computeScore(
   checkResults: CheckResult[],
   antiPatternResults: AntiPatternResult[],
   totalCheckCount: number,
 ): ScoreSummary {
-  // Per-tier scoring
+  /** Foundation tier score */
   const foundation = scoreTier(checkResults, 'foundation');
+  /** Standard tier score */
   const standard = scoreTier(checkResults, 'standard');
+  /** Full tier score */
   const full = scoreTier(checkResults, 'full');
 
-  // Overall
+  /** Total earned points across all tiers */
   const earned = foundation.earned + standard.earned + full.earned;
+  /** Total available points across all tiers */
   const available = foundation.available + standard.available + full.available;
 
-  // Anti-pattern deductions
+  /** Sum of deductions from all triggered anti-patterns before clamping */
   const rawDeductions = antiPatternResults
     .filter(ap => ap.triggered)
     .reduce((sum, ap) => sum + ap.deduction, 0);
+  /** Clamped deductions, floored at MAX_DEDUCTION */
   const deductions = Math.max(rawDeductions, MAX_DEDUCTION);
 
-  // Final score
+  /** Final raw score after applying deductions, floored at zero */
   const raw = Math.max(0, earned + deductions);
+  /** Percentage score rounded to the nearest integer */
   const percentage = available > 0 ? Math.round((raw / available) * 100) : 0;
 
-  // N/A inflation guard
+  /** Number of checks that are not N/A */
   const applicableChecks = checkResults.filter(c => c.status !== 'na').length;
+  /** Ratio of applicable checks to total, used for inflation guard */
   const applicableRatio = totalCheckCount > 0 ? applicableChecks / totalCheckCount : 0;
+  /** Letter grade, or insufficient-data if too few checks are applicable */
   const grade = applicableRatio < INFLATION_THRESHOLD
     ? 'insufficient-data' as Grade
     : computeGrade(percentage);
@@ -125,26 +139,35 @@ export function computeScore(
   };
 }
 
+/** Calculate earned and available points for a single scoring tier */
 function scoreTier(results: CheckResult[], tier: string): TierScore {
+  /** Check results that belong to this tier */
   const tierResults = results.filter(r => r.tier === tier);
 
-  // Sum raw weighted values, round once at the end (not per-check)
-  // This ensures 1pt medium checks actually contribute 0.5, not 1.0
+  // Sum raw weighted values, round once at the end (not per-check).
+  // This ensures 1pt medium checks actually contribute 0.5, not 1.0.
   let rawEarned = 0;
   let rawAvailable = 0;
+  // Iterate over each tier result to accumulate weighted points
   for (const r of tierResults) {
+    /** Confidence-based weight: medium/low checks count at half value */
     const weight = r.confidence === 'medium' || r.confidence === 'low' ? 0.5 : 1.0;
     rawEarned += r.points * weight;
     rawAvailable += r.maxPoints * weight;
   }
+  /** Earned points for this tier, rounded from weighted sum */
   const earned = Math.round(rawEarned);
+  /** Available points for this tier, rounded from weighted sum */
   const available = Math.round(rawAvailable);
 
+  /** Percentage score for this tier */
   const percentage = available > 0 ? Math.round((earned / available) * 100) : 0;
   return { tier: tier as TierScore['tier'], earned, available, percentage };
 }
 
+/** Map a percentage to a letter grade using the threshold table */
 function computeGrade(percentage: number): Grade {
+  // Iterate over each threshold to find the first one the percentage meets
   for (const [threshold, grade] of GRADE_THRESHOLDS) {
     if (percentage >= threshold) return grade;
   }

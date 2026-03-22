@@ -91,7 +91,7 @@ goat-flow --min-score 75                 # CI gate
 - Don't put types outside the three type files (types.ts, prompt/types.ts, eval/types.ts)
 - Don't hardcode version strings (import from version.ts)
 - Don't use hypothetical examples in docs -- real incidents only
-- Don't reference removed patterns: ProjectShape, detectShape, --shape, confusion-log (ADR enforced)
+- Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)
 
 ## Generated / Ignored
 

@@ -1,16 +1,17 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
-// All skills must be interactive — no exceptions, strict scoring
+// Minimum ratio of skills passing a quality signal to award the point (80%)
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
 /**
  * Tier 2 — Standard (54 points)
- * Skills, hooks, learning loop, router, architecture, local context
+ * Skills, hooks, learning loop, router, architecture, local context.
+ * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
   // === 2.1 Skills (19 pts: 10 existence + 1 completeness + 8 quality) ===
   ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map((skill, i) => ({
-    id: `2.1.${i + 1}` as string,
+    id: `2.1.${i + 1}`,
     name: `goat-${skill} skill`,
     tier: 'standard' as const,
     category: 'Skills',
@@ -231,7 +232,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.postTurnExists) {
+        if (ctx.agentFacts.hooks.postTurnExists === false) {
           return { id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No post-turn hook to check' };
         }
         return {
@@ -251,9 +252,11 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Whether a post-tool hook (format-file) exists
         const exists = ctx.agentFacts.hooks.postToolExists;
         // Also pass if no formatter configured (documented skip)
         const noFormatter = ctx.facts.stack.formatCommand === null;
+        // Pass when either the hook exists or no formatter is needed
         const pass = exists || noFormatter;
         return {
           id: '2.2.4', name: 'Post-tool hook or documented skip', tier: 'standard', category: 'Hooks',
@@ -271,7 +274,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.4a', name: 'Deny hook has blocking logic', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
         }
         return {
@@ -291,7 +294,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.postTurnExists) {
+        if (ctx.agentFacts.hooks.postTurnExists === false) {
           return { id: '2.2.4b', name: 'Post-turn hook has validation logic', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No post-turn hook' };
         }
         return {
@@ -329,7 +332,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
         }
         return {
@@ -349,7 +352,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
         }
         return {
@@ -369,7 +372,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5c', name: 'Deny hook blocks rm -rf', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
         }
         return {
@@ -393,7 +396,7 @@ export const standardChecks: CheckDef[] = [
         if (ctx.agentFacts.agent.id === 'codex') {
           return { id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Codex has no Read-deny mechanism (execpolicy covers shell commands only)' };
         }
-        if (!ctx.agentFacts.settings.exists) {
+        if (ctx.agentFacts.settings.exists === false) {
           return { id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No settings file' };
         }
         return {
@@ -413,7 +416,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5e', name: 'Deny hook blocks force push', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
         }
         return {
@@ -433,7 +436,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5f', name: 'Deny hook blocks chmod 777', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
         }
         return {
@@ -562,7 +565,7 @@ export const standardChecks: CheckDef[] = [
   {
     id: '2.5.2', name: 'architecture.md under 100 lines', tier: 'standard', category: 'Architecture',
     pts: 1, confidence: 'high',
-    na: (ctx) => !ctx.facts.shared.architecture.exists,
+    na: (ctx) => ctx.facts.shared.architecture.exists === false,
     detect: { type: 'line_count', path: 'docs/architecture.md', pass: 100, fail: 200 },
     recommendation: 'Compress docs/architecture.md below 100 lines',
     recommendationKey: 'compress-architecture',
@@ -593,7 +596,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasRouter, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.2', name: 'Router exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory — router not applicable' };
         }
         return {
@@ -614,7 +617,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasConventions, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.3', name: 'conventions.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
@@ -634,7 +637,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.facts.shared.localInstructions.hasConventions) {
+        if (ctx.facts.shared.localInstructions.hasConventions === false) {
           return { id: '2.6.3a', name: 'conventions.md has real content', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No conventions.md' };
         }
         return {
@@ -657,7 +660,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasCodeReview, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.4', name: 'code-review.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
@@ -678,7 +681,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasGitCommit, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.5', name: 'git-commit.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
@@ -714,18 +717,22 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasFrontend, hasBackend, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
         }
+        // Lowercase all detected languages for case-insensitive comparison
         const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
+        // Whether the project uses a frontend language requiring frontend.md
         const needsFrontend = langs.some(l => l === 'typescript' || l === 'javascript');
+        // Whether the project uses a backend language requiring backend.md
         const needsBackend = langs.some(l => ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'].includes(l));
-        if (!needsFrontend && !needsBackend) {
+        if (needsFrontend === false && needsBackend === false) {
           return { id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No stack-specific domain files needed' };
         }
+        // Collect names of missing domain instruction files
         const missing: string[] = [];
-        if (needsFrontend && !hasFrontend) missing.push('TypeScript project should have frontend.md');
-        if (needsBackend && !hasBackend) missing.push(`${langs.find(l => ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'].includes(l))} project should have backend.md`);
+        if (needsFrontend && hasFrontend === false) missing.push('TypeScript project should have frontend.md');
+        if (needsBackend && hasBackend === false) missing.push(`${langs.find(l => ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'].includes(l))} project should have backend.md`);
         const pass = missing.length === 0;
         return {
           id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions',
