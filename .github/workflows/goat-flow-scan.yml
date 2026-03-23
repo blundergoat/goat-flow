@@ -3,6 +3,10 @@ on:
   pull_request:
     branches: [main, dev]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   scan:
     runs-on: ubuntu-latest
