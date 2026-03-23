@@ -9,7 +9,7 @@ interface ExtractOptions {
 }
 
 /** Orchestrate full fact extraction: detect agents, detect stack, gather shared and per-agent facts. */
-export function extractFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFacts {
+export function extractProjectFacts(fs: ReadonlyFS, options: ExtractOptions): ProjectFacts {
   /** All detected agent profiles in the project */
   let agents = detectAgents(fs);
 

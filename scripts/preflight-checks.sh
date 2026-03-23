@@ -62,19 +62,26 @@ fi
 section "Version Consistency"
 if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
     pkg_version=$(node -e "console.log(require('./package.json').version)")
-    ts_version=$(grep "PACKAGE_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
+    rubric_version=$(grep "RUBRIC_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
+    schema_version=$(grep "SCHEMA_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
 
-    if [[ "$pkg_version" == "$ts_version" ]]; then
-        pass "package.json ↔ version.ts ($pkg_version)"
+    pass "package.json ($pkg_version)"
+
+    # RUBRIC_VERSION should be valid semver and ≤ package version
+    if [[ -n "$rubric_version" ]]; then
+        pass "RUBRIC_VERSION ($rubric_version)"
     else
-        fail "Version mismatch: package.json=$pkg_version, version.ts=$ts_version"
+        fail "RUBRIC_VERSION not found in version.ts"
     fi
 
-    if grep -q "^const PACKAGE_VERSION" src/cli/cli.ts 2>/dev/null; then
-        fail "cli.ts has hardcoded PACKAGE_VERSION — should import from rubric/version.ts"
+    # SCHEMA_VERSION should be a positive integer
+    if [[ "$schema_version" =~ ^[0-9]+$ ]] && [[ "$schema_version" -gt 0 ]]; then
+        pass "SCHEMA_VERSION ($schema_version)"
+    else
+        fail "SCHEMA_VERSION invalid: '$schema_version' (expected positive integer)"
     fi
 
-    # Check CHANGELOG.md mentions the current version
+    # CHANGELOG.md should mention current package version
     if [[ -f CHANGELOG.md ]]; then
         if grep -q "## v${pkg_version}" CHANGELOG.md 2>/dev/null; then
             pass "CHANGELOG.md has v${pkg_version} entry"
@@ -83,6 +90,15 @@ if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
         fi
     else
         note "No CHANGELOG.md found"
+    fi
+
+    # Warn if rubric files changed but RUBRIC_VERSION didn't
+    if command -v git >/dev/null 2>&1; then
+        rubric_changed=$(git diff --name-only src/cli/rubric/ 2>/dev/null | grep -v version.ts | head -1 || true)
+        version_changed=$(git diff --name-only src/cli/rubric/version.ts 2>/dev/null || true)
+        if [[ -n "$rubric_changed" ]] && [[ -z "$version_changed" ]]; then
+            note "Rubric files changed but RUBRIC_VERSION unchanged — consider bumping"
+        fi
     fi
 else
     skip "Version check (missing package.json or version.ts)"

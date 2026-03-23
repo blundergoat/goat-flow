@@ -1,9 +1,28 @@
 #!/usr/bin/env node
 
 import { parseArgs } from 'node:util';
-import { resolve } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { CLIOptions, Grade, AgentId, ScanReport } from './types.js';
-import { PACKAGE_VERSION } from './rubric/version.js';
+
+/** Find package.json by walking up from the current file's directory */
+function findPackageVersion(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 10; i++) {
+    const candidate = join(dir, 'package.json');
+    if (existsSync(candidate)) {
+      return (JSON.parse(readFileSync(candidate, 'utf-8')) as { version: string }).version;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return '0.0.0';
+}
+
+/** Package version from package.json — single source of truth */
+const PACKAGE_VERSION = findPackageVersion();
 
 /** Structured error with an exit code for CLI process termination */
 class CLIError extends Error {
@@ -143,7 +162,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
 /** Handle the eval command: load, summarize, and output agent eval results */
 async function handleEvalCommand(options: ParsedCLI): Promise<void> {
   const { loadEvals, summarize, formatSummaryText, formatSummaryJson } =
-    await import('./eval/runner.js');
+    await import('./evals/loader.js');
   const { createFS } = await import('./facts/fs.js');
   /** Virtual filesystem scoped to the target project path */
   const fs = createFS(options.projectPath);
@@ -241,14 +260,14 @@ async function main(): Promise<void> {
 
   // Import dynamically to keep --help fast
   const { createFS } = await import('./facts/fs.js');
-  const { scan } = await import('./evaluate/runner.js');
+  const { scanProject } = await import('./scanner/scan.js');
   const { renderJson } = await import('./render/json.js');
   const { renderText } = await import('./render/text.js');
 
   /** Virtual filesystem scoped to the target project path */
   const fs = createFS(options.projectPath);
   /** Full scan report containing per-agent scores and check results */
-  const report = scan(fs, options.projectPath, {
+  const report = scanProject(fs, options.projectPath, {
     agentFilter: options.agent,
   });
 

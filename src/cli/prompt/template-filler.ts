@@ -18,7 +18,7 @@ function getAgentPaths(id: AgentId) {
  * Extract template variables from a scan report + agent report.
  * These replace {{variable}} placeholders in fragment instructions.
  */
-export function extractVariables(report: ScanReport, agentReport: AgentReport): PromptVariables {
+export function extractTemplateVars(report: ScanReport, agentReport: AgentReport): PromptVariables {
   /** Checks that failed or partially passed */
   const failed = agentReport.checks.filter(c => c.status === 'fail' || c.status === 'partial');
   /** Checks that fully passed */

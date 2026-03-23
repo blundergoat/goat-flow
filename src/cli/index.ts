@@ -28,8 +28,8 @@ export type {
   CLIOptions,
 } from './types.js';
 
-export { scan } from './evaluate/runner.js';
-export type { ScanOptions } from './evaluate/runner.js';
+export { scanProject } from './scanner/scan.js';
+export type { ScanOptions } from './scanner/scan.js';
 
 export { createFS } from './facts/fs.js';
 
@@ -41,4 +41,4 @@ export {
 
 export { getFragmentsByPhase } from './prompt/registry.js';
 
-export type { EvalScore, EvalResult } from './eval/types.js';
+export type { EvalScore, EvalResult } from './evals/types.js';

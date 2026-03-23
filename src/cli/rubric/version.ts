@@ -1,8 +1,8 @@
-// Rubric version used to stamp scan reports (semver)
-export const RUBRIC_VERSION = '1.0.0';
+// Bump RUBRIC_VERSION when: checks added/removed, point values changed,
+// detection logic changed, anti-patterns added/removed.
+// Do NOT bump for: fragment text changes, recommendation wording, comments.
+export const RUBRIC_VERSION = '0.7.0';
 
-// Package version for the CLI tool itself (semver)
-export const PACKAGE_VERSION = '0.1.0';
-
-// Schema version for the JSON report output format
-export const SCHEMA_VERSION = '1';
+// Bump SCHEMA_VERSION when: JSON report fields added/removed/renamed,
+// or field types changed. Consumers use this to parse reports correctly.
+export const SCHEMA_VERSION = '2';

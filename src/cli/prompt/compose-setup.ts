@@ -1,7 +1,7 @@
 import type { ScanReport, AgentId } from '../types.js';
 import type { ComposedPrompt, PromptSection, PromptVariables } from './types.js';
 import { getAllFragments } from './registry.js';
-import { extractVariables, fillTemplate } from './variables.js';
+import { extractTemplateVars, fillTemplate } from './template-filler.js';
 
 /**
  * Compose a full setup prompt for a fresh project.
@@ -14,7 +14,7 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
   // For setup mode on a project with no agents, create a synthetic agent report
   /** Template variables, either from existing report or synthesised for a fresh project */
   const vars = agentReport
-    ? extractVariables(report, agentReport)
+    ? extractTemplateVars(report, agentReport)
     : buildFreshVars(report, agentId);
 
   /** Every registered fragment across all phases */
@@ -31,16 +31,16 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
   const sections: PromptSection[] = phases.map(({ phase, heading }) => {
     /** Fragments filtered to this phase with create kind, then template-filled */
     const fragments = allFragments
-      .filter(f => f.phase === phase && f.kind === 'create')
-      .map(f => {
-        let instruction = f.instruction;
-        const override = f.agentOverrides?.[agentId];
+      .filter(fragment => fragment.phase === phase && fragment.kind === 'create')
+      .map(fragment => {
+        let instruction = fragment.instruction;
+        const override = fragment.agentOverrides?.[agentId];
         if (override) {
           instruction = override;
         }
         return {
-          key: f.key,
-          category: f.category,
+          key: fragment.key,
+          category: fragment.category,
           instruction: fillTemplate(instruction, vars),
         };
       });

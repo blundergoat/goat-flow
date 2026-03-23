@@ -1,6 +1,6 @@
 import type { ScanReport, AgentId } from '../types.js';
 import type { ComposedPrompt, PromptSection } from './types.js';
-import { extractVariables } from './variables.js';
+import { extractTemplateVars } from './template-filler.js';
 
 /**
  * Compose a read-only audit prompt.
@@ -12,7 +12,7 @@ export function composeAudit(report: ScanReport, agentId: AgentId): ComposedProm
   if (agentReport === undefined) return null;
 
   /** Template variables derived from the scan report */
-  const vars = extractVariables(report, agentReport);
+  const vars = extractTemplateVars(report, agentReport);
   /** Checks with a fail status */
   const failed = agentReport.checks.filter(c => c.status === 'fail');
   /** Checks with a partial status */

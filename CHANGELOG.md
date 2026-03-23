@@ -2,6 +2,45 @@
 
 ---
 
+## v0.7.0 - 2026-03-23
+
+CLI quality overhaul (M2.10). Zero ESLint warnings, dead code cleanup, 6 god function splits, anti-pattern fixes, prompt/doc drift resolved. 90-check rubric with confidence-weighted scoring. All agents A 100%.
+
+### TypeScript Quality
+- Split 6 god functions to ≤15 cyclomatic complexity: extractAgentFacts (84→15), detectStack (54→15), main (25→15), extractSharedFacts (25→15), parseCLIArgs (18→15), composeFix (17→15)
+- ESLint strict-type-checked: 0 errors, 0 warnings (was 30 warnings)
+- Knip: 0 unused exports (was 11)
+- Replaced all 15 non-null assertions with type guards
+- Single-source skill list in `constants.ts` (was 4 separate lists)
+- CLIError class replaces 8 `process.exit()` calls
+- `eval/runner.ts` uses ReadonlyFS (was bypassing with raw `node:fs`)
+- Exhaustive switches + tightened string params to unions
+
+### Anti-Patterns
+- AP3 implemented: detects DoD heading duplication (not word mention)
+- AP7 implemented: checks per-directory local files only (excludes `ai/instructions/` cold-path)
+- AP9 verified working (settings.local.json gitignore check)
+
+### Scanner (90 checks)
+- Check 2.6.7 split into frontend (2.6.7a) + backend (2.6.7b) with correct recommendation keys
+- Eval facts validate ALL files (was first-3 sample)
+- Confidence labels calibrated: 4 skill quality checks downgraded high→medium (honest heuristic labeling)
+- Registry duplicate ID guard at module load
+
+### Prompt/Doc Drift Fixed
+- "7 skills" → "10 skills" across all prompts and docs
+- "permission profiles" removed from setup prompts
+- Copilot scanner support clarified as "not yet"
+- .env write protection claims fixed (Bash tool only)
+
+### CI/Security
+- GitHub Actions SHA-pinned
+- Preflight: CHANGELOG version check added, knip is now breaking error
+- Deny hook limitations documented honestly (not a sandbox)
+- Security templates reconciled (env vars + framework stores)
+
+---
+
 ## v0.6.0 - 2026-03-23
 
 Expanded to 10 skills, 47 coding standards templates, eval runner, TypeScript quality hardening, and multi-agent infrastructure (Codex, Copilot).

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockFS } from '../helpers/mock-fs.js';
-import { scan } from '../../src/cli/evaluate/runner.js';
+import { scanProject } from '../../src/cli/scanner/scan.js';
 import type { ScanReport, Grade } from '../../src/cli/types.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ describe('Fixture 1: empty project', () => {
     'README.md': '# My Project\n',
     'package.json': JSON.stringify({ name: 'my-project', scripts: { start: 'node index.js' } }),
   });
-  const report = scan(fs, '/test/empty', { agentFilter: null });
+  const report = scanProject(fs, '/test/empty', { agentFilter: null });
 
   it('produces valid report with no agents', () => {
     assertValidReport(report, 'empty');
@@ -215,7 +215,7 @@ describe('Fixture 2: minimal-claude', () => {
     'CLAUDE.md': MINIMAL_CLAUDE_MD,
     'package.json': JSON.stringify({ name: 'my-app', scripts: { start: 'node server.js', test: 'jest' } }),
   });
-  const report = scan(fs, '/test/minimal-claude', { agentFilter: null });
+  const report = scanProject(fs, '/test/minimal-claude', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'minimal-claude');
@@ -241,7 +241,7 @@ describe('Fixture 3: minimal-codex', () => {
     'AGENTS.md': MINIMAL_AGENTS_MD,
     'package.json': JSON.stringify({ name: 'my-codex-app', scripts: { start: 'node app.js' } }),
   });
-  const report = scan(fs, '/test/minimal-codex', { agentFilter: null });
+  const report = scanProject(fs, '/test/minimal-codex', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'minimal-codex');
@@ -302,7 +302,7 @@ describe('Fixture 4: full-claude', () => {
     // Referenced router paths
     'docs/system-spec.md': '# System Spec\n',
   });
-  const report = scan(fs, '/test/full-claude', { agentFilter: null });
+  const report = scanProject(fs, '/test/full-claude', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'full-claude');
@@ -363,7 +363,7 @@ describe('Fixture 5: full-multi-agent', () => {
     'tasks/handoff-template.md': '# Handoff\n',
     '.gitignore': '.env\nsettings.local.json\n',
   });
-  const report = scan(fs, '/test/multi', { agentFilter: null });
+  const report = scanProject(fs, '/test/multi', { agentFilter: null });
 
   it('detects all 3 agents', () => {
     assert.equal(report.agents.length, 3);
@@ -380,7 +380,7 @@ describe('Fixture 5: full-multi-agent', () => {
   });
 
   it('--agent filter works', () => {
-    const filtered = scan(fs, '/test/multi', { agentFilter: 'claude' });
+    const filtered = scanProject(fs, '/test/multi', { agentFilter: 'claude' });
     assert.equal(filtered.agents.length, 1);
     assert.equal(filtered.agents[0].agent, 'claude');
   });
@@ -405,7 +405,7 @@ describe('Fixture 6: N/A checks', () => {
     'docs/footguns.md': '# Footguns\n\n- `src/index.ts:10` - gotcha\n',
     'docs/lessons.md': '# Lessons\n\n### Entry 1\nStuff.\n',
   });
-  const report = scan(fs, '/test/library', { agentFilter: null });
+  const report = scanProject(fs, '/test/library', { agentFilter: null });
 
   it('produces valid report for library project', () => {
     assertValidReport(report, 'library');
@@ -420,7 +420,7 @@ describe('Fixture 7: anti-patterns', () => {
     'docs/footguns.md': '# Footguns\n\nSome footguns but no file:line evidence at all.\n',
     '.claude/skills/not-goat-prefixed/SKILL.md': '# bad skill\n',
   });
-  const report = scan(fs, '/test/anti-patterns', { agentFilter: null });
+  const report = scanProject(fs, '/test/anti-patterns', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'anti-patterns');
@@ -479,7 +479,7 @@ describe('Fixture 8: partial-setup', () => {
     'docs/architecture.md': '# Architecture\n\nOverview.\n',
     '.gitignore': '.env\nnode_modules/\n',
   });
-  const report = scan(fs, '/test/partial', { agentFilter: null });
+  const report = scanProject(fs, '/test/partial', { agentFilter: null });
 
   it('produces valid report', () => {
     assertValidReport(report, 'partial');
@@ -529,7 +529,7 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     'tasks/handoff-template.md': '# Handoff\n',
     '.gitignore': '.env\nsettings.local.json\n',
   });
-  const report = scan(fs, '/test/allowed-missing', { agentFilter: null });
+  const report = scanProject(fs, '/test/allowed-missing', { agentFilter: null });
 
   it('N/A checks do not inflate score (earned=0, maxPoints=0)', () => {
     const naChecks = report.agents[0].checks.filter(c => c.status === 'na');
@@ -558,7 +558,7 @@ describe('Fixture 10a: project with ai/instructions/', () => {
     'ai/instructions/git-commit.md': '# Git Commit\n\nCommit format.\n',
     '.github/git-commit-instructions.md': '# Git Commit\n\nCommit format.\n',
   });
-  const report = scan(fs, '/test/ai-instructions', { agentFilter: null });
+  const report = scanProject(fs, '/test/ai-instructions', { agentFilter: null });
 
   it('all local instruction checks pass', () => {
     const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Instructions');
@@ -585,7 +585,7 @@ describe('Fixture 10b: project with .github/instructions/ only', () => {
     '.github/instructions/git-commit.instructions.md': '# Commit\n',
     '.github/git-commit-instructions.md': '# Commit\n',
   });
-  const report = scan(fs, '/test/gh-instructions', { agentFilter: null });
+  const report = scanProject(fs, '/test/gh-instructions', { agentFilter: null });
 
   it('accepts .github/instructions/ as alternative', () => {
     const dirCheck = report.agents[0].checks.find(c => c.id === '2.6.1');
@@ -607,7 +607,7 @@ describe('Fixture 10c: project without instructions', () => {
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)'] } }),
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
   });
-  const report = scan(fs, '/test/no-instructions', { agentFilter: null });
+  const report = scanProject(fs, '/test/no-instructions', { agentFilter: null });
 
   it('local instruction checks fail', () => {
     const localChecks = report.agents[0].checks.filter(c => c.category === 'Local Instructions');
@@ -662,7 +662,7 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'docs/system-spec.md': '# System Spec\n',
     'CHANGELOG.md': '# Changelog\n',
   });
-  const report = scan(fs, '/test/self-goat-flow', { agentFilter: null });
+  const report = scanProject(fs, '/test/self-goat-flow', { agentFilter: null });
 
   it('all 3 agents detected', () => {
     assert.equal(report.agents.length, 3);

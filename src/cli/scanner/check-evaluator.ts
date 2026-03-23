@@ -4,7 +4,7 @@ import type { Detection, CheckResult, FactContext, Confidence } from '../types.j
  * Evaluate a Detection against extracted facts.
  * This is the core engine — 10 evaluator types handle all checks.
  */
-export function evaluate(
+export function evaluateCheck(
   id: string,
   name: string,
   tier: 'foundation' | 'standard' | 'full',
@@ -341,7 +341,7 @@ function evalComposite(base: CheckBase, pts: number, partialPts: number | undefi
 
   /** Results from evaluating each sub-check independently */
   const results = detect.checks.map(sub =>
-    evaluate(base.id, base.name, base.tier, base.category, 1, undefined, sub, confidence, ctx)
+    evaluateCheck(base.id, base.name, base.tier, base.category, 1, undefined, sub, confidence, ctx)
   );
 
   /** Number of sub-checks that passed */

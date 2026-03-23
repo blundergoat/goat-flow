@@ -1,7 +1,7 @@
 import type { ScanReport, AgentReport, AgentId } from '../types.js';
 import type { ComposedPrompt, PromptSection, ResolvedFragment, FragmentPhase, PromptVariables } from './types.js';
 import { getFragment } from './registry.js';
-import { extractVariables, fillTemplate } from './variables.js';
+import { extractTemplateVars, fillTemplate } from './template-filler.js';
 
 /** Ordered phases for grouping fix fragments from highest to lowest severity */
 const PHASE_ORDER: FragmentPhase[] = ['anti-pattern', 'foundation', 'standard', 'full'];
@@ -23,7 +23,7 @@ export function composeFix(report: ScanReport, agentId: AgentId): ComposedPrompt
   if (agentReport === undefined) return null;
 
   /** Template variables derived from the scan report */
-  const vars = extractVariables(report, agentReport);
+  const vars = extractTemplateVars(report, agentReport);
 
   /** Fragment keys needed for failed checks and triggered anti-patterns */
   const neededKeys = new Set<string>();

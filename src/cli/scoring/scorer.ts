@@ -2,7 +2,7 @@ import type {
   CheckResult, AntiPatternResult, ScoreSummary, TierScore, Grade,
   FactContext, CheckDef, AntiPatternDef,
 } from '../types.js';
-import { evaluate } from '../evaluate/evaluators.js';
+import { evaluateCheck } from '../scanner/check-evaluator.js';
 
 /** Percentage thresholds mapped to letter grades, checked top-down */
 const GRADE_THRESHOLDS: [number, Grade][] = [
@@ -39,7 +39,7 @@ export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
 
     try {
       /** Evaluation result from running the check's detect function */
-      const result = evaluate(
+      const result = evaluateCheck(
         check.id, check.name, check.tier, check.category,
         check.pts, check.partialPts, check.detect, check.confidence, ctx,
       );
@@ -64,26 +64,26 @@ export function runChecks(checks: CheckDef[], ctx: FactContext): CheckResult[] {
 
 /** Execute all anti-pattern definitions against the fact context and return results */
 export function runAntiPatterns(patterns: AntiPatternDef[], ctx: FactContext): AntiPatternResult[] {
-  return patterns.map(ap => {
-    if (ap.na && ap.na(ctx)) {
+  return patterns.map(antiPattern => {
+    if (antiPattern.na && antiPattern.na(ctx)) {
       return {
-        id: ap.id,
-        name: ap.name,
+        id: antiPattern.id,
+        name: antiPattern.name,
         triggered: false,
         deduction: 0,
-        confidence: ap.confidence,
+        confidence: antiPattern.confidence,
         message: 'Not applicable',
       };
     }
     try {
-      return ap.evaluate(ctx);
+      return antiPattern.evaluate(ctx);
     } catch (err) {
       return {
-        id: ap.id,
-        name: ap.name,
+        id: antiPattern.id,
+        name: antiPattern.name,
         triggered: false,
         deduction: 0,
-        confidence: ap.confidence,
+        confidence: antiPattern.confidence,
         message: `Anti-pattern check crashed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
