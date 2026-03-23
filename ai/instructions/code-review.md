@@ -15,7 +15,7 @@ All must pass before approving:
 - `shellcheck scripts/maintenance/*.sh` clean (if .sh files changed)
 - `bash scripts/preflight-checks.sh` passes
 - No broken cross-references introduced (paths in docs, router tables, Ask First boundaries)
-- Version consistency: `package.json` version matches `src/cli/rubric/version.ts` PACKAGE_VERSION
+- Version consistency: `RUBRIC_VERSION` in `src/cli/rubric/version.ts` bumped if checks/points changed
 - Every new `CheckDef.recommendationKey` has a matching `Fragment.key` in `prompt/fragments/`
 
 ## Anti-Patterns to Flag

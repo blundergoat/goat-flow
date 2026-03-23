@@ -17,14 +17,14 @@ src/cli/
   index.ts            # Library re-exports
   types.ts            # All type definitions
   detect/             # Agent and stack detection (agents.ts, stack.ts)
-  facts/              # Fact extraction (extract.ts, agent.ts, shared.ts, fs.ts)
-  evaluate/           # Check evaluators (evaluators.ts, runner.ts)
+  facts/              # Fact extraction (orchestrator.ts, agent.ts, shared.ts, fs.ts)
+  scanner/            # Check evaluators (check-evaluator.ts, scan.ts)
   rubric/             # Check definitions by tier (foundation.ts, standard.ts, full.ts, anti-patterns.ts, registry.ts, version.ts)
-  scoring/            # Score computation and recommendations (engine.ts, recommendations.ts)
-  prompt/             # Prompt generation (compose-fix.ts, compose-setup.ts, compose-audit.ts, render.ts, variables.ts, registry.ts)
+  scoring/            # Score computation and recommendations (scorer.ts, recommendations.ts)
+  prompt/             # Prompt generation (compose-fix.ts, compose-setup.ts, compose-audit.ts, render.ts, template-filler.ts, registry.ts)
   prompt/fragments/   # Per-check fix/setup instructions (foundation.ts, standard.ts, full.ts, anti-patterns.ts)
   prompt/types.ts     # Fragment, ComposedPrompt, PromptVariables
-  eval/               # Agent eval parser (types.ts, runner.ts, parser.ts)
+  evals/              # Agent eval parser (types.ts, loader.ts, parser.ts)
   render/             # Output formatters (json.ts, text.ts)
 scripts/
   preflight-checks.sh  # Full preflight gate (shellcheck, tsc, tests, version, ADR)
@@ -67,9 +67,9 @@ goat-flow --min-score 75                 # CI gate
 - `node:test` + `node:assert/strict` for testing (not Jest, not Vitest)
 - Strict TypeScript: `"strict": true` in tsconfig.json
 - No `any` types. Minimize `as` casts. Use `unknown` and narrow.
-- All types in `src/cli/types.ts`. Prompt-specific types in `src/cli/prompt/types.ts`. Eval types in `src/cli/eval/types.ts`.
-- Version lives in `src/cli/rubric/version.ts` -- PACKAGE_VERSION, RUBRIC_VERSION, SCHEMA_VERSION
-- Version must match `package.json` version (preflight enforces this)
+- All types in `src/cli/types.ts`. Prompt-specific types in `src/cli/prompt/types.ts`. Eval types in `src/cli/evals/types.ts`.
+- RUBRIC_VERSION and SCHEMA_VERSION live in `src/cli/rubric/version.ts`. Package version reads from `package.json` at runtime.
+- RUBRIC_VERSION must be bumped when checks/points/detection logic change
 - `ReadonlyFS` interface for filesystem access -- scanner never writes to disk
 - Zero runtime dependencies. Dev-only: typescript, tsx, @types/node
 
@@ -88,7 +88,7 @@ goat-flow --min-score 75                 # CI gate
 
 - Don't add runtime dependencies (the scanner must stay zero-dep)
 - Don't use `console.log` outside `cli.ts` and `render/` (preflight warns)
-- Don't put types outside the three type files (types.ts, prompt/types.ts, eval/types.ts)
+- Don't put types outside the three type files (types.ts, prompt/types.ts, evals/types.ts)
 - Don't hardcode version strings (import from version.ts)
 - Don't use hypothetical examples in docs -- real incidents only
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)

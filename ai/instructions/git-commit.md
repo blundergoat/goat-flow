@@ -36,8 +36,6 @@ Multi-line body when the commit spans multiple areas. Separate summary from body
 
 ## Version Bumps
 
-When bumping the version, update both:
-1. `package.json` `"version"` field
-2. `src/cli/rubric/version.ts` `PACKAGE_VERSION` constant
+When bumping the version, update `package.json` `"version"` field. Package version is read from `package.json` at runtime (single source of truth).
 
-Preflight checks enforce these stay in sync.
+When changing checks/points/detection logic, bump `RUBRIC_VERSION` in `src/cli/rubric/version.ts`.

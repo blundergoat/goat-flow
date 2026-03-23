@@ -14,7 +14,7 @@ Thanks for your interest in contributing. This guide covers the basics.
 
 - **Markdown** for documentation (the bulk of the project)
 - **Bash** for maintenance and validation scripts (`scripts/`)
-- **TypeScript** for the scanner CLI (`cli/`)
+- **TypeScript** for the scanner CLI (`src/cli/`)
 
 Keep documentation concise. GOAT Flow targets ~120-line instruction files -- the same discipline applies to contributions.
 

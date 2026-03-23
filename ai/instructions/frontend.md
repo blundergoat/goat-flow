@@ -13,7 +13,7 @@ This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScri
 
 - All shared types in `src/cli/types.ts`
 - Prompt types in `src/cli/prompt/types.ts` (Fragment, ComposedPrompt, PromptVariables)
-- Eval types in `src/cli/eval/types.ts` (ParsedEval, EvalSummary, EvalFrontmatter)
+- Eval types in `src/cli/evals/types.ts` (ParsedEval, EvalSummary, EvalFrontmatter)
 - Strict mode: no implicit any, strict null checks, strict property initialization
 - No `any`. Use `unknown` and narrow with type guards. Minimize `as` casts.
 - Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'gemini'`
@@ -74,13 +74,13 @@ Template variables: `{{instructionFile}}`, `{{agentName}}`, `{{languages}}`, `{{
 - `FactContext`: `{ facts: ProjectFacts, agentFacts: AgentFacts }` -- passed to every check function
 - `ReadonlyFS`: filesystem abstraction (exists, readFile, lineCount, readJson, listDir, isExecutable, glob). Scanner never writes.
 - `SKILL_QUALITY_THRESHOLD = 0.8` in `rubric/standard.ts`: skills must meet 80% quality criteria
-- Anti-patterns cap at `MAX_DEDUCTION = -15` in `scoring/engine.ts`
+- Anti-patterns cap at `MAX_DEDUCTION = -15` in `scoring/scorer.ts`
 - Grade thresholds: A >= 90, B >= 75, C >= 60, D >= 40, F < 40
 - `INFLATION_THRESHOLD = 0.10`: fewer than 10% applicable checks = 'insufficient-data' grade
 
 ## File Organization
 
 - New check? Add `CheckDef` to the appropriate tier file in `rubric/`, add matching `Fragment` in `prompt/fragments/`
-- New detection type? Add to `DetectionType` union in `types.ts`, implement in `evaluate/evaluators.ts`
+- New detection type? Add to `DetectionType` union in `types.ts`, implement in `scanner/check-evaluator.ts`
 - New fact? Add to `SharedFacts` or `AgentFacts` in `types.ts`, extract in `facts/shared.ts` or `facts/agent.ts`
 - New CLI command? Add to `Command` union and `COMMANDS` array in `cli.ts`
