@@ -23,7 +23,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     loaded on demand. Hot path (instruction files) stays under 120 lines.
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test
+    /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -81,6 +81,11 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 | `/goat-audit`     | Distinct artefact + hard gate    | All      |
 | `/goat-investigate`  | Distinct artefact + hard gate    | All      |
 | `/goat-review`    | Repeatable structured output     | All      |
+| `/goat-plan`      | Distinct artefact + hard gate    | All      |
+| `/goat-test`      | Distinct artefact + hard gate    | All      |
+| `/goat-reflect`   | Distinct artefact + hard gate    | All      |
+| `/goat-onboard`   | Distinct artefact + hard gate    | All      |
+| `/goat-resume`    | Special failure mode + hard gate | All      |
 
 | Former Skill        | Now Lives                                | Why downgraded                               |
 | ------------------- | ---------------------------------------- | -------------------------------------------- |
@@ -350,7 +355,7 @@ stack:
 | ------------ | ---------------------------------------------------------- | ---------------------------------------- |
 | **Minimal**  | CLAUDE.md + deny-dangerous hook + permissions deny         | Solo project, getting started            |
 | **Standard** | + skills + stop/format hooks + local CLAUDE.md files       | Active development, team project         |
-| **Full**     | + agent evals + CI validation + permission profiles + ADRs | Long-lived project with incident history |
+| **Full**     | + agent evals + CI validation + ADRs + permission profiles (optional) | Long-lived project with incident history |
 
 ---
 
@@ -370,6 +375,12 @@ stack:
 
 **`/goat-test`** -- Generate 3-track testing instructions (automated, AI verification, human checklist) after milestones. Doer-verifier principle: the coding agent MUST NOT verify its own work.
 
+**`/goat-reflect`** -- Post-session reflection. Reviews session actions and outcomes, produces structured entries for `docs/lessons.md` and `docs/footguns.md`. MUST produce evidence-based entries, not fabricated incidents.
+
+**`/goat-onboard`** -- Codebase onboarding. Reads architecture, footguns, and router table to produce a structured orientation document for new contributors or agents. MUST read architecture and footguns before producing output.
+
+**`/goat-resume`** -- Session resumption. Reads `tasks/handoff.md`, `tasks/todo.md`, and session state to reconstruct context after a break or /clear. MUST read handoff files before acting.
+
 ---
 
 ## Phase 1 Files
@@ -384,7 +395,7 @@ stack:
 | `docs/guidelines-ownership-split.md` | Migration rationale          | What was moved, removed, and why                    |
 | `tasks/handoff-template.md`          | Session handoff              | Status, Current State, Decisions, Risks, Next Step  |
 | `ai/README.md`                       | Cold-path router (which instruction files to load) |                                  |
-| `ai/instructions/base.md`            | Universal project contract (conventions, commands, boundaries) |                     |
+| `ai/instructions/conventions.md`     | Universal project contract (conventions, commands, boundaries) |                     |
 | `ai/instructions/code-review.md`     | Review standards and approval criteria |                                             |
 | `ai/instructions/git-commit.md`      | Commit format, branch naming, PR workflow |                                          |
 

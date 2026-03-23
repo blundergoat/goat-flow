@@ -66,7 +66,7 @@ Create the router file `ai/README.md`:
 ```markdown
 # Project Coding Guidelines
 
-Read `instructions/base.md` first for every task.
+Read `instructions/conventions.md` first for every task.
 
 Then load additional files based on the work:
 
@@ -82,7 +82,7 @@ Precedence (highest first):
 1. security.md (always applies if touching auth/secrets/validation)
 2. code-review.md (for review tasks only)
 3. domain file (frontend/backend)
-4. base.md (always loaded)
+4. conventions.md (always loaded)
 ```
 
 Remove rows for files you don't create. Add rows if your project needs domain files not listed here (e.g., `instructions/infrastructure.md`).
@@ -97,13 +97,13 @@ This is the main work. Map your existing file-scoped instructions into domain-sc
 
 | Old file (.github/instructions/) | New file (ai/instructions/) | Notes |
 |---|----|---|
-| `ai-agent-guidelines.instructions.md` | `base.md` | Project-wide conventions, commands, boundaries |
+| `ai-agent-guidelines.instructions.md` | `conventions.md` | Project-wide conventions, commands, boundaries |
 | `php.instructions.md` | `backend.md` | Combine all backend languages into one file |
 | `python.instructions.md` | `backend.md` | Same file -- agents working on backend need both |
 | `frontend.instructions.md` | `frontend.md` | Rename, strip `.instructions.md` extension |
 | `twig.instructions.md` | `frontend.md` | Twig is a frontend templating concern |
 | `javascript.instructions.md` | `frontend.md` | Client-side JS belongs with frontend |
-| `shell.instructions.md` | `base.md` | Fold into base if small; keep as own file only if 30+ lines of shell-specific rules |
+| `shell.instructions.md` | `conventions.md` | Fold into conventions if small; keep as own file only if 30+ lines of shell-specific rules |
 | `sql.instructions.md` | `backend.md` | SQL is a backend concern |
 | `handlers.instructions.md` | `backend.md` | Handler patterns are backend domain |
 | `code-review.instructions.md` | `code-review.md` | Rename |
@@ -121,9 +121,9 @@ When merging multiple files into one domain file, don't just concatenate. Restru
 4. **Keep it under 60 lines** -- if the merged file exceeds this, cut the obvious stuff ("write clean code") and keep the project-specific stuff ("use `sqlc.arg(name)` in queries")
 5. **Drop rules that are already in your CLAUDE.md/AGENTS.md** -- no duplication between hot path and cold path
 
-### What Goes in base.md
+### What Goes in conventions.md
 
-`base.md` is the universal contract -- loaded for every task. Include:
+`conventions.md` is the universal contract -- loaded for every task. Include:
 
 - What the repo is (one paragraph)
 - Architecture overview (directory structure, key patterns)
@@ -132,7 +132,7 @@ When merging multiple files into one domain file, don't just concatenate. Restru
 - Generated files that agents must not edit
 - Common footguns
 
-Do **not** put language-specific or domain-specific rules in `base.md`. If a rule only applies when working on the frontend, it belongs in `frontend.md`.
+Do **not** put language-specific or domain-specific rules in `conventions.md`. If a rule only applies when working on the frontend, it belongs in `frontend.md`.
 
 ---
 
@@ -142,7 +142,7 @@ Two files, serving different purposes.
 
 ### ai/instructions/git-commit.md
 
-Full commit conventions for any AI agent. Include commit message format, branch naming, PR workflow, and examples. See `workflow/local-context/git-commit.md` for a template.
+Full commit conventions for any AI agent. Include commit message format, branch naming, PR workflow, and examples. See `workflow/coding-standards/git-commit.md` for a template.
 
 ### .github/git-commit-instructions.md
 
@@ -197,7 +197,7 @@ applyTo: "src/api/**,src/services/**,**/*.php,**/*.py"
 
 | Domain file | Bridge file | applyTo |
 |---|---|---|
-| `ai/instructions/base.md` | `.github/instructions/base.instructions.md` | `"**"` |
+| `ai/instructions/conventions.md` | `.github/instructions/conventions.instructions.md` | `"**"` |
 | `ai/instructions/frontend.md` | `.github/instructions/frontend.instructions.md` | `"src/app/**,src/components/**,*.tsx,*.ts,*.vue,**/*.twig"` |
 | `ai/instructions/backend.md` | `.github/instructions/backend.instructions.md` | `"src/api/**,src/services/**,**/*.php,**/*.py,**/*.go"` |
 | `ai/instructions/code-review.md` | `.github/instructions/code-review.instructions.md` | `"**"` |
@@ -218,7 +218,7 @@ rm .github/instructions/python.instructions.md
 rm .github/instructions/sql.instructions.md
 rm .github/instructions/handlers.instructions.md
 
-# This was folded into base.md
+# This was folded into conventions.md
 rm .github/instructions/shell.instructions.md
 rm .github/instructions/ai-agent-guidelines.instructions.md
 
@@ -268,7 +268,7 @@ Run `goat-flow scan .` and confirm:
 
 - Instructions directory exists (checks `ai/instructions/` first, falls back to `.github/instructions/`)
 - Router exists (`ai/README.md`)
-- `base.md` exists
+- `conventions.md` exists
 - `code-review.md` exists
 - `git-commit.md` exists
 - `.github/git-commit-instructions.md` exists
@@ -307,7 +307,7 @@ A TypeScript full-stack app with 7 `.github/instructions/` files.
 ai/
 ├── README.md                              # router
 └── instructions/
-    ├── base.md                            # from ai-agent-guidelines + project analysis
+    ├── conventions.md                     # from ai-agent-guidelines + project analysis
     ├── backend.md                         # from handlers.instructions.md + API conventions
     ├── frontend.md                        # from frontend.instructions.md (renamed)
     ├── code-review.md                     # from code-review.instructions.md (renamed)
@@ -318,7 +318,7 @@ ai/
 .github/
 ├── git-commit-instructions.md            # universal commit rules (new)
 └── instructions/
-    ├── base.instructions.md              # bridge → ai/instructions/base.md
+    ├── conventions.instructions.md       # bridge → ai/instructions/conventions.md
     ├── backend.instructions.md           # bridge → ai/instructions/backend.md
     ├── frontend.instructions.md          # bridge → ai/instructions/frontend.md
     ├── code-review.instructions.md       # bridge → ai/instructions/code-review.md
@@ -326,7 +326,7 @@ ai/
     └── testing.instructions.md           # bridge → ai/instructions/testing.md
 ```
 
-**7 files** in `.github/instructions/` became **7 domain files** in `ai/instructions/` (this project mapped nearly 1:1 because the original files were already somewhat domain-scoped). The key changes: `ai-agent-guidelines` became `base.md`, `handlers` became `backend.md`, `commit-messages` became `git-commit.md` with a separate `.github/git-commit-instructions.md`.
+**7 files** in `.github/instructions/` became **7 domain files** in `ai/instructions/` (this project mapped nearly 1:1 because the original files were already somewhat domain-scoped). The key changes: `ai-agent-guidelines` became `conventions.md`, `handlers` became `backend.md`, `commit-messages` became `git-commit.md` with a separate `.github/git-commit-instructions.md`.
 
 Old files `ai-agent-guidelines.instructions.md`, `handlers.instructions.md`, and `commit-messages.instructions.md` were deleted. The remaining `.github/instructions/` files were replaced with bridge content.
 
@@ -355,7 +355,7 @@ A Symfony + FastAPI medical scribe app with 7 language-scoped `.github/instructi
 ai/
 ├── README.md                              # router
 └── instructions/
-    ├── base.md                            # project overview + shell conventions (from shell.instructions.md)
+    ├── conventions.md                     # project overview + shell conventions (from shell.instructions.md)
     ├── backend.md                         # PHP + Python + SQL merged (from php + python + sql .instructions.md)
     ├── frontend.md                        # Twig + JS merged (from twig + javascript .instructions.md)
     └── security.md                        # from security.instructions.md (expanded for HIPAA)
@@ -363,17 +363,17 @@ ai/
 .github/
 ├── git-commit-instructions.md            # universal commit rules (new)
 └── instructions/
-    ├── base.instructions.md              # bridge → ai/instructions/base.md
+    ├── conventions.instructions.md       # bridge → ai/instructions/conventions.md
     ├── backend.instructions.md           # bridge → ai/instructions/backend.md
     ├── frontend.instructions.md          # bridge → ai/instructions/frontend.md
     └── security.instructions.md          # bridge → ai/instructions/security.md
 ```
 
-**7 language files** became **3 domain files** + `base.md`:
+**7 language files** became **3 domain files** + `conventions.md`:
 
 - `php.instructions.md` + `python.instructions.md` + `sql.instructions.md` merged into **`backend.md`** with `## PHP (Symfony)`, `## Python (FastAPI)`, and `## Database` sections. An agent working on the backend needs all three -- they share the same request lifecycle.
 - `twig.instructions.md` + `javascript.instructions.md` merged into **`frontend.md`**. Twig renders the HTML, Alpine.js and Stimulus handle interactivity -- same domain.
-- `shell.instructions.md` (15 lines of bash conventions) folded into **`base.md`** as a "Shell Scripts" section. Not enough content for its own file.
+- `shell.instructions.md` (15 lines of bash conventions) folded into **`conventions.md`** as a "Shell Scripts" section. Not enough content for its own file.
 - `security.instructions.md` stayed as **`security.md`** -- HIPAA rules are cross-cutting and apply to both frontend and backend.
 
 Old files `php.instructions.md`, `python.instructions.md`, `twig.instructions.md`, `javascript.instructions.md`, `shell.instructions.md`, and `sql.instructions.md` were deleted from `.github/instructions/`. The remaining bridges use `applyTo` globs matching the actual project paths:

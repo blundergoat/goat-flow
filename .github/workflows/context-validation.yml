@@ -19,7 +19,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Check CLAUDE.md / GEMINI.md line count
         run: |
@@ -54,7 +54,7 @@ jobs:
 
       - name: Check skills exist
         run: |
-          EXPECTED_SKILLS="goat-security goat-debug goat-audit goat-investigate goat-review goat-plan goat-test"
+          EXPECTED_SKILLS="goat-security goat-debug goat-audit goat-investigate goat-review goat-plan goat-test goat-reflect goat-onboard goat-resume"
           # Check Claude Code skills
           if [ -d ".claude/skills" ]; then
             for skill in $EXPECTED_SKILLS; do
@@ -63,7 +63,7 @@ jobs:
                 exit 1
               fi
             done
-            echo "All 7 Claude skills present"
+            echo "All 10 Claude skills present"
           fi
           # Check shared skills (Codex + Gemini)
           if [ -d ".agents/skills" ]; then
@@ -73,7 +73,7 @@ jobs:
                 exit 1
               fi
             done
-            echo "All 7 shared skills present"
+            echo "All 10 shared skills present"
           fi
 
       - name: Check local CLAUDE.md file sizes

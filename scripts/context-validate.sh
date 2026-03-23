@@ -76,6 +76,9 @@ required_skills=(
     ".agents/skills/goat-review/SKILL.md"
     ".agents/skills/goat-plan/SKILL.md"
     ".agents/skills/goat-test/SKILL.md"
+    ".agents/skills/goat-reflect/SKILL.md"
+    ".agents/skills/goat-onboard/SKILL.md"
+    ".agents/skills/goat-resume/SKILL.md"
 )
 
 for skill in "${required_skills[@]}"; do
@@ -86,7 +89,7 @@ for skill in "${required_skills[@]}"; do
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done
-info "All 7 skills exist with required sections and frontmatter"
+info "All 10 skills exist with required sections and frontmatter"
 
 if [[ -d agent-evals ]]; then
     [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"

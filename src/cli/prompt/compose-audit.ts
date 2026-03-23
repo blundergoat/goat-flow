@@ -1,20 +1,26 @@
 import type { ScanReport, AgentId } from '../types.js';
 import type { ComposedPrompt, PromptSection } from './types.js';
-import { extractVariables } from './variables.js';
+import { extractTemplateVars } from './template-filler.js';
 
 /**
  * Compose a read-only audit prompt.
  * The agent reads and diagnoses without making changes.
  */
 export function composeAudit(report: ScanReport, agentId: AgentId): ComposedPrompt | null {
+  /** Agent-specific report extracted from the scan */
   const agentReport = report.agents.find(a => a.agent === agentId);
-  if (!agentReport) return null;
+  if (agentReport === undefined) return null;
 
-  const vars = extractVariables(report, agentReport);
+  /** Template variables derived from the scan report */
+  const vars = extractTemplateVars(report, agentReport);
+  /** Checks with a fail status */
   const failed = agentReport.checks.filter(c => c.status === 'fail');
+  /** Checks with a partial status */
   const partial = agentReport.checks.filter(c => c.status === 'partial');
+  /** Anti-patterns that fired during the scan */
   const triggered = agentReport.antiPatterns.filter(ap => ap.triggered);
 
+  /** Accumulated prompt sections built up below */
   const sections: PromptSection[] = [];
 
   // Section 1: Score Overview
@@ -77,7 +83,7 @@ export function composeAudit(report: ScanReport, agentId: AgentId): ComposedProm
 2. **Enforcement gaps:** Is the deny mechanism actually blocking dangerous commands? Check ${vars.settingsFile}.
 3. **Learning loop health:** Read \`docs/lessons.md\` and \`docs/footguns.md\`. Are entries from real incidents or templated?
 4. **Router accuracy:** Check every path in the router table. Do they all resolve?
-5. **Skills completeness:** Check \`${vars.skillsDir}/\`. Are all 7 goat-* skills present with proper SKILL.md files?
+5. **Skills completeness:** Check \`${vars.skillsDir}/\`. Are all 10 goat-* skills present with proper SKILL.md files?
 6. **Architecture docs:** Is \`docs/architecture.md\` under 100 lines and actually useful?
 7. **Highest-impact fix:** Which single change would improve the score the most?
 

@@ -1,61 +1,90 @@
 #!/usr/bin/env bash
 # PreToolUse hook: blocks dangerous commands before execution.
 # Exit 0 = allow, Exit 2 = block (stderr shown as reason).
-
 set -uo pipefail
 
-# Read tool input from stdin
 INPUT=$(cat)
 
-# Extract the command from the tool input
-COMMAND=$(echo "$INPUT" | grep -oP '"command"\s*:\s*"([^"]*)"' | head -1 | sed 's/"command"\s*:\s*"//;s/"$//' 2>/dev/null || echo "$INPUT")
+# Parse command from JSON using jq (falls back to raw input if jq unavailable)
+if command -v jq >/dev/null 2>&1; then
+  COMMAND=$(echo "$INPUT" | jq -r '.command // .input // empty' 2>/dev/null || echo "$INPUT")
+else
+  # Fallback: extract with sed (less reliable but portable)
+  COMMAND=$(echo "$INPUT" | sed -n 's/.*"command"\s*:\s*"\([^"]*\)".*/\1/p' | head -1)
+  [[ -z "$COMMAND" ]] && COMMAND="$INPUT"
+fi
 
 block() {
   echo "BLOCKED: $1" >&2
   exit 2
 }
 
-# rm -rf without scoping
-echo "$COMMAND" | grep -qP 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r' && \
-  echo "$COMMAND" | grep -qvP 'rm\s+-rf\s+\./|rm\s+-rf\s+[a-zA-Z]' && \
-  block "rm -rf without safe scoping"
+check_segment() {
+  local cmd="$1"
 
-# Direct push to main/master
-echo "$COMMAND" | grep -qiP 'git\s+push\s+.*\b(main|master)\b' && \
-  block "Direct push to main/master"
+  # rm -rf without scoping (handles both -rf and -fr flag order)
+  if [[ "$cmd" =~ rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r ]]; then
+    if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\./|[a-zA-Z]) ]]; then
+      block "rm -rf without safe scoping"
+    fi
+  fi
 
-# Force push
-echo "$COMMAND" | grep -qP 'git\s+push\s+.*--force' && \
-  block "git push --force"
+  # Direct push to main/master (case-insensitive via lowercased copy)
+  local cmd_lower="${cmd,,}"
+  if [[ "$cmd_lower" =~ git[[:space:]]+push[[:space:]]+.*(main|master) ]]; then
+    block "Direct push to main/master"
+  fi
 
-# chmod 777
-echo "$COMMAND" | grep -qP 'chmod\s+777' && \
-  block "chmod 777"
+  # Force push
+  if [[ "$cmd" =~ git[[:space:]]+push[[:space:]]+.*--force ]]; then
+    block "git push --force"
+  fi
 
-# Pipe to shell
-echo "$COMMAND" | grep -qP 'curl\s.*\|\s*(ba)?sh|wget\s.*\|\s*(ba)?sh' && \
-  block "pipe-to-shell (curl|bash)"
+  # chmod 777
+  if [[ "$cmd" =~ chmod[[:space:]]+777 ]]; then
+    block "chmod 777"
+  fi
 
-# .env modifications
-echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i|nano|vim?|code)\s+.*\.env\b' && \
-  block ".env file modification"
+  # Pipe to shell
+  if [[ "$cmd" =~ (curl|wget)[^|]*\|[[:space:]]*(ba)?sh ]]; then
+    block "pipe-to-shell (curl|bash)"
+  fi
 
-# --no-verify bypass
-echo "$COMMAND" | grep -qP 'git\s+.*--no-verify' && \
-  block "git --no-verify (hook bypass)"
+  # .env modifications (matches .env, .env.local, .env.production, etc.)
+  if [[ "$cmd" =~ (\>|\>\>|tee|sed[[:space:]]+-i|nano|vim?|code)[[:space:]]+.*\.env($|[[:space:]]|\.) ]]; then
+    block ".env file modification"
+  fi
 
-# Lockfile modifications
-echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)' && \
-  block "Lockfile modification"
+  # --no-verify bypass
+  if [[ "$cmd" =~ git[[:space:]]+.*--no-verify ]]; then
+    block "git --no-verify (hook bypass)"
+  fi
 
-# Generated code / migration modifications
-echo "$COMMAND" | grep -qP '(>|>>|tee|sed\s+-i)\s+.*(\.generated\.|\.g\.|migrations/)' && \
-  block "Generated code / migration modification"
+  # Lockfile modifications
+  if [[ "$cmd" =~ (\>|\>\>|tee|sed[[:space:]]+-i)[[:space:]]+.*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock) ]]; then
+    block "Lockfile modification"
+  fi
 
-# mv without -n (no-clobber) — can silently overwrite destination
-echo "$COMMAND" | grep -qP '^\s*mv\s+' && \
-  ! echo "$COMMAND" | grep -qP 'mv\b.*\s(-[^\s]*n[^\s]*|--no-clobber)\b' && \
-  block "Use 'mv -n' instead of 'mv' to prevent overwriting existing files"
+  # Generated code / migration modifications
+  if [[ "$cmd" =~ (\>|\>\>|tee|sed[[:space:]]+-i)[[:space:]]+.*(\.generated\.|\.g\.|migrations/) ]]; then
+    block "Generated code / migration modification"
+  fi
 
-# All clear
+  # mv without -n (no-clobber) -- can silently overwrite destination
+  if [[ "$cmd" =~ ^[[:space:]]*mv[[:space:]]+ ]]; then
+    if ! [[ "$cmd" =~ mv.*[[:space:]](-[^[:space:]]*n[^[:space:]]*|--no-clobber)([[:space:]]|$) ]]; then
+      block "Use 'mv -n' instead of 'mv' to prevent overwriting existing files"
+    fi
+  fi
+}
+
+# Split on command chaining operators and check each segment
+IFS=$'\n' read -r -d '' -a segments < <(echo "$COMMAND" | sed 's/&&/\n/g; s/||/\n/g; s/;/\n/g' && printf '\0') || true
+
+for segment in "${segments[@]}"; do
+  segment=$(echo "$segment" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  [[ -z "$segment" ]] && continue
+  check_segment "$segment"
+done
+
 exit 0

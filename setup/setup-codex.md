@@ -29,13 +29,13 @@ CODEX MECHANICS (respect these):
 - Skills live in .agents/skills/{name}/SKILL.md (NOT docs/codex-playbooks/)
   Each SKILL.md needs YAML frontmatter with name and description fields.
   Codex discovers these via /skills or $skill-name at runtime.
-- No hooks system - use AGENTS.md rules + verification scripts
+- Hooks: SessionStart, UserPromptSubmit, Stop, AfterToolUse, AfterAgent (no PreToolUse blocker — use execpolicy rules for command blocking)
 - apply_patch for edits (not Edit/Write tool)
 - Codex may run in cloud sandboxes or local constrained shells
 - No /compact, no /clear, no /insights - context is per-task
 - No .claude/ directory structure, no settings.json, no profiles
-- No permissions deny list (this is the biggest enforcement gap vs
-  Claude Code - document it honestly, don't pretend it's equivalent)
+- Execpolicy rules (~/.codex/rules/) for command blocking (allow/prompt/forbidden)
+- No permissions deny list in settings (use execpolicy rules instead)
 
 REPO STATE:
 - If this project already has a Claude Code implementation (.claude/,
@@ -92,7 +92,7 @@ WHAT TO BUILD (in this order):
    description: "Security-focused review of dependencies, secrets, and permissions"
    ---
 
-   Create these 7 skills under .agents/skills/:
+   Create these 10 skills under .agents/skills/:
    - goat-security/SKILL.md (see workflow/skills/goat-security.md)
    - goat-investigate/SKILL.md (see workflow/skills/goat-investigate.md)
    - goat-debug/SKILL.md (see workflow/skills/goat-debug.md)
@@ -100,12 +100,35 @@ WHAT TO BUILD (in this order):
    - goat-review/SKILL.md (see workflow/skills/goat-review.md)
    - goat-plan/SKILL.md (see workflow/skills/goat-plan.md)
    - goat-test/SKILL.md (see workflow/skills/goat-test.md)
+   - goat-reflect/SKILL.md (see workflow/skills/goat-reflect.md)
+   - goat-onboard/SKILL.md (see workflow/skills/goat-onboard.md)
+   - goat-resume/SKILL.md (see workflow/skills/goat-resume.md)
 
    Each SKILL.md MUST have: YAML frontmatter (name + description),
    When to Use, Process or Constraints, Output template.
    Adapt stack-specific commands for THIS project.
 
-4. Verification scripts - scripts/:
+4. Codex hooks + execpolicy - .codex/:
+   Codex CLI now supports hooks (SessionStart, Stop, AfterToolUse) and
+   execpolicy rules for command blocking.
+
+   Create .codex/config.toml with hook registration:
+   - [hooks.stop] → scripts/stop-lint.sh (lint after every turn)
+   - [hooks.after_tool_use] → .codex/hooks/after-tool-use.sh
+   - [hooks.session_start] → .codex/hooks/session-start.sh
+
+   Create .codex/rules/deny-dangerous.star (Starlark execpolicy):
+   - Block: rm -rf (unscoped), git push main/master, force push,
+     chmod 777, pipe-to-shell, .env modifications, --no-verify
+   - Prompt: git commit, git push (non-main), sudo, scoped rm -rf
+   - Allow: everything else
+
+   Note: Codex has NO PreToolUse equivalent. Execpolicy blocks shell
+   commands only. File writes and agent spawns cannot be pre-blocked.
+   The deny-dangerous.sh policy script remains useful for CI and
+   preflight verification.
+
+5. Verification scripts - scripts/:
    - scripts/preflight-checks.sh - Build, lint, test for the stack.
      Wrap existing preflight if one exists, don't replace it.
    - scripts/context-validate.sh - Instruction file line count, router
@@ -115,7 +138,7 @@ WHAT TO BUILD (in this order):
      like Claude Code's PreToolUse hook - it's a policy doc and
      verification script.
 
-5. Agent evals - add Codex-specific evals to agent-evals/ (single
+6. Agent evals - add Codex-specific evals to agent-evals/ (single
    shared directory for all agents). Read existing evals first — do NOT
    duplicate incidents already covered.
    At least 1-2 evals MUST test Codex-specific mechanics: deny-dangerous
@@ -125,7 +148,7 @@ WHAT TO BUILD (in this order):
    Each eval MUST declare Origin: real-incident | synthetic-seed.
    Each eval MUST declare Agents: all | codex | claude.
 
-6. Cold path: project coding guidelines
+7. Cold path: project coding guidelines
 
    If `.github/instructions/` exists:
    - Read existing files and group by domain (e.g., `php.instructions.md` + `python.instructions.md` → `ai/instructions/backend.md`)
@@ -133,31 +156,34 @@ WHAT TO BUILD (in this order):
    - Keep `.github/instructions/` as optional Copilot bridges
 
    If no instruction files exist:
-   - Create `ai/README.md` (routing map — see `workflow/local-context/README.md` template)
-   - Create `ai/instructions/base.md` (project conventions — see `workflow/local-context/base.md` template)
-   - Create `ai/instructions/code-review.md` (review standards — see `workflow/local-context/code-review.md` template)
-   - Create `ai/instructions/git-commit.md` (commit format — see `workflow/local-context/git-commit.md` template)
+   - Create `ai/README.md` (routing map — see `workflow/coding-standards/README.md` template)
+   - Create `ai/instructions/conventions.md` (project conventions — see `workflow/coding-standards/conventions.md` template)
+   - Create `ai/instructions/code-review.md` (review standards — see `workflow/coding-standards/code-review.md` template)
+   - Create `ai/instructions/git-commit.md` (commit format — see `workflow/coding-standards/git-commit.md` template)
    - Create `.github/git-commit-instructions.md` if `.git/` exists
 
    VERIFICATION: After creating ai/instructions/ files, the agent MUST:
    1. Verify every file path exists: for each backtick-wrapped path, run `ls`
-   2. Verify commands work: run build/test/lint commands listed in base.md
+   2. Verify commands work: run build/test/lint commands listed in conventions.md
    3. Remove aspirational content: if a feature is planned but not implemented, remove it
       Source of truth is the code, not docs/architecture.md or roadmaps.
 
    Add to AGENTS.md Router Table:
    | Project guidelines | `ai/README.md` |
 
-   Verification: `ls ai/instructions/` shows base.md, code-review.md, git-commit.md.
+   Verification: `ls ai/instructions/` shows conventions.md, code-review.md, git-commit.md.
 
 VERIFICATION:
 - AGENTS.md is concise and under 135 lines
 - All seed files exist
-- All 7 skills exist under .agents/skills/ with YAML frontmatter
+- All 10 skills exist under .agents/skills/ with YAML frontmatter
+- .codex/config.toml exists with hook registrations
+- .codex/rules/deny-dangerous.star exists with forbidden patterns
+- Hook scripts are executable
 - Verification scripts are executable
 - Footguns are real with file:line evidence
 - Router table references resolve
-- ai/instructions/ exists with base.md, code-review.md, git-commit.md
+- ai/instructions/ exists with conventions.md, code-review.md, git-commit.md
 ```
 
 ---
@@ -171,7 +197,7 @@ VERIFICATION:
 - [ ] AGENTS.md uses LOG (not RECORD)
 - [ ] docs/footguns.md entries have file:line evidence (not fabricated)
 - [ ] docs/guidelines-ownership-split.md exists (if guidelines were trimmed)
-- [ ] All 7 skills exist in .agents/skills/goat-*/ with SKILL.md + frontmatter
+- [ ] All 10 skills exist in .agents/skills/goat-*/ with SKILL.md + frontmatter
 - [ ] scripts/deny-dangerous.sh --self-test passes
 - [ ] scripts/context-validate.sh runs cleanly
 - [ ] Router table references all resolve to real files
@@ -188,12 +214,12 @@ VERIFICATION:
 
 | Claude Code Feature | Why Codex Skips It |
 |--------------------|--------------------|
-| PreToolUse hooks | Codex has no hook system. deny-dangerous.sh is policy doc, not runtime blocker. |
+| PreToolUse hooks | Codex has Stop, AfterToolUse, AfterAgent, SessionStart, UserPromptSubmit hooks — but no PreToolUse blocker. Execpolicy handles shell commands; non-shell tools (file writes, agent spawns) have no pre-execution gate. |
 | Permission profiles | Codex has no native profile support. Document roles in AGENTS.md if needed. |
 | Local CLAUDE.md files | Codex doesn't auto-load per-directory. Use .github/instructions/ with applyTo instead. |
 | Slash commands | Codex uses .agents/skills/ with SKILL.md files. Invoked via /skills or $skill-name. |
 | Strict line target | AGENTS.md runs ~35% larger. No hard ceiling - aim for concise but don't sacrifice clarity. |
-| Permissions deny list | No equivalent in Codex. Behavioural guidance only (~30% compliance vs ~100% mechanical). |
+| Permissions deny list | Codex uses execpolicy rules (.codex/rules/ or ~/.codex/rules/) with Starlark-based allow/prompt/forbidden decisions. Runtime blocking for shell commands. See item 4 above for .codex/rules/deny-dangerous.star setup. |
 
 ---
 

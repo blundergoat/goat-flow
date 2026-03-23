@@ -5,7 +5,7 @@
 
 ## Context
 
-The GOAT Flow skill system has 7 skills. goat-preflight was consistently rated the weakest by 6 independent agent reviews (avg score 72/100, range 45-90). The core criticism: it's a shell script wrapper — `scripts/preflight-checks.sh` already does everything the skill does. The scanner already checks for the preflight script (check 2.2.5). The skill adds "fix and re-run" logic, but that's the only value over running the script directly.
+The GOAT Flow skill system had 7 skills at the time of this decision. goat-preflight was consistently rated the weakest by 6 independent agent reviews (avg score 72/100, range 45-90). The core criticism: it's a shell script wrapper — `scripts/preflight-checks.sh` already does everything the skill does. The scanner already checks for the preflight script (check 2.2.5). The skill adds "fix and re-run" logic, but that's the only value over running the script directly.
 
 Meanwhile, security review was identified as the #1 missing capability. 5 of 6 projects have security-sensitive code (rampart is a security platform, sus-form-detector is a security library, all projects have auth boundaries). No current skill prevents the specific failure mode where agents flag framework-mitigated vulnerabilities as real issues (e.g., SQL injection on parameterized queries).
 

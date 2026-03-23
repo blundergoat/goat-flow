@@ -169,3 +169,75 @@ VERIFICATION:
 - If compaction hook was skipped, note why
 - Run the deny-dangerous hook against a test input to verify it works
 ```
+
+### Deny Hook Limitations
+
+Deny hooks are best-effort pre-execution filtering for literal shell commands. They do NOT protect against:
+- Shell aliases that wrap denied commands
+- Variable indirection (`$cmd` where cmd='git push main')
+- Pipe to arbitrary shell (`echo malicious | sh` — only `curl|bash` is blocked)
+- Encoded or obfuscated commands
+- Write/Edit tool operations on .env files (hooks only register for Bash tool)
+
+Defense in depth: hooks + settings.json deny patterns + instruction file rules. No single layer is a complete sandbox.
+
+---
+
+## Codex Enforcement
+
+Codex CLI uses a different enforcement model than Claude Code. Instead of JSON-configured hooks in settings.json, Codex uses TOML-configured hooks and Starlark-based execpolicy rules.
+
+### Hook Events
+
+Codex supports these hook events (registered in `.codex/config.toml`):
+
+| Event | When it fires | Typical use |
+|-------|--------------|-------------|
+| SessionStart | Once when session opens | Load context, verify environment |
+| UserPromptSubmit | Before processing user input | Input validation, prompt logging |
+| Stop | After every agent turn completes | Lint, type-check changed files |
+| AfterToolUse | After any tool invocation | Format files after edits |
+| AfterAgent | After a sub-agent completes | Validate sub-agent output |
+
+**Key difference:** There is no PreToolUse equivalent for non-shell tools. File writes, agent spawns, and other non-shell tool calls cannot be blocked before execution. Only shell commands can be pre-blocked via execpolicy rules.
+
+### Execpolicy Rules (Starlark)
+
+Codex uses Starlark-based execpolicy rules for runtime command blocking. Rules live in `.codex/rules/*.star` (project-level) or `~/.codex/rules/*.star` (user-level).
+
+Each rule returns one of three decisions:
+
+| Decision | Behaviour |
+|----------|-----------|
+| `allow` | Command runs without prompting |
+| `prompt` | User must confirm before execution |
+| `forbidden` | Command is blocked entirely |
+
+Config location: `.codex/config.toml`
+
+Rules location: `.codex/rules/*.star`
+
+Example config.toml hook registration:
+```toml
+[hooks.stop]
+command = "bash scripts/stop-lint.sh"
+
+[hooks.after_tool_use]
+command = "bash .codex/hooks/after-tool-use.sh"
+
+[hooks.session_start]
+command = "bash .codex/hooks/session-start.sh"
+```
+
+### Comparison to Claude Code Enforcement
+
+| Layer | Claude Code | Codex |
+|-------|------------|-------|
+| Pre-execution blocking (all tools) | PreToolUse hook | No equivalent |
+| Pre-execution blocking (shell only) | PreToolUse hook | Execpolicy rules (.codex/rules/*.star) |
+| Post-turn checks | Stop hook | Stop hook |
+| Post-tool checks | PostToolUse hook | AfterToolUse hook |
+| Permission deny list | .claude/settings.json deny | Execpolicy rules (shell only) |
+| Read-deny patterns | settings.json Read deny | No equivalent |
+| Config format | JSON (.claude/settings.json) | TOML (.codex/config.toml) |
+| Rule language | Bash scripts | Starlark (.star files) + Bash hooks |

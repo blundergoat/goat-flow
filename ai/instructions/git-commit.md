@@ -1,50 +1,41 @@
-# Git Commit — GOAT Flow
+# Git Commit Conventions
 
 ## Commit Message Format
 
 ```
-<action> <scope>: <description>
-
-<body — what and why, not how>
+<summary of what changed and why>
 ```
 
-**Good:**
-```
-Add local instruction scanner checks (2.6.1-2.6.6)
-Fix line count off-by-one in facts/agent.ts
-Remove confusion-log from workflow (ADR-003)
-Update setup guides with cold path creation
-```
+Single-line summary. No prefix convention (no `feat:`, `fix:`, etc.). Describe the change concisely -- past commits use plain English:
+- "Add CLI scanner (M1), prompt generator (M2), restructure cli/ to root"
+- "Fix 12 scanner/prompt bugs, remove local context heuristic, add M2.6 plan"
+- "Refactor preflight checks for improved output and structure"
 
-**Bad:**
-```
-update stuff
-fixes
-WIP
-minor changes
-```
+Multi-line body when the commit spans multiple areas. Separate summary from body with a blank line.
 
-## Rules
+## Before Committing
 
-- Imperative mood: "Add" not "Added" or "Adds"
-- First line under 72 characters
-- Reference ADRs when making architectural decisions
-- Reference milestone numbers when completing planned work
-- Don't commit `.env`, `settings.local.json`, or `node_modules/`
+1. `npm run typecheck` -- must pass
+2. `npm test` -- must pass
+3. `shellcheck scripts/maintenance/*.sh` -- must pass if .sh files changed
+4. `bash scripts/preflight-checks.sh` -- full gate (runs all of the above plus version consistency, ADR enforcement)
 
-## Branch Naming
+## Branch Workflow
 
-```
-feature/<description>     # New functionality
-fix/<description>         # Bug fix
-docs/<description>        # Documentation only
-refactor/<description>    # Code change that doesn't fix a bug or add a feature
-```
+- `main` -- stable releases. Never push directly.
+- `dev` -- active development branch. PRs go here.
+- Feature branches off `dev` when working on isolated changes.
 
-## PR Workflow
+## What Not to Commit
 
-1. Create branch from `dev`
-2. Make changes, run `scripts/preflight-checks.sh`
-3. Push to remote, create PR against `dev`
-4. PR description: summary + what changed + how to test
-5. Merge after review (squash preferred for clean history)
+- `dist/` (build output, gitignored)
+- `node_modules/` (gitignored)
+- `.claude/settings.local.json` (user-specific, gitignored)
+- `.claude/projects/`, `.claude/worktrees/` (session data, gitignored)
+- Files containing secrets or credentials
+
+## Version Bumps
+
+When bumping the version, update `package.json` `"version"` field. Package version is read from `package.json` at runtime (single source of truth).
+
+When changing checks/points/detection logic, bump `RUBRIC_VERSION` in `src/cli/rubric/version.ts`.

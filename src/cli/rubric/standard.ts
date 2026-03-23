@@ -1,186 +1,214 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
+import { SKILL_NAMES } from '../constants.js';
 
-// All skills must be interactive — no exceptions, strict scoring
+// Confidence criteria:
+//   high   = deterministic (file exists, line count, JSON valid, exact match)
+//   medium = heuristic (regex pattern, ratio threshold, keyword detection)
+//   low    = semantic inference (content quality judgment)
+
+// Minimum ratio of skills passing a quality signal to award the point (80%)
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
 /**
- * Tier 2 — Standard (35 points)
- * Skills, hooks, learning loop, router, architecture, local context
+ * Tier 2 — Standard (55 points)
+ * Skills, hooks, learning loop, router, architecture, local context.
+ * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
-  // === 2.1 Skills (8 pts) ===
-  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map((skill, i) => ({
-    id: `2.1.${i + 1}` as string,
-    name: `goat-${skill} skill`,
+  // === 2.1 Skills (19 pts: 10 existence + 1 completeness + 8 quality) ===
+  ...SKILL_NAMES.map((skill, i) => ({
+    id: `2.1.${i + 1}`,
+    name: `${skill} skill`,
     tier: 'standard' as const,
     category: 'Skills',
     pts: 1,
     confidence: 'high' as const,
-    detect: { type: 'file_exists' as const, path: `{skills_dir}/goat-${skill}/SKILL.md` },
-    recommendation: `Create goat-${skill} skill`,
-    recommendationKey: `create-skill-${skill}`,
+    detect: { type: 'file_exists' as const, path: `{skills_dir}/${skill}/SKILL.md` },
+    recommendation: `Create ${skill} skill`,
+    recommendationKey: `create-skill-${skill.replace('goat-', '')}`,
   })),
   {
-    id: '2.1.8', name: 'All 7 skills present', tier: 'standard', category: 'Skills',
+    id: '2.1.11', name: 'All 10 skills present', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
-        id: '2.1.8', name: 'All 7 skills present', tier: 'standard', category: 'Skills',
+        id: '2.1.11', name: 'All 10 skills present', tier: 'standard', category: 'Skills',
         status: ctx.agentFacts.skills.allPresent ? 'pass' : 'fail',
         points: ctx.agentFacts.skills.allPresent ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.skills.allPresent
-          ? 'All 7 skills present'
+          ? 'All 10 skills present'
           : `Missing: ${ctx.agentFacts.skills.missing.join(', ')}`,
       }),
     },
-    recommendation: 'Create all 7 goat-* skills',
+    recommendation: 'Create all 10 goat-* skills',
     recommendationKey: 'create-all-skills',
   },
 
-  // === 2.1.9-2.1.12 Skill Content Quality (4 pts) ===
+  // === 2.1.12-2.1.18 Skill Content Quality (7 pts) ===
   {
-    id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withStep0 / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withStep0}/${quality.total} skills ask questions before acting` };
+          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withStep0}/${quality.total} skills ask questions before acting` };
         }
-        return { id: '2.1.9', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withStep0}/${quality.total} skills gather context — most should ask before acting` };
+        return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withStep0}/${quality.total} skills gather context — most should ask before acting` };
       },
     },
     recommendation: 'Skills should ask clarifying questions before acting (Step 0 pattern)',
     recommendationKey: 'add-skill-step0',
   },
   {
-    id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withHumanGate / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withHumanGate}/${quality.total} skills include human gates` };
+          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withHumanGate}/${quality.total} skills include human gates` };
         }
-        return { id: '2.1.10', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withHumanGate}/${quality.total} skills have human gates — agents should pause for review` };
+        return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withHumanGate}/${quality.total} skills have human gates — agents should pause for review` };
       },
     },
     recommendation: 'Skills should include HUMAN GATE checkpoints where the agent pauses for human review',
     recommendationKey: 'add-skill-human-gates',
   },
   {
-    id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withConstraints / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withConstraints}/${quality.total} skills have RFC 2119 constraints` };
+          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConstraints}/${quality.total} skills have RFC 2119 constraints` };
         }
-        return { id: '2.1.11', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withConstraints}/${quality.total} skills have MUST/MUST NOT constraints` };
+        return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConstraints}/${quality.total} skills have MUST/MUST NOT constraints` };
       },
     },
     recommendation: 'Skills should use MUST/MUST NOT constraints to enforce boundaries',
     recommendationKey: 'add-skill-constraints',
   },
   {
-    id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withPhases / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withPhases}/${quality.total} skills have phased execution` };
+          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withPhases}/${quality.total} skills have phased execution` };
         }
-        return { id: '2.1.12', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withPhases}/${quality.total} skills have phased execution — structure prevents skipping steps` };
+        return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withPhases}/${quality.total} skills have phased execution — structure prevents skipping steps` };
       },
     },
     recommendation: 'Skills should have a phased process (Phase 1, Phase 2, etc.) to prevent step-skipping',
     recommendationKey: 'add-skill-phases',
   },
   {
-    id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills',
+    id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+          return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withConversational / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConversational}/${quality.total} skills encourage conversational interaction` };
+          return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConversational}/${quality.total} skills encourage conversational interaction` };
         }
-        return { id: '2.1.13', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConversational}/${quality.total} skills are conversational — skills should present findings then let humans drill in, not dump one-shot output` };
+        return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConversational}/${quality.total} skills are conversational — skills should present findings then let humans drill in, not dump one-shot output` };
       },
     },
     recommendation: 'Skills should be conversational — present findings, then let the human drill in with follow-up questions. One-shot dumps miss architectural problems.',
     recommendationKey: 'add-skill-conversational',
   },
   {
-    id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills',
+    id: '2.1.17', name: 'Skills have chaining', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+          return { id: '2.1.17', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withChaining / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChaining}/${quality.total} skills link to related skills` };
+          return { id: '2.1.17', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChaining}/${quality.total} skills link to related skills` };
         }
-        return { id: '2.1.14', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChaining}/${quality.total} skills have chaining — skills should link to related skills` };
+        return { id: '2.1.17', name: 'Skills have chaining', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChaining}/${quality.total} skills have chaining — skills should link to related skills` };
       },
     },
     recommendation: 'Skills should include a "Chains with" footer linking to related skills',
     recommendationKey: 'add-skill-chaining',
   },
   {
-    id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills',
+    id: '2.1.18', name: 'Skills have structured choices', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+          return { id: '2.1.18', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withChoices / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChoices}/${quality.total} skills offer choices at phase transitions` };
+          return { id: '2.1.18', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withChoices}/${quality.total} skills offer choices at phase transitions` };
         }
-        return { id: '2.1.15', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChoices}/${quality.total} skills have structured choices — use (a)/(b)/(c) options, not yes/no gates` };
+        return { id: '2.1.18', name: 'Skills have structured choices', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withChoices}/${quality.total} skills have structured choices — use (a)/(b)/(c) options, not yes/no gates` };
       },
     },
     recommendation: 'Skills should offer choices at phase transitions, not just yes/no gates',
     recommendationKey: 'add-skill-choices',
   },
 
-  // === 2.2 Hooks / Verification Scripts (7 pts) ===
+  {
+    id: '2.1.19', name: 'Skills have output format', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { quality } = ctx.agentFacts.skills;
+        if (quality.total === 0) {
+          return { id: '2.1.19', name: 'Skills have output format', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+        }
+        const ratio = quality.withOutputFormat / quality.total;
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
+          return { id: '2.1.19', name: 'Skills have output format', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withOutputFormat}/${quality.total} skills define an output format` };
+        }
+        return { id: '2.1.19', name: 'Skills have output format', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withOutputFormat}/${quality.total} skills define an output format — skills should specify what the agent produces` };
+      },
+    },
+    recommendation: 'Skills should include an ## Output or ## Output Format section that defines the expected deliverable format',
+    recommendationKey: 'add-skill-output-format',
+  },
+
+  // === 2.2 Hooks / Verification Scripts (16 pts) ===
   {
     id: '2.2.1', name: 'Settings/config valid', tier: 'standard', category: 'Hooks',
     pts: 1, confidence: 'high',
@@ -206,17 +234,17 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks',
-    pts: 1, confidence: 'medium',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.postTurnExists) {
-          return { id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No post-turn hook to check' };
+        if (ctx.agentFacts.hooks.postTurnExists === false) {
+          return { id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No post-turn hook to check' };
         }
         return {
           id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks',
           status: ctx.agentFacts.hooks.postTurnExitsZero ? 'pass' : 'fail',
-          points: ctx.agentFacts.hooks.postTurnExitsZero ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          points: ctx.agentFacts.hooks.postTurnExitsZero ? 1 : 0, maxPoints: 1, confidence: 'high',
           message: ctx.agentFacts.hooks.postTurnExitsZero ? 'Post-turn hook exits 0' : 'Post-turn hook may not exit 0 (causes infinite loops)',
         };
       },
@@ -230,9 +258,11 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Whether a post-tool hook (format-file) exists
         const exists = ctx.agentFacts.hooks.postToolExists;
         // Also pass if no formatter configured (documented skip)
         const noFormatter = ctx.facts.stack.formatCommand === null;
+        // Pass when either the hook exists or no formatter is needed
         const pass = exists || noFormatter;
         return {
           id: '2.2.4', name: 'Post-tool hook or documented skip', tier: 'standard', category: 'Hooks',
@@ -250,7 +280,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.denyExists) {
+        if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.4a', name: 'Deny hook has blocking logic', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
         }
         return {
@@ -270,7 +300,7 @@ export const standardChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        if (!ctx.agentFacts.hooks.postTurnExists) {
+        if (ctx.agentFacts.hooks.postTurnExists === false) {
           return { id: '2.2.4b', name: 'Post-turn hook has validation logic', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No post-turn hook' };
         }
         return {
@@ -303,6 +333,130 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'add-compaction-hook',
   },
   {
+    id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyUsesJq ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyUsesJq ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: ctx.agentFacts.hooks.denyUsesJq ? 'Deny hook uses jq for JSON parsing (portable)' : 'Deny hook uses grep -P or regex for JSON parsing — use jq instead (grep -P is not portable to macOS)',
+        };
+      },
+    },
+    recommendation: 'Deny hook should use jq for JSON input parsing, not grep -P (which is unavailable on macOS). Fall back to sed if jq is not installed.',
+    recommendationKey: 'fix-deny-json-parsing',
+  },
+  {
+    id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyHandlesChaining ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyHandlesChaining ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: ctx.agentFacts.hooks.denyHandlesChaining ? 'Deny hook splits on && || ; before checking patterns' : 'Deny hook does not handle command chaining — "echo hello && rm -rf /" would bypass detection',
+        };
+      },
+    },
+    recommendation: 'Deny hook should split commands on &&, ||, and ; then check each segment independently. Without this, chained dangerous commands bypass detection.',
+    recommendationKey: 'fix-deny-chaining',
+  },
+  {
+    id: '2.2.5c', name: 'Deny hook blocks rm -rf', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5c', name: 'Deny hook blocks rm -rf', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5c', name: 'Deny hook blocks rm -rf', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyBlocksRmRf ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyBlocksRmRf ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: ctx.agentFacts.hooks.denyBlocksRmRf ? 'Deny hook blocks rm -rf' : 'Deny hook does not block rm -rf — the most dangerous destructive command must be blocked',
+        };
+      },
+    },
+    recommendation: 'Deny hook MUST block rm -rf (and rm -fr). This is the single most dangerous command an agent can run.',
+    recommendationKey: 'fix-deny-rm-rf',
+  },
+  {
+    id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        // Codex has no Read-deny mechanism — execpolicy only blocks shell commands, not file reads
+        if (ctx.agentFacts.agent.id === 'codex') {
+          return { id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Codex has no Read-deny mechanism (execpolicy covers shell commands only)' };
+        }
+        if (ctx.agentFacts.settings.exists === false) {
+          return { id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No settings file' };
+        }
+        return {
+          id: '2.2.5d', name: 'Read-deny covers sensitive paths', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.readDenyCoversSecrets ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.readDenyCoversSecrets ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: ctx.agentFacts.hooks.readDenyCoversSecrets ? 'Read-deny patterns cover .env, .ssh, .aws, and key/credential files' : 'Read-deny patterns are missing coverage for common sensitive paths (.env, .ssh, .aws, .pem/.key/credentials)',
+        };
+      },
+    },
+    recommendation: 'Settings permissions.deny should include Read patterns for: .env*, .ssh/**, .aws/**, *.pem, *.key, credentials*. These prevent agents from reading secrets.',
+    recommendationKey: 'fix-read-deny-secrets',
+  },
+  {
+    id: '2.2.5e', name: 'Deny hook blocks force push', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5e', name: 'Deny hook blocks force push', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5e', name: 'Deny hook blocks force push', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyBlocksForcePush ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyBlocksForcePush ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: ctx.agentFacts.hooks.denyBlocksForcePush ? 'Deny hook blocks force push' : 'Deny hook does not block force push — agents must never force push',
+        };
+      },
+    },
+    recommendation: 'Deny hook MUST block force push (--force flag on git push). Force push can destroy shared branch history.',
+    recommendationKey: 'fix-deny-force-push',
+  },
+  {
+    id: '2.2.5f', name: 'Deny hook blocks chmod 777', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5f', name: 'Deny hook blocks chmod 777', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5f', name: 'Deny hook blocks chmod 777', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyBlocksChmod ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyBlocksChmod ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: ctx.agentFacts.hooks.denyBlocksChmod ? 'Deny hook blocks chmod 777' : 'Deny hook does not block chmod 777 — world-writable permissions are a security risk',
+        };
+      },
+    },
+    recommendation: 'Deny hook MUST block chmod 777. World-writable permissions are a security vulnerability.',
+    recommendationKey: 'fix-deny-chmod',
+  },
+  {
     id: '2.2.5', name: 'Preflight script', tier: 'standard', category: 'Hooks',
     pts: 1, confidence: 'high',
     detect: { type: 'file_exists', path: 'scripts/preflight-checks.sh' },
@@ -321,8 +475,26 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Create context validation script or CI workflow',
     recommendationKey: 'create-context-validation',
   },
+  {
+    id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
+    pts: 2, confidence: 'medium',
+    na: (ctx) => ctx.agentFacts.askFirst.exists === false || ctx.agentFacts.agent.hooksDir === null,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
+        status: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 'pass' : 'fail',
+        points: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 2 : 0, maxPoints: 2, confidence: 'medium',
+        message: ctx.agentFacts.askFirstEnforcement.hasPathHook
+          ? 'Ask First boundaries have a PreToolUse enforcement hook'
+          : 'Ask First boundaries are policy-only — no hook enforces edits to boundary files',
+      }),
+    },
+    recommendation: 'Create a PreToolUse hook that warns when editing Ask First boundary files',
+    recommendationKey: 'create-ask-first-hook',
+  },
 
-  // === 2.3 Learning Loop (7 pts) ===
+  // === 2.3 Learning Loop (6 pts) ===
   {
     id: '2.3.1', name: 'lessons.md exists', tier: 'standard', category: 'Learning Loop',
     pts: 1, confidence: 'high',
@@ -367,6 +539,37 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Add file:line evidence to footgun entries',
     recommendationKey: 'add-footgun-evidence',
   },
+  {
+    id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop',
+    pts: 1, partialPts: 0, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { exists, entryCount } = ctx.facts.shared.lessons;
+        if (!exists) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
+        if (entryCount >= 3) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries — healthy learning loop` };
+        return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${entryCount} lesson entries — search git history for real incidents to seed more` };
+      },
+    },
+    recommendation: 'Seed lessons.md with 3+ real incidents from git history',
+    recommendationKey: 'seed-lessons-minimum',
+  },
+  {
+    id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop',
+    pts: 2, partialPts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { totalRefs, validRefs, staleRefs } = ctx.facts.shared.footguns;
+        if (totalRefs === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No file:line references to check' };
+        if (staleRefs.length === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `All ${totalRefs} file references resolve` };
+        if (validRefs / totalRefs > 0.5) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${staleRefs.length} stale refs: ${staleRefs.slice(0, 3).join(', ')}`, evidence: staleRefs.join(', ') };
+        return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: `${staleRefs.length}/${totalRefs} references are stale`, evidence: staleRefs.join(', ') };
+      },
+    },
+    recommendation: 'Update stale file:line references in footguns.md',
+    recommendationKey: 'ap-fix-stale-references',
+  },
 
   // === 2.4 Router Table (5 pts) ===
   {
@@ -406,10 +609,10 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'route-skills',
   },
 
-  // === 2.5 Architecture Docs (4 pts) ===
+  // === 2.5 Architecture Docs (2 pts) ===
   {
     id: '2.5.1', name: 'architecture.md exists', tier: 'standard', category: 'Architecture',
-    pts: 2, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: { type: 'file_exists', path: 'docs/architecture.md' },
     recommendation: 'Create docs/architecture.md',
     recommendationKey: 'create-architecture',
@@ -417,20 +620,11 @@ export const standardChecks: CheckDef[] = [
   {
     id: '2.5.2', name: 'architecture.md under 100 lines', tier: 'standard', category: 'Architecture',
     pts: 1, confidence: 'high',
-    na: (ctx) => !ctx.facts.shared.architecture.exists,
+    na: (ctx) => ctx.facts.shared.architecture.exists === false,
     detect: { type: 'line_count', path: 'docs/architecture.md', pass: 100, fail: 200 },
     recommendation: 'Compress docs/architecture.md below 100 lines',
     recommendationKey: 'compress-architecture',
   },
-  {
-    id: '2.5.3', name: 'domain-reference.md exists', tier: 'standard', category: 'Architecture',
-    pts: 1, confidence: 'high',
-    na: () => true, // N/A unless migration happened — conservatively skip
-    detect: { type: 'file_exists', path: 'docs/domain-reference.md' },
-    recommendation: 'Create docs/domain-reference.md if domain content was migrated',
-    recommendationKey: 'create-domain-reference',
-  },
-
   // === 2.6 Local Instructions (cold path) (6 pts) ===
   {
     id: '2.6.1', name: 'Instructions directory exists', tier: 'standard', category: 'Local Instructions',
@@ -457,7 +651,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasRouter, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.2', name: 'Router exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory — router not applicable' };
         }
         return {
@@ -472,25 +666,47 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'create-instructions-router',
   },
   {
-    id: '2.6.3', name: 'base.md exists', tier: 'standard', category: 'Local Instructions',
+    id: '2.6.3', name: 'conventions.md exists', tier: 'standard', category: 'Local Instructions',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        const { hasBase, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
-          return { id: '2.6.3', name: 'base.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
+        const { hasConventions, dirExists } = ctx.facts.shared.localInstructions;
+        if (dirExists === false) {
+          return { id: '2.6.3', name: 'conventions.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
-          id: '2.6.3', name: 'base.md exists', tier: 'standard', category: 'Local Instructions',
-          status: hasBase ? 'pass' : 'fail',
-          points: hasBase ? 1 : 0, maxPoints: 1, confidence: 'high',
-          message: hasBase ? 'base.md found' : 'base.md not found — project needs a universal coding contract',
+          id: '2.6.3', name: 'conventions.md exists', tier: 'standard', category: 'Local Instructions',
+          status: hasConventions ? 'pass' : 'fail',
+          points: hasConventions ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: hasConventions ? 'conventions.md found' : 'conventions.md not found — project needs a universal coding contract',
         };
       },
     },
-    recommendation: 'Create ai/instructions/base.md with project-wide conventions',
-    recommendationKey: 'create-base-instructions',
+    recommendation: 'Create ai/instructions/conventions.md with project-wide conventions',
+    recommendationKey: 'create-conventions-instructions',
+  },
+  {
+    id: '2.6.3a', name: 'conventions.md has real content', tier: 'standard', category: 'Local Instructions',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.facts.shared.localInstructions.hasConventions === false) {
+          return { id: '2.6.3a', name: 'conventions.md has real content', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No conventions.md' };
+        }
+        return {
+          id: '2.6.3a', name: 'conventions.md has real content', tier: 'standard', category: 'Local Instructions',
+          status: ctx.facts.shared.localInstructions.conventionsHasContent ? 'pass' : 'fail',
+          points: ctx.facts.shared.localInstructions.conventionsHasContent ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: ctx.facts.shared.localInstructions.conventionsHasContent
+            ? 'conventions.md has commands and conventions'
+            : 'conventions.md exists but lacks commands or conventions — a stub is not useful',
+        };
+      },
+    },
+    recommendation: 'conventions.md should include: build/test/lint commands, coding conventions (DO/DON\'T), and dangerous operations',
+    recommendationKey: 'improve-conventions-instructions',
   },
   {
     id: '2.6.4', name: 'code-review.md exists', tier: 'standard', category: 'Local Instructions',
@@ -499,7 +715,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasCodeReview, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.4', name: 'code-review.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
@@ -520,7 +736,7 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { hasGitCommit, dirExists } = ctx.facts.shared.localInstructions;
-        if (!dirExists) {
+        if (dirExists === false) {
           return { id: '2.6.5', name: 'git-commit.md exists', tier: 'standard', category: 'Local Instructions', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No instructions directory' };
         }
         return {
@@ -548,5 +764,59 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Create .github/git-commit-instructions.md for universal commit guidance',
     recommendationKey: 'create-github-git-commit',
+  },
+  {
+    id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasFrontend, dirExists } = ctx.facts.shared.localInstructions;
+        if (dirExists === false) {
+          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
+        }
+        const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
+        const needsFrontend = langs.some(l => l === 'typescript' || l === 'javascript');
+        if (!needsFrontend) {
+          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No TS/JS detected' };
+        }
+        return {
+          id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
+          status: hasFrontend ? 'pass' : 'fail',
+          points: hasFrontend ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: hasFrontend ? 'frontend.md found' : 'TypeScript/JavaScript project should have frontend.md',
+        };
+      },
+    },
+    recommendation: 'Create ai/instructions/frontend.md with TS/JS coding conventions',
+    recommendationKey: 'create-frontend-instructions',
+  },
+  {
+    id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasBackend, dirExists } = ctx.facts.shared.localInstructions;
+        if (dirExists === false) {
+          return { id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
+        }
+        const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
+        const backendLangs = ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'];
+        const needsBackend = langs.some(l => backendLangs.includes(l));
+        if (!needsBackend) {
+          return { id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No backend language detected' };
+        }
+        const detectedLang = langs.find(l => backendLangs.includes(l));
+        return {
+          id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions',
+          status: hasBackend ? 'pass' : 'fail',
+          points: hasBackend ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: hasBackend ? 'backend.md found' : `${detectedLang} project should have backend.md`,
+        };
+      },
+    },
+    recommendation: 'Create ai/instructions/backend.md with backend coding conventions',
+    recommendationKey: 'create-backend-instructions',
   },
 ];

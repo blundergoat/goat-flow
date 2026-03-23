@@ -2,6 +2,8 @@
 
 These sections go in every project's root instruction file (CLAUDE.md, AGENTS.md, or equivalent). They are the same regardless of which agent you use.
 
+**MULTI-AGENT SYNC:** When multiple agent files exist (CLAUDE.md + AGENTS.md + GEMINI.md), the execution loop content is duplicated in each (no import mechanism exists). Changes to the loop MUST be propagated to all copies. The scanner checks for divergence (check 3.3.4).
+
 Target: under 120 lines. Hard limit: 150. Use BAD/GOOD examples not prose.
 
 ---
@@ -28,6 +30,8 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Anti-planning-loop rule. Anti-BDUF guard with BAD/GOOD example
    - VERIFY: continuous test loop. Stop-the-line with two-level
      escalation. Revert-and-rescope tactic.
+     Plan tracking: if working from a plan/milestone file, tick each
+     checkbox (`- [x]`) as the task is completed — not at the end.
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
@@ -38,11 +42,11 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      docs/decisions/ (significant technical decisions with context/rationale).
      When-to-use table. Footgun propagation rule.
      Context-based loading rules.
-     Mechanical trigger: if VERIFY caught a failure in code you wrote
-     this session, or you corrected course mid-task, a lessons.md
-     entry is required before DoD can be satisfied.
-     After human correction of agent behaviour, MUST log the lesson
-     immediately — do not wait for next session.
+     MECHANICAL TRIGGER (non-negotiable):
+     - VERIFY caught a failure in your code → lessons.md entry BEFORE DoD
+     - Human corrected agent behaviour → lessons.md entry IMMEDIATELY
+     - Discovered architectural trap with file:line evidence → footguns.md
+     Skip = DoD gate #4 blocks completion. This is not optional.
      Dual-agent projects: learning loop files are shared. Read the
      current file before appending to avoid duplicating entries.
 
@@ -69,6 +73,8 @@ e) Working Memory: Working Notes for 5+ turn tasks, context escalation
    failed attempts and superseded reasoning before compacting (noise
    pruning). Use /clear between unrelated tasks for fresh context.
    tasks/todo.md and tasks/handoff.md MUST be gitignored.
+   settings.local.json: review quarterly, prune session artifacts.
+   Target: under 20 intentional lines (test runners, build tools only).
    Recommended: register a Notification hook for compaction that
    re-injects current task, modified files, and constraints.
    See workflow/runtime/enforcement.md for the hook configuration.
@@ -79,7 +85,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 7 skill directories (Claude/Gemini/Codex: .claude/skills/, .agents/skills/)
+     - All 10 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)
      - Learning loop files (footguns, lessons)
      - Architecture doc, handoff template, agent evals
      - Project guidelines: `ai/README.md`

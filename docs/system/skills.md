@@ -1,6 +1,6 @@
 # Skills
 
-Seven focused capabilities loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked — they stay out of the instruction budget.
+Ten focused capabilities loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked — they stay out of the instruction budget.
 
 All skills use the `goat-` prefix to avoid conflicts with built-in agent commands.
 
@@ -13,6 +13,9 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 | /goat-review | Structured code review | MUST read all files before commenting | Before merging or after external PR feedback |
 | /goat-plan | 4-phase planning workflow | Human approval between each phase | Before non-trivial implementation |
 | /goat-test | 3-track testing instructions | Coding agent MUST NOT verify its own work | After a milestone or 30-60 min of coding |
+| /goat-reflect | Post-session reflection | MUST produce structured lessons entry | After a coding session or before /clear |
+| /goat-onboard | Codebase onboarding | MUST read architecture + footguns before producing orientation | New contributor or agent entering the project |
+| /goat-resume | Session resumption | MUST read handoff files before acting | After a break, /clear, or session restart |
 
 ---
 
@@ -92,6 +95,36 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 **Invoke when:** You've finished a chunk of work and need to verify it before moving on. Based on the doer-verifier principle from `workflow/playbooks/testing/`.
 
+### /goat-reflect
+
+**When:** After a coding session, before `/clear`, or when explicitly asked to reflect on what happened.
+
+**What it does:** Reviews the session's actions, decisions, and outcomes. Produces structured entries for `docs/lessons.md` (behavioural mistakes) and `docs/footguns.md` (architectural traps discovered). Identifies patterns across recent sessions.
+
+**Hard gate:** MUST produce a structured lessons entry with evidence. MUST NOT fabricate incidents.
+
+**Invoke when:** You've finished a session and want to capture what went well, what went wrong, and what the next agent should know. Do NOT invoke mid-task.
+
+### /goat-onboard
+
+**When:** A new contributor or agent enters the project for the first time, or after significant architectural changes.
+
+**What it does:** Reads `docs/architecture.md`, `docs/footguns.md`, the router table, and project structure to produce a structured orientation document. Maps key boundaries, critical paths, and common gotchas.
+
+**Hard gate:** MUST read architecture and footguns files before producing the orientation. MUST NOT skip Ask First boundaries.
+
+**Invoke when:** You're new to the project or need a refresher on the system's structure. Do NOT invoke if you're already familiar with the codebase.
+
+### /goat-resume
+
+**When:** Resuming work after a break, `/clear`, or session restart.
+
+**What it does:** Reads `tasks/handoff.md`, `tasks/todo.md`, and session state files to reconstruct context. Produces a summary of where work left off, what decisions were made, and what the next steps are.
+
+**Hard gate:** MUST read handoff files before acting. MUST NOT start new work without reviewing pending state.
+
+**Invoke when:** You're picking up where a previous session left off. Do NOT invoke for fresh tasks with no prior context.
+
 ---
 
 ## Choosing the Right Skill
@@ -105,6 +138,9 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 | "How should we build this feature?" | /goat-plan | Planning before implementing |
 | "Are these changes safe to merge?" | /goat-review | Reviewing changes, not finding new issues |
 | "How do we verify this work?" | /goat-test | Generate testing instructions for 3 tracks |
+| "What did we learn this session?" | /goat-reflect | Structured lessons from session actions |
+| "I'm new to this project" | /goat-onboard | Orientation before contributing |
+| "Where did we leave off?" | /goat-resume | Reconstruct context from handoff state |
 
 ## Where Skills Live
 
@@ -113,6 +149,7 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 | Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
 | Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
+| Copilot CLI | `.github/skills/goat-{name}/SKILL.md` |
 
 Skills are created during Phase 1b of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them.
 
@@ -147,6 +184,18 @@ Skills are created during Phase 1b of the GOAT Flow setup. The skill templates i
 ### /goat-test
 **Problem:** The coding agent verifies its own work and declares victory. Self-assessment is unreliable — the agent has blind spots for the same failure modes it introduced.
 **Design:** Generates instructions for three independent verification tracks. The coding agent produces the test plan but does NOT execute verification — separate agents and the human do.
+
+### /goat-reflect
+**Problem:** Lessons from coding sessions evaporate when the session ends. Mistakes repeat because no one captures what happened.
+**Design:** Structured reflection producing entries for the learning loop files. Forces evidence-based entries, not vague summaries.
+
+### /goat-onboard
+**Problem:** New agents or contributors waste their first session reading the wrong files or missing critical boundaries.
+**Design:** Reads architecture, footguns, and router table to produce an orientation document. Surfaces Ask First boundaries and high-risk areas early.
+
+### /goat-resume
+**Problem:** After /clear or a session break, the agent starts from scratch and loses context about decisions, progress, and pending work.
+**Design:** Reads handoff and todo files to reconstruct state before acting. Prevents duplicate work and forgotten decisions.
 
 ## Skill Justification Test
 

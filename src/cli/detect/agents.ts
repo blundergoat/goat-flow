@@ -1,6 +1,7 @@
 import type { AgentProfile, AgentId, ReadonlyFS } from '../types.js';
 
-const PROFILES: Record<AgentId, AgentProfile> = {
+/** Configuration profiles for all supported AI coding agents */
+export const PROFILES: Record<AgentId, AgentProfile> = {
   claude: {
     id: 'claude',
     name: 'Claude Code',
@@ -16,12 +17,12 @@ const PROFILES: Record<AgentId, AgentProfile> = {
     id: 'codex',
     name: 'Codex',
     instructionFile: 'AGENTS.md',
-    settingsFile: null,
+    settingsFile: '.codex/config.toml',
     skillsDir: '.agents/skills',
-    hooksDir: null,
+    hooksDir: '.codex/hooks',
     denyMechanism: { type: 'deny-script', path: 'scripts/deny-dangerous.sh' },
     localPattern: '.github/instructions/*.md',
-    hookEvents: { preTool: '', postTool: '', postTurn: '' },
+    hookEvents: { preTool: '', postTool: 'after_tool_use', postTurn: 'stop' },
   },
   gemini: {
     id: 'gemini',
@@ -36,14 +37,14 @@ const PROFILES: Record<AgentId, AgentProfile> = {
   },
 };
 
-export function getProfile(id: AgentId): AgentProfile {
-  return PROFILES[id];
-}
-
+/** Detect which AI coding agents are configured in the project */
 export function detectAgents(fs: ReadonlyFS): AgentProfile[] {
+  /** Accumulator for agents whose instruction files exist in the project */
   const agents: AgentProfile[] = [];
 
+  // Iterate over each known agent ID to check for its instruction file
   for (const id of ['claude', 'codex', 'gemini'] as const) {
+    /** Profile configuration for the current agent */
     const profile = PROFILES[id];
     if (fs.exists(profile.instructionFile)) {
       agents.push(profile);

@@ -1,5 +1,7 @@
-// Library entry point for programmatic consumers (M2, M3)
-// Re-exports the scan engine, types, and utilities
+/**
+ * Library entry point for programmatic consumers (M2, M3).
+ * Re-exports the scan engine, types, and utilities.
+ */
 
 export type {
   AgentId,
@@ -26,4 +28,17 @@ export type {
   CLIOptions,
 } from './types.js';
 
-// TODO: export scan(), score(), detect() functions as they are built
+export { scanProject } from './scanner/scan.js';
+export type { ScanOptions } from './scanner/scan.js';
+
+export { createFS } from './facts/fs.js';
+
+export {
+  getCheck,
+  getChecksByTier,
+  getChecksByCategory,
+} from './rubric/registry.js';
+
+export { getFragmentsByPhase } from './prompt/registry.js';
+
+export type { EvalScore, EvalResult } from './evals/types.js';

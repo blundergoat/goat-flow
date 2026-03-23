@@ -1,8 +1,8 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 3 — Full fragments (19 check keys)
- * Agent evals, CI validation, permission profiles, guidelines ownership, hygiene
+ * Tier 3 — Full fragments (12 check keys)
+ * Agent evals, CI validation, hygiene
  */
 export const fullFragments: Fragment[] = [
   // === Agent Evals ===
@@ -12,30 +12,6 @@ export const fullFragments: Fragment[] = [
     category: 'Agent Evals',
     kind: 'create',
     instruction: `Create the \`agent-evals/\` directory for agent evaluation scenarios.`,
-  },
-  {
-    key: 'create-evals-readme',
-    phase: 'full',
-    category: 'Agent Evals',
-    kind: 'create',
-    instruction: `Create \`agent-evals/README.md\`:
-
-\`\`\`markdown
-# Agent Evals
-
-Replay scenarios for testing agent behaviour. Each eval captures a real incident or synthetic seed.
-
-## Format
-
-Each eval file contains:
-- **Origin:** real-incident | synthetic-seed
-- **Agents:** which agents this applies to
-- **Replay Prompt:** the exact prompt to paste
-
-## Running Evals
-
-Paste the Replay Prompt into the agent and verify it handles the scenario correctly.
-\`\`\``,
   },
   {
     key: 'add-evals',
@@ -95,6 +71,19 @@ Prefer real incidents over synthetic seeds. At least 3 evals required.`,
 
 Use \`real-incident\` for evals from actual bugs/issues. Use \`synthetic-seed\` for designed test scenarios.`,
   },
+  {
+    key: 'add-eval-skill-coverage',
+    phase: 'full',
+    category: 'Agent Evals',
+    kind: 'fix',
+    instruction: `Eval files should reference which skill they exercise. Add a \`**Skill:**\` label to each eval file:
+
+\`\`\`markdown
+**Skill:** goat-debug
+\`\`\`
+
+Ensure at least 2 distinct skills are covered across all evals. This validates that your skills work in realistic scenarios, not just in isolation.`,
+  },
 
   // === CI Validation ===
   {
@@ -121,7 +110,7 @@ jobs:
         run: bash scripts/context-validate.sh || true
       - name: Check skills exist
         run: |
-          for skill in preflight debug audit investigate review plan test; do
+          for skill in security debug audit investigate review plan test reflect onboard resume; do
             for dir in .claude/skills .agents/skills; do
               [ -d "$dir/goat-$skill" ] && echo "✓ $dir/goat-$skill"
             done
@@ -155,75 +144,20 @@ jobs:
     phase: 'full',
     category: 'CI Validation',
     kind: 'create',
-    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 7 goat-* skill directories have a SKILL.md.`,
-  },
-
-  // === Permission Profiles ===
-  {
-    key: 'create-profiles-dir',
-    phase: 'full',
-    category: 'Permission Profiles',
-    kind: 'create',
-    instruction: `Create \`.claude/profiles/\` directory for role-based permission profiles. Profiles allow different permission sets for different tasks (e.g., reviewer vs implementer).`,
+    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 10 goat-* skill directories have a SKILL.md.`,
   },
   {
-    key: 'create-profiles',
+    key: 'ci-trigger-prs',
     phase: 'full',
-    category: 'Permission Profiles',
-    kind: 'create',
-    instruction: `Create 2+ permission profiles in \`.claude/profiles/\`. Example:
+    category: 'CI Validation',
+    kind: 'fix',
+    instruction: `Add \`pull_request\` to the CI workflow triggers so validation runs automatically on every PR:
 
-\`\`\`json
-// .claude/profiles/reviewer.json
-{
-  "permissions": {
-    "deny": ["Bash(git commit*)", "Bash(git push*)", "Edit(*)", "Write(*)"]
-  }
-}
+\`\`\`yaml
+on: [push, pull_request]
 \`\`\`
 
-Common profiles: reviewer (read-only), implementer (edit within scope), admin (full access).`,
-  },
-  {
-    key: 'route-profiles',
-    phase: 'full',
-    category: 'Permission Profiles',
-    kind: 'create',
-    instruction: `Add profiles to the router table in \`{{instructionFile}}\`:
-
-\`\`\`markdown
-| Profiles | \\\`.claude/profiles/\\\` |
-\`\`\``,
-  },
-
-  // === Guidelines Ownership ===
-  {
-    key: 'fix-dod-overlap',
-    phase: 'full',
-    category: 'Guidelines Ownership',
-    kind: 'fix',
-    instruction: `The Definition of Done appears in both the instruction file and a guidelines file. Remove the DoD from the guidelines file — it belongs only in \`{{instructionFile}}\`.`,
-  },
-  {
-    key: 'fix-loop-overlap',
-    phase: 'full',
-    category: 'Guidelines Ownership',
-    kind: 'fix',
-    instruction: `Execution loop content appears in both the instruction file and a guidelines file. Remove execution loop content from the guidelines file — it belongs only in \`{{instructionFile}}\`.`,
-  },
-  {
-    key: 'create-ownership-split',
-    phase: 'full',
-    category: 'Guidelines Ownership',
-    kind: 'create',
-    instruction: `Create \`docs/guidelines-ownership-split.md\` documenting what was migrated from guidelines to the instruction file and why.`,
-  },
-  {
-    key: 'verify-separation',
-    phase: 'full',
-    category: 'Guidelines Ownership',
-    kind: 'fix',
-    instruction: `Verify clean separation: autonomy tiers, stop-the-line rules, and DoD should only appear in \`{{instructionFile}}\`, not in any guidelines file.`,
+Without this, PRs can merge without context validation passing.`,
   },
 
   // === Hygiene ===
@@ -277,5 +211,20 @@ Ensure at least 3 instances across the instruction file. Use MUST for DoD gates 
 **Option B:** Create \`CHANGELOG.md\` at the project root
 
 Track meaningful changes to the GOAT Flow configuration (not code changes).`,
+  },
+  // === Execution Loop Sync ===
+  {
+    key: 'fix-execution-loop-sync',
+    phase: 'full',
+    category: 'Hygiene',
+    kind: 'fix',
+    instruction: `Multiple agent instruction files have diverged execution loops. When CLAUDE.md, AGENTS.md, and/or GEMINI.md all contain the execution loop (READ→CLASSIFY→SCOPE→ACT→VERIFY→LOG), changes must be propagated to all copies.
+
+1. Diff the execution loop sections across all agent instruction files
+2. Identify intentional differences (agent-specific adaptations) vs accidental drift
+3. Reconcile: same rules should use same wording, agent-specific behaviour stays different
+4. After reconciling, verify essential commands and Ask First boundaries are also consistent
+
+Note: the execution loop MUST be duplicated (each file is loaded independently). The goal is consistency, not deduplication.`,
   },
 ];

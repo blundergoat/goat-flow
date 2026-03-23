@@ -6,6 +6,15 @@ Each eval declares:
 - **Origin:** `real-incident` (from git history) or `synthetic-seed` (from known failure mode)
 - **Agents:** `all` (any agent) or `codex` / `claude` (agent-specific)
 
+See [`FORMAT.md`](FORMAT.md) for the structured eval format (YAML frontmatter, behavioral gates, scoring).
+
+## CLI
+
+```bash
+goat-flow eval                  # Summarize all evals (text)
+goat-flow eval --format json    # Summarize as JSON
+```
+
 ## How to Use
 
 1. Pick an eval file (filter by `Agents:` if testing a specific agent)

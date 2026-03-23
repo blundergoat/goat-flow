@@ -1,11 +1,17 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
+// Confidence criteria:
+//   high   = deterministic (file exists, line count, JSON valid, exact match)
+//   medium = heuristic (regex pattern, ratio threshold, keyword detection)
+//   low    = semantic inference (content quality judgment)
+
 /**
- * Tier 1 — Foundation (42 points)
- * Instruction file, execution loop, autonomy tiers, DoD, enforcement
+ * Tier 1 — Foundation (47 points)
+ * Instruction file, execution loop, autonomy tiers, DoD, enforcement.
+ * These are baseline requirements every GOAT Flow project must satisfy.
  */
 export const foundationChecks: CheckDef[] = [
-  // === 1.1 Instruction File (8 pts) ===
+  // === 1.1 Instruction File (9 pts) ===
   {
     id: '1.1.1', name: 'Instruction file exists', tier: 'foundation', category: 'Instruction File',
     pts: 2, confidence: 'high',
@@ -35,7 +41,28 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-essential-commands',
   },
 
-  // === 1.2 Execution Loop (12 pts) ===
+  {
+    id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content;
+        if (content === null) {
+          return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
+        }
+        const matches = content.match(/\bBAD\b|\bGOOD\b|\bDON'T\b|\bexample:/gi) ?? [];
+        if (matches.length >= 2) {
+          return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `Instruction file uses concrete DO/DON'T or BAD/GOOD examples (${matches.length} matches)` };
+        }
+        return { id: '1.1.5', name: 'Instruction file has concrete examples', tier: 'foundation', category: 'Instruction File', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No concrete examples found' };
+      },
+    },
+    recommendation: 'Add concrete BAD/GOOD or DO/DON\'T examples to the instruction file — at least 2 pairs showing right vs wrong approaches',
+    recommendationKey: 'add-concrete-examples',
+  },
+
+  // === 1.2 Execution Loop (13 pts) ===
   {
     id: '1.2.1', name: 'READ step', tier: 'foundation', category: 'Execution Loop',
     pts: 2, confidence: 'high',
@@ -49,6 +76,26 @@ export const foundationChecks: CheckDef[] = [
     detect: { type: 'grep', path: '{instruction_file}', pattern: 'classify|complexity.*budget|Hotfix.*Standard' },
     recommendation: 'Add CLASSIFY step with complexity budgets (Hotfix/Standard/System/Infrastructure)',
     recommendationKey: 'add-classify-step',
+  },
+  {
+    id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content;
+        if (content === null) {
+          return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
+        }
+        const hasBudgetTable = /Hotfix.*\d|Standard.*\d|read.*budget|turn.*budget/i.test(content);
+        if (hasBudgetTable) {
+          return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section includes complexity budgets with numbers' };
+        }
+        return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section has no complexity budget table' };
+      },
+    },
+    recommendation: 'Add a complexity budget table to the CLASSIFY step with read/turn budgets per complexity level (Hotfix, Standard, System, Infrastructure)',
+    recommendationKey: 'add-classify-budgets',
   },
   {
     id: '1.2.3', name: 'SCOPE step', tier: 'foundation', category: 'Execution Loop',
@@ -79,7 +126,7 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-log-step',
   },
 
-  // === 1.3 Autonomy Tiers (8 pts) ===
+  // === 1.3 Autonomy Tiers (10 pts) ===
   {
     id: '1.3.1', name: 'Three tiers present', tier: 'foundation', category: 'Autonomy Tiers',
     pts: 2, confidence: 'high',
@@ -101,19 +148,20 @@ export const foundationChecks: CheckDef[] = [
       fn: (ctx: FactContext): CheckResult => {
         // Search section headings first, then fall back to body content
         let section = findSection(ctx, 'ask first');
-        if (!section) {
+        if (section === null) {
           // Try finding "Ask First" as bold text in the full content
           const content = ctx.agentFacts.instruction.content;
-          if (content) {
+          if (content !== null) {
             const match = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
             if (match) section = match[0];
           }
         }
-        if (!section) {
+        if (section === null) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: 'No Ask First section found' };
         }
         const lines = section.split('\n').filter(l => l.trim()).length;
-        const hasProjectPaths = /`[^`]*[./][^`]*`/.test(section); // Contains backtick-wrapped paths
+        // Check whether the section contains backtick-wrapped file paths
+        const hasProjectPaths = /`[^`]*[./][^`]*`/.test(section);
         if (lines > 5 && hasProjectPaths) {
           return { id: '1.3.2', name: 'Ask First project-specific', tier: 'foundation', category: 'Autonomy Tiers', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Ask First has ${lines} lines with project-specific content`, evidence: 'Ask First section' };
         }
@@ -163,7 +211,7 @@ export const foundationChecks: CheckDef[] = [
     recommendationKey: 'add-micro-checklist',
   },
 
-  // === 1.4 Definition of Done (6 pts) ===
+  // === 1.4 Definition of Done (7 pts) ===
   {
     id: '1.4.1', name: 'DoD section exists', tier: 'foundation', category: 'Definition of Done',
     pts: 2, confidence: 'high',
@@ -183,7 +231,7 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.4.3', name: 'Grep-after-rename gate', tier: 'foundation', category: 'Definition of Done',
-    pts: 1, confidence: 'high',
+    pts: 2, confidence: 'high',
     detect: { type: 'grep', path: '{instruction_file}', pattern: 'grep.*old.*pattern|zero.*remaining|grep.*rename' },
     recommendation: 'Add grep-after-rename gate to DoD',
     recommendationKey: 'add-grep-gate',
@@ -204,7 +252,9 @@ export const foundationChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const deny = ctx.agentFacts.agent.denyMechanism;
+        // Whether any deny mechanism was found for this agent
         let exists = false;
+        // Path(s) where the deny mechanism was detected
         let evidence = '';
 
         if (deny.type === 'settings-deny') {
@@ -231,13 +281,13 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.5.2', name: 'git commit blocked', tier: 'foundation', category: 'Enforcement',
-    pts: 2, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '1.5.2', name: 'git commit blocked', tier: 'foundation', category: 'Enforcement',
         status: ctx.agentFacts.deny.gitCommitBlocked ? 'pass' : 'fail',
-        points: ctx.agentFacts.deny.gitCommitBlocked ? 2 : 0, maxPoints: 2, confidence: 'high',
+        points: ctx.agentFacts.deny.gitCommitBlocked ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.deny.gitCommitBlocked ? 'git commit is blocked' : 'git commit is not blocked',
       }),
     },
@@ -246,13 +296,13 @@ export const foundationChecks: CheckDef[] = [
   },
   {
     id: '1.5.3', name: 'git push blocked', tier: 'foundation', category: 'Enforcement',
-    pts: 1, confidence: 'high',
+    pts: 2, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '1.5.3', name: 'git push blocked', tier: 'foundation', category: 'Enforcement',
         status: ctx.agentFacts.deny.gitPushBlocked ? 'pass' : 'fail',
-        points: ctx.agentFacts.deny.gitPushBlocked ? 1 : 0, maxPoints: 1, confidence: 'high',
+        points: ctx.agentFacts.deny.gitPushBlocked ? 2 : 0, maxPoints: 2, confidence: 'high',
         message: ctx.agentFacts.deny.gitPushBlocked ? 'git push is blocked' : 'git push is not blocked',
       }),
     },
@@ -265,6 +315,7 @@ export const foundationChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        // Whether a deny-dangerous script exists in the hooks directory
         const exists = ctx.agentFacts.hooks.denyExists;
         return {
           id: '1.5.4', name: 'Deny hook/script exists', tier: 'foundation', category: 'Enforcement',
@@ -278,7 +329,12 @@ export const foundationChecks: CheckDef[] = [
   },
 ];
 
+/**
+ * Search the instruction file sections for a heading containing the given name.
+ * Returns the section body text, or null if no matching heading is found.
+ */
 function findSection(ctx: FactContext, name: string): string | null {
+  // Iterate over all parsed section headings in the instruction file
   for (const [heading, content] of ctx.agentFacts.instruction.sections) {
     if (heading.includes(name.toLowerCase())) return content;
   }

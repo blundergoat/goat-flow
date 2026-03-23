@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Anti-pattern fix fragments (9 keys)
+ * Anti-pattern fix fragments (12 keys)
  */
 export const antiPatternFragments: Fragment[] = [
   {
@@ -112,5 +112,45 @@ Add to \`.gitignore\`:
 settings.local.json
 .env
 \`\`\``,
+  },
+  {
+    key: 'ap-prune-settings-local',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `\`settings.local.json\` has grown beyond 50 lines. This file accumulates one-off session approvals as permanent policy.
+
+Audit it:
+1. Remove single-use debugging commands (inline scripts, cat/echo to /tmp)
+2. Remove commands from completed tasks that are no longer needed
+3. Keep only permanently needed overrides (test runners, build tools)
+4. Target: under 20 intentional lines. Over 50 triggers this anti-pattern.`,
+  },
+  {
+    key: 'ap-fix-empty-scaffolding',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Learning loop files exist but are empty — created to pass the scanner, not to capture knowledge.
+
+Either:
+1. **Populate** — search git history for real incidents: \`git log --oneline | grep -iE 'fix|revert|bug|broke|regression'\`. Seed from real mistakes only.
+2. **Or remove** — delete the empty files. Let them materialise on first real use.
+
+Empty scaffolding provides no value and creates a false sense of completeness.`,
+  },
+  {
+    key: 'ap-fix-stale-references',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `\`docs/footguns.md\` contains file:line references to files that no longer exist. Stale references mislead agents.
+
+For each stale reference:
+1. If the file was **renamed**: update the path to the new location
+2. If the file was **deleted**: remove the footgun entry or update with current evidence
+3. If the footgun is **no longer relevant**: remove the entire entry
+
+Every file:line reference must point to a real file on disk.`,
   },
 ];

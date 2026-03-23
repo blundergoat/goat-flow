@@ -1,87 +1,143 @@
 # GOAT Flow
 
-A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, Codex, and Copilot a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop - instead of a wall of rules.
-
-Implemented across 7 real projects. Open source under MIT.
+A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, and Codex a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop — instead of a wall of rules they half-follow.
 
 ## The Problem
 
-AI coding agents are powerful but unreliable without structure. They fabricate file paths, skip verification, expand scope without asking, declare tasks done when they're not, and repeat the same mistakes across sessions. Rules in instruction files help (~70% compliance), but rules alone aren't enough.
+AI coding agents are powerful but unreliable without structure. They fabricate file paths, skip verification, expand scope without asking, declare tasks done when they're not, and repeat the same mistakes across sessions.
+
+Rules in instruction files help — but research shows agents follow ~70% of prose instructions. The other 30% is where things break.
 
 ## What GOAT Flow Does
 
-**A 6-step execution loop:** READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG. Every agent action follows this loop. SCOPE prevents scope creep. VERIFY catches errors before they ship. LOG captures lessons for next time.
+**6-step execution loop:** READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG. Every task follows this loop. SCOPE prevents scope creep. VERIFY catches errors before they ship. LOG captures lessons for next time.
 
-**Three autonomy tiers:** Always (safe, reversible), Ask First (boundaries with a checklist), Never (destructive actions blocked mechanically).
+**Three autonomy tiers:** Always (safe, reversible), Ask First (boundaries with a 5-item checklist), Never (destructive actions blocked mechanically).
 
-**Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% compliance vs ~70% for rules). Post-turn hooks lint after every change. Format hooks clean up edits.
+**Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% block rate vs ~70% for rules alone). Post-turn hooks lint after every change. Format hooks clean up edits. Ask First hooks warn on boundary file edits.
 
-**A learning loop:** `docs/footguns.md` (architectural traps with file:line evidence), `docs/lessons.md` (behavioural mistakes). Real incidents, not hypothetical ones.
+**Learning loop:** `docs/footguns.md` captures architectural traps with file:line evidence. `docs/lessons.md` captures behavioural mistakes. Real incidents only — no hypotheticals. Agent evals replay past failures as regression tests.
 
-**7 skills:** /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test. Each has a distinct artifact, a hard quality gate, and a repeatable output.
+**10 skills:** `/goat-security`, `/goat-debug`, `/goat-audit`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-reflect`, `/goat-onboard`, `/goat-resume`. Each has a distinct artifact, human gates, and a repeatable structured output.
+
+**CLI scanner:** Scores your project's GOAT Flow implementation across 94 checks + 12 anti-patterns. Generates fix prompts for failing checks and setup prompts for new projects.
+
+```
+$ goat-flow scan .
+
+--- Claude Code ---
+
+Grade: A (96%)
+
+  Foundation:   43/43  ████████████████████  100%
+  Standard:     53/54  ████████████████████  98%
+  Full:         16/17  ███████████████████░  94%
+  Deductions:  -2
+```
 
 ## Quick Start
 
-1. Clone this repo into your project (or copy `docs/system-spec.md` + `setup/`)
-2. Pick your agent: [Claude Code](setup/setup-claude.md) | [Gemini CLI](setup/setup-gemini.md) | [Codex](setup/setup-codex.md) | [Copilot](setup/setup-copilot.md)
-3. Paste the setup prompts into your agent - it builds the system for your project
+### 1. Clone this repo
 
-**Minimal setup** (5 min): Phase 0 gives you an instruction file + deny-dangerous hook.
-**Full setup** (45 min): Phase 1a-2 gives you the complete system.
+```bash
+git clone https://github.com/devgoat-code/goat-flow.git
+cd goat-flow
+npm install && npm run build
+```
 
-See [docs/getting-started.md](docs/getting-started.md) for the full guide.
+### 2. Scan your project
+
+```bash
+scripts/run-cli.sh scan /path/to/your-project
+```
+
+This detects your stack, scores any existing GOAT Flow setup, and shows what's missing.
+
+### 3. Generate a setup prompt
+
+```bash
+scripts/run-cli.sh setup /path/to/your-project --agent claude
+```
+
+This generates a prompt with references to the template files in this repo. Paste it into your agent — it reads the templates and builds the system for your project.
+
+Available agents: `claude`, `codex`, `gemini`
+
+### 4. Fix what's failing
+
+```bash
+scripts/run-cli.sh fix /path/to/your-project --agent claude
+```
+
+Generates targeted fix instructions for any failing checks.
+
+### 5. Verify
+
+```bash
+scripts/run-cli.sh scan /path/to/your-project --agent claude
+```
+
+Target: Grade A. The scanner checks 94 items across foundation (instruction file, execution loop, autonomy, DoD, enforcement), standard (skills, hooks, learning loop, router, architecture, local instructions), and full (evals, CI, hygiene) tiers.
 
 ## Architecture
 
 ```
-Layer 1 - Runtime         Instruction file (~120 lines), hooks, settings
-Layer 2 - Local Context   Per-directory instruction files for high-risk areas
-Layer 3 - Skills          7 on-demand capabilities loaded via slash commands
-Layer 4 - Playbooks       Planning methodology templates
-Layer 5 - Evaluation      Agent evals, CI validation, learning loop
+Layer 1 — Runtime         Instruction file (~120 lines), hooks, settings
+Layer 2 — Local Context   Per-directory instruction files for high-risk areas
+Layer 3 — Skills          10 on-demand capabilities loaded via slash commands
+Layer 4 — Playbooks       Planning methodology templates
+Layer 5 — Evaluation      Agent evals, CI validation, learning loop
 ```
+
+Only Layer 1 loads every session. Everything else loads on demand via the router table.
 
 Details: [docs/system/five-layers.md](docs/system/five-layers.md)
 
 ## Multi-Agent Support
 
-| | Claude Code | Gemini CLI | Codex | Copilot |
-|---|---|---|---|---|
-| Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md | .github/copilot-instructions.md |
-| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ | .github/instructions/ |
-| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) | — |
-| Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) | [setup-copilot.md](setup/setup-copilot.md) |
+| | Claude Code | Gemini CLI | Codex |
+|---|---|---|---|
+| Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md |
+| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ |
+| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) |
+| Settings | .claude/settings.json | .gemini/settings.json | .codex/config.toml |
+| Scanner | Yes | Yes | Yes |
 
-All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files.
+All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files. Agent-specific differences are in file locations and hook mechanisms.
+
+## Project Structure
+
+```
+src/cli/                CLI scanner, prompt generator, scoring engine
+setup/                  Setup guides + shared templates
+  shared/               Cross-agent templates (execution loop, docs seed)
+  setup-claude.md       Claude Code setup phases
+  setup-gemini.md       Gemini CLI setup phases
+  setup-codex.md        Codex setup phases
+workflow/               Templates for skills, coding standards, evaluation
+  skills/               10 skill templates (goat-*.md)
+  coding-standards/     49 templates (backend, frontend, security)
+  evaluation/           Eval format, footguns, lessons, handoff templates
+  runtime/              Enforcement, architecture, code-map templates
+docs/                   System design + reference documentation
+scripts/                CLI runner, validation, enforcement scripts
+agent-evals/            Regression tests from real incidents
+```
 
 ## Documentation
 
 | Document | What it covers |
 |----------|---------------|
-| [Getting Started](docs/getting-started.md) | Reading order, setup checklist, adoption tiers, gotchas |
+| [Getting Started](docs/getting-started.md) | Reading order, setup checklist, adoption tiers |
 | [System Spec](docs/system-spec.md) | Full technical specification (canonical source of truth) |
 | [5-Layer Architecture](docs/system/five-layers.md) | Runtime, Local Context, Skills, Playbooks, Evaluation |
 | [6-Step Execution Loop](docs/system/six-steps.md) | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG |
+| [Skills Reference](docs/system/skills.md) | All 10 skills: when to use, gates, output formats |
 | [Design Rationale](docs/reference/design-rationale.md) | Why behind every design decision |
-| [Cross-Agent Comparison](docs/reference/cross-agent-comparison.md) | Claude Code vs Codex vs Gemini CLI |
-| [Skills Reference](docs/system/skills.md) | All 7 skills: when to use, hard gates, output formats |
 
-## Project Structure
+## Author
 
-```
-setup/                  Setup guides + shared templates
-  setup-claude.md       Claude Code setup (Phases 0-2)
-  setup-gemini.md       Gemini CLI setup (Phases 0-2)
-  setup-codex.md        Codex setup
-  shared/               Cross-agent templates (execution loop, docs seed)
-docs/                   System design + reference documentation
-workflow/               Skill templates, playbooks, evaluation templates
-agent-evals/            Regression tests (real incidents + synthetic seeds)
-scripts/                Validation and enforcement scripts (Codex)
-.claude/                Claude Code runtime (hooks, settings, skills)
-.gemini/                Gemini CLI runtime (hooks, settings)
-.agents/                Shared skills (Codex + Gemini CLI)
-```
+Built by [Matthew Hansen](https://www.blundergoat.com/about).
 
 ## License
 

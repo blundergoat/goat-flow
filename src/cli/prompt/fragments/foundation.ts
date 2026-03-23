@@ -76,6 +76,21 @@ Hard limit: 150 lines. Target: under 120.`,
 List only commands the agent will actually run. Skip "none".`,
   },
 
+  {
+    key: 'add-concrete-examples',
+    phase: 'foundation',
+    category: 'Instruction File',
+    kind: 'create',
+    instruction: `Add concrete BAD/GOOD or DO/DON'T examples to \`{{instructionFile}}\`. Agents follow examples better than abstract rules.
+
+\`\`\`markdown
+BAD:  "The spec says 100 lines for apps" (guessed without reading)
+GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
+\`\`\`
+
+Include at least 2 example pairs showing right vs wrong approaches for your most important rules.`,
+  },
+
   // === Execution Loop ===
   {
     key: 'add-read-step',
@@ -106,6 +121,24 @@ This is the first step of the execution loop: READ → CLASSIFY → SCOPE → AC
 | Standard Feature | 4 reads | 10 turns |
 | System Change | 6 reads | 20 turns |
 \`\`\``,
+  },
+  {
+    key: 'add-classify-budgets',
+    phase: 'foundation',
+    category: 'Execution Loop',
+    kind: 'fix',
+    instruction: `The CLASSIFY step exists but lacks numeric budgets. Add a complexity budget table with concrete read/turn limits:
+
+\`\`\`markdown
+| Complexity | Read budget | Turn budget |
+|------------|-------------|-------------|
+| Hotfix | 2 reads | 3 turns |
+| Standard Feature | 4 reads | 10 turns |
+| System Change | 6 reads | 20 turns |
+| Infrastructure | 8 reads | 25 turns |
+\`\`\`
+
+Over budget = re-classify before continuing.`,
   },
   {
     key: 'add-scope-step',

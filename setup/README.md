@@ -23,7 +23,7 @@ All agents share: docs/footguns.md, docs/lessons.md, docs/architecture.md, tasks
 |-------|-------------|-----------|
 | Phase 0 | Bootstrap - minimal instruction file + deny hook | Optional (skip if doing Phase 1) |
 | Phase 1a | Foundation - instruction file + docs seed files + local context | Yes |
-| Phase 1b | Skills - 7 goat-* skills | Yes |
+| Phase 1b | Skills - 10 goat-* skills | Yes |
 | Phase 1c | Enforcement - hooks, deny list, CI, ignore files | Yes (Claude Code specific) |
 | Phase 2 | Evaluation - evals, RFC 2119 pass, profiles, CI | Yes - implement immediately after Phase 1 |
 

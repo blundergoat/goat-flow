@@ -1,7 +1,7 @@
 ---
 applyTo: "**"
 ---
-<!-- Source: ai/instructions/base.md — keep in sync -->
+<!-- Source: ai/instructions/conventions.md — keep in sync -->
 
 # Base — GOAT Flow
 

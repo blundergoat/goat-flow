@@ -39,7 +39,7 @@ Mode-transition rule: "Switching to [NEW STATE] because [reason]."
 Debug: No fixes until human reviews diagnosis with file:line evidence.
 Anti-BDUF: Extract interface ONLY when second provider needed.
 
-**VERIFY** - Run tests after each code change. Stop-the-line: isolated (note); cross-boundary/security (FULL STOP). Revert-and-rescope: git revert + rescope after 2 failed attempts.
+**VERIFY** - Run tests after each code change. Stop-the-line: isolated (note); cross-boundary/security (FULL STOP). Revert-and-rescope: git revert + rescope after 2 failed attempts. If working from a plan/milestone: tick `- [x]` on each task as completed — not at the end.
 Recovery: (a) missing context -> read X; (b) out-of-scope -> re-scope; (c) conflict -> ask.
 
 **LOG** - MUST update when tripped (DoD gate #4). Mechanical trigger: required if VERIFY caught your code failure or you corrected course mid-task. Human correction: MUST log lesson immediately.
@@ -66,7 +66,12 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-refs (3) no unapprov
 
 Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one question + default.
 
+## Hard Rules
+
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- MUST maintain cross-file consistency: same concept, same description everywhere
+- MUST preserve file:line evidence format in footguns and examples
+- MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
 
 ## Working Memory
 

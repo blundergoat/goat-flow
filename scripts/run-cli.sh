@@ -5,6 +5,11 @@ set -euo pipefail
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT_DIR"
 
+# Auto-build if src/ is newer than dist/
+if [[ ! -f dist/cli/cli.js ]] || [[ -n "$(find src/cli -name '*.ts' -newer dist/cli/cli.js 2>/dev/null | head -1)" ]]; then
+    npx tsc 2>&1 || { echo "Build failed" >&2; exit 1; }
+fi
+
 cli() { node dist/cli/cli.js "$@"; }
 
 usage() {
@@ -23,7 +28,7 @@ usage() {
   Examples:
     scripts/run-cli.sh scan .
     scripts/run-cli.sh scan . --agent claude
-    scripts/run-cli.sh fix . --agent claude
+    scripts/run-cli.sh fix .
     scripts/run-cli.sh test-all
 
 EOF
@@ -109,9 +114,9 @@ if [[ -z "$cmd" ]]; then
     printf "  \033[36m3\033[0m  scan . --agent claude           Score one agent only\n"
     echo ""
     printf "  \033[2mGenerate\033[0m\n"
-    printf "  \033[36m4\033[0m  fix . --agent claude            Prompt to fix failed checks\n"
-    printf "  \033[36m5\033[0m  setup . --agent claude          Prompt for fresh GOAT Flow setup\n"
-    printf "  \033[36m6\033[0m  audit . --agent claude          Read-only diagnosis prompt\n"
+    printf "  \033[36m4\033[0m  setup .                          Prompt for fresh GOAT Flow setup\n"
+    printf "  \033[36m5\033[0m  fix .                            Prompt to fix failed checks\n"
+    printf "  \033[36m6\033[0m  audit .                          Read-only diagnosis prompt\n"
     echo ""
     printf "  \033[2mTest\033[0m\n"
     printf "  \033[36m7\033[0m  test-all                        Run all 7 human testing gates\n"
@@ -123,9 +128,9 @@ if [[ -z "$cmd" ]]; then
         1) cli scan . ;;
         2) cli scan . --format text --verbose ;;
         3) cli scan . --agent claude --format text ;;
-        4) cli fix . --agent claude ;;
-        5) cli setup . --agent claude ;;
-        6) cli audit . --agent claude ;;
+        4) cli setup . ;;
+        5) cli fix . ;;
+        6) cli audit . ;;
         7) cmd="test-all" ;;
         h|H) usage; exit 0 ;;
         *) echo "Invalid choice"; exit 1 ;;

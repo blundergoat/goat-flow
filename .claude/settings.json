@@ -3,10 +3,23 @@
     "deny": [
       "Bash(*git commit*)",
       "Bash(*git push*)",
-      "Read(.env*)",
+      "Bash(*sudo *)",
+      "Bash(*mkfs*)",
+      "Bash(*dd if=*)",
+      "Bash(*git reset --hard*)",
+      "Read(**/.env*)",
       "Read(**/secrets/**)",
       "Read(**/*.pem)",
-      "Read(**/*.key)"
+      "Read(**/*.key)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.docker/config.json)",
+      "Read(**/.gnupg/**)",
+      "Read(**/.npmrc)",
+      "Read(**/.pypirc)",
+      "Read(**/*.pfx)",
+      "Read(**/credentials*)",
+      "Read(**/.kube/config)"
     ]
   },
   "hooks": {

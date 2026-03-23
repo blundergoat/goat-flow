@@ -1,0 +1,16 @@
+# Codex CLI configuration for goat-flow
+# Hooks: https://developers.openai.com/codex/config-reference
+
+[hooks]
+
+# After every turn — run lint/typecheck on changed files
+[hooks.stop]
+command = ["bash", "scripts/stop-lint.sh"]
+
+# After tool execution — log what was done
+[hooks.after_tool_use]
+command = ["bash", ".codex/hooks/after-tool-use.sh"]
+
+# Session start — inject project context
+[hooks.session_start]
+command = ["bash", ".codex/hooks/session-start.sh"]

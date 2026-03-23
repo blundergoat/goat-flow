@@ -1,0 +1,56 @@
+# Coding Standards Templates (Layer 2)
+
+Prompt templates for generating project-specific coding guidelines. These templates tell agents how to create the `ai/instructions/` files that live in your project.
+
+## How It Works
+
+This is a **cold-path router** system. Agents read `ai/README.md` (the router) to decide which instruction files to load for the current task. Instruction files live in `ai/instructions/` and load on demand -- agents only pull in what they need, keeping token budgets low.
+
+The templates in this directory are not loaded directly by agents. They are prompts you paste into your coding agent during setup. The agent reads your codebase and generates project-specific `ai/instructions/` files from these templates.
+
+## Directory Layout
+
+```
+coding-standards/
+├── README.md                  # This file
+├── conventions.md             # Template for ai/instructions/conventions.md (always-loaded project contract)
+├── code-review.md             # Template for ai/instructions/code-review.md
+├── security.md                # Universal security template for ai/instructions/security.md
+├── testing.md                 # Template for ai/instructions/testing.md
+├── git-commit.md              # Template for BOTH ai/instructions/git-commit.md AND .github/git-commit-instructions.md
+├── copilot-bridge.md          # Template for .github/instructions/ bridge files (Copilot)
+├── domain-instructions.md     # Guide for creating domain-specific instruction files
+├── frontend/                  # Stack-specific frontend templates (React, Vue, etc.)
+├── backend/                   # Stack-specific backend templates (Go, Node, Python, etc.)
+└── security/                  # Stack-specific security overlays
+    └── framework-specific/    # Framework-level security templates (Rails, Django, etc.)
+```
+
+### Core Templates
+
+| File | Generates | Loaded When |
+|------|-----------|-------------|
+| `conventions.md` | `ai/instructions/conventions.md` | Every task (always loaded) |
+| `code-review.md` | `ai/instructions/code-review.md` | Reviewing code |
+| `security.md` | `ai/instructions/security.md` | Touching auth, secrets, validation |
+| `testing.md` | `ai/instructions/testing.md` | Writing or modifying tests |
+| `git-commit.md` | `ai/instructions/git-commit.md` + `.github/git-commit-instructions.md` | Committing code, creating PRs |
+
+### Stack-Specific Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `frontend/` | Stack-specific frontend conventions (React/TS, Vue, Svelte, etc.) |
+| `backend/` | Stack-specific backend conventions (Go, Node, Python, Rust, etc.) |
+| `security/` | Universal security template + `framework-specific/` overlays |
+
+## How Agents Use It
+
+1. During setup, the agent reads the project's codebase to detect the stack
+2. The agent loads the relevant template from this directory
+3. The agent generates `ai/instructions/` files tailored to the project
+4. At runtime, `ai/README.md` routes agents to the right instruction files per task
+
+## Usage
+
+These are **prompt templates**, not executable code. The setup guides in `setup/` reference these templates during project onboarding. Copy the prompt block from any template, paste it into your coding agent, and the agent generates the corresponding `ai/instructions/` file from your actual codebase.

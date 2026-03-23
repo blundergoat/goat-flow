@@ -2,9 +2,12 @@ import { readFileSync, statSync, readdirSync, accessSync, constants } from 'node
 import { resolve, relative, join } from 'node:path';
 import type { ReadonlyFS } from '../types.js';
 
+/** Create a read-only filesystem abstraction rooted at the given path. */
 export function createFS(rootPath: string): ReadonlyFS {
+  /** Absolute path to the project root directory */
   const root = resolve(rootPath);
 
+  /** Resolve a relative path against the project root. */
   function resolvePath(p: string): string {
     return resolve(root, p);
   }
@@ -36,7 +39,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       }
     },
 
-    readJson(path: string): unknown | null {
+    readJson(path: string): unknown {
       try {
         const content = readFileSync(resolvePath(path), 'utf-8');
         return JSON.parse(content);
@@ -75,16 +78,23 @@ export function createFS(rootPath: string): ReadonlyFS {
     glob(pattern: string): string[] {
       // Simple recursive glob implementation (no deps)
       // Supports: *, **, specific extensions
+      /** Accumulated matching file paths */
       const results: string[] = [];
+      /** Pattern split into path segments for incremental matching */
       const parts = pattern.split('/');
 
+      /** Recursively walk directories matching glob pattern segments. */
       function walk(dir: string, patternIndex: number): void {
         if (patternIndex >= parts.length) return;
 
+        /** Current pattern segment being matched */
         const part = parts[patternIndex];
+        if (part === undefined) return;
+        /** Whether this is the final segment in the pattern */
         const isLast = patternIndex === parts.length - 1;
 
         try {
+          /** Directory entries at the current level */
           const entries = readdirSync(resolvePath(dir), { withFileTypes: true });
 
           if (part === '**') {
@@ -93,20 +103,22 @@ export function createFS(rootPath: string): ReadonlyFS {
             if (patternIndex + 1 < parts.length) {
               walk(dir, patternIndex + 1);
             }
-            // Recurse into subdirectories
+            // Iterate over directory entries to recurse into non-ignored subdirectories
             for (const entry of entries) {
-              if (entry.isDirectory() && !isIgnoredDir(entry.name)) {
+              if (entry.isDirectory() && isIgnoredDir(entry.name) === false) {
                 walk(join(dir, entry.name), patternIndex);
               }
             }
           } else {
-            // Convert glob part to regex
+            /** Regex constructed from the glob segment for matching entry names */
             const regex = new RegExp(
               '^' + part.replace(/\./g, '\\.').replace(/\*/g, '[^/]*') + '$'
             );
 
+            // Iterate over directory entries to match against the current glob segment
             for (const entry of entries) {
               if (regex.test(entry.name)) {
+                /** Full path combining the current directory and entry name */
                 const fullPath = join(dir, entry.name);
                 if (isLast) {
                   results.push(relative(root, resolvePath(fullPath)));
@@ -127,12 +139,14 @@ export function createFS(rootPath: string): ReadonlyFS {
   };
 }
 
+/** Directory names to skip during recursive glob traversal */
 const IGNORED_DIRS = new Set([
   '.git', 'node_modules', 'dist', 'build', 'coverage',
   '.next', '.turbo', 'vendor', '.venv', '__pycache__',
   '.idea', '.vscode',
 ]);
 
+/** Check whether a directory name should be skipped during glob traversal. */
 function isIgnoredDir(name: string): boolean {
   return IGNORED_DIRS.has(name);
 }

@@ -1,12 +1,12 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 2 — Standard fragments (41 check keys)
+ * Tier 2 — Standard fragments (49 check keys)
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
-  // === Skills (7 individual + 1 completeness) ===
-  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(skill => ({
+  // === Skills (10 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
+  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map(skill => ({
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
@@ -177,11 +177,26 @@ Each phase should have a clear entry condition (what must be done before startin
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Ensure all 7 GOAT Flow skills are present under \`{{skillsDir}}/\`:
+    instruction: `Ensure all 10 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
-- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test
+- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-reflect, goat-onboard, goat-resume
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
+  },
+  {
+    key: 'add-skill-output-format',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should include an Output or Output Format section that defines what the agent produces. Add to each skill:
+
+\`\`\`markdown
+## Output
+
+[Describe the expected deliverable: format, structure, required sections]
+\`\`\`
+
+Without an output format, agents produce inconsistent deliverables and the human cannot predict what to expect.`,
   },
 
   // === Hooks ===
@@ -221,6 +236,116 @@ Add to \`{{settingsFile}}\` hooks array:
 \`\`\`
 
 This preserves context during long sessions — the agent gets reminded of current task, modified files, and constraints after compaction.`,
+  },
+  {
+    key: 'fix-deny-json-parsing',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook uses \`grep -P\` for JSON parsing, which is not available on macOS. Replace with \`jq\`:
+
+\`\`\`bash
+# Good — portable JSON parsing
+COMMAND=$(echo "$INPUT" | jq -r '.command // .input // empty' 2>/dev/null || echo "$INPUT")
+
+# Bad — grep -P is not available on macOS
+COMMAND=$(echo "$INPUT" | grep -oP '"command"\\s*:\\s*"([^"]*)"')
+\`\`\`
+
+If jq may not be installed, add a sed fallback after the jq attempt.`,
+  },
+  {
+    key: 'fix-deny-chaining',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook does not handle command chaining. An input like \`echo hello && rm -rf /\` bypasses all pattern checks because the dangerous command is after \`&&\`.
+
+Split the command on chaining operators before checking patterns:
+
+\`\`\`bash
+# Split on &&, ||, ; and check each segment
+IFS=$'\\n' read -r -d '' -a segments < <(echo "$COMMAND" | sed 's/&&/\\n/g; s/||/\\n/g; s/;/\\n/g' && printf '\\0') || true
+for segment in "\${segments[@]}"; do
+  check_segment "$segment"
+done
+\`\`\``,
+  },
+  {
+    key: 'fix-deny-rm-rf',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook MUST block \`rm -rf\` (and \`rm -fr\`). This is the most dangerous destructive command an agent can execute.
+
+\`\`\`bash
+# Block rm -rf and rm -fr (both flag orders)
+if [[ "$cmd" =~ rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r ]]; then
+  # Allow scoped deletions: rm -rf ./tmp, rm -fr build/
+  if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\\./|[a-zA-Z]) ]]; then
+    block "rm -rf without safe scoping"
+  fi
+fi
+\`\`\``,
+  },
+  {
+    key: 'fix-deny-force-push',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook MUST block force push. Force pushing can destroy shared branch history and lose other developers' work.
+
+\`\`\`bash
+# Block force push
+if [[ "$cmd" =~ --force|push.*--force|-f.*push ]]; then
+  block "force push"
+fi
+\`\`\`
+
+Also block in settings.json deny list: \`"Bash(git push --force*)"\`, \`"Bash(git push -f*)"\`.`,
+  },
+  {
+    key: 'fix-deny-chmod',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook MUST block \`chmod 777\`. World-writable permissions are a security vulnerability — any process can read, write, and execute the file.
+
+\`\`\`bash
+# Block chmod 777
+if [[ "$cmd" =~ chmod.*777 ]]; then
+  block "chmod 777 — world-writable permissions"
+fi
+\`\`\`
+
+Also block in settings.json deny list: \`"Bash(chmod 777*)"\`.`,
+  },
+  {
+    key: 'fix-read-deny-secrets',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The settings permissions.deny list is missing read protection for common sensitive paths. Add these patterns:
+
+\`\`\`json
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env*)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/credentials*)",
+      "Read(**/.docker/config.json)",
+      "Read(**/.gnupg/**)",
+      "Read(**/.kube/config)"
+    ]
+  }
+}
+\`\`\`
+
+These prevent agents from reading SSH keys, cloud credentials, certificates, and secret files.`,
   },
   {
     key: 'add-stop-lint-validation',
@@ -509,16 +634,6 @@ Keep under 100 lines. This is for agent orientation, not exhaustive documentatio
 
 Target: under 100 lines.`,
   },
-  {
-    key: 'create-domain-reference',
-    phase: 'standard',
-    category: 'Architecture',
-    kind: 'create',
-    instruction: `Create \`docs/domain-reference.md\` — domain terms and concepts that were migrated out of the instruction file.
-
-Only create this if domain content was extracted from \`{{instructionFile}}\` to reduce its line count.`,
-  },
-
   // === Local Instructions (cold path) ===
   {
     key: 'create-instructions-dir',
@@ -530,7 +645,7 @@ Only create this if domain content was extracted from \`{{instructionFile}}\` to
 \`\`\`markdown
 # Project Coding Guidelines
 
-Read \`instructions/base.md\` first for every task.
+Read \`instructions/conventions.md\` first for every task.
 
 Then load additional files based on the work:
 
@@ -543,7 +658,7 @@ Precedence (highest first):
 1. security.md (if touching auth/secrets/validation)
 2. code-review.md (for review tasks only)
 3. domain file (frontend/backend)
-4. base.md (always loaded)
+4. conventions.md (always loaded)
 
 Only load files that exist.
 \`\`\`
@@ -558,11 +673,11 @@ Add rows for domain files as you create them (frontend.md, backend.md, security.
     instruction: `Create \`ai/README.md\` as the routing map for instruction files. This tells agents which files to load for which tasks. See the \`ai/instructions/\` directory for the files it references.`,
   },
   {
-    key: 'create-base-instructions',
+    key: 'create-conventions-instructions',
     phase: 'standard',
     category: 'Local Instructions',
     kind: 'create',
-    instruction: `Create \`ai/instructions/base.md\` — the universal project contract. Include:
+    instruction: `Create \`ai/instructions/conventions.md\` — the universal project contract. Include:
 
 - What the repo is (one line)
 - Architecture overview (2-3 lines)
@@ -572,6 +687,49 @@ Add rows for domain files as you create them (frontend.md, backend.md, security.
 - Dangerous operations (list with reasons)
 
 Keep it concrete: "Use \`sqlc.arg(name)\` in queries" not "write clean SQL".`,
+  },
+  {
+    key: 'improve-conventions-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'fix',
+    instruction: `\`ai/instructions/conventions.md\` exists but lacks real content. A stub file is not useful. Add:
+
+1. **Commands section** with actual build/test/lint commands in a bash code block
+2. **Conventions section** with concrete DO/DON'T rules extracted from the codebase
+3. At least 15 lines of substantive content
+
+The agent should be able to read this file and immediately know how to build, test, and follow project conventions.`,
+  },
+  {
+    key: 'create-frontend-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/instructions/frontend.md\` — frontend-specific coding conventions for TypeScript/JavaScript projects. Include:
+
+- Component patterns (naming, structure, composition)
+- State management conventions
+- Styling approach and file organization
+- Testing patterns for UI components
+- Common anti-patterns to avoid
+
+Only include rules specific to frontend work. Shared rules belong in \`conventions.md\`.`,
+  },
+  {
+    key: 'create-backend-instructions',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'create',
+    instruction: `Create \`ai/instructions/backend.md\` — backend-specific coding conventions. Include:
+
+- API design patterns (request/response, error handling)
+- Database conventions (queries, migrations, naming)
+- Service layer structure
+- Authentication/authorization patterns
+- Testing patterns for backend code
+
+Only include rules specific to backend work. Shared rules belong in \`conventions.md\`.`,
   },
   {
     key: 'create-code-review-instructions',
@@ -622,5 +780,60 @@ applyTo: "src/frontend/**"
 <!-- Source: ai/instructions/frontend.md — keep in sync -->
 [content from ai/instructions/frontend.md]
 \`\`\``,
+  },
+  // === Learning Loop Depth ===
+  {
+    key: 'seed-lessons-minimum',
+    phase: 'standard',
+    category: 'Learning Loop',
+    kind: 'fix',
+    instruction: `\`docs/lessons.md\` has fewer than 3 entries. A healthy learning loop captures real mistakes.
+
+Search git history for real incidents:
+\`\`\`bash
+git log --oneline --all | grep -iE 'fix|revert|bug|broke|regression'
+\`\`\`
+
+For each real incident found, add a lesson entry with:
+- Date and category (fabrication, mode-drift, premature-fix, scope-creep, missed-read)
+- What went wrong (specific, with file references)
+- What the correct behaviour should have been
+
+Seed from real mistakes only. Do NOT invent hypothetical lessons.`,
+  },
+  // === Ask First Enforcement ===
+  {
+    key: 'create-ask-first-hook',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'create',
+    instruction: `Ask First boundaries in \`{{instructionFile}}\` are policy-only — no hook enforces them. Create a PreToolUse hook that warns when editing boundary files.
+
+Create \`{{hooksDir}}/ask-first-guard.sh\`:
+\`\`\`bash
+#!/usr/bin/env bash
+set -euo pipefail
+# PreToolUse hook — warn on Ask First boundary edits
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ]; then
+  FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+  # Add your Ask First boundary paths here:
+  ASK_FIRST_PATHS=(
+    # Example: "src/auth/" "config/packages/" "migrations/"
+  )
+  for boundary in "\${ASK_FIRST_PATHS[@]}"; do
+    if [[ "$FILE" == *"$boundary"* ]]; then
+      echo "⚠ ASK FIRST: $FILE is in boundary '$boundary'" >&2
+      echo "Complete the micro-checklist before proceeding." >&2
+      exit 2
+    fi
+  done
+fi
+exit 0
+\`\`\`
+
+Then register it in \`{{settingsFile}}\` under hooks.PreToolUse (alongside deny-dangerous.sh).
+Populate ASK_FIRST_PATHS with the actual boundary paths from your Ask First section.`,
   },
 ];

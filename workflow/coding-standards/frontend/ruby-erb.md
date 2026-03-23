@@ -1,0 +1,106 @@
+# Ruby + Rails ERB Coding Standards
+
+Reference for generating `ai/instructions/frontend.md` in Rails projects using ERB templates.
+
+## Template Format
+
+- ERB is the Rails default. If the project uses Haml or Slim, follow its conventions — project consistency wins.
+- `<%= expression %>` outputs and escapes. `<% statement %>` executes without output.
+- DO NOT use `<%== expression %>` (which is `raw`) on user input.
+
+```erb
+<%# DO — escaped output %>
+<p><%= @user.bio %></p>
+
+<%# DON'T — raw output of user data %>
+<p><%= raw @user.bio %></p>
+<p><%== @user.bio %></p>
+
+<%# OK — sanitized content %>
+<p><%= sanitize @article.body, tags: %w[p br strong em] %></p>
+```
+
+## Partials
+
+- Extract a partial when the same HTML appears in 2+ views, or when a section exceeds ~40 lines.
+- Pass data via `locals:`, not instance variables. Partials using instance variables are invisible dependencies.
+- Name partials with a leading underscore: `_user_card.html.erb`.
+
+```erb
+<%# DO — explicit locals %>
+<%= render 'users/user_card', user: @user, show_actions: true %>
+
+<%# DON'T — relying on instance variables in partials %>
+<%= render 'users/user_card' %>
+<%# _user_card.html.erb accesses @user — where does it come from? %>
+```
+
+- Use `render collection:` for lists. Rails automatically batches rendering and avoids N+1 partial lookups.
+
+```erb
+<%# DO — collection rendering %>
+<%= render partial: 'users/user_card', collection: @users, as: :user %>
+
+<%# DON'T — manual loop %>
+<% @users.each do |user| %>
+  <%= render 'users/user_card', user: user %>
+<% end %>
+```
+
+## ViewComponents (if present)
+
+- Use ViewComponents for complex UI logic that does not belong in a partial or helper.
+- Each ViewComponent is a Ruby class + template. Logic in the class, markup in the template.
+- Test ViewComponents with unit tests — they render without a full request cycle.
+
+```ruby
+# DO — ViewComponent for complex UI
+# app/components/user_badge_component.rb
+class UserBadgeComponent < ViewComponent::Base
+  def initialize(user:)
+    @user = user
+  end
+
+  def badge_class
+    @user.admin? ? 'badge-admin' : 'badge-user'
+  end
+end
+```
+
+```erb
+<%# app/components/user_badge_component.html.erb %>
+<span class="badge <%= badge_class %>"><%= @user.name %></span>
+
+<%# Usage %>
+<%= render UserBadgeComponent.new(user: @user) %>
+```
+
+## Hotwire (Turbo + Stimulus)
+
+- Use **Turbo Frames** for partial page updates. Wrap the updatable section in `<turbo-frame id="unique-id">`.
+- Use **Turbo Streams** for server-pushed DOM updates (append, prepend, replace, remove).
+- Use **Stimulus** for client-side behavior. One controller per concern, small and focused.
+- DO NOT reach for React/Vue when Turbo + Stimulus handles the interaction. Hotwire is the Rails way.
+
+```erb
+<%# DO — Turbo Frame for inline editing %>
+<turbo-frame id="user_<%= @user.id %>">
+  <p><%= @user.name %></p>
+  <%= link_to "Edit", edit_user_path(@user) %>
+</turbo-frame>
+```
+
+## Helpers
+
+- Use view helpers for simple formatting: `time_ago_in_words`, `number_to_currency`.
+- Custom helpers for project-specific formatting. Keep them pure (no side effects, no database calls).
+- If a helper needs more than 10 lines of logic, it belongs in a ViewComponent or presenter.
+
+## Common Footguns
+
+- **`html_safe` / `raw` XSS**: Marking user input as `html_safe` is a direct XSS vulnerability. Use `sanitize` with an explicit allow list instead.
+- **N+1 queries in views**: Accessing `user.posts` in an `each` loop. Use `includes` or `preload` in the controller query.
+- **Fat views**: Views with business logic (conditionals checking roles, computing values). Move to the model, a presenter, or a ViewComponent.
+- **Missing authenticity token**: Forms built without `form_with` or `form_tag` skip CSRF protection. Always use Rails form helpers.
+- **Instance variable leaks**: Controllers setting 5+ instance variables for a single view. Use a view model or locals hash to make dependencies explicit.
+- **Turbo Frame ID collisions**: Two `<turbo-frame>` elements with the same ID on the same page cause silent update failures. Use record-based IDs: `dom_id(@user)`.
