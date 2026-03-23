@@ -270,9 +270,9 @@ describe('Fixture 4: full-claude', () => {
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
-    // 7 skills
+    // 10 skills
     ...Object.fromEntries(
-      ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
+      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -282,7 +282,8 @@ describe('Fixture 4: full-claude', () => {
     '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nprettier --write "$1"\nexit 0\n',
     // Learning loop
     'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
-    'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod\n\n**created_at:** 2026-01-01\n',
+    'src/auth.ts': '// auth module\nexport function login() {}\n',
+    'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod\n\n### Entry 2\n**What happened:** missed test\n\n### Entry 3\n**What happened:** stale ref\n',
     // Architecture
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals
@@ -627,9 +628,9 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'package.json': JSON.stringify({ name: 'goat-flow', scripts: { test: 'node --test' } }),
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
     '.gemini/settings.json': JSON.stringify({ permissions: { deny: ['git commit', 'git push'] } }),
-    // Skills for all agents
+    // Skills for all agents (10 required skills)
     ...Object.fromEntries(
-      ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].flatMap(s => [
+      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].flatMap(s => [
         [`.claude/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`],
         [`.agents/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`],
       ]),
@@ -643,7 +644,8 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'scripts/stop-lint.sh': '#!/usr/bin/env bash\nexit 0\n',
     // Learning loop
     'docs/footguns.md': '# Footguns\n\n## Footgun: Auth\n\n**Evidence:**\n- `src/auth.ts:42` - broke login\n- `src/auth.ts:88` - missing lock\n',
-    'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** something\n\n**created_at:** 2026-01-01\n',
+    'src/auth.ts': '// auth module\n',
+    'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** something\n\n### Entry 2\n**What happened:** missed test\n\n### Entry 3\n**What happened:** stale ref\n',
     // Architecture
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals

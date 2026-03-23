@@ -164,8 +164,9 @@ export interface StackInfo {
 
 /** Facts shared across all agents (project-wide files and directories) */
 export interface SharedFacts {
-  footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number> };
-  lessons: { exists: boolean; hasEntries: boolean };
+  footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number>; staleRefs: string[]; totalRefs: number; validRefs: number };
+  lessons: { exists: boolean; hasEntries: boolean; entryCount: number };
+  decisions: { dirExists: boolean; fileCount: number };
   architecture: { exists: boolean; lineCount: number };
   evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean; evalSkillCount: number };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
@@ -210,6 +211,8 @@ export interface AgentFacts {
     parsed: unknown;
     hasDenyPatterns: boolean;
   };
+  settingsLocal: { exists: boolean; lineCount: number };
+  askFirstEnforcement: { hasPathHook: boolean };
   skills: {
     found: string[];
     missing: string[];

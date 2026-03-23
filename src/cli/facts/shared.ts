@@ -34,7 +34,25 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
       }
     }
   }
-  return { exists, hasEvidence, dirMentions };
+  // Validate that referenced files still exist on disk
+  const staleRefs: string[] = [];
+  let totalRefs = 0;
+  let validRefs = 0;
+  if (footgunsContent) {
+    /** All backtick-wrapped file:line references for staleness checks */
+    const fileRefs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
+    for (const match of fileRefs) {
+      const filePath = match[1];
+      if (filePath === undefined) continue;
+      totalRefs++;
+      if (fs.exists(filePath)) {
+        validRefs++;
+      } else {
+        staleRefs.push(filePath);
+      }
+    }
+  }
+  return { exists, hasEvidence, dirMentions, staleRefs, totalRefs, validRefs };
 }
 
 /** Extract lessons facts: existence and whether entries are present. */
@@ -45,7 +63,9 @@ function extractLessonsFacts(fs: ReadonlyFS): SharedFacts['lessons'] {
   const exists = lessonsContent !== null;
   /** Whether the lessons file contains at least one H3 entry */
   const hasEntries = exists && /^### /m.test(lessonsContent);
-  return { exists, hasEntries };
+  /** Count of H3 heading entries in lessons file */
+  const entryCount = exists ? (lessonsContent.match(/^### /gm) ?? []).length : 0;
+  return { exists, hasEntries, entryCount };
 }
 
 /** Extract eval facts: directory, file count, replay prompts, origin labels, skill coverage. */
@@ -140,9 +160,21 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     domainReference: { exists: fs.exists('docs/domain-reference.md') },
     preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
     changelog: { exists: fs.exists('CHANGELOG.md') },
+    decisions: extractDecisionsFacts(fs),
     localInstructions: extractLocalInstructions(fs),
     gitCommitInstructions: { exists: fs.exists('.github/git-commit-instructions.md') },
   };
+}
+
+/** Extract decisions directory facts: existence and file count. */
+function extractDecisionsFacts(fs: ReadonlyFS): SharedFacts['decisions'] {
+  /** Whether the decisions directory exists */
+  const dirExists = fs.exists('docs/decisions');
+  /** Count of markdown files in decisions directory, excluding README */
+  const fileCount = dirExists
+    ? fs.listDir('docs/decisions').filter(f => f.endsWith('.md') && f !== 'README.md').length
+    : 0;
+  return { dirExists, fileCount };
 }
 
 /** Detect and analyze local instruction files from ai/instructions/ or .github/instructions/. */

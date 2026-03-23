@@ -120,6 +120,43 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: 'Add settings.local.json to .gitignore',
     recommendationKey: 'ap-gitignore-settings-local',
   },
+  // === AP10-AP12: Quality Anti-Patterns ===
+  {
+    id: 'AP10', name: 'settings.local.json bloat', deduction: -2, confidence: 'high',
+    na: (ctx) => ctx.agentFacts.agent.settingsFile === null,
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { exists, lineCount } = ctx.agentFacts.settingsLocal;
+      if (!exists) return { id: 'AP10', name: 'settings.local.json bloat', triggered: false, deduction: 0, confidence: 'high', message: 'No settings.local.json' };
+      const triggered = lineCount > 50;
+      return { id: 'AP10', name: 'settings.local.json bloat', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? `settings.local.json is ${lineCount} lines — prune session artifacts (target: under 20)` : `settings.local.json is ${lineCount} lines (OK)` };
+    },
+    recommendation: 'Prune settings.local.json — remove one-off debugging commands',
+    recommendationKey: 'ap-prune-settings-local',
+  },
+  {
+    id: 'AP11', name: 'Empty learning loop scaffolding', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { lessons, footguns, decisions } = ctx.facts.shared;
+      const lessonsEmpty = lessons.exists && !lessons.hasEntries;
+      const footgunsEmpty = footguns.exists && !footguns.hasEvidence;
+      const decisionsEmpty = decisions.dirExists && decisions.fileCount === 0;
+      const triggered = (lessonsEmpty && footgunsEmpty) || (lessonsEmpty && decisionsEmpty && footgunsEmpty);
+      return { id: 'AP11', name: 'Empty learning loop scaffolding', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? 'Learning loop files exist but are empty — populate with real incidents or remove' : 'Learning loop files have content' };
+    },
+    recommendation: 'Populate learning loop files with real incidents or remove empty scaffolding',
+    recommendationKey: 'ap-fix-empty-scaffolding',
+  },
+  {
+    id: 'AP12', name: 'Stale file references in footguns.md', deduction: -3, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { staleRefs, totalRefs } = ctx.facts.shared.footguns;
+      if (totalRefs === 0) return { id: 'AP12', name: 'Stale file references in footguns.md', triggered: false, deduction: 0, confidence: 'high', message: 'No file references to check' };
+      const triggered = staleRefs.length > 0;
+      return { id: 'AP12', name: 'Stale file references in footguns.md', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `${staleRefs.length} stale refs: ${staleRefs.slice(0, 3).join(', ')}` : 'All file references resolve', evidence: triggered ? staleRefs.join(', ') : undefined };
+    },
+    recommendation: 'Update or remove stale file:line references in footguns.md',
+    recommendationKey: 'ap-fix-stale-references',
+  },
 ];
 
 /**

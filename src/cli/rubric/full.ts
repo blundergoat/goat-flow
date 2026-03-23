@@ -187,4 +187,41 @@ export const fullChecks: CheckDef[] = [
     recommendation: 'Add version history or CHANGELOG.md',
     recommendationKey: 'add-changelog',
   },
+  {
+    id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene',
+    pts: 2, confidence: 'medium',
+    na: (ctx) => ctx.facts.agents.length <= 1,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        /** Extract execution loop text between READ and LOG/Router headings */
+        const extractLoop = (content: string | null): string => {
+          if (!content) return '';
+          const readMatch = content.match(/###?\s+READ\b/i);
+          const endMatch = content.match(/###?\s+(Router|Working Memory|Autonomy|Essential|Hard Rules)\b/i);
+          if (!readMatch) return '';
+          const start = readMatch.index ?? 0;
+          const end = endMatch?.index ?? content.length;
+          return content.slice(start, end).replace(/\s+/g, ' ').trim();
+        };
+        const loops = ctx.facts.agents
+          .filter(a => a.instruction.exists && a.instruction.content)
+          .map(a => ({ agent: a.agent.instructionFile, loop: extractLoop(a.instruction.content) }));
+        if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
+        // Compare each pair — check if loops are >80% similar (simple length-ratio heuristic)
+        const diverged: string[] = [];
+        for (let i = 1; i < loops.length; i++) {
+          const a = loops[0]!, b = loops[i]!;
+          const ratio = Math.min(a.loop.length, b.loop.length) / Math.max(a.loop.length, b.loop.length || 1);
+          if (ratio < 0.6 || a.loop.length === 0 || b.loop.length === 0) {
+            diverged.push(`${a.agent} vs ${b.agent}`);
+          }
+        }
+        if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'pass', points: 2, maxPoints: 2, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
+        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}` };
+      },
+    },
+    recommendation: 'Reconcile execution loop sections across agent instruction files',
+    recommendationKey: 'fix-execution-loop-sync',
+  },
 ];

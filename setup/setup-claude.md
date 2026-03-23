@@ -220,6 +220,12 @@ HOOKS:
    - Block Write operations that reduce file size by >80%
    - Catches agents emptying files during refactors
 
+   PreToolUse hook: .claude/hooks/ask-first-guard.sh
+   - Extract Ask First boundary paths from CLAUDE.md
+   - On Edit/Write: check if file path matches any boundary
+   - If match: emit warning + exit 2 (blocks until approved)
+   - Populate ASK_FIRST_PATHS array with actual project paths
+
    ALL paths MUST use: bash "$(git rev-parse --show-toplevel)/..."
 
 2. .gitignore: .claude/settings.local.json, tasks/todo.md, tasks/handoff.md

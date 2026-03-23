@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 3 — Full fragments (11 check keys)
+ * Tier 3 — Full fragments (12 check keys)
  * Agent evals, CI validation, hygiene
  */
 export const fullFragments: Fragment[] = [
@@ -211,5 +211,20 @@ Ensure at least 3 instances across the instruction file. Use MUST for DoD gates 
 **Option B:** Create \`CHANGELOG.md\` at the project root
 
 Track meaningful changes to the GOAT Flow configuration (not code changes).`,
+  },
+  // === Execution Loop Sync ===
+  {
+    key: 'fix-execution-loop-sync',
+    phase: 'full',
+    category: 'Hygiene',
+    kind: 'fix',
+    instruction: `Multiple agent instruction files have diverged execution loops. When CLAUDE.md, AGENTS.md, and/or GEMINI.md all contain the execution loop (READ→CLASSIFY→SCOPE→ACT→VERIFY→LOG), changes must be propagated to all copies.
+
+1. Diff the execution loop sections across all agent instruction files
+2. Identify intentional differences (agent-specific adaptations) vs accidental drift
+3. Reconcile: same rules should use same wording, agent-specific behaviour stays different
+4. After reconciling, verify essential commands and Ask First boundaries are also consistent
+
+Note: the execution loop MUST be duplicated (each file is loaded independently). The goal is consistency, not deduplication.`,
   },
 ];

@@ -50,10 +50,11 @@ These files are created during Phase 1a regardless of which agent you use. They 
    overview (under 100 lines): what the system does, major components,
    data flows, non-obvious constraints, deliberate trade-offs.
 
-6. docs/decisions/ - ADR directory. Create on first use. Materialise
-   when the first real architectural decision worth recording occurs.
-   If you can identify 1-2 real decisions from the code, create them.
-   Do NOT invent decisions.
+6. docs/decisions/ - ADR directory. DO NOT create this directory during
+   setup unless you can identify a real architectural decision from the
+   code right now. If no real decisions exist yet, skip this entirely.
+   The directory materialises when the first real ADR is written.
+   Do NOT create empty directories or placeholder files.
 
 7. CHANGELOG.md - If the project has a CHANGELOG, update it when making
    functional changes. If it doesn't exist, consider creating one.

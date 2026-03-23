@@ -475,6 +475,24 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Create context validation script or CI workflow',
     recommendationKey: 'create-context-validation',
   },
+  {
+    id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
+    pts: 2, confidence: 'medium',
+    na: (ctx) => ctx.agentFacts.askFirst.exists === false || ctx.agentFacts.agent.hooksDir === null,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
+        status: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 'pass' : 'fail',
+        points: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 2 : 0, maxPoints: 2, confidence: 'medium',
+        message: ctx.agentFacts.askFirstEnforcement.hasPathHook
+          ? 'Ask First boundaries have a PreToolUse enforcement hook'
+          : 'Ask First boundaries are policy-only — no hook enforces edits to boundary files',
+      }),
+    },
+    recommendation: 'Create a PreToolUse hook that warns when editing Ask First boundary files',
+    recommendationKey: 'create-ask-first-hook',
+  },
 
   // === 2.3 Learning Loop (6 pts) ===
   {
@@ -520,6 +538,37 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Add file:line evidence to footgun entries',
     recommendationKey: 'add-footgun-evidence',
+  },
+  {
+    id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop',
+    pts: 1, partialPts: 0, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { exists, entryCount } = ctx.facts.shared.lessons;
+        if (!exists) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
+        if (entryCount >= 3) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries — healthy learning loop` };
+        return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${entryCount} lesson entries — search git history for real incidents to seed more` };
+      },
+    },
+    recommendation: 'Seed lessons.md with 3+ real incidents from git history',
+    recommendationKey: 'seed-lessons-minimum',
+  },
+  {
+    id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop',
+    pts: 2, partialPts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { totalRefs, validRefs, staleRefs } = ctx.facts.shared.footguns;
+        if (totalRefs === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No file:line references to check' };
+        if (staleRefs.length === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `All ${totalRefs} file references resolve` };
+        if (validRefs / totalRefs > 0.5) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${staleRefs.length} stale refs: ${staleRefs.slice(0, 3).join(', ')}`, evidence: staleRefs.join(', ') };
+        return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: `${staleRefs.length}/${totalRefs} references are stale`, evidence: staleRefs.join(', ') };
+      },
+    },
+    recommendation: 'Update stale file:line references in footguns.md',
+    recommendationKey: 'ap-fix-stale-references',
   },
 
   // === 2.4 Router Table (5 pts) ===
