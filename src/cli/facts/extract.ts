@@ -1,11 +1,11 @@
-import type { ProjectFacts, ReadonlyFS } from '../types.js';
+import type { ProjectFacts, ReadonlyFS, AgentId } from '../types.js';
 import { detectAgents } from '../detect/agents.js';
 import { detectStack } from '../detect/stack.js';
 import { extractSharedFacts } from './shared.js';
 import { extractAgentFacts } from './agent.js';
 
-export interface ExtractOptions {
-  agentFilter: string | null;
+interface ExtractOptions {
+  agentFilter: AgentId | null;
 }
 
 /** Orchestrate full fact extraction: detect agents, detect stack, gather shared and per-agent facts. */

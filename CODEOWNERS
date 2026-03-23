@@ -2,7 +2,7 @@
 * @mattyhansen
 
 # Scanner code
-cli/ @mattyhansen
+src/cli/ @mattyhansen
 
 # Workflow docs
 docs/ @mattyhansen

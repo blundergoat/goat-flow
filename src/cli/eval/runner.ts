@@ -6,9 +6,9 @@
  * Actual agent execution against scenarios comes later.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEvalFile } from './parser.js';
+import type { ReadonlyFS } from '../types.js';
 import type {
   ParsedEval,
   EvalSummary,
@@ -24,21 +24,21 @@ import type {
 const SKIP_FILES = new Set(['README.md', 'FORMAT.md']);
 
 /** Discover all markdown eval files in the given directory, excluding skip-listed names */
-export function discoverEvalFiles(evalsDir: string): string[] {
-  if (existsSync(evalsDir) === false) return [];
+function discoverEvalFiles(fs: ReadonlyFS, evalsDir: string): string[] {
+  if (fs.exists(evalsDir) === false) return [];
 
-  return readdirSync(evalsDir)
+  return fs.listDir(evalsDir)
     .filter(f => f.endsWith('.md') && SKIP_FILES.has(f) === false)
     .sort();
 }
 
 /** Load and parse all eval files from a directory, returning parsed evals and any parse errors */
-export function loadEvals(evalsDir: string): {
+export function loadEvals(fs: ReadonlyFS, evalsDir: string): {
   evals: ParsedEval[];
   errors: ParseError[];
 } {
   /** List of discovered eval markdown filenames */
-  const files = discoverEvalFiles(evalsDir);
+  const files = discoverEvalFiles(fs, evalsDir);
   /** Accumulator for successfully parsed eval objects */
   const evals: ParsedEval[] = [];
   /** Accumulator for files that failed to parse */
@@ -48,7 +48,11 @@ export function loadEvals(evalsDir: string): {
   for (const file of files) {
     try {
       /** Raw markdown content of the eval file */
-      const raw = readFileSync(join(evalsDir, file), 'utf-8');
+      const raw = fs.readFile(join(evalsDir, file));
+      if (raw === null) {
+        errors.push({ file, message: 'File could not be read' });
+        continue;
+      }
       evals.push(parseEvalFile(raw, file));
     } catch (err) {
       errors.push({

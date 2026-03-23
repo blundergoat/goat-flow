@@ -54,40 +54,7 @@ export function composeFix(report: ScanReport, agentId: AgentId): ComposedPrompt
   }
 
   /** Prompt sections grouped by phase */
-  const sections: PromptSection[] = [];
-
-  // Iterate over each phase to resolve and group matching fragments
-  for (const phase of PHASE_ORDER) {
-    /** Resolved fragments belonging to this phase */
-    const fragments: ResolvedFragment[] = [];
-
-    // Iterate over each needed key to find fragments matching the current phase
-    for (const key of neededKeys) {
-      /** Fragment definition from the registry */
-      const fragment = getFragment(key);
-      if (fragment === undefined || fragment.phase !== phase) continue;
-
-      // Use agent-specific override if available
-      let instruction = fragment.instruction;
-      if (fragment.agentOverrides?.[agentId]) {
-        instruction = fragment.agentOverrides[agentId]!;
-      }
-
-      fragments.push({
-        key,
-        category: fragment.category,
-        instruction: fillTemplate(instruction, vars),
-      });
-    }
-
-    if (fragments.length > 0) {
-      sections.push({
-        phase,
-        heading: PHASE_HEADINGS[phase],
-        fragments,
-      });
-    }
-  }
+  const sections = resolveFragmentsByPhase(neededKeys, agentId, vars);
 
   return {
     mode: 'fix',
@@ -97,6 +64,27 @@ export function composeFix(report: ScanReport, agentId: AgentId): ComposedPrompt
     sections,
     summary: buildSummary(neededKeys.size, vars),
   };
+}
+
+/** Resolve fragment keys into grouped prompt sections by phase */
+function resolveFragmentsByPhase(neededKeys: Set<string>, agentId: AgentId, vars: PromptVariables): PromptSection[] {
+  const sections: PromptSection[] = [];
+  // Iterate over each phase to resolve and group matching fragments
+  for (const phase of PHASE_ORDER) {
+    const fragments: ResolvedFragment[] = [];
+    // Iterate over each needed key to find fragments matching the current phase
+    for (const key of neededKeys) {
+      const fragment = getFragment(key);
+      if (fragment === undefined || fragment.phase !== phase) continue;
+      const override = fragment.agentOverrides?.[agentId];
+      const instruction = fillTemplate(override ?? fragment.instruction, vars);
+      fragments.push({ key, category: fragment.category, instruction });
+    }
+    if (fragments.length > 0) {
+      sections.push({ phase, heading: PHASE_HEADINGS[phase], fragments });
+    }
+  }
+  return sections;
 }
 
 /** Build the preamble text summarising score and stack for the fix prompt */

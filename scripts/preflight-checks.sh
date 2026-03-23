@@ -73,6 +73,17 @@ if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
     if grep -q "^const PACKAGE_VERSION" src/cli/cli.ts 2>/dev/null; then
         fail "cli.ts has hardcoded PACKAGE_VERSION — should import from rubric/version.ts"
     fi
+
+    # Check CHANGELOG.md mentions the current version
+    if [[ -f CHANGELOG.md ]]; then
+        if grep -q "## v${pkg_version}" CHANGELOG.md 2>/dev/null; then
+            pass "CHANGELOG.md has v${pkg_version} entry"
+        else
+            fail "CHANGELOG.md missing entry for v${pkg_version}"
+        fi
+    else
+        note "No CHANGELOG.md found"
+    fi
 else
     skip "Version check (missing package.json or version.ts)"
 fi
@@ -109,14 +120,14 @@ if [[ -f tsconfig.json ]]; then
         skip "ESLint (not configured)"
     fi
 
-    # Knip (unused exports, dead code)
+    # Knip (unused exports, dead code — breaking error)
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
         knip_output=$(npx knip --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
             unused_count=$(echo "$knip_output" | grep -c '^[A-Za-z].*  ' || echo "?")
-            note "Knip: $unused_count unused exports/types — run npx knip for details"
+            fail "Knip: $unused_count unused exports/types — run npx knip for details"
         fi
     else
         skip "Knip (not installed)"

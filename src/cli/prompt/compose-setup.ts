@@ -24,7 +24,7 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
   const phases = [
     { phase: 'foundation' as const, heading: 'Phase 1a: Foundation — Instruction File + Execution Loop' },
     { phase: 'standard' as const, heading: 'Phase 1b: Standard — Skills, Hooks, Learning Loop' },
-    { phase: 'full' as const, heading: 'Phase 2: Full — Evals, CI, Profiles, Hygiene' },
+    { phase: 'full' as const, heading: 'Phase 2: Full — Evals, CI, Hygiene' },
   ];
 
   /** Sections built by mapping each phase to its matching create-kind fragments */
@@ -34,8 +34,9 @@ export function composeSetup(report: ScanReport, agentId: AgentId): ComposedProm
       .filter(f => f.phase === phase && f.kind === 'create')
       .map(f => {
         let instruction = f.instruction;
-        if (f.agentOverrides?.[agentId]) {
-          instruction = f.agentOverrides[agentId]!;
+        const override = f.agentOverrides?.[agentId];
+        if (override) {
+          instruction = override;
         }
         return {
           key: f.key,
@@ -77,7 +78,7 @@ function buildSetupPreamble(vars: PromptVariables): string {
     '',
     '**Phase 1a** creates the instruction file, execution loop, autonomy tiers, DoD, and enforcement.',
     '**Phase 1b** adds skills, hooks, learning loop files, router table, and architecture docs.',
-    '**Phase 2** adds agent evals, CI validation, permission profiles, and hygiene.',
+    '**Phase 2** adds agent evals, CI validation, and hygiene.',
   ].join('\n');
 }
 

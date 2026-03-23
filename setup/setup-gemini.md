@@ -234,7 +234,7 @@ HOOKS & POLICY:
    BeforeTool hook: .gemini/hooks/deny-dangerous.sh
    - For Bash: block rm -rf, git push main, git push --force, chmod 777,
      pipe-to-shell, --no-verify
-   - For Write/Edit: block .env files, lockfiles, generated code
+   - .env files: Bash writes blocked by hook; Read blocked by permissions deny list (Write/Edit not yet blocked -- add deny rules if needed)
    - Exit 0 for everything else
 
    AfterAgent hook: .gemini/hooks/stop-lint.sh

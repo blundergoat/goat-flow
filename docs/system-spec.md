@@ -355,7 +355,7 @@ stack:
 | ------------ | ---------------------------------------------------------- | ---------------------------------------- |
 | **Minimal**  | CLAUDE.md + deny-dangerous hook + permissions deny         | Solo project, getting started            |
 | **Standard** | + skills + stop/format hooks + local CLAUDE.md files       | Active development, team project         |
-| **Full**     | + agent evals + CI validation + permission profiles + ADRs | Long-lived project with incident history |
+| **Full**     | + agent evals + CI validation + ADRs + permission profiles (optional) | Long-lived project with incident history |
 
 ---
 

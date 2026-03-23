@@ -1,7 +1,7 @@
 import type { AgentProfile, AgentId, ReadonlyFS } from '../types.js';
 
 /** Configuration profiles for all supported AI coding agents */
-const PROFILES: Record<AgentId, AgentProfile> = {
+export const PROFILES: Record<AgentId, AgentProfile> = {
   claude: {
     id: 'claude',
     name: 'Claude Code',
@@ -36,11 +36,6 @@ const PROFILES: Record<AgentId, AgentProfile> = {
     hookEvents: { preTool: 'BeforeTool', postTool: 'AfterTool', postTurn: 'AfterAgent' },
   },
 };
-
-/** Return the agent profile for a given agent ID */
-export function getProfile(id: AgentId): AgentProfile {
-  return PROFILES[id];
-}
 
 /** Detect which AI coding agents are configured in the project */
 export function detectAgents(fs: ReadonlyFS): AgentProfile[] {

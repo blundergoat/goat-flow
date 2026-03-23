@@ -50,6 +50,7 @@ Details: [docs/system/five-layers.md](docs/system/five-layers.md)
 | Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md | .github/copilot-instructions.md |
 | Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ | .github/skills/ |
 | Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) | preToolUse/postToolUse |
+| Scanner scoring | Yes | Yes | Yes | Not yet |
 | Setup guide | [setup-claude.md](setup/setup-claude.md) | [setup-gemini.md](setup/setup-gemini.md) | [setup-codex.md](setup/setup-codex.md) | [setup-copilot.md](setup/setup-copilot.md) |
 
 All agents share the same execution loop, autonomy tiers, definition of done, and learning loop files.

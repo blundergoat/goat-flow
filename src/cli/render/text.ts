@@ -1,4 +1,7 @@
-import type { ScanReport, AgentReport, CheckResult, AntiPatternResult } from '../types.js';
+import type { ScanReport, AgentReport, CheckResult, AntiPatternResult, CheckStatus } from '../types.js';
+
+/** Priority levels used by recommendation entries */
+type Priority = 'critical' | 'high' | 'medium' | 'low';
 
 /** Render a text-based progress bar using block characters */
 function progressBar(percentage: number, width: number = 20): string {
@@ -10,24 +13,22 @@ function progressBar(percentage: number, width: number = 20): string {
 }
 
 /** Map a check status to its 4-character display label */
-function statusIcon(status: string): string {
+function statusIcon(status: CheckStatus): string {
   switch (status) {
     case 'pass': return 'PASS';
     case 'partial': return 'PART';
     case 'fail': return 'FAIL';
     case 'na': return 'N/A ';
-    default: return '????';
   }
 }
 
 /** Map a priority level to its fixed-width display label */
-function priorityLabel(priority: string): string {
+function priorityLabel(priority: Priority): string {
   switch (priority) {
     case 'critical': return 'CRITICAL';
     case 'high': return 'HIGH    ';
     case 'medium': return 'MEDIUM  ';
     case 'low': return 'LOW     ';
-    default: return '        ';
   }
 }
 

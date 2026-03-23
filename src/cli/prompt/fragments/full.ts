@@ -110,7 +110,7 @@ jobs:
         run: bash scripts/context-validate.sh || true
       - name: Check skills exist
         run: |
-          for skill in preflight debug audit investigate review plan test; do
+          for skill in security debug audit investigate review plan test reflect onboard resume; do
             for dir in .claude/skills .agents/skills; do
               [ -d "$dir/goat-$skill" ] && echo "✓ $dir/goat-$skill"
             done
@@ -144,7 +144,7 @@ jobs:
     phase: 'full',
     category: 'CI Validation',
     kind: 'create',
-    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 7 goat-* skill directories have a SKILL.md.`,
+    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 10 goat-* skill directories have a SKILL.md.`,
   },
   {
     key: 'ci-trigger-prs',

@@ -1,6 +1,7 @@
 // === Eval Types ===
 
 import type { AgentId } from '../types.js';
+import type { SkillName } from '../constants.js';
 
 /** Origin of the eval scenario: real incident or synthetically generated */
 export type EvalOrigin = 'real-incident' | 'synthetic-seed';
@@ -12,17 +13,7 @@ export type EvalAgents = 'all' | AgentId;
 export type EvalDifficulty = 'easy' | 'medium' | 'hard';
 
 /** Recognized GOAT Flow skill identifiers that evals can target */
-export type EvalSkill =
-  | 'goat-debug'
-  | 'goat-audit'
-  | 'goat-review'
-  | 'goat-investigate'
-  | 'goat-plan'
-  | 'goat-test'
-  | 'goat-security'
-  | 'goat-reflect'
-  | 'goat-onboard'
-  | 'goat-resume';
+export type EvalSkill = SkillName;
 
 /** Pass or fail status for a single behavioral gate check */
 export type GateStatus = 'pass' | 'fail';

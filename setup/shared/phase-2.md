@@ -61,7 +61,7 @@ CI VALIDATION:
 
 VERIFICATION:
 - Count instruction file lines. MUST stay under target after RFC 2119 pass.
-- Verify permission profile files are valid (if created).
+- If permission profiles were created (optional), verify the files are valid.
 - Run scripts/preflight-checks.sh if it exists. Otherwise run the
   project's lint + test commands.
 - Report instruction file line count.

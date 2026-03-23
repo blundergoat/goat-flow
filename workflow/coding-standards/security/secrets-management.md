@@ -4,7 +4,7 @@ Reference for generating `ai/instructions/security.md` in projects handling cred
 
 ## Environment Variables
 
-Environment variables are the ONLY acceptable source for secrets in application code.
+Environment variables or framework-native secret stores (Rails encrypted credentials, Spring Vault, AWS SSM) are the acceptable sources for secrets in application code.
 
 ```python
 # DO — read from environment

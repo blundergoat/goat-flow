@@ -88,7 +88,8 @@ export function createFS(rootPath: string): ReadonlyFS {
         if (patternIndex >= parts.length) return;
 
         /** Current pattern segment being matched */
-        const part = parts[patternIndex]!;
+        const part = parts[patternIndex];
+        if (part === undefined) return;
         /** Whether this is the final segment in the pattern */
         const isLast = patternIndex === parts.length - 1;
 

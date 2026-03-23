@@ -21,13 +21,6 @@ export interface Fragment {
   agentOverrides?: Partial<Record<AgentId, string>>;
 }
 
-/** Options controlling prompt composition mode and target agent */
-export interface PromptOptions {
-  mode: PromptMode;
-  agent: AgentId | null;
-  selfContained: boolean;
-}
-
 /** A fully assembled prompt ready for rendering */
 export interface ComposedPrompt {
   mode: PromptMode;

@@ -1,25 +1,31 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
+import { SKILL_NAMES } from '../constants.js';
+
+// Confidence criteria:
+//   high   = deterministic (file exists, line count, JSON valid, exact match)
+//   medium = heuristic (regex pattern, ratio threshold, keyword detection)
+//   low    = semantic inference (content quality judgment)
 
 // Minimum ratio of skills passing a quality signal to award the point (80%)
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
 /**
- * Tier 2 — Standard (54 points)
+ * Tier 2 — Standard (55 points)
  * Skills, hooks, learning loop, router, architecture, local context.
  * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
   // === 2.1 Skills (19 pts: 10 existence + 1 completeness + 8 quality) ===
-  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map((skill, i) => ({
+  ...SKILL_NAMES.map((skill, i) => ({
     id: `2.1.${i + 1}`,
-    name: `goat-${skill} skill`,
+    name: `${skill} skill`,
     tier: 'standard' as const,
     category: 'Skills',
     pts: 1,
     confidence: 'high' as const,
-    detect: { type: 'file_exists' as const, path: `{skills_dir}/goat-${skill}/SKILL.md` },
-    recommendation: `Create goat-${skill} skill`,
-    recommendationKey: `create-skill-${skill}`,
+    detect: { type: 'file_exists' as const, path: `{skills_dir}/${skill}/SKILL.md` },
+    recommendation: `Create ${skill} skill`,
+    recommendationKey: `create-skill-${skill.replace('goat-', '')}`,
   })),
   {
     id: '2.1.11', name: 'All 10 skills present', tier: 'standard', category: 'Skills',
@@ -42,19 +48,19 @@ export const standardChecks: CheckDef[] = [
   // === 2.1.12-2.1.18 Skill Content Quality (7 pts) ===
   {
     id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withStep0 / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withStep0}/${quality.total} skills ask questions before acting` };
+          return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withStep0}/${quality.total} skills ask questions before acting` };
         }
-        return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withStep0}/${quality.total} skills gather context — most should ask before acting` };
+        return { id: '2.1.12', name: 'Skills gather context (Step 0)', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withStep0}/${quality.total} skills gather context — most should ask before acting` };
       },
     },
     recommendation: 'Skills should ask clarifying questions before acting (Step 0 pattern)',
@@ -62,19 +68,19 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withHumanGate / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withHumanGate}/${quality.total} skills include human gates` };
+          return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withHumanGate}/${quality.total} skills include human gates` };
         }
-        return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withHumanGate}/${quality.total} skills have human gates — agents should pause for review` };
+        return { id: '2.1.13', name: 'Skills have human gates', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withHumanGate}/${quality.total} skills have human gates — agents should pause for review` };
       },
     },
     recommendation: 'Skills should include HUMAN GATE checkpoints where the agent pauses for human review',
@@ -82,19 +88,19 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withConstraints / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withConstraints}/${quality.total} skills have RFC 2119 constraints` };
+          return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConstraints}/${quality.total} skills have RFC 2119 constraints` };
         }
-        return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withConstraints}/${quality.total} skills have MUST/MUST NOT constraints` };
+        return { id: '2.1.14', name: 'Skills have MUST/MUST NOT constraints', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConstraints}/${quality.total} skills have MUST/MUST NOT constraints` };
       },
     },
     recommendation: 'Skills should use MUST/MUST NOT constraints to enforce boundaries',
@@ -102,19 +108,19 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills',
-    pts: 1, confidence: 'high',
+    pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { quality } = ctx.agentFacts.skills;
         if (quality.total === 0) {
-          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No skills found' };
+          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
         const ratio = quality.withPhases / quality.total;
         if (ratio >= SKILL_QUALITY_THRESHOLD) {
-          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${quality.withPhases}/${quality.total} skills have phased execution` };
+          return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withPhases}/${quality.total} skills have phased execution` };
         }
-        return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${quality.withPhases}/${quality.total} skills have phased execution — structure prevents skipping steps` };
+        return { id: '2.1.15', name: 'Skills have phased process', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withPhases}/${quality.total} skills have phased execution — structure prevents skipping steps` };
       },
     },
     recommendation: 'Skills should have a phased process (Phase 1, Phase 2, etc.) to prevent step-skipping',
@@ -228,17 +234,17 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks',
-    pts: 1, confidence: 'medium',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         if (ctx.agentFacts.hooks.postTurnExists === false) {
-          return { id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No post-turn hook to check' };
+          return { id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No post-turn hook to check' };
         }
         return {
           id: '2.2.3', name: 'Post-turn hook exits 0', tier: 'standard', category: 'Hooks',
           status: ctx.agentFacts.hooks.postTurnExitsZero ? 'pass' : 'fail',
-          points: ctx.agentFacts.hooks.postTurnExitsZero ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          points: ctx.agentFacts.hooks.postTurnExitsZero ? 1 : 0, maxPoints: 1, confidence: 'high',
           message: ctx.agentFacts.hooks.postTurnExitsZero ? 'Post-turn hook exits 0' : 'Post-turn hook may not exit 0 (causes infinite loops)',
         };
       },
@@ -711,38 +717,57 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'create-github-git-commit',
   },
   {
-    id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions',
+    id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        const { hasFrontend, hasBackend, dirExists } = ctx.facts.shared.localInstructions;
+        const { hasFrontend, dirExists } = ctx.facts.shared.localInstructions;
         if (dirExists === false) {
-          return { id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
+          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
         }
-        // Lowercase all detected languages for case-insensitive comparison
         const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
-        // Whether the project uses a frontend language requiring frontend.md
         const needsFrontend = langs.some(l => l === 'typescript' || l === 'javascript');
-        // Whether the project uses a backend language requiring backend.md
-        const needsBackend = langs.some(l => ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'].includes(l));
-        if (needsFrontend === false && needsBackend === false) {
-          return { id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No stack-specific domain files needed' };
+        if (!needsFrontend) {
+          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No TS/JS detected' };
         }
-        // Collect names of missing domain instruction files
-        const missing: string[] = [];
-        if (needsFrontend && hasFrontend === false) missing.push('TypeScript project should have frontend.md');
-        if (needsBackend && hasBackend === false) missing.push(`${langs.find(l => ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'].includes(l))} project should have backend.md`);
-        const pass = missing.length === 0;
         return {
-          id: '2.6.7', name: 'Stack-appropriate domain files exist', tier: 'standard', category: 'Local Instructions',
-          status: pass ? 'pass' : 'fail',
-          points: pass ? 1 : 0, maxPoints: 1, confidence: 'high',
-          message: pass ? 'All stack-appropriate domain files present' : missing.join('; '),
+          id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
+          status: hasFrontend ? 'pass' : 'fail',
+          points: hasFrontend ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: hasFrontend ? 'frontend.md found' : 'TypeScript/JavaScript project should have frontend.md',
         };
       },
     },
-    recommendation: 'Create stack-appropriate domain instruction files (frontend.md for TS/JS, backend.md for Go/Python/Rust/Java/PHP/Ruby/C#)',
+    recommendation: 'Create ai/instructions/frontend.md with TS/JS coding conventions',
     recommendationKey: 'create-frontend-instructions',
+  },
+  {
+    id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasBackend, dirExists } = ctx.facts.shared.localInstructions;
+        if (dirExists === false) {
+          return { id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
+        }
+        const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
+        const backendLangs = ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'];
+        const needsBackend = langs.some(l => backendLangs.includes(l));
+        if (!needsBackend) {
+          return { id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No backend language detected' };
+        }
+        const detectedLang = langs.find(l => backendLangs.includes(l));
+        return {
+          id: '2.6.7b', name: 'backend.md exists for backend-language projects', tier: 'standard', category: 'Local Instructions',
+          status: hasBackend ? 'pass' : 'fail',
+          points: hasBackend ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: hasBackend ? 'backend.md found' : `${detectedLang} project should have backend.md`,
+        };
+      },
+    },
+    recommendation: 'Create ai/instructions/backend.md with backend coding conventions',
+    recommendationKey: 'create-backend-instructions',
   },
 ];

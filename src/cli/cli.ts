@@ -2,8 +2,13 @@
 
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
-import type { CLIOptions, Grade, AgentId } from './types.js';
+import type { CLIOptions, Grade, AgentId, ScanReport } from './types.js';
 import { PACKAGE_VERSION } from './rubric/version.js';
+
+/** Structured error with an exit code for CLI process termination */
+class CLIError extends Error {
+  constructor(message: string, public exitCode: number) { super(message); }
+}
 
 /** Print usage instructions and available commands to stdout */
 function printHelp(): void {
@@ -88,8 +93,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   let format: CLIOptions['format'] = process.stdout.isTTY ? 'text' : 'json';
   if (values.format) {
     if (['json', 'text'].includes(values.format) === false) {
-      console.error(`Invalid format: ${values.format}. Use: json, text`);
-      process.exit(2);
+      throw new CLIError(`Invalid format: ${values.format}. Use: json, text`, 2);
     }
     format = values.format as CLIOptions['format'];
   }
@@ -98,8 +102,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   let agent: AgentId | null = null;
   if (values.agent) {
     if (['claude', 'codex', 'gemini'].includes(values.agent) === false) {
-      console.error(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`);
-      process.exit(2);
+      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`, 2);
     }
     agent = values.agent as AgentId;
   }
@@ -109,8 +112,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   if (values['min-score']) {
     minScore = parseInt(values['min-score'], 10);
     if (isNaN(minScore) || minScore < 0 || minScore > 100) {
-      console.error(`Invalid min-score: ${values['min-score']}. Use: 0-100`);
-      process.exit(2);
+      throw new CLIError(`Invalid min-score: ${values['min-score']}. Use: 0-100`, 2);
     }
   }
 
@@ -120,8 +122,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     /** Allowed grade values for the CI gate threshold */
     const valid = ['A', 'B', 'C', 'D'];
     if (valid.includes(values['min-grade'].toUpperCase()) === false) {
-      console.error(`Invalid min-grade: ${values['min-grade']}. Use: A, B, C, D`);
-      process.exit(2);
+      throw new CLIError(`Invalid min-grade: ${values['min-grade']}. Use: A, B, C, D`, 2);
     }
     minGrade = values['min-grade'].toUpperCase() as Grade;
   }
@@ -131,12 +132,97 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     projectPath: resolve(positionals[0] ?? '.'),
     format,
     agent,
-    verbose: values.verbose ?? false,
+    verbose: values.verbose === true,
     minScore,
     minGrade,
-    help: values.help ?? false,
-    version: values.version ?? false,
+    help: values.help === true,
+    version: values.version === true,
   };
+}
+
+/** Handle the eval command: load, summarize, and output agent eval results */
+async function handleEvalCommand(options: ParsedCLI): Promise<void> {
+  const { loadEvals, summarize, formatSummaryText, formatSummaryJson } =
+    await import('./eval/runner.js');
+  const { createFS } = await import('./facts/fs.js');
+  /** Virtual filesystem scoped to the target project path */
+  const fs = createFS(options.projectPath);
+  /** Resolved path to the agent-evals directory */
+  const evalsDir = resolve(options.projectPath, 'agent-evals');
+  const { evals, errors } = loadEvals(fs, evalsDir);
+  /** Aggregated eval summary grouped by skill, agent, difficulty, and origin */
+  const summary = summarize(evals, errors);
+  /** Formatted output string in the requested format */
+  const output = options.format === 'json'
+    ? formatSummaryJson(summary)
+    : formatSummaryText(summary);
+  process.stdout.write(output + '\n');
+  if (errors.length > 0) {
+    throw new CLIError('Eval completed with errors', 1);
+  }
+}
+
+/** Handle prompt commands (fix, setup, audit): compose and render prompts per agent */
+async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
+  const { composeFix } = await import('./prompt/compose-fix.js');
+  const { composeSetup } = await import('./prompt/compose-setup.js');
+  const { composeAudit } = await import('./prompt/compose-audit.js');
+  const { renderPrompt } = await import('./prompt/render.js');
+
+  // Determine which agents to generate prompts for
+  /** List of agent IDs to generate prompts for (filtered or all detected) */
+  const agentIds = options.agent
+    ? [options.agent]
+    : report.agents.map(a => a.agent);
+
+  if (agentIds.length === 0) {
+    throw new CLIError('No agents detected. Use --agent to specify one.', 1);
+  }
+
+  // Iterate over each agent ID to compose and render the appropriate prompt
+  for (const agentId of agentIds) {
+    let prompt;
+    switch (options.command) {
+      case 'fix': prompt = composeFix(report, agentId); break;
+      case 'setup': prompt = composeSetup(report, agentId); break;
+      case 'audit': prompt = composeAudit(report, agentId); break;
+    }
+
+    if (prompt) {
+      process.stdout.write(renderPrompt(prompt) + '\n');
+      if (agentIds.length > 1) process.stdout.write('\n---\n\n');
+    }
+  }
+}
+
+/** Check CI gate thresholds and throw if any agent fails to meet them */
+function handleCIGate(options: ParsedCLI, report: ScanReport): void {
+  if (options.minScore === null && options.minGrade === null) return;
+
+  /** Numeric ordering of grades for comparison (higher is better) */
+  const gradeOrder: Record<string, number> = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1, 'insufficient-data': 0 };
+
+  // Iterate over each agent report to check against CI gate thresholds
+  for (const agent of report.agents) {
+    if (options.minScore !== null && agent.score.percentage < options.minScore) {
+      throw new CLIError(
+        `CI gate failed: ${agent.agent} score ${agent.score.percentage}% below threshold ${options.minScore}%`,
+        1,
+      );
+    }
+    if (options.minGrade !== null) {
+      /** Numeric value of the agent's grade for threshold comparison */
+      const agentGradeValue = gradeOrder[agent.score.grade] ?? 0;
+      /** Numeric value of the minimum required grade */
+      const minGradeValue = gradeOrder[options.minGrade] ?? 0;
+      if (agentGradeValue < minGradeValue) {
+        throw new CLIError(
+          `CI gate failed: ${agent.agent} grade ${agent.score.grade} below threshold ${options.minGrade}`,
+          1,
+        );
+      }
+    }
+  }
 }
 
 /** Entry point that dispatches to the appropriate command handler */
@@ -144,31 +230,12 @@ async function main(): Promise<void> {
   /** Parsed CLI options derived from process.argv */
   const options = parseCLIArgs(process.argv.slice(2));
 
-  if (options.help) {
-    printHelp();
-    process.exit(0);
-  }
-
-  if (options.version) {
-    printVersion();
-    process.exit(0);
-  }
+  if (options.help) { printHelp(); return; }
+  if (options.version) { printVersion(); return; }
 
   // Handle eval command separately (does not need project scanning)
   if (options.command === 'eval') {
-    const { loadEvals, summarize, formatSummaryText, formatSummaryJson } =
-      await import('./eval/runner.js');
-    /** Resolved path to the agent-evals directory */
-    const evalsDir = resolve(options.projectPath, 'agent-evals');
-    const { evals, errors } = loadEvals(evalsDir);
-    /** Aggregated eval summary grouped by skill, agent, difficulty, and origin */
-    const summary = summarize(evals, errors);
-    /** Formatted output string in the requested format */
-    const output = options.format === 'json'
-      ? formatSummaryJson(summary)
-      : formatSummaryText(summary);
-    process.stdout.write(output + '\n');
-    if (errors.length > 0) process.exit(1);
+    await handleEvalCommand(options);
     return;
   }
 
@@ -185,73 +252,24 @@ async function main(): Promise<void> {
     agentFilter: options.agent,
   });
 
-  // Handle prompt commands (fix, setup, audit)
-  if (options.command !== 'scan') {
-    const { composeFix } = await import('./prompt/compose-fix.js');
-    const { composeSetup } = await import('./prompt/compose-setup.js');
-    const { composeAudit } = await import('./prompt/compose-audit.js');
-    const { renderPrompt } = await import('./prompt/render.js');
-
-    // Determine which agents to generate prompts for
-    /** List of agent IDs to generate prompts for (filtered or all detected) */
-    const agentIds = options.agent
-      ? [options.agent]
-      : report.agents.map(a => a.agent);
-
-    if (agentIds.length === 0) {
-      console.error('No agents detected. Use --agent to specify one.');
-      process.exit(1);
-    }
-
-    // Iterate over each agent ID to compose and render the appropriate prompt
-    for (const agentId of agentIds) {
-      let prompt;
-      switch (options.command) {
-        case 'fix': prompt = composeFix(report, agentId); break;
-        case 'setup': prompt = composeSetup(report, agentId); break;
-        case 'audit': prompt = composeAudit(report, agentId); break;
-      }
-
-      if (prompt) {
-        process.stdout.write(renderPrompt(prompt) + '\n');
-        if (agentIds.length > 1) process.stdout.write('\n---\n\n');
-      }
-    }
-    return;
+  if (options.command === 'scan') {
+    /** Formatted scan output string in the requested format */
+    const output = options.format === 'text'
+      ? renderText(report, options.verbose)
+      : renderJson(report);
+    process.stdout.write(output + '\n');
+  } else {
+    await handlePromptCommand(options, report);
   }
 
-  // Render scan output
-  /** Formatted scan output string in the requested format */
-  const output = options.format === 'text'
-    ? renderText(report, options.verbose)
-    : renderJson(report);
-
-  process.stdout.write(output + '\n');
-
-  // CI gate
-  if (options.minScore !== null || options.minGrade !== null) {
-    /** Numeric ordering of grades for comparison (higher is better) */
-    const gradeOrder: Record<string, number> = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'F': 1, 'insufficient-data': 0 };
-
-    // Iterate over each agent report to check against CI gate thresholds
-    for (const agent of report.agents) {
-      if (options.minScore !== null && agent.score.percentage < options.minScore) {
-        process.exit(1);
-      }
-      if (options.minGrade !== null) {
-        /** Numeric value of the agent's grade for threshold comparison */
-        const agentGradeValue = gradeOrder[agent.score.grade] ?? 0;
-        /** Numeric value of the minimum required grade */
-        const minGradeValue = gradeOrder[options.minGrade] ?? 0;
-        if (agentGradeValue < minGradeValue) {
-          process.exit(1);
-        }
-      }
-    }
-  }
+  handleCIGate(options, report);
 }
 
 main().catch((err: unknown) => {
-  console.error('Fatal error:', err instanceof Error ? err.message : err);
+  if (err instanceof CLIError) {
+    console.error(err.message);
+    process.exit(err.exitCode);
+  }
+  console.error(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

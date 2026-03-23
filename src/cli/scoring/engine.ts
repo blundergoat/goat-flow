@@ -140,7 +140,7 @@ export function computeScore(
 }
 
 /** Calculate earned and available points for a single scoring tier */
-function scoreTier(results: CheckResult[], tier: string): TierScore {
+function scoreTier(results: CheckResult[], tier: 'foundation' | 'standard' | 'full'): TierScore {
   /** Check results that belong to this tier */
   const tierResults = results.filter(r => r.tier === tier);
 
@@ -162,7 +162,7 @@ function scoreTier(results: CheckResult[], tier: string): TierScore {
 
   /** Percentage score for this tier */
   const percentage = available > 0 ? Math.round((earned / available) * 100) : 0;
-  return { tier: tier as TierScore['tier'], earned, available, percentage };
+  return { tier, earned, available, percentage };
 }
 
 /** Map a percentage to a letter grade using the threshold table */

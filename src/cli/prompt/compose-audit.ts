@@ -83,7 +83,7 @@ export function composeAudit(report: ScanReport, agentId: AgentId): ComposedProm
 2. **Enforcement gaps:** Is the deny mechanism actually blocking dangerous commands? Check ${vars.settingsFile}.
 3. **Learning loop health:** Read \`docs/lessons.md\` and \`docs/footguns.md\`. Are entries from real incidents or templated?
 4. **Router accuracy:** Check every path in the router table. Do they all resolve?
-5. **Skills completeness:** Check \`${vars.skillsDir}/\`. Are all 7 goat-* skills present with proper SKILL.md files?
+5. **Skills completeness:** Check \`${vars.skillsDir}/\`. Are all 10 goat-* skills present with proper SKILL.md files?
 6. **Architecture docs:** Is \`docs/architecture.md\` under 100 lines and actually useful?
 7. **Highest-impact fix:** Which single change would improve the score the most?
 

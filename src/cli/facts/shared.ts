@@ -8,14 +8,14 @@ import type { SharedFacts, ReadonlyFS } from '../types.js';
  */
 const EVIDENCE_PATTERN = /`[^`]+:[0-9]+`|\(lines?\s+[0-9]+/;
 
-/** Extract project-wide shared facts from docs, evals, CI, and config files. */
-export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
+/** Extract footgun facts: existence, evidence quality, and directory mention counts. */
+function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   /** Raw content of the footguns documentation file */
   const footgunsContent = fs.readFile('docs/footguns.md');
   /** Whether the footguns file exists on disk */
-  const footgunsExists = footgunsContent !== null;
+  const exists = footgunsContent !== null;
   /** Whether the footguns file contains file:line evidence references */
-  const footgunsHasEvidence = footgunsExists && EVIDENCE_PATTERN.test(footgunsContent);
+  const hasEvidence = exists && EVIDENCE_PATTERN.test(footgunsContent);
   /** Map of directory paths to how many times they appear in footgun evidence */
   const dirMentions = new Map<string, number>();
   if (footgunsContent) {
@@ -24,7 +24,9 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     // Iterate over file:line references to count directory mentions
     for (const match of pathRefs) {
       /** File path extracted from the backtick reference */
-      const filePath = match[1]!;
+      const group = match[1];
+      if (group === undefined) continue;
+      const filePath = group;
       /** Parent directory of the referenced file */
       const dir = filePath.split('/').slice(0, -1).join('/');
       if (dir) {
@@ -32,61 +34,69 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
       }
     }
   }
+  return { exists, hasEvidence, dirMentions };
+}
 
+/** Extract lessons facts: existence and whether entries are present. */
+function extractLessonsFacts(fs: ReadonlyFS): SharedFacts['lessons'] {
   /** Raw content of the lessons documentation file */
   const lessonsContent = fs.readFile('docs/lessons.md');
   /** Whether the lessons file exists on disk */
-  const lessonsExists = lessonsContent !== null;
+  const exists = lessonsContent !== null;
   /** Whether the lessons file contains at least one H3 entry */
-  const lessonsHasEntries = lessonsExists && /^### /m.test(lessonsContent);
+  const hasEntries = exists && /^### /m.test(lessonsContent);
+  return { exists, hasEntries };
+}
 
+/** Extract eval facts: directory, file count, replay prompts, origin labels, skill coverage. */
+function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
+  /** Whether the agent-evals directory exists */
+  const dirExists = fs.exists('agent-evals');
+  /** Markdown eval files (excluding README) found in the evals directory */
+  const evalFiles = dirExists ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md') : [];
+  /** Total number of eval files found */
+  const count = evalFiles.length;
+  /** Whether the evals directory contains a README.md */
+  const hasReadme = dirExists && fs.exists('agent-evals/README.md');
+
+  if (count === 0) {
+    return { dirExists, count, hasReadme, hasOriginLabels: false, hasReplayPrompts: false, evalSkillCount: 0 };
+  }
+
+  /** Distinct skill names referenced across all eval files */
+  const skillNames = new Set<string>();
+  /** Track whether all eval files pass origin/replay checks */
+  let allHaveOrigin = true;
+  let allHaveReplay = true;
+  // Iterate over ALL eval files for quality checks and skill counting
+  for (const f of evalFiles) {
+    /** Raw content of this eval file */
+    const content = fs.readFile(`agent-evals/${f}`);
+    if (content === null) {
+      allHaveOrigin = false;
+      allHaveReplay = false;
+      continue;
+    }
+    if (/\*\*Origin:\*\*/i.test(content) === false) allHaveOrigin = false;
+    if (/## Replay Prompt/i.test(content) === false) allHaveReplay = false;
+    /** All skill label matches found in the eval content */
+    const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
+    // Iterate over skill matches to collect unique skill names
+    for (const m of skillMatches) {
+      /** Normalized skill name from the match */
+      const name = (m[1] ?? m[2] ?? '').trim().toLowerCase();
+      if (name) skillNames.add(name);
+    }
+  }
+  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasReplayPrompts: allHaveReplay, evalSkillCount: skillNames.size };
+}
+
+/** Extract project-wide shared facts from docs, evals, CI, and config files. */
+export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
   /** Whether the architecture documentation file exists */
   const archExists = fs.exists('docs/architecture.md');
   /** Line count of the architecture file (0 if missing) */
   const archLineCount = archExists ? fs.lineCount('docs/architecture.md') : 0;
-
-  /** Whether the agent-evals directory exists */
-  const evalsDir = fs.exists('agent-evals');
-  /** Markdown eval files (excluding README) found in the evals directory */
-  const evalFiles = evalsDir ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md') : [];
-  /** Total number of eval files found */
-  const evalCount = evalFiles.length;
-  /** Whether the evals directory contains a README.md */
-  const hasReadme = evalsDir && fs.exists('agent-evals/README.md');
-
-  let hasOriginLabels = false;
-  let hasReplayPrompts = false;
-  let evalSkillCount = 0;
-  if (evalCount > 0) {
-    /** Up to 3 eval files sampled for quality checks */
-    const sampled = evalFiles.slice(0, 3);
-    hasOriginLabels = sampled.every(f => {
-      const content = fs.readFile(`agent-evals/${f}`);
-      return content !== null && /\*\*Origin:\*\*/i.test(content);
-    });
-    hasReplayPrompts = sampled.every(f => {
-      const content = fs.readFile(`agent-evals/${f}`);
-      return content !== null && /## Replay Prompt/i.test(content);
-    });
-    /** Distinct skill names referenced across all eval files */
-    const skillNames = new Set<string>();
-    // Iterate over eval files to collect distinct skill name references
-    for (const f of evalFiles) {
-      /** Raw content of this eval file */
-      const content = fs.readFile(`agent-evals/${f}`);
-      if (content) {
-        /** All skill label matches found in the eval content */
-        const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
-        // Iterate over skill matches to collect unique skill names
-        for (const m of skillMatches) {
-          /** Normalized skill name from the match */
-          const name = (m[1] ?? m[2] ?? '').trim().toLowerCase();
-          if (name) skillNames.add(name);
-        }
-      }
-    }
-    evalSkillCount = skillNames.size;
-  }
 
   /** Raw content of the CI workflow file */
   const ciContent = fs.readFile('.github/workflows/context-validation.yml');
@@ -112,10 +122,10 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
   );
 
   return {
-    footguns: { exists: footgunsExists, hasEvidence: footgunsHasEvidence, dirMentions },
-    lessons: { exists: lessonsExists, hasEntries: lessonsHasEntries },
+    footguns: extractFootgunFacts(fs),
+    lessons: extractLessonsFacts(fs),
     architecture: { exists: archExists, lineCount: archLineCount },
-    evals: { dirExists: evalsDir, count: evalCount, hasReadme, hasOriginLabels, hasReplayPrompts, evalSkillCount },
+    evals: extractEvalFacts(fs),
     ci: {
       workflowExists: ciExists,
       checksLineCount: ciExists && /wc -l/i.test(ciContent),
@@ -143,7 +153,7 @@ function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstruction
   const ghDir = fs.exists('.github/instructions');
 
   if (aiDir === false && ghDir === false) {
-    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasConventions: false, conventionsHasContent: false, hasFrontend: false, hasBackend: false, hasCodeReview: false, hasGitCommit: false };
+    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasConventions: false, conventionsHasContent: false, hasFrontend: false, hasBackend: false, hasCodeReview: false, hasGitCommit: false, conventionsContent: null, localFileSizes: [] };
   }
 
   /** Which directory convention is in use ('ai' or 'github') */
@@ -166,13 +176,23 @@ function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstruction
   /** Whether a git-commit instruction file exists */
   const hasGitCommit = files.some(f => f === 'git-commit.md' || f === 'git-commit.instructions.md');
 
+  /** Line counts for each markdown file in the local instructions directory */
+  const localFileSizes: Array<{ path: string; lines: number }> = [];
+  // Iterate over instruction files to record their line counts
+  for (const f of files) {
+    /** Line count for this instruction file */
+    const lines = fs.lineCount(`${dir}/${f}`);
+    localFileSizes.push({ path: `${dir}/${f}`, lines });
+  }
+
   // Check conventions.md has real content (commands + conventions, not just a header)
   let conventionsHasContent = false;
+  /** Raw content of the conventions file, stored for anti-pattern checks */
+  let conventionsContent: string | null = null;
   if (hasConventions) {
     /** Resolved path to the conventions instruction file */
     const conventionsPath = aiDir ? 'ai/instructions/conventions.md' : '.github/instructions/conventions.instructions.md';
-    /** Raw content of the conventions file */
-    const conventionsContent = fs.readFile(conventionsPath);
+    conventionsContent = fs.readFile(conventionsPath);
     if (conventionsContent) {
       /** Whether the conventions file includes command examples */
       const hasCommands = /##.*command|```bash|```sh/i.test(conventionsContent);
@@ -184,5 +204,5 @@ function extractLocalInstructions(fs: ReadonlyFS): SharedFacts['localInstruction
     }
   }
 
-  return { dirExists: true, location, fileCount: files.length, hasRouter, hasConventions, conventionsHasContent, hasFrontend, hasBackend, hasCodeReview, hasGitCommit };
+  return { dirExists: true, location, fileCount: files.length, hasRouter, hasConventions, conventionsHasContent, hasFrontend, hasBackend, hasCodeReview, hasGitCommit, conventionsContent, localFileSizes };
 }

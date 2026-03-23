@@ -1,5 +1,18 @@
-import type { ScanReport, AgentReport } from '../types.js';
+import type { ScanReport, AgentReport, AgentId } from '../types.js';
 import type { PromptVariables } from './types.js';
+import { PROFILES } from '../detect/agents.js';
+
+/** Derive prompt-facing path variables from the canonical PROFILES.
+ *  Settings/hooks may differ from detection paths (e.g. Codex has no JSON settings). */
+function getAgentPaths(id: AgentId) {
+  const p = PROFILES[id];
+  return {
+    instructionFile: p.instructionFile,
+    settingsFile: p.settingsFile ?? '(none)',
+    skillsDir: p.skillsDir,
+    hooksDir: p.hooksDir ?? '(none)',
+  };
+}
 
 /**
  * Extract template variables from a scan report + agent report.
@@ -11,8 +24,8 @@ export function extractVariables(report: ScanReport, agentReport: AgentReport): 
   /** Checks that fully passed */
   const passed = agentReport.checks.filter(c => c.status === 'pass');
 
-  /** File paths specific to the detected agent, with claude as fallback */
-  const paths = AGENT_PATHS[agentReport.agent] ?? AGENT_PATHS.claude;
+  /** File paths specific to the detected agent, derived from PROFILES */
+  const paths = getAgentPaths(agentReport.agent);
 
   return {
     agentId: agentReport.agent,
@@ -35,36 +48,13 @@ export function extractVariables(report: ScanReport, agentReport: AgentReport): 
   };
 }
 
-/** Per-agent file path defaults for instruction file, settings, skills, and hooks */
-const AGENT_PATHS = {
-  claude: {
-    instructionFile: 'CLAUDE.md',
-    settingsFile: '.claude/settings.json',
-    skillsDir: '.claude/skills',
-    hooksDir: '.claude/hooks',
-  },
-  codex: {
-    instructionFile: 'AGENTS.md',
-    settingsFile: '(none)',
-    skillsDir: '.agents/skills',
-    hooksDir: 'scripts/',
-  },
-  gemini: {
-    instructionFile: 'GEMINI.md',
-    settingsFile: '.gemini/settings.json',
-    skillsDir: '.agents/skills',
-    hooksDir: '.gemini/hooks',
-  },
-} as const;
-
 /**
  * Replace {{variable}} placeholders in a template string.
  * Leaves unresolved placeholders with an [UNFILLED: name] marker.
  */
 export function fillTemplate(template: string, vars: PromptVariables): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => {
-    const value = vars[name as keyof PromptVariables];
-    if (value !== undefined) return value;
+    if (name in vars) return vars[name as keyof PromptVariables];
     return `[UNFILLED: ${name}]`;
   });
 }

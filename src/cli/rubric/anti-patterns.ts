@@ -29,11 +29,15 @@ export const antiPatterns: AntiPatternDef[] = [
   },
   {
     id: 'AP3', name: 'DoD in both instruction file and guidelines', deduction: -3, confidence: 'low',
-    // TODO: v2 — implement when conventions.md content is available in SharedFacts
-    // Needs: grep conventions.md for "definition of done" text and compare with instruction file
-    na: () => true,
-    evaluate: (): AntiPatternResult => {
-      return { id: 'AP3', name: 'DoD in both instruction file and guidelines', triggered: false, deduction: 0, confidence: 'low', message: 'Not applicable — conventions.md content not yet available in facts' };
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      // Check for actual DoD SECTION duplication (heading), not just the word "DoD" in passing
+      const DOD_SECTION = /^#+\s*definition of done/im;
+      const instructionContent = ctx.agentFacts.instruction.content;
+      const conventionsContent = ctx.facts.shared.localInstructions.conventionsContent;
+      const inInstruction = instructionContent !== null && DOD_SECTION.test(instructionContent);
+      const inConventions = conventionsContent !== null && DOD_SECTION.test(conventionsContent);
+      const triggered = inInstruction && inConventions;
+      return { id: 'AP3', name: 'DoD in both instruction file and guidelines', triggered, deduction: triggered ? -3 : 0, confidence: 'low', message: triggered ? 'DoD appears in both instruction file and conventions.md — risk of conflicting definitions' : 'No DoD duplication detected' };
     },
     recommendation: 'Remove DoD from guidelines file',
     recommendationKey: 'ap-fix-dod-overlap',
@@ -74,12 +78,18 @@ export const antiPatterns: AntiPatternDef[] = [
 
   // === AP7-AP9: Local Files and Gitignore Anti-Patterns ===
   {
-    id: 'AP7', name: 'Local instruction file over 20 lines', deduction: -2, confidence: 'high',
-    // TODO: v2 — implement when per-file line counts are available in SharedFacts.localInstructions
-    // Needs: line count for each file in ai/instructions/ or .github/instructions/
-    na: () => true,
-    evaluate: (): AntiPatternResult => {
-      return { id: 'AP7', name: 'Local instruction file over 20 lines', triggered: false, deduction: 0, confidence: 'high', message: 'Not applicable — per-file line counts not yet available in facts' };
+    id: 'AP7', name: 'Local per-directory instruction file over 20 lines', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      // Only check per-directory local files (e.g., src/api/CLAUDE.md)
+      // EXCLUDE ai/instructions/ and .github/instructions/ — those are cold-path files meant to be 40-60 lines
+      const oversize = ctx.facts.shared.localInstructions.localFileSizes
+        .filter(f => f.path.includes('ai/instructions/') === false && f.path.includes('.github/instructions/') === false)
+        .filter(f => f.lines > 20);
+      const triggered = oversize.length > 0;
+      const message = triggered
+        ? `Oversize local files: ${oversize.map(f => `${f.path} (${f.lines} lines)`).join(', ')}`
+        : 'All local per-directory instruction files are 20 lines or fewer';
+      return { id: 'AP7', name: 'Local per-directory instruction file over 20 lines', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message };
     },
     recommendation: 'Compress local instruction files to under 20 lines',
     recommendationKey: 'ap-compress-local-files',

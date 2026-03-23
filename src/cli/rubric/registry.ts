@@ -11,6 +11,13 @@ const allChecks: CheckDef[] = [
   ...fullChecks,
 ];
 
+// Guard: fail fast on duplicate check IDs (catches copy-paste errors at load time)
+const idSet = new Set<string>();
+for (const check of allChecks) {
+  if (idSet.has(check.id)) throw new Error(`Duplicate check ID: ${check.id}`);
+  idSet.add(check.id);
+}
+
 // Re-exported anti-pattern definitions for the scoring engine
 const allAntiPatterns: AntiPatternDef[] = antiPatterns;
 

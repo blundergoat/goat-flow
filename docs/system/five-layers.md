@@ -182,7 +182,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
 | Phase 1b | Skills: /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
-| Phase 2 | Agent eval suite, CI validation, permission profiles, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
+| Phase 2 | Agent eval suite, CI validation, RFC 2119 pass, permission profiles (optional) | Layer 5, enhances Layers 1-4 |
 
 **Quarterly shrink:** Model-version gating required before removing rules. Run the eval suite on the current model version first. Shrink based on tooling improvements and rules never triggered in 90+ days.
 

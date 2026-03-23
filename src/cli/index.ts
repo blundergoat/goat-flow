@@ -28,4 +28,17 @@ export type {
   CLIOptions,
 } from './types.js';
 
-// TODO: export scan(), score(), detect() functions as they are built
+export { scan } from './evaluate/runner.js';
+export type { ScanOptions } from './evaluate/runner.js';
+
+export { createFS } from './facts/fs.js';
+
+export {
+  getCheck,
+  getChecksByTier,
+  getChecksByCategory,
+} from './rubric/registry.js';
+
+export { getFragmentsByPhase } from './prompt/registry.js';
+
+export type { EvalScore, EvalResult } from './eval/types.js';

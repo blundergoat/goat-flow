@@ -12,7 +12,7 @@ Templates and prompts for the GOAT Flow workflow layers. See
 | `playbooks/planning/` | Feature brief, mob elaboration, SBAO ranking, milestone planning |
 | `playbooks/testing/` | Testing workflow methodology and test plan generation |
 | `runtime/` | Enforcement hooks, permission profiles, RFC 2119, code map, architecture, guidelines split |
-| `skills/` | 7 goat-* skill templates: preflight, debug, audit, investigate, review, plan, test |
+| `skills/` | 10 goat-* skill templates: security, debug, audit, investigate, review, plan, test, reflect, onboard, resume |
 
 ## Usage
 

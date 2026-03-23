@@ -1,5 +1,10 @@
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
 
+// Confidence criteria:
+//   high   = deterministic (file exists, line count, JSON valid, exact match)
+//   medium = heuristic (regex pattern, ratio threshold, keyword detection)
+//   low    = semantic inference (content quality judgment)
+
 /**
  * Tier 3 — Full (16 points)
  * Agent evals, CI validation, hygiene.

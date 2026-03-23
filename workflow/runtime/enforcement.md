@@ -170,6 +170,17 @@ VERIFICATION:
 - Run the deny-dangerous hook against a test input to verify it works
 ```
 
+### Deny Hook Limitations
+
+Deny hooks are best-effort pre-execution filtering for literal shell commands. They do NOT protect against:
+- Shell aliases that wrap denied commands
+- Variable indirection (`$cmd` where cmd='git push main')
+- Pipe to arbitrary shell (`echo malicious | sh` — only `curl|bash` is blocked)
+- Encoded or obfuscated commands
+- Write/Edit tool operations on .env files (hooks only register for Bash tool)
+
+Defense in depth: hooks + settings.json deny patterns + instruction file rules. No single layer is a complete sandbox.
+
 ---
 
 ## Codex Enforcement

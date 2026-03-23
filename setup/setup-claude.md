@@ -205,7 +205,7 @@ HOOKS:
    PreToolUse hook: .claude/hooks/deny-dangerous.sh
    - For Bash: block rm -rf, git push main, git push --force, chmod 777,
      pipe-to-shell, --no-verify
-   - For Write/Edit: block .env files, lockfiles, generated code
+   - .env files: Bash writes blocked by hook; Read blocked by permissions deny list (Write/Edit not yet blocked -- add Write(**/.env*) to deny list if needed)
    - Exit 0 for everything else
 
    Stop hook: .claude/hooks/stop-lint.sh

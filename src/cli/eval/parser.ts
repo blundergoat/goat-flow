@@ -17,6 +17,14 @@ import type {
   EvalDifficulty,
   EvalSkill,
 } from './types.js';
+import { SKILL_NAMES } from '../constants.js';
+
+/** Extract a regex capture group, throwing if undefined */
+function captureGroup(match: RegExpMatchArray, index: number): string {
+  const value = match[index];
+  if (value === undefined) throw new Error(`Capture group ${index} missing`);
+  return value;
+}
 
 // --- Frontmatter parsing ---
 
@@ -79,13 +87,9 @@ function validateAgents(val: string | undefined): EvalAgents {
 
 /** Validate a skill value against the known skill list, returning null if invalid */
 function validateSkill(val: string | undefined): EvalSkill | null {
-  /** List of all recognized GOAT Flow skill identifiers */
-  const valid: EvalSkill[] = [
-    'goat-debug', 'goat-audit', 'goat-review', 'goat-investigate',
-    'goat-plan', 'goat-test', 'goat-security', 'goat-reflect',
-    'goat-onboard', 'goat-resume',
-  ];
-  if (val && valid.includes(val as EvalSkill)) return val as EvalSkill;
+  /** Canonical skill list cast to readonly string[] for .includes() compatibility */
+  const valid = SKILL_NAMES as readonly string[];
+  if (val && valid.includes(val)) return val as EvalSkill;
   return null;
 }
 
@@ -174,7 +178,7 @@ function parseGates(section: string): BehavioralGate[] {
     const checkboxMatch = line.match(/^[-*]\s+\[([ xX])\]\s+(.+)/);
     if (checkboxMatch) {
       gates.push({
-        text: checkboxMatch[2]!.trim(),
+        text: captureGroup(checkboxMatch, 2).trim(),
         status: checkboxMatch[1] === ' ' ? 'fail' : 'pass',
       });
       continue;
@@ -184,7 +188,7 @@ function parseGates(section: string): BehavioralGate[] {
     const numberedMatch = line.match(/^\d+\.\s+(.+)/);
     if (numberedMatch) {
       gates.push({
-        text: numberedMatch[1]!.trim(),
+        text: captureGroup(numberedMatch, 1).trim(),
         // Unchecked by default
         status: 'fail',
       });
@@ -208,7 +212,7 @@ function parseAntiPatterns(section: string): string[] {
     /** Regex match for markdown bullet list syntax */
     const bulletMatch = line.match(/^[-*]\s+(.+)/);
     if (bulletMatch) {
-      patterns.push(bulletMatch[1]!.trim());
+      patterns.push(captureGroup(bulletMatch, 1).trim());
     }
   }
 
@@ -282,6 +286,6 @@ function extractScenarioText(raw: string): string {
   // Remove ```text ... ``` or ``` ... ``` wrapper
   /** Regex match for code fence blocks wrapping the scenario text */
   const fenceMatch = raw.match(/```(?:text)?\n([\s\S]*?)```/);
-  if (fenceMatch) return fenceMatch[1]!.trim();
+  if (fenceMatch) return captureGroup(fenceMatch, 1).trim();
   return raw.trim();
 }

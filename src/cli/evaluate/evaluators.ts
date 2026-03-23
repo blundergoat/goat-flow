@@ -395,7 +395,11 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.github/git-commit-instructions.md': shared.gitCommitInstructions.exists,
   };
 
-  if (path in pathMap) return pathMap[path]!;
+  if (path in pathMap) {
+    const value = pathMap[path];
+    if (value === undefined) return false;
+    return value;
+  }
 
   // Check skill paths
   if (path.startsWith(ctx.agentFacts.agent.skillsDir)) {

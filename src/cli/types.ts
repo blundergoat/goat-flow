@@ -188,6 +188,8 @@ export interface SharedFacts {
     hasBackend: boolean;
     hasCodeReview: boolean;
     hasGitCommit: boolean;
+    conventionsContent: string | null;
+    localFileSizes: Array<{ path: string; lines: number }>;
   };
   gitCommitInstructions: { exists: boolean };
 }
