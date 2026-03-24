@@ -67,12 +67,6 @@ function getFoundationHooks(agentId: AgentId): TemplateRef[] {
           phase: 'foundation',
           note: 'Section: PostToolUse',
         },
-        {
-          output: '.claude/hooks/ask-first-guard.sh',
-          template: 'setup/setup-claude.md',
-          phase: 'foundation',
-          note: 'Section: Ask First (line 223+)',
-        },
       ];
 
     case 'codex':

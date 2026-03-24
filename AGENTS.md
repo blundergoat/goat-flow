@@ -8,45 +8,53 @@ bash scripts/deny-dangerous.sh --self-test
 bash -n scripts/*.sh scripts/maintenance/*.sh
 shellcheck scripts/*.sh scripts/maintenance/*.sh
 ```
-## Execution Loop: READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG
-**READ** - MUST read every file that defines the concept being changed before editing. In this repo, cross-doc consistency is part of correctness.
-```text
-BAD:  "The spec still says 5-step" (guessed from memory)
-GOOD: Read docs/system-spec.md and docs/system/six-steps.md before editing loop language
+## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
 ```
-**CLASSIFY** - MUST declare complexity + mode before acting. Question = answer it; directive = act on it. Mode: Plan / Implement / Explain / Debug / Review.
+BAD:  "The spec says 100 lines for apps" (guessed without reading)
+GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
+```
+
+**CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
+
 | Complexity | Read budget | Turn budget |
 |------------|-------------|-------------|
 | Hotfix | 2 reads | 3 turns |
 | Standard Feature | 4 reads | 10 turns |
 | System Change | 6 reads | 20 turns |
 | Infrastructure | 8 reads | 25 turns |
+
 Over budget = re-classify before continuing.
-**SCOPE** - MUST declare before acting: files allowed to change, systems touched, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with the human.
+
+**SCOPE** - MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
+
 **ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
-Mode transitions: `Switching to [NEW STATE] because [reason].`
+
 | Mode | Behaviour |
 |------|-----------|
-| Plan | Produce artefact only. No repo edits. Exit on LGTM |
-| Implement | Edit within scope. 4th read without writing = stop exploring |
+| Plan | Produce artefact only. No file edits. Exit on LGTM |
+| Implement | Edit in 2-3 turns. 4th read without writing = stop |
 | Explain | Walkthrough only. No changes unless asked |
-| Debug | Diagnosis with file:line first. No fixes until human reviews diagnosis |
-| Review | Investigate independently. Never rubber-stamp suggestions |
-```text
-BAD:  Added a new abstraction because it "might help later"
-GOOD: Keep the current shape. Extract only when the second case exists
+| Debug | Diagnosis with file:line first. Fixes after human reviews |
+| Review | Investigate first. Never blindly apply suggestions |
+
 ```
-**VERIFY** - MUST run `bash scripts/preflight-checks.sh` after meaningful changes. MUST grep for old paths or terms after renames/moves. If working from a plan/milestone: tick `- [x]` on each task as completed — not at the end.
-- Level 1: isolated warning or missing optional tool -> note it, continue carefully
-- Level 2: broken refs, spec drift, evidence corruption, or policy-script failure -> full stop with file:line diagnosis
-- Two failed approaches on the same issue = stop, report, and wait
-**LOG** - MUST update when tripped (DoD gate #4). Load `docs/footguns.md` before Ask First or cross-doc work.
-- If VERIFY caught a failure in code you wrote this session, or you corrected course mid-task, a `docs/lessons.md` entry is required before DoD is satisfied.
-- After human correction, MUST log immediately. Propagate confirmed footguns to the nearest routed instruction doc. Dual-agent shared files: read shared files before appending.
+BAD:  Created abstract template system (one format exists)
+GOOD: Inline format. Extract when second format needed
+```
+
+**VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed — not at the end.
+- Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
+- Two corrections on same approach = MUST rewind
+- Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
+
+**LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure in your code, or you corrected course: lessons.md entry required before DoD. After human correction: MUST log immediately. Propagate footguns to local CLAUDE.md.
+
 | File | When to update |
-|------|----------------|
-| `docs/lessons.md` | Behavioural mistake by the agent |
-| `docs/footguns.md` | Cross-doc or cross-tool landmine with file:line evidence |
+|------|---------------|
+| `docs/lessons.md` | Behavioural mistake (agent did something wrong) |
+| `docs/footguns.md` | Cross-doc architectural trap (with file:line evidence) |
 | `docs/decisions/` | Significant technical decision with context/rationale |
 ## Autonomy Tiers
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts, update shared learning-loop files with evidence.
@@ -73,10 +81,7 @@ MUST confirm all 6 gates:
 6. Grep old pattern/path after rename, move, or terminology change
 ## Working Memory
 For 5+ turn tasks, keep short working notes in the task thread or a temporary scratch file. Use `tasks/handoff-template.md` before ending incomplete work. If context drifts or two approaches fail, restate scope and start fresh.
-## Sub-Agent Objectives
-One focused objective, disjoint file scope, structured return: paths changed, evidence found, confidence, next step. 5-call budget.
-## Communication When Blocked
-Ask one question with a recommended default and exact file boundary.
+Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 ## Router Table
 | Resource | Path |
 |----------|------|
@@ -90,13 +95,7 @@ Ask one question with a recommended default and exact file boundary.
 | Claude setup | `setup/setup-claude.md` |
 | Codex setup | `setup/setup-codex.md` |
 | Shared execution template | `setup/shared/execution-loop.md` |
-| Security skill | `.agents/skills/goat-security/SKILL.md` |
-| Debug skill | `.agents/skills/goat-debug/SKILL.md` |
-| Audit skill | `.agents/skills/goat-audit/SKILL.md` |
-| Investigate skill | `.agents/skills/goat-investigate/SKILL.md` |
-| Review skill | `.agents/skills/goat-review/SKILL.md` |
-| Plan skill | `.agents/skills/goat-plan/SKILL.md` |
-| Test skill | `.agents/skills/goat-test/SKILL.md` |
+| Skills | `.agents/skills/goat-*/SKILL.md` |
 | Footguns | `docs/footguns.md` |
 | Lessons | `docs/lessons.md` |
 | Architecture | `docs/architecture.md` |

@@ -588,22 +588,6 @@ function extractSettingsLocalFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFa
   return { exists, lineCount };
 }
 
-/** Check whether any hook script references Ask First boundary paths for enforcement. */
-function extractAskFirstEnforcement(fs: ReadonlyFS, agent: AgentProfile, askFirstPaths: string[]): AgentFacts['askFirstEnforcement'] {
-  if (!agent.hooksDir || askFirstPaths.length === 0) return { hasPathHook: false };
-  /** All shell scripts in the hooks directory */
-  const hookFiles = fs.listDir(agent.hooksDir).filter(f => f.endsWith('.sh'));
-  for (const hookFile of hookFiles) {
-    /** Raw content of this hook script */
-    const content = fs.readFile(`${agent.hooksDir}/${hookFile}`);
-    if (!content) continue;
-    // Check if the hook references at least one Ask First boundary path
-    const refsAnyPath = askFirstPaths.some(p => content.includes(p));
-    if (refsAnyPath && /exit\s+2/.test(content)) return { hasPathHook: true };
-  }
-  return { hasPathHook: false };
-}
-
 // ─── Composer ────────────────────────────────────────────────────────
 
 /** Extract all facts about a single agent from the filesystem. */
@@ -631,14 +615,12 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   // This will be populated from shared facts in the extract orchestrator
 
   const settingsLocal = extractSettingsLocalFacts(fs, agent);
-  const askFirstEnforcement = extractAskFirstEnforcement(fs, agent, askFirst.paths);
 
   return {
     agent,
     instruction,
     settings: { exists: settings.exists, valid: settings.valid, parsed: settings.parsed, hasDenyPatterns: settings.hasDenyPatterns },
     settingsLocal,
-    askFirstEnforcement,
     skills,
     hooks: { ...hookFacts, readDenyCoversSecrets: settings.readDenyCoversSecrets },
     deny,

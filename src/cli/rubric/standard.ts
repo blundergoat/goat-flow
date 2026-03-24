@@ -475,24 +475,9 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Create context validation script or CI workflow',
     recommendationKey: 'create-context-validation',
   },
-  {
-    id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
-    pts: 2, confidence: 'medium',
-    na: (ctx) => ctx.agentFacts.askFirst.exists === false || ctx.agentFacts.agent.hooksDir === null,
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
-        status: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 'pass' : 'fail',
-        points: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 2 : 0, maxPoints: 2, confidence: 'medium',
-        message: ctx.agentFacts.askFirstEnforcement.hasPathHook
-          ? 'Ask First boundaries have a PreToolUse enforcement hook'
-          : 'Ask First boundaries are policy-only — no hook enforces edits to boundary files',
-      }),
-    },
-    recommendation: 'Create a PreToolUse hook that warns when editing Ask First boundary files',
-    recommendationKey: 'create-ask-first-hook',
-  },
+  // 2.2.7 (Ask First mechanical enforcement) removed — see ADR-006.
+  // The hook blocks normal development on framework projects. Ask First
+  // boundaries remain as policy in the instruction file.
 
   // === 2.3 Learning Loop (6 pts) ===
   {

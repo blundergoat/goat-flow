@@ -212,7 +212,6 @@ export interface AgentFacts {
     hasDenyPatterns: boolean;
   };
   settingsLocal: { exists: boolean; lineCount: number };
-  askFirstEnforcement: { hasPathHook: boolean };
   skills: {
     found: string[];
     missing: string[];

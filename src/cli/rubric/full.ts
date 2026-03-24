@@ -194,14 +194,17 @@ export const fullChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        /** Extract execution loop text between READ and LOG/Router headings */
+        /** Extract execution loop text between READ and Autonomy/Router headings */
         const extractLoop = (content: string | null): string => {
           if (!content) return '';
-          const readMatch = content.match(/###?\s+READ\b/i);
-          const endMatch = content.match(/###?\s+(Router|Working Memory|Autonomy|Essential|Hard Rules)\b/i);
+          /** Match READ as a heading (## READ, ### READ) or bold (**READ**) */
+          const readMatch = content.match(/(?:###?\s+|\*\*)READ\b/i);
           if (!readMatch) return '';
-          const start = readMatch.index ?? 0;
-          const end = endMatch?.index ?? content.length;
+          const start = readMatch.index!;
+          /** Find the end marker AFTER the READ match — Autonomy Tiers, Router Table, Hard Rules, or Working Memory */
+          const afterRead = content.slice(start);
+          const endMatch = afterRead.match(/^##\s+(Autonomy|Router|Hard Rules|Working Memory|Definition of Done)\b/im);
+          const end = endMatch ? start + endMatch.index! : content.length;
           return content.slice(start, end).replace(/\s+/g, ' ').trim();
         };
         const loops = ctx.facts.agents

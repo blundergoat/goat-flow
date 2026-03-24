@@ -801,39 +801,5 @@ For each real incident found, add a lesson entry with:
 
 Seed from real mistakes only. Do NOT invent hypothetical lessons.`,
   },
-  // === Ask First Enforcement ===
-  {
-    key: 'create-ask-first-hook',
-    phase: 'standard',
-    category: 'Hooks',
-    kind: 'create',
-    instruction: `Ask First boundaries in \`{{instructionFile}}\` are policy-only — no hook enforces them. Create a PreToolUse hook that warns when editing boundary files.
-
-Create \`{{hooksDir}}/ask-first-guard.sh\`:
-\`\`\`bash
-#!/usr/bin/env bash
-set -euo pipefail
-# PreToolUse hook — warn on Ask First boundary edits
-INPUT=$(cat)
-TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-if [ "$TOOL" = "Edit" ] || [ "$TOOL" = "Write" ]; then
-  FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
-  # Add your Ask First boundary paths here:
-  ASK_FIRST_PATHS=(
-    # Example: "src/auth/" "config/packages/" "migrations/"
-  )
-  for boundary in "\${ASK_FIRST_PATHS[@]}"; do
-    if [[ "$FILE" == *"$boundary"* ]]; then
-      echo "⚠ ASK FIRST: $FILE is in boundary '$boundary'" >&2
-      echo "Complete the micro-checklist before proceeding." >&2
-      exit 2
-    fi
-  done
-fi
-exit 0
-\`\`\`
-
-Then register it in \`{{settingsFile}}\` under hooks.PreToolUse (alongside deny-dangerous.sh).
-Populate ASK_FIRST_PATHS with the actual boundary paths from your Ask First section.`,
-  },
+  // Ask First enforcement hook removed — see ADR-006.
 ];

@@ -281,18 +281,6 @@ describe('composeSetup (reference-based)', () => {
     assert.ok(gateCount >= 3, `Expected ≥3 gate instructions, got ${gateCount}`);
   });
 
-  it('ask-first-guard references setup-claude.md (not enforcement.md)', () => {
-    const fs = buildEmptyProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const output = composeSetup(report, 'claude');
-    assert.ok(output);
-    assert.ok(output.includes('ask-first-guard.sh'), 'Should contain ask-first-guard');
-    // The ask-first line should reference setup-claude, not enforcement
-    const askFirstLine = output.split('\n').find(l => l.includes('ask-first-guard'));
-    assert.ok(askFirstLine);
-    assert.ok(askFirstLine.includes('setup/setup-claude.md'), 'ask-first should reference setup-claude.md');
-  });
-
   it('template paths are absolute', () => {
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
