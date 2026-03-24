@@ -63,6 +63,12 @@ c) Autonomy Tiers: Always / Ask First / Never
      5. Rollback command: [exact command]
 
 d) Definition of Done: 6 gates
+   (1) lint/typecheck passes on changed files
+   (2) no broken cross-references introduced
+   (3) no unapproved boundary changes
+   (4) logs updated if tripped
+   (5) working notes current
+   (6) grep old pattern after renames
 
 e) Working Memory: Working Notes for 5+ turn tasks, context escalation
    ladder, session handoff protocol. Incomplete work → copy

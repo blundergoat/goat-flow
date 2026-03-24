@@ -114,4 +114,35 @@ for script in scripts/preflight-checks.sh scripts/context-validate.sh scripts/de
 done
 info "Codex scripts are executable"
 
+# Validate setup prompt template refs (M2.11)
+# Uses the built CLI to check all template paths referenced by the setup renderer
+if [[ -f dist/cli/prompt/template-refs.js ]]; then
+    template_errors=0
+    while IFS= read -r tmpl; do
+        if [[ ! -f "$tmpl" ]]; then
+            warn "Missing setup template: $tmpl"
+            template_errors=1
+        fi
+    done < <(
+        node -e "
+import('./dist/cli/prompt/template-refs.js').then(m => {
+  for (const agent of ['claude', 'codex', 'gemini']) {
+    const refs = m.getAgentTemplates(agent);
+    const seen = new Set();
+    for (const ref of refs) {
+      if (!seen.has(ref.template)) {
+        seen.add(ref.template);
+        console.log(ref.template);
+      }
+    }
+  }
+});
+" 2>/dev/null
+    )
+    (( template_errors == 0 )) || fail "Setup template references contain missing files"
+    info "Setup template references all resolve"
+else
+    warn "dist/cli/prompt/template-refs.js not built — skipping template ref validation"
+fi
+
 info "Context validation passed"

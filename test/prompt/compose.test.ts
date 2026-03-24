@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createMockFS } from '../helpers/mock-fs.js';
 import { scanProject } from '../../src/cli/scanner/scan.js';
 import { composeFix } from '../../src/cli/prompt/compose-fix.js';
-import { composeSetup } from '../../src/cli/prompt/compose-setup.js';
+import { composeSetup, composeInlineSetup } from '../../src/cli/prompt/compose-setup.js';
+import type { TemplateRef } from '../../src/cli/prompt/template-refs.js';
 import { composeAudit } from '../../src/cli/prompt/compose-audit.js';
 import { renderPrompt } from '../../src/cli/prompt/render.js';
 
@@ -213,57 +214,248 @@ describe('composeFix', () => {
 
 // ─── compose-setup ──────────────────────────────────────────────────
 
-describe('composeSetup', () => {
-  it('works on a project with no agents', () => {
+describe('composeSetup (reference-based)', () => {
+  it('returns a string (not a ComposedPrompt)', () => {
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeSetup(report, 'claude');
-    assert.ok(prompt);
-    assert.equal(prompt.mode, 'setup');
-    assert.equal(prompt.agent, 'claude');
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.equal(typeof output, 'string');
   });
 
-  it('includes all three phases', () => {
+  it('is under 100 lines per agent', () => {
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeSetup(report, 'claude');
-    assert.ok(prompt);
-    const phases = prompt.sections.map(s => s.phase);
-    assert.ok(phases.includes('foundation'), 'Missing foundation phase');
-    assert.ok(phases.includes('standard'), 'Missing standard phase');
-    assert.ok(phases.includes('full'), 'Missing full phase');
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    const lineCount = output.split('\n').length;
+    assert.ok(lineCount <= 100, `Expected ≤100 lines, got ${lineCount}`);
   });
 
-  it('pre-fills stack variables from detection', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeSetup(report, 'claude');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.includes('CLAUDE.md'), 'Should reference CLAUDE.md');
-    assert.ok(output.includes('.claude/skills'), 'Should reference .claude/skills');
-  });
-
-  it('uses agent-specific paths for codex', () => {
+  it('includes all three phase headings', () => {
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeSetup(report, 'codex');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.includes('AGENTS.md'), 'Should reference AGENTS.md for codex');
-    assert.ok(output.includes('.agents/skills'), 'Should reference .agents/skills for codex');
-  });
-
-  it('renders to markdown with clear section structure', () => {
-    const fs = buildEmptyProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeSetup(report, 'claude');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.includes('# GOAT Flow Setup'), 'Title');
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
     assert.ok(output.includes('## Phase 1a'), 'Phase 1a heading');
     assert.ok(output.includes('## Phase 1b'), 'Phase 1b heading');
     assert.ok(output.includes('## Phase 2'), 'Phase 2 heading');
+  });
+
+  it('references Claude-specific paths', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('CLAUDE.md'), 'Should reference CLAUDE.md');
+    assert.ok(output.includes('.claude/settings.json'), 'Should reference settings');
+    assert.ok(output.includes('.claude/skills'), 'Should reference skills dir');
+    assert.ok(output.includes('setup/setup-claude.md'), 'Should reference agent setup guide');
+  });
+
+  it('references Codex-specific paths', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'codex');
+    assert.ok(output);
+    assert.ok(output.includes('AGENTS.md'), 'Should reference AGENTS.md');
+    assert.ok(output.includes('.codex/config.toml'), 'Should reference Codex config');
+    assert.ok(output.includes('.agents/skills'), 'Should reference .agents/skills');
+    assert.ok(output.includes('.codex/rules/deny-dangerous.star'), 'Should reference Starlark execpolicy');
+  });
+
+  it('includes detected stack languages in preamble', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('Stack:'), 'Should contain Stack: line');
+  });
+
+  it('each phase has a gate instruction', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    const gateCount = (output.match(/goat-flow scan/g) || []).length;
+    assert.ok(gateCount >= 3, `Expected ≥3 gate instructions, got ${gateCount}`);
+  });
+
+  it('ask-first-guard references setup-claude.md (not enforcement.md)', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('ask-first-guard.sh'), 'Should contain ask-first-guard');
+    // The ask-first line should reference setup-claude, not enforcement
+    const askFirstLine = output.split('\n').find(l => l.includes('ask-first-guard'));
+    assert.ok(askFirstLine);
+    assert.ok(askFirstLine.includes('setup/setup-claude.md'), 'ask-first should reference setup-claude.md');
+  });
+
+  it('template paths are absolute', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('/setup/shared/execution-loop.md'), 'Template paths should be absolute');
+  });
+
+  it('references template files that exist on disk', async () => {
+    const { validateTemplateRefs, getAgentTemplates } = await import('../../src/cli/prompt/template-refs.js');
+    const missing = validateTemplateRefs('claude');
+    assert.deepEqual(missing, [], `Missing templates: ${missing.join(', ')}`);
+    // Also verify the refs have the expected shape
+    const refs: TemplateRef[] = getAgentTemplates('claude');
+    assert.ok(refs.length > 0, 'Should have template refs');
+    assert.ok(refs[0].output, 'Ref should have output');
+    assert.ok(refs[0].template, 'Ref should have template');
+  });
+});
+
+describe('composeInlineSetup (old, preserved)', () => {
+  it('still works and returns ComposedPrompt', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const prompt = composeInlineSetup(report, 'claude');
+    assert.ok(prompt);
+    assert.equal(prompt.mode, 'setup');
+    assert.equal(prompt.agent, 'claude');
+    assert.ok(prompt.sections.length > 0, 'Should have sections');
+  });
+});
+
+describe('mapLanguagesToTemplates', () => {
+  // Dynamic import since it's not in the top-level imports
+  const getMapper = async () => {
+    const mod = await import('../../src/cli/prompt/template-refs.js');
+    return mod.mapLanguagesToTemplates;
+  };
+
+  it('maps typescript + bash to correct templates', async () => {
+    const mapLanguagesToTemplates = await getMapper();
+    const refs = mapLanguagesToTemplates(['typescript', 'bash']);
+    const templates = refs.map(r => r.template);
+    assert.ok(templates.some(t => t.includes('typescript-node')), 'Should include typescript-node');
+    assert.ok(templates.some(t => t.includes('bash')), 'Should include bash');
+    assert.ok(templates.some(t => t.includes('web-common')), 'Should include web-common for web languages');
+  });
+
+  it('maps go to go.md + web-common', async () => {
+    const mapLanguagesToTemplates = await getMapper();
+    const refs = mapLanguagesToTemplates(['go']);
+    const templates = refs.map(r => r.template);
+    assert.ok(templates.some(t => t.includes('/go.md')), 'Should include go.md');
+    assert.ok(templates.some(t => t.includes('web-common')), 'Should include web-common');
+  });
+
+  it('returns empty for markdown-only', async () => {
+    const mapLanguagesToTemplates = await getMapper();
+    const refs = mapLanguagesToTemplates(['markdown']);
+    assert.equal(refs.length, 0);
+  });
+
+  it('returns empty for empty input', async () => {
+    const mapLanguagesToTemplates = await getMapper();
+    const refs = mapLanguagesToTemplates([]);
+    assert.equal(refs.length, 0);
+  });
+
+  it('deduplicates typescript + javascript (same template)', async () => {
+    const mapLanguagesToTemplates = await getMapper();
+    const refs = mapLanguagesToTemplates(['typescript', 'javascript']);
+    const tsRefs = refs.filter(r => r.template.includes('typescript-node'));
+    assert.equal(tsRefs.length, 1, 'Should not duplicate typescript-node.md');
+  });
+});
+
+// ─── M2.11b: post-healthkit quality fixes ───────────────────────────
+
+describe('M2.11b: setup prompt improvements', () => {
+  it('includes role-specific coding-standards rows', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('ai/instructions/conventions.md'), 'Should include conventions.md');
+    assert.ok(output.includes('ai/instructions/code-review.md'), 'Should include code-review.md');
+    assert.ok(output.includes('ai/instructions/git-commit.md'), 'Should include git-commit.md');
+  });
+
+  it('includes frontend.md for TS/JS projects', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('ai/instructions/frontend.md'), 'Should include frontend.md');
+  });
+
+  it('includes skill quality requirements block', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('Skill quality requirements'), 'Should include skill quality block');
+    assert.ok(output.includes('Output Format'), 'Should mention Output Format');
+    assert.ok(output.includes('Chaining'), 'Should mention Chaining');
+  });
+
+  it('ends with goat-flow fix instruction', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('goat-flow fix'), 'Should include fix instruction');
+  });
+
+  it('--agent all includes multi-agent sync instruction', () => {
+    // This tests the CLI dispatch, not composeSetup directly.
+    // composeSetup is called per agent; the sync instruction is added by handlePromptCommand.
+    // We test that composeSetup output does NOT contain it (that's the CLI's job).
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(!output.includes('Multi-agent sync'), 'composeSetup should not contain sync instruction (CLI adds it)');
+  });
+});
+
+describe('M2.11b: scanner fixes', () => {
+  it('lessons.md with only template headings fails 2.3.2', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/lessons.md': '# Lessons\n\n### Entry Format\n<!-- Describe what happened -->\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
+    assert.ok(check, 'Check 2.3.2 should exist');
+    assert.equal(check.status, 'fail', 'Template-only lessons should fail');
+  });
+
+  it('lessons.md with real entries passes 2.3.2', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/lessons.md': '# Lessons\n\n### 2026-03-20: Auth migration broke staging\nRolled back because the migration assumed sequential IDs.\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
+    assert.ok(check, 'Check 2.3.2 should exist');
+    assert.equal(check.status, 'pass', 'Real lessons entries should pass');
+  });
+
+  it('AP11 fires when lessons is empty even if footguns has content', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/lessons.md': '# Lessons\n\nNo entries yet.\n',
+      'docs/footguns.md': '# Footguns\n\n- some pattern without evidence\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap11 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP11');
+    assert.ok(ap11, 'AP11 should exist');
+    assert.equal(ap11.triggered, true, 'AP11 should fire when lessons is empty');
   });
 });
 

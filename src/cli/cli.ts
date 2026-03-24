@@ -49,7 +49,7 @@ Arguments:
 
 Flags:
   --format <type>   Output format: json, text (default: auto)
-  --agent <id>      Filter to one agent: claude, codex, gemini
+  --agent <id>      Filter to one agent: claude, codex, gemini, all
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
   --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
@@ -61,6 +61,7 @@ Examples:
   goat-flow scan --format json       Force JSON output
   goat-flow fix --agent claude       Fix prompt for Claude only
   goat-flow setup --agent codex      Setup prompt for Codex
+  goat-flow setup --agent all        Setup prompt for all agents
   goat-flow audit --agent gemini     Audit prompt for Gemini
   goat-flow --min-score 75           CI gate: fail if below 75%
   goat-flow eval                     Summarize agent evals
@@ -118,12 +119,12 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   }
 
   // Validate agent
-  let agent: AgentId | null = null;
+  let agent: AgentId | 'all' | null = null;
   if (values.agent) {
-    if (['claude', 'codex', 'gemini'].includes(values.agent) === false) {
-      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`, 2);
+    if (['claude', 'codex', 'gemini', 'all'].includes(values.agent) === false) {
+      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini, all`, 2);
     }
-    agent = values.agent as AgentId;
+    agent = values.agent as AgentId | 'all';
   }
 
   // Parse min-score
@@ -184,31 +185,60 @@ async function handleEvalCommand(options: ParsedCLI): Promise<void> {
 /** Handle prompt commands (fix, setup, audit): compose and render prompts per agent */
 async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
   const { composeFix } = await import('./prompt/compose-fix.js');
-  const { composeSetup } = await import('./prompt/compose-setup.js');
+  const { composeSetup, composeInlineSetup } = await import('./prompt/compose-setup.js');
   const { composeAudit } = await import('./prompt/compose-audit.js');
   const { renderPrompt } = await import('./prompt/render.js');
 
   // Determine which agents to generate prompts for
   /** List of agent IDs to generate prompts for (filtered or all detected) */
-  const agentIds = options.agent
-    ? [options.agent]
-    : report.agents.map(a => a.agent);
+  const agentIds: AgentId[] = options.agent === 'all'
+    ? ['claude', 'codex', 'gemini']
+    : options.agent
+      ? [options.agent]
+      : report.agents.map(a => a.agent);
 
   if (agentIds.length === 0) {
-    throw new CLIError('No agents detected. Use --agent to specify one.', 1);
+    throw new CLIError('No agents detected. Use --agent claude, --agent codex, --agent gemini, or --agent all', 1);
+  }
+
+  // When generating setup for multiple agents, prepend a sync instruction
+  if (options.command === 'setup' && agentIds.length > 1) {
+    process.stdout.write([
+      '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
+      '(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done',
+      'MUST be identical across all instruction files. Write these sections for the first agent,',
+      'then COPY THEM VERBATIM to the other instruction files. Do not rephrase.',
+      '',
+      '---',
+      '',
+    ].join('\n'));
   }
 
   // Iterate over each agent ID to compose and render the appropriate prompt
   for (const agentId of agentIds) {
-    let prompt;
-    switch (options.command) {
-      case 'fix': prompt = composeFix(report, agentId); break;
-      case 'setup': prompt = composeSetup(report, agentId); break;
-      case 'audit': prompt = composeAudit(report, agentId); break;
+    let output: string | null = null;
+
+    if (options.command === 'setup') {
+      // Setup returns a markdown string directly (reference-based)
+      // Rollback: GOAT_FLOW_INLINE_SETUP=1 uses the old fragment-based renderer
+      if (process.env.GOAT_FLOW_INLINE_SETUP === '1') {
+        const prompt = composeInlineSetup(report, agentId);
+        output = prompt ? renderPrompt(prompt) : null;
+      } else {
+        output = composeSetup(report, agentId);
+      }
+    } else {
+      // Fix and audit use the fragment-based ComposedPrompt + renderPrompt
+      let prompt;
+      switch (options.command) {
+        case 'fix': prompt = composeFix(report, agentId); break;
+        case 'audit': prompt = composeAudit(report, agentId); break;
+      }
+      output = prompt ? renderPrompt(prompt) : null;
     }
 
-    if (prompt) {
-      process.stdout.write(renderPrompt(prompt) + '\n');
+    if (output) {
+      process.stdout.write(output + '\n');
       if (agentIds.length > 1) process.stdout.write('\n---\n\n');
     }
   }
@@ -268,7 +298,7 @@ async function main(): Promise<void> {
   const fs = createFS(options.projectPath);
   /** Full scan report containing per-agent scores and check results */
   const report = scanProject(fs, options.projectPath, {
-    agentFilter: options.agent,
+    agentFilter: options.agent === 'all' ? null : options.agent,
   });
 
   if (options.command === 'scan') {

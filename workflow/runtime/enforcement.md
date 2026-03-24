@@ -65,6 +65,27 @@ Create the following:
      use mv -n to prevent data loss on untracked files)
    Note: Agents hallucinate dependency version bumps to fix type errors.
    Lockfile changes must go through the package manager.
+
+   JSON parsing: The hook receives JSON on stdin from the agent runtime.
+   Use jq if available:
+     INPUT=$(cat)
+     TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+     CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+   Fallback if jq is not installed:
+     TOOL=$(echo "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+   Do NOT use grep -P (Perl regex) — it is unavailable on macOS.
+
+   Command chaining: Split commands on &&, ||, and ; then check each
+   segment independently. Without this, chained dangerous commands
+   bypass detection:
+     IFS=$'\n' read -ra SEGMENTS <<< "$(echo "$CMD" | sed 's/[&|;]\{1,2\}/\n/g')"
+     for seg in "${SEGMENTS[@]}"; do ... done
+
+   Read-deny: The settings permissions.deny list should also block
+   reading sensitive files: .env*, .ssh/**, .aws/**, *.pem, *.key,
+   credentials*. Add Read(...) patterns alongside the Bash(...) deny
+   patterns in the settings file.
+
    [ADD PROJECT-SPECIFIC BLOCKS if needed: e.g., direct edits to
     binary/generated files that must be modified through tooling]
 

@@ -208,12 +208,25 @@ export const fullChecks: CheckDef[] = [
           .filter(a => a.instruction.exists && a.instruction.content)
           .map(a => ({ agent: a.agent.instructionFile, loop: extractLoop(a.instruction.content) }));
         if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
-        // Compare each pair — check if loops are >80% similar (simple length-ratio heuristic)
+        // Normalize for comparison: lowercase, strip markdown formatting
+        const normalize = (s: string): string[] =>
+          s.toLowerCase()
+            .replace(/[*`|_\-#]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' ')
+            .filter(w => w.length > 0);
+
+        // Compare each pair — word-intersection similarity (Jaccard index)
         const diverged: string[] = [];
         for (let i = 1; i < loops.length; i++) {
           const a = loops[0]!, b = loops[i]!;
-          const ratio = Math.min(a.loop.length, b.loop.length) / Math.max(a.loop.length, b.loop.length || 1);
-          if (ratio < 0.6 || a.loop.length === 0 || b.loop.length === 0) {
+          const wordsA = new Set(normalize(a.loop));
+          const wordsB = new Set(normalize(b.loop));
+          const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
+          const union = new Set([...wordsA, ...wordsB]).size;
+          const similarity = union > 0 ? intersection / union : 1;
+          if (similarity < 0.85 || a.loop.length === 0 || b.loop.length === 0) {
             diverged.push(`${a.agent} vs ${b.agent}`);
           }
         }

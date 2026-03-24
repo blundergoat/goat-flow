@@ -61,10 +61,20 @@ function extractLessonsFacts(fs: ReadonlyFS): SharedFacts['lessons'] {
   const lessonsContent = fs.readFile('docs/lessons.md');
   /** Whether the lessons file exists on disk */
   const exists = lessonsContent !== null;
-  /** Whether the lessons file contains at least one H3 entry */
-  const hasEntries = exists && /^### /m.test(lessonsContent);
-  /** Count of H3 heading entries in lessons file */
-  const entryCount = exists ? (lessonsContent.match(/^### /gm) ?? []).length : 0;
+
+  let hasEntries = false;
+  let entryCount = 0;
+
+  if (exists) {
+    // Strip HTML comments before checking for entries
+    const stripped = lessonsContent.replace(/<!--[\s\S]*?-->/g, '');
+    // Find H3 headings followed by actual content (not just whitespace/comments)
+    const h3Pattern = /^### .+\n+(\S[^\n]{19,})/gm;
+    const matches = stripped.match(h3Pattern);
+    entryCount = matches ? matches.length : 0;
+    hasEntries = entryCount > 0;
+  }
+
   return { exists, hasEntries, entryCount };
 }
 
