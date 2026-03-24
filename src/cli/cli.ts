@@ -39,9 +39,7 @@ Usage:
 
 Commands:
   scan              Score a project (default)
-  fix               Generate fix prompt for failed checks
-  setup             Generate full setup prompt
-  audit             Generate read-only audit prompt
+  setup             Generate setup prompt (adapts to project state)
   eval              Parse and summarize agent evals
 
 Arguments:
@@ -59,10 +57,9 @@ Flags:
 Examples:
   goat-flow .                        Scan current directory
   goat-flow scan --format json       Force JSON output
-  goat-flow fix --agent claude       Fix prompt for Claude only
+  goat-flow setup --agent claude     Setup prompt for Claude
   goat-flow setup --agent codex      Setup prompt for Codex
   goat-flow setup --agent all        Setup prompt for all agents
-  goat-flow audit --agent gemini     Audit prompt for Gemini
   goat-flow --min-score 75           CI gate: fail if below 75%
   goat-flow eval                     Summarize agent evals
   goat-flow eval --format json       Eval summary as JSON
@@ -74,10 +71,10 @@ function printVersion(): void {
   console.log(`goat-flow v${PACKAGE_VERSION}`);
 }
 
-type Command = 'scan' | 'fix' | 'setup' | 'audit' | 'eval';
+type Command = 'scan' | 'setup' | 'eval';
 
 /** List of recognized CLI subcommands */
-const COMMANDS: Command[] = ['scan', 'fix', 'setup', 'audit', 'eval'];
+const COMMANDS: Command[] = ['scan', 'setup', 'eval'];
 
 export interface ParsedCLI extends CLIOptions {
   command: Command;
@@ -89,6 +86,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   let command: Command = 'scan';
   /** Mutable copy of argv for shifting the command token */
   const filtered = [...argv];
+  const REMOVED_COMMANDS = ['fix', 'audit'];
+  const first = filtered[0];
+  if (first !== undefined && REMOVED_COMMANDS.includes(first)) {
+    throw new CLIError(`"${first}" was removed. Use "setup" instead — it adapts to your project's state.`, 2);
+  }
   if (filtered.length > 0 && COMMANDS.includes(filtered[0] as Command)) {
     command = filtered.shift() as Command;
   }
@@ -182,11 +184,9 @@ async function handleEvalCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/** Handle prompt commands (fix, setup, audit): compose and render prompts per agent */
-async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
-  const { composeFix } = await import('./prompt/compose-fix.js');
+/** Handle the setup command: compose and render setup prompts per agent */
+async function handleSetupCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
   const { composeSetup, composeInlineSetup } = await import('./prompt/compose-setup.js');
-  const { composeAudit } = await import('./prompt/compose-audit.js');
   const { renderPrompt } = await import('./prompt/render.js');
 
   // Determine which agents to generate prompts for
@@ -202,7 +202,7 @@ async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Prom
   }
 
   // When generating setup for multiple agents, prepend a sync instruction
-  if (options.command === 'setup' && agentIds.length > 1) {
+  if (agentIds.length > 1) {
     process.stdout.write([
       '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
       '(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done',
@@ -214,27 +214,17 @@ async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Prom
     ].join('\n'));
   }
 
-  // Iterate over each agent ID to compose and render the appropriate prompt
+  // Iterate over each agent ID to compose and render the setup prompt
   for (const agentId of agentIds) {
     let output: string | null = null;
 
-    if (options.command === 'setup') {
-      // Setup returns a markdown string directly (reference-based)
-      // Rollback: GOAT_FLOW_INLINE_SETUP=1 uses the old fragment-based renderer
-      if (process.env.GOAT_FLOW_INLINE_SETUP === '1') {
-        const prompt = composeInlineSetup(report, agentId);
-        output = prompt ? renderPrompt(prompt) : null;
-      } else {
-        output = composeSetup(report, agentId);
-      }
-    } else {
-      // Fix and audit use the fragment-based ComposedPrompt + renderPrompt
-      let prompt;
-      switch (options.command) {
-        case 'fix': prompt = composeFix(report, agentId); break;
-        case 'audit': prompt = composeAudit(report, agentId); break;
-      }
+    // Setup returns a markdown string directly (reference-based)
+    // Rollback: GOAT_FLOW_INLINE_SETUP=1 uses the old fragment-based renderer
+    if (process.env.GOAT_FLOW_INLINE_SETUP === '1') {
+      const prompt = composeInlineSetup(report, agentId);
       output = prompt ? renderPrompt(prompt) : null;
+    } else {
+      output = composeSetup(report, agentId);
     }
 
     if (output) {
@@ -308,7 +298,8 @@ async function main(): Promise<void> {
       : renderJson(report);
     process.stdout.write(output + '\n');
   } else {
-    await handlePromptCommand(options, report);
+    // setup command — generates prompts that adapt to project state
+    await handleSetupCommand(options, report);
   }
 
   handleCIGate(options, report);

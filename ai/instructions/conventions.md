@@ -21,7 +21,7 @@ src/cli/
   scanner/            # Check evaluators (check-evaluator.ts, scan.ts)
   rubric/             # Check definitions by tier (foundation.ts, standard.ts, full.ts, anti-patterns.ts, registry.ts, version.ts)
   scoring/            # Score computation and recommendations (scorer.ts, recommendations.ts)
-  prompt/             # Prompt generation (compose-fix.ts, compose-setup.ts, compose-audit.ts, render.ts, template-filler.ts, registry.ts)
+  prompt/             # Prompt generation (compose-setup.ts, render.ts, template-filler.ts, registry.ts)
   prompt/fragments/   # Per-check fix/setup instructions (foundation.ts, standard.ts, full.ts, anti-patterns.ts)
   prompt/types.ts     # Fragment, ComposedPrompt, PromptVariables
   evals/              # Agent eval parser (types.ts, loader.ts, parser.ts)
@@ -53,9 +53,8 @@ bash scripts/context-validate.sh         # Validate GOAT Flow structure
 
 # CLI commands (after build)
 goat-flow scan .                         # Score a project
-goat-flow fix --agent claude             # Generate fix prompt
+goat-flow setup --agent claude           # Generate setup prompt
 goat-flow setup --agent codex            # Generate setup prompt
-goat-flow audit --agent gemini           # Generate audit prompt
 goat-flow eval                           # Summarize agent evals
 goat-flow --min-score 75                 # CI gate
 ```

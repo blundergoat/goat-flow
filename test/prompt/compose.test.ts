@@ -2,11 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockFS } from '../helpers/mock-fs.js';
 import { scanProject } from '../../src/cli/scanner/scan.js';
-import { composeFix } from '../../src/cli/prompt/compose-fix.js';
 import { composeSetup, composeInlineSetup } from '../../src/cli/prompt/compose-setup.js';
 import type { TemplateRef } from '../../src/cli/prompt/template-refs.js';
-import { composeAudit } from '../../src/cli/prompt/compose-audit.js';
-import { renderPrompt } from '../../src/cli/prompt/render.js';
 
 // ─── Shared fixtures ────────────────────────────────────────────────
 
@@ -133,84 +130,6 @@ function buildEmptyProject() {
     'README.md': '# Empty\n',
   });
 }
-
-// ─── compose-fix ────────────────────────────────────────────────────
-
-describe('composeFix', () => {
-  it('returns few fragments for a high-scoring project', () => {
-    const fs = buildFullProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    // A well-set-up project may still have some failures due to quality checks on mock content
-    const totalFragments = prompt.sections.reduce((sum, s) => sum + s.fragments.length, 0);
-    assert.ok(totalFragments <= 35, `Expected ≤35 fragments for full project, got ${totalFragments}`);
-  });
-
-  it('returns many fragments for a minimal project', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    const totalFragments = prompt.sections.reduce((sum, s) => sum + s.fragments.length, 0);
-    assert.ok(totalFragments > 10, `Expected >10 fragments for minimal project, got ${totalFragments}`);
-  });
-
-  it('returns null for nonexistent agent', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'gemini');
-    assert.equal(prompt, null);
-  });
-
-  it('sections are ordered: anti-pattern → foundation → standard → full', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    const phaseOrder = ['anti-pattern', 'foundation', 'standard', 'full'];
-    let lastIdx = -1;
-    for (const section of prompt.sections) {
-      const idx = phaseOrder.indexOf(section.phase);
-      assert.ok(idx >= lastIdx, `Phase '${section.phase}' out of order`);
-      lastIdx = idx;
-    }
-  });
-
-  it('preamble includes grade and percentage', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    assert.ok(prompt.preamble.includes('%'), 'Preamble should include percentage');
-    assert.ok(/\b[A-F]\b/.test(prompt.preamble), 'Preamble should include grade');
-  });
-
-  it('fragments contain filled variables (not raw {{placeholders}})', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    for (const section of prompt.sections) {
-      for (const fragment of section.fragments) {
-        assert.ok(!fragment.instruction.includes('{{agentName}}'), `Fragment '${fragment.key}' has unfilled {{agentName}}`);
-        assert.ok(!fragment.instruction.includes('{{instructionFile}}'), `Fragment '${fragment.key}' has unfilled {{instructionFile}}`);
-        assert.ok(!fragment.instruction.includes('{{skillsDir}}'), `Fragment '${fragment.key}' has unfilled {{skillsDir}}`);
-      }
-    }
-  });
-
-  it('renders to non-empty markdown', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeFix(report, 'claude');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.length > 100, 'Rendered output should be substantial');
-    assert.ok(output.startsWith('# GOAT Flow Fix'), 'Should start with title');
-    assert.ok(output.includes('## Phase'), 'Should have phase sections');
-  });
-});
 
 // ─── compose-setup ──────────────────────────────────────────────────
 
@@ -370,8 +289,12 @@ describe('M2.11b: setup prompt improvements', () => {
     assert.ok(output.includes('ai/instructions/git-commit.md'), 'Should include git-commit.md');
   });
 
-  it('includes frontend.md for TS/JS projects', () => {
-    const fs = buildMinimalProject();
+  it('includes frontend.md for TS/JS projects in full setup mode', () => {
+    // Use empty project (no agents) to trigger full setup mode which renders language refs
+    const fs = createMockFS({
+      'package.json': JSON.stringify({ name: 'ts-project', devDependencies: { typescript: '^5.0.0' }, scripts: { start: 'node .' } }),
+      'README.md': '# TS Project\n',
+    });
     const report = scanProject(fs, '/test', { agentFilter: null });
     const output = composeSetup(report, 'claude');
     assert.ok(output);
@@ -388,17 +311,17 @@ describe('M2.11b: setup prompt improvements', () => {
     assert.ok(output.includes('Chaining'), 'Should mention Chaining');
   });
 
-  it('ends with goat-flow fix instruction', () => {
+  it('ends with goat-flow setup re-run instruction', () => {
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
     const output = composeSetup(report, 'claude');
     assert.ok(output);
-    assert.ok(output.includes('goat-flow fix'), 'Should include fix instruction');
+    assert.ok(output.includes('goat-flow setup'), 'Should include setup re-run instruction');
   });
 
   it('--agent all includes multi-agent sync instruction', () => {
     // This tests the CLI dispatch, not composeSetup directly.
-    // composeSetup is called per agent; the sync instruction is added by handlePromptCommand.
+    // composeSetup is called per agent; the sync instruction is added by handleSetupCommand.
     // We test that composeSetup output does NOT contain it (that's the CLI's job).
     const fs = buildEmptyProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
@@ -447,53 +370,6 @@ describe('M2.11b: scanner fixes', () => {
   });
 });
 
-// ─── compose-audit ──────────────────────────────────────────────────
-
-describe('composeAudit', () => {
-  it('returns null for nonexistent agent', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeAudit(report, 'gemini');
-    assert.equal(prompt, null);
-  });
-
-  it('includes score overview', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeAudit(report, 'claude');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.includes('Foundation'), 'Should include tier breakdown');
-    assert.ok(output.includes('%'), 'Should include percentages');
-  });
-
-  it('includes failed checks section', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeAudit(report, 'claude');
-    assert.ok(prompt);
-    assert.ok(prompt.sections.some(s => s.heading === 'Failed Checks'), 'Should have Failed Checks section');
-  });
-
-  it('includes diagnostic questions', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeAudit(report, 'claude');
-    assert.ok(prompt);
-    const output = renderPrompt(prompt);
-    assert.ok(output.includes('read-only audit'), 'Should mention read-only');
-    assert.ok(output.includes('Do NOT make any changes'), 'Should prohibit changes');
-  });
-
-  it('mode is audit', () => {
-    const fs = buildMinimalProject();
-    const report = scanProject(fs, '/test', { agentFilter: null });
-    const prompt = composeAudit(report, 'claude');
-    assert.ok(prompt);
-    assert.equal(prompt.mode, 'audit');
-  });
-});
-
 // ─── variable substitution ──────────────────────────────────────────
 
 describe('Variable substitution', () => {
@@ -534,5 +410,45 @@ describe('Variable substitution', () => {
     assert.equal(vars.skillsDir, '.claude/skills');
     assert.ok(vars.grade.length > 0, 'grade should be filled');
     assert.ok(vars.percentage.length > 0, 'percentage should be filled');
+  });
+});
+
+// ─── M2.12: unified setup modes ─────────────────────────────────────
+
+describe('composeSetup mode selection', () => {
+  it('fresh project (no agents) → full setup with reference tables', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('## How this works'), 'Full setup should have How this works section');
+    assert.ok(output.includes('| Create | Template | Notes |'), 'Full setup should have template table');
+  });
+
+  it('100% project → all-pass message', () => {
+    const fs = buildFullProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    // Full project should score very high — if it hits 100%, we get the all-pass message
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    // Either all-pass or short-fix mode (depending on exact score)
+    assert.ok(typeof output === 'string', 'Should return a string');
+    assert.ok(output.includes('GOAT Flow Setup'), 'Should have title');
+  });
+
+  it('partially set up project → targeted or short fix (not full setup)', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    // Minimal project has CLAUDE.md so it has an agent, should NOT get full setup mode
+    assert.ok(!output.includes('## How this works'), 'Should NOT be full setup mode');
+    assert.ok(output.includes('GOAT Flow Setup'), 'Should have title');
+  });
+
+  it('removed commands produce errors', async () => {
+    const { parseCLIArgs } = await import('../../src/cli/cli.js');
+    assert.throws(() => parseCLIArgs(['fix', '.']), /removed/i, 'fix should throw removed error');
+    assert.throws(() => parseCLIArgs(['audit', '.']), /removed/i, 'audit should throw removed error');
   });
 });

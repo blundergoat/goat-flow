@@ -343,6 +343,80 @@ export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
 }
 
 // ---------------------------------------------------------------------------
+// Fragment → template mapping (for targeted-fix mode)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps create-kind fragment keys to their goat-flow template source.
+ * Used by targeted-fix mode to render template references instead of inline skeletons.
+ * String value = universal template. Object value = per-agent templates.
+ * Keys NOT in this map render inline (fix-kind fragments, inline-only creates).
+ */
+const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, string>>> = {
+  // File-level creates — skills
+  'create-skill-security': 'workflow/skills/goat-security.md',
+  'create-skill-debug': 'workflow/skills/goat-debug.md',
+  'create-skill-audit': 'workflow/skills/goat-audit.md',
+  'create-skill-investigate': 'workflow/skills/goat-investigate.md',
+  'create-skill-review': 'workflow/skills/goat-review.md',
+  'create-skill-plan': 'workflow/skills/goat-plan.md',
+  'create-skill-test': 'workflow/skills/goat-test.md',
+  'create-skill-reflect': 'workflow/skills/goat-reflect.md',
+  'create-skill-onboard': 'workflow/skills/goat-onboard.md',
+  'create-skill-resume': 'workflow/skills/goat-resume.md',
+
+  // File-level creates — instruction file and docs
+  'create-instruction-file': 'setup/shared/execution-loop.md',
+  'create-lessons': 'setup/shared/docs-seed.md',
+  'create-footguns': 'setup/shared/docs-seed.md',
+  'create-architecture': 'workflow/runtime/architecture.md',
+  'create-handoff-template': 'workflow/evaluation/handoff.md',
+  'create-evals-dir': 'workflow/evaluation/evals.md',
+  'add-evals': 'workflow/evaluation/evals.md',
+  'create-ci-workflow': 'workflow/evaluation/ci-validation.md',
+
+  // File-level creates — hooks/enforcement
+  'create-deny-script': 'workflow/runtime/enforcement.md',
+  'create-stop-lint': 'workflow/runtime/enforcement.md',
+  'create-format-hook': 'workflow/runtime/enforcement.md',
+
+  // File-level creates — coding standards
+  'create-conventions-instructions': 'workflow/coding-standards/conventions.md',
+  'create-code-review-instructions': 'workflow/coding-standards/code-review.md',
+  'create-git-commit-instructions': 'workflow/coding-standards/git-commit.md',
+
+  // Section-level creates — execution loop steps (all point to same parent)
+  'add-read-step': 'setup/shared/execution-loop.md',
+  'add-classify-step': 'setup/shared/execution-loop.md',
+  'add-scope-step': 'setup/shared/execution-loop.md',
+  'add-act-step': 'setup/shared/execution-loop.md',
+  'add-verify-step': 'setup/shared/execution-loop.md',
+  'add-log-step': 'setup/shared/execution-loop.md',
+
+  // Section-level creates — autonomy tiers
+  'add-autonomy-tiers': 'setup/shared/execution-loop.md',
+  'add-never-guards': 'setup/shared/execution-loop.md',
+  'add-micro-checklist': 'setup/shared/execution-loop.md',
+
+  // Section-level creates — definition of done
+  'add-dod': 'setup/shared/execution-loop.md',
+  'add-dod-gates': 'setup/shared/execution-loop.md',
+  'add-grep-gate': 'setup/shared/execution-loop.md',
+  'add-log-gate': 'setup/shared/execution-loop.md',
+};
+
+/**
+ * Look up the template for a fragment key, resolving per-agent entries.
+ * Returns the absolute template path, or null if not in the map.
+ */
+export function getFragmentTemplate(key: string, agentId: AgentId): string | null {
+  const entry = FRAGMENT_TEMPLATE_MAP[key];
+  if (!entry) return null;
+  if (typeof entry === 'string') return entry;
+  return entry[agentId] ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 

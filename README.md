@@ -20,7 +20,7 @@ Rules in instruction files help — but research shows agents follow ~70% of pro
 
 **10 skills:** `/goat-security`, `/goat-debug`, `/goat-audit`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-reflect`, `/goat-onboard`, `/goat-resume`. Each has a distinct artifact, human gates, and a repeatable structured output.
 
-**CLI scanner:** Scores your project's GOAT Flow implementation across 94 checks + 12 anti-patterns. Generates fix prompts for failing checks and setup prompts for new projects.
+**CLI scanner:** Scores your project's GOAT Flow implementation across 94 checks + 12 anti-patterns. Generates setup prompts that adapt to your project's state.
 
 ```
 $ goat-flow scan .
@@ -63,15 +63,7 @@ This generates a prompt with references to the template files in this repo. Past
 
 Available agents: `claude`, `codex`, `gemini`
 
-### 4. Fix what's failing
-
-```bash
-scripts/run-cli.sh fix /path/to/your-project --agent claude
-```
-
-Generates targeted fix instructions for any failing checks.
-
-### 5. Verify
+### 4. Verify
 
 ```bash
 scripts/run-cli.sh scan /path/to/your-project --agent claude
