@@ -8,27 +8,48 @@ import type { SharedFacts, ReadonlyFS } from '../types.js';
  */
 const EVIDENCE_PATTERN = /`[^`]+:[0-9]+`|\(lines?\s+[0-9]+/;
 
+/** Check if a backtick-wrapped file:line reference is a real file path (not a URL/hostname) */
+function isFileRef(filePath: string): boolean {
+  // Skip hostname/URL patterns (not file references)
+  if (/^https?:|:\/\//.test(filePath) || /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(filePath)) return false;
+  // Paths with '/' are clearly file paths
+  if (filePath.includes('/')) return true;
+  // Root-level files with extensions (e.g., AGENTS.md:42) are valid refs
+  // Bare names without extensions (e.g., webpack:123) are ambiguous — skip
+  return /\.[a-zA-Z0-9]+$/.test(filePath);
+}
+
 /** Extract footgun facts: existence, evidence quality, and directory mention counts. */
 function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   /** Raw content of the footguns documentation file */
   const footgunsContent = fs.readFile('docs/footguns.md');
   /** Whether the footguns file exists on disk */
   const exists = footgunsContent !== null;
-  /** Whether the footguns file contains file:line evidence references */
-  const hasEvidence = exists && EVIDENCE_PATTERN.test(footgunsContent);
+  // Check for real file:line evidence (filter out URLs/hostnames before deciding)
+  let hasEvidence = false;
+  if (exists && footgunsContent) {
+    // First check: does the file have any evidence-like patterns at all?
+    if (EVIDENCE_PATTERN.test(footgunsContent)) {
+      // Second check: does it have at least one real file:line ref (not just URLs)?
+      const refs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
+      for (const m of refs) {
+        if (m[1] !== undefined && isFileRef(m[1])) { hasEvidence = true; break; }
+      }
+      // Also accept prose-style evidence: (lines 42-50) or (line 52)
+      if (!hasEvidence) hasEvidence = /\(lines?\s+[0-9]+/.test(footgunsContent);
+    }
+  }
   /** Map of directory paths to how many times they appear in footgun evidence */
   const dirMentions = new Map<string, number>();
   if (footgunsContent) {
     /** All backtick-wrapped file:line references found in the footguns content */
     const pathRefs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
-    // Iterate over file:line references to count directory mentions
     for (const match of pathRefs) {
-      /** File path extracted from the backtick reference */
       const group = match[1];
       if (group === undefined) continue;
-      const filePath = group;
+      if (!isFileRef(group)) continue;
       /** Parent directory of the referenced file */
-      const dir = filePath.split('/').slice(0, -1).join('/');
+      const dir = group.split('/').slice(0, -1).join('/');
       if (dir) {
         dirMentions.set(dir, (dirMentions.get(dir) ?? 0) + 1);
       }
@@ -39,11 +60,11 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   let totalRefs = 0;
   let validRefs = 0;
   if (footgunsContent) {
-    /** All backtick-wrapped file:line references for staleness checks */
     const fileRefs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
     for (const match of fileRefs) {
       const filePath = match[1];
       if (filePath === undefined) continue;
+      if (!isFileRef(filePath)) continue;
       totalRefs++;
       if (fs.exists(filePath)) {
         validRefs++;
@@ -107,8 +128,8 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
       allHaveReplay = false;
       continue;
     }
-    if (/\*\*Origin:\*\*/i.test(content) === false) allHaveOrigin = false;
-    if (/## Replay Prompt/i.test(content) === false) allHaveReplay = false;
+    if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false) allHaveOrigin = false;
+    if (/##+ Replay Prompt/i.test(content) === false && /##+ Scenario/i.test(content) === false) allHaveReplay = false;
     /** All skill label matches found in the eval content */
     const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
     // Iterate over skill matches to collect unique skill names

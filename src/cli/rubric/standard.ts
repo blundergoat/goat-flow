@@ -496,7 +496,7 @@ export const standardChecks: CheckDef[] = [
         id: '2.3.2', name: 'lessons.md has entries', tier: 'standard', category: 'Learning Loop',
         status: ctx.facts.shared.lessons.hasEntries ? 'pass' : 'fail',
         points: ctx.facts.shared.lessons.hasEntries ? 1 : 0, maxPoints: 1, confidence: 'high',
-        message: ctx.facts.shared.lessons.hasEntries ? 'lessons.md has entries' : 'lessons.md is empty or has no entries',
+        message: ctx.facts.shared.lessons.hasEntries ? 'lessons.md has entries' : 'lessons.md is empty or has no entries. Expected: `### Title` heading followed by 20+ characters of content on the next line',
       }),
     },
     recommendation: 'Add entries to docs/lessons.md from real incidents',
@@ -539,22 +539,7 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Seed lessons.md with 3+ real incidents from git history',
     recommendationKey: 'seed-lessons-minimum',
   },
-  {
-    id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop',
-    pts: 2, partialPts: 1, confidence: 'high',
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => {
-        const { totalRefs, validRefs, staleRefs } = ctx.facts.shared.footguns;
-        if (totalRefs === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No file:line references to check' };
-        if (staleRefs.length === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `All ${totalRefs} file references resolve` };
-        if (validRefs / totalRefs > 0.5) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${staleRefs.length} stale refs: ${staleRefs.slice(0, 3).join(', ')}`, evidence: staleRefs.join(', ') };
-        return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: `${staleRefs.length}/${totalRefs} references are stale`, evidence: staleRefs.join(', ') };
-      },
-    },
-    recommendation: 'Update stale file:line references in footguns.md',
-    recommendationKey: 'ap-fix-stale-references',
-  },
+  // 2.3.5 removed — duplicate of AP12 (stale footgun refs)
 
   // === 2.4 Router Table (5 pts) ===
   {

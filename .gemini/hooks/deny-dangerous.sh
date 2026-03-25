@@ -7,7 +7,7 @@ INPUT=$(cat)
 
 # Parse command from JSON using jq (falls back to raw input if jq unavailable)
 if command -v jq >/dev/null 2>&1; then
-  COMMAND=$(echo "$INPUT" | jq -r '.command // .input // empty' 2>/dev/null || echo "$INPUT")
+  COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "$INPUT")
 else
   # Fallback: extract with sed (less reliable but portable)
   COMMAND=$(echo "$INPUT" | sed -n 's/.*"command"\s*:\s*"\([^"]*\)".*/\1/p' | head -1)

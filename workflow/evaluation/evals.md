@@ -69,3 +69,40 @@ VERIFICATION:
 - Report: number of evals created, how many from real incidents vs
   synthetic seeds
 ```
+
+## What Makes a Great Eval
+
+A great eval has specific, verifiable evidence — not vague descriptions.
+
+**Good example (from a real project):**
+````markdown
+# Incomplete Access Control Fix
+
+## Bug Description
+Fix at commit `abc1234` addressed role-based access for `GET /api/patients`
+(`src/Http/Controllers/PatientController.php:42`) but missed the bulk
+export endpoint (`src/Http/Controllers/ExportController.php:89`).
+The export endpoint returns unfiltered patient data regardless of user role.
+
+## Replay Prompt
+```
+Review the access control implementation. Check every endpoint that returns
+patient data. Verify role-based filtering is applied consistently.
+```
+
+## Expected Outcome
+Agent identifies ExportController.php:89 as missing the same role check
+applied in PatientController.php:42.
+
+## Known Failure Mode
+Agent only checked the controller mentioned in the original fix commit,
+not related controllers handling the same data.
+
+**Origin:** real-history (commit abc1234, issue #63442)
+````
+
+Key traits:
+- Commit SHAs and file:line references (not "somewhere in the auth module")
+- Specific failure mode (not "agent made a mistake")
+- Replay prompt that recreates the exact scenario
+- Origin proves it's from a real incident

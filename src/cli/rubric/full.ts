@@ -229,12 +229,13 @@ export const fullChecks: CheckDef[] = [
           const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
           const union = new Set([...wordsA, ...wordsB]).size;
           const similarity = union > 0 ? intersection / union : 1;
-          if (similarity < 0.85 || a.loop.length === 0 || b.loop.length === 0) {
+          // 0.75 threshold tolerates minor wording variation while catching structural divergence
+          if (similarity < 0.75 || a.loop.length === 0 || b.loop.length === 0) {
             diverged.push(`${a.agent} vs ${b.agent}`);
           }
         }
         if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'pass', points: 2, maxPoints: 2, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
-        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}` };
+        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}. Write the loop in one file, copy verbatim to others` };
       },
     },
     recommendation: 'Reconcile execution loop sections across agent instruction files',

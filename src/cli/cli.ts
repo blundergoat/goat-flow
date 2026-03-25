@@ -186,7 +186,7 @@ async function handleEvalCommand(options: ParsedCLI): Promise<void> {
 
 /** Handle the setup command: compose and render setup prompts per agent */
 async function handleSetupCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
-  const { composeSetup, composeInlineSetup } = await import('./prompt/compose-setup.js');
+  const { composeSetup, composeInlineSetup, composeMultiAgentSetup } = await import('./prompt/compose-setup.js');
   const { renderPrompt } = await import('./prompt/render.js');
 
   // Determine which agents to generate prompts for
@@ -201,7 +201,31 @@ async function handleSetupCommand(options: ParsedCLI, report: ScanReport): Promi
     throw new CLIError('No agents detected. Use --agent claude, --agent codex, --agent gemini, or --agent all', 1);
   }
 
-  // When generating setup for multiple agents, prepend a sync instruction
+  // Multi-agent: deduplicated output with shared files once + per-agent sections
+  if (agentIds.length > 1 && process.env.GOAT_FLOW_INLINE_SETUP !== '1') {
+    // Check if any agent needs full setup (no agents detected or 0%)
+    const allFresh = agentIds.every(id => {
+      const agentReport = report.agents.find(a => a.agent === id);
+      return !agentReport || agentReport.score.percentage === 0;
+    });
+
+    if (allFresh) {
+      // All agents need full setup — use deduplicated multi-agent output
+      process.stdout.write([
+        '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
+        '(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done',
+        'MUST be identical across all instruction files. Write these sections for the first agent,',
+        'then COPY THEM VERBATIM to the other instruction files. Do not rephrase.',
+        '',
+        '',
+      ].join('\n'));
+      const output = composeMultiAgentSetup(report, agentIds);
+      process.stdout.write(output + '\n');
+      return;
+    }
+  }
+
+  // Single-agent or mixed-mode: render each agent separately
   if (agentIds.length > 1) {
     process.stdout.write([
       '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
@@ -266,6 +290,12 @@ function handleCIGate(options: ParsedCLI, report: ScanReport): void {
 
 /** Entry point that dispatches to the appropriate command handler */
 async function main(): Promise<void> {
+  // Gracefully handle EPIPE (e.g., output piped to `head`)
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') process.exit(0);
+    throw err;
+  });
+
   /** Parsed CLI options derived from process.argv */
   const options = parseCLIArgs(process.argv.slice(2));
 

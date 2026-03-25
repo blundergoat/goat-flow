@@ -61,8 +61,8 @@ Create the following:
      composer.lock, Cargo.lock, yarn.lock)
    - Direct modification of generated code files, migration files, or
      compiled artifacts
-   - mv without -n flag (bare mv silently overwrites destination files;
-     use mv -n to prevent data loss on untracked files)
+   - mv without -n flag: WARN but allow (bare mv risks overwriting
+     untracked files; prefer mv -n but do not hard-block renames)
    Note: Agents hallucinate dependency version bumps to fix type errors.
    Lockfile changes must go through the package manager.
 
@@ -100,6 +100,9 @@ Create the following:
    causes infinite fix loops).
 
    Include:
+   - Early exit when nothing changed this turn:
+     CHANGED=$(git diff --name-only 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
+     [ -z "$CHANGED" ] && exit 0
    - Guard against missing tools: command -v check before running
    - Infinite loop guard: if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then exit 0; fi
      export STOP_HOOK_ACTIVE=1
@@ -115,6 +118,21 @@ Create the following:
    project stack (e.g., shell scripts with no formatter). Do NOT
    create a format hook that re-runs the linter - that duplicates
    the Stop hook.
+
+   Reference script (PostToolUse receives the tool result as JSON on stdin):
+   ```bash
+   #!/usr/bin/env bash
+   INPUT=$(cat)
+   FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // empty' 2>/dev/null)
+   [ -z "$FILE_PATH" ] && exit 0
+   case "$FILE_PATH" in
+     *.ts|*.tsx|*.js|*.jsx) npx prettier --write "$FILE_PATH" 2>/dev/null ;;
+   esac
+   exit 0
+   ```
+   Note: PostToolUse payloads use `.file_path` at the top level (not
+   `.tool_input.command` like PreToolUse). Always test with `jq -r`
+   and fall through on empty.
 
 5. .gitignore additions
 

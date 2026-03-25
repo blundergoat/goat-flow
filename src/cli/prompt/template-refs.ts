@@ -376,9 +376,21 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   'create-ci-workflow': 'workflow/evaluation/ci-validation.md',
 
   // File-level creates — hooks/enforcement
-  'create-deny-script': 'workflow/runtime/enforcement.md',
-  'create-stop-lint': 'workflow/runtime/enforcement.md',
-  'create-format-hook': 'workflow/runtime/enforcement.md',
+  'create-deny-script': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'create-stop-lint': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'create-format-hook': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
 
   // File-level creates — coding standards
   'create-conventions-instructions': 'workflow/coding-standards/conventions.md',
@@ -403,6 +415,114 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   'add-dod-gates': 'setup/shared/execution-loop.md',
   'add-grep-gate': 'setup/shared/execution-loop.md',
   'add-log-gate': 'setup/shared/execution-loop.md',
+
+  // Fix-kind — skill quality (all templates demonstrate these sections)
+  'create-all-skills': 'workflow/skills/goat-debug.md',
+  'add-skill-step0': 'workflow/skills/goat-debug.md',
+  'add-skill-human-gates': 'workflow/skills/goat-debug.md',
+  'add-skill-constraints': 'workflow/skills/goat-debug.md',
+  'add-skill-conversational': 'workflow/skills/goat-debug.md',
+  'add-skill-chaining': 'workflow/skills/goat-debug.md',
+  'add-skill-choices': 'workflow/skills/goat-debug.md',
+  'add-skill-phases': 'workflow/skills/goat-debug.md',
+  'add-skill-output-format': 'workflow/skills/goat-debug.md',
+
+  // Fix-kind — hook hardening (agent-specific)
+  'add-deny-blocks': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-json-parsing': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-chaining': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-rm-rf': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-force-push': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-chmod': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-read-deny-secrets': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'add-stop-lint-validation': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'add-compaction-hook': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+
+  // Fix-kind — learning loop
+  'seed-lessons': 'setup/shared/docs-seed.md',
+  'seed-lessons-minimum': 'setup/shared/docs-seed.md',
+  'add-footgun-evidence': 'setup/shared/docs-seed.md',
+
+  // Fix-kind — local instructions
+  'improve-conventions-instructions': 'workflow/coding-standards/conventions.md',
+  'create-instructions-dir': 'setup/shared/docs-seed.md',
+  'create-instructions-router': 'setup/shared/docs-seed.md',
+  'create-frontend-instructions': 'workflow/coding-standards/frontend/typescript.md',
+  'create-github-git-commit': 'workflow/coding-standards/git-commit.md',
+
+  // Fix-kind — foundation (instruction file sections)
+  'add-version-header': 'setup/shared/execution-loop.md',
+  'add-essential-commands': 'setup/shared/execution-loop.md',
+  'add-concrete-examples': 'setup/shared/execution-loop.md',
+  'add-classify-budgets': 'setup/shared/execution-loop.md',
+  'add-router': 'setup/shared/execution-loop.md',
+  'route-skills': 'setup/shared/execution-loop.md',
+  'add-deny-mechanism': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'block-git-commit': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'block-git-push': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'add-rfc2119': 'setup/shared/execution-loop.md',
+  'fix-execution-loop-sync': 'setup/shared/execution-loop.md',
+
+  // Fix-kind — evals and CI
+  'add-replay-prompts': 'workflow/evaluation/evals.md',
+  'add-origin-labels': 'workflow/evaluation/evals.md',
+  'add-eval-skill-coverage': 'workflow/evaluation/evals.md',
+  'ci-check-lines': 'workflow/evaluation/ci-validation.md',
+  'ci-check-router': 'workflow/evaluation/ci-validation.md',
+  'ci-check-skills': 'workflow/evaluation/ci-validation.md',
+  'ci-trigger-prs': 'workflow/evaluation/ci-validation.md',
+
+  // Fix-kind — anti-patterns (ones with clear template sources)
+  'ap-add-footgun-evidence': 'setup/shared/docs-seed.md',
+  'ap-fix-empty-scaffolding': 'setup/shared/docs-seed.md',
 };
 
 /**

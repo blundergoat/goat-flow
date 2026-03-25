@@ -16,6 +16,8 @@ a) Version header (v1.0 - YYYY-MM-DD)
 b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
    - READ: read relevant files first, never fabricate codebase facts
      (include BAD/GOOD example)
+     Cross-doc: MUST read docs/footguns.md before modifying files
+     listed in the Ask First boundaries. Known traps prevent repeat mistakes.
    - CLASSIFY: three signals before acting:
      1. Intent: question (answer it) vs directive (act on it)
      2. Complexity with read/turn budgets:
@@ -61,6 +63,10 @@ c) Autonomy Tiers: Always / Ask First / Never
      3. Footgun entry checked: [relevant entry, or "none"]
      4. Local instruction checked: [local CLAUDE.md / .github/instructions/ / none]
      5. Rollback command: [exact command]
+   For multi-agent projects, consider extending AGENTS.md with domain
+   concepts, key patterns, and deprecation warnings. AGENTS.md can serve
+   double duty as execution protocol + domain reference — but watch the
+   line budget.
 
 d) Definition of Done: 6 gates
    (1) lint/typecheck passes on changed files

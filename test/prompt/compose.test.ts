@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockFS } from '../helpers/mock-fs.js';
 import { scanProject } from '../../src/cli/scanner/scan.js';
-import { composeSetup, composeInlineSetup } from '../../src/cli/prompt/compose-setup.js';
+import { composeSetup, composeInlineSetup, composeMultiAgentSetup } from '../../src/cli/prompt/compose-setup.js';
 import type { TemplateRef } from '../../src/cli/prompt/template-refs.js';
+import { renderText } from '../../src/cli/render/text.js';
+import { parseCLIArgs } from '../../src/cli/cli.js';
 
 // ─── Shared fixtures ────────────────────────────────────────────────
 
@@ -446,9 +448,457 @@ describe('composeSetup mode selection', () => {
     assert.ok(output.includes('GOAT Flow Setup'), 'Should have title');
   });
 
-  it('removed commands produce errors', async () => {
-    const { parseCLIArgs } = await import('../../src/cli/cli.js');
+  it('removed commands produce errors', () => {
     assert.throws(() => parseCLIArgs(['fix', '.']), /removed/i, 'fix should throw removed error');
     assert.throws(() => parseCLIArgs(['audit', '.']), /removed/i, 'audit should throw removed error');
+  });
+});
+
+// ─── M2.13: scanner accuracy & setup polish ──────────────────────────
+
+describe('M2.13: AP12 stale ref filtering', () => {
+  it('localhost:port is NOT counted as a stale ref', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `localhost:48101` — dev server port\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    // AP12 should either not trigger or have 0 stale refs for localhost
+    if (ap12) {
+      assert.equal(ap12.triggered, false, 'AP12 should not fire for localhost:port');
+    }
+  });
+
+  it('real file path IS counted as stale ref when file does not exist', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `src/auth.ts:42` — race condition\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    assert.ok(ap12, 'AP12 should exist');
+    assert.equal(ap12.triggered, true, 'AP12 should fire for stale file path');
+  });
+});
+
+describe('M2.13: dedup template refs in targeted setup', () => {
+  it('same-template refs are collapsed (no duplicate lines)', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    // Count occurrences of enforcement.md in the output
+    const enforcementCount = (output.match(/enforcement\.md/g) || []).length;
+    // Should not appear more than once per section
+    assert.ok(enforcementCount <= 2, `enforcement.md appeared ${enforcementCount} times, expected ≤2 (collapsed)`);
+  });
+});
+
+describe('M2.13: short-fix mode text', () => {
+  it('does not truncate mid-sentence', () => {
+    const fs = buildFullProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    // Short-fix or targeted mode output should not have lines ending with partial words
+    // Check that no recommendation line is cut at exactly 120 chars
+    const lines = output.split('\n').filter(l => l.startsWith('- **'));
+    for (const line of lines) {
+      const text = line.replace(/^- \*\*[^*]+\*\*:\s*/, '');
+      assert.ok(text.length <= 200 || text.endsWith('.'), `Line may be truncated: ${text.slice(0, 50)}...`);
+    }
+  });
+});
+
+describe('M2.13: Codex template map', () => {
+  it('Codex setup maps enforcement fragments to setup-codex.md', async () => {
+    const { getFragmentTemplate } = await import('../../src/cli/prompt/template-refs.js');
+    const denyTemplate = getFragmentTemplate('create-deny-script', 'codex');
+    assert.ok(denyTemplate, 'Should have a template for create-deny-script');
+    assert.ok(denyTemplate.includes('setup-codex'), `Expected setup-codex.md, got ${denyTemplate}`);
+    assert.ok(!denyTemplate.includes('enforcement'), 'Should NOT reference enforcement.md for Codex');
+  });
+
+  it('Claude still maps enforcement fragments to enforcement.md', async () => {
+    const { getFragmentTemplate } = await import('../../src/cli/prompt/template-refs.js');
+    const denyTemplate = getFragmentTemplate('create-deny-script', 'claude');
+    assert.ok(denyTemplate);
+    assert.ok(denyTemplate.includes('enforcement'), 'Claude should reference enforcement.md');
+  });
+});
+
+describe('M2.13: placeholder npm script filter', () => {
+  it('filters out npm init default test command', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({
+        name: 'test-proj',
+        scripts: { test: 'echo "Error: no test specified" && exit 1', start: 'node .' },
+      }),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    assert.ok(!report.stack.testCommand || !report.stack.testCommand.includes('Error:'),
+      'Placeholder test command should be filtered out');
+  });
+});
+
+describe('M2.13: check 2.3.5 removed', () => {
+  it('check 2.3.5 does not appear in scan results', () => {
+    const fs = buildFullProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check235 = report.agents[0]?.checks.find(c => c.id === '2.3.5');
+    assert.ok(!check235, 'Check 2.3.5 should be removed (duplicate of AP12)');
+  });
+});
+
+describe('M2.13: --agent all dedup', () => {
+  it('multi-agent setup has shared files only once', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output);
+    // Shared files should appear exactly once
+    const footgunsCount = (output.match(/docs\/footguns\.md/g) || []).length;
+    assert.equal(footgunsCount, 1, `docs/footguns.md should appear once, got ${footgunsCount}`);
+    // Should have per-agent sections
+    assert.ok(output.includes('Claude Code'), 'Should have Claude section');
+    assert.ok(output.includes('Codex'), 'Should have Codex section');
+    assert.ok(output.includes('Gemini CLI'), 'Should have Gemini section');
+  });
+
+  it('multi-agent setup is under 160 lines', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output);
+    const lineCount = output.split('\n').length;
+    assert.ok(lineCount <= 160, `Expected ≤160 lines, got ${lineCount}`);
+  });
+
+  it('multi-agent setup has 3+ GATE instructions', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output);
+    const gateCount = (output.match(/GATE:/g) || []).length;
+    assert.ok(gateCount >= 3, `Expected ≥3 GATE instructions, got ${gateCount}`);
+  });
+
+  it('multi-agent setup uses generic skill paths (not .claude/skills/)', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output);
+    // Skills in shared section should use {skills_dir}, not .claude/skills/
+    const sharedSection = output.split('## Claude Code')[0] ?? '';
+    assert.ok(!sharedSection.includes('.claude/skills/'), 'Shared section should not have .claude/skills/ paths');
+  });
+});
+
+describe('M2.13: scan --verbose diagnostics', () => {
+  it('verbose output includes Diagnostic Summary', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const text = renderText(report, true);
+    assert.ok(text.includes('Diagnostic Summary'), 'Verbose output should have Diagnostic Summary');
+  });
+
+  it('non-verbose output does NOT include Diagnostic Summary', () => {
+    const fs = buildMinimalProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const text = renderText(report, false);
+    assert.ok(!text.includes('Diagnostic Summary'), 'Non-verbose should not have Diagnostic Summary');
+  });
+});
+
+// ─── M2.14: audit fixes + template hardening ────────────────────────
+
+describe('M2.14: hasEvidence filters URLs', () => {
+  it('footguns with only localhost:port has no evidence', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `localhost:48101` — dev server port\n- `127.0.0.1:3000` — API\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.4');
+    assert.ok(check, 'Check 2.3.4 should exist');
+    assert.equal(check.status, 'fail', 'Footguns with only URL-port refs should NOT have evidence');
+  });
+});
+
+describe('M2.14: eval format aliases', () => {
+  it('eval with ## Scenario passes replay prompt check', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'agent-evals/test-1.md': '# E1\n\n**Origin:** real\n\n## Scenario\n\nDo X.\n',
+      'agent-evals/test-2.md': '# E2\n\n**Origin:** real\n\n## Scenario\n\nDo Y.\n',
+      'agent-evals/test-3.md': '# E3\n\n**Origin:** real\n\n## Scenario\n\nDo Z.\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '3.1.4');
+    assert.ok(check, 'Check 3.1.4 should exist');
+    assert.equal(check.status, 'pass', 'Evals with ## Scenario should pass replay prompt check');
+  });
+
+  it('eval with ## Origin section passes origin label check', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'agent-evals/test-1.md': '# E1\n\n## Origin\n\nreal-incident\n\n## Replay Prompt\n\n```\nx\n```\n',
+      'agent-evals/test-2.md': '# E2\n\n## Origin\n\nreal-incident\n\n## Replay Prompt\n\n```\ny\n```\n',
+      'agent-evals/test-3.md': '# E3\n\n## Origin\n\nreal-incident\n\n## Replay Prompt\n\n```\nz\n```\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '3.1.5');
+    assert.ok(check, 'Check 3.1.5 should exist');
+    assert.equal(check.status, 'pass', 'Evals with ## Origin section should pass origin label check');
+  });
+});
+
+describe('M2.14: full setup output', () => {
+  it('includes Adapting templates section', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('## Adapting templates'), 'Should include Adapting templates section');
+    assert.ok(output.includes('Do NOT copy templates verbatim'), 'Should define what adapt means');
+  });
+});
+
+describe('M2.14: root-level AP12 refs', () => {
+  it('AGENTS.md:42 is counted as valid ref when AGENTS.md exists', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'AGENTS.md': '# AGENTS.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `AGENTS.md:42` — instruction file footgun\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    if (ap12) {
+      assert.equal(ap12.triggered, false, 'AP12 should not fire when root-level ref exists');
+    }
+  });
+
+  it('AGENTS.md:42 is counted as stale when AGENTS.md does NOT exist', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `AGENTS.md:42` — stale ref\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    assert.ok(ap12, 'AP12 should exist');
+    assert.equal(ap12.triggered, true, 'AP12 should fire for stale root-level ref');
+  });
+
+  it('webpack:123 (no extension, no slash) is skipped by AP12', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `webpack:123` — bundler warning\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    if (ap12) {
+      assert.equal(ap12.triggered, false, 'AP12 should not fire for extensionless bare name');
+    }
+  });
+
+  it('0.0.0.0:8080 is skipped by AP12', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `0.0.0.0:8080` — bind address\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap12 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP12');
+    if (ap12) {
+      assert.equal(ap12.triggered, false, 'AP12 should not fire for IP address');
+    }
+  });
+});
+
+describe('M2.14: hasEvidence edge cases', () => {
+  it('footguns with mixed real refs + URLs has evidence', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `localhost:3000` — dev\n- `src/auth.ts:42` — real ref\n',
+      'src/auth.ts': 'export const x = 1;\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.4');
+    assert.ok(check, 'Check 2.3.4 should exist');
+    assert.equal(check.status, 'pass', 'Mixed URLs + real refs should have evidence');
+  });
+
+  it('footguns with only prose-style evidence passes', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\nThe auth module (lines 42-50) has a race condition.\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.4');
+    assert.ok(check, 'Check 2.3.4 should exist');
+    assert.equal(check.status, 'pass', 'Prose-style (lines N) evidence should count');
+  });
+
+  it('footguns with only http:// URL has no evidence', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'docs/footguns.md': '# Footguns\n\n- `https://example.com:443` — API endpoint\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.4');
+    assert.ok(check, 'Check 2.3.4 should exist');
+    assert.equal(check.status, 'fail', 'URL-only footguns should NOT have evidence');
+  });
+});
+
+describe('M2.14: preferred eval format (### Scenario H3)', () => {
+  it('eval with ### Scenario (H3) passes replay prompt check', () => {
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'agent-evals/test-1.md': '# E1\n\n**Origin:** real\n\n### Scenario\n\nDo X.\n',
+      'agent-evals/test-2.md': '# E2\n\n**Origin:** real\n\n### Scenario\n\nDo Y.\n',
+      'agent-evals/test-3.md': '# E3\n\n**Origin:** real\n\n### Scenario\n\nDo Z.\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const check = report.agents[0]?.checks.find(c => c.id === '3.1.4');
+    assert.ok(check, 'Check 3.1.4 should exist');
+    assert.equal(check.status, 'pass', 'Evals with ### Scenario (H3) should pass replay prompt check');
+  });
+
+  it('eval with YAML frontmatter origin passes origin check', () => {
+    const evalContent = '---\nname: test\norigin: real-incident\nskill: goat-debug\n---\n# Test\n\n**Origin:** real-incident\n\n### Scenario\n\nDo X.\n';
+    const fs = createMockFS({
+      'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
+      'package.json': JSON.stringify({ name: 'test' }),
+      'agent-evals/test-1.md': evalContent,
+      'agent-evals/test-2.md': evalContent.replace('test-1', 'test-2'),
+      'agent-evals/test-3.md': evalContent.replace('test-1', 'test-3'),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const originCheck = report.agents[0]?.checks.find(c => c.id === '3.1.5');
+    assert.ok(originCheck, 'Check 3.1.5 should exist');
+    assert.equal(originCheck.status, 'pass', 'YAML frontmatter evals with **Origin:** should pass');
+  });
+});
+
+describe('M2.14: placeholder npm script edge cases', () => {
+  it('filters echo "Error: no test specified" && exit 1', () => {
+    const fs = createMockFS({
+      'package.json': JSON.stringify({
+        name: 'test',
+        scripts: { test: 'echo "Error: no test specified" && exit 1' },
+      }),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    assert.ok(!report.stack.testCommand, 'Placeholder test command should be null');
+  });
+
+  it('filters bare exit 1', () => {
+    const fs = createMockFS({
+      'package.json': JSON.stringify({
+        name: 'test',
+        scripts: { test: 'exit 1' },
+      }),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    assert.ok(!report.stack.testCommand, 'Bare exit 1 should be filtered');
+  });
+
+  it('keeps real test commands', () => {
+    const fs = createMockFS({
+      'package.json': JSON.stringify({
+        name: 'test',
+        scripts: { test: 'jest --coverage', build: 'tsc' },
+      }),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    assert.equal(report.stack.testCommand, 'jest --coverage');
+    assert.equal(report.stack.buildCommand, 'tsc');
+  });
+
+  it('filters placeholder build but keeps real test', () => {
+    const fs = createMockFS({
+      'package.json': JSON.stringify({
+        name: 'test',
+        scripts: {
+          build: 'echo "no build" && exit 1',
+          test: 'vitest',
+        },
+      }),
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    assert.ok(!report.stack.buildCommand, 'Placeholder build should be null');
+    assert.equal(report.stack.testCommand, 'vitest', 'Real test should be kept');
+  });
+});
+
+describe('Rubric version consistency', () => {
+  it('RUBRIC_VERSION is bumped from 0.8.0', async () => {
+    const { RUBRIC_VERSION } = await import('../../src/cli/rubric/version.js');
+    assert.notEqual(RUBRIC_VERSION, '0.8.0', 'RUBRIC_VERSION should be bumped (check 2.3.5 removed, 3.3.4 threshold changed)');
+  });
+});
+
+describe('CLI: removed commands', () => {
+  it('fix produces helpful error', () => {
+    assert.throws(() => parseCLIArgs(['fix', '.']), /removed/i);
+  });
+
+  it('audit produces helpful error', () => {
+    assert.throws(() => parseCLIArgs(['audit', '.']), /removed/i);
+  });
+
+  it('valid commands do not throw', () => {
+    assert.doesNotThrow(() => parseCLIArgs(['scan', '.']));
+    assert.doesNotThrow(() => parseCLIArgs(['setup', '.']));
+    assert.doesNotThrow(() => parseCLIArgs(['eval', '.']));
+  });
+});
+
+describe('Multi-agent setup contract', () => {
+  it('multi-agent setup validates template refs', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    // Should not throw with valid templates
+    assert.doesNotThrow(() => composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']));
+  });
+
+  it('multi-agent setup has per-agent foundation sections', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output.includes('Claude Code — Foundation'), 'Should have Claude foundation section');
+    assert.ok(output.includes('Codex — Foundation'), 'Should have Codex foundation section');
+    assert.ok(output.includes('Gemini CLI — Foundation'), 'Should have Gemini foundation section');
+  });
+
+  it('multi-agent setup has phased structure (Standard + Full sections)', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output.includes('## Standard (shared across all agents)'), 'Should have Standard section');
+    assert.ok(output.includes('## Full (shared across all agents)'), 'Should have Full section');
+  });
+
+  it('multi-agent setup includes skill quality requirements', () => {
+    const fs = buildEmptyProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeMultiAgentSetup(report, ['claude', 'codex', 'gemini']);
+    assert.ok(output.includes('Skill quality requirements'), 'Should have skill quality block');
+    assert.ok(output.includes('not adapted'), 'Should warn about generic skills');
   });
 });

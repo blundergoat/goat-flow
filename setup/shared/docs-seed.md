@@ -1,6 +1,6 @@
 # Docs Seed Files
 
-These files are created during Phase 1a regardless of which agent you use. They form the learning loop and project documentation.
+These files are created regardless of which agent you use. They form the learning loop and project documentation.
 
 ---
 
@@ -17,6 +17,7 @@ These files are created during Phase 1a regardless of which agent you use. They 
    For each match, write a lessons entry with: date, what happened, what
    the correct behaviour should have been. Minimum 3 entries if the project
    has >50 commits. If <50 commits, start with what you have.
+   If the project uses a bug tracker, include issue numbers (e.g., #63442) for traceability.
 
 2. docs/footguns.md - If the file already exists, MERGE with it: keep
    existing entries, add new footguns from reading the codebase.
@@ -97,6 +98,16 @@ These files are created during Phase 1a regardless of which agent you use. They 
    - Verify every path in Ask First exists on disk — stale paths mislead agents
    - Check router table entries resolve — broken refs are common after renames
    - If a path doesn't exist, fix it (don't copy it into ai/instructions/)
+```
+
+## Skills Deduplication
+
+```
+Create skills in ONE canonical location (.agents/skills/ for multi-agent
+projects), then copy to agent-specific directories (.claude/skills/).
+Do NOT write the same skill independently in multiple directories — this
+guarantees inconsistency. If making a correction to a skill, update the
+canonical copy first, then propagate.
 ```
 
 ## Ownership Split Report
