@@ -21,29 +21,52 @@ bash scripts/context-validate.sh         # Validate GOAT Flow structure
 
 ## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 
-**READ** - MUST read relevant files first. Never fabricate. Cross-doc: read all files for same concept.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
 ```
 BAD:  "The spec says 100 lines for apps" (guessed without reading)
-GOOD: Read docs/system-spec.md:104 -> "Target 120 lines. Hard limit 150."
+GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
 ```
 
-**CLASSIFY** - MUST declare three signals before acting:
-1. Intent: question (answer it) vs directive (act on it)
-2. Complexity: Hotfix (2 reads / 3 turns), Standard (4 / 10), System (6 / 20), Infra (8 / 25)
-3. Mode: Plan / Implement / Explain / Debug / Review
+**CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
 
-**SCOPE** - MUST declare: files allowed to change, non-goals, max blast radius. Expanding = STOP and re-scope.
+| Complexity | Read budget | Turn budget |
+|------------|-------------|-------------|
+| Hotfix | 2 reads | 3 turns |
+| Standard Feature | 4 reads | 10 turns |
+| System Change | 6 reads | 20 turns |
+| Infrastructure | 8 reads | 25 turns |
 
-**ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`.
-Mode-transition rule: "Switching to [NEW STATE] because [reason]."
-Debug: No fixes until human reviews diagnosis with file:line evidence.
-Anti-BDUF: Extract interface ONLY when second provider needed.
+Over budget = re-classify before continuing.
 
-**VERIFY** - Run tests after each code change. Stop-the-line: isolated (note); cross-boundary/security (FULL STOP). Revert-and-rescope: git revert + rescope after 2 failed attempts. If working from a plan/milestone: tick `- [x]` on each task as completed — not at the end.
-Recovery: (a) missing context -> read X; (b) out-of-scope -> re-scope; (c) conflict -> ask.
+**SCOPE** - MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
 
-**LOG** - MUST update when tripped (DoD gate #4). Mechanical trigger: required if VERIFY caught your code failure or you corrected course mid-task. Human correction: MUST log lesson immediately.
-Reference all 3: docs/lessons.md, docs/footguns.md, docs/decisions/.
+**ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
+
+| Mode | Behaviour |
+|------|-----------|
+| Plan | Produce artefact only. No file edits. Exit on LGTM |
+| Implement | Edit in 2-3 turns. 4th read without writing = stop |
+| Explain | Walkthrough only. No changes unless asked |
+| Debug | Diagnosis with file:line first. Fixes after human reviews |
+| Review | Investigate first. Never blindly apply suggestions |
+
+```
+BAD:  Created abstract template system (one format exists)
+GOOD: Inline format. Extract when second format needed
+```
+
+**VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed — not at the end.
+- Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
+- Two corrections on same approach = MUST rewind
+- Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
+
+**LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure in your code, or you corrected course: lessons.md entry required before DoD. After human correction: MUST log immediately. Propagate footguns to local CLAUDE.md.
+
+| File | When to update |
+|------|---------------|
+| `docs/lessons.md` | Behavioural mistake (agent did something wrong) |
+| `docs/footguns.md` | Cross-doc architectural trap (with file:line evidence) |
+| `docs/decisions/` | Significant technical decision with context/rationale |
 
 ## Autonomy Tiers
 

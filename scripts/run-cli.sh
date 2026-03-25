@@ -19,16 +19,14 @@ usage() {
 
   Commands:
     scan [path] [flags]     Score a project (default: .)
-    fix [path] [flags]      Generate fix prompt
-    setup [path] [flags]    Generate setup prompt
-    audit [path] [flags]    Generate audit prompt
+    setup [path] [flags]    Generate setup prompt (adapts to project state)
     test-all                Run all human testing gate checks
     test-all --full         Run all checks, show full output
 
   Examples:
     scripts/run-cli.sh scan .
     scripts/run-cli.sh scan . --agent claude
-    scripts/run-cli.sh fix .
+    scripts/run-cli.sh setup . --agent claude
     scripts/run-cli.sh test-all
 
 EOF
@@ -114,12 +112,10 @@ if [[ -z "$cmd" ]]; then
     printf "  \033[36m3\033[0m  scan . --agent claude           Score one agent only\n"
     echo ""
     printf "  \033[2mGenerate\033[0m\n"
-    printf "  \033[36m4\033[0m  setup .                          Prompt for fresh GOAT Flow setup\n"
-    printf "  \033[36m5\033[0m  fix .                            Prompt to fix failed checks\n"
-    printf "  \033[36m6\033[0m  audit .                          Read-only diagnosis prompt\n"
+    printf "  \033[36m4\033[0m  setup .                          Setup prompt (adapts to project state)\n"
     echo ""
     printf "  \033[2mTest\033[0m\n"
-    printf "  \033[36m7\033[0m  test-all                        Run all 7 human testing gates\n"
+    printf "  \033[36m5\033[0m  test-all                        Run all human testing gates\n"
     printf "  \033[36mh\033[0m  help                            Show full usage + examples\n"
     echo ""
     printf "  \033[1mPick:\033[0m "
@@ -128,10 +124,24 @@ if [[ -z "$cmd" ]]; then
         1) cli scan . ;;
         2) cli scan . --format text --verbose ;;
         3) cli scan . --agent claude --format text ;;
-        4) cli setup . ;;
-        5) cli fix . ;;
-        6) cli audit . ;;
-        7) cmd="test-all" ;;
+        4)
+            echo ""
+            printf "  Which agents to set up?\n"
+            printf "    \033[36m1\033[0m  Claude Code\n"
+            printf "    \033[36m2\033[0m  Codex\n"
+            printf "    \033[36m3\033[0m  Gemini CLI\n"
+            printf "    \033[36m4\033[0m  All of the above\n"
+            printf "  \033[1mPick:\033[0m "
+            read -r agent_choice
+            case "$agent_choice" in
+                1) cli setup . --agent claude ;;
+                2) cli setup . --agent codex ;;
+                3) cli setup . --agent gemini ;;
+                4) cli setup . --agent all ;;
+                *) echo "Invalid choice"; exit 1 ;;
+            esac
+            ;;
+        5) cmd="test-all" ;;
         h|H) usage; exit 0 ;;
         *) echo "Invalid choice"; exit 1 ;;
     esac
@@ -141,8 +151,34 @@ fi
 shift
 
 case "$cmd" in
-    scan|fix|setup|audit)
+    setup)
+        # Show agent picker if --agent not already specified
+        if echo "$*" | grep -q -- '--agent'; then
+            cli setup "$@"
+        else
+            echo ""
+            printf "  Which agents to set up?\n"
+            printf "    \033[36m1\033[0m  Claude Code\n"
+            printf "    \033[36m2\033[0m  Codex\n"
+            printf "    \033[36m3\033[0m  Gemini CLI\n"
+            printf "    \033[36m4\033[0m  All of the above\n"
+            printf "  \033[1mPick:\033[0m "
+            read -r agent_choice
+            case "$agent_choice" in
+                1) cli setup "$@" --agent claude ;;
+                2) cli setup "$@" --agent codex ;;
+                3) cli setup "$@" --agent gemini ;;
+                4) cli setup "$@" --agent all ;;
+                *) echo "Invalid choice"; exit 1 ;;
+            esac
+        fi
+        ;;
+    scan)
         cli "$cmd" "$@"
+        ;;
+    fix|audit)
+        echo "\"$cmd\" was removed. Use \"setup\" instead — it adapts to your project's state."
+        exit 2
         ;;
     test-all)
         full_mode=0
@@ -155,13 +191,12 @@ case "$cmd" in
 
             show "1. JSON output" 9999 cli scan . --format json --agent claude
             show "2. Text + verbose" 9999 cli scan . --format text --verbose --agent claude
-            show "3. Fix prompt" 9999 cli fix . --agent claude
-            show "4. Audit prompt" 9999 cli audit . --agent claude
+            show "3. Setup prompt" 9999 cli setup . --agent claude
             echo ""
         else
             passed=0
             failed=0
-            total=7
+            total=6
 
             echo ""
             printf "\033[1m  GOAT Flow CLI — Human Testing Gate\033[0m\n"
@@ -187,17 +222,14 @@ case "$cmd" in
             echo ""
             printf "\033[1m  Prompts\033[0m\n"
 
-            check 5 "Fix prompt generates" 6 \
-                cli fix . --agent claude
+            check 5 "Setup prompt generates" 6 \
+                cli setup . --agent claude
 
             tmp=$(mktemp -d)
             echo '{"name":"fresh","scripts":{"start":"node ."}}' > "$tmp/package.json"
             check 6 "Setup prompt (fresh project)" 6 \
                 cli setup "$tmp" --agent claude
             rm -r "$tmp"
-
-            check 7 "Audit prompt (read-only)" 6 \
-                cli audit . --agent claude
 
             echo ""
             printf "  ─────────────────────────────────\n"

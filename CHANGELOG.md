@@ -2,7 +2,38 @@
 
 ---
 
-## v0.6.0 - Unreleased
+## v0.7.0 - Unreleased
+
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
+
+### Reference-Based Setup Prompt
+- Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons
+- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, `--agent all` with interactive picker
+- Skill quality requirements block in Phase 1b, `GOAT_FLOW_INLINE_SETUP=1` rollback, `setup/` + `workflow/` in npm tarball
+
+### Scanner Accuracy (rubric v0.7.0)
+- 3.3.4 sync: Jaccard word-intersection ≥0.85 (was length-ratio ≥0.6), matches bold format
+- 2.3.2 lessons.md: strips HTML comments, requires 20+ chars of real content after H3
+- AP11: fires when EITHER lessons OR footguns is empty (was AND)
+- Check 2.2.7 removed — ask-first-guard hooks removed from all agents (ADR-006)
+
+### Template Quality
+- enforcement.md: jq parsing guidance, sed fallback, command chaining, read-deny patterns
+- docs-seed.md: concrete `git log`/`grep -rn` commands for seeding real incidents
+- execution-loop.md: "logs updated if tripped" DoD gate added
+
+### Removed
+- `fix` and `audit` CLI commands (deprecated in v0.6.0, now exit 2 with migration message)
+- ask-first-guard.sh hooks and scanner check 2.2.7 — see ADR-006
+
+### Other
+- GitHub Actions: goat-flow-scan.yml permissions, setup-node version bump
+- AGENTS.md trimmed to 113 lines, execution loops synced verbatim across all 3 agents
+- New: src/cli/paths.ts, src/cli/prompt/template-refs.ts; 96 tests (was 77)
+
+---
+
+## v0.6.0 - 2026-03-24
 
 10 skills, 49 coding standards templates, eval runner, multi-agent infra, CLI quality overhaul. Rubric: 94 checks + 12 anti-patterns (v0.8.0).
 

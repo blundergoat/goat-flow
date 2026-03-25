@@ -136,12 +136,15 @@ export const antiPatterns: AntiPatternDef[] = [
   {
     id: 'AP11', name: 'Empty learning loop scaffolding', deduction: -2, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      const { lessons, footguns, decisions } = ctx.facts.shared;
+      const { lessons, footguns } = ctx.facts.shared;
       const lessonsEmpty = lessons.exists && !lessons.hasEntries;
       const footgunsEmpty = footguns.exists && !footguns.hasEvidence;
-      const decisionsEmpty = decisions.dirExists && decisions.fileCount === 0;
-      const triggered = (lessonsEmpty && footgunsEmpty) || (lessonsEmpty && decisionsEmpty && footgunsEmpty);
-      return { id: 'AP11', name: 'Empty learning loop scaffolding', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? 'Learning loop files exist but are empty — populate with real incidents or remove' : 'Learning loop files have content' };
+      const triggered = lessonsEmpty || footgunsEmpty;
+      const parts: string[] = [];
+      if (lessonsEmpty) parts.push('lessons.md is empty');
+      if (footgunsEmpty) parts.push('footguns.md has no evidence');
+      const message = triggered ? `Learning loop incomplete: ${parts.join(', ')}` : 'Learning loop files have content';
+      return { id: 'AP11', name: 'Empty learning loop scaffolding', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message };
     },
     recommendation: 'Populate learning loop files with real incidents or remove empty scaffolding',
     recommendationKey: 'ap-fix-empty-scaffolding',

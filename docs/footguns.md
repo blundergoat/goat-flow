@@ -120,3 +120,46 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 - This is a Never-tier rule — overwriting a file the user didn't ask to overwrite is data destruction
 
 **Created:** 2026-03-21
+
+## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules
+
+**Symptoms:** `goat-flow setup . --agent all` emits a single deduplicated setup prompt that looks shorter and cleaner than per-agent setup, but it can direct users to scaffold shared skills in the wrong directory, flatten phase-specific guidance into one generic reference, and skip template validation entirely.
+
+**Why it happens:** `composeMultiAgentSetup()` rebuilds the full-setup output as a separate code path instead of reusing the single-agent phase rendering. Its shared table is derived from the first agent's standard refs, so Claude's `.claude/skills/` path leaks into a multi-agent prompt even though shared multi-agent skills are supposed to canonicalize under `.agents/skills/`. The same path also replaces per-phase agent-specific guidance and validation with one final gate.
+
+**Evidence:**
+- `src/cli/cli.ts:205` → routes multi-agent full setup through `composeMultiAgentSetup()`
+- `src/cli/prompt/compose-setup.ts:399` → builds shared refs from the first agent only
+- `src/cli/prompt/template-refs.ts:151` → skill output path is derived from `p.skillsDir`
+- `src/cli/detect/agents.ts:8` → Claude profile sets `skillsDir: '.claude/skills'`
+- `setup/shared/docs-seed.md:106` → multi-agent projects should canonicalize skills in `.agents/skills/`
+- `src/cli/prompt/compose-setup.ts:441` → emits one bare "Agent-specific setup" line per agent
+- `src/cli/prompt/compose-setup.ts:448` → collapses setup to one final scan gate
+- `src/cli/prompt/compose-setup.ts:262` → template validation exists only in the single-agent full setup path
+
+**Prevention:** When adding a condensed or multi-agent output mode, preserve the same invariants as the single-agent path: canonical shared output paths, per-phase agent-specific guidance, and the same template validation gates. If a new setup mode cannot reuse those invariants directly, treat it as a high-risk integration path and audit its rendered output before release.
+
+**Created:** 2026-03-25
+
+## Footgun: Eval templates, parser, and scanner drift out of contract
+
+**Symptoms:** An eval written exactly from the shipped template can fail the scanner, or a valid eval heading accepted by the parser can still fail the rubric. Users create evals that look correct in markdown but lose points in `goat-flow scan`.
+
+**Why it happens:** Eval structure is defined in three places with different assumptions:
+- `workflow/evaluation/evals.md` tells users what to write
+- `src/cli/evals/parser.ts` decides which headings are semantically equivalent
+- `src/cli/facts/shared.ts` performs strict regex checks for the rubric
+
+When one of those changes without the others, the setup guidance stops matching the scan logic.
+
+**Evidence:**
+- `workflow/evaluation/evals.md:46` → template tells users to create an `## Origin` section
+- `src/cli/facts/shared.ts:118` → scanner only accepts `**Origin:**` labels
+- `src/cli/facts/shared.ts:119` → scanner only accepts `## Replay Prompt`
+- `src/cli/evals/parser.ts:246` → parser already treats `Scenario` as equivalent to `Replay Prompt`
+- `workflow/evaluation/evals.md:78` → example opens with an outer ```markdown fence
+- `workflow/evaluation/evals.md:88` → example nests inner triple-backtick fences, which breaks standard markdown rendering
+
+**Prevention:** Treat eval shape as a single contract. Any change to allowed headings, label format, or example structure must be updated in the template, parser, and scanner together. Verify with one round-trip test: write an eval from the template, parse it, then confirm it passes the full-tier scan checks.
+
+**Created:** 2026-03-25

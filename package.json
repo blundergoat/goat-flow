@@ -10,7 +10,9 @@
     ".": "./dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "setup",
+    "workflow"
   ],
   "engines": {
     "node": ">=22"

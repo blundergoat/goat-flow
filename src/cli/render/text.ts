@@ -123,6 +123,37 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
       }
       lines.push('');
     }
+
+    // Diagnostic summary: top improvements ranked by point impact
+    const impacts: Array<{ label: string; points: number; priority: string }> = [];
+
+    // Check-based impacts
+    for (const rec of agent.recommendations) {
+      const check = agent.checks.find(c => c.id === rec.checkId);
+      const recoverable = check ? check.maxPoints - check.points : 0;
+      if (recoverable > 0) {
+        impacts.push({ label: `${rec.checkId}: ${rec.action}`, points: recoverable, priority: rec.priority });
+      }
+    }
+
+    // Anti-pattern impacts
+    for (const ap of agent.antiPatterns.filter(a => a.triggered)) {
+      impacts.push({ label: `${ap.id}: ${ap.name}`, points: Math.abs(ap.deduction), priority: 'critical' });
+    }
+
+    // Sort by points descending, take top 5
+    impacts.sort((a, b) => b.points - a.points);
+
+    if (impacts.length > 0) {
+      lines.push('Diagnostic Summary:');
+      for (const item of impacts.slice(0, 5)) {
+        lines.push(`  ${priorityLabel(item.priority as Priority).trim().padEnd(8)} ${item.label} (${item.points} pts recoverable)`);
+      }
+      lines.push('');
+      const top = impacts[0]!;
+      lines.push(`  Highest-impact fix: ${top.label} — recovers ${top.points} points`);
+      lines.push('');
+    }
   }
 
   return lines.join('\n');

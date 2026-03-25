@@ -9,13 +9,25 @@ interface DetectorResult {
   formatCommand?: string | null;
 }
 
+/** Check if an npm script command is a placeholder (npm init default) */
+function isPlaceholderScript(cmd: string): boolean {
+  return /^echo\s+"Error:/.test(cmd)
+    || /^echo\s+"no\s+(test|build)/.test(cmd)
+    || /^exit\s+1$/.test(cmd.trim())
+    || /^echo\s+.*&&\s*exit\s+1$/.test(cmd.trim());
+}
+
 /** Extract commands from a package.json scripts block */
 function extractNodeCommands(scripts: Record<string, string>): Pick<DetectorResult, 'buildCommand' | 'testCommand' | 'lintCommand' | 'formatCommand'> {
+  const filterPlaceholder = (cmd: string | undefined): string | null => {
+    if (!cmd || isPlaceholderScript(cmd)) return null;
+    return cmd;
+  };
   return {
-    buildCommand: scripts.build ?? null,
-    testCommand: scripts.test ?? null,
-    lintCommand: scripts.lint ?? null,
-    formatCommand: scripts.format ?? scripts['format:check'] ?? null,
+    buildCommand: filterPlaceholder(scripts.build),
+    testCommand: filterPlaceholder(scripts.test),
+    lintCommand: filterPlaceholder(scripts.lint),
+    formatCommand: filterPlaceholder(scripts.format ?? scripts['format:check']),
   };
 }
 

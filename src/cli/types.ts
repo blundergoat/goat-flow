@@ -212,7 +212,6 @@ export interface AgentFacts {
     hasDenyPatterns: boolean;
   };
   settingsLocal: { exists: boolean; lineCount: number };
-  askFirstEnforcement: { hasPathHook: boolean };
   skills: {
     found: string[];
     missing: string[];
@@ -361,8 +360,8 @@ export interface ReadonlyFS {
 export interface CLIOptions {
   projectPath: string;
   format: 'json' | 'text';
-  // Null means scan all detected agents
-  agent: AgentId | null;
+  // Null means scan all detected agents; 'all' explicitly requests every agent
+  agent: AgentId | 'all' | null;
   verbose: boolean;
   // Fail the process if score is below this threshold
   minScore: number | null;

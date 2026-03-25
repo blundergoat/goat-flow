@@ -1,6 +1,6 @@
 # Docs Seed Files
 
-These files are created during Phase 1a regardless of which agent you use. They form the learning loop and project documentation.
+These files are created regardless of which agent you use. They form the learning loop and project documentation.
 
 ---
 
@@ -12,6 +12,12 @@ These files are created during Phase 1a regardless of which agent you use. They 
    if the root cause was a behavioural mistake (not an architectural
    landmine), seed one lesson from it. This gives agents a format
    example and makes the file visible. If no evals exist, start empty.
+   To find real incidents in this project, run:
+     git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
+   For each match, write a lessons entry with: date, what happened, what
+   the correct behaviour should have been. Minimum 3 entries if the project
+   has >50 commits. If <50 commits, start with what you have.
+   If the project uses a bug tracker, include issue numbers (e.g., #63442) for traceability.
 
 2. docs/footguns.md - If the file already exists, MERGE with it: keep
    existing entries, add new footguns from reading the codebase.
@@ -22,6 +28,12 @@ These files are created during Phase 1a regardless of which agent you use. They 
    DESIGN_TARGET for intended values, HYPOTHETICAL_EXAMPLE for
    illustrative only. Bare claims without labels are not acceptable
    (e.g., src/Auth.php:42). Bare paths without line numbers do not count.
+   To find real footguns in this project, run:
+     grep -rn 'TODO\|FIXME\|HACK\|XXX' src/ --include='*.ts' --include='*.php' --include='*.py' | head -20
+     git log --all --oneline -- '*migration*' '**/migrations/**' | head -10
+   Each footgun MUST have a file:line reference like src/Auth.php:42.
+   Design patterns are NOT footguns — footguns are actual traps in the
+   code where an agent (or developer) is likely to make a mistake.
    Also audit config files (.json, .yaml, .sh) for stale project names,
    hardcoded absolute paths, or outdated references. Seed these as
    footguns if found.
@@ -86,6 +98,16 @@ These files are created during Phase 1a regardless of which agent you use. They 
    - Verify every path in Ask First exists on disk — stale paths mislead agents
    - Check router table entries resolve — broken refs are common after renames
    - If a path doesn't exist, fix it (don't copy it into ai/instructions/)
+```
+
+## Skills Deduplication
+
+```
+Create skills in ONE canonical location (.agents/skills/ for multi-agent
+projects), then copy to agent-specific directories (.claude/skills/).
+Do NOT write the same skill independently in multiple directories — this
+guarantees inconsistency. If making a correction to a skill, update the
+canonical copy first, then propagate.
 ```
 
 ## Ownership Split Report

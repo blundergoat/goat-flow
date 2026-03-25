@@ -475,24 +475,9 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Create context validation script or CI workflow',
     recommendationKey: 'create-context-validation',
   },
-  {
-    id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
-    pts: 2, confidence: 'medium',
-    na: (ctx) => ctx.agentFacts.askFirst.exists === false || ctx.agentFacts.agent.hooksDir === null,
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '2.2.7', name: 'Ask First has mechanical enforcement', tier: 'standard', category: 'Hooks',
-        status: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 'pass' : 'fail',
-        points: ctx.agentFacts.askFirstEnforcement.hasPathHook ? 2 : 0, maxPoints: 2, confidence: 'medium',
-        message: ctx.agentFacts.askFirstEnforcement.hasPathHook
-          ? 'Ask First boundaries have a PreToolUse enforcement hook'
-          : 'Ask First boundaries are policy-only — no hook enforces edits to boundary files',
-      }),
-    },
-    recommendation: 'Create a PreToolUse hook that warns when editing Ask First boundary files',
-    recommendationKey: 'create-ask-first-hook',
-  },
+  // 2.2.7 (Ask First mechanical enforcement) removed — see ADR-006.
+  // The hook blocks normal development on framework projects. Ask First
+  // boundaries remain as policy in the instruction file.
 
   // === 2.3 Learning Loop (6 pts) ===
   {
@@ -511,7 +496,7 @@ export const standardChecks: CheckDef[] = [
         id: '2.3.2', name: 'lessons.md has entries', tier: 'standard', category: 'Learning Loop',
         status: ctx.facts.shared.lessons.hasEntries ? 'pass' : 'fail',
         points: ctx.facts.shared.lessons.hasEntries ? 1 : 0, maxPoints: 1, confidence: 'high',
-        message: ctx.facts.shared.lessons.hasEntries ? 'lessons.md has entries' : 'lessons.md is empty or has no entries',
+        message: ctx.facts.shared.lessons.hasEntries ? 'lessons.md has entries' : 'lessons.md is empty or has no entries. Expected: `### Title` heading followed by 20+ characters of content on the next line',
       }),
     },
     recommendation: 'Add entries to docs/lessons.md from real incidents',
@@ -554,22 +539,7 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Seed lessons.md with 3+ real incidents from git history',
     recommendationKey: 'seed-lessons-minimum',
   },
-  {
-    id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop',
-    pts: 2, partialPts: 1, confidence: 'high',
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => {
-        const { totalRefs, validRefs, staleRefs } = ctx.facts.shared.footguns;
-        if (totalRefs === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No file:line references to check' };
-        if (staleRefs.length === 0) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `All ${totalRefs} file references resolve` };
-        if (validRefs / totalRefs > 0.5) return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${staleRefs.length} stale refs: ${staleRefs.slice(0, 3).join(', ')}`, evidence: staleRefs.join(', ') };
-        return { id: '2.3.5', name: 'Footgun file references resolve', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: `${staleRefs.length}/${totalRefs} references are stale`, evidence: staleRefs.join(', ') };
-      },
-    },
-    recommendation: 'Update stale file:line references in footguns.md',
-    recommendationKey: 'ap-fix-stale-references',
-  },
+  // 2.3.5 removed — duplicate of AP12 (stale footgun refs)
 
   // === 2.4 Router Table (5 pts) ===
   {

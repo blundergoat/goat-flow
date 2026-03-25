@@ -39,9 +39,7 @@ Usage:
 
 Commands:
   scan              Score a project (default)
-  fix               Generate fix prompt for failed checks
-  setup             Generate full setup prompt
-  audit             Generate read-only audit prompt
+  setup             Generate setup prompt (adapts to project state)
   eval              Parse and summarize agent evals
 
 Arguments:
@@ -49,7 +47,7 @@ Arguments:
 
 Flags:
   --format <type>   Output format: json, text (default: auto)
-  --agent <id>      Filter to one agent: claude, codex, gemini
+  --agent <id>      Filter to one agent: claude, codex, gemini, all
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
   --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
@@ -59,9 +57,9 @@ Flags:
 Examples:
   goat-flow .                        Scan current directory
   goat-flow scan --format json       Force JSON output
-  goat-flow fix --agent claude       Fix prompt for Claude only
+  goat-flow setup --agent claude     Setup prompt for Claude
   goat-flow setup --agent codex      Setup prompt for Codex
-  goat-flow audit --agent gemini     Audit prompt for Gemini
+  goat-flow setup --agent all        Setup prompt for all agents
   goat-flow --min-score 75           CI gate: fail if below 75%
   goat-flow eval                     Summarize agent evals
   goat-flow eval --format json       Eval summary as JSON
@@ -73,10 +71,10 @@ function printVersion(): void {
   console.log(`goat-flow v${PACKAGE_VERSION}`);
 }
 
-type Command = 'scan' | 'fix' | 'setup' | 'audit' | 'eval';
+type Command = 'scan' | 'setup' | 'eval';
 
 /** List of recognized CLI subcommands */
-const COMMANDS: Command[] = ['scan', 'fix', 'setup', 'audit', 'eval'];
+const COMMANDS: Command[] = ['scan', 'setup', 'eval'];
 
 export interface ParsedCLI extends CLIOptions {
   command: Command;
@@ -88,6 +86,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   let command: Command = 'scan';
   /** Mutable copy of argv for shifting the command token */
   const filtered = [...argv];
+  const REMOVED_COMMANDS = ['fix', 'audit'];
+  const first = filtered[0];
+  if (first !== undefined && REMOVED_COMMANDS.includes(first)) {
+    throw new CLIError(`"${first}" was removed. Use "setup" instead — it adapts to your project's state.`, 2);
+  }
   if (filtered.length > 0 && COMMANDS.includes(filtered[0] as Command)) {
     command = filtered.shift() as Command;
   }
@@ -118,12 +121,12 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   }
 
   // Validate agent
-  let agent: AgentId | null = null;
+  let agent: AgentId | 'all' | null = null;
   if (values.agent) {
-    if (['claude', 'codex', 'gemini'].includes(values.agent) === false) {
-      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`, 2);
+    if (['claude', 'codex', 'gemini', 'all'].includes(values.agent) === false) {
+      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini, all`, 2);
     }
-    agent = values.agent as AgentId;
+    agent = values.agent as AgentId | 'all';
   }
 
   // Parse min-score
@@ -181,34 +184,75 @@ async function handleEvalCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/** Handle prompt commands (fix, setup, audit): compose and render prompts per agent */
-async function handlePromptCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
-  const { composeFix } = await import('./prompt/compose-fix.js');
-  const { composeSetup } = await import('./prompt/compose-setup.js');
-  const { composeAudit } = await import('./prompt/compose-audit.js');
+/** Handle the setup command: compose and render setup prompts per agent */
+async function handleSetupCommand(options: ParsedCLI, report: ScanReport): Promise<void> {
+  const { composeSetup, composeInlineSetup, composeMultiAgentSetup } = await import('./prompt/compose-setup.js');
   const { renderPrompt } = await import('./prompt/render.js');
 
   // Determine which agents to generate prompts for
   /** List of agent IDs to generate prompts for (filtered or all detected) */
-  const agentIds = options.agent
-    ? [options.agent]
-    : report.agents.map(a => a.agent);
+  const agentIds: AgentId[] = options.agent === 'all'
+    ? ['claude', 'codex', 'gemini']
+    : options.agent
+      ? [options.agent]
+      : report.agents.map(a => a.agent);
 
   if (agentIds.length === 0) {
-    throw new CLIError('No agents detected. Use --agent to specify one.', 1);
+    throw new CLIError('No agents detected. Use --agent claude, --agent codex, --agent gemini, or --agent all', 1);
   }
 
-  // Iterate over each agent ID to compose and render the appropriate prompt
+  // Multi-agent: deduplicated output with shared files once + per-agent sections
+  if (agentIds.length > 1 && process.env.GOAT_FLOW_INLINE_SETUP !== '1') {
+    // Check if any agent needs full setup (no agents detected or 0%)
+    const allFresh = agentIds.every(id => {
+      const agentReport = report.agents.find(a => a.agent === id);
+      return !agentReport || agentReport.score.percentage === 0;
+    });
+
+    if (allFresh) {
+      // All agents need full setup — use deduplicated multi-agent output
+      process.stdout.write([
+        '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
+        '(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done',
+        'MUST be identical across all instruction files. Write these sections for the first agent,',
+        'then COPY THEM VERBATIM to the other instruction files. Do not rephrase.',
+        '',
+        '',
+      ].join('\n'));
+      const output = composeMultiAgentSetup(report, agentIds);
+      process.stdout.write(output + '\n');
+      return;
+    }
+  }
+
+  // Single-agent or mixed-mode: render each agent separately
+  if (agentIds.length > 1) {
+    process.stdout.write([
+      '**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop',
+      '(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done',
+      'MUST be identical across all instruction files. Write these sections for the first agent,',
+      'then COPY THEM VERBATIM to the other instruction files. Do not rephrase.',
+      '',
+      '---',
+      '',
+    ].join('\n'));
+  }
+
+  // Iterate over each agent ID to compose and render the setup prompt
   for (const agentId of agentIds) {
-    let prompt;
-    switch (options.command) {
-      case 'fix': prompt = composeFix(report, agentId); break;
-      case 'setup': prompt = composeSetup(report, agentId); break;
-      case 'audit': prompt = composeAudit(report, agentId); break;
+    let output: string | null = null;
+
+    // Setup returns a markdown string directly (reference-based)
+    // Rollback: GOAT_FLOW_INLINE_SETUP=1 uses the old fragment-based renderer
+    if (process.env.GOAT_FLOW_INLINE_SETUP === '1') {
+      const prompt = composeInlineSetup(report, agentId);
+      output = prompt ? renderPrompt(prompt) : null;
+    } else {
+      output = composeSetup(report, agentId);
     }
 
-    if (prompt) {
-      process.stdout.write(renderPrompt(prompt) + '\n');
+    if (output) {
+      process.stdout.write(output + '\n');
       if (agentIds.length > 1) process.stdout.write('\n---\n\n');
     }
   }
@@ -246,6 +290,12 @@ function handleCIGate(options: ParsedCLI, report: ScanReport): void {
 
 /** Entry point that dispatches to the appropriate command handler */
 async function main(): Promise<void> {
+  // Gracefully handle EPIPE (e.g., output piped to `head`)
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') process.exit(0);
+    throw err;
+  });
+
   /** Parsed CLI options derived from process.argv */
   const options = parseCLIArgs(process.argv.slice(2));
 
@@ -268,7 +318,7 @@ async function main(): Promise<void> {
   const fs = createFS(options.projectPath);
   /** Full scan report containing per-agent scores and check results */
   const report = scanProject(fs, options.projectPath, {
-    agentFilter: options.agent,
+    agentFilter: options.agent === 'all' ? null : options.agent,
   });
 
   if (options.command === 'scan') {
@@ -278,7 +328,8 @@ async function main(): Promise<void> {
       : renderJson(report);
     process.stdout.write(output + '\n');
   } else {
-    await handlePromptCommand(options, report);
+    // setup command — generates prompts that adapt to project state
+    await handleSetupCommand(options, report);
   }
 
   handleCIGate(options, report);
