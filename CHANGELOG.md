@@ -4,14 +4,14 @@
 
 ## v0.7.0 - Unreleased
 
-Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.9.0, 92 checks + 12 anti-patterns.
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
 
 ### Reference-Based Setup Prompt
 - Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons
 - Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, `--agent all` with interactive picker
 - Skill quality requirements block in Phase 1b, `GOAT_FLOW_INLINE_SETUP=1` rollback, `setup/` + `workflow/` in npm tarball
 
-### Scanner Accuracy (rubric v0.9.0)
+### Scanner Accuracy (rubric v0.7.0)
 - 3.3.4 sync: Jaccard word-intersection ≥0.85 (was length-ratio ≥0.6), matches bold format
 - 2.3.2 lessons.md: strips HTML comments, requires 20+ chars of real content after H3
 - AP11: fires when EITHER lessons OR footguns is empty (was AND)
