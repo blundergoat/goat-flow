@@ -4,35 +4,32 @@
 
 ## v0.7.0 - Unreleased
 
-Reference-based setup prompt, scanner quality fixes, CLI simplification. Setup output drops from ~860 lines to ~90. Rubric: 93 checks + 12 anti-patterns.
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.9.0, 92 checks + 12 anti-patterns.
 
 ### Reference-Based Setup Prompt
-- `goat-flow setup` now generates ~90-line prompts with absolute template paths instead of ~860 lines of inline skeletons
-- `--agent all` flag generates prompts for all 3 agents; interactive picker in run-cli.sh
-- Agent-branched template tables: Claude → enforcement.md, Codex → setup-codex.md (Starlark execpolicy), Gemini → setup-gemini.md
-- Language-to-coding-standards mapper: auto-detects stack and includes typescript-node, php, python-django, go, rust, bash, web-common templates
-- Role-specific coding-standards rows: conventions.md, code-review.md, git-commit.md, frontend.md, backend.md
-- Skill quality requirements block in Phase 1b, multi-agent sync instruction for `--agent all`
-- `GOAT_FLOW_INLINE_SETUP=1` rollback to old inline format
-- `setup/` and `workflow/` added to package.json `files` array for npm tarball
+- Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons
+- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, `--agent all` with interactive picker
+- Skill quality requirements block in Phase 1b, `GOAT_FLOW_INLINE_SETUP=1` rollback, `setup/` + `workflow/` in npm tarball
 
-### Scanner & Template Quality Fixes
-- Scanner: lessons.md check (2.3.2) strips HTML comments, requires 20+ chars of real content after H3 headings
-- Scanner: AP11 fires when EITHER lessons OR footguns is empty (was AND)
-- Scanner: 3.3.4 sync check uses Jaccard word-intersection ≥0.85 (was length-ratio ≥0.6), matches `**READ**` bold format
-- Template: enforcement.md adds jq parsing guidance, sed fallback, "do NOT use grep -P", command chaining, read-deny patterns
-- Template: docs-seed.md adds concrete `git log` and `grep -rn` commands for finding real incidents
-- Template: execution-loop.md adds explicit "logs updated if tripped" DoD gate
+### Scanner Accuracy (rubric v0.9.0)
+- 3.3.4 sync: Jaccard word-intersection ≥0.85 (was length-ratio ≥0.6), matches bold format
+- 2.3.2 lessons.md: strips HTML comments, requires 20+ chars of real content after H3
+- AP11: fires when EITHER lessons OR footguns is empty (was AND)
+- Check 2.2.7 removed — ask-first-guard hooks removed from all agents (ADR-006)
+
+### Template Quality
+- enforcement.md: jq parsing guidance, sed fallback, command chaining, read-deny patterns
+- docs-seed.md: concrete `git log`/`grep -rn` commands for seeding real incidents
+- execution-loop.md: "logs updated if tripped" DoD gate added
 
 ### Removed
-- Scanner check 2.2.7 (Ask First mechanical enforcement) and ask-first-guard.sh hooks — see ADR-006
+- `fix` and `audit` CLI commands (deprecated in v0.6.0, now exit 2 with migration message)
+- ask-first-guard.sh hooks and scanner check 2.2.7 — see ADR-006
 
 ### Other
-- GitHub Actions: goat-flow-scan.yml permissions for content + pull requests, setup-node version bump
-- README rewrite, CONTRIBUTING.md version fix, agent-evals FORMAT.md update
-- AGENTS.md trimmed to 113 lines (was 122), execution loops synced verbatim across all 3 agents
-- New files: src/cli/paths.ts (goat-flow root resolution), src/cli/prompt/template-refs.ts (template tables + language mapper)
-- 96 tests (was 77), all passing
+- GitHub Actions: goat-flow-scan.yml permissions, setup-node version bump
+- AGENTS.md trimmed to 113 lines, execution loops synced verbatim across all 3 agents
+- New: src/cli/paths.ts, src/cli/prompt/template-refs.ts; 96 tests (was 77)
 
 ---
 
