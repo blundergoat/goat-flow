@@ -271,6 +271,9 @@ const LANGUAGE_TEMPLATE_MAP: Record<string, string> = {
   python: 'workflow/coding-standards/backend/python-django.md',
   go: 'workflow/coding-standards/backend/go.md',
   rust: 'workflow/coding-standards/backend/rust.md',
+  java: 'workflow/coding-standards/backend/java-spring.md',
+  ruby: 'workflow/coding-standards/backend/ruby-rails.md',
+  csharp: 'workflow/coding-standards/backend/csharp-dotnet.md',
   bash: 'workflow/coding-standards/backend/bash.md',
 };
 
