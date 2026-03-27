@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-debug
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Diagnosis Report](output-skeletons.md#diagnosis-report) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -64,16 +71,20 @@ indices, arrays, or pagination.
 
 After tracing, mark each: CONFIRMED / ELIMINATED / UNRESOLVED with evidence.
 
+*Example:*
+| 1 | Token expiry uses `<` instead of `<=` | Logic | CONFIRMED | `auth.ts:47` |
+| 2 | Session store timing out under load | Timing | ELIMINATED | `config/redis.ts:12` shows 30s TTL, not related |
+
 **CAN'T REPRODUCE?** If you can't reproduce after 5 file reads:
 1. Log what you checked and what you expected to find
 2. Suggest logging additions at suspected locations
 3. Ask the user for more reproduction context
 
-Use extended thinking for hypothesis generation before committing to a trace path.
+Generate multiple hypotheses internally before committing to a trace path.
 
 ## Phase 2 — Diagnosis
 
-Present findings using the Diagnosis Report skeleton:
+Present findings using the Output Format template below:
 - Root cause with **confidence level**: HIGH (reproduced) / MEDIUM (traced to cause) / LOW (inferred from patterns)
 - Hypothesis table with status
 - Reproduction steps: "1, 2, 3 → expected: [X], actual: [Y]"
@@ -135,7 +146,30 @@ stop and rewind. Present what you've tried and ask the human for a different ang
 
 ## Output Format
 
-Use the Diagnosis Report skeleton from `output-skeletons.md`.
+```markdown
+## TL;DR
+<!-- 1 sentence: root cause + confidence level -->
+
+## Hypotheses
+| # | Hypothesis | Category | Status | Evidence |
+|---|-----------|----------|--------|----------|
+| 1 | [description] | data/logic/timing/env/config | CONFIRMED/ELIMINATED/UNRESOLVED | `file:line` |
+
+## Root Cause
+**Confidence:** HIGH (reproduced) | MEDIUM (traced) | LOW (inferred)
+**Location:** `file:line`
+**Description:** [what's wrong and why]
+
+## Reproduction Steps
+1. [step]
+2. Expected: [X] — Actual: [Y]
+
+## Fix Plan
+<!-- Only if human approved Phase 3 -->
+- What changes: [description]
+- Blast radius: [what else could break]
+- Verification: [how to confirm the fix worked]
+```
 
 ## Chains With
 

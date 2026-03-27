@@ -177,9 +177,9 @@ Each phase should have a clear entry condition (what must be done before startin
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Ensure all 10 GOAT Flow skills are present under \`{{skillsDir}}/\`:
+    instruction: `Ensure all 9 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
-- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-reflect, goat-onboard, goat-resume
+- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-context, goat-refactor
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
   },

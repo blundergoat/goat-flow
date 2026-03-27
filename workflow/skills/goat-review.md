@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-review
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Findings Report](output-skeletons.md#findings-report) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -66,6 +73,9 @@ pre-existing issues as part of this change — note them separately.
 **Cross-cutting checks:**
 - Autonomy tier violations: does this change cross an Ask First boundary?
 - Footgun matching: check each finding against `docs/footguns.md`. Output: `MATCH: [entry]` or `CLEAR`
+  *Example:* "Finding: Renamed `UserService` → `AccountService`. Footgun check:
+  `docs/footguns.md` entry 'cross-reference fragility'. MATCH — grep for
+  `UserService` across all `.md` files."
 - Pattern drift: does new code use a different pattern than existing codebase? Don't assume it's wrong — ask: "Intentional divergence?"
 - Downstream impact: "What breaks if this change has a bug?" — map the cascade
 - Test execution gaps: tests exist but weren't run against the changed path (different from "no test exists")
@@ -74,7 +84,7 @@ pre-existing issues as part of this change — note them separately.
 
 ## Phase 3 — Present Findings
 
-Use the Findings Report skeleton. Additional required sections for reviews:
+Use the Output Format template below. Additional required sections for reviews:
 
 **Pre-existing Issues** (not blocking this change):
 - [issue] — `file:line` — existed before this diff
@@ -155,8 +165,39 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 
 ## Output Format
 
-Use the Findings Report skeleton from `output-skeletons.md`.
-Add Pre-existing Issues, Breaking Changes, Test Execution Gaps, and What's Good sections.
+```markdown
+## TL;DR
+<!-- 3 sentences: what was reviewed, what was found, what matters most -->
+
+## Findings
+
+### MUST Fix (Blocking)
+- **[title]** — `file:line` — [description]
+  Footgun match: MATCH [entry] | CLEAR
+
+### SHOULD Fix
+- **[title]** — `file:line` — [description]
+
+### MAY Fix (Optional)
+- **[title]** — `file:line` — [description]
+
+## Pre-existing Issues
+<!-- Not blocking this change, but worth noting -->
+- [issue] — `file:line` — existed before this diff
+
+## Breaking Changes
+- [change] — affects: [consumers] — migration needed: [yes/no]
+
+## Test Execution Gaps
+- [test at file:line] doesn't exercise changed path because [reason]
+
+## What's Good
+<!-- Specific positive observations, not generic praise -->
+
+## What I Didn't Examine
+<!-- Files in blast radius not reviewed and why -->
+```
+
 Output should be compatible with standard GitHub/GitLab PR review templates.
 
 ## Chains With

@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-investigate
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Investigation Report](output-skeletons.md#investigation-report) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -55,9 +62,9 @@ up to [N] files. Anything to adjust?"
 Read in layers — don't try to understand everything at once:
 
 1. **Entry points** — where execution starts for this area
-   Use Glob for file discovery, Grep for cross-references.
+   Search for files by pattern, then search file contents for cross-references.
 2. **Critical path** — the main flow through the area
-   Use Read on key files, Agent(Explore) for deep subsystem dives.
+   Read key files. For deep subsystem dives, use parallel exploration if available.
 3. **Supporting files** — helpers, utilities, configs that the critical path depends on
 
 For each file read, log:
@@ -73,12 +80,15 @@ Semantic noise is worse than no results.
 
 ## Phase 3 — Report
 
-Produce the Investigation Report using the output skeleton. Every section is required.
+Produce the Investigation Report using the Output Format template below. Every section is required.
 
 Key sections that prevent false confidence:
 - **What I Didn't Read** — REQUIRED. List files/areas skipped with reasons (too many, lower priority, needs additional context). If you examined 8 of 30 files, say so.
 - **Current vs Expected State** — for each finding, state what IS vs what SHOULD BE.
 - **Evidence tags** — OBSERVED for things verified in code. INFERRED for deductions (state what direct evidence is missing).
+  *Example:* "OBSERVED: `auth.ts:47` uses `<` instead of `<=` for token expiry —
+  verified by reading the line. INFERRED: this likely causes premature token
+  rejection *(missing: need to verify with a test)*."
 
 **BLOCKING GATE:** Present full report. Offer:
 (a) go deeper into a specific area
@@ -108,6 +118,12 @@ Present findings: "This project uses [languages] with [frameworks]. Build: [cmd]
 
 **BLOCKING GATE:** Present drafted instructions. "Write these files, or adjust first?"
 
+## Common Failure Modes
+
+1. **Over-reading** — agent reads 30 files without pausing at the budget. The read budget checkpoint prevents this.
+2. **Everything is OBSERVED** — agent tags all findings as OBSERVED when many are inferred. Require: "INFERRED findings must state what direct evidence is missing."
+3. **Encyclopedic summary** — agent produces a comprehensive description that answers no specific question. The TL;DR + scope question keep output focused.
+
 ## Constraints
 
 <!-- FIXED: Do not adapt these -->
@@ -120,8 +136,37 @@ Present findings: "This project uses [languages] with [frameworks]. Build: [cmd]
 
 ## Output Format
 
-Use the Investigation Report skeleton from `output-skeletons.md`.
-Include Mermaid.js syntax for component maps and data flow where helpful.
+```markdown
+## TL;DR
+<!-- 3 sentences: scope, key finding, recommendation -->
+
+## Components
+| Component | Location | Role |
+|-----------|----------|------|
+
+## Data Flow
+<!-- Mermaid.js diagram or prose description -->
+
+## Boundaries Touched
+<!-- Which module/service/API boundaries does this area cross? -->
+
+## Risks / Gotchas
+<!-- Minimum 3, with file:line evidence -->
+- `file:line` — [risk] — Evidence: OBSERVED | INFERRED
+
+## Current vs Expected State
+| Aspect | Current | Expected | Gap |
+|--------|---------|----------|-----|
+
+## Open Questions
+<!-- What couldn't be determined from reading code alone? -->
+
+## What I Didn't Read
+<!-- Files/areas skipped. Reason: too many | lower priority | needs context -->
+
+## Recommendation
+<!-- What should happen next? Chain to which skill? -->
+```
 
 ## Chains With
 

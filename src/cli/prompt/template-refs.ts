@@ -125,15 +125,14 @@ function getFoundationHooks(agentId: AgentId): TemplateRef[] {
 // Standard refs — shared across all agents
 // ---------------------------------------------------------------------------
 
-/** Ordered list of the 10 goat-flow skill template sources */
+/** Ordered list of the 9 goat-flow skill template sources */
 const SKILL_TEMPLATES = [
   'workflow/skills/goat-audit.md',
+  'workflow/skills/goat-context.md',
   'workflow/skills/goat-debug.md',
   'workflow/skills/goat-investigate.md',
-  'workflow/skills/goat-onboard.md',
   'workflow/skills/goat-plan.md',
-  'workflow/skills/goat-reflect.md',
-  'workflow/skills/goat-resume.md',
+  'workflow/skills/goat-refactor.md',
   'workflow/skills/goat-review.md',
   'workflow/skills/goat-security.md',
   'workflow/skills/goat-test.md',

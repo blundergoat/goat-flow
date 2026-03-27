@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-security
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Security Assessment](output-skeletons.md#security-assessment) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -125,7 +132,7 @@ Re-read each cited `file:line` for Critical and High findings.
 
 Remove findings that don't survive re-verification.
 
-**BLOCKING GATE:** Present final report using the Security Assessment skeleton.
+**BLOCKING GATE:** Present final report using the Output Format template below.
 
 ## Common Failure Modes
 
@@ -145,7 +152,43 @@ Remove findings that don't survive re-verification.
 
 ## Output Format
 
-Use the Security Assessment skeleton from `output-skeletons.md`.
+```markdown
+## TL;DR
+<!-- 3 sentences: threat model, key findings, posture assessment -->
+
+## Threat Surface
+| Category | Status | Skip Reason |
+|----------|--------|-------------|
+| Input validation | Scanned / Skipped | [if skipped: why] |
+| Auth/authz | ... | ... |
+| Secret handling | ... | ... |
+| SQL injection | ... | ... |
+| XSS | ... | ... |
+| Command injection | ... | ... |
+| Path traversal | ... | ... |
+| Dependency CVEs | ... | ... |
+| CORS/CSP | ... | ... |
+| Permission escalation | ... | ... |
+
+## Findings (by exploitability)
+
+### Critical (exploitable without auth)
+- **[title]** — `file:line`
+  **Attack scenario:** An [attacker] can [action] via [vector], resulting in [impact]
+  **Framework mitigation:** [not mitigated | mitigated by X — downgraded]
+
+### High / Medium / Low
+
+## Framework Mitigations Verified
+| Feature | Installed | Configured | Applied to routes |
+|---------|-----------|------------|-------------------|
+
+## What I Didn't Check
+<!-- Threat surfaces skipped and why -->
+
+## Dependency Audit
+<!-- Output of npm audit / pip-audit / cargo audit / etc. -->
+```
 
 ## Chains With
 

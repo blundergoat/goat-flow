@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-audit
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Findings Report](output-skeletons.md#findings-report) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -53,7 +60,7 @@ Scan categories, weighted by audit purpose:
 | Style | Low | Low | Low |
 
 For each finding, log: category, `file:line`, description, severity.
-Use Agent tool for parallel scanning of independent areas.
+<!-- ADAPT: Use your agent's parallel execution capability, or scan areas sequentially. -->
 
 **CHECKPOINT:** "Phase 1 complete. [N] findings across [M] files. Proceeding to verification."
 
@@ -69,6 +76,10 @@ Re-read the code at the cited `file:line`. Look for evidence that contradicts
 the finding. The goal is adversarial: "Can I prove this finding is wrong?"
 Remove genuine false positives.
 
+*Example:* "Finding: No input validation on `/api/users`. Disproof attempt:
+checked middleware chain — `express-validator` at `middleware.ts:12` handles
+this route. Result: FALSE POSITIVE, removed."
+
 **B) Fabrication self-check:** Re-verify every `file:line` reference.
 Does the file exist? Does the cited line contain what the finding claims?
 Remove any finding where the evidence doesn't hold up.
@@ -81,7 +92,7 @@ Remove any finding where the evidence doesn't hold up.
 
 ## Phase 3 — Rank & Rollup
 
-Rank surviving findings by severity (see shared preamble).
+Rank surviving findings by severity (see Shared Conventions above).
 
 **Pattern rollup:** If 3+ findings share a root cause, group them:
 "This is a systemic pattern, not [N] separate issues: [pattern description]."
@@ -94,7 +105,7 @@ recommendations as findings. Audits report — they don't fix.
 
 ## Phase 4 — Present
 
-Use the Findings Report skeleton. Include:
+Use the Output Format template below. Include:
 - Findings by severity with footgun MATCH/CLEAR
 - "What I Didn't Examine" — areas within scope that were skipped
 - Pattern rollup for systemic issues
@@ -124,7 +135,29 @@ Use the Findings Report skeleton. Include:
 
 ## Output Format
 
-Use the Findings Report skeleton from `output-skeletons.md`.
+```markdown
+## TL;DR
+<!-- 3 sentences: what was examined, what was found, what matters most -->
+
+## Findings
+
+### MUST Fix (Blocking)
+- **[title]** — `file:line` — [description]
+  Footgun match: MATCH [entry] | CLEAR
+  Evidence: OBSERVED | INFERRED (missing: [what direct evidence is needed])
+
+### SHOULD Fix
+- **[title]** — `file:line` — [description]
+
+### MAY Fix (Optional)
+- **[title]** — `file:line` — [description]
+
+## What I Didn't Examine
+<!-- List files/areas skipped and why -->
+
+## Patterns
+<!-- If 3+ findings share a root cause, group as systemic issue -->
+```
 
 ## Chains With
 

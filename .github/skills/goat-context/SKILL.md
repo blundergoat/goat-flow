@@ -1,8 +1,8 @@
 ---
-name: goat-resume
+name: goat-context
 description: "Reconstruct session state and propose next action after a break"
 ---
-# /goat-resume
+# /goat-context
 
 Session continuation skill. Reconstructs working state from available context and proposes the next action for human approval. The compaction hook restores raw state; this skill INTERPRETS that state and recommends direction.
 

@@ -1,8 +1,11 @@
 # Layer 3 - Skill Templates
 
 This folder contains the skill templates used during Phase 1b setup. Each file is the
-authoritative template for the corresponding skill. For skill documentation (when to use,
-design rationale, decision table), see [docs/system/skills.md](../../docs/system/skills.md).
+authoritative template for the corresponding skill. Every skill is self-contained —
+no external references required.
+
+For skill documentation (when to use, design rationale, decision table), see
+[docs/system/skills.md](../../docs/system/skills.md).
 
 ## Active Skills (9)
 
@@ -18,16 +21,18 @@ design rationale, decision table), see [docs/system/skills.md](../../docs/system
 | goat-context.md | Session context reconstruction |
 | goat-refactor.md | Cross-file refactoring with verification |
 
-## Shared Infrastructure
+## Reference (internal to goat-flow)
+
+These files are design references for the goat-flow project itself. They are NOT
+referenced by the skill templates and are NOT needed in target projects.
 
 | File | Purpose |
 |------|---------|
-| shared-preamble.md | Shared conventions referenced by all skills |
-| output-skeletons.md | Literal output templates for all report types |
+| reference/shared-preamble.md | Original shared conventions (now inlined into each skill) |
+| reference/output-skeletons.md | Output format templates for all report types |
 
-## Deprecated (will be removed next version)
+## Migration Notes
 
-| Template | Merged into | Migration |
-|----------|-------------|-----------|
-| goat-onboard.md | goat-investigate (onboard mode) | Use `/goat-investigate` with purpose = "onboarding" |
-| goat-reflect.md | goat-review (instruction review mode) | Use `/goat-review` with target = "instruction files" |
+- **goat-onboard** was merged into goat-investigate (onboard mode). Use `/goat-investigate` with purpose = "onboarding".
+- **goat-reflect** was merged into goat-review (instruction review mode). Use `/goat-review` with target = "instruction files".
+- **goat-resume** was renamed to **goat-context**.

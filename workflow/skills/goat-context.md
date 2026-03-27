@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-context
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Resume Report](output-skeletons.md#resume-report) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -64,19 +71,29 @@ Quick-read for orientation:
 
 Based on reconstructed state, determine:
 - **What was being worked on** (from handoff/git/task files)
-- **Current status** (complete / partial / blocked / stale)
+- **Current status:**
+  - **Complete** — all tasks done, changes committed, no pending work
+  - **Partial** — uncommitted changes exist or tasks remain unchecked
+  - **Blocked** — failing test, unresolved dependency, or merge conflict
+  - **Stale** — handoff >7 days old and code has diverged significantly
 - **What changed since last session** (from diff sampling, not just filenames)
 - **Branch health** (ahead/behind main, merge conflicts likely?)
 
 ## Phase 4 — Recommend
 
-Present the Resume Report using the output skeleton.
+Present the Context Report using the Output Format template below.
 
 **BLOCKING GATE:** Present recommendation. Offer:
 (a) proceed with recommended action
 (b) I need more context on [area] → investigate
 (c) that's stale — let me explain what I'm doing now
 (d) something else
+
+## Common Failure Modes
+
+1. **Filename-only reconstruction** — agent lists "5 files changed" without reading what changed. Diff sampling prevents this.
+2. **Stale handoff trust** — agent follows handoff.md that contradicts recent git history. Handoff drift detection prevents this.
+3. **Parrot mode** — agent dumps git log output instead of interpreting it ("you were mid-way through adding auth middleware").
 
 ## Constraints
 
@@ -90,7 +107,24 @@ Present the Resume Report using the output skeleton.
 
 ## Output Format
 
-Use the Resume Report skeleton from `output-skeletons.md`.
+```markdown
+## Session Reconstruction
+
+**Last session:** [task from handoff/git]
+**Branch:** [name] — [N] commits ahead of main, [N] behind
+**Modified files:**
+| File | Status | Summary |
+|------|--------|---------|
+<!-- fill from git diff --stat + sampling -->
+
+**Handoff drift:** MATCH | DRIFT — [details if drifted]
+
+## Recommendation
+**Next action:** [what to do]
+**Suggested skill:** /goat-[name]
+**Confidence:** HIGH | MEDIUM | LOW
+**Reasoning:** [one sentence]
+```
 
 ## Chains With
 

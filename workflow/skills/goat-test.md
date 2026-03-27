@@ -5,8 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-test
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
-> Uses the [Test Plan](output-skeletons.md#test-plan) output skeleton.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -66,7 +73,7 @@ Generate commands for the coding agent to run:
 <!-- ADAPT: your preflight command -->
 ```
 
-**Track 1 executor:** The coding agent runs these commands. Phase 2 and 3 are
+**Phase 1 executor:** The coding agent runs these commands. Phase 2 and 3 are
 for independent verifiers.
 
 **Integration Gaps:**
@@ -88,6 +95,12 @@ files with purpose, and relevant footguns for the changed area.
 
 Different models catch different blind spots. The coding model has confirmation
 bias toward its own work. Recommend a different model for verification.
+
+**If Phase 2 will be skipped:** Note it explicitly in "What ISN'T Tested":
+"AI verification not performed — [reason]. Coverage relies on automated tests
+(Phase 1) and human testing (Phase 3) only. Cross-model blind spots are NOT covered."
+<!-- ADAPT: If your agent supports sub-agents, offer to run Phase 2 prompts
+as sub-agent tasks instead of requiring a separate session. -->
 
 **Failure Signatures:**
 | If this breaks... | You'll see... |
@@ -122,22 +135,53 @@ Explicitly list coverage gaps. Be honest about what's NOT verified:
 
 ## Common Failure Modes
 
-1. **Generic Track 2 prompts** — verifier gets "[CHANGES]" instead of actual file list. The self-contained requirement prevents this.
-2. **Track 3 is trivially obvious** — "click the button" instead of testing what automation can't. Focus human testing on judgment calls.
+1. **Generic Phase 2 prompts** — verifier gets "[CHANGES]" instead of actual file list. The self-contained requirement prevents this.
+2. **Phase 3 is trivially obvious** — "click the button" instead of testing what automation can't. Focus human testing on judgment calls.
 3. **Full 3-phase for a 1-line fix** — the quick path prevents this.
 
 ## Constraints
 
 <!-- FIXED: Do not adapt these -->
 - The coding agent MUST NOT verify its own work (doer-verifier principle)
-- MUST fill ALL bracketed values in Track 2 prompts — no [PLACEHOLDER] in output
+- MUST fill ALL bracketed values in Phase 2 prompts — no [PLACEHOLDER] in output
 - MUST list what ISN'T tested
 - MUST note which tests use mocks and what they can't catch
 - MUST NOT fabricate file paths or function names
 
 ## Output Format
 
-Use the Test Plan skeleton from `output-skeletons.md`.
+```markdown
+## TL;DR
+<!-- What changed, what's tested, what isn't -->
+
+## Phase 0: Change Manifest
+| File | Component | Change Type | Risk | Verification Ratio |
+|------|-----------|-------------|------|-------------------|
+
+## Phase 1: Automated Tests
+<!-- ADAPT: your project's test commands -->
+```bash
+# Commands for the coding agent to run
+```
+
+### Integration Gaps
+<!-- Risk areas NOT covered by automated tests -->
+
+## Phase 2: AI Verification
+<!-- Self-contained prompts for a SEPARATE agent -->
+
+### Failure Signatures
+| If this breaks... | You'll see... |
+|-------------------|---------------|
+
+## Phase 3: Human Testing
+| What to test | Where | What "good" looks like | What to look for |
+|-------------|-------|----------------------|-----------------|
+
+## What ISN'T Tested
+<!-- Explicit gaps in coverage -->
+```
+
 Phase 1 commands should be CI-pasteable (include a YAML snippet alongside human-readable commands).
 
 ## Chains With

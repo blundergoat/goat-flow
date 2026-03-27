@@ -10,7 +10,7 @@ name: eval-name
 description: "What this eval tests"
 origin: real-incident | synthetic-seed
 agents: all | claude | codex | gemini
-skill: goat-debug | goat-audit | goat-review | goat-investigate | goat-plan | goat-test | goat-security | goat-onboard | goat-reflect | goat-resume
+skill: goat-debug | goat-audit | goat-review | goat-investigate | goat-plan | goat-test | goat-security | goat-context | goat-refactor
 difficulty: easy | medium | hard
 ---
 ```

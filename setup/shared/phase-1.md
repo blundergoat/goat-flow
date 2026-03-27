@@ -104,27 +104,31 @@ This is NOT a cosmetic update — skill templates improve with each release.
 Read the detailed skill templates in workflow/skills/goat-*.md for each
 skill's full specification before creating or updating.
 
-Create or update these 10 skills in the agent's skills directory:
+Create or update these 9 skills in the agent's skills directory:
 
-1. goat-security/SKILL.md - Security-focused review. MUST check
-   dependencies, secrets, permissions. Severity scale ranking.
-2. goat-investigate/SKILL.md - Minimum: Files Involved, Request Flow,
-   Boundaries Touched, Risks/Gotchas (min 3 with file:line evidence).
-   Hard gate: no planning until human reviews.
-3. goat-debug/SKILL.md - Diagnosis-first. "If you want to 'just try
-   something' before tracing the code path, STOP."
-4. goat-audit/SKILL.md - 4-pass: Discovery → Verification → Prioritisation →
-   Self-Check. Pass 4 fabrication gate. MUST NOT propose fixes.
-5. goat-review/SKILL.md - Structured review with RFC 2119 constraints.
-6. goat-plan/SKILL.md - 4-phase planning (feature brief → mob elaboration →
-   SBAO ranking → milestones). Human gate between each phase.
-7. goat-test/SKILL.md - Generate testing instructions. Produces: automated
-   test commands, AI verification prompts for a separate agent, manual
-   testing steps. Doer-verifier principle: coding agent MUST NOT verify
-   its own work.
-8. goat-reflect/SKILL.md - Post-session reflection for the learning loop.
-9. goat-onboard/SKILL.md - Codebase onboarding for new contributors/agents.
-10. goat-resume/SKILL.md - Session resumption from handoff files.
+1. goat-investigate/SKILL.md - Deep codebase investigation + onboarding mode.
+   Progressive depth reading, evidence tagging, "What I Didn't Read" section.
+2. goat-review/SKILL.md - Structured code review + instruction-file audit mode.
+   RFC 2119 severity, diff-aware analysis, footgun matching.
+3. goat-security/SKILL.md - Threat-model-driven security assessment.
+   Framework-aware verification, exploitability ranking, dependency auditing.
+4. goat-debug/SKILL.md - Diagnosis-first debugging. Hypothesis tracking,
+   recurrence checks. "If you want to 'just try something', STOP."
+5. goat-plan/SKILL.md - 4-phase planning with complexity routing.
+   Triangular tension analysis, kill criteria, milestone archetypes.
+6. goat-audit/SKILL.md - Multi-phase quality audit with negative verification.
+   Fabrication self-check. MUST NOT propose fixes.
+7. goat-test/SKILL.md - 3-phase test plan generation. Doer-verifier principle:
+   coding agent MUST NOT verify its own work.
+8. goat-context/SKILL.md - Session context reconstruction with diff sampling,
+   branch divergence analysis, and next-action recommendation.
+9. goat-refactor/SKILL.md - Cross-file refactoring with blast radius analysis,
+   both-sides-first reading, and absence verification.
+
+**Migration:** goat-reflect is now part of goat-review (instruction review mode).
+goat-onboard is now part of goat-investigate (onboard mode). goat-resume was
+renamed to goat-context. If old skills exist, delete them after verifying no
+project-specific content needs migrating.
 
 Each skill MUST include in its YAML frontmatter:
   goat-flow-skill-version: matching the current goat-flow version

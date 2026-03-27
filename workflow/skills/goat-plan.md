@@ -5,7 +5,15 @@ goat-flow-skill-version: "0.7.0"
 ---
 # /goat-plan
 
-> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -85,7 +93,7 @@ evaluate from three perspectives:
 - **ANALYST:** What does the data/evidence say? What's the cost/benefit? What are the measurable trade-offs?
 - **STRATEGIST:** What's the path to shipping? What's the fastest way to learn if this works?
 
-Use extended thinking for competing-plan generation before committing to output.
+Generate competing plans internally before committing to output.
 
 Present a comparison table:
 
@@ -145,9 +153,63 @@ before implementation are hypotheses, not commitments.
 
 ## Output Format
 
-Phase 1: Feature brief (8 sections, walked through individually)
-Phase 3: Comparison table + recommendation
-Phase 4: Milestone cards with deliverable, exit criteria, kill criteria, dependencies
+### Feature Brief (Phase 1)
+
+```markdown
+# Feature Brief: [name]
+
+## Problem
+<!-- 1-2 sentences: what's wrong or missing -->
+
+## Proposed Solution
+<!-- high-level approach -->
+
+## Risks & Kill Criteria
+<!-- what could go wrong. Format: "If [measurable condition], then [action]" -->
+
+## Rollback Plan
+<!-- how to undo if it fails -->
+
+## Scope
+- **In:** [list]
+- **Out:** [list]
+
+## Dependencies
+- **Blocks:** [list]
+- **Blocked by:** [list]
+
+## Success Criteria
+<!-- 2-3 measurable outcomes -->
+
+## Open Questions
+<!-- unknowns that need answers before proceeding -->
+```
+
+### Comparison Table (Phase 3)
+
+```markdown
+| Criterion | Approach A | Approach B |
+|-----------|-----------|-----------|
+| Risk | ... | ... |
+| Effort | ... | ... |
+| Speed to feedback | ... | ... |
+| Reversibility | ... | ... |
+
+**Recommendation:** [approach] because [reasoning].
+**Decision Debt:** [decision] — Confidence: LOW/MEDIUM — Revisit when: [trigger]
+```
+
+### Milestone Card (Phase 4)
+
+```markdown
+## M[N]: [name]
+**Deliverable:** [what ships]
+**Exit criteria:** [testable, binary]
+**Kill criteria:** [what would make us stop here]
+**Depends on:** [prerequisite]
+### Tasks
+- [ ] [task]
+```
 
 ## Chains With
 
