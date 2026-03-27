@@ -1,188 +1,170 @@
-# Prompt: Create /goat-review Skill
-
-Paste this into your coding agent to create the `/goat-review` skill for your project.
-
 ---
+name: goat-review
+description: "Structured code review with RFC 2119 severity, diff-aware analysis, footgun matching, and instruction-file audit mode."
+goat-flow-skill-version: "0.7.0"
+---
+# /goat-review
 
-## The Prompt
-
-```
-Create the /goat-review skill for this project.
+> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
+> Uses the [Findings Report](output-skeletons.md#findings-report) output skeleton.
 
 ## When to Use
 
 Use when reviewing a diff, PR, or specific set of changes before they ship.
-goat-review = diff/PR review. For codebase-wide quality sweeps, use goat-audit instead.
+Also use for reviewing instruction files (CLAUDE.md, ai/instructions/) for
+staleness or drift — see Instruction Review Mode below.
 
-Purpose: structured review of code changes with RFC 2119 severity levels,
-diff-aware analysis, and respect for the project's autonomy tiers. The agent
-gathers context, reviews independently — it investigates the code, doesn't
-blindly apply external suggestions.
-
-Write the skill file to: .claude/skills/goat-review/SKILL.md
-(For Codex/Gemini: .agents/skills/goat-review/SKILL.md)
-
-When to use: before merging significant changes, after receiving an
-external PR review, or when the developer wants a second opinion
-on a change set.
+**NOT this skill:**
+- Codebase-wide quality sweep (no specific diff) → /goat-audit
+- OWASP-driven security assessment → /goat-security
+- Understanding unfamiliar code before changing it → /goat-investigate
+- Generating test instructions → /goat-test
 
 ## Step 0 — Gather Context
 
-Before reviewing, the skill MUST ask the user:
-1. What should I review? (PR, recent commits, specific files, or
-   "everything since last milestone")
-2. Any specific concerns? (performance, security, a tricky area)
-3. Is this responding to external feedback? (Copilot review, another
-   agent's review, team comments — if so, paste or point to it)
-4. Riskiest change first, or full sweep? (This lets the human direct the
-   review toward what matters most.)
+<!-- ADAPT: Replace illustrative questions with project-specific review concerns -->
 
-Do NOT start reviewing until the user has answered. A review without
-scope is a waste of time.
+**Structural questions (always ask or confirm):**
+1. What should I review? (PR, recent commits, specific files, instruction files, or "everything since last milestone")
+2. Any specific concerns? (performance, security, a tricky area, instruction drift)
 
-Scope clarification: goat-review is for diffs and PRs. If the user asks for
-a codebase-wide sweep, redirect to goat-audit.
+**Illustrative questions (adapt):**
+3. <!-- ADAPT: "Is this responding to external feedback? (Copilot, another agent, team review)" -->
+4. Riskiest change first, or full sweep?
+
+**Auto-detect:** Read `git diff --stat` to pre-fill scope. Present: "I see
+[N] files changed in [areas]. Reviewing [scope]. Correct?"
+
+If review target is **instruction files** → activate Instruction Review Mode.
 
 If `ai/instructions/code-review.md` exists, load it and apply project-specific
 review standards alongside these defaults.
 
-IMPORTANT: Reviews should be conversational, not one-shot. Present
-findings, then let the human drill in: "Walk me through the riskiest
-change." "What breaks if this runs concurrently?" "Is error handling
-consistent?" Conversational reviews catch architectural problems.
-One-shot reviews flag style nits and miss what matters.
-
 ## Phase 0 — Spec Compliance (conditional)
 
-If `requirements-{feature}.md` exists in the project root or `docs/requirements/`,
-check each acceptance criterion against the diff before starting code quality review.
-Report: PASS / FAIL / NOT TESTED for each criterion.
+If `requirements-{feature}.md` or `TODO_*_prime.md` exists for the feature
+being reviewed, check each acceptance criterion against the implementation.
+If no spec exists, skip this phase — zero cost.
 
-If no spec exists, skip this phase entirely. This costs nothing now and
-auto-activates when spec artifacts exist.
+## Phase 1 — Scope Confirmation
 
-## Phase 1 — Scope
-
-Identify what changed:
-- Read the diff or list of changed files
-- Understand the intent: what was this change trying to do?
-- Identify the blast radius: what else could be affected?
-
-Diff-aware mode: Review the DIFF for issues. Read FULL FILES for context.
-Don't flag pre-existing issues that aren't part of this change. If something
-was already broken before this diff, note it separately as "pre-existing"
-but do not count it against this change.
-
-Tell the user: "I'll be reviewing [N] files. The changes appear to be
-about [intent]. I'll also check [related areas] for blast radius."
+**CHECKPOINT:** "I'll review [N] files about [area]. Focus on [concern]?
+Anything I should prioritize?"
 
 ## Phase 2 — Review
 
-Read changed files in FULL CONTEXT (not just the diff):
+Review the DIFF for issues. Read FULL FILES for context. Do not flag
+pre-existing issues as part of this change — note them separately.
 
-Rank findings by severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE.
-Review in that order.
+**Severity-ordered scan:**
+1. Security: injection, auth bypass, secret exposure, permission escalation
+2. Correctness: logic errors, edge cases, null handling, race conditions
+3. Integration: API contract changes, cross-boundary effects, breaking changes
+4. Performance: O(n²) in hot paths, unbounded queries, memory leaks
+5. Style: naming, formatting, convention violations (lowest priority)
 
-- Check correctness — does the code do what it's supposed to?
-- Check cross-reference integrity — did renames break anything?
-- Check test coverage — are the changes tested?
-- Check for edge cases the author might have missed
-- Check consistency with existing patterns
-- Check autonomy tier violations
-- Cross-reference with docs/footguns.md for known landmines
+**Cross-cutting checks:**
+- Autonomy tier violations: does this change cross an Ask First boundary?
+- Footgun matching: check each finding against `docs/footguns.md`. Output: `MATCH: [entry]` or `CLEAR`
+- Pattern drift: does new code use a different pattern than existing codebase? Don't assume it's wrong — ask: "Intentional divergence?"
+- Downstream impact: "What breaks if this change has a bug?" — map the cascade
+- Test execution gaps: tests exist but weren't run against the changed path (different from "no test exists")
 
-Pattern drift detection: Flag when new code uses a different pattern than
-the rest of the codebase. Example: "This file uses X, but the codebase
-convention is Y. Intentional?" Don't assume drift is wrong — ask.
+**Self-check:** Before presenting, re-verify `file:line` references for all MUST-fix findings.
 
-"What I'd break" analysis: For each significant change, state what could
-break downstream. Example: "If this auth change is wrong, it would affect:
-[list of consumers]." This makes risk concrete.
+## Phase 3 — Present Findings
 
-Footgun matching: For each finding, check `docs/footguns.md` for matches.
-Output: "MATCH: footguns.md entry [name]" or "CLEAR: no known footguns
-in this area."
+Use the Findings Report skeleton. Additional required sections for reviews:
 
-If reviewing external suggestions (Copilot PR review, other tool output):
-investigate each one independently. Categorize:
-- AGREE — real issue, explain why
-- DISAGREE — false positive, explain why
-- INVESTIGATE — needs more context before deciding
-Do NOT blindly agree or apply.
+**Pre-existing Issues** (not blocking this change):
+- [issue] — `file:line` — existed before this diff
 
-## Phase 3 — Report
+**Breaking Changes:**
+- [change] — affects: [consumers] — migration needed: [yes/no]
 
-Present findings with RFC 2119 severity:
-- MUST fix (blocking): security bugs, data loss, broken functionality
-- SHOULD fix (recommended): code quality, minor edge cases
-- MAY improve (optional): style, minor refactors, docs
-- What's good: specific positive observations (not filler)
+**Test Execution Gaps:**
+- [test exists at file:line] but doesn't exercise the changed path because [reason]
 
-For each finding: file:line evidence + why it matters + footgun match status.
+**What's Good:**
+- Specific positive observations (not generic praise)
 
-HUMAN GATE — After presenting findings, ask:
-"Want me to (a) dig into the riskiest change, (b) check a specific file
-more deeply, (c) compare against spec requirements, (d) finalize the
-review verdict?"
-
-Do NOT auto-advance. Let the human drill into specific findings, challenge
-severity levels, or redirect focus.
+**BLOCKING GATE:** Present findings. Offer:
+(a) drill into a specific finding
+(b) review a related area
+(c) check test coverage
+(d) something else
 
 ## Phase 4 — DoD Gate Check
 
-Check each Definition of Done item and output pass/fail:
-1. Lint/shellcheck passes on changed .sh files
+Verify the project's Definition of Done against this change:
+<!-- ADAPT: Replace with your project's actual DoD gates -->
+1. Tests/lint pass on changed files
 2. No broken cross-references introduced
 3. No unapproved boundary changes
-4. Logs updated if tripped (lessons.md / footguns.md)
+4. Logs updated if VERIFY caught a failure
 5. Working notes current
-6. Grep old pattern after renames — no stale references remain
+6. Grep old pattern after renames — zero remaining
 
-Output: PASS or FAIL for each gate, with file:line evidence for failures.
+**CHECKPOINT:** "DoD check: [pass/partial/fail]. [Details]."
 
-The skill MUST:
-- Gather context before reviewing (Step 0)
-- Review the DIFF for issues, read FULL FILES for context
-- Don't flag pre-existing issues as part of this change
-- Provide file:line evidence for every finding
-- Use RFC 2119 severity (MUST/SHOULD/MAY)
-- Rank: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
-- Separate blocking issues (MUST) from non-blocking (SHOULD/MAY)
-- Check footguns.md for matches on each finding
-- State downstream impact for significant changes
-- Respect the project's autonomy tiers when assessing changes
-- Run DoD gate check before finalizing
+## Instruction Review Mode
 
-The skill MUST NOT:
-- Apply fixes directly (this is a review, not an implementation)
-- Blindly agree with external review suggestions
-- Report findings without reading the actual code
-- Flag pre-existing issues as blocking for this change
+Activated when review target is instruction files (CLAUDE.md, AGENTS.md,
+ai/instructions/, .github/instructions/).
 
-VERIFICATION:
-- Verify skill file exists at the correct path
-- Verify Step 0 context gathering is present
-- Verify RFC 2119 severity levels (MUST/SHOULD/MAY)
-- Verify DoD checklist is included
-- Verify footgun matching is present
-- Verify severity ranking order is present
+**Phase 1i — Friction Signal Scan:**
+Gather observable signals (not conversation memory — agents can't read prior sessions):
+- `git log --oneline -20` for recent activity patterns
+- Read `docs/lessons.md` for entries since last instruction update
+- Read `docs/footguns.md` for entries in areas governed by the instructions
+- Check `agent-evals/` for recurring failure patterns
 
-## Output
+**Phase 2i — Instruction Audit:**
+For each instruction file, check:
+- Missing rules: friction signals suggest a rule that doesn't exist
+- Misleading rules: rules that don't match current code behaviour
+- Stale rules: references to files/paths that no longer exist
+- Outdated rules: rules from a previous architecture that hasn't been updated
 
-Structured review with findings by severity, evidence, footgun match
-status, downstream impact analysis, and clear accept/request-changes/block
-recommendation.
+**Phase 3i — Propose Edits:**
+Present proposals in diff-like format:
 
-## Learning Loop
+| File | Section | Current | Proposed | Why |
+|------|---------|---------|----------|-----|
+| CLAUDE.md | Ask First | `src/old-path/` | `src/new-path/` | Path renamed in commit abc123 |
 
-If this review uncovered a lesson or footgun, update the relevant doc before closing:
-- Behavioural mistake → `docs/lessons.md`
-- Architectural trap with file:line evidence → `docs/footguns.md`
+MUST NOT auto-edit instruction files. Present for human approval.
+MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own update standards.
+
+## Common Failure Modes
+
+1. **One-shot dump** — agent produces entire review at once instead of conversational drilling. Present findings by severity tier, pause between tiers.
+2. **File-order findings** — agent lists findings in the order files were read, not by severity. Force severity ordering.
+3. **Footgun skip** — agent skips footgun matching under token pressure. This is where the highest-value findings come from.
+
+## Constraints
+
+<!-- FIXED: Do not adapt these -->
+- MUST review the diff for issues, read full files for context
+- MUST NOT flag pre-existing issues as part of this change
+- MUST check each finding against `docs/footguns.md` (MATCH/CLEAR)
+- MUST order findings by severity, not by file or discovery order
+- MUST NOT fabricate file paths or function names
+- MUST NOT auto-edit instruction files in instruction review mode
+- Conversational: present findings, then let the human drill in. One-shot dumps miss architectural problems.
+
+## Output Format
+
+Use the Findings Report skeleton from `output-skeletons.md`.
+Add Pre-existing Issues, Breaking Changes, Test Execution Gaps, and What's Good sections.
+Output should be compatible with standard GitHub/GitLab PR review templates.
 
 ## Chains With
 
-- goat-audit — codebase-wide sweeps (review is for diffs, audit is for repos)
-- goat-debug — investigate bugs found during review
-- goat-plan — review a plan before implementation begins
-- goat-test — verify test coverage gaps found during review
-```
+- /goat-audit — review surfaces systemic issues → broader sweep needed
+- /goat-debug — review finds a specific bug → diagnosis needed
+- /goat-plan — review reveals missing requirements → planning needed
+- /goat-test — review finds coverage gaps → test plan needed
+- /goat-security — review finds security concern → deeper assessment
+
+**Handoff shape:** `{diff_scope, findings_by_severity, breaking_changes, coverage_gaps}`

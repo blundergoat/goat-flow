@@ -1,6 +1,7 @@
 ---
 name: goat-plan
 description: "Plan a feature with phased human gates"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-plan
 

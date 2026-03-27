@@ -1,6 +1,7 @@
 ---
 name: goat-audit
 description: "Run a multi-pass quality audit on the codebase"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-audit
 

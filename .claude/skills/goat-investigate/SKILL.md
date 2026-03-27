@@ -1,6 +1,7 @@
 ---
 name: goat-investigate
 description: "Investigate a codebase area and report findings"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-investigate
 

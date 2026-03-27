@@ -72,6 +72,19 @@ Prefer real incidents over synthetic seeds. At least 3 evals required.`,
 Use \`real-incident\` for evals from actual bugs/issues. Use \`synthetic-seed\` for designed test scenarios.`,
   },
   {
+    key: 'add-agents-labels',
+    phase: 'full',
+    category: 'Agent Evals',
+    kind: 'fix',
+    instruction: `Eval files are missing \`**Agents:**\` labels. Add to each eval:
+
+\`\`\`markdown
+**Agents:** all
+\`\`\`
+
+Use \`all\` if the eval applies to every agent. Use \`claude\`, \`codex\`, or \`gemini\` if agent-specific.`,
+  },
+  {
     key: 'add-eval-skill-coverage',
     phase: 'full',
     category: 'Agent Evals',
@@ -188,6 +201,13 @@ Without this, PRs can merge without context validation passing.`,
 \`\`\``,
   },
   {
+    key: 'fix-handoff-sections',
+    phase: 'full',
+    category: 'Hygiene',
+    kind: 'fix',
+    instruction: '`tasks/handoff-template.md` is missing required sections. It must include: ## Status, ## Current State, ## Key Decisions, ## Known Risks, ## Next Step.',
+  },
+  {
     key: 'add-rfc2119',
     phase: 'full',
     category: 'Hygiene',
@@ -200,18 +220,7 @@ Without this, PRs can merge without context validation passing.`,
 
 Ensure at least 3 instances across the instruction file. Use MUST for DoD gates and enforcement, SHOULD for best practices.`,
   },
-  {
-    key: 'add-changelog',
-    phase: 'full',
-    category: 'Hygiene',
-    kind: 'create',
-    instruction: `Add version tracking. Either:
-
-**Option A:** Add a version history section to \`{{instructionFile}}\`
-**Option B:** Create \`CHANGELOG.md\` at the project root
-
-Track meaningful changes to the GOAT Flow configuration (not code changes).`,
-  },
+  // add-changelog removed — CHANGELOG.md is a project-level concern, not an AI workflow artifact.
   // === Execution Loop Sync ===
   {
     key: 'fix-execution-loop-sync',

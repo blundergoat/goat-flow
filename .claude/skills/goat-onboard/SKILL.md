@@ -1,6 +1,7 @@
 ---
 name: goat-onboard
 description: "Systematically map an unfamiliar codebase and draft project coding guidelines"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-onboard
 

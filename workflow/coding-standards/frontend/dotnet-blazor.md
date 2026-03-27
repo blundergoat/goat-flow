@@ -2,17 +2,19 @@
 
 Reference for generating `ai/instructions/frontend.md` in Blazor projects.
 
-## Server vs WebAssembly
+## Render Modes
 
-- **Blazor Server**: UI events handled over SignalR. Fast initial load, requires persistent connection. Good for intranet apps.
-- **Blazor WebAssembly (WASM)**: Runs in the browser. Larger initial download, works offline. Good for public-facing SPAs.
-- **Blazor United (.NET 8+)**: Mix Server and WASM per-component with `@rendermode`. Prefer this for new projects.
-- Code structure is the same for both. The hosting model is a deployment decision, not an architecture decision.
+- **Static SSR**: Fast first paint, no interactive event handling after render.
+- **Interactive Server**: UI events handled over SignalR. Fast initial load, requires a persistent connection.
+- **Interactive WebAssembly**: Runs in the browser. Larger initial download, works offline after startup.
+- **Interactive Auto**: Starts on the server, can later shift to WebAssembly when the client bundle is available.
+- Treat render mode as a delivery decision. Keep components portable across modes unless a feature depends on browser-only APIs.
 
 ```razor
 @* .NET 8+ — per-component render mode *@
 <UserDashboard @rendermode="InteractiveServer" />
 <HeavyChart @rendermode="InteractiveWebAssembly" />
+<SearchPage @rendermode="InteractiveAuto" />
 ```
 
 ## Component Lifecycle
@@ -99,7 +101,9 @@ builder.Services.AddScoped<CartState>();
 ## JavaScript Interop
 
 - Use `IJSRuntime` for calling JavaScript from Blazor. Prefer `InvokeVoidAsync` when no return value is needed.
-- DO NOT call JS interop in `OnInitializedAsync` — the DOM is not ready. Use `OnAfterRenderAsync(firstRender: true)`.
+- DO NOT call JS interop in `OnInitializedAsync` when the call needs the DOM,
+  element refs, or interactive rendering. Use
+  `OnAfterRenderAsync(firstRender: true)` instead.
 - Minimize interop calls. Batch operations into a single JS function rather than calling JS in a loop.
 
 ```csharp
@@ -130,6 +134,9 @@ protected override async Task OnInitializedAsync()
 ## Common Footguns
 
 - **Synchronous JS interop in WASM**: `IJSRuntime.Invoke<T>` (synchronous) is only available in WASM and blocks the single thread. Always use `InvokeAsync`.
+- **Prerendering + JS interop**: JS calls fail during prerendering or before the
+  element exists. Gate DOM-dependent work behind `firstRender` in
+  `OnAfterRenderAsync`.
 - **Large WASM download size**: The full .NET runtime downloads to the browser. Use lazy loading (`LazyAssemblyLoader`), AOT compilation, and tree-shaking to reduce payload.
 - **SignalR disconnects (Server)**: Network interruptions kill the circuit. Implement reconnection UI and graceful state recovery. Test with network throttling.
 - **StateHasChanged from non-UI thread**: Calling `StateHasChanged()` from a background thread throws. Use `InvokeAsync(StateHasChanged)` to marshal back to the render thread.

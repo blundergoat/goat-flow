@@ -1,6 +1,7 @@
 ---
-name: goat-resume
-description: "Reconstruct session state and propose next action after a break"
+name: goat-context
+description: "Reconstruct session context with diff sampling, branch divergence, and next-action recommendation"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-resume
 

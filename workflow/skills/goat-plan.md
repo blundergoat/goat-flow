@@ -1,336 +1,158 @@
-# Prompt: Create /goat-plan Skill
-
-Paste this into your coding agent to create the `/goat-plan` skill — an agent-driven planning workflow that guides the user through the full planning playbook sequence with human gates between each phase.
-
 ---
+name: goat-plan
+description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis for competing approaches."
+goat-flow-skill-version: "0.7.0"
+---
+# /goat-plan
+
+> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
 
 ## When to Use
 
-Before any non-trivial implementation. Instead of manually pasting 4 separate planning prompts in sequence, invoke `/goat-plan` and the agent drives the process interactively.
+Use before any non-trivial implementation. Hotfixes can use the compressed
+path. Single-line changes don't need planning.
 
----
+- **Hotfix** → Phase 1 brief only (3-5 lines), skip Phases 2-4
+- **Standard** → Phase 1 brief + Phase 4 milestones. MAY skip Phase 2-3.
+- **System** → Full 4-phase process with human gates
+- **Infrastructure** → Full process + rollback planning
 
-## The Prompt
+**NOT this skill:**
+- Understanding code before planning → /goat-investigate
+- Reviewing an existing plan or PR → /goat-review
+- Debugging a specific issue → /goat-debug
 
-```
-Create the /goat-plan skill for this project.
+## Step 0 — Where Are We?
 
-## When to Use
+**Continuation detection:** Before starting fresh, check for existing planning artifacts:
+<!-- ADAPT: Add your project's planning file patterns -->
+- `requirements-*.md`, `TODO_*_prime.md`
+- `tasks/improvement-plan.md`, `tasks/roadmaps/*.md`, `tasks/roadmaps/milestones/*.md`
+- Any `*-plan*.md`, `*-requirements*.md`, `*-milestone*.md`
 
-Use when planning a feature or significant change.
+Also check for staleness: `git log --since="2 weeks ago" -- [artifact]`. If the artifact hasn't been touched while code diverged, flag it.
 
-Purpose: guide the developer through the full GOAT Flow planning
-sequence — feature brief, mob elaboration, SBAO ranking, and milestone
-planning — as a single agent-driven workflow with human gates.
+If found: "I found [artifact] from [date]. Want to: (a) resume from here, (b) start fresh, (c) jump to a specific phase?"
 
-Write the skill file to: .claude/skills/goat-plan/SKILL.md
-(For Codex/Gemini: .agents/skills/goat-plan/SKILL.md)
+**Structural questions (always ask or confirm):**
+1. What are we building? (feature, fix, refactor, infrastructure change)
+2. What complexity? (Hotfix / Standard / System / Infrastructure)
 
-Read the planning playbooks in workflow/playbooks/planning/ for the
-authoritative templates for each phase:
-- workflow/playbooks/planning/feature-brief.md
-- workflow/playbooks/planning/mob-elaboration.md
-- workflow/playbooks/planning/sbao-ranking.md
-- workflow/playbooks/planning/milestone-planning.md
+**Illustrative questions (adapt):**
+3. <!-- ADAPT: "What's the riskiest part? (e.g., database migration, API contract, auth changes)" -->
+4. <!-- ADAPT: "Any constraints? (timeline, backwards compatibility, performance budget)" -->
 
-## Step 0 - Where Are We?
+**Kill criteria (surface early):** "What would make us abandon this entirely?"
+Even a vague answer ("if it takes more than a week" or "if it breaks the existing API")
+helps frame the planning.
 
-The skill MUST first check for in-progress planning artifacts:
-look for requirements-*.md or TODO_*_prime.md in the repo root or
-tasks/. Also check conversation context for recent /goat-plan usage.
+## Phase 1 — Feature Brief
 
-If evidence of an in-progress plan exists, ask:
-"Are we still planning [feature name]? What would you like to do?"
-  (a) Resume where we left off — pick up from the last completed phase
-  (b) Start over — scrap existing artifacts and restart from Phase 0
-  (c) Jump to a specific phase — I'll tell you which one
-  (d) Something new entirely — different feature
+Walk through each section ONE AT A TIME. Present one, wait for confirmation,
+then present the next. Do NOT dump all 8 sections at once.
 
-If no evidence, ask: "Where are we in the planning process?
-Pick a number or describe:"
+<!-- ADAPT: Adjust sections for your project's planning conventions -->
+1. **Problem** — what's wrong or missing (1-2 sentences)
+2. **Proposed solution** — high-level approach
+3. **Risks / assumptions** — what could go wrong. Include kill criteria from Step 0.
+4. **Rollback / feature flag plan** — how to undo if it fails in production
+5. **Scope** — in/out with explicit exclusions
+6. **Dependencies** — what blocks this, what this blocks
+7. **Success criteria** — measurable outcomes
+8. **Questions** — unknowns that need answers before proceeding
 
-  0 - Start fresh (new feature, no existing docs)
-  1 - Feature Brief (need to write the requirements doc)
-  2 - Mob Elaboration (have a brief, need to stress-test it)
-  3 - SBAO Ranking (need competing plans or sharpen existing plan)
-  4 - Milestone Planning (have approved plan, need milestones)
+Ask the question whose answer could invalidate the approach FIRST.
 
-The user can say a number, a phase name, or describe their situation.
-Do NOT assume the user is starting from scratch.
+**BLOCKING GATE:** Present complete brief. "Approve, or adjust?"
 
-## Step 0b - Gather Context (only if starting fresh)
-
-If Phase 0, ask the user:
-1. What are we planning? (feature name, one-line description)
-2. Why? (business driver, user pain, or technical need)
-3. Complexity? Classify scope using these thresholds:
-   - Hotfix — 1 file, <10 lines changed
-   - Standard — 2-5 files, single feature boundary
-   - System — crosses module/service boundaries, touches shared interfaces
-   - Infrastructure — CI/CD, builds, deploys, environment config
-4. Any existing requirements? (paste, point to a doc, or "starting from scratch")
-
-Do NOT proceed until the user has answered all 4 questions.
-
-Route based on complexity:
-- Hotfix → Phase 1 (compressed brief only), then stop
-- Standard → Phase 1 (brief) → Phase 4 (milestones). Skip 2 and 3.
-- System/Infrastructure → full process: Phase 1 → 2 → 3 → 4
-
-Tell the user which phases apply before starting.
-
-## Phase 1 - Feature Brief
-
-Read workflow/playbooks/planning/feature-brief.md for the full template.
-
-The skill MUST walk the user through each section interactively,
-asking one section at a time. Do NOT dump the entire template.
-
-Risk-prioritize questions: Within each section, ask the question
-whose answer would most change the overall plan first. If a single
-answer could invalidate the entire approach, surface it immediately
-rather than burying it at the end.
-
-Section order:
-1. Lean hypothesis ("We believe [X] for [users] will [outcome]")
-2. Problem & outcome (current state, desired state, why now)
-3. Users & use cases (3-5 user stories)
-4. Scope & constraints (in/out, hard constraints)
-5. Non-functional requirements (performance, security, accessibility)
-6. Risks, assumptions & edge cases (3-5 edge cases)
-7. System & impact (systems touched, dependencies, stakeholders)
-8. Success criteria (2-3 measurable metrics)
-
-Forward-compatibility note: Phase 1 output format must accommodate
-future spec artifact fields. Use extensible structure (YAML frontmatter
-+ markdown sections) that won't need breaking changes when new fields
-are added.
-
-Output: requirements-<feature-name>.md
-
-HUMAN GATE: Present the brief. Ask "Does this capture everything?"
-  (a) Approved — move to next phase
-  (b) Needs changes — I'll tell you what to update
-  (c) Missing a section — let me add more context
-  (d) Start over — this isn't the right framing
-Do NOT proceed until the user approves.
-
-## Phase 2 - Mob Elaboration
-
-Read workflow/playbooks/planning/mob-elaboration.md for the full prompt.
-
-Stress-test the brief. Generate exactly 3-5 sharp questions across:
-1. Business logic & constraints — hard rules, data limits, thresholds
-2. Edge cases & failure modes — what happens when X fails
-3. Architecture & state — integration, state changes, services touched
-
-Present all questions. Then STOP and WAIT. Do not answer your own
-questions. Iterate until the user confirms requirements are locked in.
-
-Update requirements-<feature-name>.md with elaboration results.
-
-HUMAN GATE: "Are requirements locked in?"
-  (a) Locked in — move to next phase
-  (b) Another round — I have more to clarify
-  (c) Back up — the brief itself needs changes based on what we found
-  (d) Pivot — these questions revealed we're solving the wrong problem
-Do NOT proceed until confirmed.
-
-## Phase 3 - SBAO Ranking (System/Infrastructure only)
-
-Read workflow/playbooks/planning/sbao-ranking.md for the full process.
-
-SBAO is a MULTI-AGENT adversarial process. Different agents/models
-produce competing plans and critique each other. One agent roleplaying
-multiple perspectives is NOT SBAO.
-
-Step 3a - Generate Competing Plans:
-Ask the user how they want to generate plans:
-  A. External sessions — user opens 2-3 agents (different models)
-  B. Sub-agents — spawn 3 sub-agents in parallel with fresh context
-  C. Mixed — spawn sub-agents AND user runs an external session
-  D. Single-agent triangular tension — run SKEPTIC, ANALYST,
-     STRATEGIST passes (when multi-agent not available)
-
-Option D — Lightweight SBAO Fallback:
-If the user picks D (or multi-agent isn't feasible), run three
-passes with explicit role shifts:
-1. SKEPTIC pass: "What could go wrong? List every risk, failure
-   mode, and assumption that hasn't been validated. Be adversarial."
-2. ANALYST pass: "What data, evidence, or prior art supports or
-   contradicts the current approach? Reference specific files,
-   metrics, or precedents."
-3. STRATEGIST pass: "Given the SKEPTIC's risks and the ANALYST's
-   evidence, what's the best path forward? Recommend a single plan
-   with rationale."
-
-Present all three passes to the user. Then proceed to Step 3b (Rank)
-using the STRATEGIST output as the candidate plan, with SKEPTIC and
-ANALYST outputs as the critique layer.
-
-Worked example of triangular tension:
-  SKEPTIC: "The plan assumes the external API returns <200ms. Our
-  monitoring shows p95 at 340ms. If we build the sync path around
-  that assumption, the entire UX degrades under load."
-
-  ANALYST: "Logs from the last 30 days show the API averages 180ms
-  at p50 but spikes to 400ms+ during peak hours. The competitor
-  product uses an async queue pattern to decouple from API latency."
-
-  STRATEGIST: "Build the async path from day one. Queue writes,
-  process in background, show optimistic UI. This handles both the
-  latency risk (SKEPTIC) and aligns with the proven pattern
-  (ANALYST). Milestone 1 spike: measure actual p95 with a test
-  harness before committing to the queue implementation."
-
-Give the user (or sub-agents) this prompt:
-
-  Deeply review the codebase and the following requirements
-  (attach requirements-<feature-name>.md), and give me a technical
-  plan in this file TODO_<feature-name>_<model>.md
-
-For sub-agents: spawn each with fresh context. Collect results.
-For external sessions: STOP and WAIT for the user to return.
-For mixed: spawn sub-agents AND give user the prompt.
-
-Step 3b - Rank the Plans:
-Once all plans are in, read them all. Present:
-- Comparison table ranking each out of 100
-- Where they agree (consensus) and disagree (dissent)
-- Spec bugs or issues found across plans
-
-Step 3c - Recommend Improvements:
-Based on the ranking, present a brief list of recommended changes.
-For each recommendation include:
-- What: the concrete change
-- Why: one sentence explaining why this matters
-- Source: which plan(s) identified it
-
-Group by category. Prioritise: what matters most first.
-
-Ask: "Do you agree with these improvements? Anything to add or cut?"
-Wait for user reaction.
-
-Step 3d - Prime Plan:
-Ask the user: Keep / Drop / Decide. Synthesise a prime plan
-incorporating the agreed improvements.
-
-Output: TODO_<feature-name>_prime.md
-
-After writing the prime plan, present a concise 10 bullet point summary
-of the key decisions. No detail — just the headlines so the user can
-quickly confirm the direction.
-
-HUMAN GATE: Present the summary + link to the full plan.
-"Is this the right approach?" Do NOT proceed until approved.
-
-## Phase 4 - Milestone Planning
-
-Read workflow/playbooks/planning/milestone-planning.md for the full prompt.
-
-Kill Criteria:
-Before defining milestones, define 2-3 kill criteria — conditions
-that would make us abandon this plan entirely. Write these into the
-plan document header. Examples:
-- "If the spike proves API latency exceeds 500ms at p95, abandon
-  the real-time approach and switch to batch processing."
-- "If the third-party SDK doesn't support our auth flow, drop this
-  integration and revisit in Q3."
-- "If estimated effort exceeds 3 sprints after M1, descope to the
-  minimal version."
-Kill criteria force honest assessment of whether to continue at
-each milestone gate.
-
-The First Rule: spikes before implementation. Anything uncertain →
-throwaway script to explore first.
-
-Use milestone archetypes:
-1. Prove It Works — validate riskiest assumptions, minimum viable proof
-2. Make It Real — end-to-end pipeline, someone else can test it
-3. Make It Solid — edge cases, errors, security, UX, shippable
-4. Make It Shine — polish, stretch goals, explicitly optional
-
-For each milestone provide:
-- Depends on (prerequisite exit criteria from previous milestones.
-  For M1, state "Depends on: plan approval")
-- Objective (1-2 sentences)
-- Assumptions to validate (checkboxes — NOT task checkboxes)
-  Good: "[ ] S3 presigned URLs work with our CORS setup (untested)"
-  Bad: "[ ] Set up database" (that's a task, not an assumption)
-- Tasks (checkboxes - [ ], max 10, each completable in one session)
-- Exit criteria (testable, binary — not "looks good" but
-  "latency under 500ms at p95")
-- Human testing gate (what the user must verify before sign-off)
-- Gotchas & fallbacks (table: risk → fallback)
-- Key decisions (choices made and why)
-
-Milestone Completion Rules:
-- All tasks MUST be checkbox items (- [ ]) in the milestone file
-- Tick off each task (- [x]) as completed — do not batch
-- All exit criteria MUST pass before milestone is complete
-- Every milestone ends with a human testing gate
-- Milestone is NOT complete until user confirms testing gate passes
-- Do NOT start next milestone until current is fully complete
-- After completing, re-read next milestone and rewrite based on
-  learnings. Show what changed and why — do not silently rewrite.
-  Present a brief diff: "Changed: [what]. Reason: [why]."
-- At each milestone gate, check kill criteria — if any are met,
-  surface them and ask user whether to abandon, pivot, or continue
-
-Planning Rules:
-- Start with unknowns — riskiest work first
-- Each milestone independently demoable
-- Do NOT over-detail future milestones
-- Do NOT build for imagined requirements
-- Do NOT treat the plan as fixed
-
-HUMAN GATE: Present milestones. "Ready to start M1?"
-  (a) Approved — start M1 implementation
-  (b) Needs changes — I'll tell you what to adjust
-  (c) Reorder milestones — the risk priority is wrong
-  (d) Too much / too little — adjust scope before starting
-Do NOT proceed until approved.
-
-The skill MUST:
-- Gather context before starting (Step 0)
-- Read the playbook templates for each phase
-- Walk the user through each phase interactively — not dump templates
-- Complete each phase before moving to the next
-- Wait for human approval at every gate — never auto-advance
-- Reference docs/footguns.md and docs/architecture.md during planning
-- Keep plans specific to THIS project's stack, not generic
-
-The skill MUST NOT:
-- Skip any phase without human permission
-- Auto-approve its own output at any gate
-- Generate code during planning (Plan mode only)
-- Proceed past a human gate without explicit approval
-- Answer its own elaboration questions (Phase 2)
-
-The skill MAY:
-- Skip Phases 2 + 3 for Standard features
-- Compress to brief only for Hotfixes
-
-## Learning Loop
-
-If this planning run uncovered a lesson or footgun, update the
-relevant doc before closing:
-- Behavioural mistake → docs/lessons.md
-- Architectural trap with file:line evidence → docs/footguns.md
+## Phase 2 — Mob Elaboration
+
+Generate 3-5 sharp questions about the brief — questions that could change
+the design if answered differently.
+
+**Do NOT answer your own questions.** Present them and STOP. Wait for the
+user to answer. If the user says "answer them yourself," that's permission
+to proceed — but the default is to wait.
+
+**CHECKPOINT:** "Questions answered. Proceeding to approach analysis."
+
+## Phase 3 — Triangular Tension Analysis
+
+Generate 2-3 competing approaches for the implementation. For each approach,
+evaluate from three perspectives:
+
+- **SKEPTIC:** What could go wrong? What's the worst case? What are we assuming that might be false?
+- **ANALYST:** What does the data/evidence say? What's the cost/benefit? What are the measurable trade-offs?
+- **STRATEGIST:** What's the path to shipping? What's the fastest way to learn if this works?
+
+Use extended thinking for competing-plan generation before committing to output.
+
+Present a comparison table:
+
+| Criterion | Approach A | Approach B | Approach C |
+|-----------|-----------|-----------|-----------|
+| Risk | ... | ... | ... |
+| Effort | ... | ... | ... |
+| Speed to feedback | ... | ... | ... |
+| Reversibility | ... | ... | ... |
+
+Recommend one approach with reasoning. Tag any decisions made with incomplete
+data as **Decision Debt** — to be revisited in later milestones.
+
+> For multi-agent teams: see `workflow/playbooks/planning/sbao-ranking.md` for
+> the full SBAO process with external sessions and sub-agents. The triangular
+> tension analysis above is the single-agent default.
+
+**BLOCKING GATE:** "Recommended approach: [A]. Proceed to milestones?"
+
+## Phase 4 — Milestones
+
+Structure implementation as milestones using these archetypes:
+<!-- ADAPT: Rename or reorder for your process -->
+1. **Prove It Works** — smallest slice that validates the approach
+2. **Make It Real** — core functionality, happy path complete
+3. **Make It Solid** — error handling, edge cases, tests
+4. **Make It Shine** — performance, polish, documentation
+
+Each milestone must have:
+- Clear deliverable (what ships)
+- Exit criteria (how to know it's done)
+- Kill criteria (what would make us stop here)
+- Depends on (which milestone must complete first)
+
+After completing each milestone, re-read the NEXT milestone and rewrite it
+based on what you learned. Plans evolve — the Phase 4 milestones written
+before implementation are hypotheses, not commitments.
+
+**BLOCKING GATE:** Present milestones. "Approve and start implementing?"
+
+## Common Failure Modes
+
+1. **Brief dump** — agent presents all 8 sections at once. Walk through one at a time.
+2. **Self-answering elaboration** — agent answers its own Phase 2 questions. Wait for the user.
+3. **Stale continuation** — agent resumes from a plan that no longer matches the code. Check staleness.
+
+## Constraints
+
+<!-- FIXED: Do not adapt these -->
+- MUST walk through brief sections one at a time, not dump all at once
+- MUST NOT answer your own elaboration questions
+- MUST surface kill criteria in Phase 1, not defer to Phase 4
+- MUST tag low-confidence decisions as Decision Debt
+- MUST re-read next milestone after completing each one
+- MUST NOT fabricate file paths or function names
+- MUST audit sub-agent output if using multi-agent SBAO (lessons.md #5)
+
+## Output Format
+
+Phase 1: Feature brief (8 sections, walked through individually)
+Phase 3: Comparison table + recommendation
+Phase 4: Milestone cards with deliverable, exit criteria, kill criteria, dependencies
 
 ## Chains With
 
-- goat-investigate — research before planning
-- goat-test — verify implementation against plan
+- /goat-investigate — need research before planning
+- /goat-test — milestones need verification plans
+- /goat-review — plan needs review before implementation starts
 
-VERIFICATION:
-- Verify skill file exists at the correct path
-- Verify all 4 phases are documented with human gates
-- Verify the skill references workflow/playbooks/planning/
-- Verify Step 0 context gathering is present
-- Verify "walk through interactively" constraint is present
-
-## Output
-
-Feature brief, optional prime plan, and milestone specs with tasks, exit criteria, and human testing gates.
-```
+**Handoff shape:** `{feature_brief, approach_chosen, milestones, kill_criteria}`

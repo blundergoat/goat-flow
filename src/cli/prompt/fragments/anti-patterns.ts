@@ -1,4 +1,5 @@
 import type { Fragment } from '../types.js';
+import { SKILL_VERSION } from '../../constants.js';
 
 /**
  * Anti-pattern fix fragments (12 keys)
@@ -113,19 +114,7 @@ settings.local.json
 .env
 \`\`\``,
   },
-  {
-    key: 'ap-prune-settings-local',
-    phase: 'anti-pattern',
-    category: 'Anti-Pattern Fix',
-    kind: 'fix',
-    instruction: `\`settings.local.json\` has grown beyond 50 lines. This file accumulates one-off session approvals as permanent policy.
-
-Audit it:
-1. Remove single-use debugging commands (inline scripts, cat/echo to /tmp)
-2. Remove commands from completed tasks that are no longer needed
-3. Keep only permanently needed overrides (test runners, build tools)
-4. Target: under 20 intentional lines. Over 50 triggers this anti-pattern.`,
-  },
+  // AP10 (ap-prune-settings-local) removed — settings.local.json is personal preference.
   {
     key: 'ap-fix-empty-scaffolding',
     phase: 'anti-pattern',
@@ -146,11 +135,64 @@ Empty scaffolding provides no value and creates a false sense of completeness.`,
     kind: 'fix',
     instruction: `\`docs/footguns.md\` contains file:line references to files that no longer exist. Stale references mislead agents.
 
+**Stale refs found:** {{evidence.ap-fix-stale-references}}
+
 For each stale reference:
 1. If the file was **renamed**: update the path to the new location
 2. If the file was **deleted**: remove the footgun entry or update with current evidence
 3. If the footgun is **no longer relevant**: remove the entire entry
 
 Every file:line reference must point to a real file on disk.`,
+  },
+  {
+    key: 'ap-fix-stale-instruction-refs',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `\`{{instructionFile}}\` contains backtick-wrapped code paths that don't exist on disk.
+
+**Stale refs found:** {{evidence.ap-fix-stale-instruction-refs}}
+
+For each stale reference:
+1. If the file was **renamed**: update the path (check \`git log --diff-filter=R --summary\`)
+2. If the file was **deleted**: remove the reference
+3. If the path is a **typo**: fix it
+
+Every code path in the instruction file should resolve to a real file.`,
+  },
+  {
+    key: 'ap-fix-duplicate-skills',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `This project has both generic and goat-prefixed versions of the same skill. This causes agent confusion about which to invoke.
+
+For each duplicate pair:
+1. Compare the content of both versions
+2. Keep the \`goat-*\` version (it follows the standard template)
+3. Migrate any unique content from the generic version
+4. Delete the generic skill directory`,
+  },
+  {
+    key: 'ap-fix-outdated-skills',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Some skills have outdated or missing version tags. Skills should include \`goat-flow-skill-version\` in their YAML frontmatter to track compatibility.
+
+**Outdated skills:** {{evidence.ap-fix-outdated-skills}}
+
+For each outdated skill:
+1. Read the current template from goat-flow (\`workflow/skills/goat-{name}.md\`)
+2. Compare against your installed version — look for new sections, renamed phases, or structural changes
+3. Update the skill content to match the current template structure
+4. Add or update the frontmatter version tag:
+
+\`\`\`yaml
+---
+name: goat-{name}
+goat-flow-skill-version: "${SKILL_VERSION}"
+---
+\`\`\``,
   },
 ];

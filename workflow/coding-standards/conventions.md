@@ -2,6 +2,10 @@
 
 This is the always-loaded instruction file. Every agent task reads this first.
 
+**Boundary with backend.md / frontend.md:** conventions.md covers cross-language
+concerns (build commands, naming patterns, DO/DON'T rules, dangerous ops).
+Language-specific architecture and patterns go in backend.md or frontend.md.
+
 ---
 
 ## The Prompt

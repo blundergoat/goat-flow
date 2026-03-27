@@ -1,134 +1,146 @@
-# Prompt: Create /goat-debug Skill
-
-Paste this into your coding agent to create the `/goat-debug` skill for your project.
-
 ---
+name: goat-debug
+description: "Diagnosis-first debugging with hypothesis tracking, recurrence checks, and evidence-based fix planning."
+goat-flow-skill-version: "0.7.0"
+---
+# /goat-debug
 
-## The Prompt
-
-```
-Create the /goat-debug skill for this project.
+> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
+> Uses the [Diagnosis Report](output-skeletons.md#diagnosis-report) output skeleton.
 
 ## When to Use
 
-Use when diagnosing a bug or unexpected behavior — especially
-when the root cause is unclear or spans multiple components.
+Use when diagnosing a bug or unexpected behavior — especially when the root
+cause is unclear or spans multiple components.
 
-Purpose: diagnosis-first debugging. The agent gathers context, then
-investigates and produces a diagnosis with evidence BEFORE proposing
-any fix. This prevents the common failure mode of jumping straight
-to fixing without understanding the root cause.
+Purpose: diagnosis-first debugging. The agent gathers context, then investigates
+and produces a diagnosis with evidence BEFORE proposing any fix.
 
-Write the skill file to: .claude/skills/goat-debug/SKILL.md
-(For Codex/Gemini: .agents/skills/goat-debug/SKILL.md)
+**If you want to "just try something" before tracing the code path, STOP.**
+That's the failure mode this skill exists to prevent.
 
-## Step 0 - Gather Context
+**NOT this skill:**
+- Exploring unfamiliar code without a bug → /goat-investigate
+- Reviewing changes for quality → /goat-review
+- Generating test instructions → /goat-test
+- Performance profiling or unclear requirements → general reasoning
 
-Before investigating, the skill MUST ask the user:
+## Step 0 — Gather Context
+
+<!-- ADAPT: Replace illustrative questions (3, 4) with your project's common debug targets -->
+
+**Structural questions (always ask or confirm):**
 1. What's the symptom? (error message, unexpected behaviour, test failure)
-2. How do you reproduce it? (steps, command, or "it happens intermittently")
-3. When did it start? (after a specific change, always been there, or unknown)
-4. What have you already tried? (so the agent doesn't repeat dead ends)
-5. How long before escalating? (default: 15 min or 10 turns — after that, present what you have even if incomplete)
+2. How urgent? Default: 10 turns. After that, present what you have even if incomplete.
 
-Do NOT start investigating until the user has answered. If the user
-says "it's broken, fix it", ask these questions first — blind
-debugging is the failure mode this skill prevents.
+**Illustrative questions (adapt):**
+3. <!-- ADAPT: "Which area? (e.g., auth flow, database queries, API endpoints, build pipeline)" -->
+4. What have you already tried? (so I don't repeat dead ends)
 
-The skill follows a strict 4-phase process:
+**Auto-detect:** Read the error message or test output if provided inline.
+If the user said `/goat-debug the test in auth.test.ts fails with TypeError`,
+confirm: "Symptom: TypeError in auth.test.ts. I'll start with that file. Correct?"
 
-Phase 1 - Investigate (no fixes):
+## Phase 1 — Investigate (no fixes)
 
-RECURRENCE CHECK: Before investigating, search docs/footguns.md +
-docs/lessons.md + agent-evals/ for the symptom or area. If a match
-is found, present it first: "This area has a known issue: [footgun].
-Is this the same problem?" Only proceed to fresh investigation after
-the user confirms it's a new issue.
+**RECURRENCE CHECK:** Before investigating, search `docs/footguns.md` +
+`docs/lessons.md` + `agent-evals/` for the symptom, file path, or module name.
+Search strategy: (a) exact file path, (b) error message keywords, (c) component name.
 
-HYPOTHESIS TRACKING: Write 2-3 hypotheses before tracing. After
-tracing, mark each as CONFIRMED, ELIMINATED, or UNRESOLVED with
-evidence.
+If a match is found, present it first: "This area has a known issue: [footgun].
+Is this the same problem?" Only proceed to fresh investigation after the user
+confirms it's a new issue.
 
-- Read the actual code paths involved, tracing end-to-end
-- Identify the failure point with file:line evidence
-- Check related files for cross-boundary effects
-- Document the chain: trigger → propagation → symptom
-- Check docs/footguns.md — has this area bitten someone before?
+**HYPOTHESIS TRACKING:** After reading Step 0 context but BEFORE tracing code,
+write 2-3 hypotheses. Hypotheses MUST span at least 2 categories:
+- Data (wrong input, missing field, encoding)
+- Logic (off-by-one, wrong condition, fence-post error)
+- Timing (race condition, async ordering, timeout)
+- Environment (config, dependency version, platform difference)
+- Configuration (wrong setting, missing env var, stale cache)
 
-"If you want to 'just try something' before tracing the code path,
-STOP. That impulse is the failure mode this skill prevents."
+Include at least one boundary/counting hypothesis if the bug involves loops,
+indices, arrays, or pagination.
 
-Phase 2 - Report findings:
-- Present diagnosis with file:line evidence for every claim
-- State the root cause (not just the symptom)
-- List affected files and components
-- Rank by severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
-- Note uncertainty: "I believe X because Y, but haven't verified Z"
-- Rate confidence:
-  - High = reproduced with a test
-  - Medium = traced with file:line evidence, not yet reproduced
-  - Low = inferred from code reading
+After tracing, mark each: CONFIRMED / ELIMINATED / UNRESOLVED with evidence.
 
-CAN'T REPRODUCE? If the bug cannot be reproduced: document what was
-checked, conditions ruled out, and what information is still needed.
-Don't guess — say what you know and what you don't.
+**CAN'T REPRODUCE?** If you can't reproduce after 5 file reads:
+1. Log what you checked and what you expected to find
+2. Suggest logging additions at suspected locations
+3. Ask the user for more reproduction context
 
-HUMAN GATE: Present the diagnosis. Ask "Want me to (a) trace deeper
-into a specific area, (b) check related code for cascading effects,
-(c) propose a fix, or (d) check footguns for similar past issues?"
-Do NOT proceed to Phase 3 until the user confirms.
+Use extended thinking for hypothesis generation before committing to a trace path.
 
-Phase 3 - Propose fix (only after human reviews Phase 2):
-- Propose a fix plan (not the fix itself)
-- If the human disagrees, return to Phase 1
-- If approved, ask: "Should I implement this fix, or do you want to?"
+## Phase 2 — Diagnosis
 
-Phase 4 - Post-fix verification (only after human says fix is applied):
-This phase activates ONLY when the human confirms a fix has been
-applied. Do not enter this phase unprompted.
-- Re-run the investigation trace from Phase 1
-- Confirm the divergence point is resolved
-- If resolved: confirm fix and note which hypothesis was correct
-- If NOT resolved: report what changed and what didn't, then return to Phase 1
+Present findings using the Diagnosis Report skeleton:
+- Root cause with **confidence level**: HIGH (reproduced) / MEDIUM (traced to cause) / LOW (inferred from patterns)
+- Hypothesis table with status
+- Reproduction steps: "1, 2, 3 → expected: [X], actual: [Y]"
 
-The skill MUST:
-- Gather context before investigating (Step 0)
-- Check for recurrence before fresh investigation (Phase 1)
-- Read actual code before forming hypotheses (no fabrication)
-- Provide file:line evidence for every finding
-- Complete Phase 2 before entering Phase 3
-- Stop and wait for human review between Phase 2 and Phase 3
-- Only enter Phase 4 when the human says a fix was applied
+**Confidence floor:** Do not advance to Phase 3 if ALL findings are LOW confidence.
+Return to Phase 1 for deeper investigation, or present partial findings and ask
+the user whether to proceed or dig deeper.
 
-The skill MUST NOT:
-- Skip to fixing without completing the investigation
-- Fabricate file paths or line numbers
-- Apply fixes without human approval of the diagnosis
-- Guess at root causes without reading the code
-- Enter Phase 4 unprompted
+**BLOCKING GATE:** Present diagnosis. Offer:
+(a) investigate deeper — I'm not confident yet
+(b) propose a fix plan
+(c) this matches a known issue — close
+(d) something else
 
-VERIFICATION:
-- Verify skill file exists at the correct path
-- Verify Step 0 context gathering is present
-- Verify 4-phase structure (investigate, report, propose fix, post-fix verification)
-- Verify hard gate between Phase 2 and Phase 3
-- Verify output format template is included
+This gate is the core value of the skill. Skipping diagnosis is how 3-hour
+debugging sessions start.
 
-## Learning Loop
+## Phase 3 — Fix Plan
 
-If this run uncovered a lesson or footgun, update the relevant doc
-before closing:
-- Behavioural mistake → docs/lessons.md
-- Architectural trap with file:line evidence → docs/footguns.md
+Only if human approved. Propose a fix plan (not the fix itself):
+- **What changes:** specific files and functions
+- **Blast radius:** what else could break
+- **Architecture check:** verify fix doesn't violate constraints in `docs/architecture.md`
+- **Verification:** how to confirm the fix worked (specific test or command)
+
+<!-- ADAPT: Add your project's specific verification commands -->
+
+"Should I implement this fix?"
+
+If yes → implement. Then auto-transition to Phase 4 (skip redundant "confirm fix applied" when the agent did the work).
+
+## Phase 4 — Post-Fix Verification
+
+If a fix was applied (by agent or human):
+1. Run the specific verification from Phase 3
+2. Check for regressions in related areas
+3. Grep for the old pattern if anything was renamed
+
+**Two-corrections rule:** If you've been corrected twice on the same approach,
+stop and rewind. Present what you've tried and ask the human for a different angle.
+
+**CHECKPOINT:** "Fix verified: [pass/fail]. Regressions: [none/found]. Learning loop: [entry needed/none]."
+
+## Common Failure Modes
+
+1. **"Just try something"** — agent patches without understanding. Phase 1 prevents this.
+2. **Single-track hypothesis** — 3 variations of the same theory. The 2-category rule prevents this.
+3. **Premature fix** — agent proposes a fix with LOW confidence. The confidence floor prevents this.
+
+## Constraints
+
+<!-- FIXED: Do not adapt these -->
+- MUST write hypotheses BEFORE tracing code paths (after reading Step 0 context)
+- MUST include at least 2 hypothesis categories
+- MUST NOT propose fixes until human reviews diagnosis (Phase 2→3 gate)
+- MUST NOT fabricate file paths or function names
+- MUST check recurrence against footguns + lessons before fresh investigation
+- MUST verify fix doesn't violate architecture constraints
+
+## Output Format
+
+Use the Diagnosis Report skeleton from `output-skeletons.md`.
 
 ## Chains With
 
-- goat-investigate — dig deeper into the root cause area
-- goat-test — regression test after fix is applied
+- /goat-test — bug fixed, need verification plan
+- /goat-investigate — root cause unclear, need deeper exploration
+- /goat-review — fix ready, needs review before merge
 
-## Output
-
-Structured diagnosis with symptom, hypotheses (confirmed/eliminated),
-evidence chain (file:line references), severity, root cause, and
-proposed fix — presented for human review before any changes.
-```
+**Handoff shape:** `{bug_description, root_cause, confidence, fix_applied, files_changed}`

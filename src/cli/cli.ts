@@ -47,7 +47,7 @@ Arguments:
 
 Flags:
   --format <type>   Output format: json, text (default: auto)
-  --agent <id>      Filter to one agent: claude, codex, gemini, all
+  --agent <id>      Filter to one agent: claude, codex, gemini
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
   --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
@@ -59,7 +59,7 @@ Examples:
   goat-flow scan --format json       Force JSON output
   goat-flow setup --agent claude     Setup prompt for Claude
   goat-flow setup --agent codex      Setup prompt for Codex
-  goat-flow setup --agent all        Setup prompt for all agents
+  goat-flow setup --agent gemini      Setup prompt for Gemini
   goat-flow --min-score 75           CI gate: fail if below 75%
   goat-flow eval                     Summarize agent evals
   goat-flow eval --format json       Eval summary as JSON
@@ -121,12 +121,15 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   }
 
   // Validate agent
-  let agent: AgentId | 'all' | null = null;
+  let agent: AgentId | null = null;
   if (values.agent) {
-    if (['claude', 'codex', 'gemini', 'all'].includes(values.agent) === false) {
-      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini, all`, 2);
+    if (values.agent === 'all') {
+      throw new CLIError(`--agent all is no longer supported. Run setup separately for each agent: --agent claude, --agent codex, --agent gemini`, 2);
     }
-    agent = values.agent as AgentId | 'all';
+    if (['claude', 'codex', 'gemini'].includes(values.agent) === false) {
+      throw new CLIError(`Invalid agent: ${values.agent}. Use: claude, codex, gemini`, 2);
+    }
+    agent = values.agent as AgentId;
   }
 
   // Parse min-score
@@ -189,16 +192,14 @@ async function handleSetupCommand(options: ParsedCLI, report: ScanReport): Promi
   const { composeSetup, composeInlineSetup, composeMultiAgentSetup } = await import('./prompt/compose-setup.js');
   const { renderPrompt } = await import('./prompt/render.js');
 
-  // Determine which agents to generate prompts for
-  /** List of agent IDs to generate prompts for (filtered or all detected) */
-  const agentIds: AgentId[] = options.agent === 'all'
-    ? ['claude', 'codex', 'gemini']
-    : options.agent
-      ? [options.agent]
-      : report.agents.map(a => a.agent);
+  // Determine which agent to generate prompt for
+  /** List of agent IDs to generate prompts for */
+  const agentIds: AgentId[] = options.agent
+    ? [options.agent]
+    : report.agents.map(a => a.agent);
 
   if (agentIds.length === 0) {
-    throw new CLIError('No agents detected. Use --agent claude, --agent codex, --agent gemini, or --agent all', 1);
+    throw new CLIError('No agents detected. Use --agent claude, --agent codex, or --agent gemini', 1);
   }
 
   // Multi-agent: deduplicated output with shared files once + per-agent sections
@@ -318,7 +319,7 @@ async function main(): Promise<void> {
   const fs = createFS(options.projectPath);
   /** Full scan report containing per-agent scores and check results */
   const report = scanProject(fs, options.projectPath, {
-    agentFilter: options.agent === 'all' ? null : options.agent,
+    agentFilter: options.agent ?? null,
   });
 
   if (options.command === 'scan') {

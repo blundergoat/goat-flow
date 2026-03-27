@@ -27,12 +27,13 @@ export const fullChecks: CheckDef[] = [
       fn: (ctx: FactContext): CheckResult => {
         // Number of eval files found in agent-evals/
         const count = ctx.facts.shared.evals.count;
-        if (count >= 3) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `${count} eval files` };
-        if (count >= 1) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 3+)` };
-        return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: 'No eval files' };
+        if (count >= 5) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `${count} eval files` };
+        if (count >= 3) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 5+)` };
+        if (count >= 1) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 5+)` };
+        return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: 'No eval files' };
       },
     },
-    recommendation: 'Add 3+ agent eval files with replay prompts',
+    recommendation: 'Add 5+ agent eval files with replay prompts',
     recommendationKey: 'add-evals',
   },
   {
@@ -64,6 +65,21 @@ export const fullChecks: CheckDef[] = [
     },
     recommendation: 'Add **Origin:** real-incident | synthetic-seed to eval files',
     recommendationKey: 'add-origin-labels',
+  },
+  {
+    id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
+    pts: 0, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
+        status: ctx.facts.shared.evals.hasAgentsLabels ? 'pass' : 'fail',
+        points: 0, maxPoints: 0, confidence: 'high',
+        message: ctx.facts.shared.evals.hasAgentsLabels ? 'Evals have Agents labels' : 'Evals missing **Agents:** labels (all | codex | claude | gemini)',
+      }),
+    },
+    recommendation: 'Add **Agents:** all | codex | claude | gemini to eval files',
+    recommendationKey: 'add-agents-labels',
   },
   {
     id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals',
@@ -169,24 +185,21 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'create-handoff-template',
   },
   {
+    id: '3.3.1a', name: 'Handoff template has required sections', tier: 'full', category: 'Hygiene',
+    pts: 0, confidence: 'medium',
+    na: (ctx) => !ctx.facts.shared.handoffTemplate.exists,
+    detect: { type: 'grep_count', path: 'tasks/handoff-template.md', pattern: '## Status|## Current State|## Key Decisions|## Known Risks|## Next Step', min: 4 },
+    recommendation: 'Add required sections to handoff template: Status, Current State, Key Decisions, Known Risks, Next Step',
+    recommendationKey: 'fix-handoff-sections',
+  },
+  {
     id: '3.3.2', name: 'RFC 2119 language', tier: 'full', category: 'Hygiene',
     pts: 1, confidence: 'high',
-    detect: { type: 'grep_count', path: '{instruction_file}', pattern: '\\bMUST\\b|\\bSHOULD\\b|\\bMAY\\b', min: 3 },
+    detect: { type: 'grep_count', path: '{instruction_file}', pattern: '\\bMUST\\b|\\bSHOULD\\b|\\bMAY\\b', min: 10 },
     recommendation: 'Use RFC 2119 language (MUST/SHOULD/MAY) in instruction file',
     recommendationKey: 'add-rfc2119',
   },
-  {
-    id: '3.3.3', name: 'Version/changelog', tier: 'full', category: 'Hygiene',
-    pts: 1, confidence: 'high',
-    detect: {
-      type: 'composite', mode: 'any', checks: [
-        { type: 'grep', path: '{instruction_file}', pattern: 'version.*history|changelog' },
-        { type: 'file_exists', path: 'CHANGELOG.md' },
-      ],
-    },
-    recommendation: 'Add version history or CHANGELOG.md',
-    recommendationKey: 'add-changelog',
-  },
+  // 3.3.3 (changelog) removed — CHANGELOG.md is a project-level concern, not an AI workflow check.
   {
     id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene',
     pts: 2, confidence: 'medium',

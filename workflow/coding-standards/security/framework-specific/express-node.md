@@ -151,7 +151,7 @@ app.post('/users',
 );
 
 // DON'T — trust req.body directly
-app.post('/users', (req, res) => {
+app.post('/users', async (req, res) => {
   const user = await User.create(req.body);  // no validation, mass assignment
 });
 ```

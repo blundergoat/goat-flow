@@ -1,159 +1,135 @@
-# Prompt: Create /goat-audit Skill
-
-Paste this into your coding agent to create the `/goat-audit` skill for your project.
-
 ---
+name: goat-audit
+description: "Multi-phase quality audit with negative verification, fabrication self-check, and pattern rollup."
+goat-flow-skill-version: "0.7.0"
+---
+# /goat-audit
 
-## The Prompt
-
-```
-Create the /goat-audit skill for this project.
+> Follows [shared-preamble.md](shared-preamble.md) for severity scale, evidence standard, gates, and learning loop.
+> Uses the [Findings Report](output-skeletons.md#findings-report) output skeleton.
 
 ## When to Use
 
-Use when running a quality audit on the codebase: systematic codebase quality
-review, before major releases, or when investigating a class of issues across
-the codebase. More thorough than a normal code review — a systematic audit.
+Use for systematic quality review of a codebase area — before releases,
+after major changes, or when code quality is uncertain.
 
-Write the skill file to: .claude/skills/goat-audit/SKILL.md
-(For Codex/Gemini: .agents/skills/goat-audit/SKILL.md)
+**NOT this skill:**
+- Reviewing a specific diff or PR → /goat-review
+- OWASP-driven security assessment → /goat-security
+- Investigating to understand code → /goat-investigate
+- Diagnosing a specific bug → /goat-debug
 
-## Step 0 - Gather Context
+## Step 0 — Gather Context
 
-Before auditing, the skill MUST ask the user:
-1. What's the scope? (whole repo, specific directory, specific concern
-   like "security" or "cross-references")
-2. Why now? (pre-release, investigating a class of issues, routine check)
-3. Any areas to focus on? (or "cast a wide net")
-4. Any known issues to skip? (so the audit doesn't flag things already
-   being tracked)
-5. What's the purpose? (security audit, pre-release quality gate,
-   consistency check, etc. — this drives category weighting in Pass 1)
-6. Any known false positives to skip? Check `docs/audit-allowlist.md`
-   if it exists.
+<!-- ADAPT: Replace illustrative questions with your project's common audit targets -->
 
-Do NOT start scanning until the user has answered. An unscoped audit
-wastes passes on irrelevant areas.
+**Structural questions (always ask or confirm):**
+1. What's the scope and purpose? (e.g., "security audit of src/auth/", "consistency check across all docs")
 
-The skill follows a strict multi-pass process:
+**Illustrative questions (adapt):**
+2. <!-- ADAPT: "Which categories matter most? (security, correctness, consistency, test coverage)" -->
+3. <!-- ADAPT: "Any areas to skip? (generated code, vendor, known tech debt)" -->
 
-Pass 0 - Scope Declaration:
-- Before scanning, declare in writing:
-  - Target directories/files (list exactly what will be scanned)
-  - Out-of-scope areas (what will NOT be scanned)
-  - Expected file count (approximate number of files in scope)
-- If >15 files in scope, ask the user to narrow before proceeding
-- HUMAN GATE: "Here's the declared scope. Want me to (a) adjust the
-  scope, (b) proceed to scanning?"
+**Auto-detect:** Read `git log --oneline -10` and branch state to suggest scope.
+Present: "Based on recent activity, I'd suggest auditing [area]. Correct?"
 
-Pass 1 - Scan:
-- Read the target files/directories systematically
-- Log every potential finding with file:line evidence
-- Cast a wide net — include anything that might be an issue
-- Scope-adaptive categories — weight categories based on the stated
-  purpose. A security-focused audit weights security findings higher
-  than style issues. A consistency audit weights cross-reference
-  integrity higher than performance
-- Categories (ordered by default severity): security, correctness,
-  cross-reference integrity, performance, consistency, completeness,
-  shell script correctness, test coverage gaps, architectural concerns,
-  style
-- Scope discipline: issues found outside the declared scope go to a
-  separate "Out of Scope" section — don't mix them with in-scope
-  findings
-- Report: "Pass 1 complete. Found [N] potential findings ([M]
-  out-of-scope). Starting verification."
-- HUMAN GATE: "Want me to (a) re-examine specific areas, (b) expand
-  the audit scope, (c) narrow the scope, (d) proceed to verification?"
+**Scope guidance:** For >20 files, recommend splitting into focused audits.
+For ≤8 files, intermediate checkpoints auto-advance.
 
-Pass 2 - Verify:
-- Re-read each finding from Pass 1 against the actual code
-- Remove false positives (findings that don't hold up on second look)
-- Remove duplicate findings
-- Strengthen evidence for remaining findings
-- Negative verification: for each finding, attempt to DISPROVE it.
-  Ask: "Can I prove this is wrong?" Actively look for evidence that
-  contradicts each finding. A finding that survives disproof is
-  stronger than one that was never challenged
-- Report: "[N] findings remain after removing [N] false positives."
-- HUMAN GATE: "Want me to (a) re-examine specific findings, (b)
-  expand the audit scope, (c) narrow the scope, (d) proceed to
-  ranking?"
+## Phase 1 — Scan
 
-Pass 3 - Rank:
-- Use severity scale: SECURITY > CORRECTNESS > INTEGRATION >
-  PERFORMANCE > STYLE
-- Critical: data loss, security vulnerability, broken functionality
-- High: bugs, missing enforcement, broken cross-references
-- Medium: inconsistencies, stale docs, missing tests
-- Low: style issues, minor improvements, cosmetic
-- Group related findings
-- HUMAN GATE: "Want me to (a) re-examine specific findings, (b)
-  expand the audit scope, (c) narrow the scope, (d) proceed to
-  self-check?"
+<!-- ADAPT: Adjust category list and weights for your project -->
 
-Pass 4 - Self-check:
-- For each remaining finding, ask: "Did I fabricate this?"
-- Re-verify file:line references are correct and current
-- Remove any finding where the evidence doesn't hold up
-- Flag any finding where confidence is low
-- Report: "[N] findings remain after removing [N] in self-check."
+Scan categories, weighted by audit purpose:
 
-Pass 5 - Pattern Rollup:
-- After individual findings are verified, summarize systemic patterns
-- If the same class of issue appears 3+ times, roll it up:
-  "Found [N] instances of [pattern] — this is a systemic pattern,
-  not [N] separate issues."
-- List individual instances as sub-items under the pattern
-- Recommend addressing the pattern at its root rather than fixing
-  instances one by one
+| Category | Security audit | Consistency audit | General |
+|----------|---------------|-------------------|---------|
+| Security | Critical | Medium | High |
+| Correctness | High | Medium | High |
+| Cross-reference integrity | Medium | Critical | Medium |
+| Test coverage | Medium | Low | High |
+| Performance | Low | Low | Medium |
+| Consistency | Low | Critical | Medium |
+| Style | Low | Low | Low |
 
-Present Results:
-Present the full audit to the user.
-HUMAN GATE: "Want me to (a) re-examine specific findings, (b) expand
-the audit scope, (c) narrow the scope, (d) wrap up the audit?"
+For each finding, log: category, `file:line`, description, severity.
+Use Agent tool for parallel scanning of independent areas.
 
-The skill MUST:
-- Gather context before scanning (Step 0)
-- Declare scope before scanning (Pass 0)
-- Complete all passes in order
-- Provide file:line evidence for every finding
-- Include the self-check pass (Pass 4) — this catches fabrication
-- Report how many findings were removed in each pass
-- Keep out-of-scope findings separate from in-scope findings
+**CHECKPOINT:** "Phase 1 complete. [N] findings across [M] files. Proceeding to verification."
 
-The skill MUST NOT:
-- Report findings without file:line evidence
-- Skip the self-check pass
-- Fabricate file paths or line numbers
-- Propose fixes (the audit reports — it does not fix)
+**Recurrence check:** Before reporting, search `docs/footguns.md` for entries
+in the scanned area. Cross-reference findings with known footguns.
 
-## Learning Loop
+## Phase 2 — Verify & Self-Check
 
-If this audit run uncovered a lesson or footgun, update the relevant
-doc before closing:
-- Behavioural mistake -> docs/lessons.md
-- Architectural trap with file:line evidence -> docs/footguns.md
+Two activities in one phase (previously separate passes):
+
+**A) Negative verification:** For each finding, attempt to DISPROVE it.
+Re-read the code at the cited `file:line`. Look for evidence that contradicts
+the finding. The goal is adversarial: "Can I prove this finding is wrong?"
+Remove genuine false positives.
+
+**B) Fabrication self-check:** Re-verify every `file:line` reference.
+Does the file exist? Does the cited line contain what the finding claims?
+Remove any finding where the evidence doesn't hold up.
+
+**Self-diagnostic ratios:**
+- If >50% of findings removed in this phase → initial scan was too noisy. Note this.
+- If >20% removed by fabrication check → agent was confabulating. Flag to user.
+
+**CHECKPOINT:** "[N] findings remain after removing [M] false positives. Proceeding to ranking."
+
+## Phase 3 — Rank & Rollup
+
+Rank surviving findings by severity (see shared preamble).
+
+**Pattern rollup:** If 3+ findings share a root cause, group them:
+"This is a systemic pattern, not [N] separate issues: [pattern description]."
+
+**Out-of-scope findings:** Issues discovered outside the declared scope go
+in a separate section — don't bury them, but don't let them dilute the audit.
+
+**Anti-fix discipline:** Review your output for fix language. Rephrase any
+recommendations as findings. Audits report — they don't fix.
+
+## Phase 4 — Present
+
+Use the Findings Report skeleton. Include:
+- Findings by severity with footgun MATCH/CLEAR
+- "What I Didn't Examine" — areas within scope that were skipped
+- Pattern rollup for systemic issues
+- Out-of-scope findings (separate section)
+
+**BLOCKING GATE:** Present final report. Offer:
+(a) drill into a specific finding
+(b) expand to a related area
+(c) check a specific category more deeply
+(d) close the audit
+
+## Common Failure Modes
+
+1. **Fix proposals** — agent recommends solutions instead of reporting findings. The anti-fix discipline check prevents this.
+2. **Rubber-stamp self-check** — agent confirms its own findings without re-reading. The fabrication ratio threshold catches this.
+3. **Gate fatigue** — user says "proceed" at every checkpoint without reading. Collapsing intermediate gates to CHECKPOINTs helps.
+
+## Constraints
+
+<!-- FIXED: Do not adapt these -->
+- MUST attempt to disprove each finding (negative verification)
+- MUST NOT propose fixes — audit reports only
+- MUST re-verify file:line references in self-check
+- MUST group 3+ related findings as systemic patterns
+- MUST separate out-of-scope findings from in-scope findings
+- MUST NOT fabricate file paths or function names
+
+## Output Format
+
+Use the Findings Report skeleton from `output-skeletons.md`.
 
 ## Chains With
 
-- goat-review — audit findings become a review checklist
-- goat-security — security-specific audit pass
+- /goat-review — audit findings become a review checklist for specific changes
+- /goat-security — audit reveals security concerns → deeper assessment
+- /goat-debug — audit finds a specific bug → diagnosis needed
 
-VERIFICATION:
-- Verify skill file exists at the correct path
-- Verify Step 0 context gathering is present
-- Verify Pass 0 scope declaration is present
-- Verify multi-pass structure with fabrication self-check at Pass 4
-- Verify pattern rollup at Pass 5
-- Verify MUST NOT propose fixes constraint is present
-- Verify output format template is included
-- Verify Learning Loop section is present
-- Verify Chains With section is present
-
-## Output
-
-Multi-pass audit report with scope declaration, findings grouped by severity
-(critical/high/medium/low), systemic pattern rollup, out-of-scope section,
-and file:line evidence for each finding.
-```
+**Handoff shape:** `{scope, findings_by_severity, patterns, out_of_scope_findings}`

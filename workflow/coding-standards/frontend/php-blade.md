@@ -7,6 +7,8 @@ Reference for generating `ai/instructions/frontend.md` in Laravel projects using
 - Use anonymous Blade components (`x-` prefix) over `@include` for reusable UI.
 - Components live in `resources/views/components/`. File name maps to tag: `alert.blade.php` = `<x-alert />`.
 - Use `{{ $slot }}` for content projection, `{{ $attributes }}` for attribute forwarding.
+- When interoperating with Alpine, Vue, or other colon-prefixed attributes, use
+  `::attribute` so Blade does not treat the binding as PHP.
 
 ```blade
 {{-- DO — component with typed props --}}
@@ -64,7 +66,8 @@ Reference for generating `ai/instructions/frontend.md` in Laravel projects using
 
 - Livewire components for interactive UI that would otherwise need a JS framework.
 - Keep Livewire component classes thin — delegate business logic to actions/services.
-- Use `wire:model.blur` over `wire:model.live` to avoid excessive server round-trips.
+- Use `wire:model.blur` for form-style validation, or a debounced
+  `wire:model.live` only when the UX truly needs live feedback such as search.
 - Avoid Livewire for static pages or simple forms — a standard form POST is simpler.
 
 ```blade

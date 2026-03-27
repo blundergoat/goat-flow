@@ -1,6 +1,7 @@
 ---
 name: goat-reflect
 description: "Propose instruction file edits based on session friction and observable signals"
+goat-flow-skill-version: "0.7.0"
 ---
 # /goat-reflect
 

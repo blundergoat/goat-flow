@@ -2,46 +2,55 @@
 
 Reference for generating `ai/instructions/frontend.md` in iOS projects.
 
-## SwiftUI State Management
+## SwiftUI State and Observation
 
-- `@State` for private, view-local state. Owned by the view, never passed in from outside.
-- `@Binding` for child views that need to read and write a parent's state.
-- `@ObservedObject` for injected view models. The parent owns the instance.
-- `@StateObject` for view models the view itself creates. Use this when the view is the owner.
-- `@EnvironmentObject` for dependency-injected shared state across the view tree.
+- For iOS 17+ / macOS 14+ new code, prefer the Observation framework:
+  `@Observable` models, `@State` for owned models, `@Bindable` for editable
+  child access, and `@Environment(Type.self)` for shared dependencies.
+- Keep `ObservableObject`, `@StateObject`, `@ObservedObject`, and
+  `@EnvironmentObject` for older deployment targets or existing codebases that
+  already use Combine-based observation.
+- `@Binding` remains the right tool for child views that edit a parent's simple
+  value state.
 
 ```swift
-// DO — clear ownership
-struct ProfileView: View {
-    @StateObject private var viewModel = ProfileViewModel()
+// DO — Observation-based ownership
+@Observable
+final class ProfileModel {
+    var user: User
+    var isEditing = false
 
-    var body: some View {
-        VStack {
-            Text(viewModel.user.name)
-            EditButton(isEditing: $viewModel.isEditing)
-        }
+    init(user: User) {
+        self.user = user
     }
 }
 
-struct EditButton: View {
-    @Binding var isEditing: Bool
+struct ProfileView: View {
+    @State private var model = ProfileModel(user: .mock)
 
     var body: some View {
-        Button(isEditing ? "Done" : "Edit") {
-            isEditing.toggle()
-        }
+        ProfileEditor(model: model)
     }
 }
 
-// DON'T — @ObservedObject for owned state (recreated on re-render)
+struct ProfileEditor: View {
+    @Bindable var model: ProfileModel
+
+    var body: some View {
+        Toggle("Editing", isOn: $model.isEditing)
+    }
+}
+
+// DON'T — recreate owned legacy observable state on every render
 struct ProfileView: View {
-    @ObservedObject var viewModel = ProfileViewModel() // WRONG: loses state
+    @ObservedObject var viewModel = ProfileViewModel()
 }
 ```
 
 ## MVVM Pattern
 
-- One `ViewModel` per screen/feature. View models are `@Observable` (iOS 17+) or `ObservableObject`.
+- One view model or observable model per screen/feature. Use `@Observable` for
+  modern targets, `ObservableObject` for older targets.
 - View models handle business logic, data fetching, and state. Views only render and forward user actions.
 - DO NOT put networking or database code directly in views.
 
@@ -104,7 +113,8 @@ struct RootView: View {
 
 - Use `async`/`await` for all asynchronous work. GCD (`DispatchQueue`) is legacy.
 - Mark view model methods that update UI state with `@MainActor`.
-- Use `Task` in views to launch async work from synchronous contexts (`.task` modifier preferred).
+- Use `.task` for view-driven async work so SwiftUI can cancel it when the view
+  disappears or the task identity changes.
 
 ```swift
 // DO — structured concurrency
@@ -150,8 +160,13 @@ func testLoadUsers() async {
 ## Common Footguns
 
 - **Main thread violations**: Updating `@Published` properties from a background thread crashes. Use `@MainActor` on the view model class or on individual methods.
+- **Observation mismatch**: Mixing Observation (`@Observable`) and legacy
+  `ObservableObject` wrappers in the same feature makes ownership rules hard to
+  follow. Pick one model per feature boundary.
 - **Retain cycles**: Closures capturing `self` in `ObservableObject` subclasses. Use `[weak self]` in escaping closures and completion handlers.
-- **@StateObject vs @ObservedObject**: Using `@ObservedObject` for a view-created instance causes state loss on re-render. Use `@StateObject` for owned instances.
+- **Legacy object ownership**: When supporting older OS targets, use
+  `@StateObject` for view-owned `ObservableObject` instances and
+  `@ObservedObject` for injected ones.
 - **body recomputation**: The `body` property is called frequently. Never perform expensive work (network calls, heavy computation) inside `body`. Use `.task` or `.onAppear`.
 - **ForEach without stable IDs**: `ForEach(items, id: \.self)` on non-unique values causes rendering bugs. Always use a stable, unique identifier.
 - **Large @Observable classes**: A single `@Observable` with 20 properties causes unnecessary re-renders. Split into focused view models per screen.

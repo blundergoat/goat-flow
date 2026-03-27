@@ -62,7 +62,7 @@ export type Detection =
   | { type: 'file_exists'; path: string }
   | { type: 'dir_exists'; path: string }
   | { type: 'grep'; path: string; pattern: string; section?: string }
-  | { type: 'grep_count'; path: string; pattern: string; min: number; section?: string }
+  | { type: 'grep_count'; path: string; pattern: string; min: number; partial?: number; section?: string }
   | { type: 'line_count'; path: string; pass?: number; partial?: number; fail?: number }
   | { type: 'json_valid'; path: string }
   | { type: 'json_contains'; path: string; field: string; pattern?: string }
@@ -168,7 +168,7 @@ export interface SharedFacts {
   lessons: { exists: boolean; hasEntries: boolean; entryCount: number };
   decisions: { dirExists: boolean; fileCount: number };
   architecture: { exists: boolean; lineCount: number };
-  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasReplayPrompts: boolean; evalSkillCount: number };
+  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasAgentsLabels: boolean; hasReplayPrompts: boolean; evalSkillCount: number };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
   handoffTemplate: { exists: boolean };
   ignoreFiles: { copilotignore: boolean; cursorignore: boolean; geminiignore: boolean };
@@ -176,7 +176,7 @@ export interface SharedFacts {
   guidelinesOwnership: { exists: boolean };
   domainReference: { exists: boolean };
   preflightScript: { exists: boolean };
-  changelog: { exists: boolean };
+  // changelog removed — project-level concern, not AI workflow.
   localInstructions: {
     dirExists: boolean;
     // Which directory convention is used: ai/ or .github/
@@ -211,11 +211,15 @@ export interface AgentFacts {
     parsed: unknown;
     hasDenyPatterns: boolean;
   };
-  settingsLocal: { exists: boolean; lineCount: number };
+  // settingsLocal removed — personal preference file, not a project quality signal.
   skills: {
     found: string[];
     missing: string[];
     allPresent: boolean;
+    /** Map from skill name to its embedded goat-flow-skill-version (null if missing) */
+    versions: Record<string, string | null>;
+    /** Number of skills with a version older than the current SKILL_VERSION */
+    outdatedCount: number;
     quality: {
       withStep0: number;
       withHumanGate: number;
@@ -360,8 +364,8 @@ export interface ReadonlyFS {
 export interface CLIOptions {
   projectPath: string;
   format: 'json' | 'text';
-  // Null means scan all detected agents; 'all' explicitly requests every agent
-  agent: AgentId | 'all' | null;
+  // Null means scan all detected agents
+  agent: AgentId | null;
   verbose: boolean;
   // Fail the process if score is below this threshold
   minScore: number | null;

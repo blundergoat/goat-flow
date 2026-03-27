@@ -1,6 +1,6 @@
 # Security Stack Detection
 
-Agents: load `web-common.md` for ALL web projects. Then load the framework-specific file based on detection. Load additional files based on what the project does.
+Agents: load `web-common.md` for ALL web projects. Then load the framework-specific file based on detection. Load additional files based on what the project does. Some overlays, such as Cypress, are additive test-stack overlays and should be loaded alongside the main app framework file, not instead of it.
 
 ## Always Load
 - web-common.md — OWASP Top 10, headers, cookie security
@@ -26,3 +26,4 @@ Agents: load `web-common.md` for ALL web projects. Then load the framework-speci
 | pom.xml/build.gradle + "spring-boot" | framework-specific/spring.md |
 | package.json + "express" | framework-specific/express-node.md |
 | *.csproj + "Microsoft.AspNetCore" | framework-specific/dotnet.md |
+| package.json + "cypress" | framework-specific/cypress.md |

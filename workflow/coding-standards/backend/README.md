@@ -2,6 +2,10 @@
 
 Agents: read this file to identify the backend stack, then load the matching file as a reference when generating `ai/instructions/backend.md`.
 
+**Boundary with conventions.md:** backend.md covers language-specific architecture
+and patterns (service layers, ORM patterns, error handling idioms). Cross-language
+concerns (build commands, naming patterns, DO/DON'T rules) go in conventions.md.
+
 ## Detection Signals
 
 | Signal | Stack file |

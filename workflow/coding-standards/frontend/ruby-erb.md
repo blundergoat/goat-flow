@@ -84,7 +84,7 @@ end
 
 ```erb
 <%# DO — Turbo Frame for inline editing %>
-<turbo-frame id="user_<%= @user.id %>">
+<turbo-frame id="<%= dom_id(@user) %>">
   <p><%= @user.name %></p>
   <%= link_to "Edit", edit_user_path(@user) %>
 </turbo-frame>

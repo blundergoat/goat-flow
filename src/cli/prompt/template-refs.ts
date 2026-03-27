@@ -364,9 +364,8 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   'create-skill-review': 'workflow/skills/goat-review.md',
   'create-skill-plan': 'workflow/skills/goat-plan.md',
   'create-skill-test': 'workflow/skills/goat-test.md',
-  'create-skill-reflect': 'workflow/skills/goat-reflect.md',
-  'create-skill-onboard': 'workflow/skills/goat-onboard.md',
-  'create-skill-resume': 'workflow/skills/goat-resume.md',
+  'create-skill-context': 'workflow/skills/goat-context.md',
+  'create-skill-refactor': 'workflow/skills/goat-refactor.md',
 
   // File-level creates — instruction file and docs
   'create-instruction-file': 'setup/shared/execution-loop.md',
@@ -530,13 +529,37 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
 
 /**
  * Look up the template for a fragment key, resolving per-agent entries.
- * Returns the absolute template path, or null if not in the map.
+ * Returns the relative template path, or null if not in the map.
  */
 export function getFragmentTemplate(key: string, agentId: AgentId): string | null {
   const entry = FRAGMENT_TEMPLATE_MAP[key];
   if (!entry) return null;
   if (typeof entry === 'string') return entry;
   return entry[agentId] ?? null;
+}
+
+/**
+ * Get a language-specific template override for a fragment key.
+ * Returns the relative template path if the project's detected languages
+ * provide a more specific template than the generic one in FRAGMENT_TEMPLATE_MAP.
+ */
+export function getLanguageTemplate(key: string, languages: string[]): string | null {
+  // Only override coding-standards fragment keys
+  if (key === 'create-backend-instructions') {
+    const backendLangs = ['go', 'python', 'rust', 'java', 'php', 'ruby', 'csharp'];
+    const detected = languages.find(l => backendLangs.includes(l));
+    if (detected) return LANGUAGE_TEMPLATE_MAP[detected] ?? null;
+  }
+  if (key === 'create-frontend-instructions') {
+    if (languages.some(l => l === 'typescript' || l === 'javascript')) {
+      return 'workflow/coding-standards/frontend/typescript.md';
+    }
+  }
+  if (key === 'create-conventions-instructions' || key === 'improve-conventions-instructions') {
+    // Conventions stays generic — it covers cross-language patterns
+    return null;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

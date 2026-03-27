@@ -388,7 +388,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.github/workflows/context-validation.yml': shared.ci.workflowExists,
     '.gitignore': shared.gitignore.exists,
     'scripts/preflight-checks.sh': shared.preflightScript.exists,
-    'CHANGELOG.md': shared.changelog.exists,
+    // CHANGELOG.md removed — project-level concern.
     'ai/instructions': shared.localInstructions.dirExists && shared.localInstructions.location === 'ai',
     'ai/README.md': shared.localInstructions.hasRouter && shared.localInstructions.location === 'ai',
     '.github/instructions': shared.localInstructions.dirExists && shared.localInstructions.location === 'github',

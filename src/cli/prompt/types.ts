@@ -45,6 +45,24 @@ export interface ResolvedFragment {
   instruction: string;
 }
 
+/**
+ * A single actionable task in a setup prompt.
+ * Bridges TemplateRef (what file to create from what template) with
+ * Fragment (adaptation guidance and fix instructions).
+ */
+export interface SetupTask {
+  /** Display number within the phase, e.g., "1", "2" */
+  num: number;
+  /** File to create or fix in the target project */
+  outputPath: string;
+  /** Absolute path to the goat-flow template to read */
+  templatePath: string;
+  /** Project-specific adaptation guidance */
+  adapt: string;
+  /** Concrete verification step */
+  verify: string;
+}
+
 /** Variables extracted from scan report for template substitution */
 export interface PromptVariables {
   agentId: AgentId;
@@ -64,4 +82,9 @@ export interface PromptVariables {
   passedCount: string;
   totalCount: string;
   date: string;
+  /**
+   * Scan evidence keyed by recommendation key — populated from check/AP results
+   * so fragments can include specific details (stale refs, bloat patterns, etc.)
+   */
+  evidence: Record<string, string>;
 }
