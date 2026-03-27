@@ -121,7 +121,7 @@ goat-flow scan . --agent codex
 - [ ] ACT has state declaration AND mode-transition rule
 - [ ] LOG has mechanical trigger, human correction trigger, footgun propagation
 - [ ] Ask First has explicit 5-item micro-checklist
-- [ ] All 10 goat-* skills in .agents/skills/ with YAML frontmatter
+- [ ] All 8 goat-* skills in .agents/skills/ with YAML frontmatter
 - [ ] scripts/deny-dangerous.sh --self-test passes
 - [ ] Router table references all resolve to real files
 - [ ] If dual-agent: no Claude Code files were modified or removed

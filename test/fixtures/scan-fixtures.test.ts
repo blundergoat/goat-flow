@@ -629,9 +629,9 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'package.json': JSON.stringify({ name: 'goat-flow', scripts: { test: 'node --test' } }),
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
     '.gemini/settings.json': JSON.stringify({ permissions: { deny: ['git commit', 'git push'] } }),
-    // Skills for all agents (9 required skills)
+    // Skills for all agents (8 required skills)
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].flatMap(s => [
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
         [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.7.0"\n---\n# goat-${s}\n`],
         [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.7.0"\n---\n# goat-${s}\n`],
       ]),

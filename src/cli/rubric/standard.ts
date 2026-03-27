@@ -15,7 +15,7 @@ const SKILL_QUALITY_THRESHOLD = 0.8;
  * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
-  // === 2.1 Skills (19 pts: 10 existence + 1 completeness + 8 quality) ===
+  // === 2.1 Skills (17 pts: 8 existence + 1 completeness + 8 quality) ===
   ...SKILL_NAMES.map((skill, i) => ({
     id: `2.1.${i + 1}`,
     name: `${skill} skill`,
@@ -41,7 +41,7 @@ export const standardChecks: CheckDef[] = [
           : `Missing: ${ctx.agentFacts.skills.missing.join(', ')}`,
       }),
     },
-    recommendation: 'Create all 10 goat-* skills',
+    recommendation: 'Create all 8 goat-* skills',
     recommendationKey: 'create-all-skills',
   },
 

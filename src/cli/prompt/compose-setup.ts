@@ -208,7 +208,7 @@ function renderTargetedFix(report: ScanReport, agentId: AgentId, agentReport: Ag
 
       // Skills as numbered tasks
       if (skillRefs.length > 0) {
-        lines.push(`**Missing Skills (${skillRefs.length} of 10)** — create in \`${PROFILES[agentId].skillsDir}/goat-{name}/SKILL.md\``);
+        lines.push(`**Missing Skills (${skillRefs.length} of 8)** — create in \`${PROFILES[agentId].skillsDir}/goat-{name}/SKILL.md\``);
         lines.push('');
         for (const ref of skillRefs) {
           const name = ref.key.replace('create-skill-', 'goat-');
@@ -460,7 +460,7 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
   lines.push('');
   lines.push('That file walks through:');
   lines.push('- **Phase 1a:** Instruction file, docs seed files, local instruction files');
-  lines.push('- **Phase 1b:** 10 goat-* skills adapted for this project');
+  lines.push('- **Phase 1b:** 8 goat-* skills adapted for this project');
   lines.push('- **Phase 1c:** Enforcement hooks, deny patterns, coding guidelines');
   lines.push('- **Phase 2:** Agent evals, hygiene (handoff template, RFC 2119 pass)');
   lines.push('- **Phase 3:** Verify 100% on the CLI scan');

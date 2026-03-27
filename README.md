@@ -20,7 +20,7 @@ Rules in instruction files help — but research shows agents follow ~70% of pro
 
 **8 skills:** `/goat-security`, `/goat-debug`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-refactor`, `/goat-simplify`. Each has a distinct artifact, human gates, and a repeatable structured output.
 
-**CLI scanner:** Scores your project's GOAT Flow implementation across 94 checks + 12 anti-patterns. Generates setup prompts that adapt to your project's state.
+**CLI scanner:** Scores your project's GOAT Flow implementation across 97 checks + 14 anti-patterns. Generates setup prompts that adapt to your project's state.
 
 ```
 $ goat-flow scan .
@@ -76,7 +76,7 @@ Target: Grade A. The scanner checks 94 items across foundation (instruction file
 ```
 Layer 1 — Runtime         Instruction file (~120 lines), hooks, settings
 Layer 2 — Local Context   Per-directory instruction files for high-risk areas
-Layer 3 — Skills          10 on-demand capabilities loaded via slash commands
+Layer 3 — Skills          8 on-demand capabilities loaded via slash commands
 Layer 4 — Playbooks       Planning methodology templates
 Layer 5 — Evaluation      Agent evals, CI validation, learning loop
 ```
@@ -107,7 +107,7 @@ setup/                  Setup guides + shared templates
   setup-gemini.md       Gemini CLI setup phases
   setup-codex.md        Codex setup phases
 workflow/               Templates for skills, coding standards, evaluation
-  skills/               10 skill templates (goat-*.md)
+  skills/               8 skill templates (goat-*.md)
   coding-standards/     49 templates (backend, frontend, security)
   evaluation/           Eval format, footguns, lessons, handoff templates
   runtime/              Enforcement, architecture, code-map templates

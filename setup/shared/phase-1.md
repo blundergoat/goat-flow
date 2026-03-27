@@ -86,7 +86,7 @@ Use the stack detected in Phase 1a Step 0 (languages and frameworks).
 PRE-EXISTING SKILLS:
 If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/),
 IGNORE them — they are the project's custom skills. Do not modify, delete,
-or merge them. Focus ONLY on creating/updating the 10 goat-* skills.
+or merge them. Focus ONLY on creating/updating the 8 goat-* skills.
 
 SKILL VERSION AUDIT:
 If goat-* skills already exist, check the goat-flow-skill-version tag in

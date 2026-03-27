@@ -4,11 +4,11 @@
 
 ## v0.7.0 - Unreleased
 
-Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 97 checks + 14 anti-patterns.
 
 ### Reference-Based Setup Prompt
 - Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons
-- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, `--agent all` with interactive picker
+- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, per-agent `--agent` flag (run separately for each agent)
 - Skill quality requirements block in Phase 1b, `GOAT_FLOW_INLINE_SETUP=1` rollback, `setup/` + `workflow/` in npm tarball
 
 ### Scanner Accuracy (rubric v0.7.0)

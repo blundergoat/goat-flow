@@ -375,11 +375,9 @@ stack:
 
 **`/goat-test`** -- Generate 3-track testing instructions (automated, AI verification, human checklist) after milestones. Doer-verifier principle: the coding agent MUST NOT verify its own work.
 
-**`/goat-reflect`** -- Post-session reflection. Reviews session actions and outcomes, produces structured entries for `docs/lessons.md` and `docs/footguns.md`. MUST produce evidence-based entries, not fabricated incidents.
+**`/goat-refactor`** -- Cross-file refactoring with blast radius analysis. MUST read both sides before changing. Grep-after-every-rename to verify absence of old pattern.
 
-**`/goat-onboard`** -- Codebase onboarding. Reads architecture, footguns, and router table to produce a structured orientation document for new contributors or agents. MUST read architecture and footguns before producing output.
-
-**`/goat-resume`** -- Session resumption. Reads `tasks/handoff.md`, `tasks/todo.md`, and session state to reconstruct context after a break or /clear. MUST read handoff files before acting.
+**`/goat-simplify`** -- Code readability improvement. MUST NOT change behaviour. Prefer renaming over commenting. Impact-ordered findings with before/after diffs.
 
 ---
 

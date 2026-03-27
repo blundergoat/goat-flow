@@ -47,9 +47,9 @@ Skills live in 3 locations to serve different agents:
 
 | Location | Consumed by | Count |
 |----------|-------------|-------|
-| `.claude/skills/goat-*/` | Claude Code | 10 |
-| `.agents/skills/goat-*/` | Codex + Gemini CLI | 10 |
-| `workflow/skills/` | Canonical templates | 10 |
+| `.claude/skills/goat-*/` | Claude Code | 8 |
+| `.agents/skills/goat-*/` | Codex + Gemini CLI | 8 |
+| `workflow/skills/` | Canonical templates | 8 |
 
 The `workflow/skills/` templates are the source of truth. Agent-specific copies are derived from them. When a skill changes, the template updates first, then propagates.
 

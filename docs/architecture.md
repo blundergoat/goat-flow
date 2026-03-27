@@ -11,7 +11,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Core docs | `docs/` | System spec, architecture descriptions, design rationale, examples |
 | Setup prompts | `setup/` | Agent-specific setup instructions for Claude Code, Gemini CLI, or Codex |
 | Shared setup | `setup/shared/` | Cross-agent setup fragments (execution loop, docs seed, Phase 2) |
-| Skill templates | `workflow/skills/` | Reference prompts for creating the 10 goat-* skills |
+| Skill templates | `workflow/skills/` | Reference prompts for creating the 8 goat-* skills |
 | Playbook templates | `workflow/playbooks/` | Planning (feature brief → SBAO) and testing methodology |
 | Evaluation templates | `workflow/evaluation/` | Agent evals, CI validation, footguns/lessons templates |
 | Runtime templates | `workflow/runtime/` | Layer 1 setup, enforcement patterns, architecture scaffolding |

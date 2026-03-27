@@ -80,7 +80,7 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
-**The ten skills:**
+**The eight skills:**
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
@@ -92,8 +92,6 @@ AI coding agents need structure, not just rules. This system organises everythin
 | `/goat-test` | Generate test plans across three verification phases | Test instructions (automated, AI, human) |
 | `/goat-refactor` | Cross-file refactoring with blast radius analysis | Verified renames with absence checks |
 | `/goat-simplify` | Code readability improvement | Impact-ordered findings with renames |
-| `/goat-onboard` | Codebase onboarding for new contributors or agents | Orientation document |
-| `/goat-resume` | Session resumption from handoff state | Context reconstruction summary |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
@@ -211,7 +209,7 @@ Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 |--------|-----|---------|-------------------|
 | Layer 1 line target | ~120 | ~120 | ~120 |
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
-| Layer 3 skills | All 10 | All 10 | All 10 |
+| Layer 3 skills | All 8 | All 8 | All 8 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
 
 ---

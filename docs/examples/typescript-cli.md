@@ -12,7 +12,7 @@ No workflow system. Ad-hoc rules in a long CLAUDE.md that mixed project-specific
 
 ## After
 
-Three instruction files, 10 skills across 3 locations, enforcement hooks, and a learning loop.
+Three instruction files, 8 skills across 3 locations, enforcement hooks, and a learning loop.
 
 **Key files created:**
 
@@ -22,7 +22,7 @@ Three instruction files, 10 skills across 3 locations, enforcement hooks, and a 
 | AGENTS.md | 110 | Codex runtime (same loop, Codex-specific boundaries) |
 | GEMINI.md | 86 | Gemini CLI runtime (compressed format, same loop) |
 
-**Skills (10 skills x 3 locations = 30 SKILL.md files):**
+**Skills (8 skills x 3 locations = 24 SKILL.md files):**
 
 - `.claude/skills/goat-*/` -- Claude Code skills
 - `.agents/skills/goat-*/` -- Shared skills (Codex + Gemini CLI)

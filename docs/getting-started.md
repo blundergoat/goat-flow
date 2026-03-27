@@ -15,7 +15,7 @@ A structured workflow system for AI coding agents — Claude Code, Gemini CLI, a
 2. **The spec** (`docs/system-spec.md`) -- full reference for every design decision
 3. **The setup** (`setup/setup-claude.md`, `setup/setup-gemini.md`, or `setup/setup-codex.md`) -- what you run
 4. **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
-5. **The skills** (`docs/system/skills.md`) -- all 10 skills with usage guidance
+5. **The skills** (`docs/system/skills.md`) -- all 8 skills with usage guidance
 
 ## Before You Start
 
@@ -38,7 +38,7 @@ Run these in Claude Code. Copy each prompt from the runtime directory, fill in t
 |------|--------|-----------------|------|
 | **Phase 0** | Phase 0 bootstrap | CLAUDE.md + deny-dangerous hook + settings.json | ~5 min |
 | **Phase 1a** | Prompt A (new) or Prompt B (existing CLAUDE.md) | CLAUDE.md, docs seed files, architecture.md, local CLAUDE.md files, guidelines-ownership-split.md | ~15 min |
-| **Phase 1b** | Phase 1b -- Skills | 10 skill files under `.claude/skills/` | ~10 min |
+| **Phase 1b** | Phase 1b -- Skills | 8 skill files under `.claude/skills/` | ~10 min |
 | **Phase 1c** | Phase 1c -- Enforcement | Hooks, CI workflow, gitignore additions | ~10 min |
 | **Phase 2** | Phase 2 | Agent evals, RFC 2119 pass, permission profiles (optional) | ~15 min |
 
@@ -161,7 +161,7 @@ agent-evals/                           <- Phase 2
 - **The spec** (`docs/system-spec.md`) -- full system design, rationale for every section, hook design patterns, security hardening details
 - **The rationale** (`docs/reference/design-rationale.md`) -- deep dives on why each section exists
 - **Cross-agent comparison** (`docs/reference/cross-agent-comparison.md`) -- how this adapts across Claude Code, Gemini CLI, and Codex
-- **Skills reference** (`docs/system/skills.md`) -- all 10 skills, when to use, hard gates
+- **Skills reference** (`docs/system/skills.md`) -- all 8 skills, when to use, hard gates
 - **Planning playbooks** (`workflow/playbooks/`) -- planning prompts (mob elaboration, SBAO ranking, milestone planning)
 - **Scaffold prompts** (`workflow/runtime/`) -- project scaffolding prompts
 - **Testing workflow** (`workflow/playbooks/testing/`) -- testing-related workflow files
