@@ -18,7 +18,7 @@ Rules in instruction files help — but research shows agents follow ~70% of pro
 
 **Learning loop:** `docs/footguns.md` captures architectural traps with file:line evidence. `docs/lessons.md` captures behavioural mistakes. Real incidents only — no hypotheticals. Agent evals replay past failures as regression tests.
 
-**9 skills:** `/goat-security`, `/goat-debug`, `/goat-audit`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-context`, `/goat-refactor`. Each has a distinct artifact, human gates, and a repeatable structured output.
+**8 skills:** `/goat-security`, `/goat-debug`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-refactor`, `/goat-simplify`. Each has a distinct artifact, human gates, and a repeatable structured output.
 
 **CLI scanner:** Scores your project's GOAT Flow implementation across 94 checks + 12 anti-patterns. Generates setup prompts that adapt to your project's state.
 
@@ -124,7 +124,7 @@ agent-evals/            Regression tests from real incidents
 | [System Spec](docs/system-spec.md) | Full technical specification (canonical source of truth) |
 | [5-Layer Architecture](docs/system/five-layers.md) | Runtime, Local Context, Skills, Playbooks, Evaluation |
 | [6-Step Execution Loop](docs/system/six-steps.md) | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG |
-| [Skills Reference](docs/system/skills.md) | All 9 skills: when to use, gates, output formats |
+| [Skills Reference](docs/system/skills.md) | All 8 skills: when to use, gates, output formats |
 | [Design Rationale](docs/reference/design-rationale.md) | Why behind every design decision |
 
 ## Author

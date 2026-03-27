@@ -5,7 +5,7 @@ reports MUST use these skeletons to ensure consistent, parseable output.
 
 ---
 
-## Findings Report (goat-audit, goat-review, goat-security)
+## Findings Report (goat-review, goat-security)
 
 ```markdown
 ## TL;DR
@@ -175,7 +175,7 @@ reports MUST use these skeletons to ensure consistent, parseable output.
 <!-- Explicit gaps in coverage -->
 ```
 
-## Context Report (goat-context)
+## Context Report (removed — goat-context was deleted in v0.7.0)
 
 ```markdown
 ## Session Reconstruction

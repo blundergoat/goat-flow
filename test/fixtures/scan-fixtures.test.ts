@@ -271,9 +271,9 @@ describe('Fixture 4: full-claude', () => {
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
-    // 9 skills
+    // 8 skills
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].map(s => [
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -474,7 +474,7 @@ describe('Fixture 8: partial-setup', () => {
     // Has some skills but not all
     '.claude/skills/goat-security/SKILL.md': '# goat-security\n',
     '.claude/skills/goat-debug/SKILL.md': '# goat-debug\n',
-    '.claude/skills/goat-audit/SKILL.md': '# goat-audit\n',
+    '.claude/skills/goat-review/SKILL.md': '# goat-review\n',
     // Learning loop — lessons exists but no footguns
     'docs/lessons.md': '# Lessons\n\n### Entry 1\nSomething.\n',
     // Architecture exists
@@ -742,7 +742,7 @@ GOOD: Inline format. Extract when second format needed
     'agent-evals/README.md': '# Agent Evals\n',
     'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-debug\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
     'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nDo something\n```\n',
-    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-audit\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
+    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
     '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
     'tasks/handoff-template.md': '# Handoff Template\n\n## Status\n\n## Current State\n\n## Key Decisions\n\n## Known Risks\n\n## Next Step\n',

@@ -48,7 +48,7 @@ Specific catches during development:
 
 ## Key Wins
 
-**Skills prevented blind debugging.** `/goat-debug` enforces diagnosis-first with file:line evidence before any fix. `/goat-audit` uses a 4-pass approach (scan, re-read, rank, self-check) that catches fabricated findings.
+**Skills prevented blind debugging.** `/goat-debug` enforces diagnosis-first with file:line evidence before any fix. `/goat-review` in audit mode uses negative verification and fabrication self-check to catch false positives.
 
 **The learning loop captured 9 real incidents.** `docs/lessons.md` holds 9 entries with a pattern section. `docs/footguns.md` holds 7 entries with file:line evidence. Real examples: agents under line pressure cut required sections, `mv` overwrote an untracked file with no git recovery path, sub-agents wrote planned features as current state.
 

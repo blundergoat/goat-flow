@@ -5,8 +5,8 @@ import type { Fragment } from '../types.js';
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
-  // === Skills (10 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
-  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].map(skill => ({
+  // === Skills (9 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
+  ...['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(skill => ({
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
@@ -177,9 +177,9 @@ Each phase should have a clear entry condition (what must be done before startin
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Ensure all 9 GOAT Flow skills are present under \`{{skillsDir}}/\`:
+    instruction: `Ensure all 8 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
-- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-context, goat-refactor
+- goat-security, goat-debug, goat-investigate, goat-review, goat-plan, goat-test, goat-refactor, goat-simplify
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
   },

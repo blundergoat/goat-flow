@@ -28,16 +28,16 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: `create-skill-${skill.replace('goat-', '')}`,
   })),
   {
-    id: '2.1.11', name: 'All 9 skills present', tier: 'standard', category: 'Skills',
+    id: '2.1.11', name: 'All 8 skills present', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
-        id: '2.1.11', name: 'All 9 skills present', tier: 'standard', category: 'Skills',
+        id: '2.1.11', name: 'All 8 skills present', tier: 'standard', category: 'Skills',
         status: ctx.agentFacts.skills.allPresent ? 'pass' : 'fail',
         points: ctx.agentFacts.skills.allPresent ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.skills.allPresent
-          ? 'All 9 skills present'
+          ? 'All 8 skills present'
           : `Missing: ${ctx.agentFacts.skills.missing.join(', ')}`,
       }),
     },

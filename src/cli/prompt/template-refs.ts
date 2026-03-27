@@ -125,16 +125,15 @@ function getFoundationHooks(agentId: AgentId): TemplateRef[] {
 // Standard refs — shared across all agents
 // ---------------------------------------------------------------------------
 
-/** Ordered list of the 9 goat-flow skill template sources */
+/** Ordered list of the 8 goat-flow skill template sources */
 const SKILL_TEMPLATES = [
-  'workflow/skills/goat-audit.md',
-  'workflow/skills/goat-context.md',
   'workflow/skills/goat-debug.md',
   'workflow/skills/goat-investigate.md',
   'workflow/skills/goat-plan.md',
   'workflow/skills/goat-refactor.md',
   'workflow/skills/goat-review.md',
   'workflow/skills/goat-security.md',
+  'workflow/skills/goat-simplify.md',
   'workflow/skills/goat-test.md',
 ] as const;
 
@@ -358,13 +357,12 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   // File-level creates — skills
   'create-skill-security': 'workflow/skills/goat-security.md',
   'create-skill-debug': 'workflow/skills/goat-debug.md',
-  'create-skill-audit': 'workflow/skills/goat-audit.md',
   'create-skill-investigate': 'workflow/skills/goat-investigate.md',
   'create-skill-review': 'workflow/skills/goat-review.md',
   'create-skill-plan': 'workflow/skills/goat-plan.md',
   'create-skill-test': 'workflow/skills/goat-test.md',
-  'create-skill-context': 'workflow/skills/goat-context.md',
   'create-skill-refactor': 'workflow/skills/goat-refactor.md',
+  'create-skill-simplify': 'workflow/skills/goat-simplify.md',
 
   // File-level creates — instruction file and docs
   'create-instruction-file': 'setup/shared/execution-loop.md',

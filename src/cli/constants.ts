@@ -1,12 +1,15 @@
 /** Canonical list of all GOAT Flow skill names */
 export const SKILL_NAMES = [
-  'goat-security', 'goat-debug', 'goat-audit', 'goat-investigate',
-  'goat-review', 'goat-plan', 'goat-test', 'goat-context',
-  'goat-refactor',
+  'goat-security', 'goat-debug', 'goat-investigate',
+  'goat-review', 'goat-plan', 'goat-test',
+  'goat-refactor', 'goat-simplify',
 ] as const;
 
 /** Deprecated skill names — scanner accepts these during migration grace period */
-export const DEPRECATED_SKILL_NAMES = ['goat-reflect', 'goat-onboard', 'goat-resume'] as const;
+export const DEPRECATED_SKILL_NAMES = [
+  'goat-reflect', 'goat-onboard', 'goat-resume',
+  'goat-audit', 'goat-context',
+] as const;
 
 /** Type derived from the canonical skill list */
 export type SkillName = typeof SKILL_NAMES[number];

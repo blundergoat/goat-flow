@@ -104,31 +104,29 @@ This is NOT a cosmetic update — skill templates improve with each release.
 Read the detailed skill templates in workflow/skills/goat-*.md for each
 skill's full specification before creating or updating.
 
-Create or update these 9 skills in the agent's skills directory:
+Create or update these 8 skills in the agent's skills directory:
 
 1. goat-investigate/SKILL.md - Deep codebase investigation + onboarding mode.
    Progressive depth reading, evidence tagging, "What I Didn't Read" section.
-2. goat-review/SKILL.md - Structured code review + instruction-file audit mode.
-   RFC 2119 severity, diff-aware analysis, footgun matching.
+2. goat-review/SKILL.md - Structured code review + quality audit mode +
+   instruction review mode. RFC 2119 severity, negative verification, footgun matching.
 3. goat-security/SKILL.md - Threat-model-driven security assessment.
    Framework-aware verification, exploitability ranking, dependency auditing.
 4. goat-debug/SKILL.md - Diagnosis-first debugging. Hypothesis tracking,
    recurrence checks. "If you want to 'just try something', STOP."
 5. goat-plan/SKILL.md - 4-phase planning with complexity routing.
    Triangular tension analysis, kill criteria, milestone archetypes.
-6. goat-audit/SKILL.md - Multi-phase quality audit with negative verification.
-   Fabrication self-check. MUST NOT propose fixes.
-7. goat-test/SKILL.md - 3-phase test plan generation. Doer-verifier principle:
+6. goat-test/SKILL.md - 3-phase test plan generation. Doer-verifier principle:
    coding agent MUST NOT verify its own work.
-8. goat-context/SKILL.md - Session context reconstruction with diff sampling,
-   branch divergence analysis, and next-action recommendation.
-9. goat-refactor/SKILL.md - Cross-file refactoring with blast radius analysis,
+7. goat-refactor/SKILL.md - Cross-file refactoring with blast radius analysis,
    both-sides-first reading, and absence verification.
+8. goat-simplify/SKILL.md - Code readability improvement. Naming analysis,
+   self-documentation, comment audit, complexity reduction. MUST NOT change behavior.
 
-**Migration:** goat-reflect is now part of goat-review (instruction review mode).
-goat-onboard is now part of goat-investigate (onboard mode). goat-resume was
-renamed to goat-context. If old skills exist, delete them after verifying no
-project-specific content needs migrating.
+**Migration:** goat-reflect merged into goat-review (instruction review mode).
+goat-onboard merged into goat-investigate (onboard mode). goat-audit merged
+into goat-review (audit mode). goat-context removed. If old skills exist,
+delete them after verifying no project-specific content needs migrating.
 
 Each skill MUST include in its YAML frontmatter:
   goat-flow-skill-version: matching the current goat-flow version
@@ -145,7 +143,7 @@ Adapt all examples for THIS project's tech stack. Do NOT leave placeholder
 text like "[Step 1]" or "[describe X]".
 
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
-- GATE: Verify all 10 goat-* skill files exist with required sections.
+- GATE: Verify all 8 goat-* skill files exist with required sections.
 - GATE: Verify instruction file router table references the skill directories.
 - GATE: Run scripts/preflight-checks.sh if it exists, otherwise run the
   project's lint + test commands from Essential Commands.

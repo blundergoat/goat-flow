@@ -1,6 +1,6 @@
 ---
 name: goat-review
-description: "Structured code review with RFC 2119 severity, diff-aware analysis, footgun matching, and instruction-file audit mode."
+description: "Structured code review and quality audit with RFC 2119 severity, diff-aware analysis, footgun matching, negative verification, and instruction-file audit mode."
 goat-flow-skill-version: "0.7.0"
 ---
 # /goat-review
@@ -18,21 +18,22 @@ goat-flow-skill-version: "0.7.0"
 ## When to Use
 
 Use when reviewing a diff, PR, or specific set of changes before they ship.
-Also use for reviewing instruction files (CLAUDE.md, ai/instructions/) for
-staleness or drift — see Instruction Review Mode below.
+Also use for systematic quality audits of a codebase area — before releases,
+after major changes, or when code quality is uncertain.
+Also use for reviewing instruction files for staleness — see modes below.
 
 **NOT this skill:**
-- Codebase-wide quality sweep (no specific diff) → /goat-audit
 - OWASP-driven security assessment → /goat-security
 - Understanding unfamiliar code before changing it → /goat-investigate
 - Generating test instructions → /goat-test
+- Making code more readable → /goat-simplify
 
 ## Step 0 — Gather Context
 
 <!-- ADAPT: Replace illustrative questions with project-specific review concerns -->
 
 **Structural questions (always ask or confirm):**
-1. What should I review? (PR, recent commits, specific files, instruction files, or "everything since last milestone")
+1. What should I review? (PR, recent commits, specific files, codebase area, instruction files)
 2. Any specific concerns? (performance, security, a tricky area, instruction drift)
 
 **Illustrative questions (adapt):**
@@ -42,7 +43,10 @@ staleness or drift — see Instruction Review Mode below.
 **Auto-detect:** Read `git diff --stat` to pre-fill scope. Present: "I see
 [N] files changed in [areas]. Reviewing [scope]. Correct?"
 
-If review target is **instruction files** → activate Instruction Review Mode.
+**Mode routing:**
+- If target is **instruction files** → activate Instruction Review Mode.
+- If target is a **codebase area** (not a specific diff) → activate Audit Mode.
+- Otherwise → standard diff review (Phases 0-4 below).
 
 If `ai/instructions/code-review.md` exists, load it and apply project-specific
 review standards alongside these defaults.
@@ -117,6 +121,72 @@ Verify the project's Definition of Done against this change:
 
 **CHECKPOINT:** "DoD check: [pass/partial/fail]. [Details]."
 
+## Audit Mode
+
+Activated when Step 0 target is a codebase area (not a specific diff or PR).
+Use for systematic quality review — before releases, after major changes,
+or when code quality is uncertain.
+
+**Scope guidance:** For >20 files, recommend splitting into focused audits.
+
+**Phase A1 — Scan:**
+<!-- ADAPT: Adjust category list and weights for your project -->
+
+Scan categories, weighted by audit purpose:
+
+| Category | Security audit | Consistency audit | General |
+|----------|---------------|-------------------|---------|
+| Security | Critical | Medium | High |
+| Correctness | High | Medium | High |
+| Cross-reference integrity | Medium | Critical | Medium |
+| Test coverage | Medium | Low | High |
+| Performance | Low | Low | Medium |
+| Consistency | Low | Critical | Medium |
+| Style | Low | Low | Low |
+
+For each finding, log: category, `file:line`, description, severity.
+<!-- ADAPT: Use your agent's parallel execution capability, or scan areas sequentially. -->
+
+**Recurrence check:** Before reporting, search `docs/footguns.md` for entries
+in the scanned area. Cross-reference findings with known footguns.
+
+**Phase A2 — Verify & Self-Check:**
+
+**A) Negative verification:** For each finding, attempt to DISPROVE it.
+Re-read the code at the cited `file:line`. Look for evidence that contradicts
+the finding. The goal is adversarial: "Can I prove this finding is wrong?"
+Remove genuine false positives.
+
+*Example:* "Finding: No input validation on `/api/users`. Disproof attempt:
+checked middleware chain — `express-validator` at `middleware.ts:12` handles
+this route. Result: FALSE POSITIVE, removed."
+
+**B) Fabrication self-check:** Re-verify every `file:line` reference.
+Does the file exist? Does the cited line contain what the finding claims?
+
+**Self-diagnostic ratios:**
+- If >50% of findings removed → initial scan was too noisy. Note this.
+- If >20% removed by fabrication check → agent was confabulating. Flag to user.
+
+**Phase A3 — Rank & Rollup:**
+
+Rank surviving findings by severity (see Shared Conventions above).
+
+**Pattern rollup:** If 3+ findings share a root cause, group them:
+"This is a systemic pattern, not [N] separate issues: [pattern description]."
+
+**Out-of-scope findings:** Issues discovered outside the declared scope go
+in a separate section — don't bury them, but don't let them dilute the audit.
+
+**Anti-fix discipline:** Audit findings report problems — they don't propose fixes.
+Review your output for fix language. Rephrase any recommendations as findings.
+
+**BLOCKING GATE:** Present findings using the Output Format template below. Offer:
+(a) drill into a specific finding
+(b) expand to a related area
+(c) check a specific category more deeply
+(d) close the audit
+
 ## Instruction Review Mode
 
 Activated when review target is instruction files (CLAUDE.md, AGENTS.md,
@@ -151,16 +221,22 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 1. **One-shot dump** — agent produces entire review at once instead of conversational drilling. Present findings by severity tier, pause between tiers.
 2. **File-order findings** — agent lists findings in the order files were read, not by severity. Force severity ordering.
 3. **Footgun skip** — agent skips footgun matching under token pressure. This is where the highest-value findings come from.
+4. **Fix proposals in audit mode** — agent recommends solutions instead of reporting findings. The anti-fix discipline check prevents this.
+5. **Rubber-stamp self-check** — agent confirms its own findings without re-reading. The fabrication ratio threshold catches this.
 
 ## Constraints
 
 <!-- FIXED: Do not adapt these -->
 - MUST review the diff for issues, read full files for context
-- MUST NOT flag pre-existing issues as part of this change
+- MUST NOT flag pre-existing issues as part of this change (review mode)
 - MUST check each finding against `docs/footguns.md` (MATCH/CLEAR)
 - MUST order findings by severity, not by file or discovery order
 - MUST NOT fabricate file paths or function names
 - MUST NOT auto-edit instruction files in instruction review mode
+- MUST attempt to disprove each finding in audit mode (negative verification)
+- MUST NOT propose fixes in audit mode — audit reports only
+- MUST re-verify file:line references in audit self-check
+- MUST group 3+ related audit findings as systemic patterns
 - Conversational: present findings, then let the human drill in. One-shot dumps miss architectural problems.
 
 ## Output Format
@@ -174,6 +250,7 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 ### MUST Fix (Blocking)
 - **[title]** — `file:line` — [description]
   Footgun match: MATCH [entry] | CLEAR
+  Evidence: OBSERVED | INFERRED (missing: [what direct evidence is needed])
 
 ### SHOULD Fix
 - **[title]** — `file:line` — [description]
@@ -182,7 +259,7 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 - **[title]** — `file:line` — [description]
 
 ## Pre-existing Issues
-<!-- Not blocking this change, but worth noting -->
+<!-- Not blocking this change, but worth noting (review mode) -->
 - [issue] — `file:line` — existed before this diff
 
 ## Breaking Changes
@@ -191,21 +268,24 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 ## Test Execution Gaps
 - [test at file:line] doesn't exercise changed path because [reason]
 
+## Patterns
+<!-- If 3+ findings share a root cause, group as systemic issue (audit mode) -->
+
 ## What's Good
 <!-- Specific positive observations, not generic praise -->
 
 ## What I Didn't Examine
-<!-- Files in blast radius not reviewed and why -->
+<!-- Files in blast radius not reviewed/audited and why -->
 ```
 
 Output should be compatible with standard GitHub/GitLab PR review templates.
 
 ## Chains With
 
-- /goat-audit — review surfaces systemic issues → broader sweep needed
-- /goat-debug — review finds a specific bug → diagnosis needed
+- /goat-debug — review/audit finds a specific bug → diagnosis needed
 - /goat-plan — review reveals missing requirements → planning needed
 - /goat-test — review finds coverage gaps → test plan needed
-- /goat-security — review finds security concern → deeper assessment
+- /goat-security — review/audit finds security concern → deeper assessment
+- /goat-simplify — review finds readability issues → simplification needed
 
-**Handoff shape:** `{diff_scope, findings_by_severity, breaking_changes, coverage_gaps}`
+**Handoff shape:** `{scope, mode, findings_by_severity, breaking_changes, coverage_gaps, patterns}`

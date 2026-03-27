@@ -126,18 +126,16 @@ if [[ -z "$cmd" ]]; then
         3) cli scan . --agent claude --format text ;;
         4)
             echo ""
-            printf "  Which agents to set up?\n"
+            printf "  Which agent to set up?\n"
             printf "    \033[36m1\033[0m  Claude Code\n"
             printf "    \033[36m2\033[0m  Codex\n"
             printf "    \033[36m3\033[0m  Gemini CLI\n"
-            printf "    \033[36m4\033[0m  All of the above\n"
             printf "  \033[1mPick:\033[0m "
             read -r agent_choice
             case "$agent_choice" in
                 1) cli setup . --agent claude ;;
                 2) cli setup . --agent codex ;;
                 3) cli setup . --agent gemini ;;
-                4) cli setup . --agent all ;;
                 *) echo "Invalid choice"; exit 1 ;;
             esac
             ;;
@@ -157,18 +155,16 @@ case "$cmd" in
             cli setup "$@"
         else
             echo ""
-            printf "  Which agents to set up?\n"
+            printf "  Which agent to set up?\n"
             printf "    \033[36m1\033[0m  Claude Code\n"
             printf "    \033[36m2\033[0m  Codex\n"
             printf "    \033[36m3\033[0m  Gemini CLI\n"
-            printf "    \033[36m4\033[0m  All of the above\n"
             printf "  \033[1mPick:\033[0m "
             read -r agent_choice
             case "$agent_choice" in
                 1) cli setup "$@" --agent claude ;;
                 2) cli setup "$@" --agent codex ;;
                 3) cli setup "$@" --agent gemini ;;
-                4) cli setup "$@" --agent all ;;
                 *) echo "Invalid choice"; exit 1 ;;
             esac
         fi

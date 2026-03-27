@@ -21,7 +21,7 @@ Use when assessing security posture: before deployment, after adding auth/input
 handling, when touching secrets/credentials, or for a security-focused audit.
 
 **NOT this skill:**
-- General code quality sweep → /goat-audit
+- General code quality sweep → /goat-review (audit mode)
 - Reviewing a specific diff for issues → /goat-review
 - Diagnosing a specific vulnerability → /goat-debug
 - Understanding code before securing it → /goat-investigate
@@ -194,6 +194,6 @@ Remove findings that don't survive re-verification.
 
 - /goat-review — security findings feed into change review
 - /goat-debug — specific vulnerability needs deeper diagnosis
-- /goat-audit — security scan reveals broader quality issues → codebase sweep
+- /goat-review — security scan reveals broader quality issues → audit mode
 
 **Handoff shape:** `{threat_model, findings_by_exploitability, framework_mitigations, dependency_audit_results}`

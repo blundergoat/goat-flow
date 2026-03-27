@@ -1,6 +1,6 @@
 # Skills
 
-Nine focused capabilities loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked — they stay out of the instruction budget.
+Eight focused capabilities loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked — they stay out of the instruction budget.
 
 All skills use the `goat-` prefix to avoid conflicts with built-in agent commands.
 
@@ -8,15 +8,14 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 |-------|---------|-----------|-------------|
 | /goat-security | Threat-model-driven security assessment | MUST rank findings by exploitability; framework-aware verification | Before releases, after dependency changes, during audits |
 | /goat-debug | Diagnosis-first debugging | No fixes until human reviews diagnosis | Bug or test failure with unclear root cause |
-| /goat-audit | Multi-pass quality audit | MUST NOT propose fixes; negative verification + fabrication self-check | Systematic review before releases or major changes |
 | /goat-investigate | Deep codebase investigation | No planning until human reviews; includes onboarding mode | Exploring unfamiliar code, onboarding to a new project |
-| /goat-review | Structured code review | MUST read all files before commenting; includes instruction review mode | Before merging or after external PR feedback |
+| /goat-review | Structured code review + quality audit | MUST read all files before commenting; includes audit mode + instruction review mode | Before merging, quality audits, instruction staleness |
 | /goat-plan | 4-phase planning workflow | Human approval between each phase | Before non-trivial implementation |
 | /goat-test | 3-phase test plan generation | Coding agent MUST NOT verify its own work (doer-verifier) | After a milestone or 30-60 min of coding |
-| /goat-context | Session context reconstruction | MUST read handoff/git state before acting | After a break, context compaction, or session restart |
 | /goat-refactor | Cross-file refactoring | MUST read both sides before changing; grep-after-every-rename | Renames, interface changes, restructuring across files |
+| /goat-simplify | Code readability improvement | MUST NOT change behavior; prefer renaming over commenting | Code that works but is hard to read or maintain |
 
-> **Migration note (v0.7.0):** /goat-reflect merged into /goat-review (Instruction Review Mode). /goat-onboard merged into /goat-investigate (Onboard Mode). /goat-resume renamed to /goat-context with expanded capabilities. /goat-refactor is new.
+> **Migration note (v0.7.0):** /goat-reflect merged into /goat-review (Instruction Review Mode). /goat-onboard merged into /goat-investigate (Onboard Mode). /goat-audit merged into /goat-review (Audit Mode). /goat-context removed. /goat-refactor and /goat-simplify are new.
 
 ---
 
@@ -42,16 +41,6 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 **Invoke when:** A test fails and you don't know why, or a bug report comes in and the cause isn't obvious. Do NOT invoke when you already know the fix — just fix it.
 
-### /goat-audit
-
-**When:** Systematic codebase quality review, before major releases, or investigating a class of issues.
-
-**What it does:** Multi-phase audit. Scan (log findings) → Verify & Self-Check (negative verification + fabrication check) → Rank & Rollup (severity ordering, pattern grouping) → Present.
-
-**Hard gate:** MUST NOT propose fixes. MUST attempt to disprove each finding. Audit reports findings only.
-
-**Invoke when:** You want a thorough quality check of a module, or before a major release. More thorough than a review — it's a systematic scan, not a diff-based check.
-
 ### /goat-investigate
 
 **When:** Exploring an unfamiliar area, understanding how a system works before changing it, mapping dependencies before a refactor, or onboarding to a new project.
@@ -62,6 +51,19 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 **Invoke when:** You're about to change code you don't fully understand, need to map how data flows through a system, or are new to the project. Do NOT invoke for areas you already know well.
 
+### /goat-review
+
+**When:** Before merging changes, for systematic quality audits, or when reviewing instruction files for staleness.
+
+**What it does:** Three modes:
+- **Standard review:** Diff-based review with RFC 2119 severity levels. Reads changed files in full context. Categorises findings as MUST fix / SHOULD fix / MAY improve. Footgun matching on every finding.
+- **Audit mode:** Systematic codebase quality review. Scan with weighted categories → Negative verification (attempt to disprove each finding) → Fabrication self-check → Pattern rollup. MUST NOT propose fixes in audit mode.
+- **Instruction review mode:** Audits CLAUDE.md/AGENTS.md files for staleness, drift, and missing rules.
+
+**Hard gate:** MUST read all files before commenting. MUST check footguns for each finding. In audit mode: MUST attempt to disprove each finding and MUST NOT propose fixes.
+
+**Invoke when:** You've made changes and want them checked, you want a thorough quality check of a module, or you want to audit instruction files.
+
 ### /goat-plan
 
 **When:** Before any non-trivial implementation. Planning methodology for structuring thinking before giving the agent a task.
@@ -71,16 +73,6 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 **Hard gate:** Human approval required between phases. MUST surface kill criteria early. MUST tag low-confidence decisions as Decision Debt.
 
 **Invoke when:** You need to plan a Standard Feature or larger. For Hotfixes, skip — just fix it.
-
-### /goat-review
-
-**When:** Before merging significant changes, after external PR feedback, when a second opinion is needed, or when reviewing instruction files for staleness.
-
-**What it does:** Structured review with RFC 2119 severity levels. Reads changed files in full context (actual source code, not just the diff). Categorises findings as MUST fix / SHOULD fix / MAY improve. Checks each finding against `docs/footguns.md`. Includes **Instruction Review Mode** for auditing CLAUDE.md/AGENTS.md files for drift.
-
-**Hard gate:** MUST read all changed files before commenting. MUST NOT apply fixes directly — review only. MUST check footguns for each finding.
-
-**Invoke when:** You've made changes and want them checked before merging, you received external review feedback, or you want to audit instruction files for staleness.
 
 ### /goat-test
 
@@ -96,16 +88,6 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 **Invoke when:** You've finished a chunk of work and need to verify it before moving on.
 
-### /goat-context
-
-**When:** Resuming work after a break, context compaction, or session restart.
-
-**What it does:** Reads handoff notes, task files, git log, branch divergence, and actual diffs to reconstruct session context. Detects handoff drift (when handoff notes contradict recent git history). Recommends next action and suggested skill.
-
-**Hard gate:** MUST read handoff files before git state. MUST sample actual diffs, not just list filenames. MUST flag handoff drift when detected.
-
-**Invoke when:** You're picking up where a previous session left off. Do NOT invoke for fresh tasks with no prior context.
-
 ### /goat-refactor
 
 **When:** Cross-file renames, interface changes, module restructuring, or any change that touches both sides of a boundary.
@@ -116,6 +98,16 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 
 **Invoke when:** You need to rename, move, or restructure code across multiple files. Do NOT invoke for single-file changes — just make them.
 
+### /goat-simplify
+
+**When:** Code works correctly but is hard to read, follow, or maintain.
+
+**What it does:** Readability improvement through naming analysis, self-documentation assessment, comment audit, and complexity reduction. Scans for cryptic names, misleading comments, deep nesting, magic numbers, and dead code. Suggests semantics-preserving improvements ordered by impact.
+
+**Hard gate:** MUST NOT change behavior. MUST prefer renaming over commenting. MUST verify behavior unchanged after implementation.
+
+**Invoke when:** You want to make code more self-documenting, clean up naming, or reduce cognitive load before handing off to other developers or agents. Do NOT invoke for code that needs restructuring across files — use /goat-refactor.
+
 ---
 
 ## Choosing the Right Skill
@@ -124,15 +116,15 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 |-----------|-------|--------------------|
 | "Are there security issues?" | /goat-security | Threat-model-driven scan with framework verification |
 | "This test is failing, why?" | /goat-debug | Need diagnosis before fixing |
-| "How healthy is this module?" | /goat-audit | Systematic scan, not a single bug |
+| "How healthy is this module?" | /goat-review (audit mode) | Systematic scan, not a single bug |
 | "How does this subsystem work?" | /goat-investigate | Understanding before changing |
 | "I'm new to this project" | /goat-investigate (onboard mode) | Stack detection + orientation |
 | "How should we build this feature?" | /goat-plan | Planning before implementing |
 | "Are these changes safe to merge?" | /goat-review | Reviewing changes, not finding new issues |
 | "Are our instruction files stale?" | /goat-review (instruction mode) | Friction signals + staleness audit |
 | "How do we verify this work?" | /goat-test | Generate test plan across 3 phases |
-| "Where did we leave off?" | /goat-context | Reconstruct context from handoff/git state |
 | "I need to rename across files" | /goat-refactor | Both-sides-first + grep-after-rename |
+| "This code is hard to follow" | /goat-simplify | Readability without behavior change |
 
 ## Where Skills Live
 
@@ -157,17 +149,13 @@ Skills are created during Phase 1b of the GOAT Flow setup. The skill templates i
 **Problem:** Agents guess fixes before understanding the bug. "Just try something" works ~30% of the time and creates confusing diffs the other 70%.
 **Design:** Hard gate — hypotheses across 2+ categories, diagnosis with file:line evidence and confidence level, fixes only after human reviews.
 
-### /goat-audit
-**Problem:** Fabricated findings. LLMs are reliably bad at distinguishing real findings from plausible-sounding ones they invented.
-**Design:** Scan → Verify & Self-Check (negative verification + fabrication check) → Rank & Rollup → Present. MUST NOT propose fixes.
-
 ### /goat-investigate
 **Problem:** Planning without understanding the codebase. Agent proposes approaches based on assumptions that turn out wrong midway through.
 **Design:** Progressive depth reading with OBSERVED/INFERRED evidence tagging. Includes Onboard Mode for new projects (stack detection + instruction drafting). Hard gate — no planning until human reviews.
 
 ### /goat-review
-**Problem:** Rubber-stamp reviews. Agent says "looks good" or lists trivial style issues while missing architectural concerns.
-**Design:** Structured review with RFC 2119 severity. Read actual source code, not just docs. Footgun matching on every finding. Includes Instruction Review Mode for auditing CLAUDE.md/AGENTS.md for staleness.
+**Problem:** Rubber-stamp reviews and fabricated audit findings. Agent says "looks good" or invents plausible-sounding issues.
+**Design:** Three modes in one skill. Standard review: RFC 2119 severity, footgun matching, full-file context. Audit mode: negative verification + fabrication self-check — attempt to disprove each finding. Instruction review mode: friction signals + staleness audit. Merged from separate /goat-audit and /goat-reflect skills to reduce skill count while preserving all mechanisms.
 
 ### /goat-plan
 **Problem:** Jumping into implementation without structured planning. Features get built without clear scope, success criteria, or phased milestones.
@@ -177,13 +165,13 @@ Skills are created during Phase 1b of the GOAT Flow setup. The skill templates i
 **Problem:** The coding agent verifies its own work and declares victory. Self-assessment is unreliable — the agent has blind spots for the same failure modes it introduced.
 **Design:** Generates test plans across three phases. The coding agent produces the plan but does NOT execute verification — separate agents and the human do (doer-verifier principle).
 
-### /goat-context
-**Problem:** After context compaction or a session break, the agent starts from scratch and loses context about decisions, progress, and pending work.
-**Design:** Multi-source context reconstruction (handoff notes, task files, git log, branch divergence, diff sampling). Detects handoff drift. Recommends next action and skill.
-
 ### /goat-refactor
 **Problem:** Cross-file changes break when one side is updated without reading the other. Renames leave orphaned references in docs and tests.
 **Design:** Both-sides-first reading. One layer at a time. Grep-after-every-rename to verify zero remaining references. Doc cross-reference check.
+
+### /goat-simplify
+**Problem:** Code that works but is hard to read, follow, or maintain. Cryptic naming, misleading comments, and unnecessary complexity accumulate over time and slow down everyone who reads the code.
+**Design:** Readability-focused analysis with semantics-preserving constraint. Prefer renaming over commenting. Impact-ordered findings. Behavior verification after every change.
 
 ## Skill Justification Test
 
@@ -196,4 +184,4 @@ A skill earns its place if it meets ALL of:
 
 Skills that failed this test and were downgraded to inline instructions: `/annotation-cycle`, `/sbao-synthesis`, `/review-triage`, `/revert-rescope`.
 
-Skills that were merged (v0.7.0): `/goat-reflect` → absorbed into `/goat-review` (Instruction Review Mode). `/goat-onboard` → absorbed into `/goat-investigate` (Onboard Mode). `/goat-resume` → renamed to `/goat-context` with expanded capabilities.
+Skills that were merged (v0.7.0): `/goat-reflect` → `/goat-review` (Instruction Review Mode). `/goat-onboard` → `/goat-investigate` (Onboard Mode). `/goat-audit` → `/goat-review` (Audit Mode). `/goat-context` removed — session resumption is handled by the agent's built-in context management.
