@@ -1,7 +1,8 @@
 # Shared Skill Preamble
 
-All goat-* skills follow these shared conventions. Each skill references this
-preamble instead of repeating these sections inline.
+All goat-* skills follow these shared conventions. Skills inline these
+sections rather than referencing this file at runtime. This document is the
+canonical source — update here first, then propagate to skill templates.
 
 ---
 

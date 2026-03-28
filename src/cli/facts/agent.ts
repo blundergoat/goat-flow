@@ -307,10 +307,10 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
         }
 
         if (/step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i.test(skillContent)) withStep0++;
-        if (/human\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
+        if (/human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
         if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
         if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
-        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question/i.test(skillContent)) withConversational++;
+        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question|proceed\?/i.test(skillContent)) withConversational++;
         if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
         if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
         if (/##\s*(Output|Output Format)/i.test(skillContent)) withOutputFormat++;

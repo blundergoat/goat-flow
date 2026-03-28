@@ -1,7 +1,7 @@
 ---
 name: goat-test
 description: "Generate testing instructions across three verification tracks"
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.8.0"
 ---
 # /goat-test
 

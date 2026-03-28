@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CLI auditor + scoring engine for GOAT Flow AI coding agent workflows",
   "type": "module",
   "bin": {

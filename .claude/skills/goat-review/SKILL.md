@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Review diffs and PRs with structured severity levels, diff-aware analysis, and footgun matching"
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.8.0"
 ---
 # /goat-review
 

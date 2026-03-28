@@ -156,7 +156,7 @@ function qualitySkill(name: string): string {
   return `---
 name: goat-${name}
 description: "${name} skill"
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.8.0"
 ---
 # goat-${name}
 
@@ -632,8 +632,8 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     // Skills for all agents (8 required skills)
     ...Object.fromEntries(
       ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
-        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.7.0"\n---\n# goat-${s}\n`],
-        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.7.0"\n---\n# goat-${s}\n`],
+        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
+        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
       ]),
     ),
     // Hooks

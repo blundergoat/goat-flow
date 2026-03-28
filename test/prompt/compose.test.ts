@@ -843,7 +843,7 @@ describe('M2.14: placeholder npm script edge cases', () => {
 describe('Rubric version consistency', () => {
   it('RUBRIC_VERSION is current', async () => {
     const { RUBRIC_VERSION } = await import('../../src/cli/rubric/version.js');
-    assert.equal(RUBRIC_VERSION, '0.7.0', 'RUBRIC_VERSION should match package version');
+    assert.equal(RUBRIC_VERSION, '0.8.0', 'RUBRIC_VERSION should match package version');
   });
 });
 
