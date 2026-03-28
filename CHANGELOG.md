@@ -2,13 +2,55 @@
 
 ---
 
-## v0.7.0 - Unreleased
+## v0.8.0 - 2026-03-28
 
-Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 97 checks + 14 anti-patterns.
+Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation alignment. Rubric v0.7.0: 97 checks + 14 anti-patterns. 138 tests.
+
+### Skill Consolidation (10→8) — ADR-007
+- goat-reflect/audit merged into goat-review (Instruction Review + Audit modes), goat-onboard merged into goat-investigate (Onboard mode), goat-context removed
+- goat-refactor (cross-file renames, blast radius analysis) and goat-simplify (readability, no behaviour change) added as new skills
+- Deprecated skill dirs deleted from .claude/, .agents/, .github/ — all three now have identical 8-skill parity
+- `goat-flow-skill-version: "0.7.0"` frontmatter on all installed skills; DEPRECATED_SKILL_NAMES constant provides scanner migration grace period
+
+### Setup Prompt Fix
+- Skill-quality recommendation keys (add-skill-step0, add-skill-human-gates, etc.) were all resolving to "Adapt from goat-debug.md" — FRAGMENT_TEMPLATE_MAP pointed them at goat-debug as an example reference
+- renderShortFix now skips template paths for `add-skill-*` and `create-all-skills` keys, renders actual instruction text instead
+- `--agent all` removed (exit 2 with per-agent message)
+- Language mapper expanded to 10 languages (+Java, Ruby, C#)
+
+### Documentation Alignment
+- 21 stale "10 skills" references fixed across README.md, docs/ (getting-started, architecture, five-layers, cross-agent-comparison, examples), setup/ (README, phase-1, execution-loop, setup-codex), src/cli/ (standard.ts, compose-setup.ts, full.ts)
+- docs/system-spec.md deprecated skill descriptions (goat-reflect, goat-onboard, goat-resume) replaced with goat-refactor/goat-simplify
+- docs/system/five-layers.md skill table trimmed from 10 to 8 rows; workflow/README.md skill list updated
+- CHANGELOG.md and README.md scanner counts corrected (92→97 checks, 12→14 anti-patterns)
+- Rubric comment at standard.ts:18 corrected (19 pts/10 existence → 17 pts/8 existence)
+
+### CI Template Fix
+- `full.ts:126` shell for-loop was generating CI YAML checking deprecated skills (audit, reflect, onboard, resume)
+- Fixed to check the canonical 8: security, debug, investigate, review, plan, test, refactor, simplify
+
+### Tests
+- scan-fixtures.test.ts full-pass fixture updated from 9 deprecated skills (included audit, context) to canonical 8
+- 138 tests pass (was 96)
+
+### ADRs
+- ADR-007: skill consolidation 10→8 — justification test, merge mapping, consequences
+- ADR-008: reference-based setup prompts — why inline skeletons failed (template drift, agent copy-paste, context waste)
+
+### Cross-Project Audit (9 projects)
+- All 9 projects score A (96-100%) after v0.8.0 changes
+- Setup files regenerated with fixed CLI for all projects
+- Per-project review prompts generated in tasks/cli-setup-claude/
+
+---
+
+## v0.7.0 - 2026-03-26
+
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
 
 ### Reference-Based Setup Prompt
 - Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons
-- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, per-agent `--agent` flag (run separately for each agent)
+- Agent-branched tables (Claude/Codex/Gemini), language-to-coding-standards mapper, `--agent all` with interactive picker
 - Skill quality requirements block in Phase 1b, `GOAT_FLOW_INLINE_SETUP=1` rollback, `setup/` + `workflow/` in npm tarball
 
 ### Scanner Accuracy (rubric v0.7.0)

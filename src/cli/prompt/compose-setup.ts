@@ -98,7 +98,10 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
     if (!fragment) continue;
     // Skip AP fragments here — they're rendered below with evidence
     if (fragment.phase === 'anti-pattern') continue;
-    const templatePath = getFragmentTemplate(key, agentId);
+    // Skip template path for skill-quality keys — they all point to goat-debug.md as an example
+    // reference, not a creation template. Render their actual instruction text instead.
+    const isSkillQuality = key.startsWith('add-skill-') || key === 'create-all-skills';
+    const templatePath = isSkillQuality ? null : getFragmentTemplate(key, agentId);
     if (templatePath) {
       lines.push(`- **${fragment.category}**: Adapt from ${getTemplatePath(templatePath)}`);
     } else {
