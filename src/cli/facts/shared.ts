@@ -49,8 +49,15 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   const footgunsContent = fs.readFile('docs/footguns.md');
   /** Whether the footguns file exists on disk */
   const exists = footgunsContent !== null;
-  /** Number of footgun entries in the file */
-  const entryCount = footgunsContent ? (footgunsContent.match(/^## Footgun:/gm)?.length ?? 0) : 0;
+  /** Number of footgun entries in the file.
+   * Detects two formats:
+   *   Standard:    ## Footgun: Name
+   *   H3 entries:  ### Name  (older projects that predate the standard format)
+   */
+  const entryCount = footgunsContent ? (
+    (footgunsContent.match(/^## Footgun:/gm)?.length ?? 0) +
+    (footgunsContent.match(/^### .{5,}/gm)?.length ?? 0)
+  ) : 0;
   /** Number of explicit evidence type labels in the file */
   const labelCount = footgunsContent ? (footgunsContent.match(/^\*\*Evidence type:\*\*/gm)?.length ?? 0) : 0;
   // Check for real file:line evidence (filter out URLs/hostnames before deciding)

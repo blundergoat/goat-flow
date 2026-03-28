@@ -507,7 +507,7 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
     codex: 'setup/setup-codex.md',
     gemini: 'setup/setup-gemini.md',
   },
-  'add-rfc2119': 'setup/shared/execution-loop.md',
+  // add-rfc2119 intentionally excluded — inline instruction is self-contained
   'fix-execution-loop-sync': 'setup/shared/execution-loop.md',
 
   // Fix-kind — evals and CI

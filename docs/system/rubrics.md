@@ -6,10 +6,10 @@ All checks scored by `goat-flow scan`. Organized by tier → category. Use this 
 
 | Tier | Points | Purpose |
 |------|--------|---------|
-| Foundation | 47 | Must-have basics: instruction file, execution loop, enforcement |
-| Standard | 69 | Reliable workflow: skills, hooks, learning loop, router |
-| Full | 20 | Advanced quality: evals, CI, portfolio health |
-| **Total** | **136** | |
+| Foundation | 43 | Must-have basics: instruction file, execution loop, enforcement |
+| Standard | 62 | Reliable workflow: skills, hooks, learning loop, router |
+| Full | 16–20 | Advanced quality: evals, CI, hygiene (stack-specific checks affect total) |
+| **Total** | **~121** | Varies slightly by project stack |
 | Anti-Patterns | −15 max | Deductions for actively harmful states |
 
 Grade: A ≥ 90% · B ≥ 80% · C ≥ 70% · D ≥ 60% · F < 60%.
@@ -96,6 +96,7 @@ Eight canonical skills exist because different task types need different interac
 | 2.1.18 | Structured choices | 1 | (a)/(b)/(c) at transition points prevents yes/no gates that stall work. |
 | 2.1.19 | Output format defined | 1 | Without a format spec, agents invent output shapes that vary per run. |
 | 2.1.20 | Skill adaptation (not template copy) | 1 | Skills copied verbatim from the template serve the template project, not this one. |
+| 2.1.21 | Shared Conventions block | 1 | Cross-skill consistency block (severity scale, evidence standard, gates, learning loop) — without it, each skill applies different standards. |
 
 ### 2.2 Hooks (16 pts)
 
