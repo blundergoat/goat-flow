@@ -1,4 +1,4 @@
-import type { ScanReport, AgentId, AgentReport } from '../types.js';
+import type { ScanReport, AgentId, AgentReport, ProjectSignals } from '../types.js';
 import type { ComposedPrompt, PromptSection, PromptVariables, FragmentPhase, SetupTask } from './types.js';
 import { getAllFragments, getFragment } from './registry.js';
 import { extractTemplateVars, fillTemplate } from './template-filler.js';
@@ -8,6 +8,24 @@ import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, getFr
 
 /** Projects at or above this percentage get the short fix list instead of targeted fix */
 const SHORT_FIX_THRESHOLD = 90;
+
+/** Render detected project signals into the setup prompt output */
+function renderSignals(lines: string[], signals: ProjectSignals): void {
+  const parts: string[] = [];
+  if (signals.codeGenTools.length > 0) parts.push(`**Code gen:** ${signals.codeGenTools.join(', ')}`);
+  if (signals.deployPlatforms.length > 0) parts.push(`**Deploy:** ${signals.deployPlatforms.join(', ')}`);
+  if (signals.llmIntegration) parts.push('**LLM integration detected**');
+  if (signals.staticAnalysis.length > 0) {
+    const tools = signals.staticAnalysis.map(s => s.level ? `${s.tool} (${s.level})` : s.tool).join(', ');
+    parts.push(`**Static analysis:** ${tools}`);
+  }
+  if (signals.complianceSignals) parts.push('**PHI/compliance signals detected** — add mandatory constraints to hot path');
+  if (signals.formatterGaps.length > 0) parts.push(`**Formatter gaps:** ${signals.formatterGaps.join(', ')} (no formatter detected in hooks)`);
+  if (parts.length > 0) {
+    lines.push('');
+    lines.push(parts.join(' | '));
+  }
+}
 
 /** Phase order for targeted-fix mode (anti-patterns first, then tiers) */
 const PHASE_ORDER: FragmentPhase[] = ['anti-pattern', 'foundation', 'standard', 'full'];
@@ -79,6 +97,7 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
     ? `${vars.failedCount} checks + ${triggeredAPs} anti-patterns remaining.`
     : `${vars.failedCount} checks remaining.`;
   lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%). ${countText}`);
+  renderSignals(lines, report.stack.signals);
   lines.push('');
 
   // Collect needed fragment keys
@@ -331,6 +350,7 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   lines.push('');
   lines.push(`Stack: ${languages}`);
   if (cmds) lines.push(cmds);
+  renderSignals(lines, stack.signals);
   lines.push('');
 
   lines.push('## How this works');
@@ -442,6 +462,7 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
     stack.lintCommand && `**Lint:** \`${stack.lintCommand}\``,
   ].filter(Boolean).join(' | ');
   if (cmds) lines.push(cmds);
+  renderSignals(lines, stack.signals);
   lines.push('');
 
   // Pre-instructions

@@ -2,9 +2,41 @@
 
 ---
 
+## v0.9.0 - 2026-03-29
+
+Dispatcher skill, Shared Conventions checks, workflow templates v0.8.0 bump, phase-0.md, 8 skill evals, preflight version gate. Rubric v0.9.0: 99 checks + 15 anti-patterns. 138 tests.
+
+### Scanner
+- Check 2.1.20: Dispatcher skill (goat) installed — custom fn reads `hasDispatcher` fact via `fs.exists(skillsDir/goat/SKILL.md)`
+- Check 2.1.21: All canonical skills have `## Shared Conventions` block — `withSharedConventions` counter in `facts/agent.ts`
+
+### Skills & Dispatcher
+- Dispatcher skill (`goat`) added across all three agent dirs; routes to 8 canonical skills by intent
+- `## Shared Conventions` block added to all 18 installed skill files (.claude/.agents/.github × 6 skills)
+- Workflow templates bumped from `goat-flow-skill-version: "0.7.0"` → `"0.8.0"` (fixes guaranteed AP15 -10 on new installs)
+
+### Setup & Scripts
+- `setup/shared/phase-0.md` created (fixes dead link in setup/README.md phases table)
+- `setup/shared/phase-1.md` updated: dispatcher install guidance, version check gate, AP15 warning
+- `scripts/preflight-checks.sh`: Skill Template Versions section — catches version drift before shipping
+- `scripts/context-validate.sh`: dispatcher-aware (accepts `## How It Works`; skips Output check for goat)
+
+### Evals & Docs
+- 8 skill-specific evals added under `agent-evals/` (one per canonical skill, new YAML frontmatter format)
+- `docs/reference/design-rationale.md`: ADR-007 supersession note on v2.9 row
+
+---
+
 ## v0.8.0 - 2026-03-28
 
-Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation alignment. Rubric v0.7.0: 97 checks + 14 anti-patterns. 138 tests.
+Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation alignment, rubric scoring cleanup. Rubric v0.8.0: 97 checks + 15 anti-patterns. 138 tests.
+
+### Rubric Scoring Cleanup
+- Converted previously advisory checks into scored checks where the detector is reliable: footgun evidence labels, lesson path validity, router completeness for learning loop/architecture/evals, eval Agents labels, handoff template required sections, and eval skill diversity
+- Removed zero-point checks that were too heuristic or too weak to score safely: skill Step 0 adaptation, Ask First boundary/router overlap, AI ignore files, and cold-path line budget
+- Moved empty `docs/decisions/` from a zero-point rubric check to anti-pattern `AP16` with a small deduction, so misleading empty ADR scaffolding now affects score
+- Tightened `3.3.1a` to require all five handoff template sections before awarding the point
+- Total check count remains 97 after the cleanup; anti-pattern count increases to 15
 
 ### Skill Consolidation (10→8) — ADR-007
 - goat-reflect/audit merged into goat-review (Instruction Review + Audit modes), goat-onboard merged into goat-investigate (Onboard mode), goat-context removed
@@ -46,7 +78,7 @@ Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation align
 
 ## v0.7.0 - 2026-03-26
 
-Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric v0.7.0: 92 checks + 12 anti-patterns.
 
 ### Reference-Based Setup Prompt
 - Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons

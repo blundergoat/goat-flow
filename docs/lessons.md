@@ -4,6 +4,13 @@ Behavioural mistakes made by the agent during this project. Each entry describes
 
 ## Entries
 
+### Version bumps require explicit confirmation
+**What happened:** While cleaning up zero-point rubric checks, the agent also bumped `package.json`, `RUBRIC_VERSION`, and skill frontmatter above the current `0.8.0` line. The user had not asked for a release/version bump and corrected it immediately.
+
+**Prevention:** Treat version changes as a separate decision from rubric or content changes. Do not bump package, rubric, or template versions unless the user explicitly requests the new version or the release plan says to do it.
+
+**created_at:** 2026-03-29
+
 ### Agents resolve contradictions by following whichever source they read first
 **What happened:** system-spec.md showed the old 5-step execution loop while execution-loop.md had the updated 6-step version with SCOPE. The setup prompt says "Read docs/system-spec.md" first. Both rampart and sus-form-detector agents absorbed the spec's loop and either didn't notice or couldn't override execution-loop.md. 7 of 8 gaps in sus-form-detector traced to this single contradiction.
 
@@ -57,7 +64,7 @@ Behavioural mistakes made by the agent during this project. Each entry describes
 **created_at:** 2026-03-22
 
 ### Setup agents propagate errors from existing instruction files
-**What happened:** Rampart's CLAUDE.md had `redaction.rs` (doesn't exist — redaction is Python only). Blundergoat's CLAUDE.md had `apps/web/src/middleware.ts` (doesn't exist — project uses `proxy.ts`) and `apps/api/sql/migrations/` (actual path is `sql/schema/`). Sub-agents creating `ai/instructions/` read these wrong paths from the existing instruction files and copied them into the new cold-path files, propagating the error.
+**What happened:** Rampart's CLAUDE.md had `redaction.rs` (doesn't exist — redaction is Python only). Blundergoat's CLAUDE.md had a stale web middleware path pointing at `middleware.ts` instead of `proxy.ts`, plus a stale API SQL directory pointing at `migrations/` instead of `schema/`. Sub-agents creating `ai/instructions/` read these wrong paths from the existing instruction files and copied them into the new cold-path files, propagating the error.
 **Root cause:** The verification gate said "verify paths in ai/instructions/" but didn't say "also audit the existing instruction file you're reading from." Agents trust the hot-path file as authoritative without checking.
 **Fix:** Added "ALSO AUDIT EXISTING INSTRUCTION FILES" gate to docs-seed.md — verify Ask First paths exist, check router entries resolve, fix stale paths before copying them into cold-path files.
 **created_at:** 2026-03-22

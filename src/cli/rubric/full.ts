@@ -6,12 +6,12 @@ import type { CheckDef, FactContext, CheckResult } from '../types.js';
 //   low    = semantic inference (content quality judgment)
 
 /**
- * Tier 3 — Full (16 points)
+ * Tier 3 — Full (20 points)
  * Agent evals, CI validation, hygiene.
  * These checks represent mature GOAT Flow adoption with CI integration.
  */
 export const fullChecks: CheckDef[] = [
-  // === 3.1 Agent Evals (7 pts: 1 existence + 2 count + 2 replay + 1 origin + 1 coverage) ===
+  // === 3.1 Agent Evals (8 pts: 1 existence + 2 count + 2 replay + 1 origin + 1 agents + 1 coverage) ===
   {
     id: '3.1.1', name: 'Evals directory exists', tier: 'full', category: 'Agent Evals',
     pts: 1, confidence: 'high',
@@ -68,13 +68,13 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
-    pts: 0, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
         status: ctx.facts.shared.evals.hasAgentsLabels ? 'pass' : 'fail',
-        points: 0, maxPoints: 0, confidence: 'high',
+        points: ctx.facts.shared.evals.hasAgentsLabels ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.facts.shared.evals.hasAgentsLabels ? 'Evals have Agents labels' : 'Evals missing **Agents:** labels (all | codex | claude | gemini)',
       }),
     },
@@ -82,23 +82,23 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'add-agents-labels',
   },
   {
-    id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals',
+    id: '3.1.6', name: 'Evals cover all 8 canonical skills', tier: 'full', category: 'Agent Evals',
     pts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        // Number of distinct skill names referenced across all eval files
-        const count = ctx.facts.shared.evals.evalSkillCount;
-        if (ctx.facts.shared.evals.count === 0) {
-          return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No eval files' };
+        const { evalSkillCount, count } = ctx.facts.shared.evals;
+        const TOTAL_SKILLS = 8;
+        if (count === 0) {
+          return { id: '3.1.6', name: 'Evals cover all 8 canonical skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No eval files' };
         }
-        if (count >= 2) {
-          return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `Evals reference ${count} distinct skills` };
+        if (evalSkillCount >= TOTAL_SKILLS) {
+          return { id: '3.1.6', name: 'Evals cover all 8 canonical skills', tier: 'full', category: 'Agent Evals', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `All ${TOTAL_SKILLS} canonical skills covered` };
         }
-        return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: count === 1 ? 'Evals only cover 1 skill — add evals for at least 2 distinct skills' : 'Evals do not reference any skills — add **Skill:** labels to eval files' };
+        return { id: '3.1.6', name: 'Evals cover all 8 canonical skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: evalSkillCount === 0 ? 'No **Skill:** labels found in evals — add skill: goat-X frontmatter to each eval file' : `${evalSkillCount}/${TOTAL_SKILLS} canonical skills covered — add evals for the missing ones` };
       },
     },
-    recommendation: 'Add **Skill:** labels to eval files and ensure at least 2 distinct skills are covered',
+    recommendation: 'Add evals for all 8 canonical skills: goat-debug, goat-investigate, goat-plan, goat-refactor, goat-review, goat-security, goat-simplify, goat-test.',
     recommendationKey: 'add-eval-skill-coverage',
   },
 
@@ -176,7 +176,7 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'ci-trigger-prs',
   },
 
-  // === 3.3 Hygiene (3 pts) ===
+  // === 3.3 Hygiene (5 pts) ===
   {
     id: '3.3.1', name: 'Handoff template', tier: 'full', category: 'Hygiene',
     pts: 1, confidence: 'high',
@@ -186,9 +186,27 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.3.1a', name: 'Handoff template has required sections', tier: 'full', category: 'Hygiene',
-    pts: 0, confidence: 'medium',
+    pts: 1, confidence: 'medium',
     na: (ctx) => !ctx.facts.shared.handoffTemplate.exists,
-    detect: { type: 'grep_count', path: 'tasks/handoff-template.md', pattern: '## Status|## Current State|## Key Decisions|## Known Risks|## Next Step', min: 4 },
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasRequiredSections, sectionCount } = ctx.facts.shared.handoffTemplate;
+        return {
+          id: '3.3.1a',
+          name: 'Handoff template has required sections',
+          tier: 'full',
+          category: 'Hygiene',
+          status: hasRequiredSections ? 'pass' : 'fail',
+          points: hasRequiredSections ? 1 : 0,
+          maxPoints: 1,
+          confidence: 'medium',
+          message: hasRequiredSections
+            ? `Found ${sectionCount}/5 required sections`
+            : `Found ${sectionCount}/5 required sections`,
+        };
+      },
+    },
     recommendation: 'Add required sections to handoff template: Status, Current State, Key Decisions, Known Risks, Next Step',
     recommendationKey: 'fix-handoff-sections',
   },
@@ -254,4 +272,6 @@ export const fullChecks: CheckDef[] = [
     recommendation: 'Reconcile execution loop sections across agent instruction files',
     recommendationKey: 'fix-execution-loop-sync',
   },
+
+  // 3.4.1 removed — duplicate of 3.1.6 after both were updated to require all 8 canonical skills.
 ];

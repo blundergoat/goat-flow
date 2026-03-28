@@ -176,10 +176,10 @@ function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefi
   /** Line count at or above which the check fails */
   const failThreshold = detect.fail ?? Infinity;
 
-  if (lineCount < passThreshold) {
-    return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${lineCount} lines (under ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
+  if (lineCount <= passThreshold) {
+    return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${lineCount} lines (at or under ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
   }
-  if (detect.partial && partialPts && lineCount < failThreshold) {
+  if (detect.partial && partialPts && lineCount <= failThreshold) {
     return { ...base, status: 'partial', points: partialPts, maxPoints: pts, message: `${lineCount} lines (under ${failThreshold} limit but over ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
   }
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${lineCount} lines (over ${failThreshold} limit)`, evidence: `${path}: ${lineCount} lines` };
@@ -388,6 +388,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     '.github/workflows/context-validation.yml': shared.ci.workflowExists,
     '.gitignore': shared.gitignore.exists,
     'scripts/preflight-checks.sh': shared.preflightScript.exists,
+    'docs/decisions': shared.decisions.dirExists,
     // CHANGELOG.md removed — project-level concern.
     'ai/instructions': shared.localInstructions.dirExists && shared.localInstructions.location === 'ai',
     'ai/README.md': shared.localInstructions.hasRouter && shared.localInstructions.location === 'ai',

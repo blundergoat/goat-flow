@@ -160,6 +160,16 @@ goat-flow-skill-version: "0.8.0"
 ---
 # goat-${name}
 
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs \`file:line\`. Tag as OBSERVED (verified) or INFERRED. MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → \`docs/lessons.md\`. Architectural trap → \`docs/footguns.md\`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+
 ## When to Use
 
 Use for ${name} tasks.
@@ -728,21 +738,22 @@ GOOD: Inline format. Extract when second format needed
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].map(s => [
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
+    '.claude/skills/goat/SKILL.md': `---\nname: goat\ndescription: "Dispatcher"\ngoat-flow-skill-version: "0.8.0"\n---\n# /goat\n\n## How It Works\n\nRoutes to the right skill.\n\n## Constraints\n\n- MUST announce selected skill\n`,
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nset -euo pipefail\nINPUT=$(cat)\nCMD=$(echo "$INPUT" | jq -r .command // empty)\ncase "$CMD" in *rm\\ -rf*|*--force*|*chmod\\ 777*) exit 2;; esac\nexit 0\n',
     '.claude/hooks/stop-lint.sh': '#!/usr/bin/env bash\necho "lint check"\nexit 0\n',
     '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nprettier --write "$1"\nexit 0\n',
-    'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\nACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
+    'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\n**Evidence type:** ACTUAL_MEASURED\n\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
     'src/auth.ts': '// auth module\n',
     'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod deploy\n\n### Entry 2\n**What happened:** missed test coverage\n\n### Entry 3\n**What happened:** stale ref after rename\n',
     'docs/architecture.md': '# Architecture\n\n' + 'System overview line.\n'.repeat(8),
     'agent-evals/README.md': '# Agent Evals\n',
     'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-debug\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
     'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nDo something\n```\n',
-    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
+    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-plan\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
     '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
     'tasks/handoff-template.md': '# Handoff Template\n\n## Status\n\n## Current State\n\n## Key Decisions\n\n## Known Risks\n\n## Next Step\n',

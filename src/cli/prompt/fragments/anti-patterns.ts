@@ -2,7 +2,7 @@ import type { Fragment } from '../types.js';
 import { SKILL_VERSION } from '../../constants.js';
 
 /**
- * Anti-pattern fix fragments (12 keys)
+ * Anti-pattern fix fragments
  */
 export const antiPatternFragments: Fragment[] = [
   {

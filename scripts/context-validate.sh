@@ -77,17 +77,22 @@ required_skills=(
     ".agents/skills/goat-test/SKILL.md"
     ".agents/skills/goat-refactor/SKILL.md"
     ".agents/skills/goat-simplify/SKILL.md"
+    ".agents/skills/goat/SKILL.md"
 )
 
 for skill in "${required_skills[@]}"; do
     [[ -f "$skill" ]] || fail "Missing skill: $skill"
-    grep -q '^## When to Use' "$skill" || fail "Missing '## When to Use' in $skill"
+    # Dispatcher uses 'How It Works' instead of 'When to Use' — accept either
+    grep -Eq '^## (When to Use|How It Works)' "$skill" || fail "Missing '## When to Use' (or '## How It Works' for dispatcher) in $skill"
     grep -Eq '^## (Constraints|Process|Phase)' "$skill" || fail "Missing '## Constraints', '## Process', or '## Phase' in $skill"
-    grep -Eq '^## Output' "$skill" || fail "Missing '## Output' or '## Output Format' in $skill"
+    # Dispatcher has no Output section — only require it for canonical skills
+    if [[ "$skill" != *"/goat/SKILL.md" ]]; then
+        grep -Eq '^## Output' "$skill" || fail "Missing '## Output' or '## Output Format' in $skill"
+    fi
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done
-info "All 8 skills exist with required sections and frontmatter"
+info "All 9 skills (8 canonical + dispatcher) exist with required sections and frontmatter"
 
 if [[ -d agent-evals ]]; then
     [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"

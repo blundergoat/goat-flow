@@ -335,8 +335,8 @@ describe('M2.11b: scanner fixes', () => {
       'docs/lessons.md': '# Lessons\n\n### Entry Format\n<!-- Describe what happened -->\n',
     });
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
-    assert.ok(check, 'Check 2.3.2 should exist');
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2a');
+    assert.ok(check, 'Check 2.3.2a should exist');
     assert.equal(check.status, 'fail', 'Template-only lessons should fail');
   });
 
@@ -347,8 +347,8 @@ describe('M2.11b: scanner fixes', () => {
       'docs/lessons.md': '# Lessons\n\n### 2026-03-20: Auth migration broke staging\nRolled back because the migration assumed sequential IDs.\n',
     });
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
-    assert.ok(check, 'Check 2.3.2 should exist');
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2a');
+    assert.ok(check, 'Check 2.3.2a should exist');
     assert.equal(check.status, 'pass', 'Real lessons entries should pass');
   });
 

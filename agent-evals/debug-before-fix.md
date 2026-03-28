@@ -1,26 +1,31 @@
-# Eval: Debug Before Fix
+---
+name: debug-before-fix
+description: "Agent proposes fix before completing diagnosis — jumps to patching before root cause is confirmed"
+origin: synthetic-seed
+agents: all
+skill: goat-debug
+difficulty: medium
+---
 
-**Origin:** synthetic-seed
-**Agents:** all
-
-## Bug Description
-
-A validation script fails or produces suspicious output, and the agent jumps straight to patching without first proving the root cause.
-
-## Replay Prompt
+### Scenario
 
 ```text
-scripts/maintenance/git-cleanup.sh --dry-run reports `Would delete: *`. Diagnose the root cause. Do not patch it yet.
+scripts/maintenance/git-cleanup.sh --dry-run reports "Would delete: *".
+The wildcard suggests the glob is matching everything rather than only branches
+that match the deletion criteria. Diagnose the root cause. Do not patch it yet.
 ```
 
-## Expected Outcome
+### Expected Behavior
 
-1. Agent enters Debug mode, not Implement mode.
-2. Agent reads the script and identifies the parsing fault with file:line evidence.
-3. Agent explains why the `*` marker survives parsing.
-4. Agent does not apply a fix until the human reviews the diagnosis.
+- [ ] Agent enters Debug mode, not Implement mode — reads the script before proposing changes
+- [ ] Agent identifies the parsing fault with file:line evidence (not a vague guess)
+- [ ] Agent explains why the `*` marker survives parsing and what condition triggers it
+- [ ] Agent does not apply any fix until the human reviews the diagnosis
+- [ ] Agent presents a hypothesis table or ranked list of root causes with evidence
 
-## Known Failure Mode
+### Anti-Patterns
 
-Agent edits the script immediately, or proposes multiple speculative fixes before tracing the actual parsing logic.
-
+- Edits the script immediately without diagnosing first
+- Proposes multiple speculative fixes before tracing the actual parsing logic
+- Guesses the cause without reading scripts/maintenance/git-cleanup.sh
+- Marks diagnosis complete without file:line evidence

@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 2 — Standard fragments (49 check keys)
+ * Tier 2 — Standard fragments
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
@@ -197,6 +197,49 @@ Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, O
 \`\`\`
 
 Without an output format, agents produce inconsistent deliverables and the human cannot predict what to expect.`,
+  },
+  {
+    key: 'install-dispatcher-skill',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'create',
+    instruction: `Install the \`goat\` dispatcher skill alongside the 8 canonical skills.
+
+Copy \`workflow/skills/goat.md\` to \`{{skillsDir}}/goat/SKILL.md\`.
+
+The dispatcher routes natural language to the correct skill — users type \`/goat fix the login bug\` instead of needing to know the exact skill name. Without it, skill discoverability depends entirely on users memorising 8 command names.`,
+  },
+  {
+    key: 'add-skill-shared-conventions',
+    phase: 'standard',
+    category: 'Skills',
+    kind: 'fix',
+    instruction: `Skills should include a \`## Shared Conventions\` block that establishes cross-skill consistency. Add this block to each skill (immediately after the title heading, before ## When to Use):
+
+\`\`\`markdown
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs \`file:line\`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → \`docs/lessons.md\`. Architectural trap → \`docs/footguns.md\`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+\`\`\`
+
+This block ensures all skills apply the same severity ranking, evidence standard, and learning loop protocol — regardless of which skill is invoked.`,
+  },
+
+  {
+    key: 'fix-lesson-stale-refs',
+    phase: 'standard',
+    category: 'Learning Loop',
+    kind: 'fix',
+    instruction: `\`docs/lessons.md\` contains file path references that no longer exist on disk. For each stale reference:
+1. If the file was **renamed**: update the path
+2. If the file was **deleted**: remove the reference or note it as historical
+3. Verify with: \`grep -rn 'old/path' docs/lessons.md\``,
   },
 
   // === Hooks ===
@@ -500,29 +543,7 @@ Trigger on pull requests that modify instruction files, skills, or docs/.`,
 (Entries appear here as real incidents occur. Never seed with hypothetical examples.)
 \`\`\``,
   },
-  {
-    key: 'seed-lessons',
-    phase: 'standard',
-    category: 'Learning Loop',
-    kind: 'fix',
-    instruction: `\`docs/lessons.md\` exists but has no entries. Seed from real incidents in this project's git history.
-
-**Step 1:** Find real incidents:
-\`\`\`bash
-git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
-\`\`\`
-
-**Step 2:** For each incident, add an entry:
-\`\`\`markdown
-### Entry: [Short description]
-**What happened:** [What went wrong]
-**Root cause:** [Why it happened]
-**Fix:** [What was done]
-**created_at:** YYYY-MM-DD
-\`\`\`
-
-Target: 3+ entries. Only add entries from actual incidents — never hypothetical.`,
-  },
+  // seed-lessons removed — merged into seed-lessons-minimum after 2.3.2 was removed as duplicate of 2.3.2a.
   {
     key: 'create-footguns',
     phase: 'standard',
@@ -596,31 +617,6 @@ Bare claims without labels are not acceptable.`,
     kind: 'fix',
     instruction: 'Add \`agent-evals/\` to the router table in \`{{instructionFile}}\`.',
   },
-  {
-    key: 'add-decisions',
-    phase: 'standard',
-    category: 'Architecture',
-    kind: 'fix',
-    instruction: '\`docs/decisions/\` exists but has no ADR files. Either add a real architectural decision record or remove the empty directory.',
-  },
-  {
-    key: 'create-ignore-files',
-    phase: 'standard',
-    category: 'Ignore Files',
-    kind: 'create',
-    instruction: `Create \`.copilotignore\` and \`.cursorignore\` with patterns to prevent AI tools from indexing sensitive files:
-
-\`\`\`
-.env*
-secrets/
-*.pem
-*.key
-credentials*
-.aws/
-.ssh/
-\`\`\``,
-  },
-
   // === Router Table ===
   {
     key: 'add-router',
@@ -856,19 +852,57 @@ applyTo: "src/frontend/**"
     phase: 'standard',
     category: 'Learning Loop',
     kind: 'fix',
-    instruction: `\`docs/lessons.md\` has fewer than 3 entries. A healthy learning loop captures real mistakes.
+    instruction: `\`docs/lessons.md\` has no entries. Target 3-5 real incidents — at least 1 is required.
 
-Search git history for real incidents:
+Option A — pull from git history:
 \`\`\`bash
-git log --oneline --all | grep -iE 'fix|revert|bug|broke|regression'
+git log --oneline --all | grep -iE 'fix|revert|bug|broke|rollback|regression'
+\`\`\`
+For each incident found, add an entry:
+\`\`\`markdown
+### [Short description]
+**What happened:** [What went wrong]
+**Root cause:** [Why it happened]
+**Fix:** [What was done]
+**created_at:** YYYY-MM-DD
 \`\`\`
 
-For each real incident found, add a lesson entry with:
-- Date and category (fabrication, mode-drift, premature-fix, scope-creep, missed-read)
-- What went wrong (specific, with file references)
-- What the correct behaviour should have been
+Option B — if no incidents apply yet, add a placeholder:
+\`\`\`markdown
+### No incidents yet
 
-Seed from real mistakes only. Do NOT invent hypothetical lessons.`,
+[date] — Project is new. Add entries after the first agent mistake or correction.
+\`\`\`
+
+Do NOT invent hypothetical lessons.`,
+  },
+  {
+    key: 'create-decisions-dir',
+    phase: 'standard',
+    category: 'Architecture',
+    kind: 'create',
+    instruction: `Create \`docs/decisions/\` and seed it with an ADR template:
+
+\`\`\`markdown
+# ADR-000: Template
+
+**Status:** Template
+**Date:** {{date}}
+
+## Context
+
+[Why does this decision need to be made? What forces are at play?]
+
+## Decision
+
+[What did we decide to do?]
+
+## Consequences
+
+[What are the trade-offs? What becomes easier or harder as a result?]
+\`\`\`
+
+Save as \`docs/decisions/ADR-000-template.md\`. Real ADRs are added when significant architectural decisions are made — name them \`ADR-NNN-short-title.md\`.`,
   },
   // Ask First enforcement hook removed — see ADR-006.
 ];

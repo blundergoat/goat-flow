@@ -10,18 +10,18 @@ import { SKILL_NAMES } from '../constants.js';
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
 /**
- * Tier 2 — Standard (55 points)
+ * Tier 2 — Standard (69 points)
  * Skills, hooks, learning loop, router, architecture, local context.
  * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
-  // === 2.1 Skills (17 pts: 8 existence + 1 completeness + 8 quality) ===
+  // === 2.1 Skills (27 pts: 8 existence@2 + 1 completeness@1 + 8 quality@1 + 1 dispatcher@1 + 1 shared-conventions@1) ===
   ...SKILL_NAMES.map((skill, i) => ({
     id: `2.1.${i + 1}`,
     name: `${skill} skill`,
     tier: 'standard' as const,
     category: 'Skills',
-    pts: 1,
+    pts: 2,
     confidence: 'high' as const,
     detect: { type: 'file_exists' as const, path: `{skills_dir}/${skill}/SKILL.md` },
     recommendation: `Create ${skill} skill`,
@@ -206,6 +206,43 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Skills should include an ## Output or ## Output Format section that defines the expected deliverable format',
     recommendationKey: 'add-skill-output-format',
+  },
+  {
+    id: '2.1.20', name: 'Dispatcher skill (goat) installed', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '2.1.20', name: 'Dispatcher skill (goat) installed', tier: 'standard', category: 'Skills',
+        status: ctx.agentFacts.skills.hasDispatcher ? 'pass' : 'fail',
+        points: ctx.agentFacts.skills.hasDispatcher ? 1 : 0, maxPoints: 1, confidence: 'high',
+        message: ctx.agentFacts.skills.hasDispatcher
+          ? `${ctx.agentFacts.agent.skillsDir}/goat/SKILL.md exists`
+          : `${ctx.agentFacts.agent.skillsDir}/goat/SKILL.md not found`,
+      }),
+    },
+    recommendation: 'Install the goat dispatcher skill alongside the 8 canonical skills — it routes /goat commands to the right skill',
+    recommendationKey: 'install-dispatcher-skill',
+  },
+  {
+    id: '2.1.21', name: 'Skills have Shared Conventions block', tier: 'standard', category: 'Skills',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { found, quality } = ctx.agentFacts.skills;
+        if (found.length === 0) {
+          return { id: '2.1.21', name: 'Skills have Shared Conventions block', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
+        }
+        const ratio = quality.withSharedConventions / found.length;
+        if (ratio >= SKILL_QUALITY_THRESHOLD) {
+          return { id: '2.1.21', name: 'Skills have Shared Conventions block', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withSharedConventions}/${found.length} skills have Shared Conventions block` };
+        }
+        return { id: '2.1.21', name: 'Skills have Shared Conventions block', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withSharedConventions}/${found.length} skills have Shared Conventions block — add severity, evidence standard, gates, learning loop` };
+      },
+    },
+    recommendation: 'Add ## Shared Conventions block to each skill (severity scale, evidence standard, gates, adaptive Step 0, learning loop)',
+    recommendationKey: 'add-skill-shared-conventions',
   },
 
   // === 2.2 Hooks / Verification Scripts (16 pts) ===
@@ -487,21 +524,7 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Create docs/lessons.md',
     recommendationKey: 'create-lessons',
   },
-  {
-    id: '2.3.2', name: 'lessons.md has entries', tier: 'standard', category: 'Learning Loop',
-    pts: 1, confidence: 'high',
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '2.3.2', name: 'lessons.md has entries', tier: 'standard', category: 'Learning Loop',
-        status: ctx.facts.shared.lessons.hasEntries ? 'pass' : 'fail',
-        points: ctx.facts.shared.lessons.hasEntries ? 1 : 0, maxPoints: 1, confidence: 'high',
-        message: ctx.facts.shared.lessons.hasEntries ? 'lessons.md has entries' : 'lessons.md is empty or has no entries. Expected: `### Title` heading followed by 20+ characters of content on the next line',
-      }),
-    },
-    recommendation: 'Add entries to docs/lessons.md from real incidents',
-    recommendationKey: 'seed-lessons',
-  },
+  // 2.3.2 removed — duplicate of 2.3.2a (hasEntries === entryCount >= 1)
   {
     id: '2.3.3', name: 'footguns.md exists', tier: 'standard', category: 'Learning Loop',
     pts: 2, confidence: 'high',
@@ -525,31 +548,67 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'add-footgun-evidence',
   },
   {
-    id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop',
+    id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop',
     pts: 1, partialPts: 0, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { exists, entryCount } = ctx.facts.shared.lessons;
-        if (!exists) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
-        if (entryCount >= 3) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries — healthy learning loop` };
-        return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${entryCount} lesson entries (need 3+). Each entry must be a \`### Title\` heading followed by 20+ characters. Run: git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug'` };
+        if (!exists) return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
+        if (entryCount >= 1) return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries (3-5 is ideal)` };
+        return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No lesson entries. Add 1+ real incidents from git history, or a placeholder explaining why none apply yet.' };
       },
     },
-    recommendation: 'Seed lessons.md with 3+ real incidents from git history',
+    recommendation: 'Seed lessons.md with at least 1 real incident from git history (3-5 is ideal)',
     recommendationKey: 'seed-lessons-minimum',
   },
   // 2.3.5 removed — duplicate of AP12 (stale footgun refs)
   {
     id: '2.3.5a', name: 'Footguns have evidence labels', tier: 'standard', category: 'Learning Loop',
-    pts: 0, confidence: 'medium',
+    pts: 1, confidence: 'medium',
     na: (ctx) => ctx.facts.shared.footguns.exists === false || ctx.facts.shared.footguns.hasEvidence === false,
-    detect: { type: 'grep', path: 'docs/footguns.md', pattern: 'ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE' },
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { entryCount, labelCount, hasEvidenceLabels } = ctx.facts.shared.footguns;
+        return {
+          id: '2.3.5a',
+          name: 'Footguns have evidence labels',
+          tier: 'standard',
+          category: 'Learning Loop',
+          status: hasEvidenceLabels ? 'pass' : 'fail',
+          points: hasEvidenceLabels ? 1 : 0,
+          maxPoints: 1,
+          confidence: 'medium',
+          message: hasEvidenceLabels
+            ? `${labelCount}/${entryCount} footgun entries have evidence labels`
+            : `Only ${labelCount}/${entryCount} footgun entries have evidence labels`,
+        };
+      },
+    },
     recommendation: 'Add evidence type labels (ACTUAL_MEASURED, DESIGN_TARGET, HYPOTHETICAL_EXAMPLE) to footgun entries',
     recommendationKey: 'add-footgun-labels',
   },
 
-  // === 2.4 Router Table (5 pts) ===
+  {
+    id: '2.3.6', name: 'Lessons file references resolve', tier: 'standard', category: 'Learning Loop',
+    pts: 1, confidence: 'medium',
+    na: (ctx) => !ctx.facts.shared.lessons.exists || ctx.facts.shared.lessons.staleRefs.length === 0,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { staleRefs } = ctx.facts.shared.lessons;
+        if (staleRefs.length === 0) {
+          return { id: '2.3.6', name: 'Lessons file references resolve', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: 'All lesson file references resolve' };
+        }
+        return { id: '2.3.6', name: 'Lessons file references resolve', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `${staleRefs.length} stale refs in lessons.md: ${staleRefs.slice(0, 3).join(', ')}` };
+      },
+    },
+    recommendation: 'Update or remove stale file path references in docs/lessons.md',
+    recommendationKey: 'fix-lesson-stale-refs',
+  },
+
+  // === 2.4 Router Table (8 pts) ===
   {
     id: '2.4.1', name: 'Router section exists', tier: 'standard', category: 'Router Table',
     pts: 1, confidence: 'high',
@@ -587,10 +646,10 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'route-skills',
   },
 
-  // === 2.4.4-2.4.6 Router completeness (A3) ===
+  // === 2.4.4-2.4.6 Router completeness (3 pts) ===
   {
     id: '2.4.4', name: 'Learning loop in router', tier: 'standard', category: 'Router Table',
-    pts: 0, confidence: 'high',
+    pts: 1, confidence: 'high',
     na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
     detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'lessons|footguns|learning' },
     recommendation: 'Add lessons.md and footguns.md to the router table',
@@ -598,7 +657,7 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.4.5', name: 'Architecture in router', tier: 'standard', category: 'Router Table',
-    pts: 0, confidence: 'high',
+    pts: 1, confidence: 'high',
     na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
     detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'architecture|arch' },
     recommendation: 'Add docs/architecture.md to the router table',
@@ -606,14 +665,14 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.4.6', name: 'Evals in router', tier: 'standard', category: 'Router Table',
-    pts: 0, confidence: 'high',
+    pts: 1, confidence: 'high',
     na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router') || !ctx.facts.shared.evals.dirExists,
     detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'eval|agent-eval' },
     recommendation: 'Add agent-evals/ to the router table',
     recommendationKey: 'route-evals',
   },
 
-  // === 2.5 Architecture Docs (2 pts) ===
+  // === 2.5 Architecture Docs (3 pts) ===
   {
     id: '2.5.1', name: 'architecture.md exists', tier: 'standard', category: 'Architecture',
     pts: 1, confidence: 'high',
@@ -629,23 +688,13 @@ export const standardChecks: CheckDef[] = [
     recommendation: 'Compress docs/architecture.md below 100 lines',
     recommendationKey: 'compress-architecture',
   },
-  // === 2.5.3 Decisions directory (A1 — conditional) ===
   {
-    id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture',
-    pts: 0, confidence: 'high',
-    na: (ctx) => ctx.facts.shared.decisions.dirExists === false,
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => {
-        const { fileCount } = ctx.facts.shared.decisions;
-        if (fileCount > 0) return { id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture', status: 'pass', points: 0, maxPoints: 0, confidence: 'high', message: `${fileCount} ADR files in docs/decisions/` };
-        return { id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture', status: 'fail', points: 0, maxPoints: 0, confidence: 'high', message: 'docs/decisions/ exists but has no ADR files — remove empty directory or add a real decision record' };
-      },
-    },
-    recommendation: 'Add real ADRs to docs/decisions/ or remove the empty directory',
-    recommendationKey: 'add-decisions',
+    id: '2.5.3', name: 'decisions dir scaffolded', tier: 'standard', category: 'Architecture',
+    pts: 1, confidence: 'high',
+    detect: { type: 'dir_exists', path: 'docs/decisions' },
+    recommendation: 'Create docs/decisions/ with an ADR template',
+    recommendationKey: 'create-decisions-dir',
   },
-
   // === 2.6 Local Instructions (cold path) (6 pts) ===
   {
     id: '2.6.1', name: 'Instructions directory exists', tier: 'standard', category: 'Local Instructions',
@@ -841,25 +890,4 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'create-backend-instructions',
   },
 
-  // === 2.7 Ignore Files (0 pts — advisory) ===
-  {
-    id: '2.7.1', name: 'AI ignore files exist', tier: 'standard', category: 'Ignore Files',
-    pts: 0, confidence: 'high',
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => {
-        const { copilotignore, cursorignore } = ctx.facts.shared.ignoreFiles;
-        const hasAny = copilotignore || cursorignore;
-        return {
-          id: '2.7.1', name: 'AI ignore files exist', tier: 'standard', category: 'Ignore Files',
-          status: hasAny ? 'pass' : 'fail', points: 0, maxPoints: 0, confidence: 'high',
-          message: hasAny
-            ? `Found: ${[copilotignore && '.copilotignore', cursorignore && '.cursorignore'].filter(Boolean).join(', ')}`
-            : 'No .copilotignore or .cursorignore — AI tools may index sensitive files (.env, secrets/, *.pem)',
-        };
-      },
-    },
-    recommendation: 'Create .copilotignore and/or .cursorignore with secret patterns (.env*, secrets/, *.pem, *.key, credentials*)',
-    recommendationKey: 'create-ignore-files',
-  },
 ];

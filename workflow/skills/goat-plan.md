@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis for competing approaches."
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.8.0"
 ---
 # /goat-plan
 
@@ -12,8 +12,9 @@ goat-flow-skill-version: "0.7.0"
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
 - **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -41,6 +42,10 @@ path. Single-line changes don't need planning.
 Also check for staleness: `git log --since="2 weeks ago" -- [artifact]`. If the artifact hasn't been touched while code diverged, flag it.
 
 If found: "I found [artifact] from [date]. Want to: (a) resume from here, (b) start fresh, (c) jump to a specific phase?"
+
+**Concurrent work check:** Before planning, check if other branches touch the same area:
+`git log --all --oneline --since='3 days ago' -- <target-files-or-dirs>`
+If matches found: "Branch [name] modified [files] [N] days ago. Coordinate?"
 
 **Structural questions (always ask or confirm):**
 1. What are we building? (feature, fix, refactor, infrastructure change)
@@ -71,6 +76,9 @@ then present the next. Do NOT dump all 8 sections at once.
 
 Ask the question whose answer could invalidate the approach FIRST.
 
+**Glossary check:** If `docs/glossary.md` exists, verify all domain terms in the
+brief are defined. If new terms appear, add them: `| term | definition | canonical file | aliases |`
+
 **BLOCKING GATE:** Present complete brief. "Approve, or adjust?"
 
 ## Phase 2 — Mob Elaboration
@@ -82,7 +90,11 @@ the design if answered differently.
 user to answer. If the user says "answer them yourself," that's permission
 to proceed — but the default is to wait.
 
-**CHECKPOINT:** "Questions answered. Proceeding to approach analysis."
+After answers arrive, summarise each answer in one sentence and ask:
+"Want me to drill deeper into any of these, or are we locked in?"
+Repeat until the user says "locked in" or 3 rounds complete (whichever first).
+
+**CHECKPOINT:** "Locked in. Proceeding to approach analysis."
 
 ## Phase 3 — Triangular Tension Analysis
 

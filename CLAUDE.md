@@ -1,6 +1,6 @@
-# CLAUDE.md - v0.4.0 (2026-03-22)
+# CLAUDE.md - v0.8.0 (2026-03-28)
 
-Documentation framework for AI coding agent workflows. Markdown docs + Bash maintenance scripts.
+Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI scanner.
 
 ## Essential Commands
 
@@ -87,13 +87,12 @@ Boundaries:
 MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
 
 ## Hard Rules
-
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples
 - MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
+- Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 
-Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 ## Working Memory
 
 5+ turn tasks → `tasks/todo.md`. Incomplete work → `tasks/handoff.md`. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
@@ -103,17 +102,12 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Resource | Path |
 |----------|------|
 | System spec (canonical) | `docs/system-spec.md` |
-| 5-layer architecture | `docs/system/five-layers.md` |
-| 6-step execution loop | `docs/system/six-steps.md` |
-| Reference docs | `docs/reference/` |
-| Setup prompts | `setup/` |
-| Skill/playbook templates | `workflow/` |
+| System docs (5-layers, 6-steps, rubrics) | `docs/system/` |
 | Coding guidelines | `ai/README.md` |
-| Footguns | `docs/footguns.md` |
-| Lessons | `docs/lessons.md` |
-| Architecture | `docs/architecture.md` |
-| Decisions | `docs/decisions/` |
-| Maintenance scripts | `scripts/maintenance/` |
+| Footguns · Lessons | `docs/footguns.md` · `docs/lessons.md` |
+| Architecture · Decisions | `docs/architecture.md` · `docs/decisions/` |
+| CLI scanner/prompt code | `src/cli/` |
+| Scripts | `scripts/` |
 | Skills | `.claude/skills/goat-*/` |
 | Agent evals | `agent-evals/` |
-| Codex runtime | `AGENTS.md` |
+| Release | `CHANGELOG.md`, `README.md`, `package.json` |

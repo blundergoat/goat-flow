@@ -369,7 +369,7 @@ stack:
 
 **`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews. Includes Onboard Mode for new projects.
 
-**`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers.
+**`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers. Includes Audit Mode (codebase-wide quality sweep) and Instruction Review Mode (CLAUDE.md/skill staleness check).
 
 **`/goat-plan`** -- 4-phase planning: feature brief → mob elaboration → SBAO ranking → milestones. Human gate between each phase. Skip SBAO for Standard features, compress to brief for Hotfixes.
 

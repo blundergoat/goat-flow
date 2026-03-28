@@ -58,6 +58,25 @@ else
     fail "Deny policy self-test"
 fi
 
+# ── Skill Template Versions ──────────────────────────────────────────
+section "Skill Template Versions"
+skill_version=$(grep -o "RUBRIC_VERSION = '[^']*'" src/cli/rubric/version.ts | grep -o "'[^']*'" | tr -d "'" || true)
+if [[ -z "$skill_version" ]]; then
+    note "Could not extract SKILL_VERSION from src/cli/constants.ts"
+else
+    template_fail=0
+    while IFS= read -r -d '' f; do
+        ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+        if [[ "$ver" != "$skill_version" ]]; then
+            fail "Skill template $f has version '$ver', expected '$skill_version'"
+            template_fail=1
+        fi
+    done < <(find workflow/skills -name 'goat-*.md' -not -path '*/reference/*' -print0)
+    if [[ "$template_fail" -eq 0 ]]; then
+        pass "All workflow skill templates at version $skill_version"
+    fi
+fi
+
 # ── Version Consistency ──────────────────────────────────────────────
 section "Version Consistency"
 if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then

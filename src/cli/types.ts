@@ -160,17 +160,45 @@ export interface StackInfo {
   testCommand: string | null;
   lintCommand: string | null;
   formatCommand: string | null;
+  /** Extended project signals detected during setup-time analysis */
+  signals: ProjectSignals;
+}
+
+/** Extended detection signals for richer setup prompts (M03.3) */
+export interface ProjectSignals {
+  /** Code generation tools found (sqlc, Hygen, protobuf, openapi-generator) */
+  codeGenTools: string[];
+  /** Deployment/infrastructure platforms found (amplify, terraform, docker, fly, vercel) */
+  deployPlatforms: string[];
+  /** LLM integration signals (model provider env vars, SDK imports) */
+  llmIntegration: boolean;
+  /** Static analysis tools with detected strictness level */
+  staticAnalysis: Array<{ tool: string; level: string | null }>;
+  /** PHI/compliance keywords detected in docs or instructions */
+  complianceSignals: boolean;
+  /** Formatter coverage: languages with detected formatters vs languages without */
+  formatterGaps: string[];
 }
 
 /** Facts shared across all agents (project-wide files and directories) */
 export interface SharedFacts {
-  footguns: { exists: boolean; hasEvidence: boolean; dirMentions: Map<string, number>; staleRefs: string[]; totalRefs: number; validRefs: number };
-  lessons: { exists: boolean; hasEntries: boolean; entryCount: number };
+  footguns: {
+    exists: boolean;
+    hasEvidence: boolean;
+    entryCount: number;
+    labelCount: number;
+    hasEvidenceLabels: boolean;
+    dirMentions: Map<string, number>;
+    staleRefs: string[];
+    totalRefs: number;
+    validRefs: number;
+  };
+  lessons: { exists: boolean; hasEntries: boolean; entryCount: number; staleRefs: string[] };
   decisions: { dirExists: boolean; fileCount: number };
   architecture: { exists: boolean; lineCount: number };
   evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasAgentsLabels: boolean; hasReplayPrompts: boolean; evalSkillCount: number };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
-  handoffTemplate: { exists: boolean };
+  handoffTemplate: { exists: boolean; sectionCount: number; hasRequiredSections: boolean };
   ignoreFiles: { copilotignore: boolean; cursorignore: boolean; geminiignore: boolean };
   gitignore: { exists: boolean; hasRequiredEntries: boolean };
   guidelinesOwnership: { exists: boolean };
@@ -193,6 +221,8 @@ export interface SharedFacts {
     localFileSizes: Array<{ path: string; lines: number }>;
   };
   gitCommitInstructions: { exists: boolean };
+  /** Total line count across ai/instructions/ files (cold-path budget) */
+  aiInstructionsLineCount: number;
 }
 
 /** Per-agent facts gathered from instruction files, settings, skills, and hooks */
@@ -220,6 +250,8 @@ export interface AgentFacts {
     versions: Record<string, string | null>;
     /** Number of skills with a version older than the current SKILL_VERSION */
     outdatedCount: number;
+    /** Whether the goat dispatcher skill is installed */
+    hasDispatcher: boolean;
     quality: {
       withStep0: number;
       withHumanGate: number;
@@ -229,6 +261,9 @@ export interface AgentFacts {
       withChaining: number;
       withChoices: number;
       withOutputFormat: number;
+      withSharedConventions: number;
+      /** Skills where Step 0 Jaccard similarity to template > 0.9 (unadapted) */
+      unadaptedCount: number;
       // Total number of skill files evaluated
       total: number;
     };

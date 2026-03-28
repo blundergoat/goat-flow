@@ -20,6 +20,7 @@ usage() {
   Commands:
     scan [path] [flags]     Score a project (default: .)
     setup [path] [flags]    Generate setup prompt (adapts to project state)
+    eval                    List agent evals and show how to run them
     test-all                Run all human testing gate checks
     test-all --full         Run all checks, show full output
 
@@ -27,6 +28,7 @@ usage() {
     scripts/run-cli.sh scan .
     scripts/run-cli.sh scan . --agent claude
     scripts/run-cli.sh setup . --agent claude
+    scripts/run-cli.sh eval
     scripts/run-cli.sh test-all
 
 EOF
@@ -113,9 +115,10 @@ if [[ -z "$cmd" ]]; then
     echo ""
     printf "  \033[2mGenerate\033[0m\n"
     printf "  \033[36m4\033[0m  setup .                          Setup prompt (adapts to project state)\n"
+    printf "  \033[36m5\033[0m  eval                            List agent evals\n"
     echo ""
     printf "  \033[2mTest\033[0m\n"
-    printf "  \033[36m5\033[0m  test-all                        Run all human testing gates\n"
+    printf "  \033[36m6\033[0m  test-all                        Run all human testing gates\n"
     printf "  \033[36mh\033[0m  help                            Show full usage + examples\n"
     echo ""
     printf "  \033[1mPick:\033[0m "
@@ -139,11 +142,12 @@ if [[ -z "$cmd" ]]; then
                 *) echo "Invalid choice"; exit 1 ;;
             esac
             ;;
-        5) cmd="test-all" ;;
+        5) cmd="eval" ;;
+        6) cmd="test-all" ;;
         h|H) usage; exit 0 ;;
         *) echo "Invalid choice"; exit 1 ;;
     esac
-    [[ "${cmd:-}" != "test-all" ]] && exit 0
+    [[ "${cmd:-}" != "test-all" ]] && [[ "${cmd:-}" != "eval" ]] && exit 0
 fi
 
 shift
@@ -175,6 +179,27 @@ case "$cmd" in
     fix|audit)
         echo "\"$cmd\" was removed. Use \"setup\" instead — it adapts to your project's state."
         exit 2
+        ;;
+    eval)
+        echo ""
+        printf "\033[1m  GOAT Flow — Agent Evals\033[0m\n"
+        echo ""
+        if [[ -d "agent-evals" ]]; then
+            mapfile -t eval_files < <(find agent-evals -maxdepth 1 -name "*.md" ! -name "README.md" ! -name "FORMAT.md" | sort)
+            printf "  \033[2m%d eval files in agent-evals/\033[0m\n" "${#eval_files[@]}"
+            echo ""
+            for f in "${eval_files[@]}"; do
+                printf "    %s\n" "$f"
+            done
+            echo ""
+            printf "  \033[2mEvals are manually reviewed — paste the ## Scenario into your agent\033[0m\n"
+            printf "  \033[2mand check ## Expected Behavior gates against the response.\033[0m\n"
+            printf "  \033[2mSee agent-evals/FORMAT.md for format details.\033[0m\n"
+        else
+            printf "  \033[31mNo agent-evals/ directory found.\033[0m\n"
+            printf "  \033[2mCreate agent-evals/ to track expected agent behaviors.\033[0m\n"
+        fi
+        echo ""
         ;;
     test-all)
         full_mode=0
