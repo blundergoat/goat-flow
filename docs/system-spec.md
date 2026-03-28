@@ -23,7 +23,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     loaded on demand. Hot path (instruction files) stays under 120 lines.
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume
+    /goat-security, /goat-debug, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-refactor, /goat-simplify
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -76,22 +76,24 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 
 | Skill                | Justification                    | Projects |
 | -------------------- | -------------------------------- | -------- |
-| `/goat-security` | Distinct artefact + hard gate    | All      |
-| `/goat-debug`     | Special failure mode + hard gate | All      |
-| `/goat-audit`     | Distinct artefact + hard gate    | All      |
+| `/goat-security`    | Distinct artefact + hard gate    | All      |
+| `/goat-debug`       | Special failure mode + hard gate | All      |
 | `/goat-investigate`  | Distinct artefact + hard gate    | All      |
-| `/goat-review`    | Repeatable structured output     | All      |
-| `/goat-plan`      | Distinct artefact + hard gate    | All      |
-| `/goat-test`      | Distinct artefact + hard gate    | All      |
-| `/goat-reflect`   | Distinct artefact + hard gate    | All      |
-| `/goat-onboard`   | Distinct artefact + hard gate    | All      |
-| `/goat-resume`    | Special failure mode + hard gate | All      |
+| `/goat-review`      | Repeatable structured output     | All      |
+| `/goat-plan`        | Distinct artefact + hard gate    | All      |
+| `/goat-test`        | Distinct artefact + hard gate    | All      |
+| `/goat-refactor`    | Distinct artefact + hard gate    | All      |
+| `/goat-simplify`    | Distinct artefact + hard gate    | All      |
 
-| Former Skill        | Now Lives                                | Why downgraded                               |
-| ------------------- | ---------------------------------------- | -------------------------------------------- |
-| `/annotation-cycle` | Section in mob elaboration playbook (02) | Planning refinement -- no distinct artefact   |
-| `/sbao-synthesis`   | Section in SBAO planning playbook (03)   | Template, not a workflow with gates          |
-| `/review-triage`    | Review branch of the default ACT step    | Normal review behaviour, not a distinct mode |
+| Former Skill        | Now Lives                                | Why downgraded / merged                                  |
+| ------------------- | ---------------------------------------- | -------------------------------------------------------- |
+| `/annotation-cycle` | Section in mob elaboration playbook (02) | Planning refinement -- no distinct artefact               |
+| `/sbao-synthesis`   | Section in SBAO planning playbook (03)   | Template, not a workflow with gates                      |
+| `/review-triage`    | Review branch of the default ACT step    | Normal review behaviour, not a distinct mode             |
+| `/goat-audit`       | `/goat-review` (Audit Mode)              | Merged -- negative verification + fabrication self-check |
+| `/goat-reflect`     | `/goat-review` (Instruction Review Mode) | Merged -- friction signals + staleness audit             |
+| `/goat-onboard`     | `/goat-investigate` (Onboard Mode)       | Merged -- stack detection + instruction drafting         |
+| `/goat-context`     | Removed                                  | Session resumption handled by agent built-in context     |
 | `/revert-rescope`   | Paragraph in VERIFY/stop-the-line        | Tactic, not a workflow                       |
 
 ---
@@ -365,9 +367,7 @@ stack:
 
 **`/goat-debug`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix.
 
-**`/goat-audit`** -- Multi-pass codebase audit. Pass 1: scan, log with file:line evidence. Pass 2: re-read each finding, remove false positives. Pass 3: rank by severity/blast radius. Pass 4: self-check -- "did I fabricate this?"
-
-**`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews.
+**`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews. Includes Onboard Mode for new projects.
 
 **`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers.
 
@@ -375,11 +375,9 @@ stack:
 
 **`/goat-test`** -- Generate 3-track testing instructions (automated, AI verification, human checklist) after milestones. Doer-verifier principle: the coding agent MUST NOT verify its own work.
 
-**`/goat-reflect`** -- Post-session reflection. Reviews session actions and outcomes, produces structured entries for `docs/lessons.md` and `docs/footguns.md`. MUST produce evidence-based entries, not fabricated incidents.
+**`/goat-refactor`** -- Cross-file refactoring with blast radius analysis. MUST read both sides before changing. Grep-after-every-rename to verify absence of old pattern.
 
-**`/goat-onboard`** -- Codebase onboarding. Reads architecture, footguns, and router table to produce a structured orientation document for new contributors or agents. MUST read architecture and footguns before producing output.
-
-**`/goat-resume`** -- Session resumption. Reads `tasks/handoff.md`, `tasks/todo.md`, and session state to reconstruct context after a break or /clear. MUST read handoff files before acting.
+**`/goat-simplify`** -- Code readability improvement. MUST NOT change behaviour. Prefer renaming over commenting. Impact-ordered findings with before/after diffs.
 
 ---
 

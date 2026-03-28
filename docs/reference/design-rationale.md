@@ -39,7 +39,7 @@ flowchart TB
     end
 
     subgraph DEMAND["ON-DEMAND (via router table / slash commands)"]
-        L3["<b>Layer 3 -- Skills</b><br/>/goat-security - /goat-debug - /goat-audit<br/>/goat-investigate - /goat-review"]
+        L3["<b>Layer 3 -- Skills</b><br/>/goat-security - /goat-debug - /goat-investigate<br/>/goat-review - /goat-plan - /goat-test<br/>/goat-refactor - /goat-simplify"]
         L4["<b>Layer 4 -- Playbooks</b><br/>Mob Elaboration - SBAO Planning - Milestone Planning"]
     end
 

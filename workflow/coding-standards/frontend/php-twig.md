@@ -104,7 +104,10 @@ public function formatPrice(int $cents, string $currency = 'USD'): string
 
 - **Webpack Encore**: Use for projects needing JS bundling, CSS preprocessing, or complex asset pipelines.
 - **AssetMapper**: Use for simpler setups (CSS + minimal JS). No build step required.
-- Reference assets with `{{ asset('path') }}` or `{{ encore_entry_link_tags('app') }}`. Never hardcode `/build/` paths.
+- Reference static files with `{{ asset('path') }}`. Use
+  `{{ encore_entry_link_tags('app') }}` / `{{ encore_entry_script_tags('app') }}`
+  for Encore entrypoints, or `{{ importmap('app') }}` for AssetMapper apps.
+  Never hardcode `/build/` paths.
 
 ## Stimulus / Turbo (if present)
 

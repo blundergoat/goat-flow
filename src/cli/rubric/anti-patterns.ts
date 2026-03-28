@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AntiPatternDef, FactContext, AntiPatternResult } from '../types.js';
+import { SKILL_VERSION } from '../constants.js';
 
 /**
  * Anti-Pattern Deductions (max -15)
@@ -120,19 +123,8 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: 'Add settings.local.json to .gitignore',
     recommendationKey: 'ap-gitignore-settings-local',
   },
-  // === AP10-AP12: Quality Anti-Patterns ===
-  {
-    id: 'AP10', name: 'settings.local.json bloat', deduction: -2, confidence: 'high',
-    na: (ctx) => ctx.agentFacts.agent.settingsFile === null,
-    evaluate: (ctx: FactContext): AntiPatternResult => {
-      const { exists, lineCount } = ctx.agentFacts.settingsLocal;
-      if (!exists) return { id: 'AP10', name: 'settings.local.json bloat', triggered: false, deduction: 0, confidence: 'high', message: 'No settings.local.json' };
-      const triggered = lineCount > 50;
-      return { id: 'AP10', name: 'settings.local.json bloat', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? `settings.local.json is ${lineCount} lines — prune session artifacts (target: under 20)` : `settings.local.json is ${lineCount} lines (OK)` };
-    },
-    recommendation: 'Prune settings.local.json — remove one-off debugging commands',
-    recommendationKey: 'ap-prune-settings-local',
-  },
+  // AP10 removed — settings.local.json is a personal preference file, not a project quality signal.
+  // === AP11-AP12: Quality Anti-Patterns ===
   {
     id: 'AP11', name: 'Empty learning loop scaffolding', deduction: -2, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
@@ -159,6 +151,62 @@ export const antiPatterns: AntiPatternDef[] = [
     },
     recommendation: 'Update or remove stale file:line references in footguns.md',
     recommendationKey: 'ap-fix-stale-references',
+  },
+
+  // === AP13-AP15: New anti-patterns (B3-B5) ===
+  {
+    id: 'AP13', name: 'Stale code references in instruction file', deduction: -3, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const content = ctx.agentFacts.instruction.content;
+      if (!content) return { id: 'AP13', name: 'Stale code references in instruction file', triggered: false, deduction: 0, confidence: 'high', message: 'No instruction file' };
+      // Extract backtick-wrapped paths starting with src/, config/, templates/, app/, apps/, lib/
+      const pathPattern = /`((?:src|config|templates?|app|apps|lib)\/[^`]+)`/g;
+      const stale: string[] = [];
+      for (const m of content.matchAll(pathPattern)) {
+        const p = m[1];
+        if (p === undefined) continue;
+        // Strip :linenum suffix if present
+        const cleanPath = p.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
+        if (!existsSync(join(ctx.facts.root, cleanPath))) stale.push(cleanPath);
+      }
+      const triggered = stale.length > 0;
+      return { id: 'AP13', name: 'Stale code references in instruction file', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `${stale.length} stale code refs in ${ctx.agentFacts.agent.instructionFile}: ${stale.slice(0, 3).join(', ')}` : 'All code references resolve', evidence: triggered ? stale.join(', ') : undefined };
+    },
+    recommendation: 'Fix stale code references in the instruction file — update paths after renames/deletes',
+    recommendationKey: 'ap-fix-stale-instruction-refs',
+  },
+  {
+    id: 'AP14', name: 'Duplicate skill directories', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      // Check for non-goat skills that have a goat- equivalent
+      const found = ctx.agentFacts.skills.found;
+      const goatSkills = found.filter(s => s.startsWith('goat-'));
+      const nonGoat = found.filter(s => !s.startsWith('goat-'));
+      const duplicates = nonGoat.filter(s => goatSkills.includes(`goat-${s}`));
+      const triggered = duplicates.length > 0;
+      return { id: 'AP14', name: 'Duplicate skill directories', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? `Duplicate skills: ${duplicates.map(s => `${s}/ + goat-${s}/`).join(', ')}` : 'No duplicate skills' };
+    },
+    recommendation: 'Remove non-goat-prefixed skill directories that duplicate goat-* skills',
+    recommendationKey: 'ap-fix-duplicate-skills',
+  },
+  {
+    id: 'AP15', name: 'Outdated skill versions', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { found, outdatedCount, versions } = ctx.agentFacts.skills;
+      if (found.length === 0) return { id: 'AP15', name: 'Outdated skill versions', triggered: false, deduction: 0, confidence: 'high', message: 'No skills to check' };
+      const triggered = outdatedCount > 0;
+      const outdatedNames = found.filter(s => versions[s] === null || versions[s] !== SKILL_VERSION);
+      return {
+        id: 'AP15', name: 'Outdated skill versions', triggered,
+        deduction: triggered ? -2 : 0, confidence: 'high',
+        message: triggered
+          ? `${outdatedCount}/${found.length} skills are outdated (expected version ${SKILL_VERSION}): ${outdatedNames.slice(0, 5).join(', ')}`
+          : `All ${found.length} skills at version ${SKILL_VERSION}`,
+        evidence: triggered ? outdatedNames.join(', ') : undefined,
+      };
+    },
+    recommendation: `Update skills to version ${SKILL_VERSION} — re-run setup or add goat-flow-skill-version: ${SKILL_VERSION} to each skill's frontmatter`,
+    recommendationKey: 'ap-fix-outdated-skills',
   },
 ];
 

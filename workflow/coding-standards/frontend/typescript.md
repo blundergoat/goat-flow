@@ -1,19 +1,25 @@
-# TypeScript Coding Standards (Plain TypeScript — No Framework)
+# TypeScript Coding Standards (Framework-Agnostic)
 
 Reference for generating `ai/instructions/frontend.md` or `ai/instructions/backend.md` in TypeScript projects that do NOT use React, Vue, Angular, or Svelte. Applies to CLI tools, libraries, Node.js services, and utility packages.
 
-## ESM Configuration
+## Module Configuration
 
-- Use ESM: set `"type": "module"` in package.json and `"module": "ESNext"` in tsconfig.
-- Always include `.js` extensions in relative imports — TypeScript does not rewrite them.
+- Match `module` and `moduleResolution` to the runtime. Use `nodenext`/`node16`
+  for Node.js packages and services, `bundler` for Vite/Webpack/Rollup apps, and
+  CommonJS only when the runtime or toolchain requires it.
+- Prefer ESM for new packages and services unless a legacy runtime or dependency
+  boundary forces CommonJS.
+- Include `.js` extensions in relative imports when the emitted JavaScript is
+  resolved directly by Node.js ESM or another runtime that requires real file
+  extensions.
 - Use `exports` field in package.json for public entry points. Avoid bare `"main"` for ESM packages.
 
 ```typescript
-// DO — explicit .js extension in ESM imports
+// DO — Node ESM / NodeNext import specifiers
 import { parseConfig } from "./config/parser.js";
 import type { AppConfig } from "./types/config.js";
 
-// DON'T — missing extension breaks at runtime
+// DON'T — missing extension for Node ESM runtime
 import { parseConfig } from "./config/parser";
 ```
 
@@ -22,6 +28,7 @@ import { parseConfig } from "./config/parser";
 - Enable `strict: true` in tsconfig. DO NOT disable individual strict checks.
 - No `any` in production code — use `unknown` and narrow with type guards.
 - No non-null assertions (`!`) in production code. Narrow with checks or provide defaults.
+- Prefer `satisfies` over `as` when validating config objects or constant maps.
 
 ```typescript
 // DO — narrow unknown with type guard
@@ -55,7 +62,12 @@ function handle(r: Result): string {
   switch (r.kind) {
     case "success": return r.data;
     case "failure": return r.error.message;
+    default: return assertNever(r);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled result variant: ${JSON.stringify(value)}`);
 }
 
 // DON'T — boolean flags and optional fields for state
@@ -122,7 +134,12 @@ const fakeClock = { now: jest.fn() } as any;
 ## Common Footguns
 
 - **ESM/CJS interop**: Importing a CJS module from ESM may require `.default` access. Check whether the library provides an ESM build. Use `import pkg from "cjs-lib"` then access `pkg.default` if needed.
-- **Missing `.js` extensions**: TypeScript compiles fine but Node.js ESM loader throws `ERR_MODULE_NOT_FOUND` at runtime. Always include `.js` in relative imports.
+- **Module-resolution mismatch**: `moduleResolution: bundler` and
+  `moduleResolution: nodenext` have different rules. Pick the one that matches
+  the real runtime; otherwise imports compile but fail later.
+- **Missing `.js` extensions in Node ESM**: TypeScript compiles fine but the
+  Node.js ESM loader throws `ERR_MODULE_NOT_FOUND` at runtime. Include `.js` in
+  relative imports when targeting Node ESM.
 - **Type narrowing gaps**: `typeof null === "object"`. Always check `!== null` before `typeof` checks for objects.
 - **Index signatures swallow typos**: `Record<string, T>` accepts any key silently. Prefer explicit interfaces or use `Map<string, T>` when keys are dynamic.
 - **Enum pitfalls**: Numeric enums reverse-map and bloat output. Prefer string literal unions (`type Status = "active" | "inactive"`) or `as const` objects.

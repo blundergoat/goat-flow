@@ -24,7 +24,7 @@ On the shell script collection, both agents found the same 5 qualifying incident
 | Stop hooks (lint after every turn) | Stop hook (experimental, v0.114.0+) | Both now have post-turn hooks. Codex's is newer and less battle-tested. |
 | PostToolUse hooks (auto-format) | AfterToolUse hook (experimental) | Codex now has AfterToolUse events. Formatting can be triggered after edits. |
 | Local CLAUDE.md (directory auto-load) | Centralised footguns.md + router references | Claude Code loads warnings automatically when entering a directory. Codex requires the agent to check the router table. |
-| Slash commands (/goat-security, /goat-debug, etc.) | `.agents/skills/` with SKILL.md files, invoked via /skills or $skill-name | Same content, different loading mechanism. 10 skills per agent. |
+| Slash commands (/goat-security, /goat-debug, etc.) | `.agents/skills/` with SKILL.md files, invoked via /skills or $skill-name | Same content, different loading mechanism. 8 skills per agent. |
 | Permission profiles (.claude/profiles/) | Behavioural guidance in AGENTS.md only | No tool-level scoping. |
 | Permissions deny (settings.json) | Execpolicy rules (.codex/rules/ Starlark) + AGENTS.md Never rules + deny-dangerous script + CI | Codex execpolicy (.codex/rules/*.star) provides runtime shell command blocking (allow/prompt/forbidden). Comparable to Claude Code's settings.json deny list for shell commands. No equivalent for Read-deny patterns. |
 | /compact, /insights | No equivalent | Codex context is per-task, not per-session. No session management needed -- but no session learning either. |
@@ -99,7 +99,7 @@ Implementation options: Docker container with restricted user, rbash (restricted
 
 As of M2.9, GitHub Copilot CLI supports two features previously listed as "no equivalent":
 
-**Skills (`.github/skills/`):** Copilot CLI now discovers skills via `/skills list` or `/goat-{name}` at runtime. The SKILL.md format (YAML frontmatter + content) is identical to `.claude/skills/` and `.agents/skills/`. All 10 skills are supported.
+**Skills (`.github/skills/`):** Copilot CLI now discovers skills via `/skills list` or `/goat-{name}` at runtime. The SKILL.md format (YAML frontmatter + content) is identical to `.claude/skills/` and `.agents/skills/`. All 8 skills are supported.
 
 **Hooks (preToolUse, postToolUse lifecycle):** Copilot CLI now has lifecycle hooks for pre-tool and post-tool events. This narrows the enforcement gap -- Copilot can now block dangerous commands before execution and run formatting/linting after tool use, similar to Claude Code and Gemini CLI.
 

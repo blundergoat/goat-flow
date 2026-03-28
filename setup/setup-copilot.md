@@ -71,7 +71,7 @@ Create `.github/git-commit-instructions.md` if not exists — universal commit i
 If the project uses GitHub Copilot CLI (not just VS Code), create skills under `.github/skills/`:
 
 For each skill in the workflow, create `.github/skills/goat-{name}/SKILL.md`:
-- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-reflect, goat-onboard, goat-resume
+- goat-security, goat-debug, goat-investigate, goat-review, goat-plan, goat-test, goat-refactor, goat-simplify
 
 Each SKILL.md needs YAML frontmatter (name + description) and the full skill content.
 Copy from `.claude/skills/` or `.agents/skills/` — the format is identical.

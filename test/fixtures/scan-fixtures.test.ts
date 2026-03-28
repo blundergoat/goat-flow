@@ -156,6 +156,7 @@ function qualitySkill(name: string): string {
   return `---
 name: goat-${name}
 description: "${name} skill"
+goat-flow-skill-version: "0.8.0"
 ---
 # goat-${name}
 
@@ -270,9 +271,9 @@ describe('Fixture 4: full-claude', () => {
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
-    // 10 skills
+    // 8 skills
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map(s => [
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -473,7 +474,7 @@ describe('Fixture 8: partial-setup', () => {
     // Has some skills but not all
     '.claude/skills/goat-security/SKILL.md': '# goat-security\n',
     '.claude/skills/goat-debug/SKILL.md': '# goat-debug\n',
-    '.claude/skills/goat-audit/SKILL.md': '# goat-audit\n',
+    '.claude/skills/goat-review/SKILL.md': '# goat-review\n',
     // Learning loop — lessons exists but no footguns
     'docs/lessons.md': '# Lessons\n\n### Entry 1\nSomething.\n',
     // Architecture exists
@@ -486,11 +487,11 @@ describe('Fixture 8: partial-setup', () => {
     assertValidReport(report, 'partial');
   });
 
-  it('scores C or D (decent instruction file but missing enforcement + skills)', () => {
+  it('scores D or F (decent instruction file but missing enforcement + skills + new checks)', () => {
     const grade = report.agents[0].score.grade;
     assert.ok(
-      grade === 'C' || grade === 'D',
-      `Expected C or D, got ${grade} (${report.agents[0].score.percentage}%)`,
+      grade === 'C' || grade === 'D' || grade === 'F',
+      `Expected C, D, or F, got ${grade} (${report.agents[0].score.percentage}%)`,
     );
   });
 
@@ -628,11 +629,11 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'package.json': JSON.stringify({ name: 'goat-flow', scripts: { test: 'node --test' } }),
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
     '.gemini/settings.json': JSON.stringify({ permissions: { deny: ['git commit', 'git push'] } }),
-    // Skills for all agents (10 required skills)
+    // Skills for all agents (8 required skills)
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].flatMap(s => [
-        [`.claude/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`],
-        [`.agents/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`],
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
+        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
+        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
       ]),
     ),
     // Hooks
@@ -697,5 +698,105 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
         assert.ok(!rec.key.includes(' '), `Recommendation key '${rec.key}' contains spaces`);
       }
     }
+  });
+});
+
+// ─── F1: Regression test corpus ──────────────────────────────────────
+// These tests pin specific behaviors so threshold changes are detected.
+
+describe('Regression: full project score stability', () => {
+  const REGRESSION_CLAUDE_MD = FULL_CLAUDE_MD + `
+\`\`\`
+BAD:  "The spec says 100 lines for apps" (guessed without reading)
+GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
+\`\`\`
+
+\`\`\`
+BAD:  Created abstract template system (one format exists)
+GOOD: Inline format. Extract when second format needed
+\`\`\`
+`;
+  const fs = createMockFS({
+    'CLAUDE.md': REGRESSION_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'regression-project',
+      devDependencies: { typescript: '^5.0.0' },
+      scripts: { build: 'tsc', test: 'vitest', lint: 'eslint .', format: 'prettier --write .' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)', 'Read(.env*)', 'Read(.ssh/**)', 'Read(.aws/**)'] },
+      hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
+    }),
+    ...Object.fromEntries(
+      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].map(s => [
+        `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
+      ]),
+    ),
+    '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nset -euo pipefail\nINPUT=$(cat)\nCMD=$(echo "$INPUT" | jq -r .command // empty)\ncase "$CMD" in *rm\\ -rf*|*--force*|*chmod\\ 777*) exit 2;; esac\nexit 0\n',
+    '.claude/hooks/stop-lint.sh': '#!/usr/bin/env bash\necho "lint check"\nexit 0\n',
+    '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nprettier --write "$1"\nexit 0\n',
+    'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\nACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
+    'src/auth.ts': '// auth module\n',
+    'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod deploy\n\n### Entry 2\n**What happened:** missed test coverage\n\n### Entry 3\n**What happened:** stale ref after rename\n',
+    'docs/architecture.md': '# Architecture\n\n' + 'System overview line.\n'.repeat(8),
+    'agent-evals/README.md': '# Agent Evals\n',
+    'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-debug\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
+    'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nDo something\n```\n',
+    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
+    '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
+    'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
+    'tasks/handoff-template.md': '# Handoff Template\n\n## Status\n\n## Current State\n\n## Key Decisions\n\n## Known Risks\n\n## Next Step\n',
+    '.gitignore': '.env\nsettings.local.json\nnode_modules/\n',
+    'docs/system-spec.md': '# System Spec\n',
+    'ai/README.md': '# Coding Guidelines\n\nRouter for instruction files.\n',
+    'ai/instructions/conventions.md': '# Conventions\n\n## Commands\n\n```bash\nnpm test\n```\n\n## Conventions\n\nDo: use TypeScript\nDon\'t: use any\n\n' + 'Line.\n'.repeat(10),
+    'ai/instructions/code-review.md': '# Code Review\n\nReview checklist.\n',
+    'ai/instructions/git-commit.md': '# Git Commit\n\nCommit conventions.\n',
+    'CHANGELOG.md': '# Changelog\n\n## v1.0\n\nInitial setup.\n',
+  });
+  const report = scanProject(fs, '/test/regression', { agentFilter: null });
+
+  it('full project scores A (90%+)', () => {
+    assertValidReport(report, 'regression-full');
+    const agent = report.agents.find(a => a.agent === 'claude');
+    assert.ok(agent, 'Claude agent should exist');
+    assert.ok(agent.score.percentage >= 90, `Expected 90%+, got ${agent.score.percentage}%`);
+    assert.equal(agent.score.grade, 'A');
+  });
+
+  it('has zero anti-pattern deductions', () => {
+    const agent = report.agents.find(a => a.agent === 'claude')!;
+    const triggered = agent.antiPatterns.filter(ap => ap.triggered);
+    assert.equal(triggered.length, 0, `Expected 0 triggered APs, got: ${triggered.map(a => a.id).join(', ')}`);
+  });
+
+  it('all foundation checks pass', () => {
+    const agent = report.agents.find(a => a.agent === 'claude')!;
+    const foundationFails = agent.checks.filter(c => c.tier === 'foundation' && c.status === 'fail');
+    assert.equal(foundationFails.length, 0, `Foundation failures: ${foundationFails.map(c => `${c.id}: ${c.message}`).join(', ')}`);
+  });
+
+  it('check count is stable', () => {
+    assert.ok(report.meta.checkCount >= 95, `Expected 95+ checks, got ${report.meta.checkCount}`);
+    assert.ok(report.meta.antiPatternCount >= 14, `Expected 14+ APs, got ${report.meta.antiPatternCount}`);
+  });
+});
+
+describe('Regression: minimal project scores F', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': MINIMAL_CLAUDE_MD,
+    'package.json': JSON.stringify({ name: 'minimal' }),
+  });
+  const report = scanProject(fs, '/test/regression-minimal', { agentFilter: null });
+
+  it('minimal project scores D or F', () => {
+    const agent = report.agents.find(a => a.agent === 'claude');
+    assert.ok(agent, 'Claude agent should exist');
+    assert.ok(agent.score.percentage < 50, `Expected <50%, got ${agent.score.percentage}%`);
+  });
+
+  it('has many recommendations', () => {
+    const agent = report.agents.find(a => a.agent === 'claude')!;
+    assert.ok(agent.recommendations.length >= 10, `Expected 10+ recommendations, got ${agent.recommendations.length}`);
   });
 });

@@ -68,10 +68,6 @@ These files are created regardless of which agent you use. They form the learnin
    The directory materialises when the first real ADR is written.
    Do NOT create empty directories or placeholder files.
 
-7. CHANGELOG.md - If the project has a CHANGELOG, update it when making
-   functional changes. If it doesn't exist, consider creating one.
-   Agents frequently forget CHANGELOG updates — if the project uses one,
-   reference it in the Definition of Done.
 ```
 
 ## Project Coding Guidelines (Cold Path)

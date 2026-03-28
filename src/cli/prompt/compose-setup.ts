@@ -1,12 +1,10 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { ScanReport, AgentId, AgentReport } from '../types.js';
-import type { ComposedPrompt, PromptSection, PromptVariables, FragmentPhase } from './types.js';
+import type { ComposedPrompt, PromptSection, PromptVariables, FragmentPhase, SetupTask } from './types.js';
 import { getAllFragments, getFragment } from './registry.js';
 import { extractTemplateVars, fillTemplate } from './template-filler.js';
 import { PROFILES } from '../detect/agents.js';
-import { getTemplatePath } from '../paths.js';
-import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, getFragmentTemplate } from './template-refs.js';
+import { getTemplatePath, getCliCommand } from '../paths.js';
+import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, getFragmentTemplate, getLanguageTemplate } from './template-refs.js';
 
 /** Projects at or above this percentage get the short fix list instead of targeted fix */
 const SHORT_FIX_THRESHOLD = 90;
@@ -36,9 +34,9 @@ export function composeSetup(report: ScanReport, agentId: AgentId): string | nul
 
   const agentReport = report.agents.find(a => a.agent === agentId);
 
-  // No agents detected → full setup
+  // No agents detected → redirect to setup guide
   if (!agentReport) {
-    return renderFullSetup(report, agentId);
+    return renderSetupRedirect(report, agentId, null);
   }
 
   const percentage = agentReport.score.percentage;
@@ -49,11 +47,11 @@ export function composeSetup(report: ScanReport, agentId: AgentId): string | nul
   if (percentage >= SHORT_FIX_THRESHOLD) {
     return renderShortFix(report, agentId, agentReport);
   }
-  if (percentage > 0) {
+  if (percentage >= 50) {
     return renderTargetedFix(report, agentId, agentReport);
   }
-  // 0% with agent detected → full setup
-  return renderFullSetup(report, agentId);
+  // Under 50% — too many issues for targeted fixes, redirect to full setup guide
+  return renderSetupRedirect(report, agentId, agentReport);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,47 +84,67 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
   // Collect needed fragment keys
   const neededKeys = collectNeededKeys(agentReport);
 
-  if (neededKeys.size === 0) {
+  // Even if no check keys, anti-patterns may still need fixing
+  const triggered = agentReport.antiPatterns.filter(ap => ap.triggered);
+
+  if (neededKeys.size === 0 && triggered.length === 0) {
     lines.push('No actionable fixes found.');
     return lines.join('\n');
   }
 
-  // Render each failing item with its recommendation or fragment content
+  // Render each failing check with its recommendation or fragment content
   for (const key of neededKeys) {
     const fragment = getFragment(key);
     if (!fragment) continue;
-    const templatePath = getFragmentTemplate(key, agentId);
+    // Skip AP fragments here — they're rendered below with evidence
+    if (fragment.phase === 'anti-pattern') continue;
+    // Skip template path for skill-quality keys — they all point to goat-debug.md as an example
+    // reference, not a creation template. Render their actual instruction text instead.
+    const isSkillQuality = key.startsWith('add-skill-') || key === 'create-all-skills';
+    const templatePath = isSkillQuality ? null : getFragmentTemplate(key, agentId);
     if (templatePath) {
       lines.push(`- **${fragment.category}**: Adapt from ${getTemplatePath(templatePath)}`);
     } else {
-      // Use recommendation text from the report when available (purpose-written summaries)
       const matchingRec = agentReport.recommendations.find(r => r.checkId && agentReport.checks.some(c => c.id === r.checkId && c.recommendationKey === key));
       if (matchingRec) {
         lines.push(`- **${fragment.category}**: ${matchingRec.action}`);
       } else {
         const override = fragment.agentOverrides?.[agentId];
         const instruction = fillTemplate(override ?? fragment.instruction, vars);
-        // Take first complete sentence (up to first '. ' or newline), capped at 200 chars
-        const firstLine = instruction.split('\n')[0] ?? '';
-        const sentenceEnd = firstLine.indexOf('. ');
-        const summary = sentenceEnd > 0 ? firstLine.slice(0, sentenceEnd + 1) : firstLine.slice(0, 200);
-        lines.push(`- **${fragment.category}**: ${summary}`);
+        lines.push(`- **${fragment.category}**: ${instruction.split('\n')[0] ?? ''}`);
       }
     }
   }
 
-  // Anti-patterns
-  const triggered = agentReport.antiPatterns.filter(ap => ap.triggered);
+  // Anti-patterns — render full fragment instructions with evidence
   if (triggered.length > 0) {
     lines.push('');
     lines.push('**Anti-patterns to fix:**');
+    lines.push('');
     for (const ap of triggered) {
-      lines.push(`- ${ap.id}: ${ap.message}`);
+      const fragment = ap.recommendationKey ? getFragment(ap.recommendationKey) : undefined;
+      if (fragment) {
+        const override = fragment.agentOverrides?.[agentId];
+        const instruction = fillTemplate(override ?? fragment.instruction, vars);
+        lines.push(`### ${ap.id}: ${ap.name} (${ap.deduction} pts)`);
+        lines.push('');
+        // Include scan evidence if available
+        if (ap.evidence) {
+          lines.push(`**Evidence:** ${ap.evidence}`);
+          lines.push('');
+        }
+        lines.push(instruction);
+        lines.push('');
+      } else {
+        lines.push(`- **${ap.id}**: ${ap.message}`);
+      }
     }
   }
 
   lines.push('');
-  lines.push(`Re-run: \`goat-flow scan . --agent ${agentId}\``);
+  lines.push(`**Target: 100% with zero anti-pattern deductions.**`);
+  lines.push(`Re-run: \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push(`If not 100%, run \`${getCliCommand()} setup . --agent ${agentId}\` for fix instructions. Repeat until 100% (max 3 cycles).`);
 
   return lines.join('\n');
 }
@@ -168,7 +186,9 @@ function renderTargetedFix(report: ScanReport, agentId: AgentId, agentReport: Ag
       const fragment = getFragment(key);
       if (!fragment || fragment.phase !== phase) continue;
 
-      const templatePath = getFragmentTemplate(key, agentId);
+      // Prefer language-specific template when available (e.g., php.md over generic conventions.md)
+      const langTemplate = getLanguageTemplate(key, report.stack.languages);
+      const templatePath = langTemplate ?? getFragmentTemplate(key, agentId);
       if (templatePath) {
         templateRefs.push({ category: fragment.category, key, template: templatePath });
       } else {
@@ -183,208 +203,100 @@ function renderTargetedFix(report: ScanReport, agentId: AgentId, agentReport: Ag
     lines.push(`## ${PHASE_HEADINGS[phase]}`);
     lines.push('');
 
-    // Group template refs by template path (collapse same-template refs)
+    // Render template refs as numbered tasks
+    let taskNum = 1;
     if (templateRefs.length > 0) {
-      /** Map from template path to the fragment keys that reference it */
-      const byTemplate = new Map<string, string[]>();
-      for (const ref of templateRefs) {
-        const existing = byTemplate.get(ref.template) ?? [];
-        existing.push(ref.key);
-        byTemplate.set(ref.template, existing);
-      }
-
-      // Check if this is a skills group (render as table)
       const skillRefs = templateRefs.filter(r => r.key.startsWith('create-skill-'));
+      const nonSkillRefs = templateRefs.filter(r => !r.key.startsWith('create-skill-'));
+
+      // Skills as numbered tasks
       if (skillRefs.length > 0) {
-        lines.push(`### Missing Skills (${skillRefs.length} of 10)`);
+        lines.push(`**Missing Skills (${skillRefs.length} of 8)** — create in \`${PROFILES[agentId].skillsDir}/goat-{name}/SKILL.md\``);
         lines.push('');
-        lines.push('| Skill | Template |');
-        lines.push('|-------|----------|');
         for (const ref of skillRefs) {
           const name = ref.key.replace('create-skill-', 'goat-');
-          lines.push(`| ${name} | ${getTemplatePath(ref.template)} |`);
+          lines.push(renderTask({ num: taskNum++, outputPath: `${PROFILES[agentId].skillsDir}/${name}/SKILL.md`, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.key, undefined, vars.languages), verify: defaultVerify(ref.key) }));
+          lines.push('');
         }
-        lines.push('');
-        lines.push(`Target directory: \`${PROFILES[agentId].skillsDir}/goat-{name}/SKILL.md\``);
-        lines.push('');
       }
 
-      // Non-skill template refs — list or collapse
-      for (const [template, keys] of byTemplate) {
-        if (keys.every(k => k.startsWith('create-skill-'))) continue; // already rendered
-        // Check if this is a skill-quality group (all mapped to a skill template like goat-debug.md)
-        const isSkillQualityGroup = keys.every(k =>
-          k.startsWith('add-skill-') || k.startsWith('create-skill-') || k === 'create-all-skills'
-        );
-        if (isSkillQualityGroup && keys.length >= 2) {
-          const signals = keys
-            .filter(k => k.startsWith('add-skill-'))
-            .map(k => k.replace('add-skill-', ''));
-          lines.push(`- Read any goat-flow skill template (e.g., ${getTemplatePath(template)}) and ensure each skill has: ${signals.join(', ')}`);
-        } else if (keys.length >= 2) {
-          // Collapse same-template refs (2+ refs to same template)
-          const names = keys.map(k => k.replace(/^(create-skill-|add-skill-|create-all-|create-|add-|fix-|ap-)/, '')).join(', ');
-          lines.push(`- Read ${getTemplatePath(template)} and add missing sections: ${names}`);
-        } else {
-          for (const key of keys) {
-            const ref = templateRefs.find(r => r.key === key)!;
-            lines.push(`- **${ref.category}**: Adapt from ${getTemplatePath(ref.template)}`);
-          }
-        }
+      // Non-skill template refs as tasks
+      for (const ref of nonSkillRefs) {
+        // Skip skill-quality refs — they're guidance, not file creation
+        if (ref.key.startsWith('add-skill-') || ref.key === 'create-all-skills') continue;
+        const outputPath = ref.key.replace(/^create-/, '').replace(/-/g, '/');
+        const fragment = getFragment(ref.key);
+        lines.push(renderTask({ num: taskNum++, outputPath: fragment?.category ?? outputPath, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.key, undefined, vars.languages), verify: defaultVerify(ref.key) }));
+        lines.push('');
       }
-      lines.push('');
     }
 
-    // Inline fragments
+    // Inline fragments (fix-kind or fragments without template)
     for (const frag of inlineFragments) {
       lines.push(frag.instruction);
       lines.push('');
     }
 
     if (phase === 'standard') {
-      lines.push('**Skill quality requirements** — each skill MUST include ALL of these sections from the template:');
-      lines.push('- **When to Use** — specific triggers, not generic descriptions');
-      lines.push('- **Process** with phased steps and human gates between phases');
-      lines.push('- **Constraints** (MUST/MUST NOT rules)');
-      lines.push('- **Output Format** — define the expected deliverable structure');
-      lines.push('- **Chaining** — what skill to suggest next');
+      lines.push('**Skill quality check** — every skill MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
       lines.push('');
+      if (vars.languages && vars.languages !== 'unknown') {
+        lines.push(`**Adaptation for this project:** Replace template Step 0 questions with questions about ${vars.languages} patterns. Replace template examples with patterns from this codebase. Do NOT leave placeholder text like "[Step 1]" or "[describe X]".`);
+        lines.push('');
+      }
     }
 
     if (phase !== 'anti-pattern') {
-      lines.push(`GATE: Run \`goat-flow scan . --agent ${agentId}\``);
+      lines.push(`**GATE:** Run \`${getCliCommand()} scan . --agent ${agentId}\``);
       lines.push('');
     }
   }
 
   lines.push('---');
   lines.push('');
-  lines.push(`After completing fixes, re-run \`goat-flow setup . --agent ${agentId}\` to check for remaining issues.`);
+  lines.push(`After completing fixes, re-run \`${getCliCommand()} setup . --agent ${agentId}\` to check for remaining issues.`);
 
   return lines.join('\n');
 }
 
-// ---------------------------------------------------------------------------
-// Mode: Full setup (0% or no agents)
-// ---------------------------------------------------------------------------
-
-function renderFullSetup(report: ScanReport, agentId: AgentId): string {
-  // Validate all template paths exist — hard error if any missing
-  const missing = validateTemplateRefs(agentId);
-  if (missing.length > 0) {
-    const list = missing.map(p => `  - ${getTemplatePath(p)}`).join('\n');
-    throw new Error(`Missing template files for ${agentId} setup:\n${list}\nRe-install goat-flow or check the installation.`);
-  }
-
-  const profile = PROFILES[agentId];
-  const stack = report.stack;
-  const languages = stack.languages.join(', ') || 'unknown';
-  const cmds = [
-    stack.buildCommand && `Build: ${stack.buildCommand}`,
-    stack.testCommand && `Test: ${stack.testCommand}`,
-    stack.lintCommand && `Lint: ${stack.lintCommand}`,
-    stack.formatCommand && `Format: ${stack.formatCommand}`,
-  ].filter(Boolean).join(' | ');
-
-  const allRefs = getAgentTemplates(agentId);
+/** Render a SetupTask as a numbered markdown block */
+function renderTask(task: SetupTask): string {
   const lines: string[] = [];
-
-  lines.push(`# GOAT Flow Setup — ${profile.name}`);
+  lines.push(`### Task ${task.num}: Create \`${task.outputPath}\``);
   lines.push('');
-  lines.push(`Stack: ${languages}`);
-  if (cmds) lines.push(cmds);
-  lines.push('');
-
-  lines.push('## How this works');
-  lines.push('');
-  lines.push('This prompt references template files in the goat-flow project. For each phase:');
-  lines.push('1. Read the referenced template file');
-  lines.push('2. Adapt it for THIS project (use the detected stack info above)');
-  lines.push('3. Create the output file in THIS project');
-  lines.push('4. Verify it meets the template\'s requirements');
-  lines.push('');
-  lines.push('If any template path below is missing, run `goat-flow setup` again to get updated paths.');
-  lines.push('');
-  lines.push('## Adapting templates');
-  lines.push('');
-  lines.push('"Adapt" means: replace generic examples with THIS project\'s real examples.');
-  lines.push('- Skills: replace generic "Step 0" questions with questions specific to this stack');
-  lines.push('- Footguns: only real traps from THIS codebase with file:line evidence');
-  lines.push('- Conventions: real build/test/lint commands, real file naming patterns');
-  lines.push('Do NOT copy templates verbatim. If a template says "[describe X]", describe X for THIS project.');
-
-  const phases = [
-    { phase: 'foundation' as const, heading: 'Phase 1a: Foundation' },
-    { phase: 'standard' as const, heading: 'Phase 1b: Standard' },
-    { phase: 'full' as const, heading: 'Phase 2: Full' },
-  ];
-
-  const languageRefs = mapLanguagesToTemplates(stack.languages);
-
-  // Detect if .github/instructions/ already has files — route instead of duplicating
-  const ghInstructionsDir = resolve(report.target, '.github/instructions');
-  const hasGhInstructions = existsSync(ghInstructionsDir) &&
-    readdirSync(ghInstructionsDir).filter(f => f.endsWith('.md')).length >= 3;
-
-  for (const { phase, heading } of phases) {
-    let phaseRefs = allRefs.filter(r => r.phase === phase && !r.output.startsWith('('));
-    if (phase === 'standard') {
-      if (hasGhInstructions) {
-        // Filter out ai/instructions/ refs — project already has .github/instructions/
-        phaseRefs = phaseRefs.filter(r => !r.output.startsWith('ai/instructions/'));
-      }
-      phaseRefs = [...phaseRefs, ...languageRefs.filter(r => !hasGhInstructions || !r.output.startsWith('ai/instructions/'))];
-    }
-    const guideRef = allRefs.find(r => r.phase === phase && r.output.startsWith('('));
-
-    if (phaseRefs.length === 0 && !guideRef) continue;
-
-    lines.push('');
-    lines.push(`## ${heading}`);
-    lines.push('');
-    lines.push('Read and adapt these templates:');
-    lines.push('');
-    lines.push('| Create | Template | Notes |');
-    lines.push('|--------|----------|-------|');
-
-    for (const ref of phaseRefs) {
-      lines.push(`| ${ref.output} | ${getTemplatePath(ref.template)} | ${ref.note ?? ''} |`);
-    }
-
-    if (guideRef) {
-      lines.push('');
-      lines.push(`Agent-specific setup: ${getTemplatePath(guideRef.template)} (${heading} section)`);
-    }
-
-    if (phase === 'standard' && hasGhInstructions) {
-      lines.push('');
-      lines.push('**Existing coding standards:** This project has `.github/instructions/` files. Create `ai/README.md` as a routing table pointing to those files. Do NOT create `ai/instructions/` — use the existing files.');
-    }
-
-    if (phase === 'standard') {
-      lines.push('');
-      lines.push('**Skill quality requirements** — each skill MUST include ALL of these sections from the template:');
-      lines.push('- **When to Use** — specific triggers, not generic descriptions');
-      lines.push('- **Process** with phased steps and human gates between phases');
-      lines.push('- **Constraints** (MUST/MUST NOT rules)');
-      lines.push('- **Output Format** — define the expected deliverable structure');
-      lines.push('- **Chaining** — what skill to suggest next');
-      lines.push('Skills should be conversational: present findings, then let the human drill in with follow-ups.');
-      lines.push('Offer structured choices at phase transitions, not just yes/no gates.');
-      lines.push('Skills with only generic placeholder content are not adapted — replace examples with real project patterns.');
-    }
-
-    lines.push('');
-    lines.push(`GATE: Run \`goat-flow scan . --agent ${agentId}\` — ${phase === 'foundation' ? 'foundation tier must be 100%' : phase === 'standard' ? 'standard tier must be 100%' : 'target 100% across all tiers'}.`);
-  }
-
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-  lines.push(`After completing all phases, run \`goat-flow setup . --agent ${agentId}\` to address any remaining quality gaps.`);
-
+  lines.push(`1. **Read template:** ${task.templatePath}`);
+  lines.push(`2. **Adapt:** ${task.adapt}`);
+  lines.push(`3. **Verify:** ${task.verify}`);
   return lines.join('\n');
 }
+
+/** Default adaptation guidance based on output path patterns */
+function defaultAdaptGuidance(output: string, note: string | undefined, languages: string): string {
+  // Path-specific guidance takes precedence over generic notes
+  if (output.includes('/skills/')) return `Replace template Step 0 questions and examples with ${languages} patterns from this project`;
+  if (output === 'docs/footguns.md') return `Run \`grep -rn 'TODO\\|FIXME\\|HACK' src/ | head -20\` to find real traps. Every entry needs \`file:line\` evidence. No hypotheticals`;
+  if (output === 'docs/lessons.md') return `Run \`git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug'\` to find real incidents. Seed 3+ entries`;
+  if (output === 'docs/architecture.md') return 'Read project entry points and main directories. Document what exists — under 100 lines, no aspirational content';
+  if (output.includes('instructions/')) return `Adapt for this project's ${languages} patterns. Replace generic examples with real patterns from the codebase`;
+  // Fall back to template ref note or generic
+  if (note) return note;
+  return 'Adapt template for this project — replace generic examples with real project patterns';
+}
+
+/** Default verification text for a task */
+function defaultVerify(output: string): string {
+  if (output.includes('/skills/')) return 'File has: When to Use, Process with human gates, Constraints, Output Format, Chaining sections';
+  if (output === 'docs/footguns.md') return 'File exists, has 3+ entries, each with backtick-wrapped `path:line` evidence';
+  if (output === 'docs/lessons.md') return 'File exists, has entries with ### headings and 20+ chars of content each';
+  if (output === 'docs/architecture.md') return 'File exists and is under 100 lines';
+  if (output.endsWith('.sh')) return '`bash -n <file>` passes (no syntax errors)';
+  if (output.endsWith('.json')) return 'Valid JSON (no parse errors)';
+  if (output.endsWith('.yml')) return 'Valid YAML';
+  return 'File exists and has project-specific content (not placeholder text)';
+}
+
+// renderFullSetup removed — all new/low-scoring projects use renderSetupRedirect
+// which points agents at setup/setup-{agent}.md instead of generating inline tasks.
 
 // ---------------------------------------------------------------------------
 // Mode: Multi-agent deduplicated setup
@@ -429,7 +341,7 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   lines.push('3. Create the output file in THIS project');
   lines.push('4. Verify it meets the template\'s requirements');
   lines.push('');
-  lines.push('If any template path below is missing, run `goat-flow setup` again to get updated paths.');
+  lines.push(`If any template path below is missing, run \`${getCliCommand()} setup\` again to get updated paths.`);
   lines.push('');
 
   // Gather shared refs — use generic skill paths instead of first agent's paths
@@ -447,62 +359,121 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
 
     lines.push(`## ${profile.name} — Foundation`);
     lines.push('');
-    lines.push('| Create | Template | Notes |');
-    lines.push('|--------|----------|-------|');
+    let taskNum = 1;
     for (const ref of agentFoundation) {
-      lines.push(`| ${ref.output} | ${getTemplatePath(ref.template)} | ${ref.note ?? ''} |`);
+      lines.push(renderTask({ num: taskNum++, outputPath: ref.output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.output, ref.note, languages), verify: defaultVerify(ref.output) }));
+      lines.push('');
     }
-    lines.push('');
     if (guideRef) {
-      lines.push(`Agent-specific setup: ${getTemplatePath(guideRef.template)} (foundation section)`);
+      lines.push(`> **Agent-specific details:** Also read ${getTemplatePath(guideRef.template)} (foundation section)`);
       lines.push('');
     }
   }
 
-  lines.push('GATE: Run `goat-flow scan .` — foundation tier must be 100% for all agents.');
+  lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` — foundation tier must be 100% for all agents.`);
   lines.push('');
 
   // --- Shared standard phase ---
   lines.push('## Standard (shared across all agents)');
   lines.push('');
-  lines.push('| Create | Template | Notes |');
-  lines.push('|--------|----------|-------|');
+  let taskNum = 1;
   for (const ref of [...standardShared, ...languageRefs]) {
-    // Replace agent-specific skill paths with generic form
     const output = ref.output.includes('/skills/') ? ref.output.replace(/\.[^/]+\/skills\//, '{skills_dir}/') : ref.output;
-    lines.push(`| ${output} | ${getTemplatePath(ref.template)} | ${ref.note ?? ''} |`);
+    lines.push(renderTask({ num: taskNum++, outputPath: output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(output, ref.note, languages), verify: defaultVerify(output) }));
+    lines.push('');
   }
-  lines.push('');
   lines.push('Skills go in each agent\'s skills directory: `.claude/skills/`, `.agents/skills/`');
   lines.push('');
-  lines.push('**Skill quality requirements** — each skill MUST include ALL of these sections from the template:');
-  lines.push('- **When to Use** — specific triggers, not generic descriptions');
-  lines.push('- **Process** with phased steps and human gates between phases');
-  lines.push('- **Constraints** (MUST/MUST NOT rules)');
-  lines.push('- **Output Format** — define the expected deliverable structure');
-  lines.push('- **Chaining** — what skill to suggest next');
-  lines.push('Skills should be conversational: present findings, then let the human drill in with follow-ups.');
-  lines.push('Offer structured choices at phase transitions, not just yes/no gates.');
-  lines.push('Skills with only generic placeholder content are not adapted — replace examples with real project patterns.');
+  lines.push('**Skill quality check** — every skill file MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
   lines.push('');
-  lines.push('GATE: Run `goat-flow scan .` — standard tier must be 100% for all agents.');
+  lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` — standard tier must be 100% for all agents.`);
   lines.push('');
 
   // --- Shared full phase ---
   lines.push('## Full (shared across all agents)');
   lines.push('');
-  lines.push('| Create | Template | Notes |');
-  lines.push('|--------|----------|-------|');
+  taskNum = 1;
   for (const ref of fullShared) {
-    lines.push(`| ${ref.output} | ${getTemplatePath(ref.template)} | ${ref.note ?? ''} |`);
+    lines.push(renderTask({ num: taskNum++, outputPath: ref.output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.output, ref.note, languages), verify: defaultVerify(ref.output) }));
+    lines.push('');
   }
-  lines.push('');
-  lines.push('GATE: Run `goat-flow scan .` — target 100% across all agents.');
+  lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` — target 100% across all agents.`);
   lines.push('');
 
   lines.push('---');
   lines.push('');
-  lines.push('After completing all phases, run `goat-flow setup .` to check for remaining issues.');
+  lines.push(`After completing all phases, run \`${getCliCommand()} setup .\` to check for remaining issues.`);
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Mode: Setup redirect (under 50% — too many issues for inline fixes)
+// ---------------------------------------------------------------------------
+
+/** Map agent IDs to their setup file paths */
+const SETUP_FILES: Record<AgentId, string> = {
+  claude: 'setup/setup-claude.md',
+  codex: 'setup/setup-codex.md',
+  gemini: 'setup/setup-gemini.md',
+};
+
+function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: AgentReport | null): string {
+  const profile = PROFILES[agentId];
+  const setupFile = getTemplatePath(SETUP_FILES[agentId]);
+  const stack = report.stack;
+  const languages = stack.languages.join(', ') || 'unknown';
+  const lines: string[] = [];
+
+  lines.push(`# GOAT Flow Setup — ${profile.name}`);
+  lines.push('');
+  if (agentReport) {
+    lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%) — it needs a full setup pass.`);
+  } else {
+    lines.push(`No ${profile.name} configuration detected — this project needs a full setup.`);
+  }
+  lines.push('');
+
+  // Project context — detected stack info
+  lines.push(`**Stack:** ${languages}`);
+  const cmds = [
+    stack.buildCommand && `**Build:** \`${stack.buildCommand}\``,
+    stack.testCommand && `**Test:** \`${stack.testCommand}\``,
+    stack.lintCommand && `**Lint:** \`${stack.lintCommand}\``,
+  ].filter(Boolean).join(' | ');
+  if (cmds) lines.push(cmds);
+  lines.push('');
+
+  // Pre-instructions
+  lines.push('## Before you start');
+  lines.push('');
+  lines.push('1. Verify the detected stack above is correct. If not, the setup file will');
+  lines.push('   ask you to detect it from the actual codebase (package.json, composer.json, etc.)');
+  lines.push('2. "Adapt" means: replace generic examples with THIS project\'s real examples.');
+  lines.push('   Skills: replace generic Step 0 questions with questions specific to this stack.');
+  lines.push('   Footguns: only real traps from THIS codebase with `file:line` evidence.');
+  lines.push('   Conventions: real build/test/lint commands, real file naming patterns.');
+  lines.push('3. Do NOT copy templates verbatim. If a template says "[describe X]", describe X for THIS project.');
+  lines.push('');
+
+  // Main instruction
+  lines.push('## Setup instructions');
+  lines.push('');
+  lines.push(`Deeply review and implement the instructions in: \`${setupFile}\``);
+  lines.push('');
+  lines.push('That file walks through:');
+  lines.push('- **Phase 1a:** Instruction file, docs seed files, local instruction files');
+  lines.push('- **Phase 1b:** 8 goat-* skills adapted for this project');
+  lines.push('- **Phase 1c:** Enforcement hooks, deny patterns, coding guidelines');
+  lines.push('- **Phase 2:** Agent evals, hygiene (handoff template, RFC 2119 pass)');
+  lines.push('- **Phase 3:** Verify 100% on the CLI scan');
+  lines.push('');
+
+  // Scan + iterate
+  lines.push(`After completing setup, run: \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push('');
+  lines.push('**Target: 100% with zero anti-pattern deductions.**');
+  lines.push(`If not 100%, run \`${getCliCommand()} setup . --agent ${agentId}\` for remaining fix instructions. Repeat until 100% (max 3 cycles).`);
 
   return lines.join('\n');
 }
@@ -566,7 +537,7 @@ export function composeInlineSetup(report: ScanReport, agentId: AgentId): Compos
     title: `GOAT Flow Setup — ${vars.agentName}`,
     preamble: buildSetupPreamble(vars),
     sections,
-    summary: `Full GOAT Flow setup for ${vars.agentName}. After completing each phase, run \`goat-flow scan .\` to verify progress.`,
+    summary: `Full GOAT Flow setup for ${vars.agentName}. After completing each phase, run \`${getCliCommand()} scan .\` to verify progress.`,
   };
 }
 
@@ -598,5 +569,6 @@ function buildFreshVars(report: ScanReport, agentId: AgentId): PromptVariables {
     lintCommand: report.stack.lintCommand ?? '', formatCommand: report.stack.formatCommand ?? '',
     grade: 'F', percentage: '0', failedCount: '0', passedCount: '0', totalCount: '0',
     date: new Date().toISOString().slice(0, 10),
+    evidence: {},
   };
 }

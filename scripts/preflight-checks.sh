@@ -81,12 +81,19 @@ if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
         fail "SCHEMA_VERSION invalid: '$schema_version' (expected positive integer)"
     fi
 
-    # CHANGELOG.md should mention current package version
+    # CHANGELOG.md newest version should match package.json + RUBRIC_VERSION
     if [[ -f CHANGELOG.md ]]; then
-        if grep -q "## v${pkg_version}" CHANGELOG.md 2>/dev/null; then
-            pass "CHANGELOG.md has v${pkg_version} entry"
+        changelog_version=$(grep -oP '^## v\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+        if [[ -n "$changelog_version" ]]; then
+            pass "CHANGELOG.md newest entry (v${changelog_version})"
+            if [[ "$pkg_version" != "$changelog_version" ]]; then
+                fail "package.json ($pkg_version) does not match CHANGELOG.md newest (v${changelog_version})"
+            fi
+            if [[ -n "$rubric_version" ]] && [[ "$rubric_version" != "$changelog_version" ]]; then
+                note "RUBRIC_VERSION ($rubric_version) differs from CHANGELOG.md newest (v${changelog_version}) — bump if rubric changed"
+            fi
         else
-            fail "CHANGELOG.md missing entry for v${pkg_version}"
+            fail "CHANGELOG.md has no version entry matching '## vX.Y.Z'"
         fi
     else
         note "No CHANGELOG.md found"
@@ -197,6 +204,34 @@ for pattern in "${removed_patterns[@]}"; do
     fi
 done
 $adr_clean && pass "No removed patterns found"
+
+# ── GOAT Flow Scan ────────────────────────────────────────────────────
+if [[ -f dist/cli/cli.js ]]; then
+    section "GOAT Flow Scan"
+    scan_output=$(node dist/cli/cli.js scan . --format text 2>&1) && scan_exit=0 || scan_exit=$?
+    if [[ "$scan_exit" -eq 0 ]]; then
+        # Extract per-agent grades and check for any below A
+        grades=$(echo "$scan_output" | grep -oP 'Grade: \K\S+ \(\d+%\)')
+        all_a=true
+        while IFS= read -r grade; do
+            [[ -z "$grade" ]] && continue
+            pct=$(echo "$grade" | grep -oP '\d+')
+            if [[ "$pct" -lt 100 ]]; then
+                all_a=false
+                note "Scan: $grade (target: 100%)"
+            fi
+        done <<< "$grades"
+        if $all_a; then
+            pass "All agents at 100%"
+        else
+            fail "Not all agents at 100% — run: node dist/cli/cli.js scan . --format text"
+        fi
+    else
+        fail "goat-flow scan failed (exit $scan_exit)"
+    fi
+else
+    skip "GOAT Flow Scan (dist/cli/cli.js not built)"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""

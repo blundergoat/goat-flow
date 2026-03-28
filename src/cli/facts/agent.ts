@@ -1,5 +1,5 @@
 import type { AgentProfile, AgentFacts, ReadonlyFS } from '../types.js';
-import { SKILL_NAMES } from '../constants.js';
+import { SKILL_NAMES, SKILL_VERSION } from '../constants.js';
 
 /** Skill names that a fully configured GOAT Flow agent should have */
 const EXPECTED_SKILLS = SKILL_NAMES;
@@ -264,12 +264,24 @@ function checkReadDenyCoversSecrets(parsed: unknown, hasDenyPatterns: boolean): 
   return hasEnv && hasSsh && hasAws && hasKeys;
 }
 
-/** Extract skill facts: found/missing skills and quality metrics. */
+/** Extract the goat-flow-skill-version from YAML frontmatter in a skill file */
+function extractSkillVersion(content: string): string | null {
+  // Match YAML frontmatter between --- delimiters
+  const frontmatter = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!frontmatter?.[1]) return null;
+  const versionMatch = frontmatter[1].match(/goat-flow-skill-version:\s*["']?([^"'\n]+)/);
+  return versionMatch?.[1]?.trim() ?? null;
+}
+
+/** Extract skill facts: found/missing skills, versions, and quality metrics. */
 function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['skills'] {
   /** Names of skills that were found on disk */
   const found: string[] = [];
   /** Names of expected skills that are missing */
   const missing: string[] = [];
+  /** Version extracted from each skill's frontmatter */
+  const versions: Record<string, string | null> = {};
+  let outdatedCount = 0;
   let withStep0 = 0;
   let withHumanGate = 0;
   let withConstraints = 0;
@@ -287,11 +299,18 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
       /** Raw content of the skill file for quality analysis */
       const skillContent = fs.readFile(skillPath);
       if (skillContent) {
+        // Extract and track version
+        const version = extractSkillVersion(skillContent);
+        versions[skill] = version;
+        if (version === null || version !== SKILL_VERSION) {
+          outdatedCount++;
+        }
+
         if (/step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i.test(skillContent)) withStep0++;
-        if (/human\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
+        if (/human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
         if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
         if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
-        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question/i.test(skillContent)) withConversational++;
+        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question|proceed\?/i.test(skillContent)) withConversational++;
         if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
         if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
         if (/##\s*(Output|Output Format)/i.test(skillContent)) withOutputFormat++;
@@ -303,6 +322,7 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
 
   return {
     found, missing, allPresent: missing.length === 0,
+    versions, outdatedCount,
     quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, total: found.length },
   };
 }
@@ -439,10 +459,17 @@ function extractHookFacts(
     }
   }
 
-  /** Filesystem path to the deny hook script, if any */
-  const denyHookPath = agent.hooksDir
-    ? `${agent.hooksDir}/deny-dangerous.sh`
-    : (agent.denyMechanism.type === 'deny-script' ? agent.denyMechanism.path : null);
+  /** Filesystem path to the deny hook script, if any.
+   *  Check agent-specific hooks dir first, then fall back to the profile's
+   *  deny mechanism path (e.g., scripts/deny-dangerous.sh for Codex). */
+  let denyHookPath: string | null = null;
+  if (agent.hooksDir && fs.exists(`${agent.hooksDir}/deny-dangerous.sh`)) {
+    denyHookPath = `${agent.hooksDir}/deny-dangerous.sh`;
+  } else if (agent.denyMechanism.type === 'deny-script') {
+    denyHookPath = agent.denyMechanism.path;
+  } else if (agent.denyMechanism.type === 'both') {
+    denyHookPath = agent.denyMechanism.scriptPath;
+  }
 
   const hook = {
     denyExists: denyHookPath ? fs.exists(denyHookPath) : false,
@@ -578,15 +605,7 @@ function extractAskFirstFacts(fs: ReadonlyFS, content: string | null): AgentFact
   return { exists: paths.length > 0, paths, resolved, unresolved };
 }
 
-/** Extract settings.local.json facts: existence and line count. */
-function extractSettingsLocalFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['settingsLocal'] {
-  if (!agent.settingsFile) return { exists: false, lineCount: 0 };
-  /** Derived path to the local settings override file */
-  const localPath = agent.settingsFile.replace(/\.json$/, '.local.json');
-  const exists = fs.exists(localPath);
-  const lineCount = exists ? fs.lineCount(localPath) : 0;
-  return { exists, lineCount };
-}
+// settingsLocal extraction removed — personal preference file, not a project quality signal.
 
 // ─── Composer ────────────────────────────────────────────────────────
 
@@ -614,13 +633,10 @@ export function extractAgentFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFac
   const missing: string[] = [];
   // This will be populated from shared facts in the extract orchestrator
 
-  const settingsLocal = extractSettingsLocalFacts(fs, agent);
-
   return {
     agent,
     instruction,
     settings: { exists: settings.exists, valid: settings.valid, parsed: settings.parsed, hasDenyPatterns: settings.hasDenyPatterns },
-    settingsLocal,
     skills,
     hooks: { ...hookFacts, readDenyCoversSecrets: settings.readDenyCoversSecrets },
     deny,

@@ -29,3 +29,12 @@ export function getTemplatePath(relative: string): string {
 export function templateExists(relative: string): boolean {
   return existsSync(getTemplatePath(relative));
 }
+
+/**
+ * Build the CLI command string that can run goat-flow from any project directory.
+ * Returns the absolute `node /path/to/dist/cli/cli.js` form since goat-flow
+ * may not be globally installed in target projects.
+ */
+export function getCliCommand(): string {
+  return `node ${join(GOAT_FLOW_ROOT, 'dist', 'cli', 'cli.js')}`;
+}

@@ -27,6 +27,25 @@ export function extractTemplateVars(report: ScanReport, agentReport: AgentReport
   /** File paths specific to the detected agent, derived from PROFILES */
   const paths = getAgentPaths(agentReport.agent);
 
+  // Collect evidence from check results and anti-pattern results
+  const evidence: Record<string, string> = {};
+  for (const check of agentReport.checks) {
+    if (check.evidence && check.recommendationKey) {
+      evidence[check.recommendationKey] = check.evidence;
+    }
+  }
+  for (const ap of agentReport.antiPatterns) {
+    if (ap.triggered && ap.evidence && ap.recommendationKey) {
+      evidence[ap.recommendationKey] = ap.evidence;
+    }
+    // Also store the AP message as evidence — it often contains actionable detail
+    if (ap.triggered && ap.recommendationKey) {
+      evidence[`${ap.recommendationKey}.message`] = ap.message;
+    }
+  }
+
+  // AP evidence flows through the map above (check.evidence + ap.evidence).
+
   return {
     agentId: agentReport.agent,
     agentName: agentReport.agentName,
@@ -45,16 +64,26 @@ export function extractTemplateVars(report: ScanReport, agentReport: AgentReport
     passedCount: String(passed.length),
     totalCount: String(agentReport.checks.length),
     date: new Date().toISOString().slice(0, 10),
+    evidence,
   };
 }
 
 /**
  * Replace {{variable}} placeholders in a template string.
+ * Supports dotted access for evidence: {{evidence.ap-fix-stale-references}}
  * Leaves unresolved placeholders with an [UNFILLED: name] marker.
  */
 export function fillTemplate(template: string, vars: PromptVariables): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => {
-    if (name in vars) return vars[name as keyof PromptVariables];
+  return template.replace(/\{\{([\w.:-]+)\}\}/g, (_match, name: string) => {
+    // Dotted access: {{evidence.some-key}}
+    if (name.startsWith('evidence.')) {
+      const evidenceKey = name.slice('evidence.'.length);
+      return vars.evidence[evidenceKey] ?? '';
+    }
+    if (name in vars) {
+      const val = vars[name as keyof PromptVariables];
+      return typeof val === 'string' ? val : '';
+    }
     return `[UNFILLED: ${name}]`;
   });
 }

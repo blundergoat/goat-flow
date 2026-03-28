@@ -364,9 +364,11 @@ Make it executable: \`chmod +x scripts/deny-dangerous.sh\``,
     phase: 'foundation',
     category: 'Enforcement',
     kind: 'create',
-    instruction: `Add \`git commit\` to the deny list in {{settingsFile}}.`,
+    instruction: `Add \`git commit\` to the deny list in {{settingsFile}}.
+
+> **Note:** This blocks ALL commits, including when the user explicitly asks to commit. Once trust is established, move \`git commit\` to \`settings.local.json\` allow list to reduce friction on feature branches.`,
     agentOverrides: {
-      claude: 'Add `"Bash(git commit*)"` to `permissions.deny` in `.claude/settings.json`.',
+      claude: 'Add `"Bash(git commit*)"` to `permissions.deny` in `.claude/settings.json`.\n\n> **Escape hatch:** Once trust is established, add `"Bash(git commit*)"` to `.claude/settings.local.json` `permissions.allow` to skip approval on feature branches.',
       codex: 'Add a case for `*"git commit"*` in `scripts/deny-dangerous.sh`.',
       gemini: 'Add `"git commit"` to `permissions.deny` in `.gemini/settings.json`.',
     },

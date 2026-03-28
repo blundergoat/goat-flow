@@ -3,10 +3,15 @@ import type { SharedFacts, ReadonlyFS } from '../types.js';
 /**
  * Matches file:line evidence in multiple formats:
  * - `src/auth.ts:42` (backtick-wrapped)
+ * - `src/auth.ts:42-50` (backtick-wrapped with line range)
+ * - `src/auth.ts:42,86-94` (backtick-wrapped with comma-separated ranges)
  * - (lines 866-880) or (line 52) (prose-style)
  * - `src/auth.ts` (lines 42-50) (backtick path + prose line)
  */
-const EVIDENCE_PATTERN = /`[^`]+:[0-9]+`|\(lines?\s+[0-9]+/;
+const EVIDENCE_PATTERN = /`[^`]+:[0-9]+(?:[-,][0-9]+)*`|\(lines?\s+[0-9]+/;
+
+/** Regex to extract file paths from backtick-wrapped file:line references (with optional ranges). */
+const FILE_REF_REGEX = /`([^`]+):[0-9]+(?:[-,][0-9]+)*`/g;
 
 /** Check if a backtick-wrapped file:line reference is a real file path (not a URL/hostname) */
 function isFileRef(filePath: string): boolean {
@@ -17,6 +22,25 @@ function isFileRef(filePath: string): boolean {
   // Root-level files with extensions (e.g., AGENTS.md:42) are valid refs
   // Bare names without extensions (e.g., webpack:123) are ambiguous — skip
   return /\.[a-zA-Z0-9]+$/.test(filePath);
+}
+
+/**
+ * Check if a file reference can be reliably validated for staleness.
+ * Paths with '/' are resolvable relative to the project root.
+ * Bare filenames with source-code extensions (e.g., `router.go`, `auth.ts`)
+ * are ambiguous — they may exist deep in subdirectories. We try fs.exists()
+ * at root first; if it resolves, it's checkable. If not, and it has a source
+ * extension without '/', skip it rather than reporting a false stale ref.
+ */
+function isCheckableForStaleness(filePath: string, fs: ReadonlyFS): boolean {
+  if (filePath.includes('/')) return true;
+  // If it exists at root, it's checkable regardless of extension
+  if (fs.exists(filePath)) return true;
+  // Bare source filenames that don't exist at root are likely shorthand
+  // for deeply nested files — skip to avoid false positives
+  if (/\.(go|ts|tsx|js|jsx|py|php|rs|java|kt|rb|cs|c|cpp|h|hpp|swift|scala)$/i.test(filePath)) return false;
+  // Non-source files (AGENTS.md, package.json, etc.) should be at root
+  return true;
 }
 
 /** Extract footgun facts: existence, evidence quality, and directory mention counts. */
@@ -31,7 +55,7 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
     // First check: does the file have any evidence-like patterns at all?
     if (EVIDENCE_PATTERN.test(footgunsContent)) {
       // Second check: does it have at least one real file:line ref (not just URLs)?
-      const refs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
+      const refs = footgunsContent.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
       for (const m of refs) {
         if (m[1] !== undefined && isFileRef(m[1])) { hasEvidence = true; break; }
       }
@@ -43,7 +67,7 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   const dirMentions = new Map<string, number>();
   if (footgunsContent) {
     /** All backtick-wrapped file:line references found in the footguns content */
-    const pathRefs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
+    const pathRefs = footgunsContent.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
     for (const match of pathRefs) {
       const group = match[1];
       if (group === undefined) continue;
@@ -55,16 +79,19 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
       }
     }
   }
-  // Validate that referenced files still exist on disk
+  // Validate that referenced files still exist on disk.
+  // Skip bare source filenames (e.g., `router.go:335`) that can't be resolved
+  // from the project root — they're valid evidence but not checkable for staleness.
   const staleRefs: string[] = [];
   let totalRefs = 0;
   let validRefs = 0;
   if (footgunsContent) {
-    const fileRefs = footgunsContent.matchAll(/`([^`]+):[0-9]+`/g);
+    const fileRefs = footgunsContent.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
     for (const match of fileRefs) {
       const filePath = match[1];
       if (filePath === undefined) continue;
       if (!isFileRef(filePath)) continue;
+      if (!isCheckableForStaleness(filePath, fs)) continue;
       totalRefs++;
       if (fs.exists(filePath)) {
         validRefs++;
@@ -111,13 +138,14 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
   const hasReadme = dirExists && fs.exists('agent-evals/README.md');
 
   if (count === 0) {
-    return { dirExists, count, hasReadme, hasOriginLabels: false, hasReplayPrompts: false, evalSkillCount: 0 };
+    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, evalSkillCount: 0 };
   }
 
   /** Distinct skill names referenced across all eval files */
   const skillNames = new Set<string>();
-  /** Track whether all eval files pass origin/replay checks */
+  /** Track whether all eval files pass origin/replay/agents checks */
   let allHaveOrigin = true;
+  let allHaveAgents = true;
   let allHaveReplay = true;
   // Iterate over ALL eval files for quality checks and skill counting
   for (const f of evalFiles) {
@@ -125,10 +153,12 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
     const content = fs.readFile(`agent-evals/${f}`);
     if (content === null) {
       allHaveOrigin = false;
+      allHaveAgents = false;
       allHaveReplay = false;
       continue;
     }
     if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false) allHaveOrigin = false;
+    if (/\*\*Agents:\*\*/i.test(content) === false) allHaveAgents = false;
     if (/##+ Replay Prompt/i.test(content) === false && /##+ Scenario/i.test(content) === false) allHaveReplay = false;
     /** All skill label matches found in the eval content */
     const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
@@ -139,7 +169,7 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
       if (name) skillNames.add(name);
     }
   }
-  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasReplayPrompts: allHaveReplay, evalSkillCount: skillNames.size };
+  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, evalSkillCount: skillNames.size };
 }
 
 /** Extract project-wide shared facts from docs, evals, CI, and config files. */
@@ -190,7 +220,7 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     guidelinesOwnership: { exists: fs.exists('docs/guidelines-ownership-split.md') },
     domainReference: { exists: fs.exists('docs/domain-reference.md') },
     preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
-    changelog: { exists: fs.exists('CHANGELOG.md') },
+    // changelog removed — project-level concern, not AI workflow.
     decisions: extractDecisionsFacts(fs),
     localInstructions: extractLocalInstructions(fs),
     gitCommitInstructions: { exists: fs.exists('.github/git-commit-instructions.md') },

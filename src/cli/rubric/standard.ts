@@ -15,7 +15,7 @@ const SKILL_QUALITY_THRESHOLD = 0.8;
  * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
-  // === 2.1 Skills (19 pts: 10 existence + 1 completeness + 8 quality) ===
+  // === 2.1 Skills (17 pts: 8 existence + 1 completeness + 8 quality) ===
   ...SKILL_NAMES.map((skill, i) => ({
     id: `2.1.${i + 1}`,
     name: `${skill} skill`,
@@ -28,20 +28,20 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: `create-skill-${skill.replace('goat-', '')}`,
   })),
   {
-    id: '2.1.11', name: 'All 10 skills present', tier: 'standard', category: 'Skills',
+    id: '2.1.11', name: 'All 8 skills present', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
-        id: '2.1.11', name: 'All 10 skills present', tier: 'standard', category: 'Skills',
+        id: '2.1.11', name: 'All 8 skills present', tier: 'standard', category: 'Skills',
         status: ctx.agentFacts.skills.allPresent ? 'pass' : 'fail',
         points: ctx.agentFacts.skills.allPresent ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.skills.allPresent
-          ? 'All 10 skills present'
+          ? 'All 8 skills present'
           : `Missing: ${ctx.agentFacts.skills.missing.join(', ')}`,
       }),
     },
-    recommendation: 'Create all 10 goat-* skills',
+    recommendation: 'Create all 8 goat-* skills',
     recommendationKey: 'create-all-skills',
   },
 
@@ -518,7 +518,7 @@ export const standardChecks: CheckDef[] = [
         id: '2.3.4', name: 'Footguns have file:line evidence', tier: 'standard', category: 'Learning Loop',
         status: ctx.facts.shared.footguns.hasEvidence ? 'pass' : 'fail',
         points: ctx.facts.shared.footguns.hasEvidence ? 2 : 0, maxPoints: 2, confidence: 'high',
-        message: ctx.facts.shared.footguns.hasEvidence ? 'Footguns have file:line evidence' : 'Footguns missing file:line evidence',
+        message: ctx.facts.shared.footguns.hasEvidence ? 'Footguns have file:line evidence' : 'Footguns missing file:line evidence. Expected: backtick-wrapped paths like `src/auth.ts:42` or `src/auth.ts:42-50`. Bare paths without line numbers and URLs do not count.',
       }),
     },
     recommendation: 'Add file:line evidence to footgun entries',
@@ -533,13 +533,21 @@ export const standardChecks: CheckDef[] = [
         const { exists, entryCount } = ctx.facts.shared.lessons;
         if (!exists) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
         if (entryCount >= 3) return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries — healthy learning loop` };
-        return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${entryCount} lesson entries — search git history for real incidents to seed more` };
+        return { id: '2.3.2a', name: 'lessons.md has 3+ entries', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `Only ${entryCount} lesson entries (need 3+). Each entry must be a \`### Title\` heading followed by 20+ characters. Run: git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug'` };
       },
     },
     recommendation: 'Seed lessons.md with 3+ real incidents from git history',
     recommendationKey: 'seed-lessons-minimum',
   },
   // 2.3.5 removed — duplicate of AP12 (stale footgun refs)
+  {
+    id: '2.3.5a', name: 'Footguns have evidence labels', tier: 'standard', category: 'Learning Loop',
+    pts: 0, confidence: 'medium',
+    na: (ctx) => ctx.facts.shared.footguns.exists === false || ctx.facts.shared.footguns.hasEvidence === false,
+    detect: { type: 'grep', path: 'docs/footguns.md', pattern: 'ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE' },
+    recommendation: 'Add evidence type labels (ACTUAL_MEASURED, DESIGN_TARGET, HYPOTHETICAL_EXAMPLE) to footgun entries',
+    recommendationKey: 'add-footgun-labels',
+  },
 
   // === 2.4 Router Table (5 pts) ===
   {
@@ -579,6 +587,32 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'route-skills',
   },
 
+  // === 2.4.4-2.4.6 Router completeness (A3) ===
+  {
+    id: '2.4.4', name: 'Learning loop in router', tier: 'standard', category: 'Router Table',
+    pts: 0, confidence: 'high',
+    na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
+    detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'lessons|footguns|learning' },
+    recommendation: 'Add lessons.md and footguns.md to the router table',
+    recommendationKey: 'route-learning-loop',
+  },
+  {
+    id: '2.4.5', name: 'Architecture in router', tier: 'standard', category: 'Router Table',
+    pts: 0, confidence: 'high',
+    na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
+    detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'architecture|arch' },
+    recommendation: 'Add docs/architecture.md to the router table',
+    recommendationKey: 'route-architecture',
+  },
+  {
+    id: '2.4.6', name: 'Evals in router', tier: 'standard', category: 'Router Table',
+    pts: 0, confidence: 'high',
+    na: (ctx) => !ctx.agentFacts.instruction.content?.toLowerCase().includes('router') || !ctx.facts.shared.evals.dirExists,
+    detect: { type: 'grep', path: '{instruction_file}', section: 'router', pattern: 'eval|agent-eval' },
+    recommendation: 'Add agent-evals/ to the router table',
+    recommendationKey: 'route-evals',
+  },
+
   // === 2.5 Architecture Docs (2 pts) ===
   {
     id: '2.5.1', name: 'architecture.md exists', tier: 'standard', category: 'Architecture',
@@ -591,10 +625,27 @@ export const standardChecks: CheckDef[] = [
     id: '2.5.2', name: 'architecture.md under 100 lines', tier: 'standard', category: 'Architecture',
     pts: 1, confidence: 'high',
     na: (ctx) => ctx.facts.shared.architecture.exists === false,
-    detect: { type: 'line_count', path: 'docs/architecture.md', pass: 100, fail: 200 },
+    detect: { type: 'line_count', path: 'docs/architecture.md', pass: 100, fail: 150 },
     recommendation: 'Compress docs/architecture.md below 100 lines',
     recommendationKey: 'compress-architecture',
   },
+  // === 2.5.3 Decisions directory (A1 — conditional) ===
+  {
+    id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture',
+    pts: 0, confidence: 'high',
+    na: (ctx) => ctx.facts.shared.decisions.dirExists === false,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { fileCount } = ctx.facts.shared.decisions;
+        if (fileCount > 0) return { id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture', status: 'pass', points: 0, maxPoints: 0, confidence: 'high', message: `${fileCount} ADR files in docs/decisions/` };
+        return { id: '2.5.3', name: 'Decisions directory has real ADRs', tier: 'standard', category: 'Architecture', status: 'fail', points: 0, maxPoints: 0, confidence: 'high', message: 'docs/decisions/ exists but has no ADR files — remove empty directory or add a real decision record' };
+      },
+    },
+    recommendation: 'Add real ADRs to docs/decisions/ or remove the empty directory',
+    recommendationKey: 'add-decisions',
+  },
+
   // === 2.6 Local Instructions (cold path) (6 pts) ===
   {
     id: '2.6.1', name: 'Instructions directory exists', tier: 'standard', category: 'Local Instructions',
@@ -788,5 +839,27 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Create ai/instructions/backend.md with backend coding conventions',
     recommendationKey: 'create-backend-instructions',
+  },
+
+  // === 2.7 Ignore Files (0 pts — advisory) ===
+  {
+    id: '2.7.1', name: 'AI ignore files exist', tier: 'standard', category: 'Ignore Files',
+    pts: 0, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { copilotignore, cursorignore } = ctx.facts.shared.ignoreFiles;
+        const hasAny = copilotignore || cursorignore;
+        return {
+          id: '2.7.1', name: 'AI ignore files exist', tier: 'standard', category: 'Ignore Files',
+          status: hasAny ? 'pass' : 'fail', points: 0, maxPoints: 0, confidence: 'high',
+          message: hasAny
+            ? `Found: ${[copilotignore && '.copilotignore', cursorignore && '.cursorignore'].filter(Boolean).join(', ')}`
+            : 'No .copilotignore or .cursorignore — AI tools may index sensitive files (.env, secrets/, *.pem)',
+        };
+      },
+    },
+    recommendation: 'Create .copilotignore and/or .cursorignore with secret patterns (.env*, secrets/, *.pem, *.key, credentials*)',
+    recommendationKey: 'create-ignore-files',
   },
 ];

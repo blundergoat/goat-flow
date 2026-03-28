@@ -12,7 +12,7 @@ No workflow system. Ad-hoc rules in a long CLAUDE.md that mixed project-specific
 
 ## After
 
-Three instruction files, 10 skills across 3 locations, enforcement hooks, and a learning loop.
+Three instruction files, 8 skills across 3 locations, enforcement hooks, and a learning loop.
 
 **Key files created:**
 
@@ -22,7 +22,7 @@ Three instruction files, 10 skills across 3 locations, enforcement hooks, and a 
 | AGENTS.md | 110 | Codex runtime (same loop, Codex-specific boundaries) |
 | GEMINI.md | 86 | Gemini CLI runtime (compressed format, same loop) |
 
-**Skills (10 skills x 3 locations = 30 SKILL.md files):**
+**Skills (8 skills x 3 locations = 24 SKILL.md files):**
 
 - `.claude/skills/goat-*/` -- Claude Code skills
 - `.agents/skills/goat-*/` -- Shared skills (Codex + Gemini CLI)
@@ -48,7 +48,7 @@ Specific catches during development:
 
 ## Key Wins
 
-**Skills prevented blind debugging.** `/goat-debug` enforces diagnosis-first with file:line evidence before any fix. `/goat-audit` uses a 4-pass approach (scan, re-read, rank, self-check) that catches fabricated findings.
+**Skills prevented blind debugging.** `/goat-debug` enforces diagnosis-first with file:line evidence before any fix. `/goat-review` in audit mode uses negative verification and fabrication self-check to catch false positives.
 
 **The learning loop captured 9 real incidents.** `docs/lessons.md` holds 9 entries with a pattern section. `docs/footguns.md` holds 7 entries with file:line evidence. Real examples: agents under line pressure cut required sections, `mv` overwrote an untracked file with no git recovery path, sub-agents wrote planned features as current state.
 

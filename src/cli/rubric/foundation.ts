@@ -224,7 +224,11 @@ export const foundationChecks: CheckDef[] = [
     pts: 2, partialPts: 1, confidence: 'medium',
     detect: {
       type: 'count_items', path: '{instruction_file}', section: 'definition of done',
-      pattern: '\\(\\d+\\)|^\\d+\\.|^- \\[', pass: 6, partial: 4,
+      // Match numbered lists, checkboxes, OR semicolon-separated items in prose.
+      // Prose format: "MUST confirm all 6 gates: lint; verified; no Ask First; logs; notes; rg"
+      // The semicolons act as list delimiters in single-line DoD declarations.
+      pattern: '\\(\\d+\\)|^\\d+\\.|^- \\[|;(?=[^;]*\\S)',
+      pass: 6, partial: 4,
     },
     recommendation: 'Add 6 DoD gates: tests green, preflight passes, no boundary violations, logs updated, working notes current, grep after renames',
     recommendationKey: 'add-dod-gates',
@@ -232,7 +236,7 @@ export const foundationChecks: CheckDef[] = [
   {
     id: '1.4.3', name: 'Grep-after-rename gate', tier: 'foundation', category: 'Definition of Done',
     pts: 2, confidence: 'high',
-    detect: { type: 'grep', path: '{instruction_file}', pattern: 'grep.*old.*pattern|zero.*remaining|grep.*rename' },
+    detect: { type: 'grep', path: '{instruction_file}', section: 'definition of done', pattern: 'grep.*old.*pattern|zero.*remaining|grep.*rename|rg.*stale|rg.*rename|stale.*reference' },
     recommendation: 'Add grep-after-rename gate to DoD',
     recommendationKey: 'add-grep-gate',
   },

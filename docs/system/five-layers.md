@@ -13,9 +13,9 @@ AI coding agents need structure, not just rules. This system organises everythin
 │  High-risk boundaries, module-specific gotchas              │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 3 - Skills                               ON DEMAND   │
-│  /goat-security, /goat-debug, /goat-audit,                  │
-│  /goat-investigate, /goat-review, /goat-plan,               │
-│  /goat-test, /goat-reflect, /goat-onboard, /goat-resume     │
+│  /goat-security, /goat-debug, /goat-investigate,             │
+│  /goat-review, /goat-plan, /goat-test,                      │
+│  /goat-refactor, /goat-simplify                              │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 4 - Playbooks                            ON DEMAND   │
 │  Feature briefs, mob elaboration, SBAO ranking,             │
@@ -80,20 +80,18 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
-**The ten skills:**
+**The eight skills:**
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
-| `/goat-security` | Security-focused review (dependencies, secrets, permissions) | Findings ranked by severity scale |
+| `/goat-security` | Threat-model-driven security assessment | Findings ranked by exploitability |
 | `/goat-debug` | Root cause analysis when a bug is reported or test fails | Diagnosis with evidence trail |
-| `/goat-audit` | Codebase quality review on demand or before major changes | Findings ranked by severity |
-| `/goat-investigate` | Deep investigation of unfamiliar areas or domains | Research summary with sources |
-| `/goat-review` | Structured review of changes before merging | Findings ranked by severity |
+| `/goat-investigate` | Deep investigation of unfamiliar areas + onboarding mode | Research summary with sources |
+| `/goat-review` | Structured review + quality audit + instruction review modes | Findings ranked by severity |
 | `/goat-plan` | Feature planning with phased human gates | Plan with milestones |
-| `/goat-test` | Generate testing instructions across three verification tracks | Test instructions (automated, AI, human) |
-| `/goat-reflect` | Post-session reflection for the learning loop | Structured lessons entries |
-| `/goat-onboard` | Codebase onboarding for new contributors or agents | Orientation document |
-| `/goat-resume` | Session resumption from handoff state | Context reconstruction summary |
+| `/goat-test` | Generate test plans across three verification phases | Test instructions (automated, AI, human) |
+| `/goat-refactor` | Cross-file refactoring with blast radius analysis | Verified renames with absence checks |
+| `/goat-simplify` | Code readability improvement | Impact-ordered findings with renames |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
@@ -180,7 +178,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 |-------|---------------|--------|
 | Phase 0 (bootstrap) | Minimal CLAUDE.md + deny-dangerous hook + settings.json | Layer 1 (minimal) |
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
-| Phase 1b | Skills: /goat-security, /goat-debug, /goat-audit, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-reflect, /goat-onboard, /goat-resume | Layer 3 |
+| Phase 1b | Skills: /goat-security, /goat-debug, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-refactor, /goat-simplify | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, RFC 2119 pass, permission profiles (optional) | Layer 5, enhances Layers 1-4 |
 
@@ -211,7 +209,7 @@ Until graduation, Phase 0 is sufficient. Don't over-invest in a prototype.
 |--------|-----|---------|-------------------|
 | Layer 1 line target | ~120 | ~120 | ~120 |
 | Layer 2 local files | Likely needed | Create where needed | Create where needed |
-| Layer 3 skills | All 10 | All 10 | All 10 |
+| Layer 3 skills | All 8 | All 8 | All 8 |
 | Layer 5 evals | Real incidents | Stack failure modes | Real incidents |
 
 ---

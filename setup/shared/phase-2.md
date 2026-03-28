@@ -1,68 +1,50 @@
-# Phase 2
+# Phase 2 — Evals & Hygiene (shared across all agents)
 
-**Implement immediately after Phase 1.** Do not defer. When asked to set up
-GOAT Flow, complete Phase 1 AND Phase 2 in the same session.
-
-Projects with short git history will have fewer real incidents for evals —
-that's fine. Seed with stack failure modes and replace with real incidents
-as they occur.
-
-These items apply to both Claude Code and Codex.
+Complete Phase 1 before starting Phase 2.
 
 ---
 
 ```
-Read the system spec and the current instruction file.
-Work through this list in order.
-
-AGENT EVAL SUITE:
-1. Add evals to agent-evals/ (single shared directory for all agents).
-   Add a README.md if it doesn't exist.
+AGENT EVALS:
+1. Create agent-evals/ directory with README.md if they don't exist.
    Read existing evals first — do NOT duplicate incidents already covered.
 
-   Search this codebase's git history and issues for real incidents.
-   For each, create [incident-name].md (flat files, not subdirectories):
-   - Bug description
-   - Single replay prompt
-   - Expected outcome
-   - Known failure mode tested
+2. Search this project's git history for real incidents:
+   git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
 
-   Each eval MUST declare Origin: real-incident | synthetic-seed.
-   If fewer than 5 qualifying incidents, create as many as exist.
-   For projects with no history: create 1-2 from common stack failure
-   modes. Replace with real incidents as they occur.
+3. For each qualifying incident (up to 5), create agent-evals/[name].md:
+   - **Origin:** real-incident
+   - **Agents:** all | claude | codex | gemini
+   - **Skill:** goat-debug | goat-review | goat-security | etc.
+   - ## Replay Prompt (exact text to paste into a fresh agent session)
+   - ## Expected Outcome (what the agent should produce)
+   - ## Failure Mode (what went wrong originally)
 
-   Each eval MUST declare Origin: real-incident | synthetic-seed.
-   Each eval MUST declare Agents: all | codex | claude.
-   For Codex: at least 1-2 evals MUST test Codex-specific mechanics
-   (Agents: codex) — no runtime hook blocking, playbooks not slash
-   commands, no /compact or /clear, dual-agent file preservation.
+   Only create evals for incidents that are genuinely useful for testing
+   agent behaviour. Do NOT create evals just to hit a count target.
+   If fewer than 5 real incidents exist, create fewer — quality over quantity.
 
 RFC 2119 PASS:
-2. Apply MUST/SHOULD/MAY to every rule in the instruction file.
+4. Review the instruction file and apply MUST/SHOULD/MAY to every rule:
    - MUST: execution loop steps, autonomy tiers, definition of done
-   - SHOULD: log hygiene, working memory, session handoffs, footgun propagation
+   - SHOULD: log hygiene, working memory, session handoffs
    - MAY: structural debt trigger, communication when blocked
    Compress prose in the SAME pass. Instruction file MUST stay under target.
 
-PER-ROLE PERMISSION PROFILES:
-3. Create on first use - materialise when the first real role separation
-   need occurs.
-   For Claude Code: .claude/profiles/ with JSON files.
-   For Codex: document roles in AGENTS.md (no native profile support).
-   Each profile restricts Edit and Bash permissions. Always Read: **.
+HYGIENE:
+5. Create tasks/handoff-template.md with sections:
+   ## Status, ## Current State, ## Key Decisions, ## Known Risks, ## Next Step
 
-CI VALIDATION:
-4. If not created in Phase 1c, create context-validation.yml:
-   - Instruction file line count (warn if >target, error if >150)
-   - Router table file references exist
-   - Skills/playbook directories have expected files
-   - Local instruction files under 20 lines
+6. Create tasks/.gitignore:
+   *
+   !.gitignore
+   !handoff-template.md
+
+7. Add .claude/settings.local.json to .gitignore (if not already there).
 
 VERIFICATION:
-- Count instruction file lines. MUST stay under target after RFC 2119 pass.
-- If permission profiles were created (optional), verify the files are valid.
-- Run scripts/preflight-checks.sh if it exists. Otherwise run the
-  project's lint + test commands.
-- Report instruction file line count.
+- GATE: agent-evals/ has eval files with Origin and Replay Prompt sections.
+- GATE: tasks/handoff-template.md has all 5 required sections.
+- GATE: Count MUST/SHOULD/MAY in instruction file — need 10+.
+- GATE: Instruction file is still under 120 lines after RFC 2119 pass.
 ```

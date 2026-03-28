@@ -1,6 +1,7 @@
 ---
 name: goat-security
 description: "Assess security posture with threat-model-driven, framework-aware verification"
+goat-flow-skill-version: "0.8.0"
 ---
 # /goat-security
 

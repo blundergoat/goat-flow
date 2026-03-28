@@ -5,8 +5,8 @@ import type { Fragment } from '../types.js';
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
-  // === Skills (10 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
-  ...['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'reflect', 'onboard', 'resume'].map(skill => ({
+  // === Skills (9 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
+  ...['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(skill => ({
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
@@ -177,9 +177,9 @@ Each phase should have a clear entry condition (what must be done before startin
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Ensure all 10 GOAT Flow skills are present under \`{{skillsDir}}/\`:
+    instruction: `Ensure all 8 GOAT Flow skills are present under \`{{skillsDir}}/\`:
 
-- goat-security, goat-debug, goat-audit, goat-investigate, goat-review, goat-plan, goat-test, goat-reflect, goat-onboard, goat-resume
+- goat-security, goat-debug, goat-investigate, goat-review, goat-plan, goat-test, goat-refactor, goat-simplify
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
   },
@@ -478,12 +478,10 @@ Adjust the lint and test commands to match your project. Remove steps that don't
     phase: 'standard',
     category: 'Hooks',
     kind: 'create',
-    instruction: `Create context validation. Either:
+    instruction: `Create \`.github/workflows/context-validation.yml\` for CI-based context validation.
 
-**Option A:** \`scripts/context-validate.sh\` (local script)
-**Option B:** \`.github/workflows/context-validation.yml\` (CI)
-
-The script should check: instruction file line counts, router table references resolve, skills exist.`,
+The workflow should check: instruction file line counts, router table references resolve, skills exist.
+Trigger on pull requests that modify instruction files, skills, or docs/.`,
   },
 
   // === Learning Loop ===
@@ -507,8 +505,14 @@ The script should check: instruction file line counts, router table references r
     phase: 'standard',
     category: 'Learning Loop',
     kind: 'fix',
-    instruction: `\`docs/lessons.md\` exists but has no entries. Add entries from real incidents:
+    instruction: `\`docs/lessons.md\` exists but has no entries. Seed from real incidents in this project's git history.
 
+**Step 1:** Find real incidents:
+\`\`\`bash
+git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
+\`\`\`
+
+**Step 2:** For each incident, add an entry:
 \`\`\`markdown
 ### Entry: [Short description]
 **What happened:** [What went wrong]
@@ -517,15 +521,22 @@ The script should check: instruction file line counts, router table references r
 **created_at:** YYYY-MM-DD
 \`\`\`
 
-Only add entries from actual incidents. Never use hypothetical examples.`,
+Target: 3+ entries. Only add entries from actual incidents — never hypothetical.`,
   },
   {
     key: 'create-footguns',
     phase: 'standard',
     category: 'Learning Loop',
     kind: 'create',
-    instruction: `Create \`docs/footguns.md\`:
+    instruction: `Create \`docs/footguns.md\` with real traps from this codebase.
 
+**Step 1:** Find potential footguns:
+\`\`\`bash
+grep -rn 'TODO\\|FIXME\\|HACK\\|XXX' src/ --include='*.ts' --include='*.php' --include='*.py' | head -20
+git log --all --oneline -- '*migration*' '**/migrations/**' | head -10
+\`\`\`
+
+**Step 2:** For each real trap, document it:
 \`\`\`markdown
 # Footguns
 
@@ -550,6 +561,64 @@ Every footgun MUST have file:line evidence. No hypotheticals.`,
 **After:** "\`src/auth.ts:42\` — race condition between token refresh and request dispatch"
 
 Every footgun entry MUST have at least one \`file:line\` reference.`,
+  },
+  {
+    key: 'add-footgun-labels',
+    phase: 'standard',
+    category: 'Learning Loop',
+    kind: 'fix',
+    instruction: `\`docs/footguns.md\` has evidence but no evidence type labels. Add one of these to each entry:
+
+- **ACTUAL_MEASURED** — real data with source (e.g., production metrics, load test results)
+- **DESIGN_TARGET** — intended values from specs (e.g., "target 120 lines per spec")
+- **HYPOTHETICAL_EXAMPLE** — illustrative only (e.g., "imagine a 500ms timeout")
+
+Bare claims without labels are not acceptable.`,
+  },
+  {
+    key: 'route-learning-loop',
+    phase: 'standard',
+    category: 'Router Table',
+    kind: 'fix',
+    instruction: 'Add \`docs/lessons.md\` and \`docs/footguns.md\` to the router table in \`{{instructionFile}}\`.',
+  },
+  {
+    key: 'route-architecture',
+    phase: 'standard',
+    category: 'Router Table',
+    kind: 'fix',
+    instruction: 'Add \`docs/architecture.md\` to the router table in \`{{instructionFile}}\`.',
+  },
+  {
+    key: 'route-evals',
+    phase: 'standard',
+    category: 'Router Table',
+    kind: 'fix',
+    instruction: 'Add \`agent-evals/\` to the router table in \`{{instructionFile}}\`.',
+  },
+  {
+    key: 'add-decisions',
+    phase: 'standard',
+    category: 'Architecture',
+    kind: 'fix',
+    instruction: '\`docs/decisions/\` exists but has no ADR files. Either add a real architectural decision record or remove the empty directory.',
+  },
+  {
+    key: 'create-ignore-files',
+    phase: 'standard',
+    category: 'Ignore Files',
+    kind: 'create',
+    instruction: `Create \`.copilotignore\` and \`.cursorignore\` with patterns to prevent AI tools from indexing sensitive files:
+
+\`\`\`
+.env*
+secrets/
+*.pem
+*.key
+credentials*
+.aws/
+.ssh/
+\`\`\``,
   },
 
   // === Router Table ===

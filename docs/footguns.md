@@ -4,6 +4,8 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 ## Footgun: Cross-reference fragility across docs
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Users following getting-started.md hit dead references.
 
 **Why it happens:** Documentation files reference each other by relative path. The project has 60+ markdown files with dense cross-referencing. Renaming one file can break references in 5-10 others.

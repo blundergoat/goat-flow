@@ -31,7 +31,7 @@ scripts/run-cli.sh                 # Interactive CLI menu
 
 ## Conventions
 
-- TypeScript ESM, Node 22+, zero runtime deps
+- TypeScript ESM, Node 20.6+, zero runtime deps
 - `node:test` for testing — no Jest/Vitest
 - All shell scripts: `set -euo pipefail`, pass shellcheck
 - Rubric checks are typed data in `src/cli/rubric/` — not parsed from markdown

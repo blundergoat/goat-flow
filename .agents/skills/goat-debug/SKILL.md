@@ -1,6 +1,7 @@
 ---
 name: goat-debug
 description: "Diagnose a bug with evidence before proposing fixes"
+goat-flow-skill-version: "0.8.0"
 ---
 # /goat-debug
 

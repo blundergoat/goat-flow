@@ -76,7 +76,13 @@ export function runAntiPatterns(patterns: AntiPatternDef[], ctx: FactContext): A
       };
     }
     try {
-      return antiPattern.evaluate(ctx);
+      const result = antiPattern.evaluate(ctx);
+      // Propagate recommendationKey from definition to result so setup prompts
+      // can look up the corresponding fragment for fix instructions
+      if (antiPattern.recommendationKey && !result.recommendationKey) {
+        result.recommendationKey = antiPattern.recommendationKey;
+      }
+      return result;
     } catch (err) {
       return {
         id: antiPattern.id,
