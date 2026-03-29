@@ -156,9 +156,19 @@ function qualitySkill(name: string): string {
   return `---
 name: goat-${name}
 description: "${name} skill"
-goat-flow-skill-version: "0.8.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # goat-${name}
+
+## Shared Conventions
+
+- **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- **Evidence:** Every finding needs \`file:line\`. Tag as OBSERVED (verified) or INFERRED. MUST NOT fabricate.
+- **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Learning Loop:** Behavioural mistake → \`docs/lessons.md\`. Architectural trap → \`docs/footguns.md\`.
+- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -289,9 +299,9 @@ describe('Fixture 4: full-claude', () => {
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals
     'agent-evals/README.md': '# Agent Evals\n',
-    'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n**Agents:** all\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
-    'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n**Agents:** all\n\n## Replay Prompt\n\n```\nDo something\n```\n',
-    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
+    'agent-evals/eval-1.md': '---\nname: eval-1\norigin: real-incident\nagents: all\nskill: goat-debug\n---\n\n### Scenario\n\n```\nDo the thing\n```\n',
+    'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nDo something\n```\n',
+    'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\nskill: goat-plan\n---\n\n### Scenario\n\n```\nAnother prompt\n```\n',
     // CI
     '.github/workflows/context-validation.yml': 'name: Context Validation\non: push\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
     // Preflight + validation
@@ -356,9 +366,9 @@ describe('Fixture 5: full-multi-agent', () => {
     'docs/lessons.md': '# Lessons\n\n### Entry 1\n**What happened:** x\n',
     'docs/architecture.md': '# Architecture\n\nOverview.\n',
     'agent-evals/README.md': '# Evals\n',
-    'agent-evals/eval-1.md': '# E1\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\nx\n```\n',
-    'agent-evals/eval-2.md': '# E2\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\ny\n```\n',
-    'agent-evals/eval-3.md': '# E3\n\n**Origin:** synthetic-seed\n\n## Replay Prompt\n\n```\nz\n```\n',
+    'agent-evals/eval-1.md': '---\nname: e1\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\nx\n```\n',
+    'agent-evals/eval-2.md': '---\nname: e2\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\ny\n```\n',
+    'agent-evals/eval-3.md': '---\nname: e3\norigin: synthetic-seed\nagents: claude\n---\n\n### Scenario\n\n```\nz\n```\n',
     '.github/workflows/context-validation.yml': 'name: CV\non: push\njobs:\n  v:\n    steps:\n      - run: wc -l\n      - run: check router\n      - run: check skills\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\n',
     'scripts/context-validate.sh': '#!/usr/bin/env bash\n',
@@ -632,8 +642,8 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     // Skills for all agents (8 required skills)
     ...Object.fromEntries(
       ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
-        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
-        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
+        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.9.0"\n---\n# goat-${s}\n`],
+        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.9.0"\n---\n# goat-${s}\n`],
       ]),
     ),
     // Hooks
@@ -651,9 +661,9 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'docs/architecture.md': '# Architecture\n\n' + 'System overview.\n'.repeat(10),
     // Evals
     'agent-evals/README.md': '# Agent Evals\n',
-    'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
-    'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n\n## Replay Prompt\n\n```\nDo another thing\n```\n',
-    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n\n## Replay Prompt\n\n```\nThird eval\n```\n',
+    'agent-evals/eval-1.md': '---\nname: eval-1\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\nDo the thing\n```\n',
+    'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\nDo another thing\n```\n',
+    'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\n---\n\n### Scenario\n\n```\nThird eval\n```\n',
     // CI
     '.github/workflows/context-validation.yml': 'name: CV\non: push\njobs:\n  v:\n    steps:\n      - run: wc -l\n      - run: check router\n      - run: check skills\n',
     // Scripts
@@ -728,21 +738,22 @@ GOOD: Inline format. Extract when second format needed
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
     ...Object.fromEntries(
-      ['security', 'debug', 'audit', 'investigate', 'review', 'plan', 'test', 'context', 'refactor'].map(s => [
+      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
+    '.claude/skills/goat/SKILL.md': `---\nname: goat\ndescription: "Dispatcher"\ngoat-flow-skill-version: "0.9.0"\n---\n# /goat\n\n## How It Works\n\nRoutes to the right skill.\n\n## Constraints\n\n- MUST announce selected skill\n`,
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nset -euo pipefail\nINPUT=$(cat)\nCMD=$(echo "$INPUT" | jq -r .command // empty)\ncase "$CMD" in *rm\\ -rf*|*--force*|*chmod\\ 777*) exit 2;; esac\nexit 0\n',
     '.claude/hooks/stop-lint.sh': '#!/usr/bin/env bash\necho "lint check"\nexit 0\n',
     '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nprettier --write "$1"\nexit 0\n',
-    'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\nACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
+    'docs/footguns.md': '# Footguns\n\n## Footgun: Auth race\n\n**Evidence type:** ACTUAL_MEASURED\n\n**Evidence:**\n- `src/auth.ts:42` - race condition\n- `src/auth.ts:88` - missing lock\n',
     'src/auth.ts': '// auth module\n',
     'docs/lessons.md': '# Lessons\n\n## Entries\n\n### Entry 1\n**What happened:** broke prod deploy\n\n### Entry 2\n**What happened:** missed test coverage\n\n### Entry 3\n**What happened:** stale ref after rename\n',
     'docs/architecture.md': '# Architecture\n\n' + 'System overview line.\n'.repeat(8),
     'agent-evals/README.md': '# Agent Evals\n',
-    'agent-evals/eval-1.md': '# Eval 1\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-debug\n\n## Replay Prompt\n\n```\nDo the thing\n```\n',
-    'agent-evals/eval-2.md': '# Eval 2\n\n**Origin:** real-incident\n**Agents:** all\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nDo something\n```\n',
-    'agent-evals/eval-3.md': '# Eval 3\n\n**Origin:** synthetic-seed\n**Agents:** claude\n**Skill:** goat-review\n\n## Replay Prompt\n\n```\nAnother prompt\n```\n',
+    'agent-evals/eval-1.md': '---\nname: eval-1\norigin: real-incident\nagents: all\nskill: goat-debug\n---\n\n### Scenario\n\n```\nDo the thing\n```\n',
+    'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nDo something\n```\n',
+    'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\nskill: goat-plan\n---\n\n### Scenario\n\n```\nAnother prompt\n```\n',
     '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
     'tasks/handoff-template.md': '# Handoff Template\n\n## Status\n\n## Current State\n\n## Key Decisions\n\n## Known Risks\n\n## Next Step\n',

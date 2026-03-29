@@ -4,6 +4,15 @@ Reference for generating `ai/instructions/frontend.md` in React projects.
 Assume TypeScript for new code; if the project is JavaScript-only, keep the same
 component, state, and testing rules and drop the type syntax.
 
+## Toolchain Gates
+
+- `useEffectEvent` is only available on newer React toolchains. If the repo is
+  not on a version that supports it, use refs or stable callbacks instead.
+- React Compiler guidance only applies if the repo actually enables the compiler
+  in its build toolchain. Do not assume it is present.
+- Loader/server-component guidance is framework-specific. Only include it when
+  the repo actually uses Next.js, Remix, or React Router data APIs.
+
 ## Component Patterns
 
 - Use function components exclusively. Class components are legacy only.
@@ -25,7 +34,8 @@ function UserCard({ user, onSelect }: UserCardProps) {
 const UserCard: React.FC<{ user: User }> = ({ user }) => { ... };
 ```
 
-- One component per file. File name matches component name: `UserCard.tsx`.
+- Default to one exported component per file. Small private helper components
+  may stay colocated when that makes the feature easier to read.
 - Extract subcomponents when a render block exceeds ~50 lines, not before.
 
 ## State Management
@@ -99,7 +109,9 @@ expect(component.state.isSubmitted).toBe(true);
 ## File Structure
 
 - Colocate tests next to source: `UserCard.tsx` + `UserCard.test.tsx`.
-- DO NOT use barrel exports (`index.ts` re-exporting everything). They break tree-shaking and create circular dependency traps.
+- Avoid broad barrel exports in app code unless the project already uses
+  intentional package-boundary barrels. They can hurt tree-shaking and create
+  circular dependency traps when added casually.
 - Group by feature, not by type: `features/users/UserCard.tsx`, not `components/UserCard.tsx`.
 
 ## Common Footguns
@@ -113,3 +125,9 @@ expect(component.state.isSubmitted).toBe(true);
   extra renders. Derive during render unless the value must survive independently.
 - **Uncontrolled-to-controlled**: Initializing `useState(undefined)` then setting a value flips an input from uncontrolled to controlled. Initialize with empty string for text inputs.
 - **Object/array literals in JSX**: `style={{ color: 'red' }}` creates a new object every render. Hoist to a constant or use CSS.
+
+## Primary Sources
+
+- React docs: https://react.dev/
+- Effects guidance: https://react.dev/learn/you-might-not-need-an-effect
+- React Compiler: https://react.dev/learn/react-compiler

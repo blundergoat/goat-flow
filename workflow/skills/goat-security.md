@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and concrete dependency auditing."
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # /goat-security
 
@@ -12,8 +12,9 @@ goat-flow-skill-version: "0.7.0"
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
 - **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 ## When to Use
 

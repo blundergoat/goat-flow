@@ -1,6 +1,10 @@
 # Prompt: Create ai/instructions/security.md
 
-Cross-cutting security overlay. Load this whenever touching auth, secrets, validation, or user input.
+> **Purpose:** Cross-cutting security overlay — input validation, auth, secrets, output encoding
+> **Generates:** `ai/instructions/security.md`
+> **Use when:** Setting up security instructions (overrides other instructions on conflict)
+> **Repo inspection:** Yes — reads auth patterns, validation logic, secrets handling, dependency tree
+> **Follow-on refs:** `security/web-common.md` for OWASP baseline; `security/framework-specific/` for framework rules; `security/api-auth.md`, `security/file-upload.md`, `security/sql-injection.md` as detected
 
 ---
 
@@ -8,7 +12,7 @@ Cross-cutting security overlay. Load this whenever touching auth, secrets, valid
 
 Write `ai/instructions/security.md`:
 
-```
+````
 # Security Instructions
 
 This file overrides all other instruction files when there is a conflict.
@@ -35,18 +39,18 @@ Reject first, then allow. Default to deny.
 ## Authentication Boundaries
 
 - Every endpoint must be explicitly marked public or authenticated. No implicit access.
-- Auth middleware runs before handlers. Never check auth inside a handler.
-- Token validation happens once at the middleware layer, not per-service-call.
+- Enforce authentication before business logic — at the framework's routing/middleware layer, not inside individual handlers. The mechanism varies by stack (middleware, decorators, annotations, route filters, guards), but the principle is the same: a new endpoint that forgets the check must fail closed.
+- Validate credentials once per request at the boundary, not per service call.
 
 ```go
-// Good — middleware handles auth
+// Good — auth enforced at the routing layer (Go middleware shown; adapt to your framework)
 mux.Handle("/api/v1/users", authMiddleware(userHandler))
 mux.Handle("/api/v1/health", publicHandler) // explicitly public
 
-// Bad — auth check buried in handler
+// Bad — auth check buried in handler (easy to forget in new handlers)
 func handler(w http.ResponseWriter, r *http.Request) {
     token := r.Header.Get("Authorization")
-    if !isValid(token) { ... } // easy to forget in new handlers
+    if !isValid(token) { ... }
 }
 ```
 
@@ -77,6 +81,15 @@ key := "sk_live_abc123def456"
 // Bad — secret in log output
 log.Printf("authenticating with key: %s", apiKey)
 ```
+
+## Output Encoding
+
+Encode output based on context. The same value needs different encoding in HTML body, HTML attributes, JavaScript, CSS, and URLs. Use the framework's built-in escaping — do not write your own.
+
+- HTML body: `{{ variable }}` (auto-escaped in most template engines)
+- HTML attributes: always quote attribute values; use framework escaping
+- JavaScript context: JSON-encode, do not embed raw strings in `<script>` blocks
+- URLs: use `encodeURIComponent()` / framework URL builder for query parameters
 
 ## Dangerous File Operations
 
@@ -185,6 +198,7 @@ If a tool or script needs access to credentials, it must:
 - [ ] Auth applied to every non-public endpoint
 - [ ] SQL queries use parameterized placeholders
 - [ ] File paths sanitized if derived from user input
-```
+````
 
 Adjust examples to match this project's language, framework, and auth approach.
+Target 40-60 lines of content (not counting the prompt wrapper).

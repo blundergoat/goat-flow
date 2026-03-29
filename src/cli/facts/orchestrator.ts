@@ -6,6 +6,7 @@ import { extractAgentFacts } from './agent.js';
 
 interface ExtractOptions {
   agentFilter: AgentId | null;
+  projectPath?: string;
 }
 
 /** Orchestrate full fact extraction: detect agents, detect stack, gather shared and per-agent facts. */
@@ -53,7 +54,7 @@ export function extractProjectFacts(fs: ReadonlyFS, options: ExtractOptions): Pr
   });
 
   return {
-    root: '.',
+    root: options.projectPath ?? '.',
     stack,
     agents: agentFacts,
     shared,

@@ -6,7 +6,9 @@ Reference for generating `ai/instructions/security.md` in projects using JWT, OA
 
 - **Access tokens**: 15-minute expiry maximum. Short-lived limits damage from token theft.
 - **Refresh tokens**: single-use with rotation. Issue a new refresh token on each use and invalidate the old one.
-- **Storage**: httpOnly cookie, never localStorage or sessionStorage.
+- **Storage (browser)**: httpOnly cookie. Never localStorage or sessionStorage — both are readable by JavaScript and vulnerable to XSS.
+- **Storage (native mobile)**: use the platform secure store (iOS Keychain, Android Keystore), not shared preferences or localStorage equivalents.
+- **Storage (server-to-server)**: environment variables or a secrets manager. Cookies are not the right model.
 - **Validation**: always verify signature, `exp`, `iss`, `aud`. Reject tokens missing any claim.
 
 ```js
@@ -99,11 +101,51 @@ def list_orders(request):
 
 ## API Keys
 
-- Hash stored copies with bcrypt, scrypt, or Argon2 (SHA-256 is too fast for key hashing). Never store plaintext API keys in the database.
+- Hash stored copies with bcrypt, scrypt, or Argon2 (SHA-256 is too fast for key hashing). Never store plaintext API keys in the database. Note: bcrypt truncates input at 72 bytes — for API keys longer than 72 characters, pre-hash with SHA-256 before passing to bcrypt.
 - Scope each key to minimum required permissions and resources.
 - Rotate on a schedule (90 days) and on any suspected compromise.
 - Prefix keys for identification: `prefix_live_`, `prefix_test_` (use your project's prefix). Makes leaked key triage faster.
 - Log key usage. Alert on anomalous patterns (sudden volume spike, geographic shift).
+
+## Machine-to-Machine Auth (service-to-service)
+
+- Use OAuth 2.0 Client Credentials flow for service-to-service communication. Developers often reach for shared API keys when Client Credentials is the correct, auditable pattern.
+- Each service gets its own client ID and secret. Never share credentials across services.
+- Tokens are short-lived (5-15 minutes). The calling service requests a new token when the current one expires.
+- Never pass API keys in URL query parameters — they appear in server logs, browser history, and proxy logs. Use the `Authorization` header.
+
+```python
+# DO — OAuth 2.0 Client Credentials flow
+import httpx
+
+token_resp = httpx.post("https://auth.example.com/oauth/token", data={
+    "grant_type": "client_credentials",
+    "client_id": os.environ["SERVICE_CLIENT_ID"],
+    "client_secret": os.environ["SERVICE_CLIENT_SECRET"],
+    "scope": "orders:read",
+})
+access_token = token_resp.json()["access_token"]
+
+resp = httpx.get("https://api.example.com/orders",
+    headers={"Authorization": f"Bearer {access_token}"})
+
+# DON'T — shared API key in URL
+resp = httpx.get(f"https://api.example.com/orders?api_key={SHARED_KEY}")
+```
+
+## mTLS (Mutual TLS)
+
+- For zero-trust or high-security service-to-service communication, use mutual TLS: both client and server present certificates.
+- Issue per-service certificates from an internal CA. Do not use self-signed certificates in production.
+- Rotate certificates before expiry. Automate rotation with cert-manager (Kubernetes) or ACME.
+- mTLS authenticates the service identity at the transport layer — still use application-level authorization to control what the service can do.
+
+## Brute-Force Protection
+
+- Rate-limit login and token endpoints. Use progressive delays or account lockout after repeated failures.
+- Lock accounts after 5-10 failed attempts. Require CAPTCHA or email verification to unlock.
+- Log all failed authentication attempts with IP, timestamp, and target account for monitoring.
+- Apply rate limits per IP and per account independently — per-IP alone doesn't stop credential stuffing across accounts.
 
 ## Common Footguns
 
@@ -113,3 +155,4 @@ def list_orders(request):
 - **Client-side auth checks only**: hiding a button is not access control. The API must enforce permissions.
 - **Long-lived refresh tokens without rotation**: if stolen, attacker has indefinite access.
 - **Shared API keys**: one key per integration, never a master key passed to multiple consumers.
+- **API keys in URLs**: query parameter keys appear in server access logs, browser history, referrer headers, and proxy logs. Use the `Authorization` header instead.

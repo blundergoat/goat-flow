@@ -1,12 +1,21 @@
-# .NET + EF Core Coding Standards
+# .NET Backend Standards (ASP.NET Core + EF Core oriented)
 
 Reference for generating `ai/instructions/backend.md` in .NET projects.
 
+This file assumes ASP.NET Core and EF Core as the common case. If the repo uses
+Minimal APIs without MediatR, Dapper instead of EF Core, or a different
+application layout, keep the DI/API/testing guidance and replace the
+architecture or persistence sections with the patterns actually present.
+
 ## Architecture
 
-- Clean Architecture: Controllers -> Application (MediatR commands/queries) -> Domain (entities, value objects) -> Infrastructure (EF Core, external services).
-- Controllers are thin: dispatch to MediatR, return results. No business logic.
-- Domain entities are persistence-ignorant. EF Core mapping goes in `Infrastructure/`.
+- Common service shape: controllers/endpoints -> application/services ->
+  domain -> infrastructure/adapters.
+- If the repo already uses MediatR/CQRS, keep command/query dispatch. Do not add
+  MediatR just to match this template.
+- Keep controllers or endpoints thin. No business logic in the HTTP layer.
+- Domain entities are persistence-ignorant when the repo already uses that
+  separation. Keep EF Core mapping where the project currently places it.
 
 ```csharp
 // DO — thin controller dispatching to MediatR
@@ -42,7 +51,7 @@ public async Task<IActionResult> Create(CreateOrderRequest request)
 }
 ```
 
-## EF Core
+## EF Core (if the repo uses EF Core)
 
 - Use `DbContext` with `AddDbContext<AppDbContext>()` in DI. Configure entity mapping in `IEntityTypeConfiguration<T>` classes.
 - Use `Include()` for eager loading related entities. Use `AsNoTracking()` for read-only queries.
@@ -68,7 +77,8 @@ foreach (var order in orders)
 
 ## Dependency Injection
 
-- Use `AddScoped` for per-request services (DbContext, repositories). Use `AddSingleton` for stateless services (configuration, HTTP clients). Use `AddTransient` for lightweight, stateless helpers.
+- Use `AddScoped` for per-request services (DbContext, repositories). Use `AddSingleton` for stateless services (configuration, caches). Use `AddTransient` for lightweight, stateless helpers.
+- For HTTP clients, use `IHttpClientFactory` via `AddHttpClient<T>()` — avoids socket exhaustion and handles DNS refresh. Never register `HttpClient` as a singleton directly.
 - Use `IOptions<T>` pattern for strongly-typed configuration. Bind from `appsettings.json` sections.
 - DO NOT resolve scoped services from a singleton — it causes captive dependency bugs.
 
@@ -94,7 +104,7 @@ var host = configuration["Smtp:Host"]; // stringly typed, no validation
 
 ## Validation
 
-- Use FluentValidation for complex rules or DataAnnotations for simple ones — pick one per project.
+- Use the project's existing validation approach: FluentValidation for complex rules, DataAnnotations for simple ones. Do not introduce a new library if one is already in use.
 - Validate in the pipeline (MediatR behaviors or action filters), not manually in controllers.
 
 ```csharp
@@ -148,3 +158,10 @@ public class OrdersTests : IClassFixture<WebApplicationFactory<Program>>
 - **Disposed ObjectContext**: Accessing navigation properties after the DbContext is disposed throws. Eager-load with `Include()` or project to a DTO before the context scope ends.
 - **N+1 queries**: EF Core lazy loading (if enabled) silently fires queries per navigation access. Use `AsNoTracking().Include()` and check SQL logs during development.
 - **IEnumerable vs IQueryable**: Calling `.ToList()` too early pulls the entire table into memory. Keep the query as `IQueryable` until you need to materialize results.
+
+## Primary Sources
+
+- ASP.NET Core documentation (learn.microsoft.com/aspnet/core/)
+- Entity Framework Core documentation (learn.microsoft.com/ef/core/)
+- .NET API design guidelines (learn.microsoft.com/dotnet/standard/design-guidelines/)
+- C# language reference (learn.microsoft.com/dotnet/csharp/)

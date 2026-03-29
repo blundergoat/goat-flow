@@ -1,10 +1,21 @@
-# Python + Jinja2/Django Templates Coding Standards
+# Python Server-Rendered Templates (Django or Flask/Jinja2)
 
-Reference for generating `ai/instructions/frontend.md` in Flask/Django projects with server-rendered templates.
+Reference for generating `ai/instructions/frontend.md` in Python projects with
+server-rendered templates.
 
-## Jinja2 Autoescaping
+Choose ONE framework branch when generating project instructions:
 
-- Autoescaping MUST be enabled globally. Verify in Flask config or Jinja2 environment setup.
+- Django project -> keep the shared rules + Django-specific guidance
+- Flask/Jinja project -> keep the shared rules + Flask/Jinja-specific guidance
+
+Do not mix Django template tags and Flask/Jinja conventions into the same
+generated `frontend.md` unless the repo genuinely contains both stacks.
+
+## Shared Template Rules
+
+- Autoescaping must stay enabled by default.
+- In Django, autoescape is on by default; audit any `{% autoescape off %}` use.
+- In Flask/Jinja, verify autoescaping in the Jinja environment setup.
 - `{{ variable }}` auto-escapes. The `|safe` filter and `{% autoescape false %}` disable it.
 - DO NOT use `|safe` on user-provided data. Ever.
 
@@ -21,7 +32,7 @@ Reference for generating `ai/instructions/frontend.md` in Flask/Django projects 
 
 ## Template Inheritance
 
-- Use `{% extends %}` + `{% block %}` for layouts. Same pattern for both Flask and Django.
+- Use `{% extends %}` + `{% block %}` for layouts.
 - Keep inheritance to 2-3 levels: base -> section layout -> page.
 - Use `{{ super() }}` (Jinja2) or `{{ block.super }}` (Django) to extend a parent block rather than replacing it entirely.
 
@@ -44,7 +55,7 @@ Reference for generating `ai/instructions/frontend.md` in Flask/Django projects 
 {% endblock %}
 ```
 
-## Django-Specific
+## Django Branch
 
 - **Template tags**: Write custom template tags for complex logic. Simple display logic only in templates.
 - **Context processors**: Use for global data (current user, site settings). Do not overload them — each adds overhead to every request.
@@ -63,7 +74,7 @@ Reference for generating `ai/instructions/frontend.md` in Flask/Django projects 
 <form method="post" action="/users/{{ user.pk }}/update/">
 ```
 
-## Flask-Specific
+## Flask/Jinja Branch
 
 - **Macros**: Use Jinja2 macros for reusable template fragments (form fields, cards, pagination).
 - **Blueprint templates**: Organize templates by blueprint: `templates/auth/login.html`, `templates/admin/dashboard.html`.
@@ -93,3 +104,12 @@ Reference for generating `ai/instructions/frontend.md` in Flask/Django projects 
 - **`|safe` filter abuse**: Every `|safe` usage must be justified and the content must be sanitized before marking safe. Grep for `|safe` in code reviews.
 - **N+1 queries in templates**: Accessing `{{ user.orders.all }}` in a loop. Use `select_related`/`prefetch_related` (Django) or eager loading in the query (Flask/SQLAlchemy).
 - **Template logic creep**: If a template has more than 2-3 conditionals or loops, extract the logic into the view/context or a custom tag/macro.
+- **Framework branch bleed**: Generated instructions that mix Django tags such
+  as `{% csrf_token %}` into Flask apps, or Jinja-only guidance into Django
+  output, create broken examples. Keep only the branch that matches the repo.
+
+## Primary Sources
+
+- Django templates: https://docs.djangoproject.com/en/stable/topics/templates/
+- Django template language: https://docs.djangoproject.com/en/stable/ref/templates/language/
+- Jinja docs: https://jinja.palletsprojects.com/

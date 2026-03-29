@@ -6,12 +6,12 @@ import type { CheckDef, FactContext, CheckResult } from '../types.js';
 //   low    = semantic inference (content quality judgment)
 
 /**
- * Tier 3 — Full (16 points)
+ * Tier 3 — Full (20 points)
  * Agent evals, CI validation, hygiene.
  * These checks represent mature GOAT Flow adoption with CI integration.
  */
 export const fullChecks: CheckDef[] = [
-  // === 3.1 Agent Evals (7 pts: 1 existence + 2 count + 2 replay + 1 origin + 1 coverage) ===
+  // === 3.1 Agent Evals (9 pts: 1 existence + 1 count + 2 replay + 1 origin + 1 agents + 2 coverage + 1 frontmatter) ===
   {
     id: '3.1.1', name: 'Evals directory exists', tier: 'full', category: 'Agent Evals',
     pts: 1, confidence: 'high',
@@ -21,19 +21,17 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals',
-    pts: 2, partialPts: 1, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        // Number of eval files found in agent-evals/
         const count = ctx.facts.shared.evals.count;
-        if (count >= 5) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'high', message: `${count} eval files` };
-        if (count >= 3) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 5+)` };
-        if (count >= 1) return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'high', message: `${count} eval files (need 5+)` };
-        return { id: '3.1.3', name: '5+ eval files', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'high', message: 'No eval files' };
+        if (count >= 3) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${count} eval files` };
+        if (count >= 1) return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: `${count} eval files (need 3+)` };
+        return { id: '3.1.3', name: '3+ eval files', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No eval files' };
       },
     },
-    recommendation: 'Add 5+ agent eval files with replay prompts',
+    recommendation: 'Add 3+ agent eval files — diversity across skills matters more than count',
     recommendationKey: 'add-evals',
   },
   {
@@ -68,13 +66,13 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
-    pts: 0, confidence: 'high',
+    pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
         id: '3.1.5a', name: 'Evals have Agents labels', tier: 'full', category: 'Agent Evals',
         status: ctx.facts.shared.evals.hasAgentsLabels ? 'pass' : 'fail',
-        points: 0, maxPoints: 0, confidence: 'high',
+        points: ctx.facts.shared.evals.hasAgentsLabels ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.facts.shared.evals.hasAgentsLabels ? 'Evals have Agents labels' : 'Evals missing **Agents:** labels (all | codex | claude | gemini)',
       }),
     },
@@ -82,23 +80,42 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'add-agents-labels',
   },
   {
-    id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals',
-    pts: 1, confidence: 'medium',
+    id: '3.1.7', name: 'Evals use YAML frontmatter', tier: 'full', category: 'Agent Evals',
+    pts: 1, confidence: 'high',
+    na: (ctx) => ctx.facts.shared.evals.count === 0,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '3.1.7', name: 'Evals use YAML frontmatter', tier: 'full', category: 'Agent Evals',
+        status: ctx.facts.shared.evals.hasFrontmatter ? 'pass' : 'fail',
+        points: ctx.facts.shared.evals.hasFrontmatter ? 1 : 0, maxPoints: 1, confidence: 'high',
+        message: ctx.facts.shared.evals.hasFrontmatter ? 'All evals use YAML frontmatter' : 'Some evals use legacy format — migrate to YAML frontmatter with name, description, origin, agents, skill fields',
+      }),
+    },
+    recommendation: 'Migrate eval files to YAML frontmatter format: ---\\nname: eval-name\\ndescription: "..."\\norigin: real-incident | synthetic-seed\\nagents: all\\nskill: goat-*\\n---',
+    recommendationKey: 'fix-eval-frontmatter',
+  },
+  {
+    id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals',
+    pts: 2, partialPts: 1, confidence: 'medium',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        // Number of distinct skill names referenced across all eval files
-        const count = ctx.facts.shared.evals.evalSkillCount;
-        if (ctx.facts.shared.evals.count === 0) {
-          return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No eval files' };
+        const { evalSkillCount, count } = ctx.facts.shared.evals;
+        const TOTAL_SKILLS = 8;
+        if (count === 0) {
+          return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: 'No eval files' };
         }
-        if (count >= 2) {
-          return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `Evals reference ${count} distinct skills` };
+        if (evalSkillCount >= TOTAL_SKILLS) {
+          return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'medium', message: `All ${TOTAL_SKILLS} canonical skills covered` };
         }
-        return { id: '3.1.6', name: 'Evals cover multiple skills', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: count === 1 ? 'Evals only cover 1 skill — add evals for at least 2 distinct skills' : 'Evals do not reference any skills — add **Skill:** labels to eval files' };
+        if (evalSkillCount >= 4) {
+          return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'medium', message: `${evalSkillCount}/${TOTAL_SKILLS} skills covered — add evals for the missing ones` };
+        }
+        return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: evalSkillCount === 0 ? 'No skill: labels in evals — add skill: goat-X to frontmatter' : `${evalSkillCount}/${TOTAL_SKILLS} skills covered — diversity matters more than count` };
       },
     },
-    recommendation: 'Add **Skill:** labels to eval files and ensure at least 2 distinct skills are covered',
+    recommendation: 'Add evals covering all 8 skills: goat-debug, goat-investigate, goat-plan, goat-refactor, goat-review, goat-security, goat-simplify, goat-test. Diversity across skills matters more than eval count.',
     recommendationKey: 'add-eval-skill-coverage',
   },
 
@@ -176,7 +193,7 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'ci-trigger-prs',
   },
 
-  // === 3.3 Hygiene (3 pts) ===
+  // === 3.3 Hygiene (5 pts) ===
   {
     id: '3.3.1', name: 'Handoff template', tier: 'full', category: 'Hygiene',
     pts: 1, confidence: 'high',
@@ -186,9 +203,27 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.3.1a', name: 'Handoff template has required sections', tier: 'full', category: 'Hygiene',
-    pts: 0, confidence: 'medium',
+    pts: 1, confidence: 'medium',
     na: (ctx) => !ctx.facts.shared.handoffTemplate.exists,
-    detect: { type: 'grep_count', path: 'tasks/handoff-template.md', pattern: '## Status|## Current State|## Key Decisions|## Known Risks|## Next Step', min: 4 },
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasRequiredSections, sectionCount } = ctx.facts.shared.handoffTemplate;
+        return {
+          id: '3.3.1a',
+          name: 'Handoff template has required sections',
+          tier: 'full',
+          category: 'Hygiene',
+          status: hasRequiredSections ? 'pass' : 'fail',
+          points: hasRequiredSections ? 1 : 0,
+          maxPoints: 1,
+          confidence: 'medium',
+          message: hasRequiredSections
+            ? `Found ${sectionCount}/5 required sections`
+            : `Found ${sectionCount}/5 required sections`,
+        };
+      },
+    },
     recommendation: 'Add required sections to handoff template: Status, Current State, Key Decisions, Known Risks, Next Step',
     recommendationKey: 'fix-handoff-sections',
   },
@@ -201,8 +236,8 @@ export const fullChecks: CheckDef[] = [
   },
   // 3.3.3 (changelog) removed — CHANGELOG.md is a project-level concern, not an AI workflow check.
   {
-    id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene',
-    pts: 2, confidence: 'medium',
+    id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency',
+    pts: 3, confidence: 'medium',
     na: (ctx) => ctx.facts.agents.length <= 1,
     detect: {
       type: 'custom',
@@ -223,7 +258,7 @@ export const fullChecks: CheckDef[] = [
         const loops = ctx.facts.agents
           .filter(a => a.instruction.exists && a.instruction.content)
           .map(a => ({ agent: a.agent.instructionFile, loop: extractLoop(a.instruction.content) }));
-        if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
+        if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
         // Normalize for comparison: lowercase, strip markdown formatting
         const normalize = (s: string): string[] =>
           s.toLowerCase()
@@ -247,11 +282,13 @@ export const fullChecks: CheckDef[] = [
             diverged.push(`${a.agent} vs ${b.agent}`);
           }
         }
-        if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'pass', points: 2, maxPoints: 2, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
-        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Hygiene', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}. Write the loop in one file, copy verbatim to others` };
+        if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
+        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}. Write the loop in one file, copy verbatim to others` };
       },
     },
     recommendation: 'Reconcile execution loop sections across agent instruction files',
     recommendationKey: 'fix-execution-loop-sync',
   },
+
+  // 3.4.1 removed — duplicate of 3.1.6 after both were updated to require all 8 canonical skills.
 ];

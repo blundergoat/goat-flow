@@ -1,6 +1,10 @@
 # Prompt: Create ai/instructions/testing.md
 
-Testing conventions template. Load this when writing or modifying tests.
+> **Purpose:** Testing conventions — naming, structure, mocking, coverage expectations
+> **Generates:** `ai/instructions/testing.md`
+> **Use when:** Setting up test instructions for the project
+> **Repo inspection:** Yes — reads existing tests for naming patterns, framework usage, fixtures
+> **Follow-on refs:** `backend/` for stack-specific test patterns (e.g. Go table-driven, RSpec, pytest)
 
 ---
 
@@ -8,7 +12,7 @@ Testing conventions template. Load this when writing or modifying tests.
 
 Read the existing tests in the codebase, then write `ai/instructions/testing.md`:
 
-```
+````
 # Testing Instructions
 
 ## Test Naming
@@ -114,7 +118,10 @@ vi.mock("@/lib/api", () => ({
 // Bad — mocking React hooks or internal state
 ```
 
-## Property-Based Testing
+## Property-Based Testing (conditional)
+
+Include this section only if the project already uses a property-based testing library
+(hypothesis, fast-check, rapid) or the codebase has functions matching the criteria below.
 
 For functions with well-defined contracts (parsers, serializers, math, data transformations), use property-based testing to find edge cases humans miss.
 
@@ -148,17 +155,12 @@ test("encode/decode roundtrip", () => {
 ```
 
 ```go
-// Go — gopter (or rapid)
+// Go — pgregory.net/rapid
 func TestParseAmount_NeverPanics(t *testing.T) {
-    properties := gopter.NewProperties(nil)
-    properties.Property("parse never panics on any string", prop.ForAll(
-        func(s string) bool {
-            _, _ = ParseAmount(s) // must not panic
-            return true
-        },
-        gen.AnyString(),
-    ))
-    properties.TestingRun(t)
+    rapid.Check(t, func(rt *rapid.T) {
+        s := rapid.String().Draw(rt, "input")
+        _, _ = ParseAmount(s) // must not panic
+    })
 }
 ```
 
@@ -225,6 +227,7 @@ Use `t.Parallel()` (Go), parallel test runs (Jest default), or `pytest-xdist` (P
 - Bug fixes: add a test that reproduces the bug before fixing it.
 - No coverage target percentage — meaningful tests over line counts.
 - If a test is hard to write, the code probably needs refactoring.
-```
+````
 
 Adjust the languages, test frameworks, and examples to match this project's actual test patterns.
+Target 40-60 lines of content (not counting the prompt wrapper).

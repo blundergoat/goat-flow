@@ -1,4 +1,4 @@
-import type { AgentId } from '../types.js';
+import type { AgentId, ProjectSignals } from '../types.js';
 import { PROFILES } from '../detect/agents.js';
 import { templateExists } from '../paths.js';
 
@@ -278,6 +278,19 @@ const LANGUAGE_TEMPLATE_MAP: Record<string, string> = {
 /** Languages that indicate a web project (gets web-common.md security template) */
 const WEB_LANGUAGES = new Set(['typescript', 'javascript', 'php', 'python', 'go', 'rust']);
 
+/** Map from detected frontend framework/template engine to its coding-standards template */
+const FRONTEND_TEMPLATE_MAP: Record<string, string> = {
+  react: 'workflow/coding-standards/frontend/react.md',
+  vue: 'workflow/coding-standards/frontend/vue.md',
+  angular: 'workflow/coding-standards/frontend/angular.md',
+  blade: 'workflow/coding-standards/frontend/php-blade.md',
+  twig: 'workflow/coding-standards/frontend/php-twig.md',
+  erb: 'workflow/coding-standards/frontend/ruby-erb.md',
+  jinja: 'workflow/coding-standards/frontend/python-jinja.md',
+  blazor: 'workflow/coding-standards/frontend/dotnet-blazor.md',
+  swift: 'workflow/coding-standards/frontend/swift-ios.md',
+};
+
 /**
  * Map detected languages to coding-standards template refs.
  * Only includes templates that exist on disk.
@@ -313,16 +326,34 @@ export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
     });
   }
 
-  // Add frontend.md for TS/JS projects (scanner check 2.6.7a)
-  const hasFrontendLang = languages.some(l => l === 'typescript' || l === 'javascript');
-  const frontendTemplate = 'workflow/coding-standards/frontend/typescript.md';
-  if (hasFrontendLang && templateExists(frontendTemplate)) {
-    refs.push({
-      output: 'ai/instructions/frontend.md',
-      template: frontendTemplate,
-      phase: 'standard',
-      note: 'Detected: typescript/javascript',
-    });
+  // Add frontend.md based on detected frontend framework (scanner check 2.6.7a)
+  // Priority: framework-specific template > typescript.md fallback for TS/JS projects
+  let frontendMatched = false;
+  for (const lang of languages) {
+    const fTemplate = FRONTEND_TEMPLATE_MAP[lang];
+    if (fTemplate && !frontendMatched && templateExists(fTemplate)) {
+      refs.push({
+        output: 'ai/instructions/frontend.md',
+        template: fTemplate,
+        phase: 'standard',
+        note: `Detected: ${lang}`,
+      });
+      frontendMatched = true;
+      break;
+    }
+  }
+  // Fallback: TS/JS without a detected framework → typescript.md
+  if (!frontendMatched) {
+    const hasFrontendLang = languages.some(l => l === 'typescript' || l === 'javascript');
+    const fallbackTemplate = 'workflow/coding-standards/frontend/typescript.md';
+    if (hasFrontendLang && templateExists(fallbackTemplate)) {
+      refs.push({
+        output: 'ai/instructions/frontend.md',
+        template: fallbackTemplate,
+        phase: 'standard',
+        note: 'Detected: typescript/javascript (no framework detected)',
+      });
+    }
   }
 
   // Add backend.md for backend-language projects (scanner check 2.6.7b)
@@ -336,6 +367,41 @@ export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
         template: backendTemplate,
         phase: 'standard',
         note: `Detected: ${detectedBackend}`,
+      });
+    }
+  }
+
+  return refs;
+}
+
+/**
+ * Map detected project signals to security/compliance template refs.
+ * Auto-includes phi-compliance.md when compliance signals detected,
+ * and llm-security.md when LLM integration detected.
+ */
+export function mapSignalsToTemplates(signals: ProjectSignals): TemplateRef[] {
+  const refs: TemplateRef[] = [];
+
+  if (signals.complianceSignals) {
+    const template = 'workflow/coding-standards/security/phi-compliance.md';
+    if (templateExists(template)) {
+      refs.push({
+        output: 'ai/instructions/phi-compliance.md',
+        template,
+        phase: 'standard',
+        note: 'PHI/compliance signals detected',
+      });
+    }
+  }
+
+  if (signals.llmIntegration) {
+    const template = 'workflow/coding-standards/security/llm-security.md';
+    if (templateExists(template)) {
+      refs.push({
+        output: 'ai/instructions/llm-security.md',
+        template,
+        phase: 'standard',
+        note: 'LLM integration detected',
       });
     }
   }
@@ -457,6 +523,16 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
     codex: 'setup/setup-codex.md',
     gemini: 'setup/setup-gemini.md',
   },
+  'fix-deny-cloud-destructive': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-package-mutation': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
   'fix-read-deny-secrets': {
     claude: 'workflow/runtime/enforcement.md',
     codex: 'setup/setup-codex.md',
@@ -507,7 +583,7 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
     codex: 'setup/setup-codex.md',
     gemini: 'setup/setup-gemini.md',
   },
-  'add-rfc2119': 'setup/shared/execution-loop.md',
+  // add-rfc2119 intentionally excluded — inline instruction is self-contained
   'fix-execution-loop-sync': 'setup/shared/execution-loop.md',
 
   // Fix-kind — evals and CI
@@ -522,6 +598,8 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   // Fix-kind — anti-patterns (ones with clear template sources)
   'ap-add-footgun-evidence': 'setup/shared/docs-seed.md',
   'ap-fix-empty-scaffolding': 'setup/shared/docs-seed.md',
+  'ap-remove-deprecated-skills': 'workflow/skills/goat-debug.md',
+  'ap-fix-dangling-skill-refs': 'workflow/skills/goat-debug.md',
 };
 
 /**

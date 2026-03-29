@@ -11,7 +11,11 @@ These files are created regardless of which agent you use. They form the learnin
    Do NOT invent entries. If agent-evals/ exist, check each incident:
    if the root cause was a behavioural mistake (not an architectural
    landmine), seed one lesson from it. This gives agents a format
-   example and makes the file visible. If no evals exist, start empty.
+   example and makes the file visible. If no evals exist, start with
+   this meta-entry so the file isn't blank:
+   "No incidents yet. After your first bug fix or course correction,
+   add an entry here: what happened, what should have happened, and
+   which execution loop step was violated."
    To find real incidents in this project, run:
      git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
    For each match, write a lessons entry with: date, what happened, what
@@ -23,6 +27,9 @@ These files are created regardless of which agent you use. They form the learnin
    existing entries, add new footguns from reading the codebase.
    If the file doesn't exist, create and seed with real footguns only.
    Do NOT invent hypothetical ones. Do NOT replace existing entries.
+   If no real footguns are found yet, start with this meta-entry:
+   "No incidents yet. After your first debugging session or course
+   correction, add an entry here with file:line evidence."
    Every entry MUST cite specific file paths with line numbers.
    Evidence labels: use ACTUAL_MEASURED for real data with source,
    DESIGN_TARGET for intended values, HYPOTHETICAL_EXAMPLE for

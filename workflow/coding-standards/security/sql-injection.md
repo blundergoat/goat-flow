@@ -121,6 +121,12 @@ Not all query builder methods are safe. Know which accept raw SQL.
 - Parameterize inputs to stored procedures the same way you parameterize queries.
 - DO NOT concatenate SQL inside stored procedures.
 
+## Database Account Privileges
+
+- The application's database user should have the minimum required permissions: SELECT, INSERT, UPDATE, DELETE on application tables. Never use a superuser or admin account.
+- Separate accounts for migrations (needs ALTER, CREATE, DROP) and runtime (needs only DML).
+- Revoke GRANT, DROP, and CREATE permissions from the runtime database user.
+
 ## Common Footguns
 
 - **Laravel `whereRaw()`**: passes raw SQL. Always use parameter binding: `whereRaw('email = ?', [$email])`.

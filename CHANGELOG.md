@@ -2,9 +2,45 @@
 
 ---
 
+## v0.9.0 - 2026-03-29
+
+Dispatcher skill, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v0.9.0: 104 checks + 16 anti-patterns. 167 tests.
+
+### Coding Standards (Phases 1-8)
+- Backend: go.md interface fix, DRF split, Rust/Spring/.NET/TS Node detection; frontend: 9-framework routing, version gates
+- Security: new `llm-security.md`, `phi-compliance.md`, `framework-specific/go.md`, `framework-specific/symfony.md`; expanded web-common/api-auth/supply-chain/infrastructure/file-upload
+- DevOps: new `devops/` with `terraform.md`, `packer.md`; `code-review.md` Learning Loop Cross-Check
+
+### Scanner
+- Checks 2.1.20-21: dispatcher skill + Shared Conventions block
+- AP16: deprecated skills (-5); AP17: dangling skill refs (-3)
+- 2.2.5g-h: package mutation + cloud-destructive deny blocking
+- 2.7.1-3: signal follow-through (LLM, PHI hot path, formatter gaps)
+- 3.1.7: eval frontmatter enforcement; 3.3.4: loop consistency promoted to standard (3 pts)
+- 3.1.6: eval coverage rebalanced (2 pts, partial at 4/8); 3.1.3 reduced to 1 pt
+
+### Signal-Aware Setup & Telemetry
+- `mapSignalsToTemplates()` auto-routes `phi-compliance.md` + `llm-security.md` on signal detection
+- `renderSignals()` produces actionable tasks; formatter gap detection checks hook content
+- `scan-logger.ts` auto-appends per-agent JSONL; skills/loop reference telemetry
+
+### Skills, Hooks & Version Consistency
+- Dispatcher skill + Shared Conventions across all agent dirs; 8 skill-specific evals (YAML frontmatter)
+- Preflight: instruction headers, installed skills, workflow templates, dual-agent loop consistency
+- `.claude/hooks/format-file.sh` (prettier); deny hooks: package + cloud blocks
+
+---
+
 ## v0.8.0 - 2026-03-28
 
-Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation alignment. Rubric v0.7.0: 97 checks + 14 anti-patterns. 138 tests.
+Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation alignment, rubric scoring cleanup. Rubric v0.8.0: 97 checks + 15 anti-patterns. 138 tests.
+
+### Rubric Scoring Cleanup
+- Converted previously advisory checks into scored checks where the detector is reliable: footgun evidence labels, lesson path validity, router completeness for learning loop/architecture/evals, eval Agents labels, handoff template required sections, and eval skill diversity
+- Removed zero-point checks that were too heuristic or too weak to score safely: skill Step 0 adaptation, Ask First boundary/router overlap, AI ignore files, and cold-path line budget
+- Moved empty `docs/decisions/` from a zero-point rubric check to anti-pattern `AP16` with a small deduction, so misleading empty ADR scaffolding now affects score
+- Tightened `3.3.1a` to require all five handoff template sections before awarding the point
+- Total check count remains 97 after the cleanup; anti-pattern count increases to 15
 
 ### Skill Consolidation (10→8) — ADR-007
 - goat-reflect/audit merged into goat-review (Instruction Review + Audit modes), goat-onboard merged into goat-investigate (Onboard mode), goat-context removed
@@ -46,7 +82,7 @@ Skill model cleanup (10→8 enforced), setup prompt bug fix, documentation align
 
 ## v0.7.0 - 2026-03-26
 
-Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric: v0.7.0, 92 checks + 12 anti-patterns.
+Reference-based setup prompts, scanner accuracy fixes, CLI simplification. Setup output drops from ~860 to ~90 lines. Rubric v0.7.0: 92 checks + 12 anti-patterns.
 
 ### Reference-Based Setup Prompt
 - Setup generates ~90-line prompts with template path tables instead of ~860 lines of inline skeletons

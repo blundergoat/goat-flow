@@ -103,3 +103,10 @@ Reference for generating `ai/instructions/frontend.md` in Laravel projects using
 - **Massive view files**: Blade files over 200 lines are a sign to extract components. A view should compose components, not contain all the HTML.
 - **Missing @csrf**: Every `<form>` with POST/PUT/DELETE needs `@csrf`. Without it, the request returns 419. Livewire handles this automatically.
 - **Blade caching**: `php artisan view:clear` after template changes in production. Cached views ignore file modifications.
+
+## Primary Sources
+
+- [Blade Templates — Laravel docs](https://laravel.com/docs/blade)
+- [Blade Components — Laravel docs](https://laravel.com/docs/blade#components)
+- [Livewire — Official docs](https://livewire.laravel.com/docs)
+- [Laravel Security — XSS Prevention](https://laravel.com/docs/strings#html-string)

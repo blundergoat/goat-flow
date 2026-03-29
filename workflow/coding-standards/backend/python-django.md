@@ -30,7 +30,7 @@ for order in orders:
 - Function-based views for custom logic that doesn't map to CRUD.
 - DO NOT use class-based views when the logic is a single conditional — a function is clearer.
 
-## Django REST Framework
+## Django REST Framework (include only if `djangorestframework` is in dependencies)
 
 - Use `ModelSerializer` for straightforward models. Switch to `Serializer` for custom representations.
 - Use `ViewSet` + `Router` for full CRUD endpoints. Use `APIView` for non-CRUD actions.
@@ -81,21 +81,27 @@ DEBUG = True
 - Mark database tests with `@pytest.mark.django_db`.
 
 ```python
-# DO — factory + RequestFactory
+# DO — factory + APIRequestFactory (DRF) for DRF views
+from rest_framework.test import APIRequestFactory, force_authenticate
 user = UserFactory(role="admin")
-request = RequestFactory().get("/orders/")
+request = APIRequestFactory().get("/orders/")
 force_authenticate(request, user=user)
 response = OrderListView.as_view()(request)
 assert response.status_code == 200
 
-# DON'T — manual object creation, full Client round-trip for a unit test
-user = User.objects.create(username="test", password="test")
+# DO — plain Django RequestFactory for non-DRF views
+from django.test import RequestFactory
+request = RequestFactory().get("/orders/")
+request.user = UserFactory(role="admin")
+response = OrderListView.as_view()(request)
+
+# DON'T — full Client round-trip for a unit test (use for integration tests only)
 client = Client()
-client.login(username="test", password="test")
+client.force_login(UserFactory())
 response = client.get("/orders/")
 ```
 
-## Celery
+## Celery (include only if `celery` is in dependencies)
 
 - All tasks MUST be idempotent — safe to retry without side effects.
 - Use `acks_late=True` so tasks re-queue if the worker crashes mid-execution.
@@ -109,3 +115,9 @@ response = client.get("/orders/")
 - **DEBUG=True in production**: Leaks full stack traces, settings, and SQL queries to users.
 - **Secret key in code**: Committing `SECRET_KEY` to version control compromises session signing and CSRF tokens.
 - **Unvalidated bulk_create/update**: `bulk_create` skips model validation and signals. Validate data before bulk operations.
+
+## Primary Sources
+
+- Django documentation (docs.djangoproject.com)
+- Django REST Framework documentation (django-rest-framework.org)
+- Django Security documentation (docs.djangoproject.com/topics/security/)

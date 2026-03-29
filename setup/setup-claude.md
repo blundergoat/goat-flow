@@ -68,6 +68,18 @@ HOOKS:
 2. Read deny patterns for secrets in .claude/settings.json:
    "Read(.env*)", "Read(**/secrets/**)", "Read(**/*.pem)", "Read(**/*.key)"
 
+INFRASTRUCTURE FACTS:
+Add a ## Project Infrastructure section to CLAUDE.md documenting:
+- Deployment platform (Docker Compose, Kubernetes, bare VPS, serverless, etc.)
+- Branch conventions (e.g., main=prod, develop=staging, feature/* → PRs)
+- Required runtime versions (Node 20, PHP 8.2, Python 3.11 — whatever is pinned)
+- Container/build rebuild command (exact command to run after server code or
+  config changes, e.g., "docker compose up -d --build")
+- CI/CD system and what triggers it
+
+Agents without this context propose incompatible syntax, test against stale
+containers, and push to the wrong branch. Document from reality, not aspirations.
+
 VERIFICATION:
 - GATE: Verify settings.json is valid JSON.
 - GATE: Verify deny-dangerous.sh blocks expected commands.

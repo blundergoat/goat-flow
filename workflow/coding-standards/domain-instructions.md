@@ -1,5 +1,11 @@
 # Domain Instruction Files (Layer 2)
 
+> **Purpose:** Guide + prompt for creating domain-specific instruction files and the `ai/README.md` router
+> **Generates:** Multiple `ai/instructions/{domain}.md` files + `ai/README.md` router
+> **Use when:** After `conventions.md` — creating domain-specific instructions for each codebase boundary
+> **Repo inspection:** Yes — discovers domain boundaries from code structure, languages, and patterns
+> **Follow-on refs:** `copilot-bridge.md` for Copilot bridges; other templates in this directory as source material
+
 Domain instruction files keep deep domain knowledge out of the always-loaded Layer 1 budget. They live in `ai/instructions/` and load on demand when the agent works on a matching domain. The router at `ai/README.md` tells agents which files to load for each task type.
 
 `.github/instructions/` is for **Copilot bridge files only** — see `copilot-bridge.md` in this directory. Bridges copy content from `ai/instructions/` inline because Copilot does not follow file references.
@@ -49,7 +55,7 @@ Agents read `ai/README.md`, then load the relevant files based on the current ta
 
 ## The Prompt
 
-```
+````
 Create domain-specific instruction files for this project. These are
 Layer 2 (Local Context) — they load on demand via the router at
 ai/README.md, keeping deep domain knowledge out of the root
@@ -113,4 +119,4 @@ VERIFICATION:
 - Verify each file is self-contained (conventions, gotchas, examples)
 - Verify no invented conventions — all extracted from existing code
 - Report: number of files created and which domains they cover
-```
+````

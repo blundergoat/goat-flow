@@ -4,10 +4,25 @@ Reference for generating `ai/instructions/frontend.md` in Angular projects.
 Assume TypeScript for new code; if the project is JavaScript-only, keep the
 same architecture and testing rules and drop the type syntax.
 
+**Version gates:**
+- Standalone components (`standalone: true`) and `inject()` function: Angular 14+
+- `input()` / `output()` / `model()` signal-based APIs: Angular 17+
+- Built-in control flow (`@if`, `@for`, `@switch`): Angular 17+
+- Signals and `toSignal()` / `toObservable()`: Angular 16+
+
+For projects on Angular 13 or earlier, use NgModule-based architecture and `@Input()` / `@Output()` decorators. Adjust the guidance below to match the actual Angular version in the project's `package.json`.
+
+If the repo is still NgModule-heavy, constructor-injection-heavy, or default
+change-detection-heavy, treat the modern guidance below as a migration target,
+not a forced rewrite rule. Match the established architecture unless the team is
+already moving that area forward.
+
 ## Component Architecture
 
-- Standalone components are the default. Use `standalone: true` on all new components.
-- NgModules only for maintaining legacy code. New features must not introduce new NgModules.
+- In Angular 14+ repos that already use standalone APIs, prefer standalone
+  components for new work.
+- In NgModule-heavy repos, follow the existing module boundary and migrate
+  deliberately instead of forcing standalone everywhere at once.
 - Prefer the function-based component APIs in new code: `input()`, `output()`,
   and `model()`. Keep `@Input()` / `@Output()` in legacy components unless you
   are already refactoring that file.
@@ -62,7 +77,9 @@ users = toSignal(this.http.get<User[]>('/api/users'), { initialValue: [] });
 
 - Services use `providedIn: 'root'` for singletons. Do not add root services to provider arrays.
 - Feature-scoped services use `providedIn: 'any'` or provide at the route/component level.
-- Use `inject()` function over constructor injection in standalone components.
+- In standalone components and modern services, prefer `inject()` when it keeps
+  dependencies local and readable. Constructor injection remains valid in
+  established codebases.
 
 ```typescript
 // DO
@@ -77,9 +94,13 @@ constructor(private userService: UserService, private router: Router) {}
 
 ## Templates and Change Detection
 
-- **OnPush on every component.** No exceptions for new code.
+- Prefer `OnPush` by default in modern Angular code, especially for
+  presentational components and signal-driven state.
+- If the repo already relies heavily on default change detection, adopt OnPush
+  intentionally instead of forcing it into every touched file.
 - With OnPush, the view updates only on input reference changes, events from the template, async pipe emissions, or signal reads.
-- Prefer built-in control flow (`@if`, `@for`, `@switch`) in new templates.
+- Prefer built-in control flow (`@if`, `@for`, `@switch`) in Angular 17+ repos.
+  Otherwise keep `*ngIf` / `*ngFor` and follow the project's current template style.
 - Use `track` / `trackBy` for list rendering to avoid unnecessary DOM recreation.
 
 ```html
@@ -126,3 +147,9 @@ it('should load users on init', () => {
 - **Circular DI**: Two services injecting each other crashes at runtime. Break the cycle with a mediator service or event bus.
 - **`ExpressionChangedAfterItHasBeenCheckedError`**: Changing state in `ngAfterViewInit` that affects the template. Move the state change to `ngOnInit` or wrap in a microtask.
 - **Overusing SharedModule**: Stuffing everything into a SharedModule defeats tree-shaking. Import only what each standalone component needs.
+
+## Primary Sources
+
+- Angular docs: https://angular.dev/
+- Signals guide: https://angular.dev/guide/signals
+- Template control flow: https://angular.dev/guide/templates/control-flow

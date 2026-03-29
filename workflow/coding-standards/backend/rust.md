@@ -1,6 +1,12 @@
-# Rust Coding Standards (Axum / Actix)
+# Rust Backend Standards (Tokio + HTTP + SQLx oriented)
 
 Reference for generating `ai/instructions/backend.md` in Rust backend projects.
+
+This file assumes Tokio for async work, HTTP extractors/middleware, and SQLx as
+the common data layer. If the repo uses Actix-specific patterns, Diesel,
+SeaORM, or a non-HTTP service shape, keep the error, async, and testing
+guidance and replace the framework/data sections with the patterns actually
+present.
 
 ## Error Handling
 
@@ -60,7 +66,7 @@ let hash = tokio::task::spawn_blocking(move || argon2::hash(password)).await?;
 let hash = argon2::hash(password); // blocks the tokio worker thread
 ```
 
-## Web Framework (Axum)
+## Web Framework (Axum example)
 
 - Use extractors for parsing: `Path`, `Query`, `Json`, `State`.
 - Share application state via `State<Arc<AppState>>`. Build state once at startup.
@@ -83,7 +89,7 @@ async fn get_user(req: Request) -> impl IntoResponse {
 }
 ```
 
-## Database (SQLx)
+## Database (SQLx, if used)
 
 - Use `sqlx` with compile-time checked queries (`sqlx::query!` / `sqlx::query_as!`).
 - Use connection pooling via `PgPool`. Create the pool once, pass it via application state.
@@ -120,3 +126,10 @@ let user = sqlx::query("SELECT * FROM users WHERE id = " + &user_id.to_string())
 - **Large futures on the stack**: Deeply nested async functions create large `Future` types that can overflow the stack. Box large futures with `Box::pin(...)`.
 - **Missing Send bound**: Futures used with `tokio::spawn` must be `Send`. Holding a non-Send type (like `Rc`) across an `.await` point breaks compilation.
 - **Silent integer overflow**: In release mode, integer overflow wraps silently. Use `checked_add` or `saturating_add` for arithmetic that could overflow.
+
+## Primary Sources
+
+- The Rust Programming Language (doc.rust-lang.org/book/)
+- Rust API Guidelines (rust-lang.github.io/api-guidelines/)
+- Rust Reference (doc.rust-lang.org/reference/)
+- Clippy Lints (rust-lang.github.io/rust-clippy/)

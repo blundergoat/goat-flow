@@ -1,6 +1,9 @@
 # Bash Coding Standards
 
-Reference for generating `ai/instructions/backend.md` or project-level shell script guidelines. Applies to projects with significant shell scripting — build scripts, CI pipelines, CLI wrappers, and maintenance tools.
+Reference for generating `ai/instructions/backend.md` or project-level shell
+script guidelines. Use this when shell is a primary implementation surface or a
+significant automation/runtime layer, not just because a non-shell repo has a
+few maintenance scripts.
 
 ## Script Structure
 
@@ -157,6 +160,13 @@ fi
 
 - **Unquoted variables**: `rm -rf $dir/` with an empty `$dir` becomes `rm -rf /`. Always quote.
 - **Word splitting**: `for f in $(ls *.txt)` breaks on filenames with spaces. Use `for f in *.txt` or `find` with `-print0`.
-- **cd without error handling**: `cd /some/dir && rm -rf .` — if `cd` fails, `rm` runs in the wrong directory. Always `cd /some/dir || exit 1`.
+- **cd without error handling**: Running destructive commands on a separate line after `cd` — if `cd` fails, the next command runs in the wrong (current) directory. The safe forms are `cd /some/dir && rm -rf .` (stops if `cd` fails) or `cd /some/dir || exit 1` followed by the destructive command on the next line.
 - **Pipes hide exit codes**: In `cmd1 | cmd2`, only `cmd2`'s exit code is checked by default. Use `set -o pipefail` (included in `set -euo pipefail`).
 - **Subshell variable scope**: Variables set inside `while read ... done < <(cmd)` using process substitution persist. Variables set inside `cmd | while read ...` do not — the pipe creates a subshell.
+
+## Primary Sources
+
+- Bash Reference Manual (gnu.org/software/bash/manual/)
+- POSIX Shell Command Language (pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html)
+- ShellCheck Wiki (shellcheck.net/wiki/)
+- Google Shell Style Guide (google.github.io/styleguide/shellguide.html)

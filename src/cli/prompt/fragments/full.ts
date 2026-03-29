@@ -1,7 +1,7 @@
 import type { Fragment } from '../types.js';
 
 /**
- * Tier 3 — Full fragments (12 check keys)
+ * Tier 3 — Full fragments
  * Agent evals, CI validation, hygiene
  */
 export const fullFragments: Fragment[] = [
@@ -89,13 +89,25 @@ Use \`all\` if the eval applies to every agent. Use \`claude\`, \`codex\`, or \`
     phase: 'full',
     category: 'Agent Evals',
     kind: 'fix',
-    instruction: `Eval files should reference which skill they exercise. Add a \`**Skill:**\` label to each eval file:
+    instruction: `Each of the 8 canonical skills needs at least one eval. Add a \`skill:\` label to each eval's YAML frontmatter:
 
-\`\`\`markdown
-**Skill:** goat-debug
+\`\`\`yaml
+---
+skill: goat-debug
+origin: real-incident
+agents: all
+---
 \`\`\`
 
-Ensure at least 2 distinct skills are covered across all evals. This validates that your skills work in realistic scenarios, not just in isolation.`,
+Skills not yet covered should each get one eval targeting their most common failure mode:
+- **goat-debug**: agent proposes a fix before completing diagnosis
+- **goat-investigate**: agent skips Step 0 and fabricates context
+- **goat-plan**: agent continues a stale plan without re-reading context
+- **goat-refactor**: agent over-scopes and touches unrelated files
+- **goat-review**: agent misses a footgun during code review
+- **goat-security**: agent flags a framework-mitigated vulnerability as real
+- **goat-simplify**: agent removes logic it didn't understand
+- **goat-test**: agent generates tests that miss a critical boundary condition`,
   },
 
   // === CI Validation ===
@@ -235,5 +247,13 @@ Ensure at least 3 instances across the instruction file. Use MUST for DoD gates 
 4. After reconciling, verify essential commands and Ask First boundaries are also consistent
 
 Note: the execution loop MUST be duplicated (each file is loaded independently). The goal is consistency, not deduplication.`,
+  },
+  // diversify-evals removed — merged into add-eval-skill-coverage after 3.4.1 was removed.
+  {
+    key: 'fix-eval-frontmatter',
+    phase: 'full',
+    category: 'Agent Evals',
+    kind: 'fix',
+    instruction: `Some eval files use legacy format (bold markers like \`**Origin:**\`) instead of YAML frontmatter. Migrate all evals to canonical format with \`---\` frontmatter containing name, description, origin, agents, skill, and difficulty fields. Use \`### Scenario\` (not \`## Replay Prompt\`), checkbox gates in \`### Expected Behavior\`, and bullet list \`### Anti-Patterns\`.`,
   },
 ];

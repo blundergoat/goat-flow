@@ -20,6 +20,8 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 ## Footgun: Concept duplication across core docs
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Symptoms:** A user reads conflicting descriptions of the same concept in different files. An agent follows a rule from one file that contradicts another.
 
 **Why it happens:** The execution loop, autonomy tiers, anti-pattern table, and other core concepts are described in `docs/system-spec.md`, `docs/system/six-steps.md`, `docs/system/five-layers.md`, `docs/getting-started.md`, and `docs/reference/design-rationale.md`. Updating one without updating the others creates drift.
@@ -34,11 +36,15 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 ## Footgun: Line target inconsistency for project shapes (RESOLVED)
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Status:** RESOLVED — unified to 120 lines for all project shapes in v0.1.1. The original 100/120 split was dropped after real implementations showed every project with the 6-step loop, budgets, and all required sections lands in the 100-120 range regardless of shape.
 
 **Prevention:** Line target is 120 for all shapes, stated in `docs/system-spec.md:104`. If this number appears differently in any other file, the spec is canonical.
 
 ## Footgun: Setup instructions contradict spec on execution loop steps
+
+**Evidence type:** ACTUAL_MEASURED
 
 **Symptoms:** Agents implementing GOAT Flow produce a CLAUDE.md with the old 5-step loop (READ → CLASSIFY → ACT → VERIFY → LOG), missing SCOPE and complexity budgets. Cascades into missing sections (f)-(g) because agents under line pressure cut what the spec doesn't reinforce.
 
@@ -56,6 +62,8 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 ## Footgun: Stale references from old project structure
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Symptoms:** Settings, paths, or documentation reference `ai-workflow-framework` (the old project name) instead of `goat-flow`.
 
 **Why it happens:** The project was renamed from `ai-workflow-framework` to `goat-flow`. Not all references were updated.
@@ -66,6 +74,8 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 **Prevention:** After any project-level rename, run `grep -r "old-name" --include="*.md" --include="*.json"` across the entire repo.
 
 ## Footgun: Agent rewrites shared docs with agent-specific vocabulary
+
+**Evidence type:** ACTUAL_MEASURED
 
 **Symptoms:** Shared documentation files (`docs/`, `workflow/`) contain references to only one agent's hook names, paths, or terminology. Other agents reading these docs get incorrect instructions. Tables lose rows for other agents.
 
@@ -88,6 +98,8 @@ Cross-domain gotchas confirmed in this codebase. Add entries only when the repo 
 
 ## Footgun: Multi-agent setup files share structure but not vocabulary
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Symptoms:** Gemini CLI rejects hook event names with "Invalid hook event name" warnings. Hooks silently don't run. Users get a working `.claude/` setup but broken `.gemini/` setup from the same instructions.
 
 **Why it happens:** `setup/setup-gemini.md` was derived from `setup/setup-claude.md` by substituting paths (`.claude/` → `.gemini/`, `CLAUDE.md` → `GEMINI.md`) but CLI-specific vocabulary wasn't translated. Each CLI uses different hook event names:
@@ -108,6 +120,8 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 ## Footgun: mv/cp/Write overwrites existing files without checking
 
+**Evidence type:** ACTUAL_MEASURED
+
 **Symptoms:** A file that existed at the destination path is silently overwritten and its content is permanently lost. Especially dangerous for untracked files that have no git recovery path.
 
 **Why it happens:** `mv src dest` and `cp src dest` overwrite `dest` without warning if it already exists. The Write tool does the same. Agents treat rename/move as a single command without checking the destination. If the user then asks to "undo", the agent moves the overwritten content back to the source path — destroying the original destination content entirely.
@@ -124,6 +138,8 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 **Created:** 2026-03-21
 
 ## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules
+
+**Evidence type:** ACTUAL_MEASURED
 
 **Symptoms:** `goat-flow setup . --agent all` emits a single deduplicated setup prompt that looks shorter and cleaner than per-agent setup, but it can direct users to scaffold shared skills in the wrong directory, flatten phase-specific guidance into one generic reference, and skip template validation entirely.
 
@@ -144,6 +160,8 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 **Created:** 2026-03-25
 
 ## Footgun: Eval templates, parser, and scanner drift out of contract
+
+**Evidence type:** ACTUAL_MEASURED
 
 **Symptoms:** An eval written exactly from the shipped template can fail the scanner, or a valid eval heading accepted by the parser can still fail the rubric. Users create evals that look correct in markdown but lose points in `goat-flow scan`.
 

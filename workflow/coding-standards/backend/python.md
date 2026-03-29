@@ -191,7 +191,7 @@ with ProcessPoolExecutor() as pool:
     results = list(pool.map(heavy_compute, items))
 ```
 
-## Footguns
+## Common Footguns
 
 - **Mutable default arguments**: `def f(items=[])` shares the list across calls. Use `def f(items: list | None = None)` with `items = items or []`.
 - **Late binding closures**: `[lambda: i for i in range(3)]` — all return 2. Fix: `lambda i=i: i`.
@@ -199,3 +199,10 @@ with ProcessPoolExecutor() as pool:
 - **Circular imports**: Move imports inside functions, use `TYPE_CHECKING` guard for type-only imports, or restructure modules.
 - **`datetime.now()` without timezone**: Returns naive datetime. Always use `datetime.now(tz=timezone.utc)` or `datetime.now(tz=ZoneInfo("..."))`.
 - **`os.path` vs `pathlib`**: Prefer `pathlib.Path` for new code. Don't mix — pick one per project.
+
+## Primary Sources
+
+- PEP 8 — Style Guide for Python Code
+- PEP 484 — Type Hints
+- Python Standard Library documentation (docs.python.org)
+- mypy documentation (mypy.readthedocs.io)

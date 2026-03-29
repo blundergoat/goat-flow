@@ -2,11 +2,20 @@
 
 Reference for generating `ai/instructions/backend.md` in PHP projects without a framework (vanilla PHP, custom MVC, legacy codebases, WordPress plugins/themes, or minimal libraries like Slim/Lumen).
 
+Use this as a base for custom PHP applications and legacy web backends. If the
+repo is a library, package, WordPress plugin/theme, or CLI-only tool, keep the
+Composer, typing, testing, and database sections that match the repo and drop
+the front-controller or session-specific guidance that does not.
+
 ## Project Structure
 
-- Entry point: `public/index.php`. All HTTP traffic routes through this file.
-- Keep `public/` as the only web-accessible directory. Source code lives outside it.
+- In front-controller web apps, the common entry point is `public/index.php` or
+  an equivalent web root file.
+- Keep `public/` as the only web-accessible directory in front-controller apps.
 - Autoload via Composer: `src/` mapped to a PSR-4 namespace in `composer.json`.
+- Libraries, plugins/themes, and CLI-only repos may not have `public/` or a
+  controller/service/repository split. Document the actual entry points instead
+  of copying the example structure.
 
 ```
 project/
@@ -146,8 +155,10 @@ public function test_tax_calculation_applies_regional_rate(): void
 - Run tests: `vendor/bin/phpunit`
 - Coverage: `vendor/bin/phpunit --coverage-text`
 
-## Session and Auth
+## Session and Auth (if the repo uses built-in PHP sessions)
 
+- Only include this section when the repo actually uses built-in PHP sessions.
+  Token-based APIs, libraries, and many plugins/themes should omit it.
 - Use PHP's built-in session handling with `session_start()`. Set secure cookie params.
 - Store session data server-side. Never trust client-side cookies for authorization.
 - Regenerate session ID after login: `session_regenerate_id(true)`.
@@ -160,10 +171,17 @@ ini_set('session.cookie_samesite', 'Lax');
 ini_set('session.use_strict_mode', '1');
 ```
 
-## Footguns
+## Common Footguns
 
 - **`include` vs `require`**: `include` only warns on failure, `require` fatals. Always use `require_once` for class files (or better, use autoloading).
 - **Loose comparison**: `0 == "foo"` is true in PHP 7. Always use `===` and `!==`. Strict types help but don't cover all cases.
 - **Silent type coercion in array keys**: `$a[true]` and `$a[1]` are the same key. Avoid non-string/int keys.
 - **`$this` in static context**: PHP 8+ throws `Error`, older versions gave unexpected results. Use `static::` not `self::` for late static binding when needed.
 - **Reference parameters**: Functions like `preg_match(&$matches)` use pass-by-reference. Missing the `&` in custom functions silently copies instead. Prefer return values over reference params.
+
+## Primary Sources
+
+- PHP documentation (php.net/docs.php)
+- PHP-FIG PSR Standards (php-fig.org/psr/)
+- Composer documentation (getcomposer.org/doc/)
+- PHPStan documentation (phpstan.org/user-guide/)

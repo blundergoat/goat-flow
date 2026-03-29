@@ -14,7 +14,7 @@ Reference for generating `ai/instructions/security.md` in projects with Docker, 
 FROM node:20-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production
+RUN npm ci --omit=dev   # --production deprecated in npm 7+
 COPY . .
 
 FROM node:20-slim
@@ -145,6 +145,48 @@ logger.warning("auth_failure", user_id=user.id, ip=request.remote_addr, reason="
 logger.info(f"User {user.email} logged in with password {password}")
 logger.debug(f"Headers: {dict(request.headers)}")  # leaks Authorization header
 ```
+
+## Cloud Secrets Manager (if the project uses AWS/GCP/Azure)
+
+- Use the platform's secrets manager (AWS Secrets Manager / SSM Parameter Store, GCP Secret Manager, Azure Key Vault) instead of environment variables for production secrets. Environment variables are visible in process listings and crash dumps.
+- Fetch secrets at application startup or use a sidecar/init container that injects secrets into a tmpfs mount.
+- Enable automatic rotation where supported. AWS Secrets Manager supports automatic rotation with Lambda functions.
+- Scope IAM permissions to specific secret ARNs — never grant `secretsmanager:GetSecretValue` on `*`.
+
+```python
+# DO — fetch from secrets manager at startup
+import boto3
+client = boto3.client("secretsmanager")
+secret = client.get_secret_value(SecretId="prod/myapp/db-password")
+db_password = secret["SecretString"]
+
+# DON'T — rely solely on environment variables in production
+db_password = os.environ["DB_PASSWORD"]  # visible in /proc/*/environ, crash dumps, docker inspect
+```
+
+## Kubernetes Security Context (if the project uses Kubernetes)
+
+```yaml
+# DO — restrict container capabilities
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+```
+
+- Set `runAsNonRoot: true` on all pods. Never run containers as root in production.
+- Set `readOnlyRootFilesystem: true` and mount writable volumes only where needed.
+- Set `allowPrivilegeEscalation: false` to prevent processes from gaining more privileges than their parent.
+- Drop all capabilities and add back only what is needed.
+
+## Terraform Security (if the project uses Terraform)
+
+- Always run `terraform plan` and review before `terraform apply`. Never use `-auto-approve` in production.
+- State files contain secrets in plaintext. Use remote backends with encryption (S3 + DynamoDB, GCS, Azure Blob).
+- Run `checkov` or `tfsec` in CI to catch overly permissive IAM policies and security misconfigurations automatically.
+- See `devops/terraform.md` for detailed Terraform coding standards.
 
 ## Common Footguns
 

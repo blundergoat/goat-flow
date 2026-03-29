@@ -1,6 +1,6 @@
 # TypeScript Coding Standards (Framework-Agnostic)
 
-Reference for generating `ai/instructions/frontend.md` or `ai/instructions/backend.md` in TypeScript projects that do NOT use React, Vue, Angular, or Svelte. Applies to CLI tools, libraries, Node.js services, and utility packages.
+Reference for generating `ai/instructions/frontend.md` or `ai/instructions/backend.md` in TypeScript projects that do NOT use React, Vue, or Angular. Applies to CLI tools, libraries, Node.js services, and utility packages.
 
 ## Module Configuration
 
@@ -143,3 +143,9 @@ const fakeClock = { now: jest.fn() } as any;
 - **Type narrowing gaps**: `typeof null === "object"`. Always check `!== null` before `typeof` checks for objects.
 - **Index signatures swallow typos**: `Record<string, T>` accepts any key silently. Prefer explicit interfaces or use `Map<string, T>` when keys are dynamic.
 - **Enum pitfalls**: Numeric enums reverse-map and bloat output. Prefer string literal unions (`type Status = "active" | "inactive"`) or `as const` objects.
+
+## Primary Sources
+
+- TypeScript Handbook: https://www.typescriptlang.org/docs/
+- TypeScript TSConfig Reference: https://www.typescriptlang.org/tsconfig
+- Node.js ECMAScript modules: https://nodejs.org/api/esm.html

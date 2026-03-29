@@ -1,13 +1,52 @@
-import type { ScanReport, AgentId, AgentReport } from '../types.js';
+import type { ScanReport, AgentId, AgentReport, ProjectSignals } from '../types.js';
 import type { ComposedPrompt, PromptSection, PromptVariables, FragmentPhase, SetupTask } from './types.js';
 import { getAllFragments, getFragment } from './registry.js';
 import { extractTemplateVars, fillTemplate } from './template-filler.js';
 import { PROFILES } from '../detect/agents.js';
 import { getTemplatePath, getCliCommand } from '../paths.js';
-import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, getFragmentTemplate, getLanguageTemplate } from './template-refs.js';
+import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, mapSignalsToTemplates, getFragmentTemplate, getLanguageTemplate } from './template-refs.js';
 
 /** Projects at or above this percentage get the short fix list instead of targeted fix */
 const SHORT_FIX_THRESHOLD = 90;
+
+/** Render detected project signals into the setup prompt output */
+function renderSignals(lines: string[], signals: ProjectSignals): void {
+  const parts: string[] = [];
+  if (signals.codeGenTools.length > 0) parts.push(`**Code gen:** ${signals.codeGenTools.join(', ')}`);
+  if (signals.deployPlatforms.length > 0) parts.push(`**Deploy:** ${signals.deployPlatforms.join(', ')}`);
+  if (signals.llmIntegration) parts.push('**LLM integration detected**');
+  if (signals.staticAnalysis.length > 0) {
+    const tools = signals.staticAnalysis.map(s => s.level ? `${s.tool} (${s.level})` : s.tool).join(', ');
+    parts.push(`**Static analysis:** ${tools}`);
+  }
+  if (signals.complianceSignals) parts.push('**PHI/compliance signals detected**');
+  if (signals.formatterGaps.length > 0) parts.push(`**Formatter gaps:** ${signals.formatterGaps.join(', ')}`);
+  if (parts.length > 0) {
+    lines.push('');
+    lines.push(parts.join(' | '));
+  }
+
+  // Actionable follow-ups for detected signals
+  const actions: string[] = [];
+  if (signals.llmIntegration) {
+    actions.push('- **LLM integration:** Add prompt/template file paths to the Router Table. Add "prompt changes require scenario testing" to Ask First boundaries. Seed a learning-loop entry for prompt-regression risk.');
+  }
+  if (signals.complianceSignals) {
+    actions.push('- **PHI/compliance:** Add mandatory constraints to the instruction file hot path (not just cold-path docs): "MUST NOT log PHI", "MUST NOT include patient data in error messages", "MUST scope all queries by tenant". These belong in the execution loop or Ask First section, not only in ai/instructions/security.md.');
+  }
+  if (signals.formatterGaps.length > 0) {
+    actions.push(`- **Formatter gaps (${signals.formatterGaps.join(', ')}):** Add formatters to the PostToolUse hook (format-file.sh). Every detected language should have a formatter running on save.`);
+  }
+  if (signals.staticAnalysis.length > 0) {
+    const tools = signals.staticAnalysis.map(s => s.level ? `${s.tool} level ${s.level}` : s.tool).join(', ');
+    actions.push(`- **Static analysis (${tools}):** Verify the linter is enforced in hooks (stop-lint.sh), not just configured. Add "MUST maintain ${tools} compliance" to the instruction file.`);
+  }
+  if (actions.length > 0) {
+    lines.push('');
+    lines.push('**Signal-driven setup tasks:**');
+    for (const a of actions) lines.push(a);
+  }
+}
 
 /** Phase order for targeted-fix mode (anti-patterns first, then tiers) */
 const PHASE_ORDER: FragmentPhase[] = ['anti-pattern', 'foundation', 'standard', 'full'];
@@ -79,6 +118,7 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
     ? `${vars.failedCount} checks + ${triggeredAPs} anti-patterns remaining.`
     : `${vars.failedCount} checks remaining.`;
   lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%). ${countText}`);
+  renderSignals(lines, report.stack.signals);
   lines.push('');
 
   // Collect needed fragment keys
@@ -331,6 +371,7 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   lines.push('');
   lines.push(`Stack: ${languages}`);
   if (cmds) lines.push(cmds);
+  renderSignals(lines, stack.signals);
   lines.push('');
 
   lines.push('## How this works');
@@ -348,6 +389,7 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   const firstId = agentIds[0]!;
   const allRefs = getAgentTemplates(firstId);
   const languageRefs = mapLanguagesToTemplates(stack.languages);
+  const signalRefs = mapSignalsToTemplates(stack.signals);
   const standardShared = allRefs.filter(r => r.phase === 'standard' && !r.output.startsWith('('));
   const fullShared = allRefs.filter(r => r.phase === 'full' && !r.output.startsWith('('));
 
@@ -377,7 +419,7 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   lines.push('## Standard (shared across all agents)');
   lines.push('');
   let taskNum = 1;
-  for (const ref of [...standardShared, ...languageRefs]) {
+  for (const ref of [...standardShared, ...languageRefs, ...signalRefs]) {
     const output = ref.output.includes('/skills/') ? ref.output.replace(/\.[^/]+\/skills\//, '{skills_dir}/') : ref.output;
     lines.push(renderTask({ num: taskNum++, outputPath: output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(output, ref.note, languages), verify: defaultVerify(output) }));
     lines.push('');
@@ -442,6 +484,7 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
     stack.lintCommand && `**Lint:** \`${stack.lintCommand}\``,
   ].filter(Boolean).join(' | ');
   if (cmds) lines.push(cmds);
+  renderSignals(lines, stack.signals);
   lines.push('');
 
   // Pre-instructions

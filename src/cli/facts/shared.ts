@@ -49,6 +49,17 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
   const footgunsContent = fs.readFile('docs/footguns.md');
   /** Whether the footguns file exists on disk */
   const exists = footgunsContent !== null;
+  /** Number of footgun entries in the file.
+   * Detects two formats:
+   *   Standard:    ## Footgun: Name
+   *   H3 entries:  ### Name  (older projects that predate the standard format)
+   */
+  const entryCount = footgunsContent ? (
+    (footgunsContent.match(/^## Footgun:/gm)?.length ?? 0) +
+    (footgunsContent.match(/^### .{5,}/gm)?.length ?? 0)
+  ) : 0;
+  /** Number of explicit evidence type labels in the file */
+  const labelCount = footgunsContent ? (footgunsContent.match(/^\*\*Evidence type:\*\*/gm)?.length ?? 0) : 0;
   // Check for real file:line evidence (filter out URLs/hostnames before deciding)
   let hasEvidence = false;
   if (exists && footgunsContent) {
@@ -100,7 +111,17 @@ function extractFootgunFacts(fs: ReadonlyFS): SharedFacts['footguns'] {
       }
     }
   }
-  return { exists, hasEvidence, dirMentions, staleRefs, totalRefs, validRefs };
+  return {
+    exists,
+    hasEvidence,
+    entryCount,
+    labelCount,
+    hasEvidenceLabels: entryCount > 0 && labelCount >= entryCount,
+    dirMentions,
+    staleRefs,
+    totalRefs,
+    validRefs,
+  };
 }
 
 /** Extract lessons facts: existence and whether entries are present. */
@@ -123,7 +144,19 @@ function extractLessonsFacts(fs: ReadonlyFS): SharedFacts['lessons'] {
     hasEntries = entryCount > 0;
   }
 
-  return { exists, hasEntries, entryCount };
+  // Check for stale file references in lessons
+  const staleRefs: string[] = [];
+  if (lessonsContent) {
+    const pathPattern = /`((?:src|config|app|apps|lib|docs|scripts|setup|workflow|strands_agents|agents)\/[^`]+)`/g;
+    for (const m of lessonsContent.matchAll(pathPattern)) {
+      const p = m[1];
+      if (p === undefined || /[*?{}]/.test(p)) continue;
+      const filePath = p.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
+      if (!fs.exists(filePath)) staleRefs.push(filePath);
+    }
+  }
+
+  return { exists, hasEntries, entryCount, staleRefs };
 }
 
 /** Extract eval facts: directory, file count, replay prompts, origin labels, skill coverage. */
@@ -131,22 +164,25 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
   /** Whether the agent-evals directory exists */
   const dirExists = fs.exists('agent-evals');
   /** Markdown eval files (excluding README) found in the evals directory */
-  const evalFiles = dirExists ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md') : [];
+  const evalFiles = dirExists ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md' && f !== 'FORMAT.md') : [];
   /** Total number of eval files found */
   const count = evalFiles.length;
   /** Whether the evals directory contains a README.md */
   const hasReadme = dirExists && fs.exists('agent-evals/README.md');
 
   if (count === 0) {
-    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, evalSkillCount: 0 };
+    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, hasFrontmatter: false, evalSkillCount: 0 };
   }
 
-  /** Distinct skill names referenced across all eval files */
+  /** The 8 canonical goat-flow skills — only these count toward eval diversity */
+  const CANONICAL_SKILLS = new Set(['goat-debug', 'goat-investigate', 'goat-plan', 'goat-refactor', 'goat-review', 'goat-security', 'goat-simplify', 'goat-test']);
+  /** Canonical skills with at least one eval */
   const skillNames = new Set<string>();
-  /** Track whether all eval files pass origin/replay/agents checks */
+  /** Track whether all eval files pass origin/replay/agents/frontmatter checks */
   let allHaveOrigin = true;
   let allHaveAgents = true;
   let allHaveReplay = true;
+  let allHaveFrontmatter = true;
   // Iterate over ALL eval files for quality checks and skill counting
   for (const f of evalFiles) {
     /** Raw content of this eval file */
@@ -157,8 +193,9 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
       allHaveReplay = false;
       continue;
     }
-    if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false) allHaveOrigin = false;
-    if (/\*\*Agents:\*\*/i.test(content) === false) allHaveAgents = false;
+    if (!/^---\n/.test(content)) allHaveFrontmatter = false;
+    if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false && /^origin:/im.test(content) === false) allHaveOrigin = false;
+    if (/\*\*Agents:\*\*/i.test(content) === false && /^agents:/im.test(content) === false) allHaveAgents = false;
     if (/##+ Replay Prompt/i.test(content) === false && /##+ Scenario/i.test(content) === false) allHaveReplay = false;
     /** All skill label matches found in the eval content */
     const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
@@ -166,10 +203,10 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
     for (const m of skillMatches) {
       /** Normalized skill name from the match */
       const name = (m[1] ?? m[2] ?? '').trim().toLowerCase();
-      if (name) skillNames.add(name);
+      if (name && CANONICAL_SKILLS.has(name)) skillNames.add(name);
     }
   }
-  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, evalSkillCount: skillNames.size };
+  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, hasFrontmatter: allHaveFrontmatter, evalSkillCount: skillNames.size };
 }
 
 /** Extract project-wide shared facts from docs, evals, CI, and config files. */
@@ -202,6 +239,16 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     gitignoreContent.includes(e)
   );
 
+  /** Raw content of the shared handoff template */
+  const handoffContent = fs.readFile('tasks/handoff-template.md');
+  /** Whether the handoff template exists */
+  const handoffExists = handoffContent !== null;
+  /** Count of required handoff sections present — accepts ## H2 headings or **Bold:** labels */
+  const HANDOFF_SECTIONS = ['status', 'current state', 'key decisions', 'known risks', 'next step'];
+  const handoffSectionCount = handoffContent
+    ? HANDOFF_SECTIONS.filter(s => new RegExp(`##\\s*${s}|\\*\\*${s}`, 'i').test(handoffContent)).length
+    : 0;
+
   return {
     footguns: extractFootgunFacts(fs),
     lessons: extractLessonsFacts(fs),
@@ -214,7 +261,11 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
       checksSkills: ciExists && /skills/i.test(ciContent),
       ciTriggersOnPRs: ciExists && /pull_request/i.test(ciContent),
     },
-    handoffTemplate: { exists: fs.exists('tasks/handoff-template.md') },
+    handoffTemplate: {
+      exists: handoffExists,
+      sectionCount: handoffSectionCount,
+      hasRequiredSections: handoffSectionCount >= 5,
+    },
     ignoreFiles: { copilotignore, cursorignore, geminiignore },
     gitignore: { exists: gitignoreExists, hasRequiredEntries },
     guidelinesOwnership: { exists: fs.exists('docs/guidelines-ownership-split.md') },
@@ -224,7 +275,19 @@ export function extractSharedFacts(fs: ReadonlyFS): SharedFacts {
     decisions: extractDecisionsFacts(fs),
     localInstructions: extractLocalInstructions(fs),
     gitCommitInstructions: { exists: fs.exists('.github/git-commit-instructions.md') },
+    aiInstructionsLineCount: countAiInstructionsLines(fs),
   };
+}
+
+/** Count total lines across ai/instructions/ files */
+function countAiInstructionsLines(fs: ReadonlyFS): number {
+  if (!fs.exists('ai/instructions')) return 0;
+  const files = fs.listDir('ai/instructions').filter(f => f.endsWith('.md'));
+  let total = 0;
+  for (const f of files) {
+    total += fs.lineCount(`ai/instructions/${f}`);
+  }
+  return total;
 }
 
 /** Extract decisions directory facts: existence and file count. */

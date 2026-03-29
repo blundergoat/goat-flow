@@ -201,7 +201,7 @@ applyTo: "src/api/**,src/services/**,**/*.php,**/*.py"
 | `ai/instructions/frontend.md` | `.github/instructions/frontend.instructions.md` | `"src/app/**,src/components/**,*.tsx,*.ts,*.vue,**/*.twig"` |
 | `ai/instructions/backend.md` | `.github/instructions/backend.instructions.md` | `"src/api/**,src/services/**,**/*.php,**/*.py,**/*.go"` |
 | `ai/instructions/code-review.md` | `.github/instructions/code-review.instructions.md` | `"**"` |
-| `ai/instructions/git-commit.md` | `.github/instructions/git-commit.instructions.md` | `"**"` |
+| `ai/instructions/git-commit.md` | `.github/git-commit-instructions.md` | (not a bridge — standalone file, no applyTo frontmatter) |
 | `ai/instructions/security.md` | `.github/instructions/security.instructions.md` | `"**/auth/**,**/middleware/**,**/security/**"` |
 | `ai/instructions/testing.md` | `.github/instructions/testing.instructions.md` | `"**/*.test.*,**/*.spec.*,**/test/**,**/tests/**"` |
 

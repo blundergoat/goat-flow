@@ -59,6 +59,15 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
+## Flush Protocol
+
+If 10+ tool calls pass without a human gate or checkpoint, STOP:
+1. Write a 3-sentence status to `tasks/scratchpad.md` (what you're doing, where you are, what's next)
+2. Ask the user: continue, compact, or redirect?
+
+The counter resets at every BLOCKING GATE, CHECKPOINT, or human message.
+`tasks/scratchpad.md` is transient — do not commit it.
+
 ## Working Memory
 
 For tasks exceeding 5 turns within this skill:
@@ -74,6 +83,7 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 ## Closing Protocol
 
 When the skill completes:
-1. Check if any working artifacts (draft docs, research notes, requirement files) should be committed or noted in `tasks/handoff.md`
+1. If work is incomplete: write `tasks/handoff.md` using the standard handoff template (Date, Status, Current State, Key Decisions, Known Risks, Next Step)
 2. Check the Learning Loop (above) for anything worth logging
 3. Suggest the most relevant next skill if applicable (see Chains With in each skill)
+4. If `tasks/logs/` exists: write a session summary to `tasks/logs/sessions/YYYY-MM-DD-goat-{skill}.md` (schema in `tasks/logs/README.md`)

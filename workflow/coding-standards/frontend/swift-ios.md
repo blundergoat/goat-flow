@@ -1,6 +1,10 @@
-# Swift + SwiftUI / UIKit Coding Standards
+# Swift iOS Coding Standards (SwiftUI-First, UIKit-Aware)
 
 Reference for generating `ai/instructions/frontend.md` in iOS projects.
+
+Generate SwiftUI guidance by default when the repo is SwiftUI-first. If the app
+is UIKit-heavy, keep the UIKit section below and trim SwiftUI-specific rules
+that do not match the codebase.
 
 ## SwiftUI State and Observation
 
@@ -109,6 +113,35 @@ struct RootView: View {
 }
 ```
 
+## UIKit Appendix
+
+- In UIKit-heavy apps, keep view controllers thin: lifecycle + view wiring in
+  the controller, business logic in coordinators/view models/services.
+- Use `viewDidLoad` for one-time setup, `viewWillAppear` for refresh work that
+  must happen when the screen becomes visible again.
+- Prefer diffable data sources and modern cell registration for collection/table
+  views when the repo already uses iOS 13+ APIs.
+- Keep Auto Layout consistent with the project: either storyboard/xib-driven or
+  programmatic constraints, but do not mix patterns casually inside one feature.
+
+```swift
+// UIKit-first default
+final class UserListViewController: UIViewController {
+    private let viewModel: UserListViewModel
+
+    init(viewModel: UserListViewModel) {
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        configureHierarchy()
+        bindViewModel()
+    }
+}
+```
+
 ## Concurrency
 
 - Use `async`/`await` for all asynchronous work. GCD (`DispatchQueue`) is legacy.
@@ -170,3 +203,9 @@ func testLoadUsers() async {
 - **body recomputation**: The `body` property is called frequently. Never perform expensive work (network calls, heavy computation) inside `body`. Use `.task` or `.onAppear`.
 - **ForEach without stable IDs**: `ForEach(items, id: \.self)` on non-unique values causes rendering bugs. Always use a stable, unique identifier.
 - **Large @Observable classes**: A single `@Observable` with 20 properties causes unnecessary re-renders. Split into focused view models per screen.
+
+## Primary Sources
+
+- SwiftUI docs: https://developer.apple.com/documentation/swiftui
+- Observation: https://developer.apple.com/documentation/observation
+- UIKit docs: https://developer.apple.com/documentation/uikit

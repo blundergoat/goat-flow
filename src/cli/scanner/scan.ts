@@ -36,6 +36,7 @@ export function scanProject(fs: ReadonlyFS, projectPath: string, options: ScanOp
   /** Extracted project and agent facts used by all evaluators */
   const facts = extractProjectFacts(fs, {
     agentFilter: options.agentFilter,
+    projectPath,
   });
 
   // Iterate over each detected agent to produce per-agent reports

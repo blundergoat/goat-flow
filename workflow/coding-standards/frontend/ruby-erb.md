@@ -77,10 +77,15 @@ end
 
 ## Hotwire (Turbo + Stimulus)
 
-- Use **Turbo Frames** for partial page updates. Wrap the updatable section in `<turbo-frame id="unique-id">`.
-- Use **Turbo Streams** for server-pushed DOM updates (append, prepend, replace, remove).
-- Use **Stimulus** for client-side behavior. One controller per concern, small and focused.
-- DO NOT reach for React/Vue when Turbo + Stimulus handles the interaction. Hotwire is the Rails way.
+- If the repo is Hotwire-first, prefer **Turbo Frames** for partial page
+  updates, **Turbo Streams** for server-pushed DOM updates, and **Stimulus**
+  for lightweight client-side behavior.
+- In hybrid apps that already use React or Vue for a defined UI boundary,
+  follow that established boundary. Do not force Hotwire into an existing SPA
+  island or introduce React/Vue just to replace well-working Hotwire flows.
+- Keep Stimulus controllers focused. One controller per concern is a good
+  default, but follow the repo's established composition pattern if it already
+  groups small behaviors together.
 
 ```erb
 <%# DO — Turbo Frame for inline editing %>
@@ -104,3 +109,12 @@ end
 - **Missing authenticity token**: Forms built without `form_with` or `form_tag` skip CSRF protection. Always use Rails form helpers.
 - **Instance variable leaks**: Controllers setting 5+ instance variables for a single view. Use a view model or locals hash to make dependencies explicit.
 - **Turbo Frame ID collisions**: Two `<turbo-frame>` elements with the same ID on the same page cause silent update failures. Use record-based IDs: `dom_id(@user)`.
+- **Mixed DOM ownership**: Let either Turbo/Stimulus or a JS island own a DOM
+  subtree. Mixing Hotwire updates into DOM nodes managed by React/Vue causes
+  stale UI and event rebinding bugs.
+
+## Primary Sources
+
+- Rails Guides: https://guides.rubyonrails.org/
+- Turbo docs: https://turbo.hotwired.dev/
+- Stimulus docs: https://stimulus.hotwired.dev/

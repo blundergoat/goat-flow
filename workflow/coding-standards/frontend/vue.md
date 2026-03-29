@@ -4,10 +4,22 @@ Reference for generating `ai/instructions/frontend.md` in Vue projects.
 Assume TypeScript for new code; if the project is JavaScript-only, keep the same
 Composition API, state, and testing rules and drop the type syntax.
 
+## Version Gates
+
+- This file assumes Vue 3.
+- `<script setup>`, typed `defineProps`, and modern composable patterns are Vue
+  3 guidance.
+- If the repo is still Vue 2, class-style, or Options API heavy, follow the
+  existing project structure unless the team is already migrating that area.
+
 ## Composition API
 
-- Use `<script setup lang="ts">` for all new components. Options API is legacy only.
-- One component per file. File name matches component: `UserCard.vue`.
+- In Vue 3 repos that already use Composition API, prefer
+  `<script setup lang="ts">` for new components.
+- In Options API heavy repos, keep the local style consistent unless the change
+  is part of an intentional migration.
+- Default to one exported component per file. Small local helpers can stay in
+  the same file when that keeps the feature easier to read.
 
 ```vue
 <!-- DO -->
@@ -40,7 +52,9 @@ export default defineComponent({
 ## State Management
 
 - **Local state**: `ref()` for primitives, `reactive()` for objects. Prefer `ref()` by default — it has explicit `.value` which makes reactivity clear.
-- **Shared state**: Pinia stores. One store per domain: `useUserStore`, `useCartStore`.
+- **Shared state**: Prefer the store library already adopted by the repo. In
+  modern Vue 3 code that usually means Pinia; in older codebases it may still
+  mean Vuex until the project migrates.
 - **Composables**: Extract shared reactive logic into `composables/` files prefixed with `use`.
 
 ```ts
@@ -115,3 +129,9 @@ const { name, email } = toRefs(state);
   it deliberately; otherwise prefer `onMounted` or composables for async work.
 - **v-if vs v-show**: `v-if` destroys and recreates DOM. `v-show` toggles CSS. Use `v-show` for frequently toggled elements, `v-if` for conditionally rendered blocks.
 - **Template refs timing**: `ref` bound to a template element is `null` until the component mounts. Access it in `onMounted`, not during setup.
+
+## Primary Sources
+
+- Vue official guide: https://vuejs.org/guide/introduction.html
+- `<script setup>` API: https://vuejs.org/api/sfc-script-setup.html
+- Pinia docs: https://pinia.vuejs.org/

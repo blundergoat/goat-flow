@@ -1,6 +1,11 @@
-# Spring Boot + JPA Coding Standards
+# Spring Boot Backend Standards (Spring Boot + JPA oriented)
 
 Reference for generating `ai/instructions/backend.md` in Spring Boot projects.
+
+This file assumes Spring Boot with Spring Data/JPA as the common case. If the
+repo uses jOOQ, MyBatis, JdbcTemplate, or another data layer, keep the DI,
+validation, security, and testing guidance and replace only the persistence
+section with the patterns actually present in the repo.
 
 ## Architecture
 
@@ -34,7 +39,7 @@ public class OrderService {
 }
 ```
 
-## JPA / Spring Data
+## JPA / Spring Data (if the repo uses JPA)
 
 - Use Spring Data repositories with derived query methods for simple queries.
 - Use `@Query` with JPQL for complex queries. Use `Specification` for dynamic filters.
@@ -110,3 +115,10 @@ class OrderControllerTest {
 - **Circular dependencies**: Two `@Service` classes injecting each other causes a startup error. Break with `@Lazy`, an event, or restructure the dependency graph.
 - **Missing @Transactional**: Service methods that write without `@Transactional` don't roll back on exceptions. Every write operation needs a transaction boundary.
 - **Leaking entity in response**: Returning JPA entities directly from controllers exposes internal fields and triggers lazy loading. Map to a response DTO.
+
+## Primary Sources
+
+- Spring Boot Reference Documentation (docs.spring.io/spring-boot/)
+- Spring Security Reference (docs.spring.io/spring-security/)
+- Spring Data JPA Reference (docs.spring.io/spring-data/jpa/)
+- Hibernate ORM documentation (hibernate.org/orm/documentation/)

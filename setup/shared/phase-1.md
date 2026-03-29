@@ -142,8 +142,30 @@ Each skill MUST include these sections:
 Adapt all examples for THIS project's tech stack. Do NOT leave placeholder
 text like "[Step 1]" or "[describe X]".
 
+ADAPTATION EXAMPLE — Step 0 questions:
+  Generic (wrong):  "What code to simplify?"
+  Adapted (right):  "Which Symfony controller to simplify? Check docs/footguns.md
+                     for PracGroup scoping traps first."
+The adapted version names a real project artifact and references the learning loop.
+Every skill's Step 0, constraints, and output format should be this specific.
+
+DISPATCHER (required — 9th skill):
+Also install workflow/skills/goat.md as {agent-skills-dir}/goat/SKILL.md.
+This is the /goat dispatcher that routes natural language to the right skill.
+Without it, users must remember exact skill names. The scanner checks for it
+(check 2.1.20) and will flag its absence.
+
+VERSION CHECK (required — AP15 deduction if skipped):
+After installing all skills, verify each SKILL.md frontmatter contains:
+  goat-flow-skill-version: matching the installed goat-flow version
+Check the current expected version in workflow/skills/goat-debug.md line 4.
+If any skill has a different version or is missing the tag, the scanner
+deducts -2 per outdated skill (AP15, max -10). Do not skip this check.
+
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
 - GATE: Verify all 8 goat-* skill files exist with required sections.
+- GATE: Verify goat/SKILL.md (dispatcher) exists in the skills directory.
+- GATE: Verify all 9 skills have matching goat-flow-skill-version tags.
 - GATE: Verify instruction file router table references the skill directories.
 - GATE: Run scripts/preflight-checks.sh if it exists, otherwise run the
   project's lint + test commands from Essential Commands.

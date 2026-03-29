@@ -1,7 +1,7 @@
 ---
 name: goat-investigate
 description: "Deep codebase investigation with progressive depth reading, evidence tagging, and structured reporting. Includes onboarding mode for new projects."
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # /goat-investigate
 
@@ -12,8 +12,9 @@ goat-flow-skill-version: "0.7.0"
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
 - **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 ## When to Use
 
@@ -109,6 +110,12 @@ Activated when Step 0 purpose = "onboarding" / "new to this project" / "need to 
 5. Entry points: identify main files per component
 
 Present findings: "This project uses [languages] with [frameworks]. Build: [cmd], Test: [cmd]. Correct?"
+
+**Phase 3.5 — Glossary Discovery** (during onboarding):
+If `docs/glossary.md` exists, read it. If it doesn't, build one from the codebase:
+scan class names, domain terms in README/docs, and naming patterns. Present as:
+`| term | definition | canonical file | aliases |`
+Ask: "Should I create docs/glossary.md with these terms?"
 
 **Phase 4 — Instruction Drafting** (after Phase 3, if user requests):
 - Present all content inline BEFORE writing any files

@@ -60,6 +60,14 @@ check_segment() {
     block "git --no-verify (hook bypass)"
   fi
 
+  # Package manager mutations (supply-chain risk)
+  if [[ "$cmd" =~ ^[[:space:]]*(npm|pnpm|yarn)[[:space:]]+(install|add|remove|uninstall) ]] ||
+     [[ "$cmd" =~ ^[[:space:]]*pip[[:space:]]+install ]] ||
+     [[ "$cmd" =~ ^[[:space:]]*composer[[:space:]]+(require|remove) ]] ||
+     [[ "$cmd" =~ ^[[:space:]]*go[[:space:]]+get ]]; then
+    block "package mutation — ask first"
+  fi
+
   # Lockfile modifications
   if [[ "$cmd" =~ (\>|\>\>|tee|sed[[:space:]]+-i)[[:space:]]+.*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock) ]]; then
     block "Lockfile modification"

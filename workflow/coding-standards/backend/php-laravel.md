@@ -58,7 +58,7 @@ foreach ($orders as $order) {
 
 - Use `Route::resource()` for standard CRUD. Supplement with custom routes only when needed.
 - Use route model binding: type-hint the model in the controller method signature.
-- Group routes with middleware: `Route::middleware(['auth:sanctum'])->group(...)`.
+- Group routes with the project's auth middleware: `Route::middleware(['auth:sanctum'])->group(...)` (adapt guard name to the repo's auth package — Sanctum, Passport, or custom).
 
 ## Validation
 
@@ -127,3 +127,9 @@ it('creates an order', function () {
 - **Unescaped Blade output**: `{!! $variable !!}` renders raw HTML. Use `{{ $variable }}` (auto-escaped) unless you explicitly need raw output and have sanitized the input.
 - **env() outside config files**: `env()` returns `null` when the config is cached (`php artisan config:cache`). Always wrap environment variables in config files and reference them with `config()`.
 - **Missing queue worker in production**: Jobs sit in the queue forever if no worker is running. Set up Supervisor or Horizon to keep workers alive.
+
+## Primary Sources
+
+- Laravel documentation (laravel.com/docs/)
+- Eloquent ORM documentation (laravel.com/docs/eloquent)
+- Laravel Security documentation (laravel.com/docs/security)

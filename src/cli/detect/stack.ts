@@ -1,4 +1,4 @@
-import type { StackInfo, ReadonlyFS } from '../types.js';
+import type { StackInfo, ProjectSignals, ReadonlyFS } from '../types.js';
 
 /** Partial detection result from a single language detector */
 interface DetectorResult {
@@ -45,6 +45,11 @@ function detectNodeStack(fs: ReadonlyFS): DetectorResult {
     if ('typescript' in deps || fs.exists('tsconfig.json')) {
       languages.push('typescript');
     }
+    // Detect frontend frameworks from deps
+    if ('react' in deps || 'react-dom' in deps || 'next' in deps) languages.push('react');
+    if ('vue' in deps || 'nuxt' in deps) languages.push('vue');
+    if ('@angular/core' in deps) languages.push('angular');
+    if ('svelte' in deps || '@sveltejs/kit' in deps) languages.push('svelte');
     const scripts = pkg.scripts as Record<string, string> | undefined;
     const commands = scripts ? extractNodeCommands(scripts) : {};
     return { languages, ...commands };
@@ -195,6 +200,16 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
     formatCommand = formatCommand ?? result.formatCommand ?? null;
   }
 
+  // Detect server-rendered template engines (frontend signals for non-JS stacks)
+  if (fs.glob('**/*.blade.php').length > 0) languages.push('blade');
+  if (fs.glob('**/*.twig').length > 0) languages.push('twig');
+  if (fs.glob('**/*.erb').length > 0 || fs.glob('**/*.html.erb').length > 0) languages.push('erb');
+  if (fs.glob('**/*.jinja2').length > 0 || fs.glob('**/*.html').some(f => /templates\//.test(f))) languages.push('jinja');
+  // Swift/iOS detection
+  if (fs.exists('Package.swift') || fs.glob('**/*.xcodeproj').length > 0 || fs.glob('**/*.swift').length > 0) languages.push('swift');
+  // Blazor detection
+  if (fs.glob('**/*.razor').length > 0) languages.push('blazor');
+
   // Markdown-only fallback: only when no languages were detected
   if (languages.length === 0) {
     const mdResult = detectMarkdownOnly(fs);
@@ -203,5 +218,99 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
     }
   }
 
-  return { languages, buildCommand, testCommand, lintCommand, formatCommand };
+  const signals = detectProjectSignals(fs, languages, formatCommand);
+  return { languages, buildCommand, testCommand, lintCommand, formatCommand, signals };
+}
+
+/** Detect extended project signals for richer setup prompts (M03.3) */
+function detectProjectSignals(fs: ReadonlyFS, languages: string[], formatCommand: string | null): ProjectSignals {
+  const codeGenTools: string[] = [];
+  const deployPlatforms: string[] = [];
+  const staticAnalysis: Array<{ tool: string; level: string | null }> = [];
+
+  // Code generation tools
+  if (fs.exists('sqlc.yaml') || fs.exists('sqlc.yml')) codeGenTools.push('sqlc');
+  if (fs.exists('_templates') || fs.glob('**/.hygen.js').length > 0) codeGenTools.push('hygen');
+  if (fs.exists('buf.yaml') || fs.exists('buf.gen.yaml')) codeGenTools.push('protobuf');
+  if (fs.glob('**/openapi-generator*').length > 0 || fs.glob('**/openapi*.yaml').length > 0) codeGenTools.push('openapi');
+
+  // Deployment platforms
+  if (fs.exists('amplify.yml') || fs.exists('amplify')) deployPlatforms.push('amplify');
+  if (fs.exists('Dockerfile') || fs.exists('docker-compose.yml') || fs.exists('docker-compose.yaml')) deployPlatforms.push('docker');
+  if (fs.exists('fly.toml')) deployPlatforms.push('fly');
+  if (fs.exists('vercel.json')) deployPlatforms.push('vercel');
+  if (fs.exists('terraform') || fs.glob('**/main.tf').length > 0) deployPlatforms.push('terraform');
+  if (fs.glob('**/*.tf').length > 0 && !deployPlatforms.includes('terraform')) deployPlatforms.push('terraform');
+
+  // LLM integration
+  let llmIntegration = false;
+  const envFiles = ['.env.example', '.env.sample', '.env'];
+  for (const envFile of envFiles) {
+    const content = fs.readFile(envFile);
+    if (content && /MODEL_PROVIDER|OPENAI_API_KEY|ANTHROPIC_API_KEY|BEDROCK|OLLAMA/i.test(content)) {
+      llmIntegration = true;
+      break;
+    }
+  }
+  if (!llmIntegration) {
+    const reqFiles = ['requirements.txt', 'pyproject.toml', 'package.json'];
+    for (const reqFile of reqFiles) {
+      const content = fs.readFile(reqFile);
+      if (content && /anthropic|openai|langchain|llamaindex|strands/i.test(content)) {
+        llmIntegration = true;
+        break;
+      }
+    }
+  }
+
+  // Static analysis level detection
+  const phpstanConfig = fs.readFile('phpstan.neon') ?? fs.readFile('phpstan.neon.dist');
+  if (phpstanConfig) {
+    const levelMatch = phpstanConfig.match(/level:\s*(\d+|max)/);
+    staticAnalysis.push({ tool: 'phpstan', level: levelMatch?.[1] ?? null });
+  }
+  const mypyConfig = fs.readFile('mypy.ini') ?? fs.readFile('setup.cfg');
+  if (mypyConfig && /\[mypy\]/i.test(mypyConfig)) {
+    const strictMatch = mypyConfig.match(/strict\s*=\s*(true|false)/i);
+    staticAnalysis.push({ tool: 'mypy', level: strictMatch?.[1] === 'true' ? 'strict' : null });
+  }
+
+  // PHI/compliance signals
+  let complianceSignals = false;
+  const docsToCheck = ['README.md', 'docs/architecture.md', '.github/instructions/security.instructions.md'];
+  for (const doc of docsToCheck) {
+    const content = fs.readFile(doc);
+    if (content && /\bPHI\b|HIPAA|GDPR|patient.*data|health.*record/i.test(content)) {
+      complianceSignals = true;
+      break;
+    }
+  }
+
+  // Formatter coverage gaps
+  const formatterGaps: string[] = [];
+  const formatterMap: Record<string, string[]> = {
+    typescript: ['prettier', 'biome', 'dprint'],
+    javascript: ['prettier', 'biome', 'dprint'],
+    php: ['php-cs-fixer', 'phpcbf', 'pint'],
+    python: ['black', 'ruff', 'yapf', 'autopep8'],
+    rust: ['rustfmt'],
+    go: ['gofmt', 'goimports'],
+    bash: ['shfmt'],
+    ruby: ['rubocop'],
+    java: ['google-java-format', 'spotless'],
+  };
+  // Check format command, lint command, and PostToolUse hooks for formatter evidence
+  const formatHookContent = fs.readFile('.claude/hooks/format-file.sh') ?? fs.readFile('.gemini/hooks/format-file.sh') ?? '';
+  const formatterSources = [(formatCommand ?? ''), formatHookContent].join(' ').toLowerCase();
+  // Only flag bash if it's the primary language (not just .sh scripts alongside other stacks)
+  const bashIsPrimary = languages[0] === 'bash' || (languages.includes('bash') && languages.length <= 2);
+  for (const lang of languages) {
+    if (lang === 'bash' && !bashIsPrimary) continue;
+    const known = formatterMap[lang];
+    if (!known) continue;
+    const hasFormatter = known.some(f => formatterSources.includes(f));
+    if (!hasFormatter) formatterGaps.push(lang);
+  }
+
+  return { codeGenTools, deployPlatforms, llmIntegration, staticAnalysis, complianceSignals, formatterGaps };
 }

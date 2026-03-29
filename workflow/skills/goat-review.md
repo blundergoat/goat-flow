@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Structured code review and quality audit with RFC 2119 severity, diff-aware analysis, footgun matching, negative verification, and instruction-file audit mode."
-goat-flow-skill-version: "0.7.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # /goat-review
 
@@ -12,8 +12,9 @@ goat-flow-skill-version: "0.7.0"
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
 - **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 ## When to Use
 
@@ -83,6 +84,7 @@ pre-existing issues as part of this change — note them separately.
 - Pattern drift: does new code use a different pattern than existing codebase? Don't assume it's wrong — ask: "Intentional divergence?"
 - Downstream impact: "What breaks if this change has a bug?" — map the cascade
 - Test execution gaps: tests exist but weren't run against the changed path (different from "no test exists")
+- Glossary consistency: if `docs/glossary.md` exists, flag terms used inconsistently in the diff (different name for same concept)
 
 **Self-check:** Before presenting, re-verify `file:line` references for all MUST-fix findings.
 
@@ -232,6 +234,7 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 - MUST check each finding against `docs/footguns.md` (MATCH/CLEAR)
 - MUST order findings by severity, not by file or discovery order
 - MUST NOT fabricate file paths or function names
+- MUST NOT make file edits in review or audit mode — report findings only. Only edit if user explicitly says "implement".
 - MUST NOT auto-edit instruction files in instruction review mode
 - MUST attempt to disprove each finding in audit mode (negative verification)
 - MUST NOT propose fixes in audit mode — audit reports only

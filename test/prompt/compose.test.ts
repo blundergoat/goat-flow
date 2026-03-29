@@ -335,8 +335,8 @@ describe('M2.11b: scanner fixes', () => {
       'docs/lessons.md': '# Lessons\n\n### Entry Format\n<!-- Describe what happened -->\n',
     });
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
-    assert.ok(check, 'Check 2.3.2 should exist');
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2a');
+    assert.ok(check, 'Check 2.3.2a should exist');
     assert.equal(check.status, 'fail', 'Template-only lessons should fail');
   });
 
@@ -347,8 +347,8 @@ describe('M2.11b: scanner fixes', () => {
       'docs/lessons.md': '# Lessons\n\n### 2026-03-20: Auth migration broke staging\nRolled back because the migration assumed sequential IDs.\n',
     });
     const report = scanProject(fs, '/test', { agentFilter: null });
-    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2');
-    assert.ok(check, 'Check 2.3.2 should exist');
+    const check = report.agents[0]?.checks.find(c => c.id === '2.3.2a');
+    assert.ok(check, 'Check 2.3.2a should exist');
     assert.equal(check.status, 'pass', 'Real lessons entries should pass');
   });
 
@@ -843,7 +843,7 @@ describe('M2.14: placeholder npm script edge cases', () => {
 describe('Rubric version consistency', () => {
   it('RUBRIC_VERSION is current', async () => {
     const { RUBRIC_VERSION } = await import('../../src/cli/rubric/version.js');
-    assert.equal(RUBRIC_VERSION, '0.8.0', 'RUBRIC_VERSION should match package version');
+    assert.equal(RUBRIC_VERSION, '0.9.0', 'RUBRIC_VERSION should match package version');
   });
 });
 

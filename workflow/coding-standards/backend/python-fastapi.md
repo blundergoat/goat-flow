@@ -1,6 +1,7 @@
-# FastAPI + SQLAlchemy Coding Standards
+# FastAPI Coding Standards
 
 Reference for generating `ai/instructions/backend.md` in FastAPI projects.
+SQLAlchemy and Pydantic sections are conditional — include only if the project uses them.
 
 ## Architecture
 
@@ -106,3 +107,10 @@ async def test_get_user(client):
 - **Pydantic v1/v2 mixing**: Importing from `pydantic.v1` alongside v2 models causes silent validation failures and schema generation bugs.
 - **Unhandled None from scalar_one_or_none**: Always check for `None` before accessing attributes. Raise `HTTPException(404)` explicitly.
 - **No response_model**: Without `response_model` or a return type annotation, FastAPI returns the raw object — potentially leaking internal fields like password hashes.
+
+## Primary Sources
+
+- FastAPI documentation (fastapi.tiangolo.com)
+- Pydantic v2 documentation (docs.pydantic.dev)
+- SQLAlchemy documentation (docs.sqlalchemy.org)
+- Starlette documentation (starlette.io)

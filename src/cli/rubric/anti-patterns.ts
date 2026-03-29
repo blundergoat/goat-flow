@@ -5,7 +5,7 @@ import { SKILL_VERSION } from '../constants.js';
 
 /**
  * Anti-Pattern Deductions (max -15)
- * AP1-AP9 in v1. AP10 + AP11 deferred to v2 (require git history).
+ * Add deductions only for misleading or actively harmful states.
  */
 export const antiPatterns: AntiPatternDef[] = [
   // === AP1-AP3: Instruction File Anti-Patterns ===
@@ -159,15 +159,21 @@ export const antiPatterns: AntiPatternDef[] = [
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const content = ctx.agentFacts.instruction.content;
       if (!content) return { id: 'AP13', name: 'Stale code references in instruction file', triggered: false, deduction: 0, confidence: 'high', message: 'No instruction file' };
-      // Extract backtick-wrapped paths starting with src/, config/, templates/, app/, apps/, lib/
-      const pathPattern = /`((?:src|config|templates?|app|apps|lib)\/[^`]+)`/g;
+      // Extract backtick-wrapped paths starting with common project directories
+      const pathPattern = /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|agent-evals|\.claude|\.agents|\.github)\/[^`]+)`/g;
       const stale: string[] = [];
       for (const m of content.matchAll(pathPattern)) {
         const p = m[1];
         if (p === undefined) continue;
+        // Skip glob patterns (e.g., .claude/skills/goat-*/) — not literal paths
+        if (/[*?{}]/.test(p)) continue;
         // Strip :linenum suffix if present
         const cleanPath = p.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
-        if (!existsSync(join(ctx.facts.root, cleanPath))) stale.push(cleanPath);
+        // Only check real filesystem paths — skip virtual test paths
+        const resolvedRoot = ctx.facts.root;
+        if (resolvedRoot && existsSync(resolvedRoot)) {
+          if (!existsSync(join(resolvedRoot, cleanPath))) stale.push(cleanPath);
+        }
       }
       const triggered = stale.length > 0;
       return { id: 'AP13', name: 'Stale code references in instruction file', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `${stale.length} stale code refs in ${ctx.agentFacts.agent.instructionFile}: ${stale.slice(0, 3).join(', ')}` : 'All code references resolve', evidence: triggered ? stale.join(', ') : undefined };
@@ -190,15 +196,17 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendationKey: 'ap-fix-duplicate-skills',
   },
   {
-    id: 'AP15', name: 'Outdated skill versions', deduction: -2, confidence: 'high',
+    id: 'AP15', name: 'Outdated skill versions', deduction: -10, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const { found, outdatedCount, versions } = ctx.agentFacts.skills;
       if (found.length === 0) return { id: 'AP15', name: 'Outdated skill versions', triggered: false, deduction: 0, confidence: 'high', message: 'No skills to check' };
       const triggered = outdatedCount > 0;
       const outdatedNames = found.filter(s => versions[s] === null || versions[s] !== SKILL_VERSION);
+      /** Scale deduction: -2 per outdated skill, capped at -10 */
+      const scaledDeduction = Math.max(-10, -2 * outdatedCount);
       return {
         id: 'AP15', name: 'Outdated skill versions', triggered,
-        deduction: triggered ? -2 : 0, confidence: 'high',
+        deduction: triggered ? scaledDeduction : 0, confidence: 'high',
         message: triggered
           ? `${outdatedCount}/${found.length} skills are outdated (expected version ${SKILL_VERSION}): ${outdatedNames.slice(0, 5).join(', ')}`
           : `All ${found.length} skills at version ${SKILL_VERSION}`,
@@ -207,6 +215,40 @@ export const antiPatterns: AntiPatternDef[] = [
     },
     recommendation: `Update skills to version ${SKILL_VERSION} — re-run setup or add goat-flow-skill-version: ${SKILL_VERSION} to each skill's frontmatter`,
     recommendationKey: 'ap-fix-outdated-skills',
+  },
+  {
+    id: 'AP16', name: 'Deprecated skills present', deduction: -5, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { deprecated } = ctx.agentFacts.skills;
+      const triggered = deprecated.length > 0;
+      return {
+        id: 'AP16', name: 'Deprecated skills present', triggered,
+        deduction: triggered ? -5 : 0, confidence: 'high',
+        message: triggered
+          ? `${deprecated.length} deprecated skill(s): ${deprecated.join(', ')}. Remove — these are replaced by the 8 canonical skills.`
+          : 'No deprecated skills',
+        evidence: triggered ? deprecated.join(', ') : undefined,
+      };
+    },
+    recommendation: 'Remove deprecated skill directories (goat-audit, goat-reflect, goat-onboard, goat-resume, goat-context). They are replaced by the 8 canonical goat-* skills.',
+    recommendationKey: 'ap-remove-deprecated-skills',
+  },
+  {
+    id: 'AP17', name: 'Dangling file references in skills', deduction: -3, confidence: 'medium',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { danglingRefs } = ctx.agentFacts.skills;
+      const triggered = danglingRefs.length > 0;
+      return {
+        id: 'AP17', name: 'Dangling file references in skills', triggered,
+        deduction: triggered ? -3 : 0, confidence: 'medium',
+        message: triggered
+          ? `${danglingRefs.length} dangling ref(s) in skills: ${danglingRefs.slice(0, 5).join(', ')}`
+          : 'All skill file references resolve',
+        evidence: triggered ? danglingRefs.join(', ') : undefined,
+      };
+    },
+    recommendation: 'Fix or remove dangling file paths in skill SKILL.md files. Every backtick-wrapped path reference should point to an existing file.',
+    recommendationKey: 'ap-fix-dangling-skill-refs',
   },
 ];
 
