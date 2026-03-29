@@ -2,6 +2,56 @@
 
 A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI, and Codex a 6-step execution loop, autonomy tiers, enforcement hooks, and a learning loop - instead of a wall of rules they half-follow.
 
+## Install
+
+```bash
+npm install --save-dev @blundergoat/goat-flow
+```
+
+Or run without installing: `npx @blundergoat/goat-flow dashboard`
+
+## Dashboard
+
+```bash
+npx goat-flow dashboard
+```
+
+Scan your project, browse results by category, compare agents side by side, and copy fix prompts. The dashboard is the fastest way to see where your project stands and what to do next.
+
+![Dashboard](docs/assets/dashboard-preview.png)
+
+## Setup
+
+### 1. Scan your project
+
+```bash
+npx goat-flow dashboard
+```
+
+Open the dashboard and hit Scan. Or from the CLI: `npx goat-flow scan`. This detects your stack, scores any existing GOAT Flow setup, and shows what's missing.
+
+### 2. Generate a setup prompt
+
+```bash
+npx goat-flow setup --agent claude
+```
+
+This generates a setup prompt adapted to your project's current state - what's already done, what's missing, and the exact templates to use. Paste it into your agent and it builds the system for your project.
+
+Available agents: `claude`, `codex`, `gemini`
+
+### 3. Verify
+
+```bash
+npx goat-flow scan --agent claude
+```
+
+Target: Grade A. Re-run setup and scan until you hit 100%. The scanner checks 103 items across foundation (instruction file, execution loop, hooks), standard (skills, learning loop, local instructions), and full (evals, CI) tiers.
+
+### 4. Iterate
+
+Open the dashboard after each round to see what improved and what's left. The Fixes tab shows exactly what to do next with copy-to-clipboard prompts.
+
 ## The Problem
 
 AI coding agents are powerful but unreliable without structure. They fabricate file paths, skip verification, expand scope without asking, declare tasks done when they're not, and repeat the same mistakes across sessions.
@@ -14,76 +64,13 @@ Rules in instruction files help - but research shows agents follow ~70% of prose
 
 **Three autonomy tiers:** Always (safe, reversible), Ask First (boundaries with a 5-item checklist), Never (destructive actions blocked mechanically).
 
-**Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% block rate vs ~70% for rules alone). Post-turn hooks lint after every change. Format hooks clean up edits. Ask First hooks warn on boundary file edits.
+**Enforcement hooks:** Pre-tool hooks block dangerous commands before execution (100% block rate vs ~70% for rules alone). Post-turn hooks lint after every change.
 
 **Learning loop:** `docs/footguns.md` captures architectural traps with file:line evidence. `docs/lessons.md` captures behavioural mistakes. Real incidents only - no hypotheticals. Agent evals replay past failures as regression tests.
 
 **9 skills (8 specialized + dispatcher):** `/goat` routes to the right skill automatically. `/goat-security`, `/goat-debug`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-refactor`, `/goat-simplify`. Each has a distinct artifact, human gates, and a repeatable structured output.
 
-**CLI scanner + dashboard:** Scores your project across 104 checks + 16 anti-patterns. Interactive dashboard for browsing results, comparing agents, and copying fix prompts. Generates setup prompts that adapt to your project's state.
-
-## Quick Start
-
-### 1. Open the dashboard
-
-```bash
-npx @blundergoat/goat-flow dashboard .
-```
-
-Opens a local web dashboard - scan your project, browse results by category, compare agents side by side, and copy fix prompts. This is the fastest way to see where your project stands.
-
-### 2. Or scan from the CLI
-
-```bash
-npx @blundergoat/goat-flow scan .
-```
-
-```
---- Claude Code ---
-
-Grade: A (100%)
-
-  Foundation:   43/43  ████████████████████  100%
-  Standard:     64/64  ████████████████████  100%
-  Full:         17/17  ████████████████████  100%
-  Deductions:   0
-```
-
-Detects your stack, scores any existing GOAT Flow setup, and shows what's missing. No installation required - runs via npx.
-
-### 3. Generate a setup prompt
-
-```bash
-npx @blundergoat/goat-flow setup . --agent claude
-```
-
-Generates a setup prompt adapted to your project's current state. Paste it into your agent - it reads the templates and builds the system for your project.
-
-Available agents: `claude`, `codex`, `gemini`
-
-### 4. Verify
-
-```bash
-npx @blundergoat/goat-flow scan . --agent claude
-```
-
-Target: Grade A. The scanner checks 104 items across foundation (instruction file, execution loop, autonomy, DoD, enforcement), standard (skills, hooks, learning loop, router, architecture, local instructions), and full (evals, CI, hygiene) tiers.
-
-### CI Gate
-
-```bash
-npx @blundergoat/goat-flow scan . --min-score 75
-# Exit code 1 if any agent scores below 75%
-```
-
-### Output Formats
-
-```bash
-npx @blundergoat/goat-flow scan . --format json       # Machine-readable
-npx @blundergoat/goat-flow scan . --format markdown    # PR comment friendly
-npx @blundergoat/goat-flow scan . --format html        # Standalone HTML report
-npx @blundergoat/goat-flow scan . --output report.json # Write to file
-```
+**Dashboard + CLI scanner:** Scores your project across 103 checks + 16 anti-patterns. Interactive dashboard for browsing results, comparing agents, and copying fix prompts. Setup prompts adapt to your project's state.
 
 ## Skills
 
@@ -105,6 +92,20 @@ Every skill pauses at Step 0 to confirm context before starting, has human gates
 All 9 skills are also directly invocable: `/goat-debug`, `/goat-security`, etc.
 
 Details: [docs/system/skills.md](docs/system/skills.md)
+
+## CLI
+
+```bash
+npx goat-flow scan                        # Score your project
+npx goat-flow scan --agent claude         # Score one agent
+npx goat-flow scan --min-score 75         # CI gate (exit 1 if below)
+npx goat-flow scan --format json          # Machine-readable
+npx goat-flow scan --format markdown      # PR comment friendly
+npx goat-flow scan --format html          # Standalone HTML report
+npx goat-flow scan --output report.json   # Write to file
+npx goat-flow setup --agent claude        # Generate setup prompt
+npx goat-flow dashboard                   # Interactive dashboard
+```
 
 ## Architecture
 
@@ -136,6 +137,7 @@ All agents share the same execution loop, autonomy tiers, definition of done, an
 
 ```
 src/cli/                CLI scanner, prompt generator, scoring engine
+src/dashboard/          Single-page HTML dashboard (Alpine.js + Tailwind via CDN)
 setup/                  Setup guides + shared templates
   shared/               Cross-agent templates (execution loop, docs seed)
   setup-claude.md       Claude Code setup phases
@@ -143,10 +145,9 @@ setup/                  Setup guides + shared templates
   setup-codex.md        Codex setup phases
 workflow/               Templates for skills, coding standards, evaluation
   skills/               9 skill templates (8 specialized + /goat dispatcher)
-  coding-standards/     55 templates (backend, frontend, security, devops)
+  coding-standards/     57 templates (backend, frontend, security, devops)
   evaluation/           Eval format, footguns, lessons, handoff templates
   runtime/              Enforcement, architecture, code-map templates
-src/dashboard/          Single-page HTML dashboard (Alpine.js + Tailwind via CDN)
 docs/                   System design + reference documentation
 scripts/                Preflight, validation, enforcement scripts
 agent-evals/            Regression tests from real incidents

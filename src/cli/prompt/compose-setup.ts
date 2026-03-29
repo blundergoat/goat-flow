@@ -506,7 +506,7 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
   lines.push('');
   lines.push('That file walks through:');
   lines.push('- **Phase 1a:** Instruction file, docs seed files, local instruction files');
-  lines.push('- **Phase 1b:** 9 goat-* skills adapted for this project');
+  lines.push('- **Phase 1b:** 9 skills (8 goat-* skills + /goat dispatcher) adapted for this project');
   lines.push('- **Phase 1c:** Enforcement hooks, deny patterns, coding guidelines');
   lines.push('- **Phase 2:** Agent evals, hygiene (handoff template, RFC 2119 pass)');
   lines.push('- **Phase 3:** Verify 100% on the CLI scan');

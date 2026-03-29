@@ -2,7 +2,6 @@ import { createServer } from 'node:http';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exec } from 'node:child_process';
 import { createFS } from './facts/fs.js';
 import { scanProject } from './scanner/scan.js';
 import { renderJson } from './render/json.js';
@@ -118,7 +117,5 @@ export function serveDashboard(defaultPath: string): void {
     if (!addr || typeof addr === 'string') return;
     const url = `http://127.0.0.1:${addr.port}`;
     console.log(`Dashboard: ${url}`);
-    const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-    exec(`${openCmd} "${url}"`);
   });
 }

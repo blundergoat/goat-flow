@@ -2,43 +2,48 @@
 
 ---
 
+## v0.9.2 - 2026-03-30
+
+Post-publish fixes. README restructured as dashboard-first. npm package description updated.
+
+- README: Install + Dashboard sections lead, setup instructions near top, CLI consolidated into reference block
+- Dashboard: removed auto-open browser (just prints URL), removed unused `exec` import
+- Setup prompt: Phase 1b wording fixed - "9 skills (8 goat-* + /goat dispatcher)" instead of "9 goat-*"
+- package.json description updated to mention dashboard
+
+---
+
 ## v0.9.1 - 2026-03-30
 
-HTML dashboard, CLI enhancements, skill conversation enforcement, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v0.9.1: 104 checks + 16 anti-patterns. 167 tests.
+Dashboard, full coding-standards wiring, skill conversation enforcement, npm publish. Rubric v0.9.1: 103 checks + 16 anti-patterns. 191 tests.
 
 ### Dashboard
-- `goat-flow dashboard .` - local server with live scanning, auto-opens browser
-- `goat-flow scan . --format html` - self-contained offline HTML report
-- 4 tabs: Overview, Checks (drill-down with filters), Compare (multi-agent diff), Fixes (recommendation browser with copy/download)
-- Folder browser, dark mode, responsive mobile, keyboard navigation, ARIA accessibility
-
-### Skills - Conversation Enforcement (M06)
-- All 9 skills synced from canonical templates across all 3 agent directories (27 files)
-- Step 0 contradiction fixed: Shared Conventions said "adaptive" but Step 0 body said "hard block" - resolved by syncing from templates which use the Adaptive Step 0 pattern consistently
-- Explicit "Before proceeding" gate added to every skill's Step 0 section - agents must present context and wait for confirmation before entering Phase 1
-- Stale goat-audit reference removed from goat-review (goat-audit was merged into goat-review in v0.8.0)
-- Missing Flush protocol added to goat-refactor and goat-simplify deployed copies
-- goat-investigate: onboard mode restored (was missing from deployed copy)
-- goat-debug: hypothesis 2-category rule, confidence floor, CAN'T REPRODUCE protocol restored
-- goat-security: framework tables, dependency audit commands, attack scenario format restored
-- Scanner check 2.1.16 tightened: requires all skills to be conversational (was 80% threshold)
-- Scanner heuristic now requires structural indicators (BLOCKING GATE/HUMAN GATE + choices/Offer/Proceed) instead of keyword matching
+- `goat-flow dashboard` - local server with live scanning, 4 tabs (Overview, Checks, Compare, Fixes)
+- `--format html` for standalone HTML reports, `--format markdown` for PR comments
+- Dark mode, responsive mobile, keyboard navigation, ARIA accessibility
+- Dashboard source at `src/dashboard/`, Alpine.js + Tailwind CSS v4 via CDN
 
 ### Coding Standards - Full Wiring
-- All 55 coding-standards templates now routed by CLI (was 25 of 55)
-- Backend framework detection: Laravel, Symfony, Django, FastAPI, Rails, Spring, Express
+- All 57 templates routed by CLI (was 25). New: `backend/python.md`, `devops/packer.md`
+- Framework detection: Laravel, Symfony, Django, FastAPI, Rails, Spring, Express, Cypress
 - Stack detectors fleshed out: Ruby (Gemfile), Java (pom.xml/build.gradle), C# (.csproj/.sln)
-- Security framework-specific routing: 9 templates auto-selected per detected framework
-- Signal-driven security topics: api-auth, file-upload, sql-injection (web), infrastructure (deploy platforms), secrets-management, supply-chain (always)
-- DevOps routing: Terraform + Packer templates via deploy platform signals
-- Always-on templates: security.md, testing.md, copilot-bridge.md, domain-instructions.md
+- 9 security framework templates, 6 security topics, 2 devops templates auto-routed by signals
 - 21 new fragment map entries for targeted-fix mode
 
-### CLI
-- `--format html` and `--format markdown` output modes
-- `--output <file>` flag for writing to file
-- npm scripts: scan, scan:verbose, scan:json, setup, dashboard, preflight, validate
-- Alpine.js + Tailwind CSS v4 via CDN (jsdelivr, version-pinned)
+### Skills
+- All 9 skills (8 goat-* + dispatcher) synced from canonical templates across 3 agent dirs (27 files)
+- Step 0 adaptive gate on every skill - agents must confirm context before entering Phase 1
+- Scanner requires 100% conversational compliance (was 80%), structural detection replaces keyword matching
+- Restored missing features: goat-review audit mode, goat-investigate onboard mode, goat-debug hypothesis rules
+
+### Scanner
+- Removed check 2.2.5g (package mutation deny) - agents should install packages freely
+- Dispatcher is 9th canonical skill for eval diversity counting (ADR-016)
+- XSS fix in HTML injection, CORS wildcard removed, agent param validation added
+
+### npm Publish
+- Published as `@blundergoat/goat-flow`. 197 files, 300KB packed
+- Source maps excluded, `--output <file>` flag, 7 npm scripts added
 
 ---
 
