@@ -172,7 +172,7 @@ flowchart TD
 
 **v1.5 refinement:** Implementation data confirms all seven original skills add value across all projects. **v2.9 expansion:** Three additional skills added (reflect, onboard, resume), bringing the total to ten skills per agent (security, debug, audit, investigate, review, plan, test, reflect, onboard, resume).
 
-> **Superseded by ADR-007 (v0.8.0):** The reflect, onboard, and resume skills were consolidated into existing skill modes. goat-audit merged into goat-review (Audit Mode). goat-context removed. goat-refactor and goat-simplify added. The canonical skill count is now **8 skills** per agent + 1 dispatcher (`goat`). See `docs/decisions/ADR-007-consolidate-skills-10-to-8.md`.
+> **Superseded by ADR-007 (v0.8.0, finalized v1.0.0):** The reflect, onboard, and resume skills were consolidated into existing skill modes. goat-audit merged into goat-review (Audit Mode). goat-context removed. goat-refactor and goat-simplify added. The canonical skill count is now **8 skills** per agent + 1 dispatcher (`goat`). See `docs/decisions/ADR-007-consolidate-skills-10-to-8.md`.
 
 ---
 

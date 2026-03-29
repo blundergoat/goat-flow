@@ -4,13 +4,25 @@
 
 ## v1.0.0 - 2026-03-29
 
-HTML dashboard, CLI enhancements, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v1.0.0: 104 checks + 16 anti-patterns. 167 tests.
+HTML dashboard, CLI enhancements, skill conversation enforcement, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v1.0.0: 104 checks + 16 anti-patterns. 167 tests.
 
 ### Dashboard
 - `goat-flow dashboard .` — local server with live scanning, auto-opens browser
 - `goat-flow scan . --format html` — self-contained offline HTML report
 - 4 tabs: Overview, Checks (drill-down with filters), Compare (multi-agent diff), Fixes (recommendation browser with copy/download)
 - Folder browser, dark mode, responsive mobile, keyboard navigation, ARIA accessibility
+
+### Skills — Conversation Enforcement (M06)
+- All 8 skills + dispatcher synced from canonical templates across all 3 agent directories (27 files)
+- Step 0 contradiction fixed: Shared Conventions said "adaptive" but Step 0 body said "hard block" — resolved by syncing from templates which use the Adaptive Step 0 pattern consistently
+- Explicit "Before proceeding" gate added to every skill's Step 0 section — agents must present context and wait for confirmation before entering Phase 1
+- Stale goat-audit reference removed from goat-review (goat-audit was merged into goat-review in v0.8.0)
+- Missing Flush protocol added to goat-refactor and goat-simplify deployed copies
+- goat-investigate: onboard mode restored (was missing from deployed copy)
+- goat-debug: hypothesis 2-category rule, confidence floor, CAN'T REPRODUCE protocol restored
+- goat-security: framework tables, dependency audit commands, attack scenario format restored
+- Scanner check 2.1.16 tightened: requires all skills to be conversational (was 80% threshold)
+- Scanner heuristic now requires structural indicators (BLOCKING GATE/HUMAN GATE + choices/Offer/Proceed) instead of keyword matching
 
 ### CLI
 - `--format html` and `--format markdown` output modes

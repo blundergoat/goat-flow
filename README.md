@@ -27,12 +27,12 @@ $ npx @blundergoat/goat-flow scan .
 
 --- Claude Code ---
 
-Grade: A (96%)
+Grade: A (100%)
 
   Foundation:   43/43  ████████████████████  100%
-  Standard:     53/54  ████████████████████  98%
-  Full:         16/17  ███████████████████░  94%
-  Deductions:  -2
+  Standard:     64/64  ████████████████████  100%
+  Full:         17/17  ████████████████████  100%
+  Deductions:   0
 ```
 
 ## Quick Start
@@ -106,8 +106,8 @@ Details: [docs/system/five-layers.md](docs/system/five-layers.md)
 | | Claude Code | Gemini CLI | Codex |
 |---|---|---|---|
 | Instruction file | CLAUDE.md | GEMINI.md | AGENTS.md |
-| Skills | .claude/skills/ | .agents/skills/ | .agents/skills/ |
-| Hooks | .claude/hooks/ | .gemini/hooks/ | scripts/ (policy) |
+| Skills | .claude/skills/ | .github/skills/ | .agents/skills/ |
+| Hooks | .claude/hooks/ | .gemini/hooks/ | .codex/hooks/ |
 | Settings | .claude/settings.json | .gemini/settings.json | .codex/config.toml |
 | Scanner | Yes | Yes | Yes |
 
@@ -123,12 +123,13 @@ setup/                  Setup guides + shared templates
   setup-gemini.md       Gemini CLI setup phases
   setup-codex.md        Codex setup phases
 workflow/               Templates for skills, coding standards, evaluation
-  skills/               8 skill templates (goat-*.md)
-  coding-standards/     49 templates (backend, frontend, security)
+  skills/               8 skill templates + /goat dispatcher
+  coding-standards/     50 templates (backend, frontend, security, devops)
   evaluation/           Eval format, footguns, lessons, handoff templates
   runtime/              Enforcement, architecture, code-map templates
+dashboard/              Single-page HTML dashboard (Alpine.js + Tailwind)
 docs/                   System design + reference documentation
-scripts/                CLI runner, validation, enforcement scripts
+scripts/                Preflight, validation, enforcement scripts
 agent-evals/            Regression tests from real incidents
 ```
 

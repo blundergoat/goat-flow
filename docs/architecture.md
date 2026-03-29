@@ -30,7 +30,7 @@ User reads docs/getting-started.md
 
 ## Key Constraints
 
-- **CLI scanner and prompt generator** in `src/cli/` with 80-check rubric, fragment-based prompts, and multi-agent scoring. Dashboard planned for `src/dashboard/`.
+- **CLI scanner and prompt generator** in `src/cli/` with 104 scanner checks + 16 anti-patterns, fragment-based prompts, and multi-agent scoring. **HTML dashboard** at `dashboard/index.html` with local server (`goat-flow dashboard .`).
 - **docs/system-spec.md is canonical.** All other docs derive from or elaborate on it. Conflicts resolve in favour of the spec.
 - **Cross-references are fragile.** 60+ markdown files with dense internal linking. File renames require repo-wide grep.
 - **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file:line references.

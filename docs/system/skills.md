@@ -15,7 +15,7 @@ All skills use the `goat-` prefix to avoid conflicts with built-in agent command
 | /goat-refactor | Cross-file refactoring | MUST read both sides before changing; grep-after-every-rename | Renames, interface changes, restructuring across files |
 | /goat-simplify | Code readability improvement | MUST NOT change behavior; prefer renaming over commenting | Code that works but is hard to read or maintain |
 
-> **Migration note (v0.7.0):** /goat-reflect merged into /goat-review (Instruction Review Mode). /goat-onboard merged into /goat-investigate (Onboard Mode). /goat-audit merged into /goat-review (Audit Mode). /goat-context removed. /goat-refactor and /goat-simplify are new.
+> **Consolidation (v0.8.0, finalized v1.0.0):** /goat-reflect merged into /goat-review (Instruction Review Mode). /goat-onboard merged into /goat-investigate (Onboard Mode). /goat-audit merged into /goat-review (Audit Mode). /goat-context removed. /goat-refactor and /goat-simplify added. /goat dispatcher added in v0.9.0.
 
 ---
 
@@ -184,4 +184,4 @@ A skill earns its place if it meets ALL of:
 
 Skills that failed this test and were downgraded to inline instructions: `/annotation-cycle`, `/sbao-synthesis`, `/review-triage`, `/revert-rescope`.
 
-Skills that were merged (v0.7.0): `/goat-reflect` → `/goat-review` (Instruction Review Mode). `/goat-onboard` → `/goat-investigate` (Onboard Mode). `/goat-audit` → `/goat-review` (Audit Mode). `/goat-context` removed — session resumption is handled by the agent's built-in context management.
+Skills that were consolidated (v0.8.0–v1.0.0): `/goat-reflect` → `/goat-review` (Instruction Review Mode). `/goat-onboard` → `/goat-investigate` (Onboard Mode). `/goat-audit` → `/goat-review` (Audit Mode). `/goat-context` removed — session resumption is handled by the agent's built-in context management.
