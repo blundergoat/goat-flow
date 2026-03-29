@@ -123,3 +123,11 @@ public function formatPrice(int $cents, string $currency = 'USD'): string
 - **Over-nested inheritance**: Templates extending templates extending templates. Debug becomes impossible. Max 3 levels.
 - **Global variables leaking**: Without `only` on `include`, fragments depend on parent scope. This breaks when you move the fragment to a different page.
 - **Translation key drift**: Using `{{ 'label'|trans }}` with keys that do not exist in translation files fails silently. Validate translation keys in CI.
+
+## Primary Sources
+
+- [Twig for Template Designers — Twig docs](https://twig.symfony.com/doc/3.x/templates.html)
+- [Twig in Symfony — Symfony docs](https://symfony.com/doc/current/templates.html)
+- [Symfony Forms — Symfony docs](https://symfony.com/doc/current/forms.html)
+- [Symfony UX (Stimulus + Turbo) — Symfony docs](https://symfony.com/bundles/StimulusBundle/current/index.html)
+- [Asset Management — Symfony docs](https://symfony.com/doc/current/frontend.html)

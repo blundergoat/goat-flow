@@ -107,6 +107,12 @@ def scan_upload(file_path: str) -> bool:
     return result[file_path][0] == "OK"
 ```
 
+## Download Headers
+
+- Always set `Content-Disposition: attachment` when serving user-uploaded files for download. Prevents the browser from rendering uploaded HTML/SVG as a page.
+- Serve uploads from a separate domain or subdomain (e.g., `uploads.example.com`, not `example.com/uploads/`). This prevents uploaded content from accessing the main domain's cookies via same-origin policy.
+- Set `X-Content-Type-Options: nosniff` on all upload responses to prevent MIME-type sniffing.
+
 ## Image Processing
 
 - Strip EXIF metadata (may contain GPS coordinates, device info).
@@ -124,6 +130,29 @@ def sanitize_image(input_path: str, output_path: str):
 
 # DON'T — serve the original upload as-is
 shutil.copy(upload_path, public_path)
+```
+
+## Archive Upload Safety
+
+- **Zip slip**: crafted archive entries with `../../` paths can write files outside the intended extraction directory. Always resolve and validate the full output path before extracting each entry.
+- **Decompression bombs (zip bombs)**: a small archive that expands to gigabytes or terabytes. Check the uncompressed size of each entry before extracting and enforce a total uncompressed size limit.
+- **Video/audio processing**: if processing user-uploaded media with FFmpeg, be aware that crafted media headers can trigger SSRF via FFmpeg's protocol handlers (`http://`, `ftp://`). Disable network protocols with `-protocol_whitelist file,pipe`.
+
+```python
+# DO — validate extraction path (zip slip prevention)
+import zipfile, os
+
+def safe_extract(zip_path: str, dest: str, max_total_bytes: int = 500_000_000):
+    total = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            target = os.path.realpath(os.path.join(dest, info.filename))
+            if not target.startswith(os.path.realpath(dest)):
+                raise ValueError(f"Path traversal detected: {info.filename}")
+            total += info.file_size
+            if total > max_total_bytes:
+                raise ValueError("Archive exceeds maximum uncompressed size")
+        zf.extractall(dest)
 ```
 
 ## Common Footguns

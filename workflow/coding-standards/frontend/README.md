@@ -8,19 +8,21 @@ DO/DON'T guidance) stay in `conventions.md`.
 
 ## Detection Signals
 
-| Signal | Stack file | Status | Notes |
-|--------|-----------|--------|-------|
-| package.json + "react" in deps | react.md | first-class | Add framework-specific data/loading guidance only if the repo actually uses Next/Remix/Router data APIs |
-| package.json + "vue" in deps | vue.md | first-class | Vue 3 / Composition API first |
-| package.json + "@angular/core" in deps | angular.md | first-class | Version-gated: verify standalone/signals/control-flow support from package.json |
-| composer.json + "laravel/framework" + resources/views/*.blade.php | php-blade.md | first-class | Livewire guidance is conditional — include only if present |
-| composer.json + "symfony/twig-bundle" | php-twig.md | first-class | Encore/AssetMapper/Turbo sections are conditional |
-| Gemfile + "rails" + app/views/**/*.erb | ruby-erb.md | first-class | Hotwire/ViewComponent guidance is conditional |
-| requirements.txt/pyproject.toml + "django" | python-jinja.md | shared-file branch | Keep Django-specific sections only; do not mix Flask guidance into generated output |
-| requirements.txt/pyproject.toml + "flask"/"jinja2" | python-jinja.md | shared-file branch | Keep Flask/Jinja-specific sections only; do not mix Django tags into generated output |
-| *.xcodeproj or Package.swift with SwiftUI imports | swift-ios.md | SwiftUI-first | File now includes a UIKit appendix; only include UIKit guidance if the repo uses UIKit |
-| *.csproj + "Microsoft.AspNetCore.Components" | dotnet-blazor.md | first-class | Version-gated: render-mode guidance depends on .NET 8+ |
-| package.json + "typescript" in devDeps (no React/Vue/Angular) | typescript.md | first-class | Framework-agnostic TypeScript only |
+| Signal | Stack file | Routing | Notes |
+|--------|-----------|---------|-------|
+| package.json + "react" in deps | react.md | auto | Add framework-specific data/loading guidance only if the repo actually uses Next/Remix/Router data APIs |
+| package.json + "vue" in deps | vue.md | auto | Vue 3 / Composition API first |
+| package.json + "@angular/core" in deps | angular.md | auto | Version-gated: verify standalone/signals/control-flow support from package.json |
+| composer.json + "laravel/framework" + resources/views/*.blade.php | php-blade.md | auto | Livewire guidance is conditional — include only if present |
+| composer.json + "symfony/twig-bundle" | php-twig.md | auto | Encore/AssetMapper/Turbo sections are conditional |
+| Gemfile + "rails" + app/views/**/*.erb | ruby-erb.md | auto | Hotwire/ViewComponent guidance is conditional |
+| requirements.txt/pyproject.toml + "django" | python-jinja.md | auto | Keep Django-specific sections only; do not mix Flask guidance into generated output |
+| requirements.txt/pyproject.toml + "flask"/"jinja2" | python-jinja.md | auto | Keep Flask/Jinja-specific sections only; do not mix Django tags into generated output |
+| *.xcodeproj or Package.swift with SwiftUI imports | swift-ios.md | auto | File now includes a UIKit appendix; only include UIKit guidance if the repo uses UIKit |
+| *.csproj + "Microsoft.AspNetCore.Components" | dotnet-blazor.md | auto | Version-gated: render-mode guidance depends on .NET 8+ |
+| package.json + "typescript" in devDeps (no React/Vue/Angular) | typescript.md | auto (fallback) | Framework-agnostic TypeScript; selected when TS/JS detected but no framework matched |
+
+**Routing key:** `auto` = CLI scanner detects the signal and routes to the template automatically via `FRONTEND_TEMPLATE_MAP` in `src/cli/prompt/template-refs.ts`. All listed stacks are auto-detected; there are no manual-only entries at this time.
 
 ## Framework-First Naming
 

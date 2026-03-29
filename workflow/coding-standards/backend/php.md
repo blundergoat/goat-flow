@@ -178,3 +178,10 @@ ini_set('session.use_strict_mode', '1');
 - **Silent type coercion in array keys**: `$a[true]` and `$a[1]` are the same key. Avoid non-string/int keys.
 - **`$this` in static context**: PHP 8+ throws `Error`, older versions gave unexpected results. Use `static::` not `self::` for late static binding when needed.
 - **Reference parameters**: Functions like `preg_match(&$matches)` use pass-by-reference. Missing the `&` in custom functions silently copies instead. Prefer return values over reference params.
+
+## Primary Sources
+
+- PHP documentation (php.net/docs.php)
+- PHP-FIG PSR Standards (php-fig.org/psr/)
+- Composer documentation (getcomposer.org/doc/)
+- PHPStan documentation (phpstan.org/user-guide/)

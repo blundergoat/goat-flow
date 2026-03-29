@@ -1,6 +1,10 @@
 # Prompt: Create ai/instructions/testing.md
 
-Testing conventions template. Load this when writing or modifying tests.
+> **Purpose:** Testing conventions — naming, structure, mocking, coverage expectations
+> **Generates:** `ai/instructions/testing.md`
+> **Use when:** Setting up test instructions for the project
+> **Repo inspection:** Yes — reads existing tests for naming patterns, framework usage, fixtures
+> **Follow-on refs:** `backend/` for stack-specific test patterns (e.g. Go table-driven, RSpec, pytest)
 
 ---
 
@@ -114,7 +118,10 @@ vi.mock("@/lib/api", () => ({
 // Bad — mocking React hooks or internal state
 ```
 
-## Property-Based Testing
+## Property-Based Testing (conditional)
+
+Include this section only if the project already uses a property-based testing library
+(hypothesis, fast-check, rapid) or the codebase has functions matching the criteria below.
 
 For functions with well-defined contracts (parsers, serializers, math, data transformations), use property-based testing to find edge cases humans miss.
 

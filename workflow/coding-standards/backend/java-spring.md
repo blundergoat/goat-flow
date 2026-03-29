@@ -115,3 +115,10 @@ class OrderControllerTest {
 - **Circular dependencies**: Two `@Service` classes injecting each other causes a startup error. Break with `@Lazy`, an event, or restructure the dependency graph.
 - **Missing @Transactional**: Service methods that write without `@Transactional` don't roll back on exceptions. Every write operation needs a transaction boundary.
 - **Leaking entity in response**: Returning JPA entities directly from controllers exposes internal fields and triggers lazy loading. Map to a response DTO.
+
+## Primary Sources
+
+- Spring Boot Reference Documentation (docs.spring.io/spring-boot/)
+- Spring Security Reference (docs.spring.io/spring-security/)
+- Spring Data JPA Reference (docs.spring.io/spring-data/jpa/)
+- Hibernate ORM documentation (hibernate.org/orm/documentation/)

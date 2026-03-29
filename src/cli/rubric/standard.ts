@@ -836,29 +836,31 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'create-github-git-commit',
   },
   {
-    id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
+    id: '2.6.7a', name: 'frontend.md exists for projects with a detected frontend/UI stack', tier: 'standard', category: 'Local Instructions',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
+        const checkName = 'frontend.md exists for projects with a detected frontend/UI stack';
         const { hasFrontend, dirExists } = ctx.facts.shared.localInstructions;
         if (dirExists === false) {
-          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
+          return { id: '2.6.7a', name: checkName, tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No instructions directory' };
         }
         const langs = ctx.facts.stack.languages.map(l => l.toLowerCase());
-        const needsFrontend = langs.some(l => l === 'typescript' || l === 'javascript');
+        const frontendSignals = ['typescript', 'javascript', 'react', 'vue', 'angular', 'svelte', 'blade', 'twig', 'erb', 'jinja', 'blazor', 'swift'];
+        const needsFrontend = langs.some(l => frontendSignals.includes(l));
         if (!needsFrontend) {
-          return { id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No TS/JS detected' };
+          return { id: '2.6.7a', name: checkName, tier: 'standard', category: 'Local Instructions', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No frontend/UI stack detected' };
         }
         return {
-          id: '2.6.7a', name: 'frontend.md exists for TS/JS projects', tier: 'standard', category: 'Local Instructions',
+          id: '2.6.7a', name: checkName, tier: 'standard', category: 'Local Instructions',
           status: hasFrontend ? 'pass' : 'fail',
           points: hasFrontend ? 1 : 0, maxPoints: 1, confidence: 'high',
-          message: hasFrontend ? 'frontend.md found' : 'TypeScript/JavaScript project should have frontend.md',
+          message: hasFrontend ? 'frontend.md found' : 'Project with frontend/UI stack should have frontend.md',
         };
       },
     },
-    recommendation: 'Create ai/instructions/frontend.md with TS/JS coding conventions',
+    recommendation: 'Create ai/instructions/frontend.md with frontend coding conventions for the detected UI stack',
     recommendationKey: 'create-frontend-instructions',
   },
   {

@@ -1,6 +1,10 @@
 # Prompt: Create ai/instructions/code-review.md
 
-Load this file when reviewing code (PRs, diffs, audit tasks).
+> **Purpose:** Code review checklist — priority order, anti-patterns, review triggers
+> **Generates:** `ai/instructions/code-review.md`
+> **Use when:** Setting up code review instructions for the project
+> **Repo inspection:** Yes — reads code for actual anti-patterns, file paths, API contracts
+> **Follow-on refs:** `security/` for security review additions; `testing.md` for test-coverage expectations
 
 ---
 
@@ -100,16 +104,6 @@ try { ... } catch (e) {
 4. Package is not deprecated or abandoned
 ```
 
-**API surface changes:** Public API changes need backwards-compatibility analysis. Breaking changes need explicit versioning.
-```
-# Flags to look for in API changes:
-- Removed or renamed fields → breaking (even if "nobody uses it")
-- Changed field types → breaking
-- New required fields → breaking
-- New optional fields → safe
-- Changed HTTP status codes → breaking for clients that branch on status
-```
-
 **Error handling audit:** Every `catch`, `rescue`, `except`, or `if err != nil` must either: handle the error, wrap with context and re-raise, or explicitly document why it's swallowed.
 ```go
 // Flag this in review — swallowed error
@@ -133,6 +127,21 @@ clang -fsanitize=thread -g -o test_binary test.c
 # JS/TS: check for shared mutable state in async code
 # Flag: module-level let/var mutated inside async functions
 ```
+
+## Migration & Schema Changes (if the project uses database migrations)
+
+- Migrations must be reversible — include both `up` and `down` (or equivalent rollback).
+- Adding a column is safe. Renaming or removing a column is a breaking change — requires a multi-step migration (add new → migrate data → remove old).
+- Never modify a migration that has already been applied to shared environments (staging, production). Create a new migration instead.
+- Schema changes that touch high-traffic tables should note the lock impact. On large PostgreSQL/MySQL tables, `ALTER TABLE` can hold locks that block reads/writes.
+
+## API Backward Compatibility (if the project exposes APIs consumed by external clients)
+
+- Removing or renaming a field is a breaking change, even if "nobody uses it."
+- Changing a field type is a breaking change.
+- Adding a new required field is a breaking change. New optional fields are safe.
+- Changing HTTP status codes breaks clients that branch on status.
+- When a breaking change is unavoidable: version the endpoint, deprecate the old one with a sunset header, and document the migration path.
 
 ## Do NOT Nitpick
 

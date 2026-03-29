@@ -1,4 +1,5 @@
-# Ignore everything in tasks/ except the template
+# Ignore everything in tasks/ except the template and logs dir
 *
 !.gitignore
 !handoff-template.md
+!logs/

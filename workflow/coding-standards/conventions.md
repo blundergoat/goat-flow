@@ -1,10 +1,12 @@
 # Prompt: Create ai/instructions/conventions.md
 
-This is the always-loaded instruction file. Every agent task reads this first.
+> **Purpose:** Always-loaded project contract — build commands, naming, DO/DON'T rules, dangerous ops
+> **Generates:** `ai/instructions/conventions.md`
+> **Use when:** Setting up or refreshing project-wide conventions
+> **Repo inspection:** Yes — reads actual source files, runs build/test/lint commands to verify
+> **Follow-on refs:** `backend/`, `frontend/` for stack-specific patterns; `security.md` for security overlay
 
-**Boundary with backend.md / frontend.md:** conventions.md covers cross-language
-concerns (build commands, naming patterns, DO/DON'T rules, dangerous ops).
-Language-specific architecture and patterns go in backend.md or frontend.md.
+**Boundary:** conventions.md covers cross-language concerns. Language-specific architecture and patterns go in backend.md or frontend.md.
 
 ---
 
@@ -95,8 +97,8 @@ export default function() { ... }
 
 ## Universal Standards
 
-These defaults apply to all projects. Include them as-is — they are not derived from the codebase.
-Phrase each as a project default: if the repo already uses a different convention, document that instead.
+These are sensible defaults. If the repo already uses a different convention (e.g. a different line limit
+or complexity threshold configured in a linter), document that instead — do not override it.
 
 **Function length:** Target 40 lines; hard limit 50. If a function exceeds this, extract a helper.
 
@@ -151,7 +153,7 @@ npm ci --ignore-scripts        # Node
 pip install --require-hashes   # Python
 ```
 
-**CLI tool preferences:** Use ripgrep (`rg`) over `grep` for speed. Use `fd` over `find`. Use `jq` for JSON processing. Use `ast-grep` for structural code search when regex is insufficient.
+**CLI tool preferences (if available):** Prefer ripgrep (`rg`) over `grep`, `fd` over `find`, `jq` for JSON processing. Use `ast-grep` for structural code search when regex is insufficient. Fall back to standard tools if these are not installed.
 ```bash
 rg "TODO|FIXME" --type ts           # fast, respects .gitignore
 fd "\.test\.ts$" src/                # intuitive, fast file search

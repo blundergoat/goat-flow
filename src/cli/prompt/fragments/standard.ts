@@ -771,15 +771,15 @@ The agent should be able to read this file and immediately know how to build, te
     phase: 'standard',
     category: 'Local Instructions',
     kind: 'create',
-    instruction: `Create \`ai/instructions/frontend.md\` — frontend-specific coding conventions for TypeScript/JavaScript projects. Include:
+    instruction: `Create \`ai/instructions/frontend.md\` — frontend-specific coding conventions for the detected UI stack (React, Vue, Angular, Blade, Twig, ERB, Jinja, Blazor, Swift/iOS, or plain TS/JS). Include:
 
-- Component patterns (naming, structure, composition)
-- State management conventions
+- Component/template patterns (naming, structure, composition)
+- State management or data-binding conventions
 - Styling approach and file organization
-- Testing patterns for UI components
+- Testing patterns for UI components or template rendering
 - Common anti-patterns to avoid
 
-Only include rules specific to frontend work. Shared rules belong in \`conventions.md\`.`,
+Only include rules specific to frontend/UI work. Shared rules belong in \`conventions.md\`.`,
   },
   {
     key: 'create-backend-instructions',

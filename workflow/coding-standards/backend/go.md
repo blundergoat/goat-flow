@@ -90,7 +90,7 @@ go fetchUser(ctx, id)
 ## Testing
 
 - Table-driven tests for functions with multiple input/output combinations.
-- Use `testify/assert` and `testify/require` for readable assertions.
+- If the project uses `testify`: use `assert` and `require` for readable assertions. If the project uses stdlib only, follow the `if got != want` pattern.
 - Use `httptest.NewRecorder` and `httptest.NewRequest` for handler tests.
 - `t.Parallel()` on independent tests. DO NOT use it when tests share database state.
 
@@ -120,7 +120,7 @@ for _, tt := range tests {
 
 ## Linting
 
-- Run `golangci-lint` with at minimum: `govet`, `staticcheck`, `gosec`, `errcheck`, `ineffassign`.
+- If the project uses `golangci-lint`: enable at minimum `govet`, `staticcheck`, `gosec`, `errcheck`, `ineffassign`. If not installed, `go vet` is the baseline.
 - Fix lint warnings, don't suppress them with `//nolint` unless justified in a comment.
 
 ## Common Footguns
@@ -130,3 +130,10 @@ for _, tt := range tests {
 - **goroutine leaks**: A goroutine blocked on a channel that nobody reads is a permanent leak. Always provide a cancellation path.
 - **shadowed err**: `:=` inside an `if` block creates a new `err` that shadows the outer one. The outer `err` stays nil and the real error is silently discarded.
 - **range variable capture**: In Go <1.22, loop variables are reused. Capture with `v := v` before passing to goroutines or closures.
+
+## Primary Sources
+
+- Go Code Review Comments (golang.org/wiki/CodeReviewComments)
+- Effective Go (golang.org/doc/effective_go)
+- Go Blog: Error handling and Go, Working with Errors in Go 1.13
+- Go Standard Library documentation (pkg.go.dev/std)

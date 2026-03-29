@@ -45,6 +45,11 @@ function detectNodeStack(fs: ReadonlyFS): DetectorResult {
     if ('typescript' in deps || fs.exists('tsconfig.json')) {
       languages.push('typescript');
     }
+    // Detect frontend frameworks from deps
+    if ('react' in deps || 'react-dom' in deps || 'next' in deps) languages.push('react');
+    if ('vue' in deps || 'nuxt' in deps) languages.push('vue');
+    if ('@angular/core' in deps) languages.push('angular');
+    if ('svelte' in deps || '@sveltejs/kit' in deps) languages.push('svelte');
     const scripts = pkg.scripts as Record<string, string> | undefined;
     const commands = scripts ? extractNodeCommands(scripts) : {};
     return { languages, ...commands };
@@ -194,6 +199,16 @@ export function detectStack(fs: ReadonlyFS): StackInfo {
     lintCommand = lintCommand ?? result.lintCommand ?? null;
     formatCommand = formatCommand ?? result.formatCommand ?? null;
   }
+
+  // Detect server-rendered template engines (frontend signals for non-JS stacks)
+  if (fs.glob('**/*.blade.php').length > 0) languages.push('blade');
+  if (fs.glob('**/*.twig').length > 0) languages.push('twig');
+  if (fs.glob('**/*.erb').length > 0 || fs.glob('**/*.html.erb').length > 0) languages.push('erb');
+  if (fs.glob('**/*.jinja2').length > 0 || fs.glob('**/*.html').some(f => /templates\//.test(f))) languages.push('jinja');
+  // Swift/iOS detection
+  if (fs.exists('Package.swift') || fs.glob('**/*.xcodeproj').length > 0 || fs.glob('**/*.swift').length > 0) languages.push('swift');
+  // Blazor detection
+  if (fs.glob('**/*.razor').length > 0) languages.push('blazor');
 
   // Markdown-only fallback: only when no languages were detected
   if (languages.length === 0) {

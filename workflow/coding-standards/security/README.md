@@ -15,6 +15,8 @@ Agents: load `web-common.md` for ALL web projects. Then load the framework-speci
 | .env files, vault config | secrets-management.md |
 | Dockerfile, CI workflows | infrastructure.md |
 | Any project with dependencies | supply-chain.md |
+| LLM/AI integration (anthropic, openai, langchain in deps or env vars) | llm-security.md |
+| PHI/healthcare compliance (HIPAA, GDPR health data, patient records) | phi-compliance.md |
 
 ## Framework-Specific
 
@@ -26,5 +28,8 @@ Agents: load `web-common.md` for ALL web projects. Then load the framework-speci
 | Gemfile + "rails" | framework-specific/rails.md |
 | pom.xml/build.gradle + "spring-boot" | framework-specific/spring.md |
 | package.json + "express" | framework-specific/express-node.md |
+| package.json + "fastify" | framework-specific/express-node.md *(fallback — use as base, adapt middleware patterns)* |
+| package.json + "@nestjs/core" | framework-specific/express-node.md *(fallback — use as base, adapt to guards/pipes/interceptors)* |
 | *.csproj + "Microsoft.AspNetCore" | framework-specific/dotnet.md |
 | package.json + "cypress" | framework-specific/cypress.md |
+| go.mod (Go projects) | framework-specific/go.md |

@@ -4,7 +4,7 @@
 
 ## v0.9.0 - 2026-03-29
 
-Dispatcher skill, Shared Conventions checks, workflow templates v0.8.0 bump, phase-0.md, 8 skill evals, preflight version gate. Rubric v0.9.0: 99 checks + 15 anti-patterns. 138 tests.
+Dispatcher skill, Shared Conventions checks, workflow templates v0.9.0 bump, phase-0.md, 8 skill evals, preflight version gate. Rubric v0.9.0: 99 checks + 15 anti-patterns. 167 tests.
 
 ### Scanner
 - Check 2.1.20: Dispatcher skill (goat) installed — custom fn reads `hasDispatcher` fact via `fs.exists(skillsDir/goat/SKILL.md)`
@@ -13,7 +13,7 @@ Dispatcher skill, Shared Conventions checks, workflow templates v0.8.0 bump, pha
 ### Skills & Dispatcher
 - Dispatcher skill (`goat`) added across all three agent dirs; routes to 8 canonical skills by intent
 - `## Shared Conventions` block added to all 18 installed skill files (.claude/.agents/.github × 6 skills)
-- Workflow templates bumped from `goat-flow-skill-version: "0.7.0"` → `"0.8.0"` (fixes guaranteed AP15 -10 on new installs)
+- Workflow templates bumped from `goat-flow-skill-version: "0.7.0"` → `"0.9.0"` (fixes guaranteed AP15 -10 on new installs)
 
 ### Setup & Scripts
 - `setup/shared/phase-0.md` created (fixes dead link in setup/README.md phases table)

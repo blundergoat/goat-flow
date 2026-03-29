@@ -113,7 +113,7 @@ final class SendOrderConfirmationHandler
 
 - `KernelTestCase` for service-level tests that need the container.
 - `WebTestCase` with `$client = static::createClient()` for HTTP tests.
-- Use `zenstruck/foundry` for factory-based test data. DO NOT create entities manually in every test.
+- If the project uses `zenstruck/foundry`: use factory-based test data. If not, use Doctrine fixtures or create entities via the entity manager directly — but keep factory patterns consistent within the project.
 - Use `.env.test` for test-specific configuration. Never point tests at a production database.
 
 ## Common Footguns
@@ -123,3 +123,10 @@ final class SendOrderConfirmationHandler
 - **Circular dependency injection**: Two services that depend on each other cause a container build error. Break the cycle with an event, a mediator, or `#[Lazy]` proxies.
 - **N+1 in serialization**: Serializing an entity collection that has unfetched relations triggers N+1 queries during JSON encoding. Eager-fetch or use a DTO.
 - **Missing return type on controller**: Forgetting the return type causes Symfony to return an empty 200 instead of the intended response.
+
+## Primary Sources
+
+- Symfony documentation (symfony.com/doc/current/)
+- Doctrine ORM documentation (doctrine-project.org/projects/orm.html)
+- Symfony Security documentation (symfony.com/doc/current/security.html)
+- Symfony Best Practices (symfony.com/doc/current/best_practices.html)

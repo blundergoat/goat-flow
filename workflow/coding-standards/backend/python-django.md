@@ -30,7 +30,7 @@ for order in orders:
 - Function-based views for custom logic that doesn't map to CRUD.
 - DO NOT use class-based views when the logic is a single conditional — a function is clearer.
 
-## Django REST Framework
+## Django REST Framework (include only if `djangorestframework` is in dependencies)
 
 - Use `ModelSerializer` for straightforward models. Switch to `Serializer` for custom representations.
 - Use `ViewSet` + `Router` for full CRUD endpoints. Use `APIView` for non-CRUD actions.
@@ -101,7 +101,7 @@ client.force_login(UserFactory())
 response = client.get("/orders/")
 ```
 
-## Celery
+## Celery (include only if `celery` is in dependencies)
 
 - All tasks MUST be idempotent — safe to retry without side effects.
 - Use `acks_late=True` so tasks re-queue if the worker crashes mid-execution.
@@ -115,3 +115,9 @@ response = client.get("/orders/")
 - **DEBUG=True in production**: Leaks full stack traces, settings, and SQL queries to users.
 - **Secret key in code**: Committing `SECRET_KEY` to version control compromises session signing and CSRF tokens.
 - **Unvalidated bulk_create/update**: `bulk_create` skips model validation and signals. Validate data before bulk operations.
+
+## Primary Sources
+
+- Django documentation (docs.djangoproject.com)
+- Django REST Framework documentation (django-rest-framework.org)
+- Django Security documentation (docs.djangoproject.com/topics/security/)

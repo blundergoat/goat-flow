@@ -143,3 +143,10 @@ describe('POST /orders', () => {
 - **Memory leaks in closures**: Event listeners, intervals, and cached closures that reference large objects prevent garbage collection. Clean up on shutdown.
 - **Missing Content-Type validation**: Not checking `Content-Type` header allows attackers to send malformed payloads that bypass body parsers.
 - **Trusting process.env types**: All `process.env` values are `string | undefined`. Parse and validate at startup with Zod or `envalid`, not at point of use.
+
+## Primary Sources
+
+- Node.js documentation (nodejs.org/docs/)
+- TypeScript Handbook (typescriptlang.org/docs/handbook/)
+- Express.js documentation (expressjs.com)
+- Node.js Best Practices (github.com/goldbergyoni/nodebestpractices)

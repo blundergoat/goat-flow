@@ -86,3 +86,4 @@ When the skill completes:
 1. If work is incomplete: write `tasks/handoff.md` using the standard handoff template (Date, Status, Current State, Key Decisions, Known Risks, Next Step)
 2. Check the Learning Loop (above) for anything worth logging
 3. Suggest the most relevant next skill if applicable (see Chains With in each skill)
+4. If `tasks/logs/` exists: write a session summary to `tasks/logs/sessions/YYYY-MM-DD-goat-{skill}.md` (schema in `tasks/logs/README.md`)

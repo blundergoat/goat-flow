@@ -104,7 +104,7 @@ var host = configuration["Smtp:Host"]; // stringly typed, no validation
 
 ## Validation
 
-- Use FluentValidation for complex rules or DataAnnotations for simple ones — pick one per project.
+- Use the project's existing validation approach: FluentValidation for complex rules, DataAnnotations for simple ones. Do not introduce a new library if one is already in use.
 - Validate in the pipeline (MediatR behaviors or action filters), not manually in controllers.
 
 ```csharp
@@ -158,3 +158,10 @@ public class OrdersTests : IClassFixture<WebApplicationFactory<Program>>
 - **Disposed ObjectContext**: Accessing navigation properties after the DbContext is disposed throws. Eager-load with `Include()` or project to a DTO before the context scope ends.
 - **N+1 queries**: EF Core lazy loading (if enabled) silently fires queries per navigation access. Use `AsNoTracking().Include()` and check SQL logs during development.
 - **IEnumerable vs IQueryable**: Calling `.ToList()` too early pulls the entire table into memory. Keep the query as `IQueryable` until you need to materialize results.
+
+## Primary Sources
+
+- ASP.NET Core documentation (learn.microsoft.com/aspnet/core/)
+- Entity Framework Core documentation (learn.microsoft.com/ef/core/)
+- .NET API design guidelines (learn.microsoft.com/dotnet/standard/design-guidelines/)
+- C# language reference (learn.microsoft.com/dotnet/csharp/)

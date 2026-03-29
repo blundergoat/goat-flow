@@ -1,0 +1,4 @@
+# Ignore all telemetry data (local-only)
+*
+!.gitignore
+!README.md

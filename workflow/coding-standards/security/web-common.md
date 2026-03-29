@@ -105,3 +105,24 @@ app.use(cors({ origin: '*', credentials: true }));
 - Never return stack traces, file paths, SQL errors, or dependency versions to clients.
 - Log the full error server-side with a request ID. Return only the request ID to the client.
 - Use generic messages: "Invalid credentials" not "User not found" vs "Wrong password" (prevents user enumeration).
+
+## SSRF Prevention
+
+- Validate and whitelist all outbound URLs constructed from user input.
+- Block requests to internal/private network ranges: `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.169.254` (cloud IMDS — the most common SSRF target in AWS/GCP/Azure; grants access to instance metadata, IAM credentials, and secrets).
+- Disable HTTP redirects in outbound requests, or re-validate the target after each redirect.
+- Use a URL allowlist, not a denylist — new internal services or cloud metadata endpoints appear over time.
+
+## WebSocket Security
+
+- WebSockets have no native auth headers. Authenticate via a short-lived ticket (issued over HTTP, exchanged on WS connect) or a query-param token exchanged for a session immediately after connection.
+- Validate the `Origin` header on connection to prevent cross-site WebSocket hijacking.
+- Set message size limits server-side to prevent memory exhaustion from oversized frames.
+- Apply the same input validation to WebSocket messages as you would to HTTP request bodies.
+
+## GraphQL Security (if the project uses GraphQL)
+
+- Disable introspection in production (`introspection: false`). Introspection exposes the entire schema to attackers.
+- Enforce query depth limiting (max 10-15 levels) to prevent deeply nested queries from consuming excessive resources.
+- Enforce query complexity analysis — assign costs to fields and reject queries exceeding a total cost budget.
+- Disable batching or limit batch size to prevent attackers from sending hundreds of queries in a single request.

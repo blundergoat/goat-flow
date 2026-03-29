@@ -1,4 +1,4 @@
-# CLAUDE.md - v0.8.0 (2026-03-28)
+# CLAUDE.md - v0.9.0 (2026-03-29)
 
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI scanner.
 
@@ -110,4 +110,5 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Scripts | `scripts/` |
 | Skills | `.claude/skills/goat-*/` |
 | Agent evals | `agent-evals/` |
+| Local telemetry logs | `tasks/logs/` |
 | Release | `CHANGELOG.md`, `README.md`, `package.json` |

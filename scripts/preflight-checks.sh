@@ -75,6 +75,23 @@ else
     if [[ "$template_fail" -eq 0 ]]; then
         pass "All workflow skill templates at version $skill_version"
     fi
+
+    # Installed skill copies must also match
+    installed_fail=0
+    for dir in .claude/skills .agents/skills .github/skills; do
+        if [[ -d "$dir" ]]; then
+            while IFS= read -r -d '' f; do
+                ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                if [[ -n "$ver" ]] && [[ "$ver" != "$skill_version" ]]; then
+                    fail "Installed skill $f has version '$ver', expected '$skill_version'"
+                    installed_fail=1
+                fi
+            done < <(find "$dir" -name 'SKILL.md' -print0)
+        fi
+    done
+    if [[ "$installed_fail" -eq 0 ]]; then
+        pass "All installed skills at version $skill_version"
+    fi
 fi
 
 # ── Version Consistency ──────────────────────────────────────────────
@@ -117,6 +134,16 @@ if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then
     else
         note "No CHANGELOG.md found"
     fi
+
+    # Instruction file headers must match package version
+    for ifile in CLAUDE.md AGENTS.md GEMINI.md; do
+        if [[ -f "$ifile" ]]; then
+            header_version=$(head -1 "$ifile" | grep -oP 'v\K[0-9]+\.[0-9]+(\.[0-9]+)?' || true)
+            if [[ -n "$header_version" ]] && [[ "$header_version" != "$pkg_version" ]]; then
+                fail "$ifile header says v${header_version}, expected v${pkg_version}"
+            fi
+        fi
+    done
 
     # Warn if rubric files changed but RUBRIC_VERSION didn't
     if command -v git >/dev/null 2>&1; then
@@ -250,6 +277,71 @@ if [[ -f dist/cli/cli.js ]]; then
     fi
 else
     skip "GOAT Flow Scan (dist/cli/cli.js not built)"
+fi
+
+# ── Coding Standards Drift Detection ─────────────────────────────────
+section "Coding Standards"
+
+# Check that every .md file referenced in backend/README.md detection table exists
+cs_dir="workflow/coding-standards"
+if [[ -f "$cs_dir/backend/README.md" ]]; then
+    backend_missing=0
+    while IFS= read -r ref_file; do
+        if [[ ! -f "$cs_dir/backend/$ref_file" ]]; then
+            fail "backend/README.md references missing file: $ref_file"
+            backend_missing=1
+        fi
+    done < <(grep -oP '(?<=\| )[a-z][-a-z]+\.md' "$cs_dir/backend/README.md" | sort -u)
+    if [[ "$backend_missing" -eq 0 ]]; then
+        pass "backend/README.md: all referenced files exist"
+    fi
+else
+    skip "backend/README.md not found"
+fi
+
+# Check that every backend .md file (except README) has ## Common Footguns and ## Primary Sources
+for bf in "$cs_dir"/backend/*.md; do
+    [[ "$(basename "$bf")" == "README.md" ]] && continue
+    bname="$(basename "$bf")"
+    if ! grep -q '^## Common Footguns' "$bf"; then
+        note "backend/$bname: missing '## Common Footguns' heading"
+    fi
+    if ! grep -q '^## Primary Sources' "$bf"; then
+        note "backend/$bname: missing '## Primary Sources' heading"
+    fi
+done
+pass "backend/*.md mandatory heading check"
+
+# Check that security/README.md referenced files exist
+if [[ -f "$cs_dir/security/README.md" ]]; then
+    sec_missing=0
+    while IFS= read -r ref_file; do
+        if [[ ! -f "$cs_dir/security/$ref_file" ]]; then
+            fail "security/README.md references missing file: $ref_file"
+            sec_missing=1
+        fi
+    done < <(grep -oP '(?<=\| )[-a-z/]+\.md' "$cs_dir/security/README.md" | sort -u)
+    if [[ "$sec_missing" -eq 0 ]]; then
+        pass "security/README.md: all referenced files exist"
+    fi
+else
+    skip "security/README.md not found"
+fi
+
+# Check devops/ files exist if devops/README.md references them
+if [[ -f "$cs_dir/devops/README.md" ]]; then
+    devops_missing=0
+    while IFS= read -r ref_file; do
+        if [[ ! -f "$cs_dir/devops/$ref_file" ]]; then
+            fail "devops/README.md references missing file: $ref_file"
+            devops_missing=1
+        fi
+    done < <(grep -oP '(?<=\| )[a-z][-a-z]+\.md' "$cs_dir/devops/README.md" | sort -u)
+    if [[ "$devops_missing" -eq 0 ]]; then
+        pass "devops/README.md: all referenced files exist"
+    fi
+else
+    skip "devops/README.md not found"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────

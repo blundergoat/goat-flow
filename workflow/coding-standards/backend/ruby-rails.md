@@ -104,8 +104,9 @@ SendConfirmationEmailJob.perform_later(order)
 
 ## Testing
 
-- Use RSpec. Prefer request specs (`spec/requests/`) over controller specs (deprecated pattern).
-- Use FactoryBot for test data. DO NOT use fixtures (static YAML) for complex test setups.
+- If the project uses RSpec (`rspec-rails` in Gemfile): prefer request specs (`spec/requests/`) over controller specs (deprecated pattern).
+- If the project uses Minitest (Rails default): follow the existing test directory structure (`test/models/`, `test/controllers/`).
+- Use FactoryBot for test data if present. DO NOT use fixtures (static YAML) for complex test setups.
 - Use `let` and `let!` for lazy/eager setup. Use `before` blocks sparingly.
 - Test behavior through the public interface, not internal implementation.
 
@@ -132,3 +133,10 @@ end
 - **Mass assignment**: Using `.permit!` or assigning `params` directly lets attackers set any attribute (e.g., `role: "admin"`).
 - **Unscoped queries leaking data**: `Model.find(params[:id])` lets any user access any record. Always scope to the current user: `current_user.orders.find(params[:id])`.
 - **Schema divergence**: Running `rails db:migrate` locally without committing `schema.rb` causes merge conflicts and environment drift. Always commit schema changes.
+
+## Primary Sources
+
+- Ruby on Rails Guides (guides.rubyonrails.org)
+- Rails API documentation (api.rubyonrails.org)
+- RSpec documentation (rspec.info)
+- Rails Security Guide (guides.rubyonrails.org/security.html)

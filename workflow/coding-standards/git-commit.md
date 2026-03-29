@@ -1,8 +1,12 @@
 # Prompt: Create git commit instructions
 
-Load this file when committing code or creating pull requests.
+> **Purpose:** Git commit messages, branch naming, PR workflow
+> **Generates:** `ai/instructions/git-commit.md` + `.github/git-commit-instructions.md`
+> **Use when:** Setting up commit/PR conventions for the project
+> **Repo inspection:** Yes — reads git log for existing commit style, branch naming, PR templates
+> **Follow-on refs:** `copilot-bridge.md` if project uses GitHub Copilot
 
-**Write to BOTH** `ai/instructions/git-commit.md` AND `.github/git-commit-instructions.md` (for tools that read from `.github/`). The `ai/instructions/` version is the full reference. The `.github/` version includes key rules inline because some tools (GitHub Copilot, Codex) may not follow references to other files.
+**Dual output:** The `ai/instructions/` version is the full reference. The `.github/` version includes key rules inline because some tools (Copilot, Codex) may not follow file references.
 
 ---
 
@@ -16,6 +20,10 @@ Write `ai/instructions/git-commit.md`:
 # Git Commit Instructions
 
 ## Commit Message Format
+
+Check `git log --oneline -20` first. If the project already uses a commit format
+(Conventional Commits, Angular, ticket prefixes, plain prose), follow that format.
+If no convention exists, use this default:
 
 ```
 <type>: <what changed and why>
@@ -60,6 +68,11 @@ refactor/extract-email-validation
 Use lowercase, hyphens between words. No issue numbers in branch names.
 
 ## PR Workflow
+
+Adapt to this project's actual workflow. Check for existing PR templates (`.github/PULL_REQUEST_TEMPLATE.md`)
+and merge strategy (`git log --merges -5` to see if the project squash-merges, rebase-merges, or merge-commits).
+
+Default if no convention exists:
 
 1. Create branch from `main`
 2. Push commits (squash related changes before review)

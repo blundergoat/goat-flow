@@ -126,3 +126,10 @@ let user = sqlx::query("SELECT * FROM users WHERE id = " + &user_id.to_string())
 - **Large futures on the stack**: Deeply nested async functions create large `Future` types that can overflow the stack. Box large futures with `Box::pin(...)`.
 - **Missing Send bound**: Futures used with `tokio::spawn` must be `Send`. Holding a non-Send type (like `Rc`) across an `.await` point breaks compilation.
 - **Silent integer overflow**: In release mode, integer overflow wraps silently. Use `checked_add` or `saturating_add` for arithmetic that could overflow.
+
+## Primary Sources
+
+- The Rust Programming Language (doc.rust-lang.org/book/)
+- Rust API Guidelines (rust-lang.github.io/api-guidelines/)
+- Rust Reference (doc.rust-lang.org/reference/)
+- Clippy Lints (rust-lang.github.io/rust-clippy/)

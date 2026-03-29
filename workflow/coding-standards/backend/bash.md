@@ -163,3 +163,10 @@ fi
 - **cd without error handling**: Running destructive commands on a separate line after `cd` — if `cd` fails, the next command runs in the wrong (current) directory. The safe forms are `cd /some/dir && rm -rf .` (stops if `cd` fails) or `cd /some/dir || exit 1` followed by the destructive command on the next line.
 - **Pipes hide exit codes**: In `cmd1 | cmd2`, only `cmd2`'s exit code is checked by default. Use `set -o pipefail` (included in `set -euo pipefail`).
 - **Subshell variable scope**: Variables set inside `while read ... done < <(cmd)` using process substitution persist. Variables set inside `cmd | while read ...` do not — the pipe creates a subshell.
+
+## Primary Sources
+
+- Bash Reference Manual (gnu.org/software/bash/manual/)
+- POSIX Shell Command Language (pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html)
+- ShellCheck Wiki (shellcheck.net/wiki/)
+- Google Shell Style Guide (google.github.io/styleguide/shellguide.html)

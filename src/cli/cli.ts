@@ -328,6 +328,10 @@ async function main(): Promise<void> {
       ? renderText(report, options.verbose)
       : renderJson(report);
     process.stdout.write(output + '\n');
+
+    // Append to local telemetry log (silent on failure)
+    const { appendScanHistory } = await import('./telemetry/scan-logger.js');
+    appendScanHistory(report, options.projectPath);
   } else {
     // setup command — generates prompts that adapt to project state
     await handleSetupCommand(options, report);

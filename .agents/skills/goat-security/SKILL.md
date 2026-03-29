@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Assess security posture with threat-model-driven, framework-aware verification"
-goat-flow-skill-version: "0.8.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # /goat-security
 
@@ -13,7 +13,7 @@ goat-flow-skill-version: "0.8.0"
 - **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** Commit or note working artifacts. Check learning loop. Suggest next skill.
+- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 Security-focused assessment. Differs from goat-audit: audit = broad quality sweep, security = threat-model-driven, OWASP-aware, framework-specific verification.
 

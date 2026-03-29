@@ -37,6 +37,9 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
+     Telemetry: if `tasks/logs/` exists, append to
+     `tasks/logs/incidents.jsonl` when VERIFY catches a failure or
+     two-corrections-rewind fires. Schema in `tasks/logs/README.md`.
    - LOG: MUST update when tripped (DoD gate #4). Reference all three
      learning loop files:
      docs/lessons.md (behavioural mistakes),
@@ -51,6 +54,9 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Skip = DoD gate #4 blocks completion. This is not optional.
      Dual-agent projects: learning loop files are shared. Read the
      current file before appending to avoid duplicating entries.
+     Incident telemetry: after writing to lessons.md or footguns.md,
+     also append to `tasks/logs/incidents.jsonl` if the directory exists.
+     Schema in `tasks/logs/README.md`.
 
 c) Autonomy Tiers: Always / Ask First / Never
    - Never tier MUST include:

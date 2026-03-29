@@ -156,7 +156,7 @@ function qualitySkill(name: string): string {
   return `---
 name: goat-${name}
 description: "${name} skill"
-goat-flow-skill-version: "0.8.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # goat-${name}
 
@@ -642,8 +642,8 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     // Skills for all agents (8 required skills)
     ...Object.fromEntries(
       ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
-        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
-        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.8.0"\n---\n# goat-${s}\n`],
+        [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.9.0"\n---\n# goat-${s}\n`],
+        [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "0.9.0"\n---\n# goat-${s}\n`],
       ]),
     ),
     // Hooks
@@ -742,7 +742,7 @@ GOOD: Inline format. Extract when second format needed
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
-    '.claude/skills/goat/SKILL.md': `---\nname: goat\ndescription: "Dispatcher"\ngoat-flow-skill-version: "0.8.0"\n---\n# /goat\n\n## How It Works\n\nRoutes to the right skill.\n\n## Constraints\n\n- MUST announce selected skill\n`,
+    '.claude/skills/goat/SKILL.md': `---\nname: goat\ndescription: "Dispatcher"\ngoat-flow-skill-version: "0.9.0"\n---\n# /goat\n\n## How It Works\n\nRoutes to the right skill.\n\n## Constraints\n\n- MUST announce selected skill\n`,
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nset -euo pipefail\nINPUT=$(cat)\nCMD=$(echo "$INPUT" | jq -r .command // empty)\ncase "$CMD" in *rm\\ -rf*|*--force*|*chmod\\ 777*) exit 2;; esac\nexit 0\n',
     '.claude/hooks/stop-lint.sh': '#!/usr/bin/env bash\necho "lint check"\nexit 0\n',
     '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nprettier --write "$1"\nexit 0\n',

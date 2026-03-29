@@ -51,7 +51,7 @@ Run audits in CI on every PR. Block merge on critical/high severity.
 | Ruby | `bundle audit check --update` | Update Gemfile.lock |
 | Rust | `cargo audit` | `cargo update` |
 | PHP | `composer audit` | `composer update` |
-| Go | `govulncheck ./...` | `go get -u` |
+| Go | `govulncheck ./...` then `go mod verify` | `go get -u` |
 | .NET | `dotnet list package --vulnerable` | Update .csproj |
 | Java | OWASP dependency-check plugin | Update pom.xml/build.gradle |
 
@@ -82,6 +82,33 @@ bundle viz                      # Ruby
 cargo tree                      # Rust
 composer show --tree            # PHP
 dotnet list package --include-transitive  # .NET
+```
+
+## Go Module Security
+
+- Run `go mod verify` in CI to check module hashes against `go.sum`. Detects tampering or download corruption.
+- For private modules, configure `GOPROXY` and `GONOSUMCHECK` explicitly. Incorrect configuration causes agents to misconfigure proxy settings or bypass the checksum database silently.
+
+```bash
+# DO — explicit private module configuration
+export GOPROXY="https://proxy.golang.org,direct"
+export GONOSUMCHECK="github.com/yourorg/*"
+export GONOSUMDB="github.com/yourorg/*"
+
+# DON'T — disable the checksum database entirely
+export GONOSUMCHECK="*"
+export GOFLAGS="-insecure"
+```
+
+## SBOM Generation
+
+For enterprise or compliance-driven projects, generate a Software Bill of Materials in CI.
+
+```bash
+# Generate SBOM (pick one per ecosystem)
+syft dir:. -o spdx-json > sbom.spdx.json        # multi-language
+trivy sbom --format spdx-json . > sbom.json       # multi-language (also scans for vulns)
+cyclonedx-gomod app > bom.xml                      # Go-specific
 ```
 
 ## Common Footguns
