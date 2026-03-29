@@ -32,7 +32,7 @@ Cold-path coding guidelines in `ai/instructions/` (conventions.md, code-review.m
 
 ## What the Scanner Caught
 
-The 84-check scanner validates GOAT Flow structure across all three agents. Results after full setup:
+The scanner (104 checks + 16 anti-patterns) validates GOAT Flow structure across all three agents. Results after full setup:
 
 - Claude Code: A (100%)
 - Codex: A (100%)

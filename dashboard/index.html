@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en" :class="darkMode ? 'dark' : ''" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GOAT Flow Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐐</text></svg>">
+  <script src="/vendor/tailwindcss-browser.js"></script>
+  <script defer src="/vendor/alpinejs.js"></script>
+  <style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
+  </style>
+  <style>
+    [x-cloak] { display: none !important; }
+    /* Dark mode fallback — if Tailwind dark: variant doesn't process, these catch it */
+    .dark { background-color: #111827; color: #f3f4f6; }
+    .dark aside, .dark .bg-white { background-color: #1f2937 !important; }
+    .dark .bg-gray-50, .dark .bg-gray-100 { background-color: #111827 !important; }
+    .dark .border-gray-200, .dark .border-gray-100 { border-color: #374151 !important; }
+    .dark .border-gray-300 { border-color: #4b5563 !important; }
+    .dark .text-gray-900 { color: #f3f4f6 !important; }
+    .dark .text-gray-700 { color: #d1d5db !important; }
+    .dark .text-gray-600 { color: #9ca3af !important; }
+    .dark .text-gray-500 { color: #9ca3af !important; }
+    .dark .text-gray-400 { color: #6b7280 !important; }
+    .dark input, .dark textarea { background-color: #111827 !important; color: #f3f4f6 !important; border-color: #4b5563 !important; }
+    .dark pre { color: #e5e7eb !important; }
+    .dark .stroke-gray-700, .dark path[stroke="#e5e7eb"] { stroke: #374151 !important; }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white !important; color: black !important; }
+      .shadow { box-shadow: none !important; border: 1px solid #e5e7eb; }
+      main { padding: 0 !important; }
+      * { break-inside: avoid; }
+      svg path { stroke-width: 4 !important; }
+      [role="tabpanel"] { page-break-before: auto; }
+      h3 { page-break-after: avoid; }
+      .rounded-full { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      span[class*="bg-"] { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    :focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-radius: 4px; }
+  </style>
+  <!-- Prevent FOUC: apply dark mode before paint -->
+  <script>
+    if (localStorage.getItem('gf-dark') === 'true' || (!localStorage.getItem('gf-dark') && matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+<!-- Screen reader live region -->
+<div aria-live="polite" aria-atomic="true" class="sr-only" x-text="srAnnouncement"></div>
+<div class="flex min-h-screen">
+
+  <!-- Mobile header -->
+  <div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between no-print">
+    <button @click="sidebarOpen = !sidebarOpen" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Toggle sidebar">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <span class="font-bold text-sm">GOAT Flow</span>
+    <span class="text-xs px-2 py-0.5 rounded-full font-bold" x-show="currentAgent"
+      :style="`background-color: ${gradeColor(currentAgent?.score?.grade)}20; color: ${gradeColor(currentAgent?.score?.grade)}`"
+      x-text="currentAgent?.score?.grade"></span>
+  </div>
+
+  <!-- Sidebar overlay (mobile) -->
+  <div x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"
+    class="md:hidden fixed inset-0 z-40 bg-black/30" x-transition.opacity></div>
+
+  <!-- Sidebar -->
+  <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+    class="no-print fixed md:relative z-50 w-64 md:w-48 lg:w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 h-full transition-transform duration-200 ease-in-out">
+    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+      <h1 class="font-bold text-lg">GOAT Flow</h1>
+      <p class="text-xs text-gray-500 dark:text-gray-400" x-text="report ? `Rubric v${report.rubricVersion}` : 'Dashboard'"></p>
+    </div>
+
+    <!-- Project Path -->
+    <div class="p-3 border-b border-gray-200 dark:border-gray-700 space-y-2">
+      <label class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Project Path</label>
+      <div class="flex gap-1">
+        <input type="text" x-model="projectPath"
+          class="flex-1 min-w-0 px-2 py-1.5 text-xs font-mono rounded-l border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-1 focus:ring-blue-500"
+          placeholder="/path/to/project" @keydown.enter="runScan()">
+        <button @click="openBrowser()"
+          class="px-2.5 py-1.5 text-xs font-medium rounded-r border border-l-0 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors whitespace-nowrap"
+          title="Browse folders">. . .</button>
+      </div>
+      <div class="flex gap-1.5">
+        <button @click="runScan()" :disabled="scanning"
+          class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait transition-colors">
+          <span x-text="scanning ? 'Scanning...' : 'Scan'"></span>
+        </button>
+        <button @click="runSetup()" :disabled="scanning"
+          class="flex-1 px-2 py-1.5 text-xs font-medium rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors">
+          Setup
+        </button>
+      </div>
+      <p x-show="toast" x-transition.opacity class="text-xs" :class="toastError ? 'text-red-500' : 'text-green-600 dark:text-green-400'" x-text="toast"></p>
+
+      <!-- Folder Browser -->
+      <div x-show="showBrowser" x-cloak class="mt-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 max-h-52 overflow-y-auto">
+        <div class="px-2 py-1.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1">
+          <button @click="browseTo(browserParent)" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">&uarr; Up</button>
+          <span class="text-xs text-gray-400 font-mono truncate flex-1" x-text="browserCurrent"></span>
+        </div>
+        <template x-for="dir in browserDirs" :key="dir.path">
+          <button @click="selectDir(dir)"
+            class="w-full text-left px-2 py-1 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1.5 transition-colors"
+            :class="dir.isProject ? 'font-medium' : 'text-gray-500 dark:text-gray-400'">
+            <span x-html="dir.isProject ? '&#128230;' : '&#128193;'"></span>
+            <span x-text="dir.name"></span>
+            <span x-show="dir.isProject" class="ml-auto text-xs text-green-600 dark:text-green-400">project</span>
+          </button>
+        </template>
+        <p x-show="browserDirs.length === 0" class="text-xs text-gray-400 p-2">No subdirectories</p>
+      </div>
+    </div>
+
+    <!-- Agent List -->
+    <nav class="flex-1 p-2 space-y-1" x-show="report">
+      <template x-for="agent in (report?.agents || [])" :key="agent.agent">
+        <button @click="selectedAgent = agent.agent; activeTab = 'overview'; sidebarOpen = false"
+          :class="selectedAgent === agent.agent ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+          <span x-text="agent.agentName"></span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+            :style="`background-color: ${gradeColor(agent.score.grade)}20; color: ${gradeColor(agent.score.grade)}`"
+            x-text="agent.score.grade === 'insufficient-data' ? '?' : agent.score.grade"></span>
+        </button>
+      </template>
+    </nav>
+
+    <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+      <button @click="darkMode = !darkMode"
+        class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+        <span x-text="darkMode ? '&#9788;' : '&#9790;'"></span>
+        <span x-text="darkMode ? 'Light mode' : 'Dark mode'"></span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-6 pt-16 md:pt-6 overflow-y-auto">
+
+    <!-- Loading Spinner -->
+    <div x-show="scanning" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/20 dark:bg-black/40">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg px-6 py-4 flex items-center gap-3">
+        <svg class="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span class="text-sm font-medium">Scanning...</span>
+      </div>
+    </div>
+
+    <!-- No Data -->
+    <div x-show="!report && !setupOutput && !scanning" class="flex items-center justify-center h-full">
+      <div class="text-center space-y-3">
+        <p class="text-4xl">&#128016;</p>
+        <h2 class="text-xl font-semibold text-gray-600 dark:text-gray-300">Ready to scan</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Click <strong>Scan</strong> to audit the project, or <strong>Setup</strong> to generate setup instructions.</p>
+      </div>
+    </div>
+
+    <!-- Setup Output -->
+    <div x-show="setupOutput" x-cloak class="max-w-4xl mx-auto space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-2xl font-bold">Setup Instructions</h2>
+        <div class="flex items-center gap-3">
+          <button @click="copyText(setupOutput)"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <span x-text="copyLabel">Copy</span>
+          </button>
+          <button @click="setupOutput = ''" class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Back to scan</button>
+        </div>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+        <pre class="text-sm font-mono whitespace-pre-wrap text-gray-800 dark:text-gray-200 leading-relaxed" x-text="setupOutput"></pre>
+      </div>
+    </div>
+
+    <!-- Agent Dashboard -->
+    <template x-if="currentAgent && !setupOutput">
+      <div class="max-w-5xl mx-auto space-y-6">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-bold" x-text="currentAgent.agentName"></h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              <span x-text="`${report.meta.checkCount} checks`"></span> &middot;
+              <span x-text="`${report.meta.antiPatternCount} anti-patterns`"></span> &middot;
+              <span x-text="report.stack.languages.join(', ')"></span>
+            </p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-gray-500 dark:text-gray-400 font-mono" x-text="report.target || ''"></p>
+            <p class="text-xs text-gray-400" x-text="report.meta.timestamp ? new Date(report.meta.timestamp).toLocaleString() : ''"></p>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="border-b border-gray-200 dark:border-gray-700 no-print">
+          <nav class="flex gap-6" role="tablist" aria-label="Dashboard views">
+            <template x-for="tab in tabs" :key="tab.id">
+              <button @click="activeTab = tab.id" role="tab" :aria-selected="activeTab === tab.id"
+                :class="activeTab === tab.id ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                class="pb-3 text-sm font-medium border-b-2 transition-colors"
+                x-show="tab.show !== false">
+                <span x-text="tab.label"></span>
+                <span x-show="tab.badge > 0" class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" x-text="tab.badge"></span>
+              </button>
+            </template>
+          </nav>
+        </div>
+
+        <!-- ===== OVERVIEW TAB ===== -->
+        <div x-show="activeTab === 'overview'" role="tabpanel" aria-label="Overview" class="space-y-6">
+
+          <!-- Grade + Tiers -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex flex-col items-center justify-center">
+              <div class="relative w-32 h-32">
+                <svg viewBox="0 0 36 36" class="w-32 h-32">
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e7eb" stroke-width="3" class="dark:stroke-gray-700"/>
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" :stroke="gradeColor(currentAgent.score.grade)" stroke-width="3" :stroke-dasharray="`${currentAgent.score.percentage}, 100`" stroke-linecap="round"/>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <template x-if="currentAgent.score.grade !== 'insufficient-data'">
+                    <span class="text-4xl font-black" :style="`color: ${gradeColor(currentAgent.score.grade)}`" x-text="currentAgent.score.grade"></span>
+                  </template>
+                  <template x-if="currentAgent.score.grade === 'insufficient-data'">
+                    <span class="text-lg font-bold text-gray-400">N/D</span>
+                  </template>
+                  <span class="text-sm text-gray-500 dark:text-gray-400" x-text="`${currentAgent.score.percentage}%`"></span>
+                </div>
+              </div>
+              <p class="mt-2 text-xs text-gray-400" x-text="`v${report.packageVersion}`"></p>
+            </div>
+            <div class="md:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow p-6 space-y-4">
+              <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tier Breakdown</h3>
+              <template x-for="tier in ['foundation', 'standard', 'full']" :key="tier">
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span class="capitalize font-medium" x-text="tier"></span>
+                    <span class="text-gray-500 dark:text-gray-400" x-text="`${currentAgent.score.tiers[tier].earned}/${currentAgent.score.tiers[tier].available} (${currentAgent.score.tiers[tier].percentage}%)`"></span>
+                  </div>
+                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div class="h-2.5 rounded-full transition-all duration-500" :style="`width: ${currentAgent.score.tiers[tier].percentage}%; background-color: ${currentAgent.score.tiers[tier].percentage === 100 ? '#10b981' : currentAgent.score.tiers[tier].percentage >= 75 ? '#3b82f6' : currentAgent.score.tiers[tier].percentage >= 50 ? '#f59e0b' : '#ef4444'}`"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- AP Deductions -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6" x-show="triggeredAPs.length > 0">
+            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Anti-Pattern Deductions <span class="text-red-500 ml-1" x-text="`(${currentAgent.score.deductions} pts)`"></span></h3>
+            <div class="space-y-2">
+              <template x-for="ap in triggeredAPs" :key="ap.id">
+                <div class="flex items-start gap-3 text-sm">
+                  <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" x-text="ap.deduction"></span>
+                  <div>
+                    <span class="font-medium" x-text="`${ap.id}: ${ap.name}`"></span>
+                    <p class="text-gray-500 dark:text-gray-400 mt-0.5" x-text="ap.message" x-show="ap.evidence"></p>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Recommendations -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6" x-show="currentAgent.recommendations.length > 0">
+            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Recommendations <span class="text-gray-400 ml-1" x-text="`(${currentAgent.recommendations.length})`"></span></h3>
+            <div class="space-y-2">
+              <template x-for="rec in currentAgent.recommendations.slice(0, 10)" :key="rec.key">
+                <div class="flex items-start gap-3 text-sm">
+                  <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold"
+                    :class="{'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': rec.priority==='critical', 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300': rec.priority==='high', 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': rec.priority==='medium', 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': rec.priority==='low'}"
+                    x-text="rec.priority.toUpperCase()"></span>
+                  <div>
+                    <span class="font-medium" x-text="`${rec.checkId}: ${rec.category}`"></span>
+                    <p class="text-gray-500 dark:text-gray-400 mt-0.5" x-text="rec.action"></p>
+                  </div>
+                </div>
+              </template>
+              <p x-show="currentAgent.recommendations.length > 10" class="text-xs text-gray-400 mt-2" x-text="`+ ${currentAgent.recommendations.length - 10} more`"></p>
+            </div>
+          </div>
+
+          <!-- All Pass -->
+          <div x-show="currentAgent.recommendations.length === 0 && triggeredAPs.length === 0"
+            class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-8 text-center">
+            <p class="text-2xl">&#10003;</p>
+            <p class="text-emerald-700 dark:text-emerald-300 font-semibold mt-2">All checks pass. Nothing to fix.</p>
+          </div>
+        </div>
+
+        <!-- ===== CHECKS TAB ===== -->
+        <div x-show="activeTab === 'checks'" role="tabpanel" aria-label="Checks" class="space-y-4">
+
+          <!-- Filters -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 space-y-3 no-print">
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- Tier filter -->
+              <template x-for="t in ['all', 'foundation', 'standard', 'full']" :key="t">
+                <button @click="filterTier = t"
+                  :class="filterTier === t ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
+                  class="px-2.5 py-1 text-xs font-medium rounded capitalize transition-colors" x-text="t"></button>
+              </template>
+              <span class="text-gray-300 dark:text-gray-600">|</span>
+              <!-- Status filter -->
+              <template x-for="s in ['fail', 'partial', 'pass', 'na']" :key="s">
+                <button @click="toggleStatus(s)"
+                  :class="filterStatuses.includes(s) ? statusBtnClass(s) : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'"
+                  class="px-2.5 py-1 text-xs font-medium rounded transition-colors" x-text="s.toUpperCase()"></button>
+              </template>
+              <span class="text-gray-300 dark:text-gray-600">|</span>
+              <button @click="filterStatuses = ['fail', 'partial']"
+                class="px-2.5 py-1 text-xs font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">Failures only</button>
+              <button @click="filterStatuses = ['fail', 'partial', 'pass', 'na']"
+                class="px-2.5 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Show all</button>
+            </div>
+            <div class="flex items-center gap-3">
+              <input type="text" x-model="searchQuery" placeholder="Search checks by ID, name, or evidence..."
+                class="flex-1 px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-1 focus:ring-blue-500">
+              <span class="text-xs text-gray-400 whitespace-nowrap" x-text="`${filteredChecks.length} of ${currentAgent.checks.length} checks`"></span>
+            </div>
+          </div>
+
+          <!-- Check List by Tier → Category -->
+          <template x-for="tier in checkTiers" :key="tier.name">
+            <div x-show="tier.checks.length > 0" class="space-y-1">
+              <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 pt-2" x-text="`${tier.name} (${tier.earned}/${tier.available})`"></h3>
+
+              <template x-for="cat in tier.categories" :key="cat.name">
+                <div class="space-y-0.5">
+                  <p class="text-xs font-medium text-gray-500 dark:text-gray-400 px-3 pt-2" x-text="cat.name"></p>
+
+                  <template x-for="check in cat.checks" :key="check.id">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                      <!-- Check Row -->
+                      <button @click="toggleExpand(check.id)" :aria-expanded="expandedChecks.includes(check.id)"
+                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                        <!-- Status Badge -->
+                        <span class="shrink-0 w-14 text-center inline-flex items-center justify-center px-1.5 py-0.5 rounded text-xs font-bold"
+                          :class="{'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300': check.status==='pass', 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': check.status==='partial', 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': check.status==='fail', 'bg-gray-100 dark:bg-gray-700 text-gray-400': check.status==='na'}"
+                          x-text="check.status.toUpperCase()"></span>
+                        <!-- ID + Name -->
+                        <span class="text-xs text-gray-400 w-14 shrink-0 font-mono" x-text="check.id"></span>
+                        <span class="flex-1 truncate" x-text="check.name"></span>
+                        <!-- Points -->
+                        <span class="text-xs text-gray-400 shrink-0" x-text="`${check.points}/${check.maxPoints}`"></span>
+                        <!-- Expand arrow -->
+                        <span class="text-gray-400 text-xs shrink-0 transition-transform" :class="expandedChecks.includes(check.id) ? 'rotate-90' : ''">&rsaquo;</span>
+                      </button>
+
+                      <!-- Expanded Detail -->
+                      <div x-show="expandedChecks.includes(check.id)" x-cloak
+                        class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                        <p class="text-sm text-gray-600 dark:text-gray-300" x-text="check.message"></p>
+                        <p x-show="check.evidence" class="text-xs font-mono bg-gray-50 dark:bg-gray-900 rounded p-2 text-gray-500 dark:text-gray-400 break-all" x-text="check.evidence"></p>
+                        <div class="flex items-center gap-3 text-xs text-gray-400">
+                          <span x-text="`Confidence: ${check.confidence}`"></span>
+                          <span x-show="check.recommendationKey" x-text="`Key: ${check.recommendationKey}`"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- Anti-Patterns Section -->
+          <div class="space-y-1 pt-2">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Anti-Patterns</h3>
+            <template x-for="ap in currentAgent.antiPatterns" :key="ap.id">
+              <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                <button @click="toggleExpand('ap-' + ap.id)"
+                  class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                  <span class="shrink-0 w-14 text-center inline-flex items-center justify-center px-1.5 py-0.5 rounded text-xs font-bold"
+                    :class="ap.triggered ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'"
+                    x-text="ap.triggered ? ap.deduction : 'OK'"></span>
+                  <span class="text-xs text-gray-400 w-14 shrink-0 font-mono" x-text="ap.id"></span>
+                  <span class="flex-1 truncate" x-text="ap.name"></span>
+                  <span class="text-gray-400 text-xs shrink-0 transition-transform" :class="expandedChecks.includes('ap-' + ap.id) ? 'rotate-90' : ''">&rsaquo;</span>
+                </button>
+                <div x-show="expandedChecks.includes('ap-' + ap.id)" x-cloak
+                  class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                  <p class="text-sm text-gray-600 dark:text-gray-300" x-text="ap.message"></p>
+                  <p x-show="ap.evidence" class="text-xs font-mono bg-gray-50 dark:bg-gray-900 rounded p-2 text-gray-500 dark:text-gray-400 break-all" x-text="ap.evidence"></p>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- ===== COMPARE TAB ===== -->
+        <div x-show="activeTab === 'compare'" role="tabpanel" aria-label="Compare" class="space-y-4">
+
+          <!-- Grade Comparison -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-200 dark:border-gray-700">
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase"></th>
+                  <template x-for="a in report.agents" :key="a.agent">
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase" x-text="a.agentName"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-gray-100 dark:border-gray-700">
+                  <td class="px-4 py-3 font-medium">Grade</td>
+                  <template x-for="a in report.agents" :key="'grade-'+a.agent">
+                    <td class="px-4 py-3 text-center">
+                      <span class="text-2xl font-black" :style="`color: ${gradeColor(a.score.grade)}`" x-text="a.score.grade"></span>
+                      <span class="text-xs text-gray-400 ml-1" x-text="`${a.score.percentage}%`"></span>
+                    </td>
+                  </template>
+                </tr>
+                <template x-for="tier in ['foundation', 'standard', 'full']" :key="'cmp-'+tier">
+                  <tr class="border-b border-gray-100 dark:border-gray-700">
+                    <td class="px-4 py-2 capitalize text-gray-600 dark:text-gray-300" x-text="tier"></td>
+                    <template x-for="a in report.agents" :key="'cmp-'+tier+'-'+a.agent">
+                      <td class="px-4 py-2 text-center text-xs">
+                        <span x-text="`${a.score.tiers[tier].earned}/${a.score.tiers[tier].available}`"></span>
+                        <span class="ml-1" :class="a.score.tiers[tier].percentage === 100 ? 'text-green-500' : a.score.tiers[tier].percentage === bestTierPct(tier) ? 'text-blue-500' : 'text-gray-400'"
+                          x-text="`(${a.score.tiers[tier].percentage}%)`"></span>
+                        <span class="ml-0.5" x-text="a.score.tiers[tier].percentage === bestTierPct(tier) ? (a.score.tiers[tier].percentage === 100 ? '=' : '&#8593;') : '&#8595;'"
+                          :class="a.score.tiers[tier].percentage === bestTierPct(tier) ? 'text-green-500' : 'text-red-400'"></span>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+                <tr>
+                  <td class="px-4 py-2 font-medium text-gray-600 dark:text-gray-300">Deductions</td>
+                  <template x-for="a in report.agents" :key="'ded-'+a.agent">
+                    <td class="px-4 py-2 text-center text-xs" :class="a.score.deductions < 0 ? 'text-red-500 font-bold' : 'text-green-500'" x-text="a.score.deductions"></td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Check Divergences -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                Check Divergences
+                <span class="text-gray-400 ml-1" x-text="`(${divergentChecks.length})`"></span>
+              </h3>
+              <label class="flex items-center gap-2 text-xs text-gray-500">
+                <input type="checkbox" x-model="showDivergencesOnly" class="rounded">
+                Divergences only
+              </label>
+            </div>
+            <div class="space-y-0.5 max-h-96 overflow-y-auto">
+              <template x-for="check in (showDivergencesOnly ? divergentChecks : allCompareChecks)" :key="'cmp-chk-'+check.id">
+                <div class="rounded" :class="check.divergent ? 'bg-amber-50 dark:bg-amber-900/10' : ''">
+                  <button @click="check.divergent && toggleExpand('cmp-'+check.id)"
+                    class="w-full flex items-center gap-2 px-2 py-1 text-xs text-left"
+                    :class="check.divergent ? 'cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/20' : 'cursor-default'">
+                    <span class="w-14 shrink-0 font-mono text-gray-400" x-text="check.id"></span>
+                    <span class="flex-1 truncate text-gray-600 dark:text-gray-300" x-text="check.name"></span>
+                    <template x-for="a in report.agents" :key="'cmp-chk-'+check.id+'-'+a.agent">
+                      <span class="w-14 text-center shrink-0 px-1 py-0.5 rounded text-xs font-bold"
+                        :class="{'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300': check.statuses[a.agent]==='pass', 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': check.statuses[a.agent]==='partial', 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': check.statuses[a.agent]==='fail', 'bg-gray-100 dark:bg-gray-700 text-gray-400': check.statuses[a.agent]==='na'}"
+                        x-text="(check.statuses[a.agent] || '-').toUpperCase()"></span>
+                    </template>
+                    <span x-show="check.divergent" class="text-gray-400 text-xs shrink-0 transition-transform" :class="expandedChecks.includes('cmp-'+check.id) ? 'rotate-90' : ''">&rsaquo;</span>
+                  </button>
+                  <!-- Side-by-side evidence -->
+                  <div x-show="expandedChecks.includes('cmp-'+check.id)" x-cloak class="px-2 pb-2 grid gap-2" :style="`grid-template-columns: repeat(${report.agents.length}, 1fr)`">
+                    <template x-for="a in report.agents" :key="'cmp-ev-'+check.id+'-'+a.agent">
+                      <div class="bg-white dark:bg-gray-800 rounded p-2 border border-gray-200 dark:border-gray-700">
+                        <p class="text-xs font-semibold text-gray-500 mb-1" x-text="a.agentName"></p>
+                        <p class="text-xs text-gray-600 dark:text-gray-300" x-text="getCheckEvidence(a, check.id).message"></p>
+                        <p x-show="getCheckEvidence(a, check.id).evidence" class="text-xs font-mono mt-1 text-gray-400 break-all" x-text="getCheckEvidence(a, check.id).evidence"></p>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <p x-show="showDivergencesOnly && divergentChecks.length === 0" class="text-xs text-gray-400 p-2">No divergences — all agents agree on every check.</p>
+            </div>
+          </div>
+
+          <!-- AP Comparison -->
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4" x-show="report.agents.length > 1">
+            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Anti-Pattern Comparison</h3>
+            <div class="space-y-1">
+              <template x-for="ap in allCompareAPs" :key="'cmp-ap-'+ap.id">
+                <div class="flex items-center gap-2 px-2 py-1 text-xs">
+                  <span class="w-14 shrink-0 font-mono text-gray-400" x-text="ap.id"></span>
+                  <span class="flex-1 truncate text-gray-600 dark:text-gray-300" x-text="ap.name"></span>
+                  <template x-for="a in report.agents" :key="'cmp-ap-'+ap.id+'-'+a.agent">
+                    <span class="w-14 text-center shrink-0 px-1 py-0.5 rounded text-xs font-bold"
+                      :class="ap.triggered[a.agent] ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'"
+                      x-text="ap.triggered[a.agent] ? ap.deductions[a.agent] : 'OK'"></span>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== FIXES TAB ===== -->
+        <div x-show="activeTab === 'fixes'" role="tabpanel" aria-label="Fixes" class="space-y-4">
+
+          <div x-show="currentAgent.recommendations.length === 0" class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-8 text-center">
+            <p class="text-emerald-700 dark:text-emerald-300 font-semibold">No recommendations for this agent. All checks pass.</p>
+          </div>
+
+          <div x-show="currentAgent.recommendations.length > 0" class="space-y-4">
+            <!-- Actions bar -->
+            <div class="flex items-center gap-3 no-print">
+              <button @click="selectAllFixes()" class="px-2.5 py-1 text-xs font-medium rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Select all</button>
+              <button @click="selectCriticalFixes()" class="px-2.5 py-1 text-xs font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">Select critical</button>
+              <button @click="selectedFixes = []" class="px-2.5 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Deselect all</button>
+              <span class="text-xs text-gray-400" x-text="`${selectedFixes.length} selected`"></span>
+              <div class="ml-auto flex gap-2">
+                <button @click="copyFixes()" :disabled="selectedFixes.length === 0"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                  <span x-text="fixCopyLabel">Copy fixes</span>
+                </button>
+                <button @click="copyCLICommand()"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                  Copy CLI command
+                </button>
+                <button @click="downloadFixes()" :disabled="selectedFixes.length === 0"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors">
+                  Download .md
+                </button>
+              </div>
+            </div>
+
+            <!-- Triggered Anti-Patterns (always shown, not deselectable) -->
+            <div x-show="triggeredAPs.length > 0" class="space-y-1">
+              <h4 class="text-xs font-semibold text-red-500 uppercase tracking-wide px-1">Blocking: Anti-Pattern Fixes</h4>
+              <template x-for="ap in triggeredAPs" :key="'fix-ap-'+ap.id">
+                <div class="flex items-start gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-800">
+                  <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" x-text="ap.deduction"></span>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium" x-text="`${ap.id}: ${ap.name}`"></span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5" x-text="ap.message"></p>
+                    <p x-show="ap.evidence" class="text-xs font-mono mt-1 text-gray-400 break-all" x-text="ap.evidence"></p>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- Recommendation list -->
+            <div class="space-y-1">
+              <h4 x-show="triggeredAPs.length > 0" class="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1 pt-2">Recommendations</h4>
+              <template x-for="rec in currentAgent.recommendations" :key="'fix-'+rec.key">
+                <label class="flex items-start gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                  <input type="checkbox" :value="rec.key" x-model="selectedFixes" class="mt-1 rounded">
+                  <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold"
+                    :class="{'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': rec.priority==='critical', 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300': rec.priority==='high', 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': rec.priority==='medium', 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': rec.priority==='low'}"
+                    x-text="rec.priority.toUpperCase()"></span>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium" x-text="`${rec.checkId}: ${rec.category}`"></span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5" x-text="rec.action"></p>
+                  </div>
+                </label>
+              </template>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </template>
+
+    <!-- No Agents -->
+    <div x-show="report && report.agents.length === 0 && !setupOutput" class="flex items-center justify-center h-full">
+      <div class="text-center space-y-2">
+        <p class="text-xl text-gray-400">No agents detected</p>
+        <p class="text-sm text-gray-500">Click <strong>Setup</strong> to generate setup instructions</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function app() {
+  const STATUS_ORDER = { fail: 0, partial: 1, pass: 2, na: 3 };
+  return {
+    report: window.__GOAT_FLOW_REPORT__ || null,
+    selectedAgent: window.__GOAT_FLOW_REPORT__?.agents?.[0]?.agent || null,
+    projectPath: window.__GOAT_FLOW_DEFAULT_PATH__ || '.',
+    darkMode: localStorage.getItem('gf-dark') === 'true' || (!localStorage.getItem('gf-dark') && window.matchMedia('(prefers-color-scheme: dark)').matches),
+    scanning: false, toast: '', toastError: false, setupOutput: '', copyLabel: 'Copy', sidebarOpen: false, srAnnouncement: '',
+    showBrowser: false, browserCurrent: '', browserParent: '', browserDirs: [],
+    // Tabs + filters
+    activeTab: 'overview',
+    filterTier: 'all',
+    filterStatuses: ['fail', 'partial', 'pass', 'na'],
+    searchQuery: '',
+    expandedChecks: [],
+    // M05.3: compare
+    showDivergencesOnly: false,
+    // M05.4: fixes
+    selectedFixes: [],
+    fixCopyLabel: 'Copy fixes',
+
+    init() {
+      this.$watch('darkMode', v => localStorage.setItem('gf-dark', v));
+      if (location.protocol === 'http:' || location.protocol === 'https:') this.runScan();
+      // Global keyboard shortcuts
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { this.sidebarOpen = false; this.showBrowser = false; }
+        if (e.key === '1' && e.altKey) this.activeTab = 'overview';
+        if (e.key === '2' && e.altKey) this.activeTab = 'checks';
+        if (e.key === '3' && e.altKey && (this.report?.agents?.length || 0) > 1) this.activeTab = 'compare';
+        if (e.key === '4' && e.altKey) this.activeTab = 'fixes';
+        // Arrow keys in check list
+        if (this.activeTab === 'checks' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+          const btns = [...document.querySelectorAll('[aria-expanded]')];
+          if (btns.length === 0) return;
+          const idx = btns.indexOf(document.activeElement);
+          const next = e.key === 'ArrowDown' ? Math.min(idx + 1, btns.length - 1) : Math.max(idx - 1, 0);
+          btns[next]?.focus();
+          e.preventDefault();
+        }
+      });
+    },
+
+    // --- API calls ---
+    async runScan() {
+      this.scanning = true; this.toast = ''; this.setupOutput = '';
+      try {
+        const res = await fetch(`/api/scan?path=${encodeURIComponent(this.projectPath)}`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        this.report = data;
+        this.selectedAgent = data.agents?.[0]?.agent || null;
+        this.expandedChecks = [];
+        this.showToast(`Scanned: ${data.target}`, false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.showToast(msg.includes('Failed to fetch') ? 'Server not running. Start with: goat-flow dashboard .' : msg, true);
+      }
+      this.scanning = false;
+    },
+    async runSetup() {
+      this.scanning = true; this.toast = '';
+      try {
+        const agent = this.selectedAgent || 'claude';
+        const res = await fetch(`/api/setup?path=${encodeURIComponent(this.projectPath)}&agent=${agent}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        this.setupOutput = data.output;
+        this.showToast('Setup generated', false);
+      } catch (err) { this.showToast(err.message || 'Setup failed', true); }
+      this.scanning = false;
+    },
+
+    // --- Folder browser ---
+    async openBrowser() { this.showBrowser = !this.showBrowser; if (this.showBrowser) await this.browseTo(this.projectPath); },
+    async browseTo(path) {
+      try {
+        const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+        const data = await res.json();
+        if (data.error) { this.showToast(data.error, true); return; }
+        this.browserCurrent = data.current; this.browserParent = data.parent; this.browserDirs = data.dirs;
+      } catch { this.showToast('Browse failed', true); }
+    },
+    selectDir(dir) {
+      if (dir.isProject) { this.projectPath = dir.path; this.showBrowser = false; this.runScan(); }
+      else this.browseTo(dir.path);
+    },
+
+    // --- Clipboard ---
+    copyText(text) {
+      const el = document.createElement('textarea'); el.value = text; el.style.position = 'fixed'; el.style.opacity = '0';
+      document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+      this.copyLabel = 'Copied!'; setTimeout(() => this.copyLabel = 'Copy', 2000);
+    },
+    showToast(msg, isError) { this.toast = msg; this.toastError = isError; setTimeout(() => this.toast = '', 4000); },
+
+    // --- Check filtering ---
+    toggleStatus(s) {
+      if (this.filterStatuses.includes(s)) this.filterStatuses = this.filterStatuses.filter(x => x !== s);
+      else this.filterStatuses = [...this.filterStatuses, s];
+      this.$nextTick(() => { this.srAnnouncement = `Showing ${this.filteredChecks.length} of ${this.currentAgent?.checks?.length || 0} checks`; });
+    },
+    toggleExpand(id) {
+      if (this.expandedChecks.includes(id)) this.expandedChecks = this.expandedChecks.filter(x => x !== id);
+      else this.expandedChecks = [...this.expandedChecks, id];
+    },
+    statusBtnClass(s) {
+      return { fail: 'bg-red-600 text-white', partial: 'bg-amber-500 text-white', pass: 'bg-green-600 text-white', na: 'bg-gray-500 text-white' }[s];
+    },
+
+    // --- Computed ---
+    get currentAgent() { return this.report?.agents?.find(a => a.agent === this.selectedAgent) || null; },
+    get triggeredAPs() { return this.currentAgent?.antiPatterns?.filter(ap => ap.triggered) || []; },
+    get failCount() { return this.currentAgent?.checks?.filter(c => c.status === 'fail' || c.status === 'partial').length || 0; },
+
+    get filteredChecks() {
+      if (!this.currentAgent) return [];
+      let checks = this.currentAgent.checks;
+      if (this.filterTier !== 'all') checks = checks.filter(c => c.tier === this.filterTier);
+      checks = checks.filter(c => this.filterStatuses.includes(c.status));
+      if (this.searchQuery.trim()) {
+        const q = this.searchQuery.toLowerCase();
+        checks = checks.filter(c => c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.evidence || '').toLowerCase().includes(q) || (c.message || '').toLowerCase().includes(q));
+      }
+      return checks;
+    },
+
+    get checkTiers() {
+      const tiers = ['foundation', 'standard', 'full'];
+      return tiers.map(t => {
+        const tierChecks = this.filteredChecks.filter(c => c.tier === t);
+        // Group by category
+        const catMap = {};
+        for (const c of tierChecks) {
+          if (!catMap[c.category]) catMap[c.category] = [];
+          catMap[c.category].push(c);
+        }
+        // Sort within each category by status
+        const categories = Object.entries(catMap).map(([name, checks]) => ({
+          name,
+          checks: checks.sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
+        }));
+        // Tier totals
+        const allTierChecks = this.currentAgent?.checks?.filter(c => c.tier === t) || [];
+        const earned = allTierChecks.reduce((s, c) => s + c.points, 0);
+        const available = allTierChecks.reduce((s, c) => s + c.maxPoints, 0);
+        return { name: t, checks: tierChecks, categories, earned, available };
+      });
+    },
+
+    // --- Tabs ---
+    get tabs() {
+      return [
+        { id: 'overview', label: 'Overview', badge: 0 },
+        { id: 'checks', label: 'Checks', badge: this.failCount },
+        { id: 'compare', label: 'Compare', badge: 0, show: (this.report?.agents?.length || 0) > 1 },
+        { id: 'fixes', label: 'Fixes', badge: this.currentAgent?.recommendations?.length || 0 },
+      ];
+    },
+
+    // --- M05.3: Compare ---
+    bestTierPct(tier) {
+      return Math.max(...(this.report?.agents || []).map(a => a.score.tiers[tier]?.percentage || 0));
+    },
+
+    get allCompareChecks() {
+      if (!this.report || this.report.agents.length < 2) return [];
+      const first = this.report.agents[0];
+      return first.checks.map(c => {
+        const statuses = {};
+        for (const a of this.report.agents) {
+          const match = a.checks.find(x => x.id === c.id);
+          statuses[a.agent] = match?.status || 'na';
+        }
+        const vals = Object.values(statuses);
+        const divergent = new Set(vals).size > 1;
+        return { id: c.id, name: c.name, statuses, divergent };
+      });
+    },
+
+    get divergentChecks() { return this.allCompareChecks.filter(c => c.divergent); },
+
+    get allCompareAPs() {
+      if (!this.report || this.report.agents.length < 2) return [];
+      const apIds = [...new Set(this.report.agents.flatMap(a => a.antiPatterns.map(ap => ap.id)))];
+      return apIds.map(id => {
+        const triggered = {}; const deductions = {};
+        let name = '';
+        for (const a of this.report.agents) {
+          const ap = a.antiPatterns.find(x => x.id === id);
+          triggered[a.agent] = ap?.triggered || false;
+          deductions[a.agent] = ap?.deduction || 0;
+          if (ap) name = ap.name;
+        }
+        return { id, name, triggered, deductions };
+      });
+    },
+
+    // --- M05.4: Fixes ---
+    selectAllFixes() { this.selectedFixes = (this.currentAgent?.recommendations || []).map(r => r.key); },
+    selectCriticalFixes() {
+      this.selectedFixes = (this.currentAgent?.recommendations || [])
+        .filter(r => r.priority === 'critical' || r.priority === 'high').map(r => r.key);
+    },
+    copyFixes() {
+      const lines = [`# Fix list for ${this.currentAgent?.agentName} (${this.report?.target || ''})`, ''];
+      // Always include triggered APs first
+      const aps = this.triggeredAPs;
+      if (aps.length > 0) {
+        lines.push('## Blocking: Anti-Pattern Fixes', '');
+        aps.forEach(ap => { lines.push(`- **${ap.id}** (${ap.deduction} pts): ${ap.name}`); lines.push(`  ${ap.message}`); lines.push(''); });
+      }
+      // Then selected recommendations
+      const recs = (this.currentAgent?.recommendations || []).filter(r => this.selectedFixes.includes(r.key));
+      if (recs.length > 0) {
+        lines.push('## Recommendations', '');
+        recs.forEach((r, i) => { lines.push(`${i + 1}. **[${r.priority.toUpperCase()}]** ${r.checkId}: ${r.category}`); lines.push(`   ${r.action}`); lines.push(''); });
+      }
+      lines.push(`Verify: \`goat-flow scan ${this.projectPath} --agent ${this.selectedAgent}\``);
+      this.copyText(lines.join('\n'));
+      this.fixCopyLabel = 'Copied!'; setTimeout(() => this.fixCopyLabel = 'Copy fixes', 2000);
+    },
+    copyCLICommand() {
+      this.copyText(`goat-flow setup ${this.projectPath} --agent ${this.selectedAgent || 'claude'}`);
+      this.showToast('CLI command copied', false);
+    },
+    downloadFixes() {
+      // Reuse copyFixes logic but download instead
+      const lines = [`# Fix list for ${this.currentAgent?.agentName} (${this.report?.target || ''})`, ''];
+      const aps = this.triggeredAPs;
+      if (aps.length > 0) { lines.push('## Blocking: Anti-Pattern Fixes', ''); aps.forEach(ap => { lines.push(`- **${ap.id}** (${ap.deduction} pts): ${ap.name}`); lines.push(`  ${ap.message}`); lines.push(''); }); }
+      const recs = (this.currentAgent?.recommendations || []).filter(r => this.selectedFixes.includes(r.key));
+      if (recs.length > 0) { lines.push('## Recommendations', ''); recs.forEach((r, i) => { lines.push(`${i + 1}. **[${r.priority.toUpperCase()}]** ${r.checkId}: ${r.category}`); lines.push(`   ${r.action}`); lines.push(''); }); }
+      lines.push(`Verify: \`goat-flow scan ${this.projectPath} --agent ${this.selectedAgent}\``);
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `goat-flow-fixes-${this.selectedAgent || 'all'}.md`; a.click(); URL.revokeObjectURL(a.href);
+    },
+    getCheckEvidence(agent, checkId) {
+      const c = agent.checks.find(x => x.id === checkId);
+      return c ? { message: c.message || '', evidence: c.evidence || '' } : { message: 'N/A', evidence: '' };
+    },
+
+    gradeColor(grade) {
+      return { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#f97316', F: '#ef4444', 'insufficient-data': '#94a3b8' }[grade] || '#94a3b8';
+    }
+  };
+}
+</script>
+</body>
+</html>

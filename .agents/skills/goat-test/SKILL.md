@@ -1,7 +1,7 @@
 ---
 name: goat-test
-description: "Generate testing instructions across three verification tracks"
-goat-flow-skill-version: "0.9.0"
+description: "3-phase test plan generation with automated commands, AI verification prompts, and human testing checklists. Doer-verifier principle."
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-test
 
@@ -10,208 +10,189 @@ goat-flow-skill-version: "0.9.0"
 - **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
-- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Bare invocation with no arguments = zero context = ask structural questions and WAIT. Auto-detect pre-fills — it does not replace confirmation.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
 - **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 ## When to Use
 
-After a coding milestone or every 30-60 minutes of agent work. Generates testing instructions for three parallel verification tracks based on the doer-verifier principle: the coding agent MUST NOT verify its own work.
+Use after a coding milestone or every 30-60 minutes of implementation to
+generate testing instructions. Testing after 30-60 min keeps the blast radius
+narrow enough that failures point to a specific change.
 
-Generate testing instructions for three parallel verification tracks. The coding agent MUST NOT verify its own work (doer-verifier principle).
+The coding agent MUST NOT verify its own work. This skill generates instructions
+for verification — it does not run tests itself.
 
-Read `workflow/playbooks/testing/testing-workflow.md` for the full testing methodology.
+**NOT this skill:**
+- Running tests → just run them directly
+- Debugging a test failure → /goat-debug
+- Reviewing code quality → /goat-review
+- Understanding test infrastructure → /goat-investigate
 
----
+**Quick path:** For changes touching ≤2 files with no interface changes:
+Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
 
 ## Step 0 — Gather Context
 
-Ask the user before generating anything:
+**Structural questions (always ask or confirm):**
+1. What changed? (feature, fix, refactor — auto-detect from `git diff --stat`)
+2. What's the risk level? (Hotfix / Standard / System)
 
-1. **What changed?** (describe the changes, or "check git diff")
-2. **Which milestone/task?** (so Track 2 prompts reference the right scope)
-3. **Any areas of concern?** (known fragile areas, edge cases the user is worried about)
-4. **What's the project's test stack?** (test command, lint command, E2E setup — or "check the instruction file")
+**Auto-detect:** Read `git diff --stat` and present: "[N] files changed in [areas].
+<!-- ADAPT: "Test stack: [detected from package.json/Makefile/etc.]" -->
+Correct?"
 
-Do NOT generate a testing plan until the user has answered. If the user says "just test everything", still ask what changed — generic testing plans are the failure mode this skill prevents.
+**Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there — not textbook examples.
 
----
+**Before proceeding:** present what you know (what changed, risk level, test stack) and what you still need. Wait for the user to confirm before entering Phase 0.
 
-## Track 0 — What Changed
+## Phase 0 — Change Manifest
 
-Summarize the changes being tested: files modified, components affected, risk areas. This gives context before generating test instructions.
+Summarize what changed using a structured table:
 
-- List every file modified with a one-line summary of the change
-- Identify which components or modules are affected
-- Flag risk areas: new dependencies, changed interfaces, security-sensitive code
-- Note the verification ratio (see below) based on the autonomy tier of the changes
+| File | Component | Change Type | Risk | Verification Ratio |
+|------|-----------|-------------|------|-------------------|
+<!-- fill from git diff -->
 
-This section is the foundation — Tracks 1-3 all reference it.
+**Verification ratio** by autonomy tier:
+- Never/Ask First changes → 1:1 (every changed behavior gets a check)
+- Always changes → 1:3 (critical paths only)
 
----
+State the ratio at the top of the output.
 
-## Track 1 — Automated (agent runs these)
+**Spec compliance:** If `requirements-{feature}.md` or acceptance criteria exist,
+cross-reference the change manifest. Flag gaps: "Acceptance criterion [X] has no
+corresponding change."
 
-Generate the exact commands to run, in order:
+## Phase 1 — Automated Tests
 
-1. **Preflight:** `bash scripts/preflight-checks.sh` (or the project's equivalent)
-2. **Unit/integration tests:** the project's test command
-3. **E2E tests:** if the project has them — quick suite first, full suite second
-4. **Scenario tests:** if applicable
+Generate commands for the coding agent to run:
+<!-- ADAPT: Replace with your project's test commands -->
+```bash
+# Run relevant test suite
+<!-- ADAPT: your test command targeting changed areas -->
 
-For each command, state:
-- What it validates
-- What a failure means (which component is broken)
-- Whether it's blocking (MUST pass) or informational (SHOULD pass)
-
----
-
-## What ISN'T Tested?
-
-After generating Track 1, list areas the automated tests do not cover and why:
-- Not testable with current infrastructure
-- Out of scope for this milestone
-- Requires production data or environment
-- Requires manual interaction (covered in Track 3)
-- No existing test coverage for this area (flag as tech debt)
-
-This prevents false confidence from a green test suite that misses critical paths.
-
----
-
-## Track 2 — AI Verification (prompts for a SEPARATE agent)
-
-Generate two ready-to-paste prompts. Fill in ALL bracketed values from the user's answers — no unfilled placeholders.
-
-Reference specific Track 1 test failures in Track 2 prompts. Example: "Track 1 found a race condition in auth.ts — verify this is resolved in your manual testing."
-
-**2a. Functional verification:**
-```
-Test [PROJECT_NAME] as an end user. The developer changed [SPECIFIC_CHANGES].
-Focus on [AREAS_OF_CONCERN]. Report anything broken, unexpected, or unclear.
-Do not modify any code or files. Do not follow existing test scripts —
-explore independently.
+# Run full preflight if available
+<!-- ADAPT: your preflight command -->
 ```
 
-**2b. Code review:**
-```
-Review the code changes since [MILESTONE/COMMIT]. Focus on [CHANGED_FILES_AND_AREAS].
-Look for regressions, security issues, logic gaps, or architectural concerns.
-Do not make any code changes — review only.
-```
+**Phase 1 executor:** The coding agent runs these commands. Phase 2 and 3 are
+for independent verifiers.
 
-Ask the user: "Which model should run Track 2? Recommend a different model than the coding agent for cross-model verification." Suggest a specific alternative.
+**Integration Gaps:**
+Risk areas from Phase 0 NOT covered by automated tests:
+- [area] — no automated test exists because [reason]
+- [area] — test exists at `file:line` but doesn't exercise the changed path because [reason]
 
-**Verdict protocol** — Express each AI verification result as:
-- **MUST** — blocking: test fails without this
-- **SHOULD** — important: flag if missing
-- **MAY** — nice to have: note but don't block
+**Mocking awareness:** Note which tests use mocks. Schema changes, API contract
+changes, and integration issues won't be caught by mocked tests. Flag: "These
+tests mock [X] — real [X] changes won't be caught."
 
----
+## Phase 2 — AI Verification
 
-## Track 3 — Human Testing (manual checklist)
+Generate prompts for a SEPARATE agent with NO shared conversation context.
+The verifier agent starts fresh — the prompts must be completely self-contained.
 
-Generate numbered steps tailored to what actually changed. For each step:
-- What to test (specific action, not vague)
-- Where to test it (browser, terminal, specific URL/page)
-- What "good" looks like (expected result)
-- What to look for (visual issues, UX problems, edge cases)
+Include in each prompt: project architecture summary (2-3 lines), list of changed
+files with purpose, and relevant footguns for the changed area.
 
-Focus on what automated tests and AI can't catch:
-- Visual correctness
-- UX flow ("this technically works but isn't what I wanted")
-- Domain-specific edge cases only the human would know
+Different models catch different blind spots. The coding model has confirmation
+bias toward its own work. Recommend a different model for verification.
 
-If UI changes: "Compare the screen to the previous version. Note any visual regressions — shifted layouts, missing elements, font or color changes, broken responsive behavior."
+**If Phase 2 will be skipped:** Note it explicitly in "What ISN'T Tested":
+"AI verification not performed — [reason]. Coverage relies on automated tests
+(Phase 1) and human testing (Phase 3) only. Cross-model blind spots are NOT covered."
+<!-- ADAPT: If your agent supports sub-agents, offer to run Phase 2 prompts
+as sub-agent tasks instead of requiring a separate session. -->
 
-Mark each item as **critical** (must check) or **nice-to-verify** (check if time allows).
+**Failure Signatures:**
+| If this breaks... | You'll see... |
+|-------------------|---------------|
+<!-- ADAPT: fill with project-specific failure patterns -->
+| Auth change broken | 401 responses on `/api/user` |
+| Migration failed | Missing columns in `users` table |
+| Build regression | `npm run build` exits non-zero |
 
----
+## Phase 3 — Human Testing
 
-## HUMAN GATE
+| What to test | Where | What "good" looks like | What to look for |
+|-------------|-------|----------------------|-----------------|
+<!-- fill — focus on what automation CAN'T verify -->
 
-Present all three tracks. Then ask:
+Human testing catches: visual regressions, UX issues, multi-step workflows,
+cross-browser behavior, real device behavior, and anything requiring judgment.
 
-> Want me to (a) adjust Track 1 automated test focus, (b) refine Track 2 AI verification prompts, (c) add Track 3 manual test items, (d) finalize test plan?
+## What ISN'T Tested
 
-Do NOT auto-advance. Let the human review the test plan, drop unnecessary items, or add edge cases before execution.
+Explicitly list coverage gaps. Be honest about what's NOT verified:
+- [gap] — why it's not tested, and the risk level if it breaks
+- [gap] — would require [access/environment/data] we don't have
 
----
+## Closing
 
-## Verification Ratio
+**BLOCKING GATE:** Present full test plan. Offer:
+(a) run Phase 1 commands now
+(b) adjust scope or coverage
+(c) found an issue → /goat-debug
+(d) close
 
-Scale effort to the autonomy tier of the changes:
-- **Never / Ask First changes:** 1:1 (thorough — all three tracks, full depth)
-- **Always changes:** 1:3 (lighter — automated tests + quick human check)
+## Common Failure Modes
 
-Tell the user which ratio applies based on what they described.
-
----
-
-## Severity Scale
-
-Rank test failures by priority when reporting results:
-
-**SECURITY** > **CORRECTNESS** > **INTEGRATION** > **PERFORMANCE** > **STYLE**
-
-Address higher-severity failures first. A SECURITY failure blocks the milestone regardless of how many other tests pass.
-
----
-
-## Review & Fix
-
-After all three tracks complete, generate a **Milestone Gate Checklist**:
-
-```
-- [ ] Preflight passes
-- [ ] Unit/integration tests pass
-- [ ] E2E tests pass (if applicable)
-- [ ] AI functional verification: no issues found (or issues fixed and re-verified)
-- [ ] AI code review: no blockers found (or blockers addressed)
-- [ ] Human testing: all critical items pass
-- [ ] [Any milestone-specific gates based on what changed]
-```
-
-Tell the user: "Collect findings from all three tracks. If fixes are needed, I can help create a fix plan — then re-run the tracks on the fixed areas."
-
----
-
-## Closing Gate
-
-- **Issues found:** route to goat-debug for investigation. Re-run affected tracks after fixes.
-- **No issues:** milestone testing gate passed. Update task status and proceed.
-
----
-
-## Learning Loop
-
-If this run uncovered a lesson or footgun, update the relevant doc before closing:
-- Behavioural mistake → `docs/lessons.md`
-- Architectural trap with file:line evidence → `docs/footguns.md`
-
----
-
-## Chains With
-
-- **goat-debug** — investigate test failures
-- **goat-plan** — test plan verifies milestone acceptance criteria
-
----
+1. **Generic Phase 2 prompts** — verifier gets "[CHANGES]" instead of actual file list. The self-contained requirement prevents this.
+2. **Phase 3 is trivially obvious** — "click the button" instead of testing what automation can't. Focus human testing on judgment calls.
+3. **Full 3-phase for a 1-line fix** — the quick path prevents this.
 
 ## Constraints
 
-- MUST gather context before generating (Step 0)
-- MUST generate all three tracks every time
-- MUST generate a Milestone Gate Checklist
-- MUST fill in project-specific details — no unfilled [PLACEHOLDERS]
-- MUST reference `docs/footguns.md` for known landmines in changed areas
-- MUST NOT run tests itself (generates instructions only)
-- MUST NOT verify its own work (doer-verifier principle)
-- MUST NOT produce generic templates — every item must reference actual changes
+<!-- FIXED: Do not adapt these -->
+- The coding agent MUST NOT verify its own work (doer-verifier principle)
+- MUST fill ALL bracketed values in Phase 2 prompts — no [PLACEHOLDER] in output
+- MUST list what ISN'T tested
+- MUST note which tests use mocks and what they can't catch
+- MUST NOT fabricate file paths or function names
 
-**Rule:** The coding agent should never run longer than the developer is willing to test. If you're not testing, the agent shouldn't be coding.
+## Output Format
 
-## Output
+```markdown
+## TL;DR
+<!-- What changed, what's tested, what isn't -->
 
-Three verification tracks (automated tests, AI review prompts, human testing checklist) plus a Milestone Gate Checklist. All items reference actual changes, not generic templates.
+## Phase 0: Change Manifest
+| File | Component | Change Type | Risk | Verification Ratio |
+|------|-----------|-------------|------|-------------------|
+
+## Phase 1: Automated Tests
+<!-- ADAPT: your project's test commands -->
+```bash
+# Commands for the coding agent to run
+```
+
+### Integration Gaps
+<!-- Risk areas NOT covered by automated tests -->
+
+## Phase 2: AI Verification
+<!-- Self-contained prompts for a SEPARATE agent -->
+
+### Failure Signatures
+| If this breaks... | You'll see... |
+|-------------------|---------------|
+
+## Phase 3: Human Testing
+| What to test | Where | What "good" looks like | What to look for |
+|-------------|-------|----------------------|-----------------|
+
+## What ISN'T Tested
+<!-- Explicit gaps in coverage -->
+```
+
+Phase 1 commands should be CI-pasteable (include a YAML snippet alongside human-readable commands).
+
+## Chains With
+
+- /goat-debug — test reveals a failure → diagnosis needed
+- /goat-plan — test verifies milestone criteria
+- /goat-review — test results inform review decisions
+
+**Handoff shape:** `{change_manifest, test_commands, coverage_gaps, failure_signatures}`

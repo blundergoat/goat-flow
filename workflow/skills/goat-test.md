@@ -1,7 +1,7 @@
 ---
 name: goat-test
 description: "3-phase test plan generation with automated commands, AI verification prompts, and human testing checklists. Doer-verifier principle."
-goat-flow-skill-version: "0.9.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-test
 
@@ -10,7 +10,7 @@ goat-flow-skill-version: "0.9.0"
 - **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
-- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Bare invocation with no arguments = zero context = ask structural questions and WAIT. Auto-detect pre-fills — it does not replace confirmation.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
@@ -45,6 +45,8 @@ Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
 Correct?"
 
 **Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there — not textbook examples.
+
+**Before proceeding:** present what you know (what changed, risk level, test stack) and what you still need. Wait for the user to confirm before entering Phase 0.
 
 ## Phase 0 — Change Manifest
 

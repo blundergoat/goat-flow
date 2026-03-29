@@ -7,7 +7,7 @@ Your project has GOAT Flow configured. Here's how to use the skills effectively.
 Type **`/goat`** followed by what you need:
 
 ```
-/goat fix the auth bug          → routes to /goat-debug
+/goat debug the auth bug        → routes to /goat-debug
 /goat review the PR             → routes to /goat-review
 /goat plan the new feature      → routes to /goat-plan
 /goat check for vulnerabilities → routes to /goat-security

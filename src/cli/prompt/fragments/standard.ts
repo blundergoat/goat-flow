@@ -93,21 +93,29 @@ Use RFC 2119 language. MUST = blocking, SHOULD = recommended, MAY = optional.`,
     phase: 'standard',
     category: 'Skills',
     kind: 'fix',
-    instruction: `Skills should be conversational, not one-shot. After each major phase, the agent should present findings and let the human drill in before proceeding.
+    instruction: `ALL skills must be conversational. Each skill needs three structural elements:
 
-Add to each skill after the main output phase:
+1. **BLOCKING GATE or HUMAN GATE** — an explicit stop point where the agent presents findings and waits for human input before proceeding. Not a checkpoint — a hard stop.
+
+2. **Structured choices** — at each gate, offer lettered options like:
+   (a) dig deeper into a specific finding
+   (b) check a related area
+   (c) proceed to the next phase
+   (d) close
+
+3. **No auto-advance** — the skill must explicitly state that the agent does NOT proceed past the gate without human input.
 
 \`\`\`markdown
-Present your findings. Then ask: "Want me to dig deeper on any of these? Any that look wrong?"
+**BLOCKING GATE:** Present findings. Offer:
+(a) drill into a specific finding
+(b) review a related area
+(c) proceed to next phase
+(d) something else
 
-Do NOT auto-advance to the next phase. Let the human:
-- Ask follow-up questions ("Walk me through the riskiest change")
-- Challenge findings ("That looks like a false positive")
-- Redirect ("Also check X")
-- Confirm ("Looks good, proceed")
+Do NOT auto-advance. Let the human challenge, redirect, or confirm.
+\`\`\`
 
-Conversational reviews catch architectural problems. One-shot dumps flag style nits.
-\`\`\``,
+The scanner checks for all three elements. A skill that matches only keywords like "conversational" without the structural gate pattern will not pass.`,
   },
   {
     key: 'add-skill-chaining',
@@ -368,19 +376,20 @@ Also block in settings.json deny list: \`"Bash(chmod 777*)"\`.`,
     phase: 'standard',
     category: 'Hooks',
     kind: 'fix',
-    instruction: `The deny hook MUST block package manager mutation commands. These silently change lockfiles and can introduce supply-chain drift.
+    instruction: `The deny hook MUST block package manager commands that add or remove dependencies. Bare \`npm install\` (no args) is safe — it installs from the lockfile — so do NOT block it.
 
 \`\`\`bash
-# Block package manager mutations
-if [[ "$cmd" =~ ^(npm|pnpm|yarn)\ (install|add|remove|uninstall) ]] ||
-   [[ "$cmd" =~ ^pip\ install ]] ||
-   [[ "$cmd" =~ ^composer\ (require|remove) ]] ||
-   [[ "$cmd" =~ ^go\ get ]]; then
+# Block package manager mutations (bare install from lockfile is safe)
+if [[ "$cmd" =~ ^(npm|pnpm|yarn)\\ (add|remove|uninstall) ]] ||
+   [[ "$cmd" =~ ^(npm|pnpm|yarn)\\ install\\ [a-zA-Z@] ]] ||
+   [[ "$cmd" =~ ^pip\\ install\\ [a-zA-Z] ]] ||
+   [[ "$cmd" =~ ^composer\\ (require|remove) ]] ||
+   [[ "$cmd" =~ ^go\\ get ]]; then
   block "package mutation — use Ask First"
 fi
 \`\`\`
 
-Also block in settings.json deny list: \`"Bash(npm install*)", "Bash(pip install*)", "Bash(go get*)"\`.`,
+Also block in settings.json deny list: \`"Bash(npm add*)", "Bash(yarn add*)", "Bash(pnpm add*)", "Bash(pip install [a-zA-Z]*)", "Bash(go get*)"\`.`,
   },
   {
     key: 'fix-read-deny-secrets',

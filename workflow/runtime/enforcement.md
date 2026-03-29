@@ -59,10 +59,6 @@ Create the following:
    - git commit --no-verify or git commit -n
    - Direct modification of lockfiles (package-lock.json, pnpm-lock.yaml,
      composer.lock, Cargo.lock, yarn.lock)
-   - Direct modification of generated code files, migration files, or
-     compiled artifacts
-   - mv without -n flag: WARN but allow (bare mv risks overwriting
-     untracked files; prefer mv -n but do not hard-block renames)
    Note: Agents hallucinate dependency version bumps to fix type errors.
    Lockfile changes must go through the package manager.
 

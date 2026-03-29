@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync } from 'node:fs';
+import { mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ScanReport, AgentId, Grade } from '../types.js';
 
@@ -73,7 +73,17 @@ export function appendScanHistory(report: ScanReport, projectPath: string): void
     }
 
     if (lines.length > 0) {
-      appendFileSync(join(logsDir, 'scan-history.jsonl'), lines.join('\n') + '\n');
+      const logPath = join(logsDir, 'scan-history.jsonl');
+      appendFileSync(logPath, lines.join('\n') + '\n');
+
+      // Rotate: keep last 500 entries (oldest trimmed on write)
+      try {
+        const content = readFileSync(logPath, 'utf-8');
+        const allLines = content.trim().split('\n');
+        if (allLines.length > 500) {
+          writeFileSync(logPath, allLines.slice(-500).join('\n') + '\n');
+        }
+      } catch { /* rotation is best-effort */ }
     }
   } catch {
     // Silent — telemetry must never break the scan

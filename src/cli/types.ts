@@ -404,7 +404,7 @@ export interface ReadonlyFS {
 /** Parsed command-line arguments for the goat-flow scan command */
 export interface CLIOptions {
   projectPath: string;
-  format: 'json' | 'text';
+  format: 'json' | 'text' | 'html' | 'markdown';
   // Null means scan all detected agents
   agent: AgentId | null;
   verbose: boolean;
@@ -412,6 +412,8 @@ export interface CLIOptions {
   minScore: number | null;
   // Fail the process if grade is below this threshold
   minGrade: Grade | null;
+  // Write output to a file instead of stdout
+  output: string | null;
   help: boolean;
   version: boolean;
 }

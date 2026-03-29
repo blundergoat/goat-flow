@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Single entry point that classifies intent and dispatches to the correct goat-* skill."
-goat-flow-skill-version: "0.9.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat
 

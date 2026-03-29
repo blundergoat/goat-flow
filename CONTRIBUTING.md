@@ -26,7 +26,7 @@ Before submitting a PR, run:
 # Full preflight gate (scripts, structure, cross-references)
 bash scripts/preflight-checks.sh
 
-# Scanner tests (78 tests)
+# Scanner tests (167 tests)
 npm test
 
 # Lint shell scripts

@@ -1,4 +1,4 @@
-# GEMINI.md - v0.9.0 (2026-03-29)
+# GEMINI.md - v1.0.0 (2026-03-29)
 
 Documentation framework for AI coding agent workflows. Markdown docs + Bash maintenance scripts.
 

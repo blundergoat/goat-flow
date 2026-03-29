@@ -136,11 +136,10 @@ export const standardChecks: CheckDef[] = [
         if (quality.total === 0) {
           return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No skills found' };
         }
-        const ratio = quality.withConversational / quality.total;
-        if (ratio >= SKILL_QUALITY_THRESHOLD) {
+        if (quality.withConversational === quality.total) {
           return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: `${quality.withConversational}/${quality.total} skills encourage conversational interaction` };
         }
-        return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConversational}/${quality.total} skills are conversational — skills should present findings then let humans drill in, not dump one-shot output` };
+        return { id: '2.1.16', name: 'Skills are conversational', tier: 'standard', category: 'Skills', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: `Only ${quality.withConversational}/${quality.total} skills are conversational — all skills must present findings then let humans drill in` };
       },
     },
     recommendation: 'Skills should be conversational — present findings, then let the human drill in with follow-up questions. One-shot dumps miss architectural problems.',
@@ -506,11 +505,11 @@ export const standardChecks: CheckDef[] = [
           id: '2.2.5g', name: 'Deny hook blocks package mutations', tier: 'standard', category: 'Hooks',
           status: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 'pass' : 'fail',
           points: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 1 : 0, maxPoints: 1, confidence: 'high',
-          message: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 'Deny hook blocks package mutations' : 'Deny hook does not block package mutations (npm install, pip install, go get, etc.)',
+          message: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 'Deny hook blocks package mutations' : 'Deny hook does not block package mutations (npm add, pip install <pkg>, go get, etc.)',
         };
       },
     },
-    recommendation: 'Deny hook should block package manager commands (npm install, yarn add, pip install, composer require, go get). Package mutations change lockfiles and can introduce supply-chain drift.',
+    recommendation: 'Deny hook should block package manager commands that add/remove deps (npm add, npm install <pkg>, yarn add, pip install <pkg>, composer require, go get). Bare npm install (from lockfile) must NOT be blocked.',
     recommendationKey: 'fix-deny-package-mutation',
   },
   {
