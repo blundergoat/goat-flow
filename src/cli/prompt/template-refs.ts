@@ -1,4 +1,4 @@
-import type { AgentId } from '../types.js';
+import type { AgentId, ProjectSignals } from '../types.js';
 import { PROFILES } from '../detect/agents.js';
 import { templateExists } from '../paths.js';
 
@@ -374,6 +374,41 @@ export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
   return refs;
 }
 
+/**
+ * Map detected project signals to security/compliance template refs.
+ * Auto-includes phi-compliance.md when compliance signals detected,
+ * and llm-security.md when LLM integration detected.
+ */
+export function mapSignalsToTemplates(signals: ProjectSignals): TemplateRef[] {
+  const refs: TemplateRef[] = [];
+
+  if (signals.complianceSignals) {
+    const template = 'workflow/coding-standards/security/phi-compliance.md';
+    if (templateExists(template)) {
+      refs.push({
+        output: 'ai/instructions/phi-compliance.md',
+        template,
+        phase: 'standard',
+        note: 'PHI/compliance signals detected',
+      });
+    }
+  }
+
+  if (signals.llmIntegration) {
+    const template = 'workflow/coding-standards/security/llm-security.md';
+    if (templateExists(template)) {
+      refs.push({
+        output: 'ai/instructions/llm-security.md',
+        template,
+        phase: 'standard',
+        note: 'LLM integration detected',
+      });
+    }
+  }
+
+  return refs;
+}
+
 // ---------------------------------------------------------------------------
 // Fragment → template mapping (for targeted-fix mode)
 // ---------------------------------------------------------------------------
@@ -488,6 +523,16 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
     codex: 'setup/setup-codex.md',
     gemini: 'setup/setup-gemini.md',
   },
+  'fix-deny-cloud-destructive': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
+  'fix-deny-package-mutation': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
   'fix-read-deny-secrets': {
     claude: 'workflow/runtime/enforcement.md',
     codex: 'setup/setup-codex.md',
@@ -553,6 +598,8 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   // Fix-kind — anti-patterns (ones with clear template sources)
   'ap-add-footgun-evidence': 'setup/shared/docs-seed.md',
   'ap-fix-empty-scaffolding': 'setup/shared/docs-seed.md',
+  'ap-remove-deprecated-skills': 'workflow/skills/goat-debug.md',
+  'ap-fix-dangling-skill-refs': 'workflow/skills/goat-debug.md',
 };
 
 /**

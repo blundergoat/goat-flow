@@ -5,13 +5,11 @@ export const SKILL_NAMES = [
   'goat-refactor', 'goat-simplify',
 ] as const;
 
-/** Deprecated skill names — scanner accepts these during migration grace period.
- *  Not exported: values are inlined where needed. Kept as documentation. */
-const DEPRECATED_SKILL_NAMES = [
+/** Deprecated skill names — scanner flags these as anti-pattern AP16. */
+export const DEPRECATED_SKILL_NAMES = new Set([
   'goat-reflect', 'goat-onboard', 'goat-resume',
   'goat-audit', 'goat-context',
-] as const;
-void DEPRECATED_SKILL_NAMES;
+]);
 
 /** Type derived from the canonical skill list */
 export type SkillName = typeof SKILL_NAMES[number];

@@ -249,4 +249,11 @@ Ensure at least 3 instances across the instruction file. Use MUST for DoD gates 
 Note: the execution loop MUST be duplicated (each file is loaded independently). The goal is consistency, not deduplication.`,
   },
   // diversify-evals removed — merged into add-eval-skill-coverage after 3.4.1 was removed.
+  {
+    key: 'fix-eval-frontmatter',
+    phase: 'full',
+    category: 'Agent Evals',
+    kind: 'fix',
+    instruction: `Some eval files use legacy format (bold markers like \`**Origin:**\`) instead of YAML frontmatter. Migrate all evals to canonical format with \`---\` frontmatter containing name, description, origin, agents, skill, and difficulty fields. Use \`### Scenario\` (not \`## Replay Prompt\`), checkbox gates in \`### Expected Behavior\`, and bullet list \`### Anti-Patterns\`.`,
+  },
 ];

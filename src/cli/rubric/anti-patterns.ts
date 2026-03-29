@@ -216,8 +216,40 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: `Update skills to version ${SKILL_VERSION} — re-run setup or add goat-flow-skill-version: ${SKILL_VERSION} to each skill's frontmatter`,
     recommendationKey: 'ap-fix-outdated-skills',
   },
-  // AP16 removed — empty decisions/ dir is valid for new projects.
-  // Scanner checks setup scaffolding, not usage. An ADR template is seeded during setup instead.
+  {
+    id: 'AP16', name: 'Deprecated skills present', deduction: -5, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { deprecated } = ctx.agentFacts.skills;
+      const triggered = deprecated.length > 0;
+      return {
+        id: 'AP16', name: 'Deprecated skills present', triggered,
+        deduction: triggered ? -5 : 0, confidence: 'high',
+        message: triggered
+          ? `${deprecated.length} deprecated skill(s): ${deprecated.join(', ')}. Remove — these are replaced by the 8 canonical skills.`
+          : 'No deprecated skills',
+        evidence: triggered ? deprecated.join(', ') : undefined,
+      };
+    },
+    recommendation: 'Remove deprecated skill directories (goat-audit, goat-reflect, goat-onboard, goat-resume, goat-context). They are replaced by the 8 canonical goat-* skills.',
+    recommendationKey: 'ap-remove-deprecated-skills',
+  },
+  {
+    id: 'AP17', name: 'Dangling file references in skills', deduction: -3, confidence: 'medium',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { danglingRefs } = ctx.agentFacts.skills;
+      const triggered = danglingRefs.length > 0;
+      return {
+        id: 'AP17', name: 'Dangling file references in skills', triggered,
+        deduction: triggered ? -3 : 0, confidence: 'medium',
+        message: triggered
+          ? `${danglingRefs.length} dangling ref(s) in skills: ${danglingRefs.slice(0, 5).join(', ')}`
+          : 'All skill file references resolve',
+        evidence: triggered ? danglingRefs.join(', ') : undefined,
+      };
+    },
+    recommendation: 'Fix or remove dangling file paths in skill SKILL.md files. Every backtick-wrapped path reference should point to an existing file.',
+    recommendationKey: 'ap-fix-dangling-skill-refs',
+  },
 ];
 
 /**

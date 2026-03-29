@@ -1,5 +1,5 @@
 import type { AgentProfile, AgentFacts, ReadonlyFS } from '../types.js';
-import { SKILL_NAMES, SKILL_VERSION } from '../constants.js';
+import { SKILL_NAMES, SKILL_VERSION, DEPRECATED_SKILL_NAMES } from '../constants.js';
 
 /** Skill names that a fully configured GOAT Flow agent should have */
 const EXPECTED_SKILLS = SKILL_NAMES;
@@ -351,9 +351,38 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
 
   const hasDispatcher = fs.exists(`${agent.skillsDir}/goat/SKILL.md`);
 
+  // Detect deprecated skills on disk
+  const deprecated: string[] = [];
+  if (fs.exists(agent.skillsDir)) {
+    for (const dir of fs.listDir(agent.skillsDir)) {
+      if (DEPRECATED_SKILL_NAMES.has(dir) && fs.exists(`${agent.skillsDir}/${dir}/SKILL.md`)) {
+        deprecated.push(dir);
+      }
+    }
+  }
+
+  // Extract dangling file path references from skill content
+  const danglingRefs: string[] = [];
+  // Match backtick-wrapped paths: must contain /, no spaces/newlines, reasonable length, look like file paths
+  const PATH_REF = /`((?:[a-zA-Z0-9._-]+\/)+[a-zA-Z0-9._-]+(?::[0-9]+)?)`/g;
+  for (const skill of found) {
+    const content = fs.readFile(`${agent.skillsDir}/${skill}/SKILL.md`);
+    if (!content) continue;
+    for (const match of content.matchAll(PATH_REF)) {
+      const ref = match[1]!.replace(/:[0-9]+$/, '');
+      if (/^https?:/.test(ref)) continue;
+      // Skip template placeholders, example paths, and gitignored working files
+      if (/\{|YYYY|file:line|path\/to|monitoring\//i.test(ref)) continue;
+      if (/^tasks\/(handoff|todo|commit|release)\.md$/.test(ref)) continue;
+      if (!fs.exists(ref) && !danglingRefs.includes(ref)) {
+        danglingRefs.push(ref);
+      }
+    }
+  }
+
   return {
     found, missing, allPresent: missing.length === 0,
-    versions, outdatedCount, hasDispatcher,
+    versions, outdatedCount, hasDispatcher, deprecated, danglingRefs,
     quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, withSharedConventions, unadaptedCount, total: found.length },
   };
 }
@@ -401,6 +430,7 @@ function analyzePostTurnScript(hookContent: string): { exitsZero: boolean; hasVa
 function analyzeDenyScript(denyContent: string): {
   hasBlocks: boolean; usesJq: boolean; handlesChaining: boolean;
   blocksRmRf: boolean; blocksForcePush: boolean; blocksChmod: boolean;
+  blocksPackageMutation: boolean; blocksCloudDestructive: boolean;
 } {
   return {
     hasBlocks: /exit\s+2|block|BLOCK/i.test(denyContent) && denyContent.split('\n').length > 5,
@@ -409,6 +439,8 @@ function analyzeDenyScript(denyContent: string): {
     blocksRmRf: /rm\s*.*-.*r.*f|rm\s*-rf/i.test(denyContent),
     blocksForcePush: /force.*push|--force/i.test(denyContent),
     blocksChmod: /chmod.*777/.test(denyContent),
+    blocksPackageMutation: /npm.*install|pip.*install|composer.*require|go\s+get|yarn.*add|pnpm.*add/is.test(denyContent),
+    blocksCloudDestructive: /docker\s+push|terraform\s+(destroy|apply.*-auto-approve)|aws\s+(s3\s+rm|ec2\s+terminate)/i.test(denyContent),
   };
 }
 
@@ -416,7 +448,7 @@ function analyzeDenyScript(denyContent: string): {
 function applySettingsDenyOverrides(
   denyStr: string,
   hook: { denyExists: boolean; denyHasBlocks: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
-    denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean },
+    denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean; denyBlocksPackageMutation: boolean; denyBlocksCloudDestructive: boolean },
 ): void {
   // Settings deny counts as a deny mechanism existing
   if (hook.denyExists === false && denyStr.includes('Bash(')) {
@@ -432,13 +464,15 @@ function applySettingsDenyOverrides(
   if (/Bash\(.*rm -rf|Bash\(.*rm -fr/i.test(denyStr)) hook.denyBlocksRmRf = true;
   if (/Bash\(.*--force|Bash\(.*force.*push/i.test(denyStr)) hook.denyBlocksForcePush = true;
   if (/Bash\(.*chmod 777/i.test(denyStr)) hook.denyBlocksChmod = true;
+  if (/Bash\(.*(npm install|yarn add|pip install|composer require|go get|pnpm add)/i.test(denyStr)) hook.denyBlocksPackageMutation = true;
+  if (/Bash\(.*(docker push|terraform destroy|terraform apply|aws s3 rm|aws ec2 terminate)/i.test(denyStr)) hook.denyBlocksCloudDestructive = true;
 }
 
 /** Enrich deny hook facts from settings.json Bash deny patterns. */
 function enrichDenyFromSettings(
   settingsParsed: unknown, hasDenyPatterns: boolean,
   hook: { denyExists: boolean; denyHasBlocks: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
-    denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean },
+    denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean; denyBlocksPackageMutation: boolean; denyBlocksCloudDestructive: boolean },
 ): void {
   if (!hasDenyPatterns || !settingsParsed) return;
   /** Permissions object from the parsed settings */
@@ -505,7 +539,7 @@ function extractHookFacts(
   const hook = {
     denyExists: denyHookPath ? fs.exists(denyHookPath) : false,
     denyHasBlocks: false, denyUsesJq: false, denyHandlesChaining: false,
-    denyBlocksRmRf: false, denyBlocksForcePush: false, denyBlocksChmod: false,
+    denyBlocksRmRf: false, denyBlocksForcePush: false, denyBlocksChmod: false, denyBlocksPackageMutation: false, denyBlocksCloudDestructive: false,
   };
 
   // First: check hook script content (if exists)
@@ -520,6 +554,8 @@ function extractHookFacts(
       hook.denyBlocksRmRf = analysis.blocksRmRf;
       hook.denyBlocksForcePush = analysis.blocksForcePush;
       hook.denyBlocksChmod = analysis.blocksChmod;
+      hook.denyBlocksPackageMutation = analysis.blocksPackageMutation;
+      hook.denyBlocksCloudDestructive = analysis.blocksCloudDestructive;
     }
   }
 

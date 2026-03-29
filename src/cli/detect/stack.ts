@@ -299,11 +299,16 @@ function detectProjectSignals(fs: ReadonlyFS, languages: string[], formatCommand
     ruby: ['rubocop'],
     java: ['google-java-format', 'spotless'],
   };
-  const formatStr = (formatCommand ?? '').toLowerCase();
+  // Check format command, lint command, and PostToolUse hooks for formatter evidence
+  const formatHookContent = fs.readFile('.claude/hooks/format-file.sh') ?? fs.readFile('.gemini/hooks/format-file.sh') ?? '';
+  const formatterSources = [(formatCommand ?? ''), formatHookContent].join(' ').toLowerCase();
+  // Only flag bash if it's the primary language (not just .sh scripts alongside other stacks)
+  const bashIsPrimary = languages[0] === 'bash' || (languages.includes('bash') && languages.length <= 2);
   for (const lang of languages) {
+    if (lang === 'bash' && !bashIsPrimary) continue;
     const known = formatterMap[lang];
     if (!known) continue;
-    const hasFormatter = known.some(f => formatStr.includes(f));
+    const hasFormatter = known.some(f => formatterSources.includes(f));
     if (!hasFormatter) formatterGaps.push(lang);
   }
 

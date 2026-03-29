@@ -143,6 +143,10 @@ clang -fsanitize=thread -g -o test_binary test.c
 - Changing HTTP status codes breaks clients that branch on status.
 - When a breaking change is unavoidable: version the endpoint, deprecate the old one with a sunset header, and document the migration path.
 
+## Learning Loop Cross-Check
+
+Before approving, check `docs/footguns.md` and `docs/lessons.md` (if they exist) for known traps relevant to the changed files. If a PR touches a file or pattern mentioned in footguns, flag it — even if the code looks correct. Past incidents are the best predictor of future ones.
+
 ## Do NOT Nitpick
 
 These are handled by linters — do not comment on them:

@@ -157,6 +157,43 @@ else
     skip "Version check (missing package.json or version.ts)"
 fi
 
+# ── Dual-Agent Loop Consistency ──────────────────────────────────────
+agent_files=()
+for af in CLAUDE.md AGENTS.md GEMINI.md; do
+    [[ -f "$af" ]] && agent_files+=("$af")
+done
+if [[ ${#agent_files[@]} -ge 2 ]]; then
+    section "Dual-Agent Consistency"
+    # Extract execution loop (READ→Autonomy) from each file, normalize, compare word sets
+    extract_loop() {
+        sed -n '/\*\*READ\*\*\|^##.*READ/,/^## \(Autonomy\|Router\|Hard Rules\|Working Memory\|Definition of Done\)/p' "$1" \
+            | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' ' ' | tr -s ' '
+    }
+    ref_loop=$(extract_loop "${agent_files[0]}")
+    loop_ok=true
+    for af in "${agent_files[@]:1}"; do
+        other_loop=$(extract_loop "$af")
+        # Simple word-count divergence check (mirrors scanner Jaccard logic)
+        ref_words=$(echo "$ref_loop" | wc -w)
+        other_words=$(echo "$other_loop" | wc -w)
+        if [[ "$ref_words" -eq 0 ]] || [[ "$other_words" -eq 0 ]]; then
+            fail "Execution loop missing in $af — copy from ${agent_files[0]}"
+            loop_ok=false
+        else
+            # Check word count ratio — >40% divergence = structural drift
+            diff_pct=$(( (ref_words - other_words) * 100 / ref_words ))
+            abs_diff=${diff_pct#-}
+            if [[ "$abs_diff" -gt 40 ]]; then
+                fail "Execution loop in $af diverges from ${agent_files[0]} (${abs_diff}% word count difference)"
+                loop_ok=false
+            fi
+        fi
+    done
+    if $loop_ok; then
+        pass "Execution loops consistent across ${#agent_files[@]} agent files"
+    fi
+fi
+
 # ── TypeScript ───────────────────────────────────────────────────────
 if [[ -f tsconfig.json ]]; then
     section "TypeScript"

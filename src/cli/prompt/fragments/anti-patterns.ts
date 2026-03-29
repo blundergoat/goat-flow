@@ -195,4 +195,37 @@ goat-flow-skill-version: "${SKILL_VERSION}"
 ---
 \`\`\``,
   },
+  {
+    key: 'ap-remove-deprecated-skills',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `This project has deprecated skill directories that are no longer part of the canonical goat-flow skill set.
+
+**Deprecated skills found:** {{evidence.ap-remove-deprecated-skills}}
+
+These skills were consolidated into the 8 canonical skills in v0.8.0:
+- \`goat-audit\` → merged into \`goat-review\` (Audit Mode)
+- \`goat-reflect\`, \`goat-onboard\`, \`goat-resume\` → consolidated into existing skills
+- \`goat-context\` → removed
+
+For each deprecated skill directory:
+1. Check if it contains any custom content not covered by the canonical skills
+2. Migrate any unique content to the appropriate canonical skill
+3. Delete the deprecated skill directory`,
+  },
+  {
+    key: 'ap-fix-dangling-skill-refs',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Some skill files reference file paths that do not exist in the project.
+
+**Dangling references:** {{evidence.ap-fix-dangling-skill-refs}}
+
+For each dangling reference:
+1. Check if the file was renamed or moved — update the path if so
+2. Check if the file was deleted — remove the reference
+3. If the reference is aspirational (file should exist but doesn't), either create the file or remove the reference`,
+  },
 ];

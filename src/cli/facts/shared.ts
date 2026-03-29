@@ -164,24 +164,25 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
   /** Whether the agent-evals directory exists */
   const dirExists = fs.exists('agent-evals');
   /** Markdown eval files (excluding README) found in the evals directory */
-  const evalFiles = dirExists ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md') : [];
+  const evalFiles = dirExists ? fs.listDir('agent-evals').filter(f => f.endsWith('.md') && f !== 'README.md' && f !== 'FORMAT.md') : [];
   /** Total number of eval files found */
   const count = evalFiles.length;
   /** Whether the evals directory contains a README.md */
   const hasReadme = dirExists && fs.exists('agent-evals/README.md');
 
   if (count === 0) {
-    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, evalSkillCount: 0 };
+    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, hasFrontmatter: false, evalSkillCount: 0 };
   }
 
   /** The 8 canonical goat-flow skills — only these count toward eval diversity */
   const CANONICAL_SKILLS = new Set(['goat-debug', 'goat-investigate', 'goat-plan', 'goat-refactor', 'goat-review', 'goat-security', 'goat-simplify', 'goat-test']);
   /** Canonical skills with at least one eval */
   const skillNames = new Set<string>();
-  /** Track whether all eval files pass origin/replay/agents checks */
+  /** Track whether all eval files pass origin/replay/agents/frontmatter checks */
   let allHaveOrigin = true;
   let allHaveAgents = true;
   let allHaveReplay = true;
+  let allHaveFrontmatter = true;
   // Iterate over ALL eval files for quality checks and skill counting
   for (const f of evalFiles) {
     /** Raw content of this eval file */
@@ -192,6 +193,7 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
       allHaveReplay = false;
       continue;
     }
+    if (!/^---\n/.test(content)) allHaveFrontmatter = false;
     if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false && /^origin:/im.test(content) === false) allHaveOrigin = false;
     if (/\*\*Agents:\*\*/i.test(content) === false && /^agents:/im.test(content) === false) allHaveAgents = false;
     if (/##+ Replay Prompt/i.test(content) === false && /##+ Scenario/i.test(content) === false) allHaveReplay = false;
@@ -204,7 +206,7 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
       if (name && CANONICAL_SKILLS.has(name)) skillNames.add(name);
     }
   }
-  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, evalSkillCount: skillNames.size };
+  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, hasFrontmatter: allHaveFrontmatter, evalSkillCount: skillNames.size };
 }
 
 /** Extract project-wide shared facts from docs, evals, CI, and config files. */

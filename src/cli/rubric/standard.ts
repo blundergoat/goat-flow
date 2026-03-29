@@ -494,6 +494,26 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'fix-deny-chmod',
   },
   {
+    id: '2.2.5g', name: 'Deny hook blocks package mutations', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return { id: '2.2.5g', name: 'Deny hook blocks package mutations', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No deny hook' };
+        }
+        return {
+          id: '2.2.5g', name: 'Deny hook blocks package mutations', tier: 'standard', category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 'pass' : 'fail',
+          points: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 1 : 0, maxPoints: 1, confidence: 'high',
+          message: ctx.agentFacts.hooks.denyBlocksPackageMutation ? 'Deny hook blocks package mutations' : 'Deny hook does not block package mutations (npm install, pip install, go get, etc.)',
+        };
+      },
+    },
+    recommendation: 'Deny hook should block package manager commands (npm install, yarn add, pip install, composer require, go get). Package mutations change lockfiles and can introduce supply-chain drift.',
+    recommendationKey: 'fix-deny-package-mutation',
+  },
+  {
     id: '2.2.5', name: 'Preflight script', tier: 'standard', category: 'Hooks',
     pts: 1, confidence: 'high',
     detect: { type: 'file_exists', path: 'scripts/preflight-checks.sh' },
@@ -890,6 +910,86 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Create ai/instructions/backend.md with backend coding conventions',
     recommendationKey: 'create-backend-instructions',
+  },
+
+  {
+    id: '2.2.5h', name: 'Deny hook blocks cloud-destructive commands', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'high',
+    na: (ctx) => ctx.agentFacts.hooks.denyExists === false || ctx.facts.stack.signals.deployPlatforms.length === 0,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '2.2.5h', name: 'Deny hook blocks cloud-destructive commands', tier: 'standard', category: 'Hooks',
+        status: ctx.agentFacts.hooks.denyBlocksCloudDestructive ? 'pass' : 'fail',
+        points: ctx.agentFacts.hooks.denyBlocksCloudDestructive ? 1 : 0, maxPoints: 1, confidence: 'high',
+        message: ctx.agentFacts.hooks.denyBlocksCloudDestructive
+          ? 'Deny hook blocks cloud-destructive commands'
+          : `Deploy platforms detected (${ctx.facts.stack.signals.deployPlatforms.join(', ')}) but deny hook does not block cloud-destructive commands (docker push, terraform destroy, aws s3 rm, etc.)`,
+      }),
+    },
+    recommendation: 'Deny hook should block cloud-destructive commands when deploy platforms are detected: docker push, terraform destroy, terraform apply -auto-approve, aws s3 rm, aws ec2 terminate-instances.',
+    recommendationKey: 'fix-deny-cloud-destructive',
+  },
+
+  // === 2.7 Signal Follow-Through (signal-conditional checks) ===
+  {
+    id: '2.7.1', name: 'LLM integration addressed in instruction file', tier: 'standard', category: 'Signal Follow-Through',
+    pts: 1, confidence: 'medium',
+    na: (ctx) => !ctx.facts.stack.signals.llmIntegration,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content?.toLowerCase() ?? '';
+        const addressed = /llm|prompt|model|ai\s+integration/i.test(content) && /ask first|boundary|router/i.test(content);
+        return {
+          id: '2.7.1', name: 'LLM integration addressed in instruction file', tier: 'standard', category: 'Signal Follow-Through',
+          status: addressed ? 'pass' : 'fail',
+          points: addressed ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: addressed ? 'Instruction file addresses LLM integration' : 'LLM integration detected but instruction file does not address prompt handling or LLM boundaries',
+        };
+      },
+    },
+    recommendation: 'LLM integration detected — add prompt/template paths to Router Table and "prompt changes require scenario testing" to Ask First boundaries',
+    recommendationKey: 'fix-llm-signal-followthrough',
+  },
+  {
+    id: '2.7.2', name: 'PHI/compliance on hot path', tier: 'standard', category: 'Signal Follow-Through',
+    pts: 1, confidence: 'medium',
+    na: (ctx) => !ctx.facts.stack.signals.complianceSignals,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const content = ctx.agentFacts.instruction.content ?? '';
+        const onHotPath = /\bPHI\b|HIPAA|patient.*data|tenant.*scope|MUST NOT log/i.test(content);
+        return {
+          id: '2.7.2', name: 'PHI/compliance on hot path', tier: 'standard', category: 'Signal Follow-Through',
+          status: onHotPath ? 'pass' : 'fail',
+          points: onHotPath ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: onHotPath ? 'Compliance constraints in instruction file hot path' : 'PHI/compliance signals detected but constraints are not in the instruction file hot path',
+        };
+      },
+    },
+    recommendation: 'PHI/compliance signals detected — add mandatory constraints to instruction file: "MUST NOT log PHI", "MUST scope queries by tenant". These belong in the hot path, not only in cold-path security docs.',
+    recommendationKey: 'fix-compliance-signal-followthrough',
+  },
+  {
+    id: '2.7.3', name: 'Formatter hook covers detected languages', tier: 'standard', category: 'Signal Follow-Through',
+    pts: 1, confidence: 'medium',
+    na: (ctx) => ctx.facts.stack.signals.formatterGaps.length === 0,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const gaps = ctx.facts.stack.signals.formatterGaps;
+        return {
+          id: '2.7.3', name: 'Formatter hook covers detected languages', tier: 'standard', category: 'Signal Follow-Through',
+          status: 'fail',
+          points: 0, maxPoints: 1, confidence: 'medium',
+          message: `Formatter gaps: ${gaps.join(', ')} — add formatters to PostToolUse hook (format-file.sh)`,
+        };
+      },
+    },
+    recommendation: 'Add formatters for all detected languages to the PostToolUse hook (format-file.sh). Every language should have a formatter running automatically.',
+    recommendationKey: 'fix-formatter-gaps',
   },
 
 ];
