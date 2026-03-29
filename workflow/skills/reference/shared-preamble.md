@@ -50,6 +50,8 @@ Skills that gather context before acting follow this pattern:
 3. If ALL questions are answered by the invocation → present a condensed confirmation and proceed
 4. If the user says "skip Step 0" or provides a detailed brief → confirm understanding and proceed
 
+**The gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before proceeding to Phase 1. Auto-detect pre-fills context — it does not replace human confirmation. Bare invocation with no arguments = zero context = ask all structural questions and wait.
+
 Never hard-block when context is already available. The goal is to start moving, not to interrogate.
 
 ## Stuck Protocol
@@ -86,4 +88,4 @@ When the skill completes:
 1. If work is incomplete: write `tasks/handoff.md` using the standard handoff template (Date, Status, Current State, Key Decisions, Known Risks, Next Step)
 2. Check the Learning Loop (above) for anything worth logging
 3. Suggest the most relevant next skill if applicable (see Chains With in each skill)
-4. If `tasks/logs/` exists: write a session summary to `tasks/logs/sessions/YYYY-MM-DD-goat-{skill}.md` (schema in `tasks/logs/README.md`)
+4. If `tasks/logs/` exists: write a session summary to `tasks/logs/sessions/YYYY-MM-DD-goat-{skill}.md`. If >50 session files, delete the oldest to stay at 50. (Schema in `tasks/logs/README.md`)

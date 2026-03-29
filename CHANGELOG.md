@@ -2,6 +2,24 @@
 
 ---
 
+## v1.0.0 - 2026-03-29
+
+HTML dashboard, CLI enhancements, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v1.0.0: 104 checks + 16 anti-patterns. 167 tests.
+
+### Dashboard
+- `goat-flow dashboard .` — local server with live scanning, auto-opens browser
+- `goat-flow scan . --format html` — self-contained offline HTML report
+- 4 tabs: Overview, Checks (drill-down with filters), Compare (multi-agent diff), Fixes (recommendation browser with copy/download)
+- Folder browser, dark mode, responsive mobile, keyboard navigation, ARIA accessibility
+
+### CLI
+- `--format html` and `--format markdown` output modes
+- `--output <file>` flag for writing to file
+- npm scripts: scan, scan:verbose, scan:json, setup, dashboard, preflight, validate
+- Alpine.js + Tailwind CSS v4 as npm dependencies (not vendored)
+
+---
+
 ## v0.9.0 - 2026-03-29
 
 Dispatcher skill, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v0.9.0: 104 checks + 16 anti-patterns. 167 tests.

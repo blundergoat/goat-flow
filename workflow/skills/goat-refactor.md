@@ -1,7 +1,7 @@
 ---
 name: goat-refactor
 description: "Structured cross-file refactoring with blast radius analysis, both-sides-first reading, rename verification, and absence checks."
-goat-flow-skill-version: "0.9.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-refactor
 
@@ -10,7 +10,7 @@ goat-flow-skill-version: "0.9.0"
 - **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
-- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Bare invocation with no arguments = zero context = ask structural questions and WAIT. Auto-detect pre-fills — it does not replace confirmation.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
@@ -40,6 +40,8 @@ could break references.
 
 **Auto-detect:** If the user describes a rename, grep for the old name to
 estimate scope: `grep -rn 'OldName' --include='*.{ts,py,go,php,rs}' | wc -l`
+
+**Before proceeding:** present what you know (refactor type, estimated scope, boundaries) and what you still need. Wait for the user to confirm before entering Phase 1.
 
 ## Phase 1 — Scope & Impact
 

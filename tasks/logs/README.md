@@ -31,8 +31,8 @@ Auto-appended by `goat-flow scan` after each run. One JSON line per agent per sc
     "standard":   { "earned": 62, "available": 62, "percentage": 100 },
     "full":       { "earned": 17, "available": 17, "percentage": 100 }
   },
-  "packageVersion": "0.9.0",
-  "rubricVersion": "0.9.0"
+  "packageVersion": "1.0.0",
+  "rubricVersion": "1.0.0"
 }
 ```
 
@@ -102,9 +102,17 @@ none
 
 If multiple sessions of the same skill occur on the same day, append a counter: `2026-03-29-goat-debug-2.md`.
 
+## Retention Limits
+
+| File | Limit | Enforced by |
+|------|-------|-------------|
+| `scan-history.jsonl` | 500 entries | CLI auto-trims oldest on write |
+| `incidents.jsonl` | 200 entries | Agent: before appending, if file exceeds 200 lines, delete the oldest half |
+| `sessions/*.md` | 50 files | Agent: before writing, if >50 session files exist, delete the oldest ones to stay at 50 |
+
 ## Notes
 
-- `scan-history.jsonl` is written automatically by the CLI — no agent action needed
-- `incidents.jsonl` and `sessions/` are written by agents following the execution loop and skill closing protocol
+- `scan-history.jsonl` is written and rotated automatically by the CLI — no agent action needed
+- `incidents.jsonl` and `sessions/` are written by agents following the execution loop and skill closing protocol — agents enforce retention limits before each write
 - This directory can be safely deleted (`rm -rf tasks/logs/*.jsonl tasks/logs/sessions/`) to reset telemetry
 - The learning loop files (`docs/lessons.md`, `docs/footguns.md`) remain the canonical record; telemetry is supplementary structured data

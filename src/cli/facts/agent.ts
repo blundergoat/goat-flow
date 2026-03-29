@@ -322,7 +322,7 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
         if (/human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
         if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
         if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
-        if (/conversational|drill.*in|dig deeper|walk.*through|present.*findings.*then|let.*human.*drill|iterate|follow[-.]up question|proceed\?/i.test(skillContent)) withConversational++;
+        if ((/blocking\s*gate|human\s*gate/i.test(skillContent)) && (/\(a\)|want me to|offer:|proceed\?/i.test(skillContent))) withConversational++;
         if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
         if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
         if (/##\s*(Output|Output Format)/i.test(skillContent)) withOutputFormat++;
@@ -373,7 +373,8 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
       if (/^https?:/.test(ref)) continue;
       // Skip template placeholders, example paths, and gitignored working files
       if (/\{|YYYY|file:line|path\/to|monitoring\//i.test(ref)) continue;
-      if (/^tasks\/(handoff|todo|commit|release)\.md$/.test(ref)) continue;
+      if (/^tasks\/(handoff|todo|commit|release|scratchpad|improvement)/.test(ref)) continue;
+      if (/^(src\/api|config\/|docs\/glossary)/.test(ref)) continue;
       if (!fs.exists(ref) && !danglingRefs.includes(ref)) {
         danglingRefs.push(ref);
       }
@@ -439,7 +440,7 @@ function analyzeDenyScript(denyContent: string): {
     blocksRmRf: /rm\s*.*-.*r.*f|rm\s*-rf/i.test(denyContent),
     blocksForcePush: /force.*push|--force/i.test(denyContent),
     blocksChmod: /chmod.*777/.test(denyContent),
-    blocksPackageMutation: /npm.*install|pip.*install|composer.*require|go\s+get|yarn.*add|pnpm.*add/is.test(denyContent),
+    blocksPackageMutation: /npm.*(install|add)|pip.*install|composer.*require|go\s+get|yarn.*(add|install)|pnpm.*(add|install)/is.test(denyContent),
     blocksCloudDestructive: /docker\s+push|terraform\s+(destroy|apply.*-auto-approve)|aws\s+(s3\s+rm|ec2\s+terminate)/i.test(denyContent),
   };
 }
@@ -464,7 +465,7 @@ function applySettingsDenyOverrides(
   if (/Bash\(.*rm -rf|Bash\(.*rm -fr/i.test(denyStr)) hook.denyBlocksRmRf = true;
   if (/Bash\(.*--force|Bash\(.*force.*push/i.test(denyStr)) hook.denyBlocksForcePush = true;
   if (/Bash\(.*chmod 777/i.test(denyStr)) hook.denyBlocksChmod = true;
-  if (/Bash\(.*(npm install|yarn add|pip install|composer require|go get|pnpm add)/i.test(denyStr)) hook.denyBlocksPackageMutation = true;
+  if (/Bash\(.*(npm (install|add)|yarn add|pip install|composer require|go get|pnpm add)/i.test(denyStr)) hook.denyBlocksPackageMutation = true;
   if (/Bash\(.*(docker push|terraform destroy|terraform apply|aws s3 rm|aws ec2 terminate)/i.test(denyStr)) hook.denyBlocksCloudDestructive = true;
 }
 

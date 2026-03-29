@@ -2,7 +2,7 @@
 
 import { parseArgs } from 'node:util';
 import { resolve, dirname, join } from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { CLIOptions, Grade, AgentId, ScanReport } from './types.js';
 
@@ -46,11 +46,12 @@ Arguments:
   project-path    Target project directory (default: .)
 
 Flags:
-  --format <type>   Output format: json, text (default: auto)
+  --format <type>   Output format: json, text, markdown, html (default: auto)
   --agent <id>      Filter to one agent: claude, codex, gemini
   --verbose         Show per-check details in text mode
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
   --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
+  --output <file>   Write output to file instead of stdout
   --help, -h        Show this help
   --version, -v     Show version
 
@@ -61,6 +62,8 @@ Examples:
   goat-flow setup --agent codex      Setup prompt for Codex
   goat-flow setup --agent gemini      Setup prompt for Gemini
   goat-flow --min-score 75           CI gate: fail if below 75%
+  goat-flow --format markdown        PR-comment friendly output
+  goat-flow --output report.json     Write results to file
   goat-flow eval                     Summarize agent evals
   goat-flow eval --format json       Eval summary as JSON
 `);
@@ -71,10 +74,10 @@ function printVersion(): void {
   console.log(`goat-flow v${PACKAGE_VERSION}`);
 }
 
-type Command = 'scan' | 'setup' | 'eval';
+type Command = 'scan' | 'setup' | 'eval' | 'dashboard';
 
 /** List of recognized CLI subcommands */
-const COMMANDS: Command[] = ['scan', 'setup', 'eval'];
+const COMMANDS: Command[] = ['scan', 'setup', 'eval', 'dashboard'];
 
 export interface ParsedCLI extends CLIOptions {
   command: Command;
@@ -104,6 +107,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       verbose: { type: 'boolean', default: false },
       'min-score': { type: 'string' },
       'min-grade': { type: 'string' },
+      output: { type: 'string', short: 'o' },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -114,8 +118,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   // Auto-detect format: text if TTY, json if piped
   let format: CLIOptions['format'] = process.stdout.isTTY ? 'text' : 'json';
   if (values.format) {
-    if (['json', 'text'].includes(values.format) === false) {
-      throw new CLIError(`Invalid format: ${values.format}. Use: json, text`, 2);
+    if (['json', 'text', 'html', 'markdown'].includes(values.format) === false) {
+      throw new CLIError(`Invalid format: ${values.format}. Use: json, text, html, markdown`, 2);
     }
     format = values.format as CLIOptions['format'];
   }
@@ -160,6 +164,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     verbose: values.verbose === true,
     minScore,
     minGrade,
+    output: values.output ? resolve(values.output) : null,
     help: values.help === true,
     version: values.version === true,
   };
@@ -309,6 +314,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Dashboard: start local server (handles scan/setup via API)
+  if (options.command === 'dashboard') {
+    const { serveDashboard } = await import('./serve-dashboard.js');
+    serveDashboard(options.projectPath);
+    return;
+  }
+
   // Import dynamically to keep --help fast
   const { createFS } = await import('./facts/fs.js');
   const { scanProject } = await import('./scanner/scan.js');
@@ -324,10 +336,25 @@ async function main(): Promise<void> {
 
   if (options.command === 'scan') {
     /** Formatted scan output string in the requested format */
-    const output = options.format === 'text'
-      ? renderText(report, options.verbose)
-      : renderJson(report);
-    process.stdout.write(output + '\n');
+    let rendered: string;
+    if (options.format === 'html') {
+      const { renderHtml } = await import('./render/html.js');
+      rendered = renderHtml(report);
+    } else if (options.format === 'markdown') {
+      const { renderMarkdown } = await import('./render/markdown.js');
+      rendered = renderMarkdown(report);
+    } else if (options.format === 'text') {
+      rendered = renderText(report, options.verbose);
+    } else {
+      rendered = renderJson(report);
+    }
+
+    if (options.output) {
+      writeFileSync(options.output, rendered + '\n', 'utf-8');
+      console.error(`Written to ${options.output}`);
+    } else {
+      process.stdout.write(rendered + '\n');
+    }
 
     // Append to local telemetry log (silent on failure)
     const { appendScanHistory } = await import('./telemetry/scan-logger.js');

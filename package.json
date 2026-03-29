@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "CLI auditor + scoring engine for GOAT Flow AI coding agent workflows",
   "type": "module",
   "bin": {
@@ -12,7 +12,8 @@
   "files": [
     "dist",
     "setup",
-    "workflow"
+    "workflow",
+    "dashboard"
   ],
   "engines": {
     "node": ">=20.6.0"
@@ -21,7 +22,13 @@
     "build": "tsc",
     "test": "node --import tsx --test 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "self-scan": "node dist/cli/cli.js .",
+    "scan": "node dist/cli/cli.js scan .",
+    "scan:verbose": "node dist/cli/cli.js scan . --verbose",
+    "scan:json": "node dist/cli/cli.js scan . --format json",
+    "setup": "node dist/cli/cli.js setup . --agent claude",
+    "dashboard": "node dist/cli/cli.js dashboard .",
+    "preflight": "bash scripts/preflight-checks.sh",
+    "validate": "bash scripts/context-validate.sh",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
@@ -31,6 +38,9 @@
     "tsx": "^4.0.0",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.57.1"
+  },
+  "knip": {
+    "ignoreDependencies": ["alpinejs", "@tailwindcss/browser"]
   },
   "keywords": [
     "ai",
@@ -46,5 +56,9 @@
     "type": "git",
     "url": "https://github.com/blundergoat/goat-flow",
     "directory": "."
+  },
+  "dependencies": {
+    "alpinejs": "^3.15.9",
+    "@tailwindcss/browser": "^4.2.2"
   }
 }

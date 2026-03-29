@@ -39,7 +39,8 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      and redirect, conflicting instructions → flag and ask)
      Telemetry: if `tasks/logs/` exists, append to
      `tasks/logs/incidents.jsonl` when VERIFY catches a failure or
-     two-corrections-rewind fires. Schema in `tasks/logs/README.md`.
+     two-corrections-rewind fires. If >200 lines, trim oldest half first.
+     Schema in `tasks/logs/README.md`.
    - LOG: MUST update when tripped (DoD gate #4). Reference all three
      learning loop files:
      docs/lessons.md (behavioural mistakes),
@@ -55,8 +56,8 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Dual-agent projects: learning loop files are shared. Read the
      current file before appending to avoid duplicating entries.
      Incident telemetry: after writing to lessons.md or footguns.md,
-     also append to `tasks/logs/incidents.jsonl` if the directory exists.
-     Schema in `tasks/logs/README.md`.
+     also append to `tasks/logs/incidents.jsonl` if the directory exists
+     (trim oldest half if >200 lines). Schema in `tasks/logs/README.md`.
 
 c) Autonomy Tiers: Always / Ask First / Never
    - Never tier MUST include:

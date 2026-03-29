@@ -1,7 +1,7 @@
 ---
 name: goat-investigate
-description: "Investigate a codebase area and report findings"
-goat-flow-skill-version: "0.9.0"
+description: "Deep codebase investigation with progressive depth reading, evidence tagging, and structured reporting. Includes onboarding mode for new projects."
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-investigate
 
@@ -10,190 +10,178 @@ goat-flow-skill-version: "0.9.0"
 - **Severity:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (verified) or INFERRED (state what's missing). MUST NOT fabricate.
 - **Gates:** BLOCKING GATE = must stop for human. CHECKPOINT = report status, continue unless interrupted.
-- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Only hard-block with zero context.
+- **Adaptive Step 0:** If context already provided, confirm it — don't re-ask. Bare invocation with no arguments = zero context = ask structural questions and WAIT. Auto-detect pre-fills — it does not replace confirmation.
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
+- **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
 - **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
 
 ## When to Use
 
-Use when investigating a codebase area to understand how it works — exploring an unfamiliar subsystem, understanding before refactoring, mapping dependencies, or onboarding to a new domain. Produces a structured research document. No planning until human reviews.
+Use when exploring an unfamiliar codebase area to understand how it works —
+before refactoring, mapping dependencies, understanding a subsystem, or
+onboarding to a new project.
 
----
+**NOT this skill:**
+- Bug diagnosis with a specific symptom → /goat-debug
+- Security assessment with a threat model → /goat-security
+- Reviewing a specific diff or PR → /goat-review
+- Planning implementation of a known feature → /goat-plan
 
 ## Step 0 — Gather Context
 
-Ask the user before investigating:
+<!-- ADAPT: Replace illustrative questions (3, 4) with project-specific options -->
 
-1. **What are we investigating?** (subsystem, feature area, dependency, domain concept)
-2. **Why?** (planning a change, understanding before refactoring, onboarding, debugging)
-3. **What do you already know?** (so the agent doesn't waste time on known things)
-4. **Any specific questions?** (or "just map it out")
+**Structural questions (always ask or confirm):**
+1. What are we investigating? (subsystem, feature area, dependency, domain)
+2. Why? (understanding before changes, onboarding, mapping dependencies, "just curious")
 
-Do NOT start reading until the user has answered. An investigation without a clear question produces noise, not signal.
+**Illustrative questions (adapt for your project):**
+3. <!-- ADAPT: "Which layer? (e.g., API handlers, database models, frontend state)" -->
+4. How deep should this go? (surface scan / full trace / "just map it out")
 
----
+**Read budget:** Default 8 files. Narrow scope: 5. Broad scope: 12.
+Confirm or adjust with the user.
 
-## Phase 1 — Scope
+**If purpose = onboarding** → activate onboard mode (see below).
 
-Based on the user's answers, define and present:
-- **Question:** what we're investigating (one clear sentence)
-- **In scope:** specific files/directories to read
-- **Out of scope:** what we're NOT looking at
-- **Read budget:** estimated number of files to read before pausing
+**Before proceeding:** present what you know (target, purpose, depth) and what you still need. Wait for the user to confirm before entering Phase 1.
 
-Ask the user: "Does this scope look right, or should I include/exclude anything?"
+## Phase 1 — Scope & Plan
 
-Wait for confirmation before reading.
+Declare scope before reading deeply:
+- **In scope:** [files, directories, or patterns to examine]
+- **Out of scope:** [what we're explicitly NOT investigating]
+- **Read budget:** [N files before pausing for check-in]
 
----
+Read `docs/footguns.md` for entries mentioning the target area. Present any
+matches: "This area has a known footgun: [entry]. Keep this in mind."
 
-## Phase 2 — Read
+**BLOCKING GATE:** Present scope to user. "I'll investigate [scope] reading
+up to [N] files. Anything to adjust?"
 
-### Progressive Depth
+## Phase 2 — Read (Progressive Depth)
 
-Read in layers: entry points first, then critical path, then supporting files. Do NOT read everything at once.
+Read in layers — don't try to understand everything at once:
 
-1. **Entry points** — main interfaces, exports, config files
-2. **Critical path** — the core logic the user asked about
-3. **Supporting files** — helpers, utilities, tests, adjacent modules
+1. **Entry points** — where execution starts for this area
+   Search for files by pattern, then search file contents for cross-references.
+2. **Critical path** — the main flow through the area
+   Read key files. For deep subsystem dives, use parallel exploration if available.
+3. **Supporting files** — helpers, utilities, configs that the critical path depends on
 
-After reaching the read budget, pause: "I've read [N] files. Want me to go deeper or present what I have?"
+For each file read, log:
+- What role it plays
+- What it connects to
+- Whether evidence is OBSERVED (verified in code) or INFERRED (deduced)
 
-### Systematic Reading
+**CHECKPOINT:** At read budget limit, report: "[N] files read. Key findings so far:
+[summary]. Continue reading, or present findings?"
 
-- Follow cross-references, imports, and internal links
-- Note data flow paths and ownership boundaries
-- Note anything surprising or undocumented
-- **Noise awareness:** drop irrelevant results rather than accumulating them in context
+**Noise awareness:** If a search returns irrelevant results, drop them.
+Semantic noise is worse than no results.
 
----
+## Phase 3 — Report
 
-## Phase 3 — Document
+Produce the Investigation Report using the Output Format template below. Every section is required.
 
-### TL;DR (start here)
+Key sections that prevent false confidence:
+- **What I Didn't Read** — REQUIRED. List files/areas skipped with reasons (too many, lower priority, needs additional context). If you examined 8 of 30 files, say so.
+- **Current vs Expected State** — for each finding, state what IS vs what SHOULD BE.
+- **Evidence tags** — OBSERVED for things verified in code. INFERRED for deductions (state what direct evidence is missing).
+  *Example:* "OBSERVED: `auth.ts:47` uses `<` instead of `<=` for token expiry —
+  verified by reading the line. INFERRED: this likely causes premature token
+  rejection *(missing: need to verify with a test)*."
 
-Start with a 3-sentence summary. The human should understand the key finding within 10 seconds.
+**BLOCKING GATE:** Present full report. Offer:
+(a) go deeper into a specific area
+(b) check a boundary I didn't cross
+(c) map a different area
+(d) close the investigation
 
-### Full Report
+## Onboard Mode
 
-Present findings structured as:
-- **Overview** (2-3 sentence summary)
-- **Components** (table: component, location, purpose)
-- **Data Flow** (how information moves, with file:line references)
-- **Boundaries Touched** (what's a boundary and why)
-- **Risks / Gotchas** (minimum 3, with file:line evidence)
-- **Findings** (what we learned, with evidence — tag each as below)
-- **Open Questions** (what couldn't be determined and why)
-- **What I Didn't Read** (files in scope but not read, and why)
-- **Recommendation** (what to do next — pending human review)
+Activated when Step 0 purpose = "onboarding" / "new to this project" / "need to set up instructions."
 
-### Evidence Quality Tags
+**Phase 0.5 — Stack Detection** (before Phase 1):
+<!-- ADAPT: Adjust file patterns for your project's stack -->
+1. Languages: scan file extensions, read build configs (package.json, composer.json, Cargo.toml, go.mod, pyproject.toml, Gemfile, *.csproj)
+2. Frameworks: identify from dependencies and directory patterns
+3. Build/test/lint: extract commands from config files
+4. Directory structure: map top-level organization
+5. Entry points: identify main files per component
 
-Tag each finding:
-- **OBSERVED** — directly verified in code with file:line evidence
-- **INFERRED** — deduced from patterns, documentation, or naming conventions; not directly verified
+Present findings: "This project uses [languages] with [frameworks]. Build: [cmd], Test: [cmd]. Correct?"
 
-### Current vs Expected State
+**Phase 3.5 — Glossary Discovery** (during onboarding):
+If `docs/glossary.md` exists, read it. If it doesn't, build one from the codebase:
+scan class names, domain terms in README/docs, and naming patterns. Present as:
+`| term | definition | canonical file | aliases |`
+Ask: "Should I create docs/glossary.md with these terms?"
 
-For each significant finding, capture both sides:
-- **Current state:** what exists in the code right now
-- **Expected state:** what should exist, or what the user expected
+**Phase 4 — Instruction Drafting** (after Phase 3, if user requests):
+- Present all content inline BEFORE writing any files
+- Source of truth is code, not docs — verify every claim against actual files
+- <!-- ADAPT: Target ai/instructions/ or .github/instructions/ based on project convention -->
+- MUST NOT include aspirational content — only document what currently exists
 
-### Severity Scale
+**BLOCKING GATE:** Present drafted instructions. "Write these files, or adjust first?"
 
-Prioritize findings: **SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE**
+## Common Failure Modes
 
-Every claim backed by file:line reference. Flag unknowns explicitly: "I couldn't determine X because Y."
-
----
-
-## Phase 4 — Gate
-
-**HUMAN GATE:** Present your findings (TL;DR first). Then ask:
-
-"Want me to (a) go deeper on a specific component, (b) check a boundary I missed, (c) map a different area entirely, or (d) close the investigation?"
-
-Do NOT auto-advance to planning or implementation. Let the human drill into specific findings, challenge conclusions, or redirect: "also look at X" or "that's wrong because Y."
-
-### Link to Next Action
-
-After the human is satisfied, recommend the next step:
-- **goat-plan** — this area needs planning work
-- **goat-debug** — found a bug during investigation
-- **close** — question answered, no further action needed
-
----
+1. **Over-reading** — agent reads 30 files without pausing at the budget. The read budget checkpoint prevents this.
+2. **Everything is OBSERVED** — agent tags all findings as OBSERVED when many are inferred. Require: "INFERRED findings must state what direct evidence is missing."
+3. **Encyclopedic summary** — agent produces a comprehensive description that answers no specific question. The TL;DR + scope question keep output focused.
 
 ## Constraints
 
-- MUST gather context before investigating (Step 0)
-- MUST confirm scope with user before reading (Phase 1)
-- MUST read in progressive depth: entry points, critical path, then supporting files
-- MUST complete reading before writing findings
-- MUST provide file:line evidence for every claim
-- MUST tag findings as OBSERVED or INFERRED
-- MUST include "What I Didn't Read" section
-- MUST stop after presenting findings — no planning until human reviews
-- MUST flag uncertainties and unknowns explicitly
-- MUST NOT skip to planning before research is reviewed
-- MUST NOT fabricate file paths, content, or behaviour
-- MUST NOT produce vague summaries without file:line specifics
-
----
+<!-- FIXED: Do not adapt these -->
+- MUST declare scope before deep reading
+- MUST tag evidence as OBSERVED or INFERRED
+- MUST include "What I Didn't Read" in every report
+- MUST NOT propose implementation or planning — investigation only
+- MUST NOT fabricate file paths or function names
+- MUST respect the read budget — pause at limit, don't silently exceed
 
 ## Output Format
 
-```
+```markdown
 ## TL;DR
-[3 sentences max. Key finding, main implication, confidence level.]
+<!-- 3 sentences: scope, key finding, recommendation -->
 
-## Investigation: [description]
+## Components
+| Component | Location | Role |
+|-----------|----------|------|
 
-### Components
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| [name] | [file:line] | [what it does] |
+## Data Flow
+<!-- Mermaid.js diagram or prose description -->
 
-### Data Flow
-1. [file:line] — [how data enters]
-2. [file:line] — [how data transforms]
-3. [file:line] — [how data exits]
+## Boundaries Touched
+<!-- Which module/service/API boundaries does this area cross? -->
 
-### Boundaries Touched
-- [boundary] — [why it matters]
+## Risks / Gotchas
+<!-- Minimum 3, with file:line evidence -->
+- `file:line` — [risk] — Evidence: OBSERVED | INFERRED
 
-### Risks / Gotchas
-1. [OBSERVED/INFERRED] [file:line] — [risk description]
-   Current state: [what exists]
-   Expected state: [what should exist]
+## Current vs Expected State
+| Aspect | Current | Expected | Gap |
+|--------|---------|----------|-----|
 
-### Findings
-1. [OBSERVED/INFERRED] [file:line] — [finding]
-   Current state: [what exists]
-   Expected state: [what should exist]
+## Open Questions
+<!-- What couldn't be determined from reading code alone? -->
 
-### Open Questions
-- [question] — [why it couldn't be determined]
+## What I Didn't Read
+<!-- Files/areas skipped. Reason: too many | lower priority | needs context -->
 
-### What I Didn't Read
-- [file/directory] — [reason: too many, lower priority, needs additional context]
-
-### Recommendation
-Based on this investigation, I recommend: [goat-plan / goat-debug / close] because [reason].
+## Recommendation
+<!-- What should happen next? Chain to which skill? -->
 ```
-
----
-
-## Learning Loop
-
-If this investigation uncovered a lesson or footgun, update the relevant doc before closing:
-- Behavioural mistake → `docs/lessons.md`
-- Architectural trap with file:line evidence → `docs/footguns.md`
-
----
 
 ## Chains With
 
-- **goat-plan** — investigated area needs planning work
-- **goat-debug** — found a bug during investigation
+- /goat-plan — investigation reveals need for structured planning
+- /goat-debug — investigation uncovers a specific bug → switch to diagnosis
+- /goat-security — investigation reveals security concerns → deeper assessment
+- /goat-refactor — investigation maps code that needs restructuring
+
+**Handoff shape:** `{scope, components, boundaries, risks, open_questions}`
