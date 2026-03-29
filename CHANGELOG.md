@@ -4,26 +4,30 @@
 
 ## v0.9.0 - 2026-03-29
 
-Dispatcher skill, Shared Conventions checks, workflow templates v0.9.0 bump, phase-0.md, 8 skill evals, preflight version gate. Rubric v0.9.0: 99 checks + 15 anti-patterns. 167 tests.
+Dispatcher skill, coding-standards refresh, scanner hardening, telemetry, signal-aware setup. Rubric v0.9.0: 104 checks + 16 anti-patterns. 167 tests.
+
+### Coding Standards (Phases 1-8)
+- Backend: go.md interface fix, DRF split, Rust/Spring/.NET/TS Node detection; frontend: 9-framework routing, version gates
+- Security: new `llm-security.md`, `phi-compliance.md`, `framework-specific/go.md`, `framework-specific/symfony.md`; expanded web-common/api-auth/supply-chain/infrastructure/file-upload
+- DevOps: new `devops/` with `terraform.md`, `packer.md`; `code-review.md` Learning Loop Cross-Check
 
 ### Scanner
-- Check 2.1.20: Dispatcher skill (goat) installed — custom fn reads `hasDispatcher` fact via `fs.exists(skillsDir/goat/SKILL.md)`
-- Check 2.1.21: All canonical skills have `## Shared Conventions` block — `withSharedConventions` counter in `facts/agent.ts`
+- Checks 2.1.20-21: dispatcher skill + Shared Conventions block
+- AP16: deprecated skills (-5); AP17: dangling skill refs (-3)
+- 2.2.5g-h: package mutation + cloud-destructive deny blocking
+- 2.7.1-3: signal follow-through (LLM, PHI hot path, formatter gaps)
+- 3.1.7: eval frontmatter enforcement; 3.3.4: loop consistency promoted to standard (3 pts)
+- 3.1.6: eval coverage rebalanced (2 pts, partial at 4/8); 3.1.3 reduced to 1 pt
 
-### Skills & Dispatcher
-- Dispatcher skill (`goat`) added across all three agent dirs; routes to 8 canonical skills by intent
-- `## Shared Conventions` block added to all 18 installed skill files (.claude/.agents/.github × 6 skills)
-- Workflow templates bumped from `goat-flow-skill-version: "0.7.0"` → `"0.9.0"` (fixes guaranteed AP15 -10 on new installs)
+### Signal-Aware Setup & Telemetry
+- `mapSignalsToTemplates()` auto-routes `phi-compliance.md` + `llm-security.md` on signal detection
+- `renderSignals()` produces actionable tasks; formatter gap detection checks hook content
+- `scan-logger.ts` auto-appends per-agent JSONL; skills/loop reference telemetry
 
-### Setup & Scripts
-- `setup/shared/phase-0.md` created (fixes dead link in setup/README.md phases table)
-- `setup/shared/phase-1.md` updated: dispatcher install guidance, version check gate, AP15 warning
-- `scripts/preflight-checks.sh`: Skill Template Versions section — catches version drift before shipping
-- `scripts/context-validate.sh`: dispatcher-aware (accepts `## How It Works`; skips Output check for goat)
-
-### Evals & Docs
-- 8 skill-specific evals added under `agent-evals/` (one per canonical skill, new YAML frontmatter format)
-- `docs/reference/design-rationale.md`: ADR-007 supersession note on v2.9 row
+### Skills, Hooks & Version Consistency
+- Dispatcher skill + Shared Conventions across all agent dirs; 8 skill-specific evals (YAML frontmatter)
+- Preflight: instruction headers, installed skills, workflow templates, dual-agent loop consistency
+- `.claude/hooks/format-file.sh` (prettier); deny hooks: package + cloud blocks
 
 ---
 
