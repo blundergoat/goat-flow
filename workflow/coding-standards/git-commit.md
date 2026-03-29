@@ -12,7 +12,7 @@ Load this file when committing code or creating pull requests.
 
 Write `ai/instructions/git-commit.md`:
 
-```
+````
 # Git Commit Instructions
 
 ## Commit Message Format
@@ -97,7 +97,7 @@ Use lowercase, hyphens between words. No issue numbers in branch names.
 - Never force-push to `main`
 - Run tests locally before pushing: `npm test && go test ./...`
 - One logical change per commit -- don't mix refactoring with features
-```
+````
 
 Adjust the test commands, branch conventions, and merge strategy to match this project.
 
@@ -107,10 +107,8 @@ Adjust the test commands, branch conventions, and merge strategy to match this p
 
 Also write `.github/git-commit-instructions.md`:
 
-```
+````
 # Commit Message Instructions
-
-Source of truth: `ai/instructions/git-commit.md` (read that file for full details).
 
 ## Format
 
@@ -163,6 +161,6 @@ Include in every PR:
 - API keys, tokens, passwords
 - Large binary files
 - Generated files (check `.gitignore`)
-```
+````
 
 Adjust the commit types and examples to match this project's conventions.

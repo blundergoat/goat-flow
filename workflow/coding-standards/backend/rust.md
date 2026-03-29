@@ -1,6 +1,12 @@
-# Rust Coding Standards (Axum / Actix)
+# Rust Backend Standards (Tokio + HTTP + SQLx oriented)
 
 Reference for generating `ai/instructions/backend.md` in Rust backend projects.
+
+This file assumes Tokio for async work, HTTP extractors/middleware, and SQLx as
+the common data layer. If the repo uses Actix-specific patterns, Diesel,
+SeaORM, or a non-HTTP service shape, keep the error, async, and testing
+guidance and replace the framework/data sections with the patterns actually
+present.
 
 ## Error Handling
 
@@ -60,7 +66,7 @@ let hash = tokio::task::spawn_blocking(move || argon2::hash(password)).await?;
 let hash = argon2::hash(password); // blocks the tokio worker thread
 ```
 
-## Web Framework (Axum)
+## Web Framework (Axum example)
 
 - Use extractors for parsing: `Path`, `Query`, `Json`, `State`.
 - Share application state via `State<Arc<AppState>>`. Build state once at startup.
@@ -83,7 +89,7 @@ async fn get_user(req: Request) -> impl IntoResponse {
 }
 ```
 
-## Database (SQLx)
+## Database (SQLx, if used)
 
 - Use `sqlx` with compile-time checked queries (`sqlx::query!` / `sqlx::query_as!`).
 - Use connection pooling via `PgPool`. Create the pool once, pass it via application state.

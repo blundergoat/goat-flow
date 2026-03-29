@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Structured code review and quality audit with RFC 2119 severity, diff-aware analysis, footgun matching, negative verification, and instruction-file audit mode."
-goat-flow-skill-version: "0.8.0"
+goat-flow-skill-version: "0.9.0"
 ---
 # /goat-review
 
@@ -234,6 +234,7 @@ MUST NOT edit `docs/footguns.md` or `docs/lessons.md` — those have their own u
 - MUST check each finding against `docs/footguns.md` (MATCH/CLEAR)
 - MUST order findings by severity, not by file or discovery order
 - MUST NOT fabricate file paths or function names
+- MUST NOT make file edits in review or audit mode — report findings only. Only edit if user explicitly says "implement".
 - MUST NOT auto-edit instruction files in instruction review mode
 - MUST attempt to disprove each finding in audit mode (negative verification)
 - MUST NOT propose fixes in audit mode — audit reports only

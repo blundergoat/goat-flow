@@ -21,6 +21,7 @@ Agents: load `web-common.md` for ALL web projects. Then load the framework-speci
 | Signal | Stack file |
 |--------|-----------|
 | composer.json + "laravel/framework" | framework-specific/laravel.md |
+| composer.json + "symfony/framework-bundle" | framework-specific/symfony.md |
 | pyproject.toml + "django" | framework-specific/django.md |
 | Gemfile + "rails" | framework-specific/rails.md |
 | pom.xml/build.gradle + "spring-boot" | framework-specific/spring.md |

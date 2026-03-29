@@ -19,7 +19,7 @@ Reference for generating `ai/instructions/security.md` in any web project.
 
 ## HTTP Security Headers
 
-Set these on every response. Values are production-ready defaults.
+Set these on every response. Values below are conservative defaults — adjust CSP directives for your actual asset sources and inline script needs.
 
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'

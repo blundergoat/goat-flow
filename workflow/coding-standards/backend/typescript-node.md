@@ -1,18 +1,27 @@
-# TypeScript Node.js Coding Standards (Express / Fastify / Nest)
+# TypeScript Node.js Coding Standards (Express / Fastify oriented; adapt for Nest)
 
 Reference for generating `ai/instructions/backend.md` in Node.js backend projects.
+
+This file is strongest for Express and Fastify services. If the repo uses Nest,
+keep the validation, env, testing, and contract guidance, but map request
+pipeline concerns to Nest modules, providers, pipes, guards, interceptors, and
+exception filters instead of copying raw Express middleware patterns.
 
 ## Project Structure
 
 - Organize by domain: `modules/users/`, `modules/orders/` — each with routes, controllers, services, and repositories.
 - Entry point sets up server, middleware, and routes. No business logic in the entry file.
 - Routes -> Controllers (parse HTTP) -> Services (business logic) -> Repositories (data access).
+- In Nest, the equivalent shape is modules -> controllers -> providers/services
+  -> repositories/adapters. Preserve the repo's existing module boundaries.
 
 ## Middleware
 
 - Register error-handling middleware last — Express calls it when `next(err)` is invoked.
 - Wrap async route handlers to catch rejected promises. Express 4 does not catch async errors automatically.
 - Use Fastify's built-in async error handling or Express 5+ which handles async natively.
+- In Nest, prefer exception filters, guards, pipes, and interceptors over
+  ad-hoc middleware for validation, auth, and error translation.
 
 ```typescript
 // DO — async error wrapper for Express 4
@@ -59,8 +68,10 @@ if (!req.body.customerId) return res.status(400).json({ error: 'missing customer
 
 ## Database
 
-- Prisma for type-safe ORM with auto-generated client and migrations.
-- Knex for query-builder projects that need more SQL control.
+- Use the repo's existing data layer. Prisma and Knex are common examples, not
+  required defaults.
+- Prisma fits type-safe ORM projects with generated client + migrations.
+- Knex fits query-builder projects that need more SQL control.
 - Migrations are mandatory. DO NOT modify the database schema by hand.
 - Use transactions for multi-step writes: `prisma.$transaction([...])` or `knex.transaction(...)`.
 
@@ -107,6 +118,8 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 - Use `supertest` for HTTP-level testing against the Express/Fastify app.
 - Mock the database layer with in-memory SQLite (Prisma) or testcontainers for integration tests.
 - Isolate tests: each test creates its own data, no shared mutable state.
+- In Nest, use `@nestjs/testing` to build modules for unit tests and pair it
+  with `supertest` for end-to-end HTTP tests.
 
 ```typescript
 // DO — supertest integration test

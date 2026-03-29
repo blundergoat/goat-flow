@@ -191,7 +191,7 @@ with ProcessPoolExecutor() as pool:
     results = list(pool.map(heavy_compute, items))
 ```
 
-## Footguns
+## Common Footguns
 
 - **Mutable default arguments**: `def f(items=[])` shares the list across calls. Use `def f(items: list | None = None)` with `items = items or []`.
 - **Late binding closures**: `[lambda: i for i in range(3)]` — all return 2. Fix: `lambda i=i: i`.

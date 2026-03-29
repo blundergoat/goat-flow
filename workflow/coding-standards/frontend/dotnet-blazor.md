@@ -2,6 +2,13 @@
 
 Reference for generating `ai/instructions/frontend.md` in Blazor projects.
 
+## Version Gates
+
+- Per-component render modes such as `InteractiveServer`,
+  `InteractiveWebAssembly`, and `InteractiveAuto` are .NET 8+ guidance.
+- If the repo targets .NET 7 or earlier, skip the render-mode advice and keep
+  the component/state/interoperability guidance only.
+
 ## Render Modes
 
 - **Static SSR**: Fast first paint, no interactive event handling after render.
@@ -19,8 +26,10 @@ Reference for generating `ai/instructions/frontend.md` in Blazor projects.
 
 ## Component Lifecycle
 
-- `OnInitializedAsync` for data fetching on component load. This is the primary lifecycle method.
-- `OnParametersSetAsync` when you need to react to parameter changes (re-fetch when a route param changes).
+- `OnInitializedAsync` is a common place for first-load data fetching when the
+  data does not depend on changing route parameters.
+- `OnParametersSetAsync` when you need to react to parameter changes (re-fetch
+  when a route param changes).
 - DO NOT put heavy logic in `SetParametersAsync` — it runs on every render cycle.
 - `Dispose` (implement `IDisposable`) for cleaning up event handlers, timers, and subscriptions.
 
@@ -142,3 +151,9 @@ protected override async Task OnInitializedAsync()
 - **StateHasChanged from non-UI thread**: Calling `StateHasChanged()` from a background thread throws. Use `InvokeAsync(StateHasChanged)` to marshal back to the render thread.
 - **Cascading parameter overuse**: Every cascading value change re-renders all consuming components in the subtree. Use for truly global state (theme, auth), not for frequently changing data.
 - **Missing `@key` on list items**: Without `@key`, Blazor uses index-based diffing. Add `@key="item.Id"` to preserve component state during list reordering.
+
+## Primary Sources
+
+- Blazor overview: https://learn.microsoft.com/aspnet/core/blazor/
+- Blazor lifecycle: https://learn.microsoft.com/aspnet/core/blazor/components/lifecycle
+- Blazor render modes: https://learn.microsoft.com/aspnet/core/blazor/components/render-modes

@@ -8,7 +8,7 @@ Load this file when reviewing code (PRs, diffs, audit tasks).
 
 Write `ai/instructions/code-review.md`:
 
-```
+````
 IMPORTANT: When listing anti-patterns or review checks, verify each against actual code:
 - Do not reference files that don't exist — run ls/find to confirm paths
 - Do not list API contracts that aren't implemented — read the source
@@ -21,8 +21,8 @@ IMPORTANT: When listing anti-patterns or review checks, verify each against actu
 
 Check in this order. Stop and flag blocking issues before continuing.
 
-1. **Correctness** — Does the code do what the PR says it does?
-2. **Security** — SQL injection, auth bypass, secret leaks, path traversal?
+1. **Security** — SQL injection, auth bypass, secret leaks, path traversal?
+2. **Correctness** — Does the code do what the PR says it does?
 3. **Data integrity** — Missing transactions, race conditions, partial writes?
 4. **Maintainability** — Can someone else understand this in 6 months?
 5. **Performance** — Only flag if measurable (N+1 queries, unbounded loops).
@@ -142,6 +142,7 @@ These are handled by linters — do not comment on them:
 - Variable naming style (camelCase vs snake_case) unless inconsistent within a file
 - Line length (configured in linter)
 - Trailing commas
-```
+````
 
 Adjust the language-specific examples to match this project's stack.
+Target 40-60 lines of content (not counting the prompt wrapper).

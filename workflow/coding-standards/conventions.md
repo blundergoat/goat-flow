@@ -12,7 +12,7 @@ Language-specific architecture and patterns go in backend.md or frontend.md.
 
 Read the codebase, then write `ai/instructions/conventions.md` following this structure:
 
-```
+````
 IMPORTANT: Only document what currently exists in the codebase.
 - Verify every claim by reading actual source files, not documentation or roadmaps
 - Do NOT include planned/aspirational features from docs/architecture.md or roadmaps
@@ -93,9 +93,12 @@ export function UserCard() { ... }
 export default function() { ... }
 ```
 
-## Universal Standards (apply to all projects regardless of codebase)
+## Universal Standards
 
-**Function length:** Hard limit 50 lines. If a function exceeds this, extract a helper. No exceptions.
+These defaults apply to all projects. Include them as-is — they are not derived from the codebase.
+Phrase each as a project default: if the repo already uses a different convention, document that instead.
+
+**Function length:** Target 40 lines; hard limit 50. If a function exceeds this, extract a helper.
 
 **Cyclomatic complexity:** Max 10 branches per function. Flatten with early returns, guard clauses, or strategy pattern.
 ```go
@@ -132,7 +135,7 @@ func process(order Order) error {
 }
 ```
 
-**Dependencies:** Pin exact versions in lockfiles. Run `npm audit` / `cargo audit` / `pip-audit` before adding new deps. Prefer well-maintained deps with >1000 GitHub stars or proven track record.
+**Dependencies:** Pin exact versions in lockfiles. Run `npm audit` / `cargo audit` / `pip-audit` before adding new deps. Prefer well-maintained packages: check last release date, open CVE count, and whether alternatives already exist in the project.
 ```bash
 # Before adding any dependency, check:
 # 1. Is it maintained? (last commit within 6 months)
@@ -192,6 +195,14 @@ Good: "Config file not found at ~/.config/app/config.toml — run 'app init' to 
 - `db/schema.sql` — managed by migrations in `db/migrations/`
 - `*.lock` files — managed by package managers
 
+## Infrastructure
+
+Deployment: [Docker Compose / Kubernetes / bare VPS / serverless — be specific]
+Branch model: [main → production, develop → staging, feature/* → PRs]
+Required versions: [Node 20, PHP 8.2, Python 3.11 — whatever is pinned]
+After server/config changes: [exact rebuild command, e.g., docker compose up -d --build]
+CI/CD: [GitHub Actions / CircleCI / etc. — what triggers it]
+
 ## Dangerous Operations
 
 - `db/migrations/` — migrations run automatically on deploy. Test locally first with `make migrate-test`.
@@ -206,7 +217,7 @@ make seed            # Seed database with test data
 make migrate         # Run pending migrations
 make docker-up       # Start all services in Docker
 ```
-```
+````
 
 Replace the examples above with real values extracted from this project's codebase.
 Every command must be runnable. Every convention must match existing code patterns.

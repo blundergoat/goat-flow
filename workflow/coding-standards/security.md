@@ -8,7 +8,7 @@ Cross-cutting security overlay. Load this whenever touching auth, secrets, valid
 
 Write `ai/instructions/security.md`:
 
-```
+````
 # Security Instructions
 
 This file overrides all other instruction files when there is a conflict.
@@ -185,6 +185,7 @@ If a tool or script needs access to credentials, it must:
 - [ ] Auth applied to every non-public endpoint
 - [ ] SQL queries use parameterized placeholders
 - [ ] File paths sanitized if derived from user input
-```
+````
 
 Adjust examples to match this project's language, framework, and auth approach.
+Target 40-60 lines of content (not counting the prompt wrapper).

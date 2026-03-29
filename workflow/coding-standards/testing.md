@@ -8,7 +8,7 @@ Testing conventions template. Load this when writing or modifying tests.
 
 Read the existing tests in the codebase, then write `ai/instructions/testing.md`:
 
-```
+````
 # Testing Instructions
 
 ## Test Naming
@@ -148,17 +148,12 @@ test("encode/decode roundtrip", () => {
 ```
 
 ```go
-// Go — gopter (or rapid)
+// Go — pgregory.net/rapid
 func TestParseAmount_NeverPanics(t *testing.T) {
-    properties := gopter.NewProperties(nil)
-    properties.Property("parse never panics on any string", prop.ForAll(
-        func(s string) bool {
-            _, _ = ParseAmount(s) // must not panic
-            return true
-        },
-        gen.AnyString(),
-    ))
-    properties.TestingRun(t)
+    rapid.Check(t, func(rt *rapid.T) {
+        s := rapid.String().Draw(rt, "input")
+        _, _ = ParseAmount(s) // must not panic
+    })
 }
 ```
 
@@ -225,6 +220,7 @@ Use `t.Parallel()` (Go), parallel test runs (Jest default), or `pytest-xdist` (P
 - Bug fixes: add a test that reproduces the bug before fixing it.
 - No coverage target percentage — meaningful tests over line counts.
 - If a test is hard to write, the code probably needs refactoring.
-```
+````
 
 Adjust the languages, test frameworks, and examples to match this project's actual test patterns.
+Target 40-60 lines of content (not counting the prompt wrapper).

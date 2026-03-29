@@ -14,7 +14,7 @@ Reference for generating `ai/instructions/security.md` in projects with Docker, 
 FROM node:20-slim AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production
+RUN npm ci --omit=dev   # --production deprecated in npm 7+
 COPY . .
 
 FROM node:20-slim

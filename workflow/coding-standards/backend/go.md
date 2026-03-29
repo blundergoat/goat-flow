@@ -12,24 +12,31 @@ Reference for generating `ai/instructions/backend.md` in Go projects.
 
 - Handler -> Service -> Repository pattern. Handlers parse HTTP, services hold business logic, repositories talk to storage.
 - Define interfaces where they are consumed, not where they are implemented.
-- Use constructor functions that return interfaces for dependency injection.
+- Constructor functions usually return concrete types. Let consumers depend on a
+  narrow interface only when a real caller needs one.
 
 ```go
-// DO — interface defined by consumer, constructor returns concrete
-type UserService interface {
+// DO — consumer defines the interface it actually needs
+type UserGetter interface {
     GetByID(ctx context.Context, id string) (User, error)
 }
 
-type userService struct {
+type Service struct {
     repo UserRepository
 }
 
-func NewUserService(repo UserRepository) UserService {
-    return &userService{repo: repo}
+func NewService(repo UserRepository) *Service {
+    return &Service{repo: repo}
 }
 
-// DON'T — accept concrete types, define interface next to implementation
-func NewHandler(svc *userService) Handler { ... }
+type Handler struct {
+    svc UserGetter
+}
+
+func NewHandler(svc UserGetter) Handler { return Handler{svc: svc} }
+
+// DON'T — define an interface next to the implementation when only one
+// consumer needs it, then force every constructor to return that interface.
 ```
 
 ## Error Handling

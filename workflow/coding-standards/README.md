@@ -40,7 +40,7 @@ coding-standards/
 
 | Directory | Purpose |
 |-----------|---------|
-| `frontend/` | Stack-specific frontend conventions (React/TS, Vue, Svelte, etc.) |
+| `frontend/` | Stack-specific frontend conventions (React/TS, Vue, Angular, Swift, Blazor, etc.) |
 | `backend/` | Stack-specific backend conventions (Go, Node, Python, Rust, etc.) |
 | `security/` | Universal security template + `framework-specific/` overlays |
 
@@ -53,4 +53,8 @@ coding-standards/
 
 ## Usage
 
-These are **prompt templates**, not executable code. The setup guides in `setup/` reference these templates during project onboarding. Copy the prompt block from any template, paste it into your coding agent, and the agent generates the corresponding `ai/instructions/` file from your actual codebase.
+This directory contains two kinds of files:
+
+**Prompt templates** (top-level: `conventions.md`, `code-review.md`, `security.md`, `testing.md`, `git-commit.md`, `domain-instructions.md`): paste the prompt block into your coding agent and it generates the corresponding `ai/instructions/` file from your actual codebase.
+
+**Reference packs** (`backend/`, `frontend/`, `security/`): stack-specific content that the setup agent reads as source material to inform what it writes. These are not pasted as prompts — the agent loads the relevant reference file based on the detected stack and uses it to fill in the stack-specific sections of the generated `ai/instructions/` file.

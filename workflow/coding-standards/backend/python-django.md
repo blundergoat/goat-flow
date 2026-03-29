@@ -81,17 +81,23 @@ DEBUG = True
 - Mark database tests with `@pytest.mark.django_db`.
 
 ```python
-# DO — factory + RequestFactory
+# DO — factory + APIRequestFactory (DRF) for DRF views
+from rest_framework.test import APIRequestFactory, force_authenticate
 user = UserFactory(role="admin")
-request = RequestFactory().get("/orders/")
+request = APIRequestFactory().get("/orders/")
 force_authenticate(request, user=user)
 response = OrderListView.as_view()(request)
 assert response.status_code == 200
 
-# DON'T — manual object creation, full Client round-trip for a unit test
-user = User.objects.create(username="test", password="test")
+# DO — plain Django RequestFactory for non-DRF views
+from django.test import RequestFactory
+request = RequestFactory().get("/orders/")
+request.user = UserFactory(role="admin")
+response = OrderListView.as_view()(request)
+
+# DON'T — full Client round-trip for a unit test (use for integration tests only)
 client = Client()
-client.login(username="test", password="test")
+client.force_login(UserFactory())
 response = client.get("/orders/")
 ```
 

@@ -49,7 +49,7 @@ Agents read `ai/README.md`, then load the relevant files based on the current ta
 
 ## The Prompt
 
-```
+````
 Create domain-specific instruction files for this project. These are
 Layer 2 (Local Context) — they load on demand via the router at
 ai/README.md, keeping deep domain knowledge out of the root
@@ -113,4 +113,4 @@ VERIFICATION:
 - Verify each file is self-contained (conventions, gotchas, examples)
 - Verify no invented conventions — all extracted from existing code
 - Report: number of files created and which domains they cover
-```
+````

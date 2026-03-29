@@ -59,7 +59,8 @@ applyTo: "src/app/**,src/components/**,*.tsx,*.ts"
 After creating bridges, verify the body content matches the source. Compare the content section (after frontmatter) against the source. Bridges will always differ in the YAML header -- check the body content matches.
 
 ```bash
-# Quick check: strip frontmatter (everything between --- lines) then diff
-tail -n +4 .github/instructions/conventions.instructions.md | diff - ai/instructions/conventions.md
-tail -n +4 .github/instructions/frontend.instructions.md | diff - ai/instructions/frontend.md
+# Strip YAML frontmatter (between --- delimiters) then diff body content
+strip_frontmatter() { awk '/^---$/{n++; next} n>=2{print}' "$1"; }
+diff <(strip_frontmatter .github/instructions/conventions.instructions.md) ai/instructions/conventions.md
+diff <(strip_frontmatter .github/instructions/frontend.instructions.md) ai/instructions/frontend.md
 ```

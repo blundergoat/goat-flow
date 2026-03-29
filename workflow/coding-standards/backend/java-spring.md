@@ -1,6 +1,11 @@
-# Spring Boot + JPA Coding Standards
+# Spring Boot Backend Standards (Spring Boot + JPA oriented)
 
 Reference for generating `ai/instructions/backend.md` in Spring Boot projects.
+
+This file assumes Spring Boot with Spring Data/JPA as the common case. If the
+repo uses jOOQ, MyBatis, JdbcTemplate, or another data layer, keep the DI,
+validation, security, and testing guidance and replace only the persistence
+section with the patterns actually present in the repo.
 
 ## Architecture
 
@@ -34,7 +39,7 @@ public class OrderService {
 }
 ```
 
-## JPA / Spring Data
+## JPA / Spring Data (if the repo uses JPA)
 
 - Use Spring Data repositories with derived query methods for simple queries.
 - Use `@Query` with JPQL for complex queries. Use `Specification` for dynamic filters.

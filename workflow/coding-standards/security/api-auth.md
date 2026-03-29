@@ -6,7 +6,9 @@ Reference for generating `ai/instructions/security.md` in projects using JWT, OA
 
 - **Access tokens**: 15-minute expiry maximum. Short-lived limits damage from token theft.
 - **Refresh tokens**: single-use with rotation. Issue a new refresh token on each use and invalidate the old one.
-- **Storage**: httpOnly cookie, never localStorage or sessionStorage.
+- **Storage (browser)**: httpOnly cookie. Never localStorage or sessionStorage — both are readable by JavaScript and vulnerable to XSS.
+- **Storage (native mobile)**: use the platform secure store (iOS Keychain, Android Keystore), not shared preferences or localStorage equivalents.
+- **Storage (server-to-server)**: environment variables or a secrets manager. Cookies are not the right model.
 - **Validation**: always verify signature, `exp`, `iss`, `aud`. Reject tokens missing any claim.
 
 ```js
