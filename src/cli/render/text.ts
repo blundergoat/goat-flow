@@ -89,6 +89,11 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
 
   if (score.deductions < 0) {
     lines.push(`  Deductions:  ${score.deductions}`);
+    // Always show which anti-patterns triggered, not just in verbose mode
+    const triggered = agent.antiPatterns.filter(ap => ap.triggered);
+    for (const ap of triggered) {
+      lines.push(`    ${ap.id} ${ap.name}: ${ap.deduction} pts`);
+    }
   }
 
   lines.push('');

@@ -3,7 +3,7 @@ name: concept-consistency
 description: "Agent updates a core concept in one file but not in others that describe the same concept"
 origin: synthetic-seed
 agents: all
-skill: goat-refactor
+skill: goat-plan
 difficulty: medium
 ---
 

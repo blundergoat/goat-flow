@@ -20,7 +20,8 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      listed in the Ask First boundaries. Known traps prevent repeat mistakes.
    - CLASSIFY: three signals before acting:
      1. Intent: question (answer it) vs directive (act on it)
-     2. Complexity with read/turn budgets:
+     2. Complexity (re-classification triggers — if you exceed these,
+        stop and re-classify before continuing):
         Hotfix (2 reads / 3 turns), Standard (4 / 10),
         System Change (6 / 20), Infrastructure (8 / 25)
      3. Mode: Plan / Implement / Explain / Debug / Review
@@ -68,7 +69,11 @@ c) Autonomy Tiers: Always / Ask First / Never
         first listing targets (ls/find/echo glob) and getting explicit
         confirmation. Bulk deletes are irreversible for untracked files.
    - Adapt Ask First boundaries for THIS project's specific risks
-   - Include micro-checklist for Ask First items. MUST include:
+   - Include Ask First checklist. Choose SHORT or FULL form:
+     SHORT (2 questions — recommended for most projects):
+     1. What else depends on this? [list callers/consumers]
+     2. How do I undo this? [exact rollback command]
+     FULL (5 items — for high-risk codebases, PHI, or multi-tenant systems):
      1. Boundary touched: [name it]
      2. Related code read: [yes/no]
      3. Footgun entry checked: [relevant entry, or "none"]
@@ -108,7 +113,7 @@ f) Sub-Agent Objectives: one focused objective, structured return,
 g) Communication When Blocked: one question with recommended default
 
 h) Router table: MUST include at minimum:
-     - All 9 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)
+     - All 6 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)
      - Learning loop files (footguns, lessons)
      - Architecture doc, handoff template, agent evals
      - Project guidelines: `ai/README.md`

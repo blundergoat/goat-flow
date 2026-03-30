@@ -14,7 +14,7 @@ Route to the right skill in one step. Type `/goat` followed by what you need.
 3. Announce: **"Running /goat-{skill}."** - wait 1 beat for the user to override
 4. Load and execute the target skill's full process (Step 0, phases, gates)
 
-The other 8 skills remain directly invocable. `/goat` is a convenience layer, not a replacement.
+The other 5 skills remain directly invocable. `/goat` is a convenience layer, not a replacement.
 
 ## Intent Mapping
 
@@ -26,9 +26,9 @@ The other 8 skills remain directly invocable. `/goat` is a convenience layer, no
 | security, vulnerability, CVE, auth bypass, injection, secrets, OWASP | **/goat-security** | Threat-model-driven assessment |
 | plan, design, feature, architect, implement, build (new thing) | **/goat-plan** | 4-phase planning with human gates |
 | test, testing, verification, coverage, test plan | **/goat-test** | 3-phase test plan generation |
-| rename, move, extract, restructure, refactor, cross-file | **/goat-refactor** | Blast radius analysis + grep-after-rename |
-| simplify, readability, clean up, naming, messy, confusing | **/goat-simplify** | Readability without behaviour change |
-| understand, explore, how does, what does, new to this, onboard | **/goat-investigate** | Deep read before acting |
+| rename, move, extract, restructure, refactor, cross-file | **/goat-plan** (refactor mode) | Blast radius analysis + grep-after-rename |
+| simplify, readability, clean up, naming, messy, confusing | **/goat-review** (simplify mode) | Readability without behaviour change |
+| understand, explore, how does, what does, new to this, onboard | **/goat-debug** (investigate mode) | Deep read before acting |
 
 ## Disambiguation
 
@@ -46,11 +46,17 @@ Do NOT guess when ambiguous. One clarification question is faster than loading t
 
 | Input | Ambiguity | Resolution |
 |-------|-----------|------------|
-| "check the auth code" | debug vs review vs security | Ask: "Is there a bug, a quality concern, or a security concern?" |
-| "improve the caching" | plan vs refactor vs simplify | Ask: "Is this a new design, a restructure, or a readability cleanup?" |
-| "look at the database" | investigate vs debug vs review | Ask: "Understanding it, debugging an issue, or reviewing quality?" |
-| "help with the migration" | plan vs refactor vs debug | Ask: "Planning it, executing it, or fixing a failing one?" |
-| "this code is bad" | review vs simplify vs debug | Ask: "Is it broken, hard to read, or low quality?" |
+| "check the auth code" | debug vs review vs security | Ask: "Is there a bug, a quality concern, or a security concern? Or tell me more." |
+| "improve the caching" | plan vs refactor vs simplify | Ask: "Is this a new design, a restructure, or a readability cleanup? Or tell me more." |
+| "look at the database" | investigate vs debug vs review | Ask: "Understanding it, debugging an issue, or reviewing quality? Or tell me more." |
+| "help with the migration" | plan vs refactor vs debug | Ask: "Planning it, executing it, or fixing a failing one? Or tell me more." |
+| "this code is bad" | review vs simplify vs debug | Ask: "Is it broken, hard to read, or low quality? Or tell me more." |
+| "analyse/evaluate/critique a plan" | review vs plan | Ask: "Find problems in the plan (review), or sharpen and improve it (plan)? Or tell me more." |
+
+**Target-aware disambiguation:** If the input references a file path, check the path for context:
+- Path contains `roadmap`, `plan`, `todo`, `milestone` → disambiguate between goat-review and goat-plan
+- Path contains `test`, `spec`, `e2e` → lean toward goat-test
+- Path contains `security`, `auth`, `vuln` → lean toward goat-security
 
 ## Bare Invocation
 
@@ -85,8 +91,21 @@ Then proceed directly to the target skill's Step 0. Do NOT add a second round of
 - MUST NOT load two skills simultaneously - dispatch to one
 - MUST present disambiguation options when 2+ skills match equally
 - MUST respect explicit skill name overrides in user input
-- The other 8 skills MUST remain directly invocable - this is additive
+- The other 5 skills MUST remain directly invocable - this is additive
 
-## Chains With
+## Post-Dispatch Chaining
 
-This skill doesn't chain - it's the entry point. The dispatched skill handles its own chaining.
+After the dispatched skill closes, suggest the next most likely skill based on what was just completed:
+
+| Completed skill | Suggest next |
+|----------------|-------------|
+| goat-debug | "Want to `/goat-test` to verify the fix, or `/goat-review` the changes?" |
+| goat-plan | "Ready to start? `/goat-plan` (refactor mode) for structural changes, or just begin implementing." |
+| goat-review | "Found issues? `/goat-debug` to diagnose, or `/goat-test` to verify coverage." |
+| goat-security | "Want to `/goat-review` the fixes, or `/goat-test` to verify mitigations?" |
+| goat-test | "Tests written? `/goat-review` the test quality, or move on." |
+| goat-plan (refactor mode) | "Refactor done? `/goat-test` to verify nothing broke, or `/goat-review` the result." |
+| goat-debug (investigate mode) | "Understand the area? `/goat-plan` to design changes, or `/goat-debug` if you found a bug." |
+| goat-review (simplify mode) | "Readability improved? `/goat-test` to confirm behavior unchanged." |
+
+Only suggest if the user hasn't already indicated they're done. One line, not a menu.

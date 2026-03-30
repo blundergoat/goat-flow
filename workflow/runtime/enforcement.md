@@ -104,6 +104,13 @@ Create the following:
      export STOP_HOOK_ACTIVE=1
    - Exclude slow checks (>10 seconds) - those go in /goat-security
    - Run lint and type-check only for file types that changed
+   - PERFORMANCE: Heavy linters (PHPStan, mypy, pylint) can add
+     30-60 seconds per turn on large projects (500+ files). Scope
+     them to changed files only:
+       phpstan analyse --memory-limit=256M $(git diff --name-only -- '*.php')
+       mypy $(git diff --name-only -- '*.py')
+     Or skip them in the Stop hook entirely and run them only in
+     the preflight script / CI.
 
 4. .claude/hooks/format-file.sh (PostToolUse hook)
 
@@ -154,19 +161,52 @@ AGENT IGNORE FILES:
 
    For Cursor - create `.cursorignore` with the same patterns.
 
-   For Claude Code - add Read deny patterns to .claude/settings.json:
-   "deny": [...existing entries..., "Read(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)"]
+   For Claude Code - add Read/Edit/Write deny patterns to .claude/settings.json:
+   "deny": [...existing entries..., "Read(**/.env*)", "Edit(**/.env*)", "Write(**/.env*)", "Read(**/*.pem)", "Read(**/*.key)"]
 
 CONTENT-PRESERVING WRITE GUARD:
 7. Add a PreToolUse hook that blocks Write operations reducing a file
    by more than 80%. This catches agents emptying files during refactors.
 
-   The hook should:
-   - Compare the proposed content length against the existing file length
-   - If reduction exceeds 80%, exit 2 with message: "This write would
-     remove more than 80% of the file's content. If this is intentional,
-     confirm with the human first."
-   - Exit 0 for all other writes
+   ```bash
+   #!/usr/bin/env bash
+   # guard-write-size.sh — PreToolUse hook for Write tool
+   # Blocks writes that remove >80% of an existing file's content.
+   set -euo pipefail
+   ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+   INPUT=$(cat)
+   FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+   NEW_CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // empty' 2>/dev/null)
+   [[ -z "$FILE_PATH" || -z "$NEW_CONTENT" ]] && exit 0
+   # Resolve to absolute path
+   [[ "$FILE_PATH" != /* ]] && FILE_PATH="$ROOT/$FILE_PATH"
+   # New files are always allowed
+   [[ ! -f "$FILE_PATH" ]] && exit 0
+   OLD_SIZE=$(wc -c < "$FILE_PATH")
+   NEW_SIZE=${#NEW_CONTENT}
+   # Skip tiny files (under 100 bytes)
+   (( OLD_SIZE < 100 )) && exit 0
+   REDUCTION=$(( (OLD_SIZE - NEW_SIZE) * 100 / OLD_SIZE ))
+   if (( REDUCTION > 80 )); then
+     echo "BLOCKED: This write would remove ${REDUCTION}% of ${FILE_PATH##*/} (${OLD_SIZE}→${NEW_SIZE} bytes). If intentional, confirm with the human first." >&2
+     exit 2
+   fi
+   exit 0
+   ```
+
+   Register as PreToolUse for Write only:
+   ```json
+   { "type": "PreToolUse", "matcher": "Write", "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/guard-write-size.sh\"" }
+   ```
+
+FORMAT HOOK MUST SKIP AGENT CONFIG DIRS:
+- The PostToolUse format hook MUST exclude agent configuration directories.
+  Without this, formatters (prettier, php-cs-fixer) rewrite skill files
+  on every Edit/Write, collapsing numbered lists and changing syntax.
+  Add these skip patterns to format-file.sh:
+    case "$FILE_PATH" in
+      */.claude/*|*/.gemini/*|*/.codex/*|*/.agents/*|*/.github/skills/*) exit 0 ;;
+    esac
 
 HOOK CONFIGURATION PITFALLS:
 - Use $(git rev-parse --show-toplevel) for ALL paths - relative
@@ -181,6 +221,24 @@ HOOK CONFIGURATION PITFALLS:
   can create hooks in subdirectories instead of the project root
 - Check git diff before running expensive checks - don't lint
   unchanged files
+
+SESSION LOG REMINDER (optional Stop hook):
+   Add a Stop hook that checks whether a session log was written when
+   a skill was invoked. This catches the common failure mode where agents
+   skip the closing protocol after delivering their output.
+
+   The hook should:
+   - Check if the conversation contained a skill invocation (grep for
+     "Running /goat-" in recent output)
+   - If yes, check if tasks/logs/sessions/ has a file with today's date
+   - If no file found, print a reminder to stderr:
+     "Skill session detected but no log written to tasks/logs/sessions/.
+      Write a session summary before closing."
+   - Always exit 0 (informational only — don't block the agent)
+
+   This pairs with the Shared Conventions closing protocol which says
+   "FIRST: write session summary" to make logging happen during delivery,
+   not as an afterthought.
 
 4. Compaction hook (Notification, optional but recommended)
 
@@ -220,7 +278,31 @@ Deny hooks are best-effort pre-execution filtering for literal shell commands. T
 - Variable indirection (`$cmd` where cmd='git push main')
 - Pipe to arbitrary shell (`echo malicious | sh` - only `curl|bash` is blocked)
 - Encoded or obfuscated commands
-- Write/Edit tool operations on .env files (hooks only register for Bash tool)
+- Write/Edit tool operations on .env files (mitigated by adding Edit(**/.env*) and Write(**/.env*) to settings.json deny — ensure these are present)
+
+### What `--dangerously-skip-permissions` Bypasses
+
+When Claude Code runs with `--dangerously-skip-permissions`:
+
+| Layer | Status | Impact |
+|-------|--------|--------|
+| **settings.json deny patterns** | **BYPASSED** | All 20+ deny rules (git commit, git push, .env reads, secrets) are skipped |
+| **PreToolUse hooks** (deny-dangerous.sh) | **Still fires** | Pattern-based blocking still works (~90% for known patterns) |
+| **CLAUDE.md rules** (autonomy tiers) | **Still loaded** | Behavioral guidance still present (~70% compliance) |
+| **Stop hooks** (stop-lint.sh) | **Still fires** | Post-turn linting still runs |
+
+**Known bypass vectors even with hooks active:**
+- Variable indirection: `$cmd` where `cmd='git push main'`
+- Subshell execution: `echo $(rm -rf /)`
+- Shell aliases wrapping denied commands
+- Encoded or obfuscated commands
+- `source .env` (reads .env without matching the cat/nano/vim pattern)
+
+**Recommendation:** Never run `--dangerously-skip-permissions` on a workstation with real data. Use a disposable container with a read-only repo mount.
+
+### Settings.json Deny Pattern Breadth
+
+`Bash(*git commit*)` is a glob substring match — it blocks ANY Bash command containing the string "git commit", including `git log --oneline | grep commit` or comments mentioning "git commit". This is a deliberate safety-first trade-off: broad matching prevents bypass via command chaining but may block legitimate commands that happen to contain denied substrings. If a user hits a false positive, they can run the blocked command manually via `! <command>` in the Claude Code prompt.
 
 Defense in depth: hooks + settings.json deny patterns + instruction file rules. No single layer is a complete sandbox.
 

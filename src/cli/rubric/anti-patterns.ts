@@ -22,8 +22,8 @@ export const antiPatterns: AntiPatternDef[] = [
   {
     id: 'AP2', name: 'Skill name conflicts with built-in', deduction: -3, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
-      // Filter skills that lack the required goat- prefix
-      const nonGoat = ctx.agentFacts.skills.found.filter(s => s.startsWith('goat-') === false);
+      // Filter skills that lack the required goat- prefix (excluding the dispatcher 'goat' itself)
+      const nonGoat = ctx.agentFacts.skills.found.filter(s => s !== 'goat' && s.startsWith('goat-') === false);
       const triggered = nonGoat.length > 0;
       return { id: 'AP2', name: 'Skill name conflicts with built-in', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `Skills without goat- prefix: ${nonGoat.join(', ')}` : 'All skills use goat- prefix' };
     },
@@ -217,23 +217,6 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendationKey: 'ap-fix-outdated-skills',
   },
   {
-    id: 'AP16', name: 'Deprecated skills present', deduction: -5, confidence: 'high',
-    evaluate: (ctx: FactContext): AntiPatternResult => {
-      const { deprecated } = ctx.agentFacts.skills;
-      const triggered = deprecated.length > 0;
-      return {
-        id: 'AP16', name: 'Deprecated skills present', triggered,
-        deduction: triggered ? -5 : 0, confidence: 'high',
-        message: triggered
-          ? `${deprecated.length} deprecated skill(s): ${deprecated.join(', ')}. Remove - these are replaced by the 9 canonical skills.`
-          : 'No deprecated skills',
-        evidence: triggered ? deprecated.join(', ') : undefined,
-      };
-    },
-    recommendation: 'Remove deprecated skill directories (goat-audit, goat-reflect, goat-onboard, goat-resume, goat-context). They are replaced by the 9 canonical goat-* skills.',
-    recommendationKey: 'ap-remove-deprecated-skills',
-  },
-  {
     id: 'AP17', name: 'Dangling file references in skills', deduction: -3, confidence: 'medium',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const { danglingRefs } = ctx.agentFacts.skills;
@@ -249,6 +232,38 @@ export const antiPatterns: AntiPatternDef[] = [
     },
     recommendation: 'Fix or remove dangling file paths in skill SKILL.md files. Every backtick-wrapped path reference should point to an existing file.',
     recommendationKey: 'ap-fix-dangling-skill-refs',
+  },
+  {
+    id: 'AP18', name: 'Unanswered ADAPT comments in skills', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { adaptCommentCount } = ctx.agentFacts.skills.quality;
+      const triggered = adaptCommentCount > 0;
+      return {
+        id: 'AP18', name: 'Unanswered ADAPT comments in skills', triggered,
+        deduction: triggered ? -2 : 0, confidence: 'high',
+        message: triggered
+          ? `${adaptCommentCount} remaining <!-- ADAPT: --> comment(s) in skill files. These are unanswered template questions that should be replaced with project-specific content.`
+          : 'All ADAPT comments resolved',
+      };
+    },
+    recommendation: 'Replace remaining <!-- ADAPT: --> comments in skill files with project-specific content. These mark template questions that need your project\'s real examples.',
+    recommendationKey: 'ap-fix-adapt-comments',
+  },
+  {
+    id: 'AP19', name: 'Hardcoded absolute paths in hooks', deduction: -2, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { absolutePathHooks } = ctx.agentFacts.hooks;
+      const triggered = absolutePathHooks.length > 0;
+      return {
+        id: 'AP19', name: 'Hardcoded absolute paths in hooks', triggered,
+        deduction: triggered ? -2 : 0, confidence: 'high',
+        message: triggered
+          ? `${absolutePathHooks.length} hook(s) with hardcoded absolute paths: ${absolutePathHooks.join(', ')}. Use $(git rev-parse --show-toplevel) instead.`
+          : 'All hooks use portable paths',
+      };
+    },
+    recommendation: 'Replace hardcoded absolute paths in hook scripts with $(git rev-parse --show-toplevel). Absolute paths break when the repo is cloned elsewhere.',
+    recommendationKey: 'ap-fix-hook-paths',
   },
 ];
 

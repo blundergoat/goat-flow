@@ -526,6 +526,9 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
   lines.push('   Footguns: only real traps from THIS codebase with `file:line` evidence.');
   lines.push('   Conventions: real build/test/lint commands, real file naming patterns.');
   lines.push('3. Do NOT copy templates verbatim. If a template says "[describe X]", describe X for THIS project.');
+  lines.push('4. Check for existing permission restrictions: if `.claude/settings.local.json` (or equivalent)');
+  lines.push('   exists and limits allowed tools/commands, the setup may fail to create files.');
+  lines.push('   Read it first. If it restricts Bash or Write, work single-threaded instead of spawning sub-agents.');
   lines.push('');
 
   // Main instruction
@@ -535,7 +538,7 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
   lines.push('');
   lines.push('That file walks through:');
   lines.push('- **Phase 1a:** Instruction file, docs seed files, local instruction files');
-  lines.push('- **Phase 1b:** 9 skills (8 goat-* skills + /goat dispatcher) adapted for this project');
+  lines.push('- **Phase 1b:** 6 skills (5 goat-* skills + /goat dispatcher) adapted for this project');
   lines.push('- **Phase 1c:** Enforcement hooks, deny patterns, coding guidelines');
   lines.push('- **Phase 2:** Agent evals, hygiene (handoff template, RFC 2119 pass)');
   lines.push('- **Phase 3:** Verify 100% on the CLI scan');

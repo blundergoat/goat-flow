@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -29,7 +29,7 @@ for verification - it does not run tests itself.
 - Running tests → just run them directly
 - Debugging a test failure → /goat-debug
 - Reviewing code quality → /goat-review
-- Understanding test infrastructure → /goat-investigate
+- Understanding test infrastructure → /goat-debug (investigate mode)
 
 **Quick path:** For changes touching ≤2 files with no interface changes:
 Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
@@ -41,7 +41,7 @@ Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
 2. What's the risk level? (Hotfix / Standard / System)
 
 **Auto-detect:** Read `git diff --stat` and present: "[N] files changed in [areas].
-<!-- ADAPT: "Test stack: [detected from package.json/Makefile/etc.]" -->
+Test stack: Node.js (node --test), shellcheck for .sh files.
 Correct?"
 
 **Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there - not textbook examples.
@@ -69,13 +69,13 @@ corresponding change."
 ## Phase 1 - Automated Tests
 
 Generate commands for the coding agent to run:
-<!-- ADAPT: Replace with your project's test commands -->
+
 ```bash
 # Run relevant test suite
-<!-- ADAPT: your test command targeting changed areas -->
+node --import tsx --test test/**/*.test.ts
 
 # Run full preflight if available
-<!-- ADAPT: your preflight command -->
+bash scripts/preflight-checks.sh
 ```
 
 **Phase 1 executor:** The coding agent runs these commands. Phase 2 and 3 are
@@ -104,13 +104,11 @@ bias toward its own work. Recommend a different model for verification.
 **If Phase 2 will be skipped:** Note it explicitly in "What ISN'T Tested":
 "AI verification not performed - [reason]. Coverage relies on automated tests
 (Phase 1) and human testing (Phase 3) only. Cross-model blind spots are NOT covered."
-<!-- ADAPT: If your agent supports sub-agents, offer to run Phase 2 prompts
-as sub-agent tasks instead of requiring a separate session. -->
 
 **Failure Signatures:**
 | If this breaks... | You'll see... |
 |-------------------|---------------|
-<!-- ADAPT: fill with project-specific failure patterns -->
+Scanner score regression, stale footgun refs, broken cross-references after renames
 | Auth change broken | 401 responses on `/api/user` |
 | Migration failed | Missing columns in `users` table |
 | Build regression | `npm run build` exits non-zero |
@@ -146,6 +144,8 @@ Explicitly list coverage gaps. Be honest about what's NOT verified:
 
 ## Constraints
 
+Conversational: present findings by severity tier, pause between tiers. Let the human drill in.
+
 <!-- FIXED: Do not adapt these -->
 - The coding agent MUST NOT verify its own work (doer-verifier principle)
 - MUST fill ALL bracketed values in Phase 2 prompts - no [PLACEHOLDER] in output
@@ -164,7 +164,7 @@ Explicitly list coverage gaps. Be honest about what's NOT verified:
 |------|-----------|-------------|------|-------------------|
 
 ## Phase 1: Automated Tests
-<!-- ADAPT: your project's test commands -->
+npm test
 ```bash
 # Commands for the coding agent to run
 ```

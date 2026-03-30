@@ -86,7 +86,7 @@ Use the stack detected in Phase 1a Step 0 (languages and frameworks).
 PRE-EXISTING SKILLS:
 If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/),
 IGNORE them - they are the project's custom skills. Do not modify, delete,
-or merge them. Focus ONLY on creating/updating the 9 goat-* skills.
+or merge them. Focus ONLY on creating/updating the 6 goat-flow skills (5 + dispatcher).
 
 SKILL VERSION AUDIT:
 If goat-* skills already exist, check the goat-flow-skill-version tag in
@@ -104,29 +104,29 @@ This is NOT a cosmetic update - skill templates improve with each release.
 Read the detailed skill templates in workflow/skills/goat-*.md for each
 skill's full specification before creating or updating.
 
-Create or update these 9 skills in the agent's skills directory:
+Create or update these 6 skills (5 + dispatcher) in the agent's skills directory:
 
-1. goat-investigate/SKILL.md - Deep codebase investigation + onboarding mode.
-   Progressive depth reading, evidence tagging, "What I Didn't Read" section.
+1. goat-debug/SKILL.md - Diagnosis-first debugging. Hypothesis tracking,
+   recurrence checks. Includes investigate mode (deep codebase investigation,
+   progressive depth reading) and onboard mode (stack detection + orientation).
 2. goat-review/SKILL.md - Structured code review + quality audit mode +
-   instruction review mode. RFC 2119 severity, negative verification, footgun matching.
+   instruction review mode + simplify mode (readability improvement, MUST NOT
+   change behavior). RFC 2119 severity, negative verification, footgun matching.
 3. goat-security/SKILL.md - Threat-model-driven security assessment.
    Framework-aware verification, exploitability ranking, dependency auditing.
-4. goat-debug/SKILL.md - Diagnosis-first debugging. Hypothesis tracking,
-   recurrence checks. "If you want to 'just try something', STOP."
-5. goat-plan/SKILL.md - 4-phase planning with complexity routing.
-   Triangular tension analysis, kill criteria, milestone archetypes.
-6. goat-test/SKILL.md - 3-phase test plan generation. Doer-verifier principle:
+4. goat-plan/SKILL.md - 4-phase planning with complexity routing.
+   Triangular tension analysis, kill criteria, milestone archetypes. Includes
+   refactor planning mode (cross-file restructuring, blast radius analysis).
+5. goat-test/SKILL.md - 3-phase test plan generation. Doer-verifier principle:
    coding agent MUST NOT verify its own work.
-7. goat-refactor/SKILL.md - Cross-file refactoring with blast radius analysis,
-   both-sides-first reading, and absence verification.
-8. goat-simplify/SKILL.md - Code readability improvement. Naming analysis,
-   self-documentation, comment audit, complexity reduction. MUST NOT change behavior.
 
 **Migration:** goat-reflect merged into goat-review (instruction review mode).
-goat-onboard merged into goat-investigate (onboard mode). goat-audit merged
-into goat-review (audit mode). goat-context removed. If old skills exist,
-delete them after verifying no project-specific content needs migrating.
+goat-onboard merged into goat-debug (onboard mode). goat-audit merged
+into goat-review (audit mode). goat-context removed. goat-investigate merged
+into goat-debug (investigate mode). goat-simplify merged into goat-review
+(simplify mode). goat-refactor merged into goat-plan (refactor planning mode).
+If old skills exist, delete them after verifying no project-specific content
+needs migrating.
 
 Each skill MUST include in its YAML frontmatter:
   goat-flow-skill-version: matching the current goat-flow version
@@ -149,7 +149,7 @@ ADAPTATION EXAMPLE - Step 0 questions:
 The adapted version names a real project artifact and references the learning loop.
 Every skill's Step 0, constraints, and output format should be this specific.
 
-DISPATCHER (required - 9th skill):
+DISPATCHER (required - 6th skill):
 Also install workflow/skills/goat.md as {agent-skills-dir}/goat/SKILL.md.
 This is the /goat dispatcher that routes natural language to the right skill.
 Without it, users must remember exact skill names. The scanner checks for it
@@ -163,9 +163,9 @@ If any skill has a different version or is missing the tag, the scanner
 deducts -2 per outdated skill (AP15, max -10). Do not skip this check.
 
 VERIFICATION (all MUST pass before proceeding to Phase 1c):
-- GATE: Verify all 9 goat-* skill files exist with required sections.
+- GATE: Verify all 6 goat-flow skill files exist with required sections.
 - GATE: Verify goat/SKILL.md (dispatcher) exists in the skills directory.
-- GATE: Verify all 9 skills have matching goat-flow-skill-version tags.
+- GATE: Verify all 6 skills have matching goat-flow-skill-version tags.
 - GATE: Verify instruction file router table references the skill directories.
 - GATE: Run scripts/preflight-checks.sh if it exists, otherwise run the
   project's lint + test commands from Essential Commands.

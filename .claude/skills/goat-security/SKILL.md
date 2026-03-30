@@ -1,6 +1,6 @@
 ---
 name: goat-security
-description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and concrete dependency auditing."
+description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, compliance auditing, and dependency vulnerability scanning."
 goat-flow-skill-version: "0.9.2"
 ---
 # /goat-security
@@ -14,57 +14,124 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
-Use when assessing security posture: before deployment, after adding auth/input
-handling, when touching secrets/credentials, or for a security-focused audit.
+Use when assessing security posture, checking compliance, or auditing dependencies.
+
+**Mode routing:**
+- Security assessment / pentest / before deploy → **Threat model mode** (Phases T1-T4)
+- HIPAA / GDPR / PHI / compliance audit → **Compliance mode** (Phases C1-C3)
+- CVEs / outdated packages / supply chain → **Dependency audit mode** (Phases D1-D3)
 
 **NOT this skill:**
 - General code quality sweep → /goat-review (audit mode)
-- Reviewing a specific diff for issues → /goat-review
+- Reviewing a specific diff → /goat-review
 - Diagnosing a specific vulnerability → /goat-debug
-- Understanding code before securing it → /goat-investigate
 
 ## Step 0 - Gather Context
 
 **Structural questions (always ask or confirm):**
-1. What's the threat model? (user-facing web app, internal tool, CLI, library, API)
-2. What framework are you using? (I'll check its built-in security features in Phase 2)
+1. What's the goal? (security assessment, compliance audit, dependency scan)
+2. What's the threat model? (user-facing web app, internal tool, CLI, library, API)
+3. What framework? (I'll check built-in security features)
 
-**Illustrative questions (adapt):**
-3. <!-- ADAPT: "What auth boundaries exist? (OAuth, JWT, session, API key, none)" -->
-4. <!-- ADAPT: "Any known vulnerabilities to skip? (already tracked, being fixed separately)" -->
+**Auto-detect:** Read package.json/composer.json/go.mod to identify framework. Check for PHI/compliance signals in README, docs/architecture.md.
 
-**Auto-detect:** Read package.json/composer.json/go.mod to identify framework.
-Present: "This is a [framework] project. I'll check [framework]'s built-in
-security features during verification."
+**Before proceeding:** present mode, threat model, framework, and scope. Wait for confirmation.
 
-**Before proceeding:** present what you know (threat model, framework, auth boundaries) and what you still need. Wait for the user to confirm before entering Phase 1.
+---
 
-## Phase 1 - Threat Surface Scan
+## Threat Model Mode (Phases T1-T4)
 
-Scan against the checklist below. **Skip categories that don't apply** based
-on Step 0 threat model (a CLI tool doesn't need CORS/CSP checks).
+### Phase T1 - Threat Surface Scan
 
-<!-- ADAPT: Remove categories irrelevant to your stack -->
+Scan against the checklist. **Skip categories that don't apply** based on threat model.
 
-| Category | Check | Skip If | Example |
-|----------|-------|---------|---------|
-| Input validation | User input reaches backend without sanitization | No user input (library) | `req.body.name` passed directly to SQL |
-| Auth/authz | Missing or bypassable authentication on sensitive routes | No HTTP endpoints | Session token in URL, missing CSRF on POST |
-| Secret handling | Hardcoded secrets, .env committed, secrets in logs | No secrets in codebase | API key in source, token in error message |
-| SQL injection | User input in raw queries without parameterization | No database | `db.query("SELECT * FROM users WHERE id=" + id)` |
-| XSS | User input rendered without escaping | No HTML output | `innerHTML = userInput`, unescaped template |
-| Command injection | User input in shell commands | No shell execution | `exec("convert " + filename)`, unsanitized args |
-| Path traversal | User input in file paths | No file system access | `fs.readFile(basePath + userInput)` |
-| Dependency CVEs | Known vulnerabilities in dependencies | - | Run audit command below |
-| CORS/CSP | Misconfigured cross-origin policies | No HTTP server | `Access-Control-Allow-Origin: *` |
-| Permission escalation | Role/privilege checks missing or bypassable | Single-role system | Admin routes without role check |
+| Category | Check | Skip If |
+|----------|-------|---------|
+| Input validation | User input reaches backend unsanitized | No user input |
+| Auth/authz | Missing or bypassable auth on sensitive routes | No HTTP endpoints |
+| Secret handling | Hardcoded secrets, .env committed, secrets in logs | No secrets |
+| SQL injection | User input in raw queries | No database |
+| XSS | User input rendered without escaping | No HTML output |
+| Command injection | User input in shell commands | No shell execution |
+| Path traversal | User input in file paths | No file system access |
+| Dependency CVEs | Known vulnerabilities in dependencies | — |
+| CORS/CSP | Misconfigured cross-origin policies | No HTTP server |
+| Permission escalation | Role/privilege checks missing | Single-role system |
 
-**Dependency audit commands:**
-<!-- ADAPT: Use your project's package manager -->
+Log every finding with `file:line` evidence.
+
+### Phase T2 - Framework-Aware Verification
+
+For EACH Phase T1 finding, check if the framework already mitigates it. Attempt to DISPROVE each finding.
+
+**Verification protocol:** Is the mitigation (a) installed, (b) configured, (c) applied to the specific route? Flag partial mitigation.
+
+Remove confirmed false positives. Flag partial mitigations as findings.
+
+**BLOCKING GATE:** Present verified findings. Offer: (a) verify a finding, (b) check different surface, (c) test edge case, (d) proceed to ranking
+
+### Phase T3 - Exploitability Ranking
+
+- **Critical:** Exploitable without authentication. Immediate action.
+- **High:** Exploitable with low-privilege access. Fix before deploy.
+- **Medium:** Exploitable with specific conditions or chained.
+- **Low:** Theoretical, mitigated by other controls.
+
+For Critical and High: one-sentence attack scenario: "An [attacker] can [action] via [vector], resulting in [impact]."
+
+### Phase T4 - Self-Check
+
+Re-read each `file:line` for Critical and High findings. Does the code match the claim? Is the attack scenario realistic? Remove findings that don't survive.
+
+**BLOCKING GATE:** Present final report.
+
+---
+
+## Compliance Mode (Phases C1-C3)
+
+Activated for HIPAA, GDPR, PHI, PCI-DSS, or other regulatory compliance.
+
+### Phase C1 - Regulatory Scope
+
+Identify which regulations apply and what they require:
+
+| Regulation | Key Requirements | Check Areas |
+|-----------|-----------------|-------------|
+| HIPAA | PHI protection, audit trails, access controls | Logs, error messages, queries, storage |
+| GDPR | Consent, data minimization, right to erasure | User data flows, retention, exports |
+| PCI-DSS | Cardholder data protection, encryption | Payment flows, storage, transmission |
+
+### Phase C2 - Compliance Scan
+
+For each applicable requirement:
+
+1. **PHI/PII in logs:** Grep for logging statements that could include patient data, names, emails, SSNs. Check error handlers.
+2. **Unscoped tenant queries:** Check that all database queries are scoped by tenant/organization. Flag queries without tenant filter.
+3. **Unencrypted PII at rest:** Check database columns, file storage, cache entries for plaintext sensitive data.
+4. **Missing audit trails:** Check that sensitive operations (data access, modification, deletion) are logged with who/what/when.
+5. **Consent mechanisms:** Check that data collection has consent flows, opt-out paths, and deletion capabilities.
+
+For each finding: `file:line`, regulation reference, current state, required state.
+
+### Phase C3 - Compliance Report
+
+Map findings to specific regulatory requirements. Rank by risk of regulatory action.
+
+**BLOCKING GATE:** Present compliance report. Offer: (a) drill into specific regulation, (b) check additional area, (c) close
+
+---
+
+## Dependency Audit Mode (Phases D1-D3)
+
+Activated for CVE scanning, outdated packages, or supply chain assessment.
+
+### Phase D1 - Run Audit Tools
+
+Run the project's package manager audit:
 ```bash
 npm audit              # Node.js
 pip-audit              # Python
@@ -74,129 +141,52 @@ bundler-audit check    # Ruby
 dotnet list package --vulnerable  # .NET
 ```
 
-Log every finding with `file:line` evidence.
+Also check: `npm outdated` / `composer outdated` / equivalent for major version gaps.
 
-## Phase 2 - Framework-Aware Verification
+### Phase D2 - Contextualize Findings
 
-**THIS IS THE KEY DIFFERENTIATOR.** For EACH Phase 1 finding, check if the
-framework already mitigates it. Attempt to DISPROVE each finding - the adversarial
-framing catches more false positives than "check if it's handled."
+For each vulnerability found:
+1. **Is the vulnerable code path actually used?** Read how the dependency is imported and used in THIS project.
+2. **Is it a direct or transitive dependency?** Direct = higher priority.
+3. **Is there a fix available?** Check if a patched version exists.
+4. **What's the upgrade risk?** Major version bump = breaking changes. Minor = likely safe.
 
-**Framework verification examples:**
-<!-- ADAPT: Replace with your framework's security features -->
+Filter out: vulnerabilities in dev-only dependencies not exposed in production, vulnerabilities in code paths the project doesn't use.
 
-| Framework | Feature | What it mitigates | How to verify |
-|-----------|---------|-------------------|---------------|
-| Express | `helmet()` middleware | XSS, clickjacking, MIME sniffing | Check `app.use(helmet())` exists AND is before route handlers |
-| Express | `csurf` / `csrf()` | CSRF attacks | Check middleware registered on state-changing routes |
-| Django | ORM queries | SQL injection | Check no `.raw()` or `.extra()` with user input |
-| Django | `CsrfViewMiddleware` | CSRF | Check not in `CSRF_EXEMPT` for sensitive views |
-| Rails | `strong_parameters` | Mass assignment | Check `params.require(:model).permit(...)` on controllers |
-| Rails | Auto-escaping in ERB | XSS | Check no `raw()` or `.html_safe` on user content |
-| React | JSX auto-escaping | XSS | Check no `dangerouslySetInnerHTML` with user content |
-| Next.js | Server actions | CSRF, input validation | Check server actions validate input, don't trust client |
-| Symfony | CSRF token component | CSRF | Check forms include `csrf_token()` |
-| Spring | Security filter chain | Auth bypass | Check `SecurityFilterChain` covers the route |
+### Phase D3 - Dependency Report
 
-**Verification protocol:**
-For each finding: Is the mitigation (a) installed, (b) configured, (c) applied
-to the specific route/endpoint? Flag partial mitigation: "helmet() is installed
-but `contentSecurityPolicy` is disabled."
+Present findings ranked by: exploitability × usage × fix availability.
 
-Remove confirmed false positives. Flag partial mitigations as findings.
+| Package | Vulnerability | Severity | Direct? | Used Code Path | Fix Available | Upgrade Risk |
+|---------|--------------|----------|---------|---------------|--------------|-------------|
 
-**BLOCKING GATE:** Present verified findings. Offer:
-(a) verify a specific finding against the framework
-(b) check a different attack surface
-(c) test an edge case
-(d) proceed to ranking
+**Known malicious packages:** Flag any dependency that appears in known-malicious registries or has been recently transferred to a new maintainer.
 
-## Phase 3 - Exploitability Ranking
+**BLOCKING GATE:** Present report. Offer: (a) investigate specific CVE, (b) check transitive deps, (c) close
 
-Rank verified findings by exploitability, not just severity:
-
-- **Critical:** Exploitable without authentication. Immediate action required.
-- **High:** Exploitable with low-privilege access. Should fix before deployment.
-- **Medium:** Exploitable with specific conditions or chained with another issue.
-- **Low:** Theoretical risk, mitigated by other controls or very hard to exploit.
-
-For each **Critical** and **High** finding, write a one-sentence attack scenario:
-"An [attacker profile] can [action] via [vector], resulting in [impact]."
-
-Example: "An unauthenticated user can extract the users table by submitting
-`' OR 1=1--` in the search field at `src/api/search.ts:42`."
-
-## Phase 4 - Self-Check
-
-Re-read each cited `file:line` for Critical and High findings.
-- Does the code actually do what the finding claims?
-- Did the framework verification in Phase 2 actually check the right thing?
-- Is the attack scenario realistic given the deployment context?
-
-Remove findings that don't survive re-verification.
-
-**BLOCKING GATE:** Present final report using the Output Format template below.
-
-## Common Failure Modes
-
-1. **Generic OWASP checklist** - agent runs through web categories on a CLI tool. The skip conditions in Phase 1 prevent this.
-2. **False positives from framework ignorance** - agent flags "no input sanitization" in a Rails app where strong params handle it. Phase 2 catches this.
-3. **Missing dependency audit** - agent scans code but skips `npm audit`. The concrete commands in Phase 1 prevent this.
+---
 
 ## Constraints
 
-<!-- FIXED: Do not adapt these -->
-- MUST NOT flag framework-mitigated issues as vulnerabilities
-- MUST include attack scenario for Critical and High findings
+Conversational: present findings by severity tier, pause between tiers. Let the human drill in.
+
+- MUST NOT flag framework-mitigated issues as vulnerabilities (threat model mode)
+- MUST include attack scenario for Critical and High findings (threat model mode)
 - MUST run dependency audit using project's package manager
 - MUST skip irrelevant categories based on threat model
-- MUST NOT fabricate file paths or function names
+- MUST map compliance findings to specific regulations (compliance mode)
+- MUST check if vulnerable code paths are actually used (dependency mode)
 - MUST re-verify Critical and High findings before presenting
+- MUST NOT fabricate file paths or function names
 
 ## Output Format
 
-```markdown
-## TL;DR
-<!-- 3 sentences: threat model, key findings, posture assessment -->
-
-## Threat Surface
-| Category | Status | Skip Reason |
-|----------|--------|-------------|
-| Input validation | Scanned / Skipped | [if skipped: why] |
-| Auth/authz | ... | ... |
-| Secret handling | ... | ... |
-| SQL injection | ... | ... |
-| XSS | ... | ... |
-| Command injection | ... | ... |
-| Path traversal | ... | ... |
-| Dependency CVEs | ... | ... |
-| CORS/CSP | ... | ... |
-| Permission escalation | ... | ... |
-
-## Findings (by exploitability)
-
-### Critical (exploitable without auth)
-- **[title]** - `file:line`
-  **Attack scenario:** An [attacker] can [action] via [vector], resulting in [impact]
-  **Framework mitigation:** [not mitigated | mitigated by X - downgraded]
-
-### High / Medium / Low
-
-## Framework Mitigations Verified
-| Feature | Installed | Configured | Applied to routes |
-|---------|-----------|------------|-------------------|
-
-## What I Didn't Check
-<!-- Threat surfaces skipped and why -->
-
-## Dependency Audit
-<!-- Output of npm audit / pip-audit / cargo audit / etc. -->
-```
+See mode-specific phases above for output structure. All modes produce findings with `file:line` evidence tagged OBSERVED/INFERRED.
 
 ## Chains With
 
 - /goat-review - security findings feed into change review
 - /goat-debug - specific vulnerability needs deeper diagnosis
-- /goat-review - security scan reveals broader quality issues → audit mode
+- /goat-test - verify security mitigations with test plan
 
-**Handoff shape:** `{threat_model, findings_by_exploitability, framework_mitigations, dependency_audit_results}`
+**Handoff shape:** `{mode, threat_model?, findings_by_exploitability?, compliance_gaps?, dependency_audit_results?}`

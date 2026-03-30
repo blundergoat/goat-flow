@@ -30,15 +30,15 @@ skill: goat
 
 ## Scenario 6: Refactor
 **Replay:** `/goat rename UserService to AccountService across all files`
-**Expected:** Announces "Running /goat-refactor." Proceeds to refactor Phase 1 (scope declaration).
+**Expected:** Announces "Running /goat-plan (refactor mode)." Proceeds to refactor Phase 1 (scope declaration).
 
 ## Scenario 7: Simplify
 **Replay:** `/goat clean up the messy calculateDiscount function - it's hard to read`
-**Expected:** Announces "Running /goat-simplify." Proceeds to simplify Phase 1 (read & assess).
+**Expected:** Announces "Running /goat-review (simplify mode)." Proceeds to simplify Phase 1 (read & assess).
 
 ## Scenario 8: Investigate
 **Replay:** `/goat I'm new to this project - help me understand the architecture`
-**Expected:** Announces "Running /goat-investigate." Activates onboard mode. Proceeds to Phase 0.5 (stack detection).
+**Expected:** Announces "Running /goat-debug (investigate mode)." Activates onboard mode. Proceeds to Phase 0.5 (stack detection).
 
 ## Known Failure Mode
 Agent starts executing a skill without announcing which one it chose. The transparency announcement is the key differentiator - without it, the user can't override a wrong dispatch before work begins.

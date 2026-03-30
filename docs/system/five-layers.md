@@ -13,9 +13,8 @@ AI coding agents need structure, not just rules. This system organises everythin
 │  High-risk boundaries, module-specific gotchas              │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 3 - Skills                               ON DEMAND   │
-│  /goat-security, /goat-debug, /goat-investigate,             │
-│  /goat-review, /goat-plan, /goat-test,                      │
-│  /goat-refactor, /goat-simplify                              │
+│  /goat-security, /goat-debug, /goat-review,                  │
+│  /goat-plan, /goat-test                                      │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 4 - Playbooks                            ON DEMAND   │
 │  Feature briefs, mob elaboration, SBAO ranking,             │
@@ -80,18 +79,15 @@ AI coding agents need structure, not just rules. This system organises everythin
 
 **What:** Focused capabilities loaded via slash commands. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
-**The eight skills:**
+**The five skills (+ dispatcher):**
 
 | Skill | Purpose | Output |
 |-------|---------|--------|
 | `/goat-security` | Threat-model-driven security assessment | Findings ranked by exploitability |
-| `/goat-debug` | Root cause analysis when a bug is reported or test fails | Diagnosis with evidence trail |
-| `/goat-investigate` | Deep investigation of unfamiliar areas + onboarding mode | Research summary with sources |
-| `/goat-review` | Structured review + quality audit + instruction review modes | Findings ranked by severity |
-| `/goat-plan` | Feature planning with phased human gates | Plan with milestones |
+| `/goat-debug` | Root cause analysis + investigate/onboard mode | Diagnosis with evidence trail |
+| `/goat-review` | Structured review + quality audit + instruction review + simplify modes | Findings ranked by severity |
+| `/goat-plan` | Feature planning with phased human gates + refactor planning mode | Plan with milestones |
 | `/goat-test` | Generate test plans across three verification phases | Test instructions (automated, AI, human) |
-| `/goat-refactor` | Cross-file refactoring with blast radius analysis | Verified renames with absence checks |
-| `/goat-simplify` | Code readability improvement | Impact-ordered findings with renames |
 
 **Skill justification test:** A skill earns its place if it has at least one of: a distinct artifact, a hard workflow gate, a special failure mode, or a repeatable structured output. Skills that failed this test were downgraded to inline instructions.
 
@@ -178,7 +174,7 @@ Layer 1 is the hub. Its router table is the index to everything else. Layers 2-4
 |-------|---------------|--------|
 | Phase 0 (bootstrap) | Minimal instruction file + deny mechanism | Layer 1 (minimal) |
 | Phase 1a | Full instruction file: execution loop, autonomy tiers, DoD, router, stack definition | Layer 1 |
-| Phase 1b | Skills: /goat-security, /goat-debug, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-refactor, /goat-simplify | Layer 3 |
+| Phase 1b | Skills: /goat-security, /goat-debug, /goat-review, /goat-plan, /goat-test | Layer 3 |
 | Phase 1c | Enforcement: hooks, permissions deny list, preflight script, context validation | Layer 1 enforcement |
 | Phase 2 | Agent eval suite, CI validation, RFC 2119 pass | Layer 5, enhances Layers 1-4 |
 

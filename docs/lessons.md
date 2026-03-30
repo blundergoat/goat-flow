@@ -82,10 +82,24 @@ _Entries: "Sub-agent output must be audited", "Double check means read the files
 
 When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. The verification scope must match the blast radius of the change. When building on existing files, audit them first - errors in source files propagate to everything built on top.
 
+### Skill session logs are never written
+**What happened:** The Shared Conventions block in every skill says "If `tasks/logs/` exists → write session summary." The goat-review audit of `tasks/roadmaps/0.9.3/tasks.md` ran the full skill process (Step 0 → Phase A1-A3 → blocking gate) but no session log was written. The user noticed `tasks/logs/sessions/` was empty. The closing protocol was skipped entirely — 0% compliance across the session.
+
+**Root cause:** The session log instruction is buried in the Closing line of the Shared Conventions block (one clause in a compound sentence at `SKILL.md:17`). It fires at the END of a skill — after the agent has already delivered its output and is mentally "done." There's no enforcement mechanism: no hook checks for the file, no DoD gate references it, and no skill phase explicitly includes "write session log" as a step. It's a SHOULD rule in a MUST position.
+
+**Prevention:** The closing protocol needs mechanical enforcement, not just a rule. Options: (1) add session logging to the DoD gates in CLAUDE.md so it blocks completion, (2) add a Stop hook that checks whether `tasks/logs/sessions/` was written to during this session, (3) make session logging the FIRST line of the skill's output format template so the agent writes it before presenting findings, not after.
+
+**created_at:** 2026-03-30
+
 ### Pattern: Blocked ≠ impossible
 _Entries: "When deny hook blocks a command, use the unblocked equivalent"_
 
 Deny hooks block dangerous patterns, not all operations. When a command is blocked, spend 2 seconds thinking about the safe alternative before asking the user or giving up.
+
+### Pattern: End-of-task rules get skipped
+_Entries: "Skill session logs are never written"_
+
+Rules that fire after the agent has delivered its primary output have near-zero compliance. The agent's attention is on the deliverable, not the closing checklist. Session logging, learning loop updates, and handoff notes all suffer from this. Prevention must be structural: either make the closing step part of the output format (so it happens DURING delivery, not after), or enforce it via hooks/DoD gates that block completion.
 
 ### Dispatcher is a first-class skill, not a helper
 The goat dispatcher was treated as secondary to the "real" 8 skills — excluded from CANONICAL_SKILLS, eval diversity counting (TOTAL_SKILLS=8), and consistently under-counted in comments and recommendations ("8 canonical skills"). This led to inconsistencies across rubric, fragments, and docs where some said 8 and others said 9.

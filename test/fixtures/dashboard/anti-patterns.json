@@ -399,16 +399,16 @@
         },
         {
           "id": "2.1.3",
-          "name": "goat-investigate skill",
+          "name": "goat-debug (investigate) skill",
           "tier": "standard",
           "category": "Skills",
           "confidence": "high",
           "status": "pass",
           "points": 2,
           "maxPoints": 2,
-          "message": ".claude/skills/goat-investigate/SKILL.md exists",
-          "evidence": ".claude/skills/goat-investigate/SKILL.md",
-          "recommendationKey": "create-skill-investigate"
+          "message": ".claude/skills/goat-debug/SKILL.md exists (investigate mode)",
+          "evidence": ".claude/skills/goat-debug/SKILL.md",
+          "recommendationKey": "create-skill-debug"
         },
         {
           "id": "2.1.4",
@@ -451,29 +451,29 @@
         },
         {
           "id": "2.1.7",
-          "name": "goat-refactor skill",
+          "name": "goat-plan (refactor) skill",
           "tier": "standard",
           "category": "Skills",
           "confidence": "high",
           "status": "pass",
           "points": 2,
           "maxPoints": 2,
-          "message": ".claude/skills/goat-refactor/SKILL.md exists",
-          "evidence": ".claude/skills/goat-refactor/SKILL.md",
-          "recommendationKey": "create-skill-refactor"
+          "message": ".claude/skills/goat-plan/SKILL.md exists (refactor mode)",
+          "evidence": ".claude/skills/goat-plan/SKILL.md",
+          "recommendationKey": "create-skill-plan"
         },
         {
           "id": "2.1.8",
-          "name": "goat-simplify skill",
+          "name": "goat-review (simplify) skill",
           "tier": "standard",
           "category": "Skills",
           "confidence": "high",
           "status": "pass",
           "points": 2,
           "maxPoints": 2,
-          "message": ".claude/skills/goat-simplify/SKILL.md exists",
-          "evidence": ".claude/skills/goat-simplify/SKILL.md",
-          "recommendationKey": "create-skill-simplify"
+          "message": ".claude/skills/goat-review/SKILL.md exists (simplify mode)",
+          "evidence": ".claude/skills/goat-review/SKILL.md",
+          "recommendationKey": "create-skill-review"
         },
         {
           "id": "2.1.11",
@@ -1483,16 +1483,6 @@
           "message": "All 8 skills at version 0.9.1",
           "recommendationKey": "ap-fix-outdated-skills",
           "evidence": "test evidence for AP15"
-        },
-        {
-          "id": "AP16",
-          "name": "Deprecated skills present",
-          "triggered": true,
-          "deduction": -3,
-          "confidence": "high",
-          "message": "No deprecated skills",
-          "recommendationKey": "ap-remove-deprecated-skills",
-          "evidence": "test evidence for AP16"
         },
         {
           "id": "AP17",

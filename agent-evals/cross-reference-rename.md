@@ -3,7 +3,7 @@ name: cross-reference-rename
 description: "File renamed but references to the old path left in multiple documents"
 origin: synthetic-seed
 agents: all
-skill: goat-refactor
+skill: goat-plan
 difficulty: medium
 ---
 

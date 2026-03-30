@@ -101,21 +101,22 @@ export const fullChecks: CheckDef[] = [
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
-        const { evalSkillCount, count } = ctx.facts.shared.evals;
-        const TOTAL_SKILLS = 9;
+        const { evalSkillCount, count, missingSkills } = ctx.facts.shared.evals;
+        const TOTAL_SKILLS = 6; // 5 skills + dispatcher (v0.9.3)
+        const missingList = missingSkills.length > 0 ? `. Missing: ${missingSkills.join(', ')}` : '';
         if (count === 0) {
           return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: 'No eval files' };
         }
         if (evalSkillCount >= TOTAL_SKILLS) {
           return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'pass', points: 2, maxPoints: 2, confidence: 'medium', message: `All ${TOTAL_SKILLS} canonical skills covered` };
         }
-        if (evalSkillCount >= 4) {
-          return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'medium', message: `${evalSkillCount}/${TOTAL_SKILLS} skills covered - add evals for the missing ones` };
+        if (evalSkillCount >= 3) {
+          return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'partial', points: 1, maxPoints: 2, confidence: 'medium', message: `${evalSkillCount}/${TOTAL_SKILLS} skills covered${missingList}` };
         }
-        return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: evalSkillCount === 0 ? 'No skill: labels in evals - add skill: goat-X to frontmatter' : `${evalSkillCount}/${TOTAL_SKILLS} skills covered - diversity matters more than count` };
+        return { id: '3.1.6', name: 'Eval skill coverage', tier: 'full', category: 'Agent Evals', status: 'fail', points: 0, maxPoints: 2, confidence: 'medium', message: evalSkillCount === 0 ? 'No skill: labels in evals - add skill: goat-X to frontmatter' : `${evalSkillCount}/${TOTAL_SKILLS} skills covered${missingList}` };
       },
     },
-    recommendation: 'Add evals covering all 9 skills: goat, goat-debug, goat-investigate, goat-plan, goat-refactor, goat-review, goat-security, goat-simplify, goat-test. Diversity across skills matters more than eval count.',
+    recommendation: 'Add evals covering all 6 skills: goat, goat-debug, goat-review, goat-plan, goat-security, goat-test. Diversity across skills matters more than eval count.',
     recommendationKey: 'add-eval-skill-coverage',
   },
 
@@ -290,5 +291,5 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'fix-execution-loop-sync',
   },
 
-  // 3.4.1 removed - duplicate of 3.1.6 after both were updated to require all 9 canonical skills.
+  // 3.4.1 removed - duplicate of 3.1.6 after both were updated to require all 6 canonical skills.
 ];

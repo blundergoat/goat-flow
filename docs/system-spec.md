@@ -23,7 +23,7 @@ Layer 2 -- Local Context (directory-level CLAUDE.md files)
     loaded on demand. Hot path (instruction files) stays under 120 lines.
 
 Layer 3 -- Skills (loaded via slash commands)
-    /goat-security, /goat-debug, /goat-investigate, /goat-review, /goat-plan, /goat-test, /goat-refactor, /goat-simplify
+    /goat-security, /goat-debug, /goat-review, /goat-plan, /goat-test
 
 Layer 4 -- Playbooks (planning tools, loaded on demand)
     Mob elaboration, SBAO planning, milestone planning
@@ -77,13 +77,10 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 | Skill                | Justification                    | Projects |
 | -------------------- | -------------------------------- | -------- |
 | `/goat-security`    | Distinct artefact + hard gate    | All      |
-| `/goat-debug`       | Special failure mode + hard gate | All      |
-| `/goat-investigate`  | Distinct artefact + hard gate    | All      |
-| `/goat-review`      | Repeatable structured output     | All      |
-| `/goat-plan`        | Distinct artefact + hard gate    | All      |
+| `/goat-debug`       | Special failure mode + hard gate + investigate/onboard mode | All      |
+| `/goat-review`      | Repeatable structured output + simplify mode     | All      |
+| `/goat-plan`        | Distinct artefact + hard gate + refactor planning mode    | All      |
 | `/goat-test`        | Distinct artefact + hard gate    | All      |
-| `/goat-refactor`    | Distinct artefact + hard gate    | All      |
-| `/goat-simplify`    | Distinct artefact + hard gate    | All      |
 
 | Former Skill        | Now Lives                                | Why downgraded / merged                                  |
 | ------------------- | ---------------------------------------- | -------------------------------------------------------- |
@@ -92,7 +89,10 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 | `/review-triage`    | Review branch of the default ACT step    | Normal review behaviour, not a distinct mode             |
 | `/goat-audit`       | `/goat-review` (Audit Mode)              | Merged -- negative verification + fabrication self-check |
 | `/goat-reflect`     | `/goat-review` (Instruction Review Mode) | Merged -- friction signals + staleness audit             |
-| `/goat-onboard`     | `/goat-investigate` (Onboard Mode)       | Merged -- stack detection + instruction drafting         |
+| `/goat-onboard`     | `/goat-debug` (Onboard Mode)             | Merged -- stack detection + instruction drafting         |
+| `/goat-investigate` | `/goat-debug` (Investigate Mode)         | Merged -- deep codebase investigation                    |
+| `/goat-simplify`    | `/goat-review` (Simplify Mode)           | Merged -- readability without behaviour change           |
+| `/goat-refactor`    | `/goat-plan` (Refactor Planning Mode)    | Merged -- cross-file refactoring with blast radius       |
 | `/goat-context`     | Removed                                  | Session resumption handled by agent built-in context     |
 | `/revert-rescope`   | Paragraph in VERIFY/stop-the-line        | Tactic, not a workflow                       |
 
@@ -365,19 +365,13 @@ stack:
 
 **`/goat-security`** -- Security-focused review. MUST: audit dependencies for known CVEs, scan for leaked secrets, review permission boundaries. SHOULD: check auth flows, validate input sanitisation. MUST rank findings using severity scale: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE.
 
-**`/goat-debug`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix.
+**`/goat-debug`** -- Diagnosis-first mode. (1) Read actual code paths, trace end-to-end. (2) Write findings with file:line evidence -- no fixes yet. (3) Only after human reviews: propose fix. Includes Investigate Mode (deep codebase read) and Onboard Mode (new project orientation).
 
-**`/goat-investigate`** -- Deep codebase read producing research.md. Hard gate: no planning until human reviews. Includes Onboard Mode for new projects.
+**`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers. Includes Audit Mode (codebase-wide quality sweep), Instruction Review Mode (CLAUDE.md/skill staleness check), and Simplify Mode (readability improvement without behaviour change).
 
-**`/goat-review`** -- Structured review with RFC 2119 constraints and autonomy tiers. Includes Audit Mode (codebase-wide quality sweep) and Instruction Review Mode (CLAUDE.md/skill staleness check).
-
-**`/goat-plan`** -- 4-phase planning: feature brief → mob elaboration → SBAO ranking → milestones. Human gate between each phase. Skip SBAO for Standard features, compress to brief for Hotfixes.
+**`/goat-plan`** -- 4-phase planning: feature brief → mob elaboration → SBAO ranking → milestones. Human gate between each phase. Skip SBAO for Standard features, compress to brief for Hotfixes. Includes Refactor Planning Mode for cross-file restructuring with blast radius analysis.
 
 **`/goat-test`** -- Generate 3-track testing instructions (automated, AI verification, human checklist) after milestones. Doer-verifier principle: the coding agent MUST NOT verify its own work.
-
-**`/goat-refactor`** -- Cross-file refactoring with blast radius analysis. MUST read both sides before changing. Grep-after-every-rename to verify absence of old pattern.
-
-**`/goat-simplify`** -- Code readability improvement. MUST NOT change behaviour. Prefer renaming over commenting. Impact-ordered findings with before/after diffs.
 
 ---
 

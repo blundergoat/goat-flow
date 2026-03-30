@@ -209,10 +209,9 @@ Over budget = re-classify before continuing.`,
 
 **Always:** Read any file, lint scripts, edit within assigned scope
 
-**Ask First** (MUST complete before proceeding):
-- [ ] Boundary touched: [name]
-- [ ] Related code read: [yes/no]
-- [ ] Rollback command: [exact command]
+**Ask First** (MUST answer before proceeding):
+- [ ] What else depends on this? [list callers/consumers]
+- [ ] How do I undo this? [exact rollback command]
 
 **Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push.
 \`\`\``,
@@ -260,8 +259,16 @@ Run \`ls\` on each backtick-wrapped path to verify.`,
     phase: 'foundation',
     category: 'Autonomy Tiers',
     kind: 'create',
-    instruction: `Add the 5-item micro-checklist to Ask First in \`{{instructionFile}}\`:
+    instruction: `Add the Ask First checklist to \`{{instructionFile}}\`. Choose the short form (recommended) or full form (for high-risk/PHI codebases):
 
+**Short form (2 questions):**
+\`\`\`markdown
+**Ask First** (MUST answer before proceeding):
+- [ ] What else depends on this? [list callers/consumers]
+- [ ] How do I undo this? [exact rollback command]
+\`\`\`
+
+**Full form (5 items — use for healthcare, multi-tenant, or compliance-critical projects):**
 \`\`\`markdown
 **Ask First** (MUST complete before proceeding):
 - [ ] Boundary touched: [name]

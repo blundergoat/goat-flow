@@ -193,26 +193,11 @@ For each outdated skill:
 name: goat-{name}
 goat-flow-skill-version: "${SKILL_VERSION}"
 ---
-\`\`\``,
-  },
-  {
-    key: 'ap-remove-deprecated-skills',
-    phase: 'anti-pattern',
-    category: 'Anti-Pattern Fix',
-    kind: 'fix',
-    instruction: `This project has deprecated skill directories that are no longer part of the canonical goat-flow skill set.
+\`\`\`
 
-**Deprecated skills found:** {{evidence.ap-remove-deprecated-skills}}
-
-These skills were consolidated into the 9 canonical skills in v0.8.0:
-- \`goat-audit\` → merged into \`goat-review\` (Audit Mode)
-- \`goat-reflect\`, \`goat-onboard\`, \`goat-resume\` → consolidated into existing skills
-- \`goat-context\` → removed
-
-For each deprecated skill directory:
-1. Check if it contains any custom content not covered by the canonical skills
-2. Migrate any unique content to the appropriate canonical skill
-3. Delete the deprecated skill directory`,
+After updating all skills:
+5. Verify the router table in CLAUDE.md (and AGENTS.md/GEMINI.md) references all 6 canonical skills and no non-existent paths
+6. If \`.github/workflows/context-validation.yml\` exists, verify its skills check list matches the canonical set`,
   },
   {
     key: 'ap-fix-dangling-skill-refs',
@@ -227,5 +212,29 @@ For each dangling reference:
 1. Check if the file was renamed or moved - update the path if so
 2. Check if the file was deleted - remove the reference
 3. If the reference is aspirational (file should exist but doesn't), either create the file or remove the reference`,
+  },
+  {
+    key: 'ap-fix-adapt-comments',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Skill files contain remaining \`<!-- ADAPT: -->\` comments. These are unanswered template questions that should be replaced with project-specific content.
+
+Search for \`<!-- ADAPT:\` across all skill files and replace each one with a real answer for THIS project. For example:
+- \`<!-- ADAPT: "Which area?" -->\` → replace with actual areas: "auth flow, database queries, API endpoints"
+- \`<!-- ADAPT: Replace with your test command -->\` → replace with the actual test command from package.json`,
+  },
+  {
+    key: 'ap-fix-hook-paths',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Hook scripts contain hardcoded absolute paths that break when the repo is cloned elsewhere.
+
+Replace all absolute paths with \`$(git rev-parse --show-toplevel)\`:
+\`\`\`bash
+# BAD:  /home/user/projects/myapp/.claude/hooks/deny-dangerous.sh
+# GOOD: $(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh
+\`\`\``,
   },
 ];

@@ -5,8 +5,8 @@ import type { Fragment } from '../types.js';
  * Skills, hooks, learning loop, router, architecture, local context
  */
 export const standardFragments: Fragment[] = [
-  // === Skills (9 individual + 1 completeness + 7 quality + 2 cross-cutting) ===
-  ...['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(skill => ({
+  // === Skills (5 individual + dispatcher + 1 completeness + 7 quality + 2 cross-cutting) ===
+  ...['debug', 'review', 'plan', 'security', 'test'].map(skill => ({
     key: `create-skill-${skill}`,
     phase: 'standard' as const,
     category: 'Skills',
@@ -185,9 +185,9 @@ Each phase should have a clear entry condition (what must be done before startin
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Ensure all 9 GOAT Flow skills are present under \`{{skillsDir}}/\`:
+    instruction: `Ensure all 6 GOAT Flow skills (5 + dispatcher) are present under \`{{skillsDir}}/\`:
 
-- goat (dispatcher), goat-security, goat-debug, goat-investigate, goat-review, goat-plan, goat-test, goat-refactor, goat-simplify
+- goat (dispatcher), goat-debug, goat-review, goat-plan, goat-security, goat-test
 
 Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, Output sections.`,
   },
@@ -207,15 +207,15 @@ Each skill needs a \`SKILL.md\` with: name, description, When to Use, Process, O
 Without an output format, agents produce inconsistent deliverables and the human cannot predict what to expect.`,
   },
   {
-    key: 'install-dispatcher-skill',
+    key: 'create-skill-goat',
     phase: 'standard',
     category: 'Skills',
     kind: 'create',
-    instruction: `Install the \`goat\` dispatcher skill — it's the 9th canonical skill that routes to the other 8.
+    instruction: `Install the \`goat\` dispatcher skill — the 6th canonical skill that routes to the other 5.
 
 Copy \`workflow/skills/goat.md\` to \`{{skillsDir}}/goat/SKILL.md\`.
 
-The dispatcher routes natural language to the correct skill - users type \`/goat fix the login bug\` instead of needing to know the exact skill name. Without it, skill discoverability depends entirely on users memorising 8 command names.`,
+The dispatcher routes natural language to the correct skill - users type \`/goat fix the login bug\` instead of needing to know the exact skill name. Without it, skill discoverability depends entirely on users memorising 5 command names.`,
   },
   {
     key: 'add-skill-shared-conventions',

@@ -28,18 +28,18 @@ Type **`/goat`** followed by what you need:
 | I need to... | Use | Key constraint |
 |-------------|-----|----------------|
 | Fix a bug | `/goat-debug` | Diagnosis first. No fixes until human reviews. |
-| Understand unfamiliar code | `/goat-investigate` | Read before acting. No planning until human reviews findings. |
+| Understand unfamiliar code | `/goat-debug` (investigate mode) | Read before acting. No planning until human reviews findings. |
 | Plan a feature | `/goat-plan` | 4-phase process with human gates between each phase. |
 | Write tests | `/goat-test` | Doer-verifier: the coding agent MUST NOT verify its own work. |
 | Review a PR or diff | `/goat-review` | Read all changed files before commenting. Check footguns. |
-| Rename across files | `/goat-refactor` | Read both sides first. Grep after every rename. |
-| Improve readability | `/goat-simplify` | MUST NOT change behaviour. Prefer renaming over commenting. |
+| Rename across files | `/goat-plan` (refactor mode) | Read both sides first. Grep after every rename. |
+| Improve readability | `/goat-review` (simplify mode) | MUST NOT change behaviour. Prefer renaming over commenting. |
 | Security assessment | `/goat-security` | Framework-aware verification. Rank by exploitability. |
 
 ### Modes (skills within skills)
 
 - `/goat-review` also has **Audit Mode** (codebase-wide quality sweep) and **Instruction Review Mode** (check CLAUDE.md for staleness)
-- `/goat-investigate` also has **Onboard Mode** (systematic codebase mapping for new contributors)
+- `/goat-debug` also has **Investigate Mode** (deep codebase exploration) and **Onboard Mode** (systematic codebase mapping for new contributors)
 
 ## Essential Workflow
 

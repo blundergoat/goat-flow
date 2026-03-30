@@ -129,14 +129,11 @@ After full implementation, your project will have:
 ```
 CLAUDE.md                              <- Layer 1: the loop (~120 lines)
 src/auth/CLAUDE.md (etc.)              <- Layer 2: local context (if qualifying dirs exist)
-.claude/skills/goat-security/SKILL.md   <- Layer 3: skills (9 total)
+.claude/skills/goat-security/SKILL.md   <- Layer 3: skills (6 total: 5 + dispatcher)
 .claude/skills/goat-debug/SKILL.md
-.claude/skills/goat-investigate/SKILL.md
 .claude/skills/goat-review/SKILL.md
 .claude/skills/goat-plan/SKILL.md
 .claude/skills/goat-test/SKILL.md
-.claude/skills/goat-refactor/SKILL.md
-.claude/skills/goat-simplify/SKILL.md
 .claude/hooks/deny-dangerous.sh        <- enforcement
 .claude/hooks/stop-lint.sh
 .claude/hooks/format-file.sh           <- skip if no formatter configured

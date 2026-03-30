@@ -3,7 +3,7 @@ name: simplify-logic-removed
 description: "Agent removes conditional logic while simplifying, changing observable behaviour under the belief it was dead code"
 origin: synthetic-seed
 agents: all
-skill: goat-simplify
+skill: goat-review
 difficulty: hard
 ---
 

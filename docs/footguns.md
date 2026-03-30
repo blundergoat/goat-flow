@@ -183,3 +183,21 @@ When one of those changes without the others, the setup guidance stops matching 
 **Prevention:** Treat eval shape as a single contract. Any change to allowed headings, label format, or example structure must be updated in the template, parser, and scanner together. Verify with one round-trip test: write an eval from the template, parse it, then confirm it passes the full-tier scan checks.
 
 **Created:** 2026-03-25
+
+## Footgun: Dispatcher intent mapping has no coverage for analysis/evaluation verbs
+
+**Evidence type:** ACTUAL_MEASURED
+
+**Symptoms:** User asks `/goat analyse this plan` or `/goat evaluate the setup`. Dispatcher auto-routes to goat-review without disambiguating. User expected goat-plan (or wanted to choose). The wrong skill loads and the entire interaction is wasted.
+
+**Why it happens:** The intent mapping table in `.claude/skills/goat/SKILL.md:19-31` has rows mapping keywords to skills. "Analyse", "evaluate", "critique", "assess", and "deeply review" appear in none of them. When no keyword matches, the agent falls through to the closest semantic match instead of triggering the disambiguation path. The disambiguation table (`.claude/skills/goat/SKILL.md:45-55`) has common ambiguities but none involving analysis verbs applied to planning artifacts.
+
+**Evidence:**
+- `.claude/skills/goat/SKILL.md:19-31` → intent mapping table has no row for analyse/evaluate/critique
+- `.claude/skills/goat/SKILL.md:45-55` → disambiguation table lacks "analyse a plan" ambiguity
+- `workflow/skills/goat.md:19-31` → same gap in the template version
+- Real incident: `/goat deeply analyse this plan: tasks/roadmaps/0.9.3/tasks.md` routed to goat-review without asking (2026-03-30)
+
+**Prevention:** Add analysis/evaluation verbs to the disambiguation table (NOT the intent mapping table — they are inherently ambiguous). When the target is a planning artifact (path contains `roadmap`, `plan`, `todo`, `milestone`), always present goat-review vs goat-plan as options. The dispatcher's job is to route clearly and ask when unclear — not to guess.
+
+**Created:** 2026-03-30

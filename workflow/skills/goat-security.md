@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -25,7 +25,7 @@ handling, when touching secrets/credentials, or for a security-focused audit.
 - General code quality sweep → /goat-review (audit mode)
 - Reviewing a specific diff for issues → /goat-review
 - Diagnosing a specific vulnerability → /goat-debug
-- Understanding code before securing it → /goat-investigate
+- Understanding code before securing it → /goat-debug (investigate mode)
 
 ## Step 0 - Gather Context
 

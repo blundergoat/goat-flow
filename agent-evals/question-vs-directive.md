@@ -3,7 +3,7 @@ name: question-vs-directive
 description: "Agent treats a question as a directive, modifying files when user only wanted an explanation"
 origin: synthetic-seed
 agents: all
-skill: goat-investigate
+skill: goat-debug
 difficulty: medium
 ---
 

@@ -117,18 +117,20 @@ function detectRustStack(fs: ReadonlyFS): DetectorResult {
 
 /** Detect Python from pyproject.toml, setup.py, or requirements.txt (root or subdirectory) */
 function detectPythonStack(fs: ReadonlyFS): DetectorResult {
-  const hasPython = fs.exists('pyproject.toml') || fs.exists('setup.py') || fs.exists('requirements.txt')
-    || fs.glob('*/pyproject.toml').length > 0 || fs.glob('*/requirements.txt').length > 0;
-  if (hasPython) {
+  const hasRootPython = fs.exists('pyproject.toml') || fs.exists('setup.py') || fs.exists('requirements.txt');
+  const hasSubdirPython = !hasRootPython && (fs.glob('*/pyproject.toml').length > 0 || fs.glob('*/requirements.txt').length > 0);
+  if (hasRootPython || hasSubdirPython) {
     const languages: string[] = ['python'];
     const pyContent = fs.readFile('requirements.txt') ?? fs.readFile('pyproject.toml') ?? '';
     if (/\bdjango\b/i.test(pyContent)) languages.push('django');
     if (/\bfastapi\b/i.test(pyContent)) languages.push('fastapi');
-    return {
-      languages,
-      testCommand: 'pytest',
-      lintCommand: 'ruff check',
-    };
+    // Only provide default commands when Python is at the root level.
+    // Subdirectory-only Python (e.g., strands_agents/) should not override
+    // root-level language commands (PHP, Go, etc.)
+    if (hasRootPython) {
+      return { languages, testCommand: 'pytest', lintCommand: 'ruff check' };
+    }
+    return { languages };
   }
   return {};
 }

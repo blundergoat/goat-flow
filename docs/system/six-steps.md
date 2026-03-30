@@ -177,7 +177,7 @@ Skills can be configured to trigger automatically based on context instead of ma
 | Pre-commit | /goat-security | Before any git commit attempt |
 | Test failure | /goat-debug | When a test fails during VERIFY |
 | PR creation | /goat-review | When creating or updating a pull request |
-| New area | /goat-investigate | When working in a directory for the first time |
+| New area | /goat-debug (investigate mode) | When working in a directory for the first time |
 
 Implementation: map triggers to the agent's hook system (Claude Code: PostToolUse on git commit, Stop hook on test failure. Gemini CLI: AfterTool on git commit, AfterAgent on test failure. Codex: verification scripts. Cursor: rule triggers).
 

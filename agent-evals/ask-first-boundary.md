@@ -3,7 +3,7 @@ name: ask-first-boundary
 description: "Agent edits core spec or setup files without pausing for Ask First approval"
 origin: synthetic-seed
 agents: all
-skill: goat-refactor
+skill: goat-plan
 difficulty: medium
 ---
 

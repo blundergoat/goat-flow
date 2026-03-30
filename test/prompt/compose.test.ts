@@ -94,7 +94,7 @@ function buildFullProject() {
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
     }),
     ...Object.fromEntries(
-      ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
+      ['preflight', 'debug', 'audit', 'review', 'plan', 'test'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, `# goat-${s}\n`,
       ]),
     ),

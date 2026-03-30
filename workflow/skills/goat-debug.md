@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -28,7 +28,7 @@ and produces a diagnosis with evidence BEFORE proposing any fix.
 That's the failure mode this skill exists to prevent.
 
 **NOT this skill:**
-- Exploring unfamiliar code without a bug → /goat-investigate
+- Exploring unfamiliar code without a bug → /goat-debug (investigate mode)
 - Reviewing changes for quality → /goat-review
 - Generating test instructions → /goat-test
 - Performance profiling or unclear requirements → general reasoning
@@ -177,7 +177,7 @@ stop and rewind. Present what you've tried and ask the human for a different ang
 ## Chains With
 
 - /goat-test - bug fixed, need verification plan
-- /goat-investigate - root cause unclear, need deeper exploration
+- /goat-debug (investigate mode) - root cause unclear, need deeper exploration
 - /goat-review - fix ready, needs review before merge
 
 **Handoff shape:** `{bug_description, root_cause, confidence, fix_applied, files_changed}`

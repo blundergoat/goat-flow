@@ -74,7 +74,7 @@ Appended by agents during VERIFY and LOG steps. Written when corrections happen,
 jq 'select(.trigger == "boundary-crossed")' tasks/logs/incidents.jsonl
 
 # Incidents by skill
-jq 'select(.skill == "goat-refactor")' tasks/logs/incidents.jsonl
+jq 'select(.skill == "goat-plan")' tasks/logs/incidents.jsonl
 
 # Two-corrections events (agent was forced to rewind)
 jq 'select(.trigger == "two-corrections-rewind")' tasks/logs/incidents.jsonl

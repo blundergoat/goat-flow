@@ -192,11 +192,12 @@ export interface SharedFacts {
     staleRefs: string[];
     totalRefs: number;
     validRefs: number;
+    formatDiagnostic: string | null;
   };
-  lessons: { exists: boolean; hasEntries: boolean; entryCount: number; staleRefs: string[] };
+  lessons: { exists: boolean; hasEntries: boolean; entryCount: number; staleRefs: string[]; formatDiagnostic: string | null };
   decisions: { dirExists: boolean; fileCount: number };
   architecture: { exists: boolean; lineCount: number };
-  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasAgentsLabels: boolean; hasReplayPrompts: boolean; hasFrontmatter: boolean; evalSkillCount: number };
+  evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasAgentsLabels: boolean; hasReplayPrompts: boolean; hasFrontmatter: boolean; evalSkillCount: number; missingSkills: string[] };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
   handoffTemplate: { exists: boolean; sectionCount: number; hasRequiredSections: boolean };
   ignoreFiles: { copilotignore: boolean; cursorignore: boolean; geminiignore: boolean };
@@ -252,8 +253,6 @@ export interface AgentFacts {
     outdatedCount: number;
     /** Whether the goat dispatcher skill is installed */
     hasDispatcher: boolean;
-    /** Deprecated skill directories found on disk */
-    deprecated: string[];
     /** Dangling file path references found in skill content */
     danglingRefs: string[];
     quality: {
@@ -268,6 +267,8 @@ export interface AgentFacts {
       withSharedConventions: number;
       /** Skills where Step 0 Jaccard similarity to template > 0.9 (unadapted) */
       unadaptedCount: number;
+      /** Total remaining <!-- ADAPT: --> comments across all skill files */
+      adaptCommentCount: number;
       // Total number of skill files evaluated
       total: number;
     };
@@ -286,6 +287,8 @@ export interface AgentFacts {
     postTurnHasValidation: boolean;
     postToolExists: boolean;
     compactionHookExists: boolean;
+    /** Hook scripts containing hardcoded absolute paths (not wrapped in $(git rev-parse)) */
+    absolutePathHooks: string[];
     readDenyCoversSecrets: boolean;
   };
   deny: {

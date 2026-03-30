@@ -1,15 +1,9 @@
-/** Canonical list of all GOAT Flow skill names */
+/** Canonical list of all GOAT Flow skill names (v0.9.3: 5 skills + dispatcher = 6) */
 export const SKILL_NAMES = [
-  'goat-security', 'goat-debug', 'goat-investigate',
-  'goat-review', 'goat-plan', 'goat-test',
-  'goat-refactor', 'goat-simplify',
+  'goat', 'goat-debug', 'goat-review', 'goat-plan',
+  'goat-security', 'goat-test',
 ] as const;
 
-/** Deprecated skill names - scanner flags these as anti-pattern AP16. */
-export const DEPRECATED_SKILL_NAMES = new Set([
-  'goat-reflect', 'goat-onboard', 'goat-resume',
-  'goat-audit', 'goat-context',
-]);
 
 /** Type derived from the canonical skill list */
 export type SkillName = typeof SKILL_NAMES[number];

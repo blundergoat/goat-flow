@@ -282,9 +282,9 @@ describe('Fixture 4: full-claude', () => {
       permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
-    // 9 skills (8 + dispatcher)
+    // 6 skills (5 + dispatcher)
     ...Object.fromEntries(
-      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
+      ['debug', 'review', 'plan', 'security', 'test'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -304,13 +304,13 @@ describe('Fixture 4: full-claude', () => {
     'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nDo something\n```\n',
     'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\nskill: goat-plan\n---\n\n### Scenario\n\n```\nAnother prompt\n```\n',
     'agent-evals/eval-4.md': '---\nname: eval-4\norigin: real-incident\nagents: all\nskill: goat-security\n---\n\n### Scenario\n\n```\nCheck auth\n```\n',
-    'agent-evals/eval-5.md': '---\nname: eval-5\norigin: real-incident\nagents: all\nskill: goat-investigate\n---\n\n### Scenario\n\n```\nExplore module\n```\n',
+    'agent-evals/eval-5.md': '---\nname: eval-5\norigin: real-incident\nagents: all\nskill: goat-debug\n---\n\n### Scenario\n\n```\nExplore module\n```\n',
     'agent-evals/eval-6.md': '---\nname: eval-6\norigin: real-incident\nagents: all\nskill: goat-test\n---\n\n### Scenario\n\n```\nVerify changes\n```\n',
-    'agent-evals/eval-7.md': '---\nname: eval-7\norigin: real-incident\nagents: all\nskill: goat-refactor\n---\n\n### Scenario\n\n```\nRename across files\n```\n',
-    'agent-evals/eval-8.md': '---\nname: eval-8\norigin: real-incident\nagents: all\nskill: goat-simplify\n---\n\n### Scenario\n\n```\nClean up naming\n```\n',
+    'agent-evals/eval-7.md': '---\nname: eval-7\norigin: real-incident\nagents: all\nskill: goat-plan\n---\n\n### Scenario\n\n```\nRename across files\n```\n',
+    'agent-evals/eval-8.md': '---\nname: eval-8\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nClean up naming\n```\n',
     'agent-evals/eval-9.md': '---\nname: eval-9\norigin: real-incident\nagents: all\nskill: goat\n---\n\n### Scenario\n\n```\nRoute intent\n```\n',
     // CI
-    '.github/workflows/context-validation.yml': 'name: Context Validation\non: push\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
+    '.github/workflows/context-validation.yml': 'name: Context Validation\non: [push, pull_request]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: bash scripts/context-validate.sh\n      - run: ls .claude/skills/goat-debug/SKILL.md\n',
     // Preflight + validation
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
     'scripts/context-validate.sh': '#!/usr/bin/env bash\necho "validate"\n',
@@ -350,7 +350,7 @@ describe('Fixture 4: full-claude', () => {
 
 describe('Fixture 5: full-multi-agent', () => {
   const skills = Object.fromEntries(
-    ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].flatMap(s => [
+    ['preflight', 'debug', 'audit', 'review', 'plan', 'test'].flatMap(s => [
       [`.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s)],
       [`.agents/skills/goat-${s}/SKILL.md`, qualitySkill(s)],
     ]),
@@ -376,7 +376,7 @@ describe('Fixture 5: full-multi-agent', () => {
     'agent-evals/eval-1.md': '---\nname: e1\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\nx\n```\n',
     'agent-evals/eval-2.md': '---\nname: e2\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\ny\n```\n',
     'agent-evals/eval-3.md': '---\nname: e3\norigin: synthetic-seed\nagents: claude\n---\n\n### Scenario\n\n```\nz\n```\n',
-    '.github/workflows/context-validation.yml': 'name: CV\non: push\njobs:\n  v:\n    steps:\n      - run: wc -l\n      - run: check router\n      - run: check skills\n',
+    '.github/workflows/context-validation.yml': 'name: CV\non: [push, pull_request]\njobs:\n  v:\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: bash scripts/context-validate.sh\n      - run: ls .claude/skills/goat-debug/SKILL.md\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\n',
     'scripts/context-validate.sh': '#!/usr/bin/env bash\n',
     'tasks/handoff-template.md': '# Handoff\n',
@@ -417,7 +417,7 @@ describe('Fixture 6: N/A checks', () => {
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)'] } }),
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
     ...Object.fromEntries(
-      ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
+      ['preflight', 'debug', 'audit', 'review', 'plan', 'test'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -538,7 +538,7 @@ describe('Fixture 9: allowed-missing (N/A checks)', () => {
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
     '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 0\n',
     ...Object.fromEntries(
-      ['preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test'].map(s => [
+      ['preflight', 'debug', 'audit', 'review', 'plan', 'test'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -646,9 +646,9 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'package.json': JSON.stringify({ name: 'goat-flow', scripts: { test: 'node --test' } }),
     '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] } }),
     '.gemini/settings.json': JSON.stringify({ permissions: { deny: ['git commit', 'git push'] } }),
-    // Skills for all agents (8 required skills)
+    // Skills for all agents (5 required skills)
     ...Object.fromEntries(
-      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].flatMap(s => [
+      ['debug', 'review', 'plan', 'security', 'test'].flatMap(s => [
         [`.claude/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "${RUBRIC_VERSION}"\n---\n# goat-${s}\n`],
         [`.agents/skills/goat-${s}/SKILL.md`, `---\nname: goat-${s}\ngoat-flow-skill-version: "${RUBRIC_VERSION}"\n---\n# goat-${s}\n`],
       ]),
@@ -672,7 +672,7 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\n---\n\n### Scenario\n\n```\nDo another thing\n```\n',
     'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\n---\n\n### Scenario\n\n```\nThird eval\n```\n',
     // CI
-    '.github/workflows/context-validation.yml': 'name: CV\non: push\njobs:\n  v:\n    steps:\n      - run: wc -l\n      - run: check router\n      - run: check skills\n',
+    '.github/workflows/context-validation.yml': 'name: CV\non: [push, pull_request]\njobs:\n  v:\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: bash scripts/context-validate.sh\n      - run: ls .claude/skills/goat-debug/SKILL.md\n',
     // Scripts
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\n',
     'scripts/context-validate.sh': '#!/usr/bin/env bash\n',
@@ -745,7 +745,7 @@ GOOD: Inline format. Extract when second format needed
       hooks: [{ type: 'Notification', matcher: 'compact', command: 'echo context' }],
     }),
     ...Object.fromEntries(
-      ['security', 'debug', 'investigate', 'review', 'plan', 'test', 'refactor', 'simplify'].map(s => [
+      ['debug', 'review', 'plan', 'security', 'test'].map(s => [
         `.claude/skills/goat-${s}/SKILL.md`, qualitySkill(s),
       ]),
     ),
@@ -762,12 +762,12 @@ GOOD: Inline format. Extract when second format needed
     'agent-evals/eval-2.md': '---\nname: eval-2\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nDo something\n```\n',
     'agent-evals/eval-3.md': '---\nname: eval-3\norigin: synthetic-seed\nagents: claude\nskill: goat-plan\n---\n\n### Scenario\n\n```\nAnother prompt\n```\n',
     'agent-evals/eval-4.md': '---\nname: eval-4\norigin: real-incident\nagents: all\nskill: goat-security\n---\n\n### Scenario\n\n```\nCheck auth\n```\n',
-    'agent-evals/eval-5.md': '---\nname: eval-5\norigin: real-incident\nagents: all\nskill: goat-investigate\n---\n\n### Scenario\n\n```\nExplore module\n```\n',
+    'agent-evals/eval-5.md': '---\nname: eval-5\norigin: real-incident\nagents: all\nskill: goat-debug\n---\n\n### Scenario\n\n```\nExplore module\n```\n',
     'agent-evals/eval-6.md': '---\nname: eval-6\norigin: real-incident\nagents: all\nskill: goat-test\n---\n\n### Scenario\n\n```\nVerify changes\n```\n',
-    'agent-evals/eval-7.md': '---\nname: eval-7\norigin: real-incident\nagents: all\nskill: goat-refactor\n---\n\n### Scenario\n\n```\nRename across files\n```\n',
-    'agent-evals/eval-8.md': '---\nname: eval-8\norigin: real-incident\nagents: all\nskill: goat-simplify\n---\n\n### Scenario\n\n```\nClean up naming\n```\n',
+    'agent-evals/eval-7.md': '---\nname: eval-7\norigin: real-incident\nagents: all\nskill: goat-plan\n---\n\n### Scenario\n\n```\nRename across files\n```\n',
+    'agent-evals/eval-8.md': '---\nname: eval-8\norigin: real-incident\nagents: all\nskill: goat-review\n---\n\n### Scenario\n\n```\nClean up naming\n```\n',
     'agent-evals/eval-9.md': '---\nname: eval-9\norigin: real-incident\nagents: all\nskill: goat\n---\n\n### Scenario\n\n```\nRoute intent\n```\n',
-    '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: scripts/check-router.sh\n      - run: scripts/check-skills.sh\n',
+    '.github/workflows/context-validation.yml': 'name: Context Validation\non:\n  pull_request:\n    paths: [CLAUDE.md]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: bash scripts/context-validate.sh\n      - run: ls .claude/skills/goat-debug/SKILL.md\n',
     'scripts/preflight-checks.sh': '#!/usr/bin/env bash\necho "preflight"\n',
     'tasks/handoff-template.md': '# Handoff Template\n\n## Status\n\n## Current State\n\n## Key Decisions\n\n## Known Risks\n\n## Next Step\n',
     '.gitignore': '.env\nsettings.local.json\nnode_modules/\n',

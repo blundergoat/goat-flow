@@ -68,7 +68,7 @@ Rules in instruction files help - but research shows agents follow ~70% of prose
 
 **Learning loop:** `docs/footguns.md` captures architectural traps with file:line evidence. `docs/lessons.md` captures behavioural mistakes. Real incidents only - no hypotheticals. Agent evals replay past failures as regression tests.
 
-**9 skills (8 specialized + dispatcher):** `/goat` routes to the right skill automatically. `/goat-security`, `/goat-debug`, `/goat-investigate`, `/goat-review`, `/goat-plan`, `/goat-test`, `/goat-refactor`, `/goat-simplify`. Each has a distinct artifact, human gates, and a repeatable structured output.
+**6 skills (5 specialized + dispatcher):** `/goat` routes to the right skill automatically. `/goat-security`, `/goat-debug`, `/goat-review`, `/goat-plan`, `/goat-test`. Each has a distinct artifact, human gates, and a repeatable structured output. Former standalone skills (investigate, simplify, refactor) are now modes within debug, review, and plan respectively.
 
 **Dashboard + CLI scanner:** Scores your project across 103 checks + 16 anti-patterns. Interactive dashboard for browsing results, comparing agents, and copying fix prompts. Setup prompts adapt to your project's state.
 
@@ -81,15 +81,15 @@ Type `/goat` followed by what you need. The dispatcher routes to the right skill
 /goat review the PR               → /goat-review
 /goat plan the new feature        → /goat-plan
 /goat check for security issues   → /goat-security
-/goat how does the auth work      → /goat-investigate
+/goat how does the auth work      → /goat-debug (investigate mode)
 /goat generate a test plan        → /goat-test
-/goat rename across files         → /goat-refactor
-/goat clean up this messy code    → /goat-simplify
+/goat rename across files         → /goat-plan (refactor mode)
+/goat clean up this messy code    → /goat-review (simplify mode)
 ```
 
 Every skill pauses at Step 0 to confirm context before starting, has human gates between phases, and produces a structured output. Skills stay out of the instruction budget until invoked.
 
-All 9 skills are also directly invocable: `/goat-debug`, `/goat-security`, etc.
+All 5 skills are also directly invocable: `/goat-debug`, `/goat-security`, etc.
 
 Details: [docs/system/skills.md](docs/system/skills.md)
 

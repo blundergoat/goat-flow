@@ -1,5 +1,5 @@
 import type { AgentProfile, AgentFacts, ReadonlyFS } from '../types.js';
-import { SKILL_NAMES, SKILL_VERSION, DEPRECATED_SKILL_NAMES } from '../constants.js';
+import { SKILL_NAMES, SKILL_VERSION } from '../constants.js';
 
 /** Skill names that a fully configured GOAT Flow agent should have */
 const EXPECTED_SKILLS = SKILL_NAMES;
@@ -302,6 +302,7 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
   let withChoices = 0;
   let withOutputFormat = 0;
   let withSharedConventions = 0;
+  let adaptCommentCount = 0;
   // Iterate over expected skills to check existence and content quality
   for (const skill of EXPECTED_SKILLS) {
     /** Full path to this skill's SKILL.md file */
@@ -317,6 +318,10 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
         if (version === null || version !== SKILL_VERSION) {
           outdatedCount++;
         }
+
+        // Count remaining ADAPT comments (unanswered template questions)
+        const adaptMatches = skillContent.match(/<!--\s*ADAPT:/g);
+        if (adaptMatches) adaptCommentCount += adaptMatches.length;
 
         if (/step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i.test(skillContent)) withStep0++;
         if (/human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
@@ -351,16 +356,6 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
 
   const hasDispatcher = fs.exists(`${agent.skillsDir}/goat/SKILL.md`);
 
-  // Detect deprecated skills on disk
-  const deprecated: string[] = [];
-  if (fs.exists(agent.skillsDir)) {
-    for (const dir of fs.listDir(agent.skillsDir)) {
-      if (DEPRECATED_SKILL_NAMES.has(dir) && fs.exists(`${agent.skillsDir}/${dir}/SKILL.md`)) {
-        deprecated.push(dir);
-      }
-    }
-  }
-
   // Extract dangling file path references from skill content
   const danglingRefs: string[] = [];
   // Match backtick-wrapped paths: must contain /, no spaces/newlines, reasonable length, look like file paths
@@ -383,8 +378,8 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
 
   return {
     found, missing, allPresent: missing.length === 0,
-    versions, outdatedCount, hasDispatcher, deprecated, danglingRefs,
-    quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, withSharedConventions, unadaptedCount, total: found.length },
+    versions, outdatedCount, hasDispatcher, danglingRefs,
+    quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, withSharedConventions, unadaptedCount, adaptCommentCount, total: found.length },
   };
 }
 
@@ -557,6 +552,26 @@ function extractHookFacts(
     }
   }
 
+  // Check for hardcoded absolute paths in hook scripts (not wrapped in $(git rev-parse))
+  const absolutePathHooks: string[] = [];
+  if (agent.hooksDir && fs.exists(agent.hooksDir)) {
+    for (const hookFile of fs.listDir(agent.hooksDir)) {
+      if (!hookFile.endsWith('.sh')) continue;
+      const hookContent = fs.readFile(`${agent.hooksDir}/${hookFile}`);
+      if (!hookContent) continue;
+      // Match absolute paths like /home/user/... or /Users/... that aren't inside $(...)
+      const lines = hookContent.split('\n');
+      for (const line of lines) {
+        if (line.trimStart().startsWith('#')) continue; // skip comments
+        if (/\$\(git rev-parse/.test(line)) continue; // line uses git rev-parse
+        if (/\/(home|Users|tmp|var|opt)\/\w+\//.test(line)) {
+          absolutePathHooks.push(hookFile);
+          break;
+        }
+      }
+    }
+  }
+
   // Second: also check settings.json Bash deny patterns
   enrichDenyFromSettings(settingsParsed, hasDenyPatterns, hook);
 
@@ -574,6 +589,7 @@ function extractHookFacts(
     postTurnHasValidation: postTurn.postTurnHasValidation,
     postToolExists: postTurn.postToolExists,
     compactionHookExists,
+    absolutePathHooks,
   };
 }
 

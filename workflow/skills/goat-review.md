@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -25,9 +25,9 @@ Also use for reviewing instruction files for staleness - see modes below.
 
 **NOT this skill:**
 - OWASP-driven security assessment → /goat-security
-- Understanding unfamiliar code before changing it → /goat-investigate
+- Understanding unfamiliar code before changing it → /goat-debug (investigate mode)
 - Generating test instructions → /goat-test
-- Making code more readable → /goat-simplify
+- Making code more readable → /goat-review (simplify mode)
 
 ## Step 0 - Gather Context
 
@@ -291,6 +291,6 @@ Output should be compatible with standard GitHub/GitLab PR review templates.
 - /goat-plan - review reveals missing requirements → planning needed
 - /goat-test - review finds coverage gaps → test plan needed
 - /goat-security - review/audit finds security concern → deeper assessment
-- /goat-simplify - review finds readability issues → simplification needed
+- /goat-review (simplify mode) - review finds readability issues → simplification needed
 
 **Handoff shape:** `{scope, mode, findings_by_severity, breaking_changes, coverage_gaps, patterns}`

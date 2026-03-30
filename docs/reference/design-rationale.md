@@ -39,7 +39,7 @@ flowchart TB
     end
 
     subgraph DEMAND["ON-DEMAND (via router table / slash commands)"]
-        L3["<b>Layer 3 -- Skills</b><br/>/goat-security - /goat-debug - /goat-investigate<br/>/goat-review - /goat-plan - /goat-test<br/>/goat-refactor - /goat-simplify"]
+        L3["<b>Layer 3 -- Skills</b><br/>/goat-security - /goat-debug - /goat-review<br/>/goat-plan - /goat-test"]
         L4["<b>Layer 4 -- Playbooks</b><br/>Mob Elaboration - SBAO Planning - Milestone Planning"]
     end
 
@@ -172,7 +172,7 @@ flowchart TD
 
 **v1.5 refinement:** Implementation data confirms all seven original skills add value across all projects. **v2.9 expansion:** Three additional skills added (reflect, onboard, resume), bringing the total to ten skills per agent (security, debug, audit, investigate, review, plan, test, reflect, onboard, resume).
 
-> **Superseded by ADR-007 (v0.8.0, finalized v0.9.1):** The reflect, onboard, and resume skills were consolidated into existing skill modes. goat-audit merged into goat-review (Audit Mode). goat-context removed. goat-refactor and goat-simplify added. The canonical skill count is now **9 skills** per agent (8 specialized + goat dispatcher). See `docs/decisions/ADR-007-consolidate-skills-10-to-8.md`.
+> **Superseded by ADR-007 (v0.8.0, finalized v0.9.3):** The reflect, onboard, and resume skills were consolidated into existing skill modes. goat-audit merged into goat-review (Audit Mode). goat-context removed. goat-investigate merged into goat-debug (Investigate Mode). goat-simplify merged into goat-review (Simplify Mode). goat-refactor merged into goat-plan (Refactor Planning Mode). The canonical skill count is now **6 skills** per agent (5 specialized + goat dispatcher). See `docs/decisions/ADR-007-consolidate-skills-10-to-8.md`.
 
 ---
 

@@ -21,7 +21,7 @@ skill: goat
 ## Scenario 3: "look at the database queries"
 **Replay:** `/goat look at the database queries`
 **Expected:** Presents options: investigate (understanding?), debug (performance issue?), review (quality?). Asks one question.
-**Failure mode:** Routes to goat-investigate because "look at" sounds exploratory, missing that the user may have a performance bug.
+**Failure mode:** Routes to goat-debug (investigate mode) because "look at" sounds exploratory, missing that the user may have a performance bug.
 
 ## Scenario 4: "help with the migration"
 **Replay:** `/goat help with the migration`

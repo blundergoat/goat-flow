@@ -28,20 +28,20 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: `create-skill-${skill.replace('goat-', '')}`,
   })),
   {
-    id: '2.1.11', name: 'All 9 skills present', tier: 'standard', category: 'Skills',
+    id: '2.1.11', name: 'All 6 skills present', tier: 'standard', category: 'Skills',
     pts: 1, confidence: 'high',
     detect: {
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => ({
-        id: '2.1.11', name: 'All 9 skills present', tier: 'standard', category: 'Skills',
+        id: '2.1.11', name: 'All 6 skills present', tier: 'standard', category: 'Skills',
         status: ctx.agentFacts.skills.allPresent ? 'pass' : 'fail',
         points: ctx.agentFacts.skills.allPresent ? 1 : 0, maxPoints: 1, confidence: 'high',
         message: ctx.agentFacts.skills.allPresent
-          ? 'All 9 skills present'
+          ? 'All 6 skills present'
           : `Missing: ${ctx.agentFacts.skills.missing.join(', ')}`,
       }),
     },
-    recommendation: 'Create all 9 goat-* skills (8 specialized + goat dispatcher)',
+    recommendation: 'Create all 6 goat-flow skills (5 specialized + goat dispatcher)',
     recommendationKey: 'create-all-skills',
   },
 
@@ -220,8 +220,8 @@ export const standardChecks: CheckDef[] = [
           : `${ctx.agentFacts.agent.skillsDir}/goat/SKILL.md not found`,
       }),
     },
-    recommendation: 'Install the goat dispatcher skill - the 9th canonical skill that routes /goat commands to the right skill',
-    recommendationKey: 'install-dispatcher-skill',
+    recommendation: 'Install the goat dispatcher skill - the 6th canonical skill that routes /goat commands to the right skill',
+    recommendationKey: 'create-skill-goat',
   },
   {
     id: '2.1.21', name: 'Skills have Shared Conventions block', tier: 'standard', category: 'Skills',
@@ -540,7 +540,7 @@ export const standardChecks: CheckDef[] = [
         id: '2.3.4', name: 'Footguns have file:line evidence', tier: 'standard', category: 'Learning Loop',
         status: ctx.facts.shared.footguns.hasEvidence ? 'pass' : 'fail',
         points: ctx.facts.shared.footguns.hasEvidence ? 2 : 0, maxPoints: 2, confidence: 'high',
-        message: ctx.facts.shared.footguns.hasEvidence ? 'Footguns have file:line evidence' : 'Footguns missing file:line evidence. Expected: backtick-wrapped paths like `src/auth.ts:42` or `src/auth.ts:42-50`. Bare paths without line numbers and URLs do not count.',
+        message: ctx.facts.shared.footguns.hasEvidence ? 'Footguns have file:line evidence' : (ctx.facts.shared.footguns.formatDiagnostic ?? 'Footguns missing file:line evidence. Expected: backtick-wrapped paths like `src/auth.ts:42` or `src/auth.ts:42-50`. Bare paths without line numbers and URLs do not count.'),
       }),
     },
     recommendation: 'Add file:line evidence to footgun entries',
@@ -555,7 +555,8 @@ export const standardChecks: CheckDef[] = [
         const { exists, entryCount } = ctx.facts.shared.lessons;
         if (!exists) return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'na', points: 0, maxPoints: 0, confidence: 'high', message: 'No lessons.md' };
         if (entryCount >= 1) return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'high', message: `${entryCount} lesson entries (3-5 is ideal)` };
-        return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: 'No lesson entries. Add 1+ real incidents from git history, or a placeholder explaining why none apply yet.' };
+        const diagnostic = ctx.facts.shared.lessons.formatDiagnostic;
+        return { id: '2.3.2a', name: 'lessons.md has at least 1 entry', tier: 'standard', category: 'Learning Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'high', message: diagnostic ?? 'No lesson entries. Add 1+ real incidents from git history, or a placeholder explaining why none apply yet.' };
       },
     },
     recommendation: 'Seed lessons.md with at least 1 real incident from git history (3-5 is ideal)',
@@ -581,7 +582,7 @@ export const standardChecks: CheckDef[] = [
           confidence: 'medium',
           message: hasEvidenceLabels
             ? `${labelCount}/${entryCount} footgun entries have evidence labels`
-            : `Only ${labelCount}/${entryCount} footgun entries have evidence labels`,
+            : (ctx.facts.shared.footguns.formatDiagnostic ?? `Only ${labelCount}/${entryCount} footgun entries have evidence labels`),
         };
       },
     },

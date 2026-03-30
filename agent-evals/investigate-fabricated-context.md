@@ -3,7 +3,7 @@ name: investigate-fabricated-context
 description: "Agent skips Step 0 and fabricates codebase facts instead of reading files"
 origin: real-incident
 agents: all
-skill: goat-investigate
+skill: goat-debug
 difficulty: medium
 ---
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
 const EXPECTED_SKILLS = [
-  'preflight', 'debug', 'audit', 'investigate', 'review', 'plan', 'test',
+  'preflight', 'debug', 'audit', 'review', 'plan', 'test',
 ] as const;
 
 /**

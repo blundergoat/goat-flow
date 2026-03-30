@@ -100,13 +100,10 @@ agents: all
 \`\`\`
 
 Skills not yet covered should each get one eval targeting their most common failure mode:
-- **goat-debug**: agent proposes a fix before completing diagnosis
-- **goat-investigate**: agent skips Step 0 and fabricates context
-- **goat-plan**: agent continues a stale plan without re-reading context
-- **goat-refactor**: agent over-scopes and touches unrelated files
-- **goat-review**: agent misses a footgun during code review
+- **goat-debug**: agent proposes a fix before completing diagnosis; investigate mode: agent skips Step 0 and fabricates context
+- **goat-plan**: agent continues a stale plan without re-reading context; refactor mode: agent over-scopes and touches unrelated files
+- **goat-review**: agent misses a footgun during code review; simplify mode: agent removes logic it didn't understand
 - **goat-security**: agent flags a framework-mitigated vulnerability as real
-- **goat-simplify**: agent removes logic it didn't understand
 - **goat-test**: agent generates tests that miss a critical boundary condition`,
   },
 
@@ -162,14 +159,16 @@ jobs:
     phase: 'full',
     category: 'CI Validation',
     kind: 'create',
-    instruction: `Add a router reference check to \`.github/workflows/context-validation.yml\`. This verifies all paths in the router table resolve to existing files.`,
+    instruction: `Add a router reference check to \`.github/workflows/context-validation.yml\`. This verifies all paths in the router table resolve to existing files.
+
+IMPORTANT: If writing inline shell instead of calling a script, do NOT use \`grep ... | while read\` — the pipe creates a subshell and error counts won't propagate. Use process substitution: \`while read ... done < <(grep ...)\` or write results to a temp file.`,
   },
   {
     key: 'ci-check-skills',
     phase: 'full',
     category: 'CI Validation',
     kind: 'create',
-    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 9 goat-* skill directories have a SKILL.md.`,
+    instruction: `Add a skills existence check to \`.github/workflows/context-validation.yml\`. Verify all 6 goat-flow skill directories (5 + dispatcher) have a SKILL.md.`,
   },
   {
     key: 'ci-trigger-prs',
@@ -218,6 +217,27 @@ Without this, PRs can merge without context validation passing.`,
     category: 'Hygiene',
     kind: 'fix',
     instruction: '`tasks/handoff-template.md` is missing required sections. It must include: ## Status, ## Current State, ## Key Decisions, ## Known Risks, ## Next Step.',
+  },
+  {
+    key: 'create-logs-dir',
+    phase: 'full',
+    category: 'Hygiene',
+    kind: 'create',
+    instruction: `Create the telemetry logs directory for session tracking:
+
+\`\`\`bash
+mkdir -p tasks/logs/sessions
+\`\`\`
+
+Copy the README from the goat-flow templates: \`workflow/evaluation/logs-README.md\` → \`tasks/logs/README.md\`.
+
+Add to \`.gitignore\`:
+\`\`\`
+tasks/logs/*.jsonl
+tasks/logs/sessions/
+\`\`\`
+
+This enables the skill session logging protocol (Shared Conventions closing step) and telemetry from \`goat-flow scan\`.`,
   },
   {
     key: 'add-rfc2119',

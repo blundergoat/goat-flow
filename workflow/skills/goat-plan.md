@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -27,7 +27,7 @@ path. Single-line changes don't need planning.
 - **Infrastructure** → Full process + rollback planning
 
 **NOT this skill:**
-- Understanding code before planning → /goat-investigate
+- Understanding code before planning → /goat-debug (investigate mode)
 - Reviewing an existing plan or PR → /goat-review
 - Debugging a specific issue → /goat-debug
 
@@ -227,7 +227,7 @@ before implementation are hypotheses, not commitments.
 
 ## Chains With
 
-- /goat-investigate - need research before planning
+- /goat-debug (investigate mode) - need research before planning
 - /goat-test - milestones need verification plans
 - /goat-review - plan needs review before implementation starts
 

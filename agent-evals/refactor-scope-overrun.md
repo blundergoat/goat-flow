@@ -3,7 +3,7 @@ name: refactor-scope-overrun
 description: "Agent touches files outside the declared refactor scope, breaking cross-references silently"
 origin: real-incident
 agents: all
-skill: goat-refactor
+skill: goat-plan
 difficulty: hard
 ---
 

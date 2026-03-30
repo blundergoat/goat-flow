@@ -7,18 +7,15 @@ no external references required.
 For skill documentation (when to use, design rationale, decision table), see
 [docs/system/skills.md](../../docs/system/skills.md).
 
-## Active Skills (8)
+## Active Skills (5)
 
 | Template | Creates |
 |----------|---------|
-| goat-investigate.md | Deep codebase investigation + onboarding mode |
-| goat-review.md | Structured code review + quality audit mode + instruction review mode |
+| goat-debug.md | Diagnosis-first debugging + investigate/onboard mode |
+| goat-review.md | Structured code review + quality audit mode + instruction review mode + simplify mode |
 | goat-security.md | Threat-model-driven security assessment |
-| goat-debug.md | Diagnosis-first debugging |
-| goat-plan.md | 4-phase planning workflow |
+| goat-plan.md | 4-phase planning workflow + refactor planning mode |
 | goat-test.md | 3-phase test plan generation |
-| goat-refactor.md | Cross-file refactoring with verification |
-| goat-simplify.md | Code readability and self-documentation improvement |
 
 ## Reference (internal to goat-flow)
 
@@ -31,8 +28,10 @@ referenced by the skill templates and are NOT needed in target projects.
 
 ## Migration Notes
 
-- **goat-onboard** was merged into goat-investigate (onboard mode). Use `/goat-investigate` with purpose = "onboarding".
+- **goat-onboard** was merged into goat-debug (investigate/onboard mode). Use `/goat-debug` with purpose = "onboarding".
 - **goat-reflect** was merged into goat-review (instruction review mode). Use `/goat-review` with target = "instruction files".
 - **goat-audit** was merged into goat-review (audit mode). Use `/goat-review` with target = "codebase area".
 - **goat-resume** was renamed to goat-context, then removed. Session resumption is handled by the agent's built-in context.
-- **goat-simplify** is new - code readability and self-documentation improvement.
+- **goat-investigate** was merged into goat-debug (investigate mode). Use `/goat-debug` with purpose = "investigation".
+- **goat-simplify** was merged into goat-review (simplify mode). Use `/goat-review` with target = "readability".
+- **goat-refactor** was merged into goat-plan (refactor planning mode). Use `/goat-plan` with purpose = "refactoring".

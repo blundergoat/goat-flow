@@ -14,7 +14,7 @@ goat-flow-skill-version: "0.9.2"
 - **Stuck:** 3 reads with no signal → present what you have, ask to redirect.
 - **Flush:** 10+ tool calls without a gate/checkpoint → write 3-sentence status to `tasks/scratchpad.md`, ask to continue/compact/redirect.
 - **Learning Loop:** Behavioural mistake → `docs/lessons.md`. Architectural trap → `docs/footguns.md`.
-- **Closing:** If incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill. If `tasks/logs/` exists → write session summary.
+- **Closing:** FIRST: if `tasks/logs/sessions/` exists, write session summary there (date, skill, complexity, turns, incidents). THEN: if incomplete → write `tasks/handoff.md`. Check learning loop. Suggest next skill.
 
 ## When to Use
 
@@ -29,7 +29,7 @@ for verification - it does not run tests itself.
 - Running tests → just run them directly
 - Debugging a test failure → /goat-debug
 - Reviewing code quality → /goat-review
-- Understanding test infrastructure → /goat-investigate
+- Understanding test infrastructure → /goat-debug (investigate mode)
 
 **Quick path:** For changes touching ≤2 files with no interface changes:
 Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
