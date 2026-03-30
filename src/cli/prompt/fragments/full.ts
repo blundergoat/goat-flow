@@ -89,7 +89,7 @@ Use \`all\` if the eval applies to every agent. Use \`claude\`, \`codex\`, or \`
     phase: 'full',
     category: 'Agent Evals',
     kind: 'fix',
-    instruction: `Each of the 9 canonical skills needs at least one eval. Add a \`skill:\` label to each eval's YAML frontmatter:
+    instruction: `Each of the 6 canonical skills needs at least one eval. Add a \`skill:\` label to each eval's YAML frontmatter:
 
 \`\`\`yaml
 ---

@@ -28,3 +28,5 @@ Excluding it from canonical counting created a 8-vs-9 inconsistency across 15+ f
 - `CANONICAL_SKILLS` in `shared.ts` now includes `'goat'`
 - Eval diversity check (3.1.6) requires coverage of all 9 skills for full points
 - All "8 canonical" references in rubric messages, fragments, and anti-patterns updated to 9
+
+**Amendment (v0.9.3):** Further consolidated from 9 to 6 skills. The dispatcher remains canonical. goat-investigate, goat-simplify, and goat-refactor merged as modes into goat-debug, goat-review, and goat-plan respectively.

@@ -144,7 +144,7 @@ setup/                  Setup guides + shared templates
   setup-gemini.md       Gemini CLI setup phases
   setup-codex.md        Codex setup phases
 workflow/               Templates for skills, coding standards, evaluation
-  skills/               9 skill templates (8 specialized + /goat dispatcher)
+  skills/               6 skill templates (5 specialized + /goat dispatcher)
   coding-standards/     48 templates (backend, frontend, security, devops)
   evaluation/           Eval format, footguns, lessons, handoff templates
   runtime/              Enforcement, architecture, code-map templates
@@ -161,7 +161,7 @@ agent-evals/            Regression tests from real incidents
 | [System Spec](docs/system-spec.md) | Full technical specification (canonical source of truth) |
 | [5-Layer Architecture](docs/system/five-layers.md) | Runtime, Local Context, Skills, Playbooks, Evaluation |
 | [6-Step Execution Loop](docs/system/six-steps.md) | READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG |
-| [Skills Reference](docs/system/skills.md) | All 9 skills: when to use, gates, output formats |
+| [Skills Reference](docs/system/skills.md) | All 6 skills: when to use, gates, output formats |
 | [Design Rationale](docs/reference/design-rationale.md) | Why behind every design decision |
 
 ## Author

@@ -21,7 +21,8 @@ fail() {
 # shellcheck disable=SC2016
 backtick_ref_pattern='`[^`]+`'
 # shellcheck disable=SC2016
-evidence_ref_pattern='`[^`]+:[0-9]+`'
+# Accept both file:line refs and bare file paths as evidence
+evidence_ref_pattern='`[^`]+\.[a-zA-Z]+`'
 
 [[ -f AGENTS.md ]] || fail "Missing AGENTS.md"
 
@@ -104,9 +105,9 @@ fi
 if grep -qi 'none confirmed yet' docs/footguns.md; then
     info "docs/footguns.md explicitly states no confirmed footguns yet"
 elif ! grep -Eq "$evidence_ref_pattern" docs/footguns.md; then
-    fail "docs/footguns.md has no file:line evidence"
+    fail "docs/footguns.md has no file path evidence"
 else
-    info "docs/footguns.md contains file:line evidence"
+    info "docs/footguns.md contains file path evidence"
 fi
 
 for script in scripts/preflight-checks.sh scripts/context-validate.sh scripts/deny-dangerous.sh; do

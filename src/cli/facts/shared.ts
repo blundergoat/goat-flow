@@ -193,8 +193,7 @@ function extractEvalFacts(fs: ReadonlyFS): SharedFacts['evals'] {
     return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, hasFrontmatter: false, evalSkillCount: 0, missingSkills: [] };
   }
 
-  /** The 9 canonical goat-flow skills (including dispatcher) - only these count toward eval diversity */
-  /** The 6 canonical goat-flow skills (v0.9.3: 5 skills + dispatcher) */
+  /** The 6 canonical goat-flow skills (5 + dispatcher) */
   const CANONICAL_SKILLS = new Set(['goat', 'goat-debug', 'goat-review', 'goat-plan', 'goat-security', 'goat-test']);
   /** Canonical skills with at least one eval */
   const skillNames = new Set<string>();

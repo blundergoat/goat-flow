@@ -187,7 +187,7 @@ Full-tier checks reward projects that have proven the workflow works: evals that
 | 3.1.4 | Evals have replay prompts | 2 | Without a Scenario section, evals can't be replayed to verify behaviour. |
 | 3.1.5 | Evals have origin labels | 1 | Real-incident evals are higher-signal than synthetic seeds. |
 | 3.1.5a | Evals have Agents labels | 1 | Agent-specific evals should only run against their target agent. |
-| 3.1.6 | Evals cover all 9 skills | 1 | Each skill needs at least one eval - uncovered skills accumulate silent regressions. |
+| 3.1.6 | Evals cover all 6 skills | 1 | Each skill needs at least one eval - uncovered skills accumulate silent regressions. |
 
 ### 3.2 CI Validation (6 pts)
 
