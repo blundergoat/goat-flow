@@ -477,14 +477,14 @@
         },
         {
           "id": "2.1.11",
-          "name": "All 8 skills present",
+          "name": "All 6 skills present",
           "tier": "standard",
           "category": "Skills",
           "status": "pass",
           "points": 1,
           "maxPoints": 1,
           "confidence": "high",
-          "message": "All 8 skills present",
+          "message": "All 6 skills present",
           "recommendationKey": "create-all-skills"
         },
         {
@@ -496,7 +496,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills ask questions before acting",
+          "message": "6/6 skills ask questions before acting",
           "recommendationKey": "add-skill-step0"
         },
         {
@@ -508,7 +508,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills include human gates",
+          "message": "6/6 skills include human gates",
           "recommendationKey": "add-skill-human-gates"
         },
         {
@@ -520,7 +520,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills have RFC 2119 constraints",
+          "message": "6/6 skills have RFC 2119 constraints",
           "recommendationKey": "add-skill-constraints"
         },
         {
@@ -532,7 +532,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills have phased execution",
+          "message": "6/6 skills have phased execution",
           "recommendationKey": "add-skill-phases"
         },
         {
@@ -544,7 +544,7 @@
           "points": 0,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "Only 7/8 skills are conversational - all skills must present findings then let humans drill in",
+          "message": "Only 5/6 skills are conversational - all skills must present findings then let humans drill in",
           "recommendationKey": "add-skill-conversational"
         },
         {
@@ -556,7 +556,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills link to related skills",
+          "message": "6/6 skills link to related skills",
           "recommendationKey": "add-skill-chaining"
         },
         {
@@ -568,7 +568,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "7/8 skills offer choices at phase transitions",
+          "message": "5/6 skills offer choices at phase transitions",
           "recommendationKey": "add-skill-choices"
         },
         {
@@ -580,7 +580,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills define an output format",
+          "message": "6/6 skills define an output format",
           "recommendationKey": "add-skill-output-format"
         },
         {
@@ -604,7 +604,7 @@
           "points": 1,
           "maxPoints": 1,
           "confidence": "medium",
-          "message": "8/8 skills have Shared Conventions block",
+          "message": "6/6 skills have Shared Conventions block",
           "recommendationKey": "add-skill-shared-conventions"
         },
         {
@@ -1229,7 +1229,7 @@
           "points": 2,
           "maxPoints": 2,
           "confidence": "medium",
-          "message": "All 8 canonical skills covered",
+          "message": "All 6 canonical skills covered",
           "recommendationKey": "add-eval-skill-coverage"
         },
         {
@@ -1480,7 +1480,7 @@
           "triggered": true,
           "deduction": -3,
           "confidence": "high",
-          "message": "All 8 skills at version 0.9.1",
+          "message": "All 6 skills at version 0.9.1",
           "recommendationKey": "ap-fix-outdated-skills",
           "evidence": "test evidence for AP15"
         },
