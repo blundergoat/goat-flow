@@ -49,7 +49,8 @@
     "dashboard": "node dist/cli/cli.js dashboard .",
     "preflight": "bash scripts/preflight-checks.sh",
     "validate": "bash scripts/context-validate.sh",
-    "prepublishOnly": "npm run build"
+    "check-versions": "node scripts/check-versions.mjs",
+    "prepublishOnly": "npm run build && npm run check-versions"
   },
   "keywords": [
     "ai",

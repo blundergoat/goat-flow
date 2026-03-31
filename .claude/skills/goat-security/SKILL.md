@@ -39,6 +39,8 @@ Use when assessing security posture, checking compliance, or auditing dependenci
 
 **Auto-detect:** Read package.json/composer.json/go.mod to identify framework. Check for PHI/compliance signals in README, docs/architecture.md.
 
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
+
 **Before proceeding:** present mode, threat model, framework, and scope. Wait for confirmation.
 
 ---

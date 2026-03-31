@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Diagnosis-first debugging with hypothesis tracking, recurrence checks, and evidence-based fix planning."
-goat-flow-skill-version: "0.9.2"
+goat-flow-skill-version: "0.9.3"
 ---
 # /goat-debug
 
@@ -48,6 +48,8 @@ That's the failure mode this skill exists to prevent.
 **Auto-detect:** Read the error message or test output if provided inline.
 If the user said `/goat-debug the test in auth.test.ts fails with TypeError`,
 confirm: "Symptom: TypeError in auth.test.ts. I'll start with that file. Correct?"
+
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
 
 **Before proceeding:** present what you know (symptom, area, urgency) and what you still need. Wait for the user to confirm before entering Phase 1.
 

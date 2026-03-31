@@ -6,6 +6,9 @@ A structured workflow system for AI coding agents. Gives Claude Code, Gemini CLI
 
 ```bash
 npm install --save-dev @blundergoat/goat-flow
+
+pnpm add -D @blundergoat/goat-flow                                                                                                                                                                                         
+
 ```
 
 Or run without installing: `npx @blundergoat/goat-flow dashboard`
@@ -14,6 +17,7 @@ Or run without installing: `npx @blundergoat/goat-flow dashboard`
 
 ```bash
 npx goat-flow dashboard
+
 ```
 
 Scan your project, browse results by category, compare agents side by side, and copy fix prompts. The dashboard is the fastest way to see where your project stands and what to do next.

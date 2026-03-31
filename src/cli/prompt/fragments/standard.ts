@@ -399,6 +399,20 @@ Also block in settings.json deny list: \`"Bash(chmod 777*)"\`.`,
 These prevent agents from reading SSH keys, cloud credentials, certificates, and secret files.`,
   },
   {
+    key: 'fix-edit-write-deny-env',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `Read deny exists for .env files but Edit/Write deny is missing. Agents can still modify secrets even though they can't read them. Add these patterns to permissions.deny:
+
+\`\`\`json
+"Edit(**/.env*)",
+"Write(**/.env*)"
+\`\`\`
+
+Place them alongside the existing \`Read(**/.env*)\` deny rule.`,
+  },
+  {
     key: 'add-stop-lint-validation',
     phase: 'standard',
     category: 'Hooks',
@@ -475,9 +489,25 @@ Open the hook script and ensure the last line is \`exit 0\`. If the script has c
 \`\`\`bash
 #!/usr/bin/env bash
 # PostToolUse hook - auto-format after file edits
+# Skip agent directories to avoid reformatting generated content
+case "$1" in .claude/*|.agents/*|.github/*) exit 0 ;; esac
 # Replace YOUR_FORMATTER with your format command (e.g., prettier --write)
 YOUR_FORMATTER "$1" 2>/dev/null || true
 exit 0
+\`\`\`
+
+Then register it in \`.claude/settings.json\` under hooks:
+\`\`\`json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": ".claude/hooks/format-file.sh $FILE_PATH"
+      }
+    ]
+  }
+}
 \`\`\``,
       gemini: `Create \`.gemini/hooks/format-file.sh\` (skip if no formatter is configured):
 

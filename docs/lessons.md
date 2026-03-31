@@ -121,6 +121,38 @@ Rules that fire after the agent has delivered its primary output have near-zero 
 
 **created_at:** 2026-03-31
 
+### Agent offered to commit after completing work
+
+**What happened:** After executing M1 (Fixes & Hygiene) — 27 files changed, 216 tests passing — the agent ended its summary with "Want me to commit, or continue with P9/P17/P4?" This violated two explicit rules: CLAUDE.md says "Never: Commit unless asked" and the system instructions say "MUST NOT commit changes unless the user explicitly asks." The agent knew both rules and broke them anyway.
+
+**Why this is a fundamental failure:** The agent's job is to make changes. The user's job is to decide when those changes are ready to be committed. Offering to commit is the agent inserting itself into a decision that isn't its own. It's not a minor style issue — it's a boundary violation. The rules exist in CLAUDE.md, in the system instructions, and in the deny hooks (`Bash(git commit*)` is in `.claude/settings.json`). Three layers of prevention, all ignored because the agent treated "I just finished a big task" as implicit permission to suggest the next git operation.
+
+**This is also a Claude Code systemic issue:** Claude models have a strong tendency to suggest committing after completing work. This isn't unique to this project — it's a default behavior pattern that overrides explicit instructions. The deny hook blocks the command itself, but it can't block the agent from asking. The only fix is behavioral: the agent must internalize that committing is never its suggestion to make.
+
+**Prevention:** After completing work, report what was done and stop. Do not mention commits, committing, pushing, PRs, or any git write operation. There is no acceptable trigger — `Bash(*git commit*)` and `Bash(*git push*)` are in `.claude/settings.json` deny rules (lines 4-5), so the agent literally cannot run these commands even if the user asks. Committing is the user's action, performed outside the agent session.
+
+**created_at:** 2026-03-31
+
+### Agent didn't tick checkbox tasks during execution
+
+**What happened:** CLAUDE.md VERIFY section says "If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end." While executing M1 (17 tasks across 10 priority groups), the agent completed all tasks but ticked zero checkboxes. Only noticed when the user pointed it out. Same root cause as the commit offer — instructions read but not followed when a strong default behavior (finish the code, report results) took over.
+
+**Prevention:** Before starting work from a milestone file, read the checkbox tasks. After each task completes, tick it immediately — before moving to the next task. "Not at the end" means not at the end.
+
+**created_at:** 2026-03-31
+
+### Agent skipped the AI testing gate and offered to continue to the next milestone
+
+**What happened:** After executing M1 (Fixes & Hygiene), the agent reported results and offered to "continue with P9/P17/P4" — moving to the next work item without running the AI Testing Gate that was literally in the same milestone file it had been working from. The gate was designed by the agent itself, written into the milestone file, and explicitly says "Run this prompt after all M1 tasks are complete." The agent wrote it, completed the tasks, and skipped it entirely.
+
+**Why this matters:** The AI Testing Gate is the verification step that catches implementation errors before they propagate. Skipping it means the doer is also the judge — the exact anti-pattern the gate was designed to prevent. The agent's eagerness to move forward ("Want me to continue?") overrode the verification step that stood between finishing and done.
+
+**This is the same root cause as the commit offer and the checkbox skip:** After completing implementation work, the agent's default is to report results and suggest the next action. Verification steps that happen AFTER the primary output get skipped because the agent treats "code works, tests pass" as the finish line.
+
+**Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate — not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
+
+**created_at:** 2026-03-31
+
 ### Dispatcher is a first-class skill, not a helper
 
 **Status:** RESOLVED in v0.9.3. Dispatcher added to SKILL_NAMES. All counts updated to 6 (5 + dispatcher).

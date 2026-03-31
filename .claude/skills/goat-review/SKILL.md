@@ -40,6 +40,8 @@ Use when reviewing code, auditing quality, checking instruction files, or improv
 
 If `ai/instructions/code-review.md` exists, load and apply project-specific standards.
 
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
+
 **Before proceeding:** present scope, mode, and concerns. Wait for confirmation.
 
 ---

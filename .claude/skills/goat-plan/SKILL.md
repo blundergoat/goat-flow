@@ -45,6 +45,8 @@ Check staleness: `git log --since="2 weeks ago" -- [artifact]`.
 
 **Concurrent work check:** `git log --all --oneline --since='3 days ago' -- <target-files-or-dirs>`
 
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
+
 **Structural questions (always ask or confirm):**
 1. What are we doing? (new feature, refactor, infrastructure change)
 2. If new: What complexity? (Hotfix / Standard / System / Infrastructure) → Plan mode

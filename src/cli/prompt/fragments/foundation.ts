@@ -339,7 +339,10 @@ If VERIFY caught a failure or you corrected course: \`docs/lessons.md\` entry re
     "deny": [
       "Bash(git commit*)",
       "Bash(git push*)",
-      "Bash(rm -rf*)"
+      "Bash(rm -rf*)",
+      "Read(**/.env*)",
+      "Edit(**/.env*)",
+      "Write(**/.env*)"
     ]
   }
 }

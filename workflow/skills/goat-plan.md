@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis for competing approaches."
-goat-flow-skill-version: "0.9.2"
+goat-flow-skill-version: "0.9.3"
 ---
 # /goat-plan
 
@@ -58,6 +58,8 @@ If matches found: "Branch [name] modified [files] [N] days ago. Coordinate?"
 **Kill criteria (surface early):** "What would make us abandon this entirely?"
 Even a vague answer ("if it takes more than a week" or "if it breaks the existing API")
 helps frame the planning.
+
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
 
 **Before proceeding:** present what you know (feature, complexity, constraints, kill criteria) and what you still need. Wait for the user to confirm before entering Phase 1.
 

@@ -1,7 +1,7 @@
 ---
 name: goat-test
 description: "3-phase test plan generation with automated commands, AI verification prompts, and human testing checklists. Doer-verifier principle."
-goat-flow-skill-version: "0.9.2"
+goat-flow-skill-version: "0.9.3"
 ---
 # /goat-test
 
@@ -45,6 +45,8 @@ Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
 Correct?"
 
 **Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there - not textbook examples.
+
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the changed area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant to your test plan?"
 
 **Before proceeding:** present what you know (what changed, risk level, test stack) and what you still need. Wait for the user to confirm before entering Phase 0.
 

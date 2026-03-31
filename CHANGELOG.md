@@ -2,6 +2,42 @@
 
 ---
 
+## v0.9.4 (unreleased)
+
+M1 Fixes & Hygiene. Driven by 6 cross-project reviews (avg 71/100). 32 files changed. AI gate: 14/14 (2 independent verifiers, zero disagreements).
+
+### Scanner Honesty
+- Stop faking Codex enforcement facts — `denyUsesJq`/`denyHandlesChaining` no longer hardcoded for config-based deny. New `denyIsConfigBased` flag; checks 2.2.5a/2.2.5b return N/A instead of false passes.
+- Distinguish source JS from tooling JS — devDependencies-only projects no longer flagged as JavaScript
+- New check 2.2.5g: flag when `Read(.env)` denied but `Edit(.env)`/`Write(.env)` not
+- New AP20: detect non-canonical goat-flow skill directories (-3 deduction)
+- Error messages show expected format example (`**Evidence type:** ACTUAL_MEASURED`)
+
+### Upgrade Path
+- Setup prompt instructs stale skill cleanup (8 old names + 3 legacy dirs), router table rewrite, dispatcher replacement
+- CI template uses canonical 6 skill names (was stale: investigate, refactor, simplify)
+- Ship static CI template at `workflow/templates/context-validation.yml`
+
+### Enforcement
+- Setup deny fragment includes `Edit(**/.env*)` and `Write(**/.env*)`
+- `format-file.sh` fragment now wires hook into settings.json with agent dir skip pattern
+
+### Skills
+- All 5 specialized skills check `docs/footguns.md` in Step 0 before acting (P27)
+- Both installed copies and workflow templates updated
+
+### Version Sync
+- Version headers synced to v0.9.3 across system-spec, getting-started, CLAUDE.md
+- All 6 workflow/skills templates synced from 0.9.2 to 0.9.3
+- New `prepublishOnly` check prevents template/package version drift at publish time
+- `conventions.md` Node requirement fixed: >=20.11.0 (was >=22)
+- `base.instructions.md` script reference fixed: `npm run scan` (was `self-scan`)
+
+### Hooks
+- `stop-lint.sh` now runs `tsc --noEmit` when `.ts` files change
+
+---
+
 ## v0.9.3 - 2026-03-30
 
 Skill consolidation, scanner improvements, enforcement hardening. Driven by cross-project reviews from halaxy-cypress (66), blundergoat-platform (74), healthkit (68). Rubric v0.9.3: 101 checks + 17 anti-patterns. 216 tests.

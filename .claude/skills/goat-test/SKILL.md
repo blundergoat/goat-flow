@@ -46,6 +46,8 @@ Correct?"
 
 **Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there - not textbook examples.
 
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the changed area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant to your test plan?"
+
 **Before proceeding:** present what you know (what changed, risk level, test stack) and what you still need. Wait for the user to confirm before entering Phase 0.
 
 ## Phase 0 - Change Manifest

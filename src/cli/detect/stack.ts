@@ -57,9 +57,20 @@ function hasSubdirTypeScript(fs: ReadonlyFS): boolean {
 function detectNodeStack(fs: ReadonlyFS): DetectorResult {
   const pkg = fs.readJson('package.json') as Record<string, unknown> | null;
   if (pkg) {
-    const languages: string[] = ['javascript'];
-    const deps = { ...pkg.dependencies as Record<string, string> | undefined, ...pkg.devDependencies as Record<string, string> | undefined };
-    if ('typescript' in deps || fs.exists('tsconfig.json')) {
+    const runtimeDeps = pkg.dependencies as Record<string, string> | undefined;
+    const devDeps = pkg.devDependencies as Record<string, string> | undefined;
+    const deps = { ...runtimeDeps, ...devDeps };
+    const hasRuntimeDeps = runtimeDeps && Object.keys(runtimeDeps).length > 0;
+    const hasSrcFiles = fs.glob('src/**/*.ts').length > 0 || fs.glob('src/**/*.js').length > 0 || fs.glob('lib/**/*.js').length > 0;
+    const hasTypeScript = 'typescript' in deps || fs.exists('tsconfig.json');
+
+    // Only flag JS/TS as a stack language if there are runtime deps or actual source files.
+    // devDependencies-only projects (e.g., docs repos with only build tools) are not JS projects.
+    const languages: string[] = [];
+    if (hasRuntimeDeps || hasSrcFiles || hasTypeScript) {
+      languages.push('javascript');
+    }
+    if (hasTypeScript) {
       languages.push('typescript');
     }
     // Detect frontend frameworks from deps

@@ -20,6 +20,7 @@ ERRORS=""
 
 # Check which file types were modified
 CHANGED_SH=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.sh$' || true)
+CHANGED_TS=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.ts$' || true)
 
 # Shell scripts: syntax check + shellcheck
 if [ -n "$CHANGED_SH" ]; then
@@ -39,6 +40,17 @@ if [ -n "$CHANGED_SH" ]; then
       fi
     fi
   done
+fi
+
+# TypeScript: type check (if tsc available and tsconfig exists)
+if [ -n "$CHANGED_TS" ] && [ -f "tsconfig.json" ]; then
+  if command -v npx >/dev/null 2>&1; then
+    if ! TSC_OUT=$(npx tsc --noEmit 2>&1); then
+      if [ -n "$TSC_OUT" ]; then
+        ERRORS="${ERRORS}TypeScript errors:\n${TSC_OUT}\n"
+      fi
+    fi
+  fi
 fi
 
 # Report errors to stderr (informational, not imperative)

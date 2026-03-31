@@ -44,6 +44,8 @@ Use when diagnosing a bug, understanding unfamiliar code, or onboarding to a new
 
 **Auto-detect:** Read the error message or target if provided inline. Confirm before proceeding.
 
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
+
 **Before proceeding:** present what you know, the selected mode, and what you still need. Wait for user to confirm.
 
 ---

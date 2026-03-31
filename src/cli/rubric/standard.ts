@@ -377,6 +377,9 @@ export const standardChecks: CheckDef[] = [
         if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
         }
+        if (ctx.agentFacts.hooks.denyIsConfigBased) {
+          return { id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Deny is config-based (settings.json or execpolicy) — JSON parsing check not applicable' };
+        }
         return {
           id: '2.2.5a', name: 'Deny hook uses safe JSON parsing', tier: 'standard', category: 'Hooks',
           status: ctx.agentFacts.hooks.denyUsesJq ? 'pass' : 'fail',
@@ -396,6 +399,9 @@ export const standardChecks: CheckDef[] = [
       fn: (ctx: FactContext): CheckResult => {
         if (ctx.agentFacts.hooks.denyExists === false) {
           return { id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny hook' };
+        }
+        if (ctx.agentFacts.hooks.denyIsConfigBased) {
+          return { id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Deny is config-based (settings.json or execpolicy) — chaining check not applicable' };
         }
         return {
           id: '2.2.5b', name: 'Deny hook handles command chaining', tier: 'standard', category: 'Hooks',
@@ -451,6 +457,44 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Settings permissions.deny should include Read patterns for: .env*, .ssh/**, .aws/**, *.pem, *.key, credentials*. These prevent agents from reading secrets.',
     recommendationKey: 'fix-read-deny-secrets',
+  },
+  {
+    id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks',
+    pts: 1, confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.agent.id === 'codex') {
+          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Codex uses execpolicy, not settings deny' };
+        }
+        if (!ctx.agentFacts.settings.hasDenyPatterns || !ctx.agentFacts.settings.parsed) {
+          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny patterns configured' };
+        }
+        const perms = (ctx.agentFacts.settings.parsed as Record<string, unknown>).permissions as Record<string, unknown> | undefined;
+        const denyArr = perms?.deny;
+        if (!Array.isArray(denyArr)) {
+          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny array' };
+        }
+        const denyStr = (denyArr as string[]).join(' ');
+        const hasReadEnv = /Read\(.*\.env/.test(denyStr);
+        const hasEditEnv = /Edit\(.*\.env/.test(denyStr);
+        const hasWriteEnv = /Write\(.*\.env/.test(denyStr);
+        if (!hasReadEnv) {
+          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No Read deny for .env — check 2.2.5d covers this' };
+        }
+        const pass = hasEditEnv && hasWriteEnv;
+        return {
+          id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks',
+          status: pass ? 'pass' : 'fail',
+          points: pass ? 1 : 0, maxPoints: 1, confidence: 'medium',
+          message: pass
+            ? 'Edit and Write deny patterns exist for .env alongside Read deny'
+            : `Read(.env) is denied but ${!hasEditEnv ? 'Edit(.env)' : ''}${!hasEditEnv && !hasWriteEnv ? ' and ' : ''}${!hasWriteEnv ? 'Write(.env)' : ''} is not — agents can still modify secrets`,
+        };
+      },
+    },
+    recommendation: 'If Read(**/.env*) is denied, also add Edit(**/.env*) and Write(**/.env*) to permissions.deny. Without these, agents can still modify secret files even though they cannot read them.',
+    recommendationKey: 'fix-edit-write-deny-env',
   },
   {
     id: '2.2.5e', name: 'Deny hook blocks force push', tier: 'standard', category: 'Hooks',
@@ -586,7 +630,7 @@ export const standardChecks: CheckDef[] = [
         };
       },
     },
-    recommendation: 'Add evidence type labels (ACTUAL_MEASURED, DESIGN_TARGET, HYPOTHETICAL_EXAMPLE) to footgun entries',
+    recommendation: 'Add evidence type labels to footgun entries. Expected format: `**Evidence type:** ACTUAL_MEASURED` (or DESIGN_TARGET, HYPOTHETICAL_EXAMPLE)',
     recommendationKey: 'add-footgun-labels',
   },
 

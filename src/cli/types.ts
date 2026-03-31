@@ -276,6 +276,8 @@ export interface AgentFacts {
   hooks: {
     denyExists: boolean;
     denyHasBlocks: boolean;
+    /** True when deny is via settings.json patterns or Codex execpolicy (not a shell script). jq/chaining checks are N/A for config-based deny. */
+    denyIsConfigBased: boolean;
     denyUsesJq: boolean;
     denyHandlesChaining: boolean;
     denyBlocksRmRf: boolean;

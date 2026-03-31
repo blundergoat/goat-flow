@@ -519,6 +519,24 @@ function renderSetupRedirect(report: ScanReport, agentId: AgentId, agentReport: 
   // Pre-instructions
   lines.push('## Before you start');
   lines.push('');
+  lines.push('**Step 0 — Clean up stale artifacts (if upgrading):**');
+  lines.push('');
+  lines.push('**Skills:** The 6 canonical skills are: `goat`, `goat-debug`, `goat-plan`, `goat-review`, `goat-security`, `goat-test`.');
+  lines.push('Delete any other `goat-*` directories (e.g., `goat-investigate`, `goat-audit`, `goat-onboard`, `goat-reflect`, `goat-resume`, `goat-simplify`, `goat-refactor`, `goat-context`).');
+  lines.push('Also delete legacy skill directories: `audit/`, `review/`, `preflight/`.');
+  lines.push('');
+  lines.push('**Router table:** Rewrite the Router Table in the instruction file to reference only the 6 canonical skills:');
+  lines.push('```');
+  lines.push('| Resource | Path |');
+  lines.push('|----------|------|');
+  lines.push('| Skills | `.claude/skills/goat-*/` (or equivalent agent skills dir) |');
+  lines.push('```');
+  lines.push('Remove any entries pointing to deleted skills (goat-investigate, goat-reflect, etc.).');
+  lines.push('');
+  lines.push('**Dispatcher:** Replace the `/goat` dispatcher skill entirely from the goat-flow template.');
+  lines.push('Read the template at `workflow/skills/goat.md` and write it to the agent skills dir.');
+  lines.push('Preserve any project-specific disambiguation examples the existing dispatcher may have.');
+  lines.push('');
   lines.push('1. Verify the detected stack above is correct. If not, the setup file will');
   lines.push('   ask you to detect it from the actual codebase (package.json, composer.json, etc.)');
   lines.push('2. "Adapt" means: replace generic examples with THIS project\'s real examples.');

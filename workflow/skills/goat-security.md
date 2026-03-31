@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and concrete dependency auditing."
-goat-flow-skill-version: "0.9.2"
+goat-flow-skill-version: "0.9.3"
 ---
 # /goat-security
 
@@ -40,6 +40,8 @@ handling, when touching secrets/credentials, or for a security-focused audit.
 **Auto-detect:** Read package.json/composer.json/go.mod to identify framework.
 Present: "This is a [framework] project. I'll check [framework]'s built-in
 security features during verification."
+
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
 
 **Before proceeding:** present what you know (threat model, framework, auth boundaries) and what you still need. Wait for the user to confirm before entering Phase 1.
 

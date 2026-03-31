@@ -237,4 +237,26 @@ Replace all absolute paths with \`$(git rev-parse --show-toplevel)\`:
 # GOOD: $(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh
 \`\`\``,
   },
+  {
+    key: 'ap-remove-stale-skills',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Non-canonical goat-flow skill directories were found. These are from a previous version and confuse agents — they load the wrong skill file.
+
+Delete these directories and keep only the 6 canonical skills: \`goat\`, \`goat-debug\`, \`goat-plan\`, \`goat-review\`, \`goat-security\`, \`goat-test\`.
+
+Common stale directories to remove:
+- \`goat-investigate\` → merged into goat-debug (investigate mode)
+- \`goat-audit\` → merged into goat-review (audit mode)
+- \`goat-onboard\` → merged into goat-debug (onboard mode)
+- \`goat-reflect\` → merged into goat-review (instruction mode)
+- \`goat-resume\` → removed (handled by agent context)
+- \`goat-simplify\` → merged into goat-review (simplify mode)
+- \`goat-refactor\` → merged into goat-plan (refactor mode)
+- \`goat-context\` → removed
+- \`audit/\`, \`review/\`, \`preflight/\` → replaced by goat-* skills
+
+After deleting, update the router table in your instruction file to reference only the 6 canonical skills.`,
+  },
 ];

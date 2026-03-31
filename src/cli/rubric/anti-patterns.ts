@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AntiPatternDef, FactContext, AntiPatternResult } from '../types.js';
-import { SKILL_VERSION } from '../constants.js';
+import { SKILL_VERSION, SKILL_NAMES } from '../constants.js';
 
 /**
  * Anti-Pattern Deductions (max -15)
@@ -264,6 +264,31 @@ export const antiPatterns: AntiPatternDef[] = [
     },
     recommendation: 'Replace hardcoded absolute paths in hook scripts with $(git rev-parse --show-toplevel). Absolute paths break when the repo is cloned elsewhere.',
     recommendationKey: 'ap-fix-hook-paths',
+  },
+  // === AP20: Non-canonical goat-flow skill directories ===
+  {
+    id: 'AP20', name: 'Non-canonical goat-flow skill directories', deduction: -3, confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const canonicalSet = new Set<string>(SKILL_NAMES);
+      const nonCanonical = ctx.agentFacts.skills.found.filter(s =>
+        (s.startsWith('goat-') || s === 'goat') && !canonicalSet.has(s)
+      );
+      // Also flag known legacy skill names that aren't goat-* prefixed
+      const legacyNames = ['audit', 'review', 'preflight'];
+      const legacyFound = ctx.agentFacts.skills.found.filter(s => legacyNames.includes(s));
+      const allStale = [...nonCanonical, ...legacyFound];
+      const triggered = allStale.length > 0;
+      return {
+        id: 'AP20', name: 'Non-canonical goat-flow skill directories', triggered,
+        deduction: triggered ? -3 : 0, confidence: 'high',
+        message: triggered
+          ? `Found ${allStale.length} non-canonical skill dir(s): ${allStale.join(', ')}. These are likely from a previous goat-flow version and confuse agents.`
+          : 'All skill directories are canonical',
+        evidence: triggered ? `Run \`goat-flow upgrade\` or manually delete: ${allStale.join(', ')}` : undefined,
+      };
+    },
+    recommendation: 'Remove non-canonical skill directories left over from a previous goat-flow version. Run `goat-flow upgrade` or manually delete the stale directories.',
+    recommendationKey: 'ap-remove-stale-skills',
   },
 ];
 

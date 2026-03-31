@@ -1,0 +1,35 @@
+# GOAT Flow Context Validation
+# Copy this file to .github/workflows/context-validation.yml
+# It validates instruction files, router references, and skill directories.
+#
+# Scanner regex expects these exact step names — do not rename them.
+name: Context Validation
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check instruction file line counts
+        run: |
+          for f in CLAUDE.md AGENTS.md GEMINI.md; do
+            [ -f "$f" ] && lines=$(wc -l < "$f") && [ "$lines" -gt 150 ] && echo "::error::$f is $lines lines (limit 150)" && exit 1
+          done
+          echo "All instruction files within line limit"
+
+      - name: Check router references
+        run: bash scripts/context-validate.sh || true
+
+      - name: Check skills exist
+        run: |
+          found=0
+          for skill in goat goat-debug goat-plan goat-review goat-security goat-test; do
+            for dir in .claude/skills .agents/skills; do
+              if [ -d "$dir/$skill" ]; then
+                echo "✓ $dir/$skill"
+                found=$((found + 1))
+              fi
+            done
+          done
+          echo "$found skill directories found"

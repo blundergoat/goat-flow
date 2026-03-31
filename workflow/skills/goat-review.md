@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Structured code review and quality audit with RFC 2119 severity, diff-aware analysis, footgun matching, negative verification, and instruction-file audit mode."
-goat-flow-skill-version: "0.9.2"
+goat-flow-skill-version: "0.9.3"
 ---
 # /goat-review
 
@@ -51,6 +51,8 @@ Also use for reviewing instruction files for staleness - see modes below.
 
 If `ai/instructions/code-review.md` exists, load it and apply project-specific
 review standards alongside these defaults.
+
+**Footgun check:** If `docs/footguns.md` exists, read it for entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
 
 **Before proceeding:** present what you know and what you still need. Wait for the user to confirm scope, mode, and concerns before entering Phase 1.
 

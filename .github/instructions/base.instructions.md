@@ -22,7 +22,7 @@ Documentation framework for AI coding agent workflows. Markdown docs + TypeScrip
 npm run build          # Compile TypeScript to dist/
 npm test               # Run all tests (node:test + tsx)
 npm run typecheck      # Type-check without emitting
-npm run self-scan      # Scan this repo with goat-flow
+npm run scan           # Scan this repo with goat-flow
 shellcheck scripts/*.sh scripts/maintenance/*.sh
 bash scripts/preflight-checks.sh   # Full preflight gate
 bash scripts/context-validate.sh   # Validate GOAT Flow structure

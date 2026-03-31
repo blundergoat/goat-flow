@@ -442,7 +442,7 @@ function analyzeDenyScript(denyContent: string): {
 /** Apply settings-based Bash deny pattern overrides to hook facts. */
 function applySettingsDenyOverrides(
   denyStr: string,
-  hook: { denyExists: boolean; denyHasBlocks: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
+  hook: { denyExists: boolean; denyHasBlocks: boolean; denyIsConfigBased: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
     denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean; denyBlocksCloudDestructive: boolean },
 ): void {
   // Settings deny counts as a deny mechanism existing
@@ -450,10 +450,8 @@ function applySettingsDenyOverrides(
     hook.denyExists = true;
     // settings.json deny is mechanical blocking
     hook.denyHasBlocks = true;
-    // no JSON parsing needed -- it's config, not a script
-    hook.denyUsesJq = true;
-    // settings.json matches substrings, handles chaining implicitly
-    hook.denyHandlesChaining = true;
+    // Config-based deny — jq/chaining checks are not applicable
+    hook.denyIsConfigBased = true;
   }
   // Check for specific dangerous patterns in Bash deny rules
   if (/Bash\(.*rm -rf|Bash\(.*rm -fr/i.test(denyStr)) hook.denyBlocksRmRf = true;
@@ -465,7 +463,7 @@ function applySettingsDenyOverrides(
 /** Enrich deny hook facts from settings.json Bash deny patterns. */
 function enrichDenyFromSettings(
   settingsParsed: unknown, hasDenyPatterns: boolean,
-  hook: { denyExists: boolean; denyHasBlocks: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
+  hook: { denyExists: boolean; denyHasBlocks: boolean; denyIsConfigBased: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
     denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean; denyBlocksCloudDestructive: boolean },
 ): void {
   if (!hasDenyPatterns || !settingsParsed) return;
@@ -482,7 +480,7 @@ function enrichDenyFromSettings(
 /** Apply Codex execpolicy Starlark rules to deny hook facts. */
 function enrichDenyFromExecpolicy(
   fs: ReadonlyFS,
-  hook: { denyExists: boolean; denyHasBlocks: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
+  hook: { denyExists: boolean; denyHasBlocks: boolean; denyIsConfigBased: boolean; denyUsesJq: boolean; denyHandlesChaining: boolean;
     denyBlocksRmRf: boolean; denyBlocksForcePush: boolean; denyBlocksChmod: boolean },
 ): void {
   /** Path to the Codex execpolicy Starlark rule file */
@@ -496,10 +494,8 @@ function enrichDenyFromExecpolicy(
   hook.denyBlocksRmRf = /rm.*-.*rf|rm.*-.*fr/i.test(ruleContent);
   hook.denyBlocksForcePush = /force.*push|--force/i.test(ruleContent);
   hook.denyBlocksChmod = /chmod.*777/.test(ruleContent);
-  // Execpolicy uses Starlark, not jq -- mark as safe parsing
-  hook.denyUsesJq = true;
-  // Starlark processes the full command string, handling chaining implicitly
-  hook.denyHandlesChaining = true;
+  // Execpolicy is config-based — jq/chaining checks are not applicable
+  hook.denyIsConfigBased = true;
 }
 
 /** Extract all hook-related facts: deny hooks, post-turn, post-tool, compaction. */
@@ -532,7 +528,7 @@ function extractHookFacts(
 
   const hook = {
     denyExists: denyHookPath ? fs.exists(denyHookPath) : false,
-    denyHasBlocks: false, denyUsesJq: false, denyHandlesChaining: false,
+    denyHasBlocks: false, denyIsConfigBased: false, denyUsesJq: false, denyHandlesChaining: false,
     denyBlocksRmRf: false, denyBlocksForcePush: false, denyBlocksChmod: false, denyBlocksCloudDestructive: false,
   };
 
