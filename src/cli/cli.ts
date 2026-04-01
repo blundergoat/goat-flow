@@ -2,7 +2,7 @@
 
 import { parseArgs } from 'node:util';
 import { resolve, dirname, join } from 'node:path';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { CLIOptions, Grade, AgentId, ScanReport } from './types.js';
 
@@ -351,8 +351,13 @@ async function main(): Promise<void> {
     }
 
     if (options.output) {
-      writeFileSync(options.output, rendered + '\n', 'utf-8');
-      console.error(`Written to ${options.output}`);
+      // Default scan output to .goat-flow/ directory
+      const outputPath = options.output.includes('/') || options.output.includes('\\')
+        ? options.output
+        : join(options.projectPath, '.goat-flow', options.output);
+      mkdirSync(dirname(outputPath), { recursive: true });
+      writeFileSync(outputPath, rendered + '\n', 'utf-8');
+      console.error(`Written to ${outputPath}`);
     } else {
       process.stdout.write(rendered + '\n');
     }
