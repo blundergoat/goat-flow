@@ -44,7 +44,7 @@ test/
 npm run build          # tsc -> dist/
 npm run test           # node --import tsx --test 'test/**/*.test.ts'
 npm run typecheck      # tsc --noEmit
-npm run self-scan      # node dist/cli/cli.js .
+npm run scan           # node dist/cli/cli.js scan .
 
 shellcheck scripts/maintenance/*.sh      # Lint shell scripts
 bash -n scripts/maintenance/*.sh          # Syntax-check scripts

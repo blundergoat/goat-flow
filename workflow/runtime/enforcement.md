@@ -133,7 +133,12 @@ Create the following:
      */.claude/*|*/.gemini/*|*/.codex/*|*/.agents/*|*/.github/skills/*) exit 0 ;;
    esac
    case "$FILE_PATH" in
-     *.ts|*.tsx|*.js|*.jsx) npx prettier --write "$FILE_PATH" 2>/dev/null ;;
+     *.ts|*.tsx|*.js|*.jsx)
+       command -v npx >/dev/null 2>&1 && npx prettier --write "$FILE_PATH" 2>/dev/null ;;
+     *.py)
+       command -v black >/dev/null 2>&1 && black -q "$FILE_PATH" 2>/dev/null ;;
+     *.sh)
+       command -v shfmt >/dev/null 2>&1 && shfmt -w "$FILE_PATH" 2>/dev/null ;;
    esac
    exit 0
    ```

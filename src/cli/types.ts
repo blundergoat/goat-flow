@@ -244,6 +244,8 @@ export interface AgentFacts {
   };
   // settingsLocal removed - personal preference file, not a project quality signal.
   skills: {
+    /** All skill directories present under the agent's skills dir that contain a SKILL.md file */
+    installedDirs: string[];
     found: string[];
     missing: string[];
     allPresent: boolean;

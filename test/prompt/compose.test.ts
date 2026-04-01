@@ -133,6 +133,36 @@ function buildEmptyProject() {
   });
 }
 
+function buildTargetedUpgradeProject(extraFiles: Record<string, string> = {}) {
+  return createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'upgrade-project',
+      devDependencies: { typescript: '^5.0.0' },
+      scripts: { build: 'tsc', test: 'vitest', lint: 'eslint .' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)', 'Read(**/.env*)'] },
+    }),
+    '.claude/hooks/deny-dangerous.sh': '#!/usr/bin/env bash\nexit 2\n',
+    '.claude/hooks/stop-lint.sh': '#!/usr/bin/env bash\nexit 0\n',
+    '.claude/hooks/format-file.sh': '#!/usr/bin/env bash\nexit 0\n',
+    '.claude/skills/goat-debug/SKILL.md': '---\nname: goat-debug\ngoat-flow-skill-version: "0.9.3"\n---\n# /goat-debug\n## Shared Conventions\n## Step 0\nFootgun check\n## Phase 1\n## Output Format\n## Chains With\n',
+    '.claude/skills/goat-plan/SKILL.md': '---\nname: goat-plan\ngoat-flow-skill-version: "0.9.3"\n---\n# /goat-plan\n## Shared Conventions\n## Step 0\nFootgun check\n## Phase 1\n## Output Format\n## Chains With\n',
+    '.claude/skills/goat-review/SKILL.md': '---\nname: goat-review\ngoat-flow-skill-version: "0.9.3"\n---\n# /goat-review\n## Shared Conventions\n## Step 0\nFootgun check\n## Phase 1\n## Output Format\n## Chains With\n',
+    '.claude/skills/goat-security/SKILL.md': '---\nname: goat-security\ngoat-flow-skill-version: "0.9.3"\n---\n# /goat-security\n## Shared Conventions\n## Step 0\nFootgun check\n## Phase 1\n## Output Format\n## Chains With\n',
+    '.claude/skills/goat-test/SKILL.md': '---\nname: goat-test\ngoat-flow-skill-version: "0.9.3"\n---\n# /goat-test\n## Shared Conventions\n## Step 0\nFootgun check\n## Phase 1\n## Output Format\n## Chains With\n',
+    'docs/footguns.md': '# Footguns\n\n- `src/auth.ts:42` - race\n',
+    'docs/lessons.md': '# Lessons\n\n### Entry 1\nStuff.\n',
+    'docs/architecture.md': '# Architecture\n\nOverview.\n',
+    'scripts/preflight-checks.sh': '#!/usr/bin/env bash\n',
+    'scripts/context-validate.sh': '#!/usr/bin/env bash\n',
+    'tasks/handoff-template.md': '# Handoff\n',
+    '.gitignore': 'settings.local.json\n',
+    ...extraFiles,
+  });
+}
+
 // ─── compose-setup ──────────────────────────────────────────────────
 
 describe('composeSetup (reference-based)', () => {
@@ -215,6 +245,35 @@ describe('composeSetup (reference-based)', () => {
     assert.ok(refs.length > 0, 'Should have template refs');
     assert.ok(refs[0].output, 'Ref should have output');
     assert.ok(refs[0].template, 'Ref should have template');
+  });
+
+  it('uses the dispatcher path instead of goat-goat in targeted fix output', () => {
+    const fs = buildTargetedUpgradeProject();
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('.claude/skills/goat/SKILL.md'), 'Dispatcher path should be goat/SKILL.md');
+    assert.ok(!output.includes('goat-goat'), 'Prompt should not fabricate goat-goat');
+    assert.ok(output.includes('Missing Skills (1 of 6)'), 'Prompt should count the 6 canonical skills');
+  });
+
+  it('surfaces stale goat skill cleanup when AP20 is triggered', () => {
+    const fs = buildTargetedUpgradeProject({
+      '.claude/skills/goat-investigate/SKILL.md': '# /goat-investigate\n',
+      '.claude/skills/goat-audit/SKILL.md': '# /goat-audit\n',
+      '.claude/skills/audit/SKILL.md': '# /audit\n',
+    });
+    const report = scanProject(fs, '/test', { agentFilter: null });
+    const ap20 = report.agents[0]?.antiPatterns.find(ap => ap.id === 'AP20');
+    assert.ok(ap20, 'AP20 should exist');
+    assert.equal(ap20.triggered, true, 'AP20 should fire on stale goat-flow skill directories');
+    assert.ok(ap20.message.includes('goat-investigate'), 'AP20 should name stale goat skills');
+    assert.ok(ap20.message.includes('audit'), 'AP20 should name legacy skill dirs');
+
+    const output = composeSetup(report, 'claude');
+    assert.ok(output);
+    assert.ok(output.includes('Delete these directories'), 'Setup prompt should instruct the user to remove stale skill dirs');
+    assert.ok(output.includes('goat-investigate'), 'Setup prompt should mention stale skill examples');
   });
 });
 

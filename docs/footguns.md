@@ -244,3 +244,38 @@ When one of those changes without the others, the setup guidance stops matching 
 **Prevention:** npm publish script or preflight must verify all `workflow/skills/*.md` files have `goat-flow-skill-version` matching `RUBRIC_VERSION`. Fail the publish if they don't match.
 
 **Created:** 2026-03-31
+
+## Footgun: CI template derives skill names by prefixing instead of listing them
+
+**Evidence type:** ACTUAL_MEASURED
+
+**Symptoms:** Consumer project CI workflow checks for `goat-investigate`, `goat-refactor`, `goat-simplify` (all stale) and misses the `goat` dispatcher entirely. When an agent adapts the pattern to include the dispatcher, it prefixes `goat-` to the name `goat`, producing `goat-goat`. The CI check permanently fails for the dispatcher.
+
+**Why it happens:** `src/cli/prompt/fragments/full.ts` CI template had `for skill in security debug investigate review plan test refactor simplify; do` and constructed `goat-$skill`. This design assumes all skill names follow the `goat-{suffix}` pattern, but the dispatcher is just `goat`. The suffix list was also never updated after the 9→6 consolidation — 3 stale suffixes remained.
+
+**Evidence:**
+- `src/cli/prompt/fragments/full.ts` → CI template skill loop with stale suffixes and derivation pattern
+- halaxy-agents-lab `.github/workflows/context-validation.yml` → `CANONICAL_SKILLS="goat-debug goat-review goat-plan goat-security goat-test goat-goat"` (permanently broken)
+
+**Prevention:** Always iterate canonical skill names directly (`goat goat-debug goat-plan goat-review goat-security goat-test`), never derive them by prefixing. Import from `SKILL_NAMES` in code, or list literal names in templates. The dispatcher name breaks the `goat-{suffix}` pattern.
+
+**Created:** 2026-04-01
+
+## Footgun: Scanner AP2 penalizes project-specific skills
+
+**Evidence type:** ACTUAL_MEASURED
+
+**Status:** RESOLVED — AP2 removed 2026-04-01.
+
+**Symptoms:** Scanner deducts -3 for any skill directory that doesn't start with `goat-`. Projects with custom skills (`deploy/`, `lint-fix/`, `preflight/`) get penalized and the setup fragment tells the agent to rename them to `goat-deploy/` etc.
+
+**Why it happens:** AP2 assumed all skills in a project should have the `goat-` prefix. The check was dead code (could never trigger because `skills.found` only contains canonical goat-flow names from `SKILL_NAMES`), but the associated fragment `ap-fix-skill-names` contained harmful instructions that would rename project-specific skills.
+
+**Evidence:**
+- `src/cli/rubric/anti-patterns.ts` → AP2 check (removed)
+- `src/cli/prompt/fragments/anti-patterns.ts` → `ap-fix-skill-names` fragment (removed)
+- halaxy-agents-lab had project-specific `preflight/`, `audit/`, `review/` skills that would have been flagged
+
+**Prevention:** Scanner checks should only validate goat-flow's own skills (from `SKILL_NAMES`), never impose naming conventions on project-specific skills. The `goat-` prefix is a goat-flow convention, not a universal rule.
+
+**Created:** 2026-04-01

@@ -1355,16 +1355,6 @@
           "recommendationKey": "ap-compress-instruction-file"
         },
         {
-          "id": "AP2",
-          "name": "Skill name conflicts with built-in",
-          "triggered": true,
-          "deduction": -3,
-          "confidence": "high",
-          "message": "All skills use goat- prefix",
-          "recommendationKey": "ap-fix-skill-names",
-          "evidence": "test evidence for AP2"
-        },
-        {
           "id": "AP3",
           "name": "DoD in both instruction file and guidelines",
           "triggered": true,

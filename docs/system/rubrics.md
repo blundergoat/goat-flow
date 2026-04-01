@@ -223,7 +223,7 @@ Anti-patterns are deducted after positive scoring. They represent actively harmf
 | ID | Name | Deduction | Why |
 |----|------|-----------|-----|
 | AP1 | Instruction file over 150 lines | −3 | Hard limit. Agents miss tail content at 150+. |
-| AP2 | Skills without goat- prefix | −3 | Name conflicts with built-in slash commands. |
+| ~~AP2~~ | ~~Skills without goat- prefix~~ | Removed | Penalized project-specific skills (e.g., deploy/, preflight/). |
 | AP3 | DoD in both instruction file and guidelines | −3 | Conflicting definitions - agents pick the wrong one. |
 | AP4 | Footguns without file:line evidence | −5 | Entries without evidence are unverifiable folklore, not guardrails. |
 | AP5 | settings.json invalid JSON | −5 | Silently disables all settings-based configuration. |

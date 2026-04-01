@@ -20,18 +20,8 @@ Immediate actions:
 
 Target: under 120 lines. Hard limit: 150.`,
   },
-  {
-    key: 'ap-fix-skill-names',
-    phase: 'anti-pattern',
-    category: 'Anti-Pattern Fix',
-    kind: 'fix',
-    instruction: `Skills without the \`goat-\` prefix conflict with potential built-in commands. Rename:
-
-1. Find skills in \`{{skillsDir}}/\` that don't start with \`goat-\`
-2. Rename the directory: \`mv {{skillsDir}}/[old-name] {{skillsDir}}/goat-[old-name]\`
-3. Update the SKILL.md \`name:\` field inside each renamed skill
-4. Update any references in \`{{instructionFile}}\` router table`,
-  },
+  // ap-fix-skill-names removed — AP2 was harmful dead code that would rename project-specific skills.
+  // See docs/footguns.md "Scanner AP2 penalizes project-specific skills" (2026-04-01, RESOLVED).
   {
     key: 'ap-fix-dod-overlap',
     phase: 'anti-pattern',

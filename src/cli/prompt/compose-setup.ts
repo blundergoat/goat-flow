@@ -1,4 +1,5 @@
 import type { ScanReport, AgentId, AgentReport, ProjectSignals } from '../types.js';
+import { SKILL_NAMES } from '../constants.js';
 import type { ComposedPrompt, PromptSection, PromptVariables, FragmentPhase, SetupTask } from './types.js';
 import { getAllFragments, getFragment } from './registry.js';
 import { extractTemplateVars, fillTemplate } from './template-filler.js';
@@ -280,11 +281,14 @@ function renderTargetedFix(report: ScanReport, agentId: AgentId, agentReport: Ag
 
       // Skills as numbered tasks
       if (skillRefs.length > 0) {
-        lines.push(`**Missing Skills (${skillRefs.length} of 8)** - create in \`${PROFILES[agentId].skillsDir}/goat-{name}/SKILL.md\``);
+        lines.push(`**Missing Skills (${skillRefs.length} of ${SKILL_NAMES.length})** - create in \`${PROFILES[agentId].skillsDir}/{skill-name}/SKILL.md\``);
         lines.push('');
         for (const ref of skillRefs) {
-          const name = ref.key.replace('create-skill-', 'goat-');
-          lines.push(renderTask({ num: taskNum++, outputPath: `${PROFILES[agentId].skillsDir}/${name}/SKILL.md`, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.key, undefined, vars.languages), verify: defaultVerify(ref.key) }));
+          const name = ref.key === 'create-skill-goat'
+            ? 'goat'
+            : ref.key.replace('create-skill-', 'goat-');
+          const outputPath = `${PROFILES[agentId].skillsDir}/${name}/SKILL.md`;
+          lines.push(renderTask({ num: taskNum++, outputPath, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(outputPath, undefined, vars.languages), verify: defaultVerify(outputPath) }));
           lines.push('');
         }
       }

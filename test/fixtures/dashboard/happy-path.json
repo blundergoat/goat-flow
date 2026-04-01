@@ -1355,15 +1355,6 @@
           "recommendationKey": "ap-compress-instruction-file"
         },
         {
-          "id": "AP2",
-          "name": "Skill name conflicts with built-in",
-          "triggered": false,
-          "deduction": 0,
-          "confidence": "high",
-          "message": "All skills use goat- prefix",
-          "recommendationKey": "ap-fix-skill-names"
-        },
-        {
           "id": "AP3",
           "name": "DoD in both instruction file and guidelines",
           "triggered": false,
@@ -2816,15 +2807,6 @@
           "recommendationKey": "ap-compress-instruction-file"
         },
         {
-          "id": "AP2",
-          "name": "Skill name conflicts with built-in",
-          "triggered": false,
-          "deduction": 0,
-          "confidence": "high",
-          "message": "All skills use goat- prefix",
-          "recommendationKey": "ap-fix-skill-names"
-        },
-        {
           "id": "AP3",
           "name": "DoD in both instruction file and guidelines",
           "triggered": false,
@@ -4275,15 +4257,6 @@
           "message": "114 lines (OK)",
           "evidence": "GEMINI.md",
           "recommendationKey": "ap-compress-instruction-file"
-        },
-        {
-          "id": "AP2",
-          "name": "Skill name conflicts with built-in",
-          "triggered": false,
-          "deduction": 0,
-          "confidence": "high",
-          "message": "All skills use goat- prefix",
-          "recommendationKey": "ap-fix-skill-names"
         },
         {
           "id": "AP3",

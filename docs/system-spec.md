@@ -297,7 +297,7 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 | ID | Anti-Pattern | Detection | Deduction |
 |----|-------------|-----------|-----------|
 | AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 |
-| AP2 | Skill name conflicts with built-in | `{skills_dir}` contains a skill name that shadows a built-in agent command | -3 |
+| ~~AP2~~ | ~~Skill name conflicts with built-in~~ | Removed — penalized project-specific skills | — |
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 |
 | AP4 | Footguns without evidence | `docs/footguns.md` exists but zero `file:|line:` references | -5 |
 | AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 |

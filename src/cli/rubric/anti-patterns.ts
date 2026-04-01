@@ -19,17 +19,8 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: 'Compress instruction file below 150 lines',
     recommendationKey: 'ap-compress-instruction-file',
   },
-  {
-    id: 'AP2', name: 'Skill name conflicts with built-in', deduction: -3, confidence: 'high',
-    evaluate: (ctx: FactContext): AntiPatternResult => {
-      // Filter skills that lack the required goat- prefix (excluding the dispatcher 'goat' itself)
-      const nonGoat = ctx.agentFacts.skills.found.filter(s => s !== 'goat' && s.startsWith('goat-') === false);
-      const triggered = nonGoat.length > 0;
-      return { id: 'AP2', name: 'Skill name conflicts with built-in', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `Skills without goat- prefix: ${nonGoat.join(', ')}` : 'All skills use goat- prefix' };
-    },
-    recommendation: 'Rename skills to use goat- prefix',
-    recommendationKey: 'ap-fix-skill-names',
-  },
+  // AP2 removed — penalized project-specific skills (e.g., deploy/, preflight/) by assuming all skills need goat- prefix.
+  // See docs/footguns.md "Scanner AP2 penalizes project-specific skills" (2026-04-01, RESOLVED).
   {
     id: 'AP3', name: 'DoD in both instruction file and guidelines', deduction: -3, confidence: 'low',
     evaluate: (ctx: FactContext): AntiPatternResult => {
@@ -185,9 +176,9 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP14', name: 'Duplicate skill directories', deduction: -2, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       // Check for non-goat skills that have a goat- equivalent
-      const found = ctx.agentFacts.skills.found;
-      const goatSkills = found.filter(s => s.startsWith('goat-'));
-      const nonGoat = found.filter(s => !s.startsWith('goat-'));
+      const installedDirs = ctx.agentFacts.skills.installedDirs;
+      const goatSkills = installedDirs.filter(s => s.startsWith('goat-'));
+      const nonGoat = installedDirs.filter(s => !s.startsWith('goat-') && s !== 'goat');
       const duplicates = nonGoat.filter(s => goatSkills.includes(`goat-${s}`));
       const triggered = duplicates.length > 0;
       return { id: 'AP14', name: 'Duplicate skill directories', triggered, deduction: triggered ? -2 : 0, confidence: 'high', message: triggered ? `Duplicate skills: ${duplicates.map(s => `${s}/ + goat-${s}/`).join(', ')}` : 'No duplicate skills' };
@@ -270,13 +261,13 @@ export const antiPatterns: AntiPatternDef[] = [
     id: 'AP20', name: 'Non-canonical goat-flow skill directories', deduction: -3, confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const canonicalSet = new Set<string>(SKILL_NAMES);
-      const nonCanonical = ctx.agentFacts.skills.found.filter(s =>
+      const nonCanonical = ctx.agentFacts.skills.installedDirs.filter(s =>
         (s.startsWith('goat-') || s === 'goat') && !canonicalSet.has(s)
       );
       // Also flag known legacy skill names that aren't goat-* prefixed
       const legacyNames = ['audit', 'review', 'preflight'];
-      const legacyFound = ctx.agentFacts.skills.found.filter(s => legacyNames.includes(s));
-      const allStale = [...nonCanonical, ...legacyFound];
+      const legacyFound = ctx.agentFacts.skills.installedDirs.filter(s => legacyNames.includes(s));
+      const allStale = [...new Set([...nonCanonical, ...legacyFound])].sort();
       const triggered = allStale.length > 0;
       return {
         id: 'AP20', name: 'Non-canonical goat-flow skill directories', triggered,

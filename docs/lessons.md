@@ -160,3 +160,26 @@ Rules that fire after the agent has delivered its primary output have near-zero 
 The goat dispatcher was treated as secondary to the "real" skills — excluded from CANONICAL_SKILLS and consistently under-counted. This led to inconsistencies across 15+ files.
 
 **Prevention:** Count the dispatcher in every enumeration of canonical skills.
+
+### "AI gate passed" does not mean the work is done
+**What happened:** M1 AI gate said 14/14 checks passed. Real-world test on halaxy-agents-lab (2026-04-01) found: 12 goat skill dirs instead of 6 (stale skills not cleaned), router table with 12 entries instead of 6, missing Edit/Write .env deny (only Read installed), CI workflow checking for "goat-goat" instead of "goat", version headers still at 0.9.2, format hook referencing uninstalled formatters. The AI gate checked whether code EXISTS in the goat-flow repo, not whether it WORKS on real consumer projects.
+
+**Root cause:** The AI verifier read goat-flow source code and confirmed features were implemented. It never ran setup on a real project to verify the output. The verifier tested the tool, not the tool's output. Same pattern as "Scanner 100% does not mean the project is correct."
+
+**Prevention:** AI testing gates must include at least one end-to-end test: run the tool against a real project and verify the result. Checking source code is necessary but not sufficient.
+
+**created_at:** 2026-04-01
+
+### Verification prompts must not assume goat skills are the only skills
+**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills (deploy/, preflight/, audit/). The instruction would cause a verifier to report project-specific skills as violations. Same blind spot as AP2 — assuming goat-flow owns the entire skills directory.
+
+**Prevention:** Verification prompts and scanner checks must scope to goat-flow's domain: "List all goat-* directories..." not "List all directories..." Project-specific skills are not goat-flow's business.
+
+**created_at:** 2026-04-01
+
+### Dispatcher keeps getting excluded from patterns and glob matches
+**What happened:** Three separate incidents where the dispatcher was missed by glob/iteration patterns: (1) `scripts/preflight-checks.sh` used `find -name 'goat-*.md'` which skipped `goat.md`, (2) CI template `for skill in ...; do goat-$skill` couldn't represent the dispatcher, producing `goat-goat`, (3) v0.9.3 consolidation missed counting the dispatcher in multiple files. All stem from the same root: the dispatcher's name (`goat`) breaks the `goat-{suffix}` pattern that all other skills follow.
+
+**Prevention:** Always use `goat*` (no dash) for glob patterns. Always iterate literal canonical names, never derive by prefixing. Test the dispatcher first in any skill enumeration — if your pattern works for `goat`, it works for `goat-debug` too, but not vice versa.
+
+**created_at:** 2026-04-01

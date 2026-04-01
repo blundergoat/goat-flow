@@ -286,6 +286,10 @@ function extractSkillVersion(content: string): string | null {
 
 /** Extract skill facts: found/missing skills, versions, and quality metrics. */
 function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['skills'] {
+  /** All installed skill directory names, including stale goat-flow and legacy skills */
+  const installedDirs = fs.listDir(agent.skillsDir)
+    .filter(entry => fs.exists(`${agent.skillsDir}/${entry}/SKILL.md`))
+    .sort();
   /** Names of skills that were found on disk */
   const found: string[] = [];
   /** Names of expected skills that are missing */
@@ -377,6 +381,7 @@ function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['ski
   }
 
   return {
+    installedDirs,
     found, missing, allPresent: missing.length === 0,
     versions, outdatedCount, hasDispatcher, danglingRefs,
     quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, withSharedConventions, unadaptedCount, adaptCommentCount, total: found.length },

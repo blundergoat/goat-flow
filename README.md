@@ -50,7 +50,7 @@ Available agents: `claude`, `codex`, `gemini`
 npx goat-flow scan --agent claude
 ```
 
-Target: Grade A. Re-run setup and scan until you hit 100%. The scanner checks 103 items across foundation (instruction file, execution loop, hooks), standard (skills, learning loop, local instructions), and full (evals, CI) tiers.
+Target: Grade A. Re-run setup and scan until you hit 100%. The scanner checks 95 items + 17 anti-patterns across foundation (instruction file, execution loop, hooks), standard (skills, learning loop, local instructions), and full (evals, CI) tiers.
 
 ### 4. Iterate
 
@@ -116,7 +116,7 @@ npx goat-flow dashboard                   # Interactive dashboard
 ```
 Layer 1 - Runtime         Instruction file (~120 lines), hooks, settings
 Layer 2 - Local Context   Per-directory instruction files for high-risk areas
-Layer 3 - Skills          9 on-demand capabilities loaded via slash commands
+Layer 3 - Skills          6 on-demand capabilities loaded via slash commands
 Layer 4 - Playbooks       Planning methodology templates
 Layer 5 - Evaluation      Agent evals, CI validation, learning loop
 ```

@@ -4,7 +4,7 @@
 
 ## v0.9.4 (unreleased)
 
-M1 Fixes & Hygiene. Driven by 6 cross-project reviews (avg 71/100). 32 files changed. AI gate: 14/14 (2 independent verifiers, zero disagreements).
+M1 Fixes & Hygiene. Driven by 6 cross-project reviews (avg 71/100) + real-project testing on blundergoat-platform and strands-php-client. Human testing gate: all sections pass.
 
 ### Scanner Honesty
 - Stop faking Codex enforcement facts — `denyUsesJq`/`denyHandlesChaining` no longer hardcoded for config-based deny. New `denyIsConfigBased` flag; checks 2.2.5a/2.2.5b return N/A instead of false passes.
@@ -12,6 +12,11 @@ M1 Fixes & Hygiene. Driven by 6 cross-project reviews (avg 71/100). 32 files cha
 - New check 2.2.5g: flag when `Read(.env)` denied but `Edit(.env)`/`Write(.env)` not
 - New AP20: detect non-canonical goat-flow skill directories (-3 deduction)
 - Error messages show expected format example (`**Evidence type:** ACTUAL_MEASURED`)
+
+### Scanner Fixes (post-review, 2026-04-01)
+- **Remove AP2** — harmful dead code that penalized project-specific skills (deploy/, preflight/). The associated `ap-fix-skill-names` fragment instructed agents to rename non-goat skills.
+- **Fix AP14/AP20** — both used `skills.found` (canonical names only) instead of `skills.installedDirs` (actual directory listing). AP20 could never detect stale skill dirs. New `installedDirs` field on `AgentFacts.skills`.
+- **Fix goat-goat setup bug** — `compose-setup.ts` derived dispatcher path as `goat-goat/SKILL.md` instead of `goat/SKILL.md`. Regression tests added.
 
 ### Upgrade Path
 - Setup prompt instructs stale skill cleanup (8 old names + 3 legacy dirs), router table rewrite, dispatcher replacement
@@ -21,20 +26,28 @@ M1 Fixes & Hygiene. Driven by 6 cross-project reviews (avg 71/100). 32 files cha
 ### Enforcement
 - Setup deny fragment includes `Edit(**/.env*)` and `Write(**/.env*)`
 - `format-file.sh` fragment now wires hook into settings.json with agent dir skip pattern
+- Format hook template checks formatter availability (`command -v`) before invocation
 
 ### Skills
 - All 5 specialized skills check `docs/footguns.md` in Step 0 before acting (P27)
 - Both installed copies and workflow templates updated
+- Dispatcher template (`goat.md`): richer intent table with modes (compliance, dependency audit), Output Format section, mode-aware post-dispatch chaining
 
 ### Version Sync
 - Version headers synced to v0.9.3 across system-spec, getting-started, CLAUDE.md
 - All 6 workflow/skills templates synced from 0.9.2 to 0.9.3
 - New `prepublishOnly` check prevents template/package version drift at publish time
 - `conventions.md` Node requirement fixed: >=20.11.0 (was >=22)
-- `base.instructions.md` script reference fixed: `npm run scan` (was `self-scan`)
+- `base.instructions.md` Node version fixed: >=20.11.0 (was 20.6+), script reference fixed: `npm run scan` (was `self-scan`)
+- README: scanner count corrected to 95 checks + 17 anti-patterns (was 103), skill count to 6 (was 9)
 
 ### Hooks
 - `stop-lint.sh` now runs `tsc --noEmit` when `.ts` files change
+- Preflight find pattern: `goat*.md` (was `goat-*.md`) to include dispatcher template
+
+### Lessons & Footguns
+- 3 new lessons: "AI gate passed" ≠ done, verification scope must not assume goat-only skills, dispatcher keeps getting excluded from glob patterns
+- 2 new footguns: CI template derivation bug (goat-goat), AP2 penalizes project-specific skills (RESOLVED)
 
 ---
 
