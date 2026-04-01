@@ -1,4 +1,4 @@
-# GEMINI.md - v0.9.3 (2026-03-31)
+# GEMINI.md - v0.9.4 (2026-04-02)
 
 Documentation framework for AI coding agent workflows. Markdown docs + Bash maintenance scripts.
 
@@ -103,12 +103,18 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 
 ## Router Table
 
-| Target | Path |
-|--------|------|
-| **Skills** | `.agents/skills/goat/`, `.agents/skills/goat-debug/`, `.agents/skills/goat-plan/`, `.agents/skills/goat-review/`, `.agents/skills/goat-security/`, `.agents/skills/goat-test/` |
-| **Playbooks** | `workflow/playbooks/` |
-| **Learning** | `ai/lessons/`, `.goat-flow/lessons/`, `docs/footguns/`, `.goat-flow/footguns/`, `ai/decisions/` |
-| **Architecture** | `docs/architecture.md` |
-| **Handoff** | `tasks/handoff-template.md` |
-| **Evals** | `ai/evals/` |
-| **Other Agents** | `CLAUDE.md`, `AGENTS.md` |
+| Resource | Path |
+|----------|------|
+| Architecture | `docs/architecture.md` |
+| System docs | `docs/system/` |
+| Scripts | `scripts/` |
+<!-- goat-flow:router:start -->
+| Skills | `.agents/skills/goat-*/` |
+| Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
+| Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
+| Decisions | `ai/decisions/` |
+| Evals | `ai/evals/` |
+| Coding standards | `ai/coding-standards/` |
+| Config | `.goat-flow/config.yaml` |
+| Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+<!-- goat-flow:router:end -->

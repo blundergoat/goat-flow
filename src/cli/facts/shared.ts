@@ -249,7 +249,7 @@ function extractEvalFacts(fs: ReadonlyFS, rawEvalsPath: string): SharedFacts['ev
   let allHaveAgents = true;
   let allHaveReplay = true;
   let allHaveFrontmatter = true;
-  let allHaveRealContent = true;
+  let realContentCount = 0;
   // Iterate over ALL eval files for quality checks and skill counting
   for (const f of evalFiles) {
     /** Raw content of this eval file */
@@ -258,7 +258,6 @@ function extractEvalFacts(fs: ReadonlyFS, rawEvalsPath: string): SharedFacts['ev
       allHaveOrigin = false;
       allHaveAgents = false;
       allHaveReplay = false;
-      allHaveRealContent = false;
       continue;
     }
     if (!/^---\n/.test(content)) allHaveFrontmatter = false;
@@ -268,7 +267,7 @@ function extractEvalFacts(fs: ReadonlyFS, rawEvalsPath: string): SharedFacts['ev
     // Check for real scenario content: ≥100 chars after scenario heading, not just TODO/TBD
     const scenarioMatch = content.match(/##+ (?:Replay Prompt|Scenario)\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
     const scenarioBody = scenarioMatch?.[1]?.trim() ?? '';
-    if (scenarioBody.length < 100 || /^(?:TODO|TBD)/i.test(scenarioBody)) allHaveRealContent = false;
+    if (scenarioBody.length >= 100 && !/^(?:TODO|TBD)/i.test(scenarioBody)) realContentCount++;
     /** All skill label matches found in the eval content */
     const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
     // Iterate over skill matches to collect unique skill names
@@ -279,7 +278,9 @@ function extractEvalFacts(fs: ReadonlyFS, rawEvalsPath: string): SharedFacts['ev
     }
   }
   const missingSkills = Array.from(CANONICAL_SKILLS).filter(skill => !skillNames.has(skill)).sort();
-  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, hasRealContent: allHaveRealContent, hasFrontmatter: allHaveFrontmatter, evalSkillCount: skillNames.size, missingSkills, path: evalsPath };
+  // hasRealContent: at least 60% of evals have ≥100 char scenarios (not all — dispatcher intent tests and other eval types use shorter formats)
+  const hasRealContent = count > 0 && realContentCount >= Math.ceil(count * 0.60);
+  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, hasRealContent, hasFrontmatter: allHaveFrontmatter, evalSkillCount: skillNames.size, missingSkills, path: evalsPath };
 }
 
 /** Extract project-wide shared facts from docs, evals, CI, and config files. */
@@ -313,7 +314,7 @@ export function extractSharedFacts(fs: ReadonlyFS, configState: LoadedConfig): S
   );
 
   /** Raw content of the shared handoff template */
-  const handoffContent = fs.readFile('tasks/handoff-template.md');
+  const handoffContent = fs.readFile('.goat-flow/tasks/handoff-template.md');
   /** Whether the handoff template exists */
   const handoffExists = handoffContent !== null;
   /** Count of required handoff sections present - accepts ## H2 headings or **Bold:** labels */
@@ -331,6 +332,7 @@ export function extractSharedFacts(fs: ReadonlyFS, configState: LoadedConfig): S
       warningCount: configState.warnings.length,
       errorCount: configState.errors.length,
       parseError: configState.parseError,
+      lineLimits: configState.config.lineLimits,
     },
     architecture: { exists: archExists, lineCount: archLineCount },
     evals: extractEvalFacts(fs, configState.config.evals.path),

@@ -1,6 +1,6 @@
 # GOAT Flow -- Getting Started
 
-**Version:** v0.9.3 | 2026-03-31
+**Version:** v0.9.4 | 2026-03-31
 **Companion to:** `setup/` (agent setup guides) and `docs/system-spec.md` (canonical spec)
 
 ---
@@ -144,7 +144,7 @@ docs/architecture.md
 docs/domain-reference.md               <- Prompt B path only
 docs/guidelines-ownership-split.md     <- migration rationale
 ai/decisions/
-tasks/handoff-template.md
+.goat-flow/tasks/handoff-template.md
 ai/README.md                           <- Cold-path router for project coding guidelines
 ai/coding-standards/                       <- Domain-specific coding guidelines (base, code-review, git-commit, frontend, backend, etc.)
 .github/git-commit-instructions.md     <- Universal commit instructions

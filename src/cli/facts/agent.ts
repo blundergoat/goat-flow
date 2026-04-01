@@ -666,7 +666,30 @@ function extractRouterFacts(fs: ReadonlyFS, content: string | null): AgentFacts[
       unresolved.push(p);
     }
   }
-  return { exists: paths.length > 0, paths, resolved, unresolved };
+  // Extract goat-flow-owned marker block paths
+  const markerStart = '<!-- goat-flow:router:start -->';
+  const markerEnd = '<!-- goat-flow:router:end -->';
+  const hasMarkers = content !== null && content.includes(markerStart) && content.includes(markerEnd);
+  const markerPaths: string[] = [];
+  const staleMarkerPaths: string[] = [];
+  if (hasMarkers && content) {
+    const startIdx = content.indexOf(markerStart) + markerStart.length;
+    const endIdx = content.indexOf(markerEnd);
+    const markerContent = content.slice(startIdx, endIdx);
+    // Extract backtick-wrapped paths from the marker block
+    const pathRefs = markerContent.matchAll(/`([^`]+\/[^`]*)`/g);
+    for (const m of pathRefs) {
+      const raw = m[1]!;
+      // Skip glob patterns (e.g., `.claude/skills/goat-*/`) — they represent groups, not checkable paths
+      if (raw.includes('*')) continue;
+      const ref = raw.replace(/\/$/, '');
+      if (ref) {
+        markerPaths.push(ref);
+        if (!fs.exists(ref)) staleMarkerPaths.push(ref);
+      }
+    }
+  }
+  return { exists: paths.length > 0, paths, resolved, unresolved, hasMarkers, markerPaths, staleMarkerPaths };
 }
 
 /** Extract ask-first boundary facts: paths listed and their resolution status. */

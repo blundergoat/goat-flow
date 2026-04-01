@@ -249,4 +249,11 @@ Common stale directories to remove:
 
 After deleting, update the router table in your instruction file to reference only the 6 canonical skills.`,
   },
+  {
+    key: 'ap-fix-stale-router-markers',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `Some paths inside the goat-flow router marker block point to non-existent resources. Run \`goat-flow setup\` to regenerate the marker block, or manually update the paths between \`<!-- goat-flow:router:start -->\` and \`<!-- goat-flow:router:end -->\`.`,
+  },
 ];

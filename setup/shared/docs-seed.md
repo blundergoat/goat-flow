@@ -40,7 +40,7 @@ These files are created regardless of which agent you use. They form the learnin
    hardcoded absolute paths, or outdated references. Seed these as
    footguns if found.
 
-3. tasks/handoff-template.md - Template for session handoffs. MUST
+3. .goat-flow/tasks/handoff-template.md - Template for session handoffs. MUST
    include a purpose section explaining: when to create (incomplete
    work or two-correction stop), when to read (start of every session,
    check if .goat-flow/tasks/handoff.md exists), and how to use (copy template

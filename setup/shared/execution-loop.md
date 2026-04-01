@@ -96,7 +96,7 @@ d) Definition of Done: 6 gates
 
 e) Working Memory: Working Notes for 5+ turn tasks, context escalation
    ladder, session handoff protocol. Incomplete work → copy
-   tasks/handoff-template.md to .goat-flow/tasks/handoff.md and fill in.
+   .goat-flow/tasks/handoff-template.md to .goat-flow/tasks/handoff.md and fill in.
    Next session MUST read .goat-flow/tasks/handoff.md if it exists.
    Multi-task sessions: re-read the instruction file constraints before starting.
    Context health: compact at 60% utilization (not 90%). Remove

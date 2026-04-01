@@ -10,12 +10,12 @@ import { SKILL_NAMES } from '../constants.js';
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
 /**
- * Tier 2 - Standard (69 points)
+ * Tier 2 - Standard (58 pts on a fully configured project; varies with N/A checks)
  * Skills, hooks, learning loop, router, architecture, local context.
  * These checks represent the operational layer that makes GOAT Flow effective.
  */
 export const standardChecks: CheckDef[] = [
-  // === 2.1 Skills (27 pts: 8 existence@2 + 1 completeness@1 + 8 quality@1 + 1 dispatcher@1 + 1 shared-conventions@1) ===
+  // === 2.1 Skills (23 pts: 6 existence@2 + 1 completeness@1 + 8 quality@1 + 1 dispatcher@1 + 1 shared-conventions@1) ===
   ...SKILL_NAMES.map((skill, i) => ({
     id: `2.1.${i + 1}`,
     name: `${skill} skill`,

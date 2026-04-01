@@ -47,7 +47,7 @@ config_path() {
     local key=$2
     local default_value=$3
 
-    if [[ ! -f goat-flow.yaml ]]; then
+    if [[ ! -f .goat-flow/config.yaml ]]; then
         printf '%s\n' "$default_value"
         return
     fi
@@ -62,7 +62,7 @@ config_path() {
                 print $0
                 exit
             }
-        ' goat-flow.yaml | trim_yaml_value
+        ' .goat-flow/config.yaml | trim_yaml_value
     )"
 
     if [[ -n "$value" ]]; then

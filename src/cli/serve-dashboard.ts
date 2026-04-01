@@ -24,7 +24,7 @@ function loadPackageFile(name: string): string {
  * exposes /api/scan and /api/setup endpoints that run the CLI.
  */
 export function serveDashboard(defaultPath: string): void {
-  const template = loadPackageFile('dashboard/index.html');
+  const template = loadPackageFile('src/dashboard/index.html');
   const absDefault = resolve(defaultPath);
 
   const server = createServer((req, res) => {

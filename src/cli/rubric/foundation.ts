@@ -22,8 +22,18 @@ export const foundationChecks: CheckDef[] = [
   {
     id: '1.1.2', name: 'Under line target', tier: 'foundation', category: 'Instruction File',
     pts: 3, partialPts: 1, confidence: 'high',
-    detect: { type: 'line_count', path: '{instruction_file}', pass: 120, partial: 150, fail: 150 },
-    recommendation: 'Compress instruction file below 120 lines. Apply cut priority: verbose examples first, then explanatory paragraphs.',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const lines = ctx.agentFacts.instruction.lineCount;
+        const { target, limit } = ctx.facts.shared.config.lineLimits;
+        const base = { id: '1.1.2', name: 'Under line target', tier: 'foundation' as const, category: 'Instruction File', confidence: 'high' as const };
+        if (lines <= target) return { ...base, status: 'pass', points: 3, maxPoints: 3, message: `${lines} lines (under ${target} target)` };
+        if (lines <= limit) return { ...base, status: 'partial', points: 1, maxPoints: 3, message: `${lines} lines (under ${limit} limit but over ${target} target)` };
+        return { ...base, status: 'fail', points: 0, maxPoints: 3, message: `${lines} lines (over ${limit} limit)` };
+      },
+    },
+    recommendation: 'Compress instruction file below the line target. Adjust in .goat-flow/config.yaml line-limits if needed.',
     recommendationKey: 'compress-instruction-file',
   },
   {

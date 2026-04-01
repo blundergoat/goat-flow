@@ -389,7 +389,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     'docs/architecture.md': shared.architecture.exists,
     'docs/guidelines-ownership-split.md': shared.guidelinesOwnership.exists,
     'docs/domain-reference.md': shared.domainReference.exists,
-    'tasks/handoff-template.md': shared.handoffTemplate.exists,
+    '.goat-flow/tasks/handoff-template.md': shared.handoffTemplate.exists,
     [shared.evals.path]: shared.evals.dirExists,
     [shared.evals.path.replace(/\/$/, '')]: shared.evals.dirExists,
     [shared.evals.path.replace(/\/$/, '') + '/README.md']: shared.evals.hasReadme,

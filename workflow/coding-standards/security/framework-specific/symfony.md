@@ -4,245 +4,71 @@ Reference for generating `ai/coding-standards/security.md` in Symfony projects.
 
 ## CSRF Protection
 
-Symfony's CSRF component is opt-in per form. Every state-changing form must include a token.
-
-```twig
-{# DO - include CSRF token in Twig forms #}
-<form method="POST" action="{{ path('order_create') }}">
-    <input type="hidden" name="_token" value="{{ csrf_token('order_create') }}">
-    <button type="submit">Place Order</button>
-</form>
-```
-
-```php
-// DO - validate in the controller
-if (!$this->isCsrfTokenValid('order_create', $request->request->get('_token'))) {
-    throw $this->createAccessDeniedException('Invalid CSRF token.');
-}
-
-// Symfony 6.3+ - use the attribute instead
-#[IsCsrfTokenValid('order_create', tokenKey: '_token')]
-public function create(Request $request): Response { ... }
-```
-
-```yaml
-# security.yaml - CSRF is disabled automatically for stateless firewalls
-firewalls:
-    api:
-        pattern: ^/api/
-        stateless: true   # no session, no CSRF needed - token/JWT auth handles it
-    main:
-        # stateful firewall: CSRF protection is active by default
-```
-
-- Symfony Form component generates and validates CSRF tokens automatically. Only manual forms and AJAX endpoints need explicit handling.
-- Never disable CSRF globally. Disable it only on stateless firewalls that use token auth.
+- Symfony Form component generates and validates CSRF tokens automatically. Manual forms and AJAX endpoints need explicit handling.
+- Every state-changing form must include `{{ csrf_token('action_name') }}` and validate with `$this->isCsrfTokenValid()` or `#[IsCsrfTokenValid]` (6.3+).
+- Never disable CSRF globally. Disable only on stateless firewalls using token/JWT auth.
 
 ## Access Control
 
-```php
-// DO - deny at the top of the action
-public function edit(Post $post): Response
-{
-    $this->denyAccessUnlessGranted('EDIT', $post); // custom Voter for object-level check
-    ...
-}
-
-// DO - attribute form (Symfony 5.2+)
-#[IsGranted('EDIT', subject: 'post')]
-public function edit(Post $post): Response { ... }
-
-// DON'T - rely on access_control alone for object-level permissions
-```
-
-- `access_control` in `security.yaml` matches URL patterns. It does not enforce ownership or object-level rules - that is the Voter's job.
-- Implement a `Voter` for ownership checks. Never inline ownership logic across multiple controllers.
-- Use `#[IsGranted]` on the action, not just on the controller class, to avoid accidentally inheriting broad grants.
+- `access_control` in `security.yaml` matches URL patterns only — it does NOT enforce ownership.
+- Implement a `Voter` for object-level permissions. Call `$this->denyAccessUnlessGranted('EDIT', $post)` or use `#[IsGranted('EDIT', subject: 'post')]` on the action.
+- Apply grants on the action, not just the controller class, to avoid inheriting broad permissions.
 
 ## Input Validation
 
-```php
-// DO - constrain DTOs with the Validator component
-use Symfony\Component\Validator\Constraints as Assert;
-
-class CreateUserInput
-{
-    #[Assert\NotBlank]
-    #[Assert\Email]
-    public string $email = '';
-
-    #[Assert\NotBlank]
-    #[Assert\Length(min: 8, max: 128)]
-    public string $password = '';
-}
-
-// Validate explicitly in the controller
-$violations = $validator->validate($input);
-if (count($violations) > 0) {
-    return $this->json(['errors' => (string) $violations], 422);
-}
-
-// Or use Symfony Forms - $form->isValid() runs validation automatically
-```
-
-- Validate at the controller boundary, before passing data to a service or repository.
-- For API endpoints, use `#[MapRequestPayload]` (Symfony 6.3+) - it deserializes and validates in one step.
+- Validate at the controller boundary using Validator constraints (`#[Assert\NotBlank]`, `#[Assert\Email]`, etc.) on DTOs.
+- For API endpoints, use `#[MapRequestPayload]` (6.3+) — deserializes and validates in one step.
+- Symfony Forms run `$form->isValid()` automatically.
 
 ## XSS Prevention
 
-Twig auto-escapes all output by default. Bypassing escaping is an XSS vector.
-
-```twig
-{# DO - auto-escaped output #}
-<p>{{ user.bio }}</p>
-
-{# DON'T - bypass escaping #}
-<p>{{ user.bio|raw }}</p>
-{% autoescape false %}{{ user.bio }}{% endautoescape %}
-```
-
-- Only use `|raw` on content you generated (e.g., Markdown rendered server-side with a trusted library).
-- If you must render user-supplied rich text, sanitize with a library (e.g., `HtmlSanitizer` component, `ezyang/htmlpurifier`) before marking safe.
-- Check Twig templates for `|raw` in code review - every use needs a justification comment.
+- Twig auto-escapes all output by default. `|raw` and `{% autoescape false %}` bypass escaping — every use needs a justification comment.
+- Only use `|raw` on content you generated (e.g., server-side Markdown rendering with a trusted library).
+- For user-supplied rich text, sanitize with `HtmlSanitizer` component or `ezyang/htmlpurifier` before marking safe.
 
 ## Doctrine SQL Injection
 
-Doctrine DQL and QueryBuilder parameterize automatically. Raw SQL requires explicit binding.
-
-```php
-// DO - QueryBuilder with named parameter
-$qb->where('u.email = :email')->setParameter('email', $email);
-
-// DO - raw SQL with binding via DBAL
-$conn->executeQuery('SELECT * FROM users WHERE email = :email', ['email' => $email]);
-
-// DON'T - string interpolation in any form
-$conn->executeQuery("SELECT * FROM users WHERE email = '$email'");
-$em->createQuery("SELECT u FROM User u WHERE u.email = '$email'");
-```
-
-- `createNativeQuery()` requires a `ResultSetMapping` and explicit binding. Never interpolate variables into the query string.
-- `extra()` on the QueryBuilder does not parameterize automatically - treat it like raw SQL.
+- QueryBuilder and DQL parameterize automatically: `$qb->where('u.email = :email')->setParameter('email', $email)`.
+- Raw SQL via DBAL requires explicit binding: `$conn->executeQuery('...WHERE email = :email', ['email' => $email])`.
+- Never string-interpolate into any query. `createNativeQuery()` and `extra()` do NOT auto-parameterize.
 
 ## Rate Limiting
 
-```yaml
-# config/packages/rate_limiter.yaml
-framework:
-    rate_limiter:
-        login:
-            policy: fixed_window
-            limit: 5
-            interval: '1 minute'
-        api:
-            policy: sliding_window
-            limit: 100
-            interval: '1 minute'
-```
+- Configure `framework.rate_limiter` in YAML. Apply to login, password reset, email verification.
+- Consume a token with `$limiter->consume()->isAccepted()` before processing sensitive actions.
+- Multi-instance: use Redis-backed store for `cache.rate_limiter` pool.
 
-```php
-// DO - consume a token before processing the sensitive action
-public function login(RateLimiterFactory $loginLimiter, Request $request): Response
-{
-    $limiter = $loginLimiter->create($request->getClientIp());
-    if (!$limiter->consume()->isAccepted()) {
-        return $this->json(['error' => 'Too many attempts. Try again later.'], 429);
-    }
-    ...
-}
-```
+## Secrets & APP_SECRET
 
-- Rate-limit login, password reset, and email verification endpoints.
-- In multi-instance deployments, configure a Redis-backed store as the `cache.rate_limiter` pool.
+- `APP_SECRET` must be ≥32 random bytes. Signs cookies, CSRF tokens, remember-me. Never reuse across environments.
+- Use the Symfony secrets vault (`secrets:set`) or environment variables in production. Never commit real values.
+- Rotating `APP_SECRET` invalidates all signed cookies and CSRF tokens — active sessions dropped.
 
-## APP_SECRET and Secrets Management
+## Production
 
-```bash
-# DO - use the Symfony secrets vault per environment
-php bin/console secrets:set DATABASE_PASSWORD          # stored in config/secrets/{env}/
-php bin/console secrets:set DATABASE_PASSWORD --env=prod
-
-# .env - placeholder values only, never real secrets
-APP_SECRET=replace-with-64-char-random-hex
-DATABASE_URL=postgresql://app:!ChangeMe!@127.0.0.1:5432/app
-```
-
-- `APP_SECRET` must be at least 32 random bytes. It signs cookies, CSRF tokens, and remember-me tokens. Never reuse across environments.
-- In production, inject secrets via environment variables or the secrets vault. Never commit real values to `.env.local` or `.env.prod`.
-- Rotating `APP_SECRET` invalidates all signed cookies and CSRF tokens - active sessions will be dropped.
-
-## Production Settings
-
-```bash
-APP_ENV=prod
-APP_DEBUG=0   # never 1 in production: exposes profiler, debug toolbar, full stack traces
-```
-
-- `APP_ENV=dev` exposes the Symfony Profiler at `/_profiler`, the debug toolbar, database queries, and request details.
-- Consider `nelmio/security-bundle` for centralized security header management (CSP, HSTS, X-Frame-Options, referrer policy) via `config/packages/nelmio_security.yaml`.
+- `APP_ENV=prod`, `APP_DEBUG=0`. Debug mode exposes profiler, stack traces, database queries, environment variables.
+- Consider `nelmio/security-bundle` for CSP, HSTS, X-Frame-Options headers.
 
 ## Password Hashing
 
-```yaml
-# config/packages/security.yaml
-security:
-    password_hashers:
-        App\Entity\User:
-            algorithm: auto   # selects bcrypt or argon2id based on available extensions
-```
-
-```php
-// DO - use the injected hasher
-$user->setPassword($hasher->hashPassword($user, $plainPassword));
-
-// DON'T - hash manually
-$user->setPassword(md5($plain));
-$user->setPassword(sha1($plain));
-```
-
-- `algorithm: auto` selects the strongest available algorithm. Do not hardcode `bcrypt` if `argon2id` is available.
-- `UserPasswordHasherInterface::isPasswordValid()` handles transparent rehashing on login when the algorithm changes.
+- Use `algorithm: auto` in `security.yaml` — selects strongest available (argon2id > bcrypt). Transparent rehashing on login.
+- Never use `md5()`, `sha1()`, or hardcode `bcrypt` when `argon2id` is available.
 
 ## File Upload
 
-```php
-// DO - validate MIME type by file content
-use Symfony\Component\Validator\Constraints\File;
+- Validate MIME type by file content (`File` constraint with `mimeTypes`), not by extension (spoofable).
+- Store uploads outside public directory. Serve through authorized controller. Never use original filename.
 
-$violations = $validator->validate($uploadedFile, [
-    new File(
-        maxSize: '10M',
-        mimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
-        mimeTypesMessage: 'Please upload a valid file.',
-    ),
-]);
-
-// DON'T - validate by extension only (easily spoofed)
-// ExtensionValidator checks the extension string, not the actual file content.
-```
-
-- Store uploads outside the public directory. Serve files through a controller that checks authorization before streaming.
-- Never use the original filename for storage. Generate a UUID or content hash.
-
-## Security Audit
-
-```bash
-# Check for known CVEs in installed packages
-composer audit
-
-# Run in CI - fail on high-severity advisories
-composer audit --no-dev --format=json | jq '.advisories | length'
-```
+## Dependency Audit
 
 - Run `composer audit` in CI on every PR. Treat high-severity advisories as build failures.
-- For deeper static analysis, add `psalm/plugin-symfony` or `phpstan/phpstan-symfony` with their security rule sets.
 
 ## Common Footguns
 
-- **`APP_ENV=dev` in production**: exposes `/_profiler`, full stack traces, database queries, and environment variables.
-- **`denyAccessUnlessGranted()` missing from action**: `access_control` in `security.yaml` matches URL patterns, not object ownership - a Voter call in the controller is still required.
-- **`|raw` Twig filter on user input**: bypasses auto-escaping. Every use needs a comment explaining why the content is trusted.
-- **`$conn->executeQuery("... WHERE id = $id")`**: concatenated SQL is injectable. Always use `?` or `:param` binding.
-- **`APP_SECRET` too short or shared across environments**: all HMAC-signed tokens share the same key. A compromised dev secret compromises production if reused.
-- **`ExtensionValidator` without `MimeTypeValidator`**: extension-only checks are trivially bypassed by renaming a file.
-- **`algorithm: bcrypt` hardcoded**: if the server gains `argon2id` support later, existing passwords are not automatically upgraded. Use `auto` to get transparent rehashing.
+- **`APP_ENV=dev` in production**: exposes `/_profiler`, full stack traces, database queries
+- **Missing `denyAccessUnlessGranted()`**: `access_control` matches URLs, not ownership
+- **`|raw` on user input**: bypasses auto-escaping
+- **String interpolation in queries**: always use parameter binding
+- **`APP_SECRET` shared across environments**: compromised dev = compromised production
+- **Extension-only file validation**: trivially bypassed by renaming
+- **Hardcoded `algorithm: bcrypt`**: prevents transparent upgrade to argon2id

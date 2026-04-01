@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, compliance auditing, and dependency vulnerability scanning."
-goat-flow-skill-version: "0.9.3"
+goat-flow-skill-version: "0.9.4"
 ---
 # /goat-security
 

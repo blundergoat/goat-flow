@@ -38,7 +38,7 @@ RFC 2119 PASS:
    Compress prose in the SAME pass. Instruction file MUST stay under target.
 
 HYGIENE:
-5. Create tasks/handoff-template.md with usage guidance at the top
+5. Create .goat-flow/tasks/handoff-template.md with usage guidance at the top
    (when to create, when to read) and these sections:
    ## Date, ## Status, ## Current State, ## Key Decisions Made,
    ## Known Risks, ## Next Step
@@ -53,7 +53,7 @@ HYGIENE:
 
 VERIFICATION:
 - GATE: ai/evals/ has eval files with YAML frontmatter and Replay Prompt sections.
-- GATE: tasks/handoff-template.md has all 6 required sections (Date through Next Step).
+- GATE: .goat-flow/tasks/handoff-template.md has all 6 required sections (Date through Next Step).
 - GATE: Count MUST/SHOULD/MAY in instruction file - need 10+.
 - GATE: Instruction file is still under 120 lines after RFC 2119 pass.
 ```

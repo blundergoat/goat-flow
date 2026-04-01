@@ -1,47 +1,54 @@
 # .goat-flow/config.yaml — project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-# Version of goat-flow this config was created with
 version: "0.9.4"
 
-# Which agents are set up (omit to auto-detect)
+# ── Project Setup ───────────────────────────────
 agents:
   - claude
   - codex
   - gemini
 
-# Skill selection (default: all 6 canonical)
-# Use a list to install only specific skills: [goat-debug, goat-review, goat-test]
 skills:
-  install: all
+  install:
+    - goat
+    - goat-debug
+    - goat-plan
+    - goat-review
+    - goat-security
+    - goat-test
 
-# Learning loop paths
-# "committed" = version-controlled (team knowledge, survives git clone)
-# "local" = gitignored (agent-specific observations, high-frequency)
-footguns:
-  committed: docs/footguns/
-  local: .goat-flow/footguns/
+# ── Scanner Thresholds ──────────────────────────
+# Adjust for project complexity:
+#   Small CLI: target 80, limit 120
+#   Standard:  target 120, limit 150 (default)
+#   Large:     target 150, limit 200
+line-limits:
+  target: 120
+  limit: 150
 
+# ── Committed Paths (ai/) ──────────────────────
 lessons:
   committed: ai/lessons/
   local: .goat-flow/lessons/
 
-# Architecture decisions — always committed (ai/)
 decisions:
   path: ai/decisions/
 
-# Agent working memory — gitignored (.goat-flow/)
-tasks:
-  path: .goat-flow/tasks/
-
-# Telemetry and session logs — gitignored (.goat-flow/)
-logs:
-  path: .goat-flow/logs/
-
-# Agent evals — always committed (ai/)
 evals:
   path: ai/evals/
 
-# Coding standards — always committed (ai/)
 coding-standards:
   path: ai/coding-standards/
+
+# ── Committed Paths (docs/) ─────────────────────
+footguns:
+  committed: docs/footguns/
+  local: .goat-flow/footguns/
+
+# ── Local Paths (.goat-flow/) ───────────────────
+tasks:
+  path: .goat-flow/tasks/
+
+logs:
+  path: .goat-flow/logs/

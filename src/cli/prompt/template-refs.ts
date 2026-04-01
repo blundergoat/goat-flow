@@ -269,7 +269,7 @@ function getSetupGuideRefs(agentId: AgentId): TemplateRef[] {
 const LANGUAGE_TEMPLATE_MAP: Record<string, string> = {
   typescript: 'workflow/coding-standards/backend/typescript-node.md',
   javascript: 'workflow/coding-standards/backend/typescript-node.md',
-  php: 'workflow/coding-standards/backend/php.md',
+  // Generic php.md does not exist — PHP routes via framework-specific templates (laravel, symfony)
   python: 'workflow/coding-standards/backend/python.md',
   go: 'workflow/coding-standards/backend/go.md',
   rust: 'workflow/coding-standards/backend/rust.md',
@@ -297,12 +297,8 @@ const SECURITY_FRAMEWORK_MAP: Record<string, string> = {
   django: 'workflow/coding-standards/security/framework-specific/django.md',
   laravel: 'workflow/coding-standards/security/framework-specific/laravel.md',
   symfony: 'workflow/coding-standards/security/framework-specific/symfony.md',
-  rails: 'workflow/coding-standards/security/framework-specific/rails.md',
-  spring: 'workflow/coding-standards/security/framework-specific/spring.md',
   express: 'workflow/coding-standards/security/framework-specific/express-node.md',
   go: 'workflow/coding-standards/security/framework-specific/go.md',
-  csharp: 'workflow/coding-standards/security/framework-specific/dotnet.md',
-  cypress: 'workflow/coding-standards/security/framework-specific/cypress.md',
 };
 
 /**
@@ -697,11 +693,8 @@ const FRAGMENT_TEMPLATE_MAP: Record<string, string | Partial<Record<AgentId, str
   'create-security-django': 'workflow/coding-standards/security/framework-specific/django.md',
   'create-security-laravel': 'workflow/coding-standards/security/framework-specific/laravel.md',
   'create-security-symfony': 'workflow/coding-standards/security/framework-specific/symfony.md',
-  'create-security-rails': 'workflow/coding-standards/security/framework-specific/rails.md',
-  'create-security-spring': 'workflow/coding-standards/security/framework-specific/spring.md',
   'create-security-express': 'workflow/coding-standards/security/framework-specific/express-node.md',
   'create-security-go': 'workflow/coding-standards/security/framework-specific/go.md',
-  'create-security-dotnet': 'workflow/coding-standards/security/framework-specific/dotnet.md',
   'create-devops-terraform': 'workflow/coding-standards/devops/terraform.md',
 
   // Fix-kind - local instructions

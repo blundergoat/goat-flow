@@ -1,4 +1,4 @@
-# Prompt: Create tasks/handoff-template.md
+# Prompt: Create .goat-flow/tasks/handoff-template.md
 
 Paste this into your coding agent to create the session handoff template.
 Use it when work stops mid-task and another session needs to resume
@@ -9,7 +9,7 @@ without reconstructing context from scratch.
 ## The Prompt
 
 ```
-Create tasks/handoff-template.md for this project.
+Create .goat-flow/tasks/handoff-template.md for this project.
 
 This is a reusable session handoff template. It is copied when an agent
 stops with incomplete work. The template itself stays clean.
@@ -69,7 +69,7 @@ The next session starts by reading the handoff file before doing
 anything else.
 
 VERIFICATION:
-- Verify tasks/handoff-template.md exists
+- Verify .goat-flow/tasks/handoff-template.md exists
 - Verify it has the Date, Status, Current State, Key Decisions Made,
   Known Risks, and Next Step sections
 - Verify it says when to create and when to read the handoff

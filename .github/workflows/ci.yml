@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [dev]
+
+jobs:
+  build-test-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npx tsc && mkdir -p dist/dashboard && cp src/dashboard/index.html dist/dashboard/
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npx eslint src/cli/
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck --exclude=SC2001 scripts/*.sh
+
+      - name: Shell syntax
+        run: bash -n scripts/*.sh
+
+      - name: Version consistency
+        run: |
+          pkg_version=$(node -e "console.log(require('./package.json').version)")
+          rubric_version=$(grep "RUBRIC_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
+
+          echo "package.json: $pkg_version"
+          echo "RUBRIC_VERSION: $rubric_version"
+
+          # RUBRIC_VERSION should be valid
+          if [ -z "$rubric_version" ]; then
+            echo "::error::RUBRIC_VERSION not found in version.ts"
+            exit 1
+          fi
+
+          # Instruction file headers
+          for f in CLAUDE.md AGENTS.md GEMINI.md; do
+            if [ -f "$f" ]; then
+              header_version=$(head -1 "$f" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
+              if [ -n "$header_version" ] && [ "$header_version" != "$pkg_version" ]; then
+                echo "::error::$f header says v${header_version}, expected v${pkg_version}"
+                exit 1
+              fi
+              echo "$f: v${header_version:-none}"
+            fi
+          done
+
+          # Config version
+          if [ -f .goat-flow/config.yaml ]; then
+            config_version=$(grep '^version:' .goat-flow/config.yaml | grep -oE '"[^"]+"' | tr -d '"' || true)
+            if [ -n "$config_version" ] && [ "$config_version" != "$pkg_version" ]; then
+              echo "::warning::.goat-flow/config.yaml version ($config_version) does not match package.json ($pkg_version)"
+            fi
+          fi
+
+      - name: Skill template versions
+        run: |
+          skill_version=$(grep -o "RUBRIC_VERSION = '[^']*'" src/cli/rubric/version.ts | grep -o "'[^']*'" | tr -d "'")
+          if [ -z "$skill_version" ]; then
+            echo "::error::Could not extract RUBRIC_VERSION from version.ts"
+            exit 1
+          fi
+          echo "Expected skill version: $skill_version"
+
+          fail=0
+          for f in workflow/skills/goat*.md; do
+            ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+            if [ "$ver" != "$skill_version" ]; then
+              echo "::error::$f has version '$ver', expected '$skill_version'"
+              fail=1
+            fi
+          done
+
+          for dir in .claude/skills .agents/skills .github/skills; do
+            if [ -d "$dir" ]; then
+              for f in $(find "$dir" -name 'SKILL.md'); do
+                ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                if [ -n "$ver" ] && [ "$ver" != "$skill_version" ]; then
+                  echo "::error::$f has version '$ver', expected '$skill_version'"
+                  fail=1
+                fi
+              done
+            fi
+          done
+
+          if [ "$fail" -eq 1 ]; then exit 1; fi
+          echo "All skill templates at version $skill_version"

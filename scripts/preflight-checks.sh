@@ -220,11 +220,11 @@ if [[ -f tsconfig.json ]]; then
         fail "Typecheck/build - run npx tsc for details"
     fi
 
-    # Verify dashboard files were copied to dist/
-    if [[ -f dist/dashboard/index.html ]]; then
-        pass "dist/dashboard/index.html exists"
+    # Dashboard HTML served from src/ at runtime (no copy step needed)
+    if [[ -f src/dashboard/index.html ]]; then
+        pass "src/dashboard/index.html exists"
     else
-        fail "dist/dashboard/index.html missing - run: cp src/dashboard/index.html dist/dashboard/"
+        fail "src/dashboard/index.html missing"
     fi
 
     # ESLint (type-checked rules)
@@ -333,85 +333,39 @@ else
     skip "GOAT Flow Scan (dist/cli/cli.js not built)"
 fi
 
-# ── Coding Standards Drift Detection ─────────────────────────────────
+# ── Coding Standards ─────────────────────────────────────────────────
 section "Coding Standards"
 
-# Check that every .md file referenced in backend/README.md detection table exists
 cs_dir="workflow/coding-standards"
-if [[ -f "$cs_dir/backend/README.md" ]]; then
-    backend_missing=0
-    while IFS= read -r ref_file; do
-        if [[ ! -f "$cs_dir/backend/$ref_file" ]]; then
-            fail "backend/README.md references missing file: $ref_file"
-            backend_missing=1
+
+# Check that every backend .md file has ## Common Footguns and ## Primary Sources
+if compgen -G "$cs_dir/backend/*.md" >/dev/null; then
+    for bf in "$cs_dir"/backend/*.md; do
+        bname="$(basename "$bf")"
+        if ! grep -q '^## Common Footguns' "$bf"; then
+            note "backend/$bname: missing '## Common Footguns' heading"
         fi
-    done < <(grep -oE '\| [a-z][-a-z]+\.md' "$cs_dir/backend/README.md" | sed 's/^| //' | sort -u)
-    if [[ "$backend_missing" -eq 0 ]]; then
-        pass "backend/README.md: all referenced files exist"
-    fi
+        if ! grep -q '^## Primary Sources' "$bf"; then
+            note "backend/$bname: missing '## Primary Sources' heading"
+        fi
+    done
+    pass "backend/*.md mandatory heading check ($(find "$cs_dir/backend" -name '*.md' | wc -l) files)"
 else
-    skip "backend/README.md not found"
+    skip "No backend coding standards found"
 fi
 
-# Check that every frontend .md file referenced in frontend/README.md exists
-if [[ -f "$cs_dir/frontend/README.md" ]]; then
-    frontend_missing=0
-    while IFS= read -r ref_file; do
-        if [[ ! -f "$cs_dir/frontend/$ref_file" ]]; then
-            fail "frontend/README.md references missing file: $ref_file"
-            frontend_missing=1
+# Check template-refs.ts doesn't reference deleted templates
+if [[ -f src/cli/prompt/template-refs.ts ]]; then
+    stale_refs=0
+    while IFS= read -r template_path; do
+        if [[ ! -f "$template_path" ]]; then
+            fail "template-refs.ts references missing: $template_path"
+            stale_refs=1
         fi
-    done < <(grep -oE '\| [a-z][-a-z]+\.md' "$cs_dir/frontend/README.md" | sed 's/^| //' | sort -u)
-    if [[ "$frontend_missing" -eq 0 ]]; then
-        pass "frontend/README.md: all referenced files exist"
+    done < <(grep -v '^\s*//' src/cli/prompt/template-refs.ts | grep -oE "workflow/coding-standards/[^'\"]*\.md" | sort -u)
+    if [[ "$stale_refs" -eq 0 ]]; then
+        pass "template-refs.ts: all referenced coding standards exist"
     fi
-else
-    skip "frontend/README.md not found"
-fi
-
-# Check that every backend .md file (except README) has ## Common Footguns and ## Primary Sources
-for bf in "$cs_dir"/backend/*.md; do
-    [[ "$(basename "$bf")" == "README.md" ]] && continue
-    bname="$(basename "$bf")"
-    if ! grep -q '^## Common Footguns' "$bf"; then
-        note "backend/$bname: missing '## Common Footguns' heading"
-    fi
-    if ! grep -q '^## Primary Sources' "$bf"; then
-        note "backend/$bname: missing '## Primary Sources' heading"
-    fi
-done
-pass "backend/*.md mandatory heading check"
-
-# Check that security/README.md referenced files exist
-if [[ -f "$cs_dir/security/README.md" ]]; then
-    sec_missing=0
-    while IFS= read -r ref_file; do
-        if [[ ! -f "$cs_dir/security/$ref_file" ]]; then
-            fail "security/README.md references missing file: $ref_file"
-            sec_missing=1
-        fi
-    done < <(grep -oE '\| [-a-z/]+\.md' "$cs_dir/security/README.md" | sed 's/^| //' | sort -u)
-    if [[ "$sec_missing" -eq 0 ]]; then
-        pass "security/README.md: all referenced files exist"
-    fi
-else
-    skip "security/README.md not found"
-fi
-
-# Check devops/ files exist if devops/README.md references them
-if [[ -f "$cs_dir/devops/README.md" ]]; then
-    devops_missing=0
-    while IFS= read -r ref_file; do
-        if [[ ! -f "$cs_dir/devops/$ref_file" ]]; then
-            fail "devops/README.md references missing file: $ref_file"
-            devops_missing=1
-        fi
-    done < <(grep -oE '\| [a-z][-a-z]+\.md' "$cs_dir/devops/README.md" | sed 's/^| //' | sort -u)
-    if [[ "$devops_missing" -eq 0 ]]; then
-        pass "devops/README.md: all referenced files exist"
-    fi
-else
-    skip "devops/README.md not found"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────

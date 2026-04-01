@@ -9,7 +9,7 @@ Pick your agent and follow the setup guide.
 | **Codex** | [setup-codex.md](setup-codex.md) | AGENTS.md, .agents/skills/, .codex/rules/, scripts/ |
 | **Copilot** | [setup-copilot.md](setup-copilot.md) | .github/copilot-instructions.md, .github/instructions/ |
 
-All agents share: docs/footguns/, ai/lessons/, docs/architecture.md, tasks/handoff-template.md, ai/coding-standards/
+All agents share: docs/footguns/, ai/lessons/, docs/architecture.md, .goat-flow/tasks/handoff-template.md, ai/coding-standards/
 
 ## Before you start
 

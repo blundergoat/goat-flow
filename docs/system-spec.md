@@ -1,6 +1,6 @@
 # AI Workflow System Specification
 
-**Version:** v0.9.3 | 2026-03-31
+**Version:** v0.9.4 | 2026-03-31
 
 **Implements:** 5-layer architecture with default execution loop
 
@@ -385,7 +385,7 @@ stack:
 | `docs/architecture.md`               | System overview              | Under 100 lines. What, why, how, constraints        |
 | `ai/decisions/`                       | Architecture Decision Records | ADR template + real decisions if discoverable (see template below) |
 | `docs/guidelines-ownership-split.md` | Migration rationale          | What was moved, removed, and why                    |
-| `tasks/handoff-template.md`          | Session handoff              | Status, Current State, Decisions, Risks, Next Step  |
+| `.goat-flow/tasks/handoff-template.md`          | Session handoff              | Status, Current State, Decisions, Risks, Next Step  |
 | `ai/README.md`                       | Cold-path router (which instruction files to load) |                                  |
 | `ai/coding-standards/conventions.md`     | Universal project contract (conventions, commands, boundaries) |                     |
 | `ai/coding-standards/code-review.md`     | Review standards and approval criteria |                                             |

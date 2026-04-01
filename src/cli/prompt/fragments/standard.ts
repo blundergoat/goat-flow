@@ -677,22 +677,26 @@ Bare claims without labels are not acceptable.`,
     phase: 'standard',
     category: 'Router Table',
     kind: 'create',
-    instruction: `Add a Router Table section to \`{{instructionFile}}\`:
+    instruction: `Add a Router Table section to \`{{instructionFile}}\`. The goat-flow-owned rows go inside markers so \`goat-flow setup\` can safely regenerate them later:
 
 \`\`\`markdown
 ## Router Table
 
+<!-- goat-flow:router:start -->
 | Resource | Path |
 |----------|------|
 | Skills | \\\`{{skillsDir}}/goat-*/\\\` |
-| Footguns (Committed) | \\\`docs/footguns/\\\` |
-| Footguns (Local) | \\\`.goat-flow/footguns/\\\` |
-| Lessons (Committed) | \\\`ai/lessons/\\\` |
-| Lessons (Local) | \\\`.goat-flow/lessons/\\\` |
-| Architecture | \\\`docs/architecture.md\\\` |
+| Footguns | \\\`docs/footguns/\\\`, \\\`.goat-flow/footguns/\\\` |
+| Lessons | \\\`ai/lessons/\\\`, \\\`.goat-flow/lessons/\\\` |
+| Decisions | \\\`ai/decisions/\\\` |
+| Evals | \\\`ai/evals/\\\` |
+| Coding standards | \\\`ai/coding-standards/\\\` |
+| Config | \\\`.goat-flow/config.yaml\\\` |
+| Local workspace | \\\`.goat-flow/tasks/\\\`, \\\`.goat-flow/logs/\\\` |
+<!-- goat-flow:router:end -->
 \`\`\`
 
-Every path in the router MUST resolve to an existing file or directory.`,
+Add your project-specific rows (system spec, architecture, scripts, etc.) OUTSIDE the markers. Every path in the router MUST resolve to an existing file or directory.`,
   },
   {
     key: 'fix-router-refs',

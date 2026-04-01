@@ -196,7 +196,7 @@
           </div>
           <div class="text-right">
             <p class="text-xs text-gray-500 dark:text-gray-400 font-mono" x-text="report.target || ''"></p>
-            <p class="text-xs text-gray-400" x-text="report.meta.timestamp ? new Date(report.meta.timestamp).toLocaleString() : ''"></p>
+            <p class="text-xs text-gray-400" x-text="report.meta.timestamp ? (() => { const d = new Date(report.meta.timestamp); const pad = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); })() : ''"></p>
           </div>
         </div>
 

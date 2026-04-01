@@ -1,4 +1,4 @@
-# AGENTS.md - v0.9.3 (2026-03-31)
+# AGENTS.md - v0.9.4 (2026-04-02)
 GOAT Flow documentation framework. Markdown docs + Bash validation scripts. This Codex layer supplements the existing Claude Code workflow; leave `CLAUDE.md` and `.claude/` untouched unless a task explicitly targets them.
 ## Essential Commands
 ```bash
@@ -80,32 +80,25 @@ MUST confirm all 6 gates:
 5. Current state recorded before stopping incomplete work
 6. Grep old pattern/path after rename, move, or terminology change
 ## Working Memory
-For 5+ turn tasks, keep short working notes in `.goat-flow/tasks/todo.md` or the task thread. Use `tasks/handoff-template.md` before ending incomplete work, then save the filled handoff to `.goat-flow/tasks/handoff.md`. If context drifts or two approaches fail, restate scope and start fresh.
+For 5+ turn tasks, keep short working notes in `.goat-flow/tasks/todo.md` or the task thread. Use `.goat-flow/tasks/handoff-template.md` before ending incomplete work, then save the filled handoff to `.goat-flow/tasks/handoff.md`. If context drifts or two approaches fail, restate scope and start fresh.
 Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 ## Router Table
 | Resource | Path |
 |----------|------|
 | System spec | `docs/system-spec.md` |
-| 5-layer architecture | `docs/system/five-layers.md` |
-| 6-step loop | `docs/system/six-steps.md` |
-| Getting started | `docs/getting-started.md` |
-| Design rationale | `docs/reference/design-rationale.md` |
-| Cross-agent comparison | `docs/reference/cross-agent-comparison.md` |
-| Claude instructions | `CLAUDE.md` |
-| Claude setup | `setup/setup-claude.md` |
-| Codex setup | `setup/setup-codex.md` |
-| Shared execution template | `setup/shared/execution-loop.md` |
-| Skills | `.agents/skills/goat-*/SKILL.md` |
-| Footguns (Committed) | `docs/footguns/` |
-| Footguns (Local) | `.goat-flow/footguns/` |
-| Lessons (Committed) | `ai/lessons/` |
-| Lessons (Local) | `.goat-flow/lessons/` |
+| System docs | `docs/system/` |
 | Architecture | `docs/architecture.md` |
-| Preflight script | `scripts/preflight-checks.sh` |
-| Context validation | `scripts/context-validate.sh` |
-| Deny policy | `scripts/deny-dangerous.sh` |
-| Agent evals | `ai/evals/` |
-| Handoff template | `tasks/handoff-template.md` |
+| Scripts | `scripts/` |
+<!-- goat-flow:router:start -->
+| Skills | `.agents/skills/goat-*/` |
+| Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
+| Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
+| Decisions | `ai/decisions/` |
+| Evals | `ai/evals/` |
+| Coding standards | `ai/coding-standards/` |
+| Config | `.goat-flow/config.yaml` |
+| Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+<!-- goat-flow:router:end -->
 
 ## Hard Rules
 

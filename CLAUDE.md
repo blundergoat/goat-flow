@@ -1,4 +1,4 @@
-# CLAUDE.md - v0.9.3 (2026-03-31)
+# CLAUDE.md - v0.9.4 (2026-04-02)
 
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI scanner.
 
@@ -102,14 +102,18 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Resource | Path |
 |----------|------|
 | System spec (canonical) | `docs/system-spec.md` |
-| System docs (5-layers, 6-steps, rubrics) | `docs/system/` |
-| Coding guidelines | `ai/README.md` |
-| Learning loop | `docs/footguns/`, `.goat-flow/footguns/`, `ai/lessons/`, `.goat-flow/lessons/` |
-| Architecture · Decisions | `docs/architecture.md` · `ai/decisions/` |
-| AI infrastructure | `ai/` (lessons, decisions, evals, coding-standards) |
+| System docs | `docs/system/` |
+| Architecture | `docs/architecture.md` |
 | CLI scanner/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
+
+<!-- goat-flow:router:start -->
 | Skills | `.claude/skills/goat-*/` |
-| Agent evals | `ai/evals/` |
+| Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
+| Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
+| Decisions | `ai/decisions/` |
+| Evals | `ai/evals/` |
+| Coding standards | `ai/coding-standards/` |
+| Config | `.goat-flow/config.yaml` |
 | Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
-| Release | `CHANGELOG.md`, `README.md`, `package.json` |
+<!-- goat-flow:router:end -->

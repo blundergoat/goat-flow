@@ -212,7 +212,7 @@ export interface SharedFacts {
     paths: { committed: string; local: string };
   };
   decisions: { dirExists: boolean; fileCount: number; path: string; hasRealContent: boolean };
-  config: { exists: boolean; valid: boolean; warningCount: number; errorCount: number; parseError: string | null };
+  config: { exists: boolean; valid: boolean; warningCount: number; errorCount: number; parseError: string | null; lineLimits: { target: number; limit: number } };
   architecture: { exists: boolean; lineCount: number };
   evals: { dirExists: boolean; count: number; hasReadme: boolean; hasOriginLabels: boolean; hasAgentsLabels: boolean; hasReplayPrompts: boolean; hasRealContent: boolean; hasFrontmatter: boolean; evalSkillCount: number; missingSkills: string[]; path: string };
   ci: { workflowExists: boolean; checksLineCount: boolean; checksRouter: boolean; checksSkills: boolean; ciTriggersOnPRs: boolean };
@@ -322,6 +322,9 @@ export interface AgentFacts {
     paths: string[];
     resolved: number;
     unresolved: string[];
+    hasMarkers: boolean;
+    markerPaths: string[];
+    staleMarkerPaths: string[];
   };
   askFirst: {
     exists: boolean;

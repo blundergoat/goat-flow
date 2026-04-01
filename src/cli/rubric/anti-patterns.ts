@@ -281,6 +281,25 @@ export const antiPatterns: AntiPatternDef[] = [
     recommendation: 'Remove non-canonical skill directories left over from a previous goat-flow version. Run `goat-flow upgrade` or manually delete the stale directories.',
     recommendationKey: 'ap-remove-stale-skills',
   },
+  // === AP21: Stale goat-flow-owned router entries ===
+  {
+    id: 'AP21', name: 'Stale goat-flow-owned router entries', deduction: -2, confidence: 'high',
+    na: (ctx) => !ctx.agentFacts.router.hasMarkers,
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const { staleMarkerPaths } = ctx.agentFacts.router;
+      const triggered = staleMarkerPaths.length > 0;
+      return {
+        id: 'AP21', name: 'Stale goat-flow-owned router entries', triggered,
+        deduction: triggered ? -2 : 0, confidence: 'high',
+        message: triggered
+          ? `${staleMarkerPaths.length} stale paths inside router markers: ${staleMarkerPaths.slice(0, 3).join(', ')}`
+          : 'All goat-flow-owned router paths resolve',
+        evidence: triggered ? staleMarkerPaths.join(', ') : undefined,
+      };
+    },
+    recommendation: 'Update router table marker block — some goat-flow-owned paths point to non-existent resources. Run `goat-flow setup` to regenerate.',
+    recommendationKey: 'ap-fix-stale-router-markers',
+  },
 ];
 
 /**

@@ -78,9 +78,13 @@ docs_*.md
 # Build output
 dist
 
-### macOS / Windows
+### Scan output
+scan_result.json
+
+### macOS / Windows / WSL
 .DS_*
 Thumbs.db
+*:Zone.Identifier
 **/*.backup.*
 **/*.back.*
 *.sublime*

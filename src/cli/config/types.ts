@@ -9,6 +9,7 @@ export interface GoatFlowConfig {
   logs: { path: string };
   agents: string[] | null;
   skills: { install: string[] | 'all' };
+  lineLimits: { target: number; limit: number };
 }
 
 export interface ValidationIssue {

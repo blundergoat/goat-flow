@@ -140,21 +140,21 @@ All agents share the same execution loop, autonomy tiers, definition of done, an
 ## Project Structure
 
 ```
-src/cli/                CLI scanner, prompt generator, scoring engine
-src/dashboard/          Single-page HTML dashboard (Alpine.js + Tailwind via CDN)
+ai/evals/               Regression tests from real incidents
+docs/                   System design + reference documentation
+scripts/                Preflight, validation, enforcement scripts
 setup/                  Setup guides + shared templates
   shared/               Cross-agent templates (execution loop, docs seed)
   setup-claude.md       Claude Code setup phases
-  setup-gemini.md       Gemini CLI setup phases
   setup-codex.md        Codex setup phases
+  setup-gemini.md       Gemini CLI setup phases
+src/cli/                CLI scanner, prompt generator, scoring engine
+src/dashboard/          Single-page HTML dashboard (Alpine.js + Tailwind via CDN)
 workflow/               Templates for skills, coding standards, evaluation
-  skills/               6 skill templates (5 specialized + /goat dispatcher)
   coding-standards/     48 templates (backend, frontend, security, devops)
   evaluation/           Eval format, footguns, lessons, handoff templates
   runtime/              Enforcement, architecture, code-map templates
-docs/                   System design + reference documentation
-scripts/                Preflight, validation, enforcement scripts
-ai/evals/               Regression tests from real incidents
+  skills/               6 skill templates (5 specialized + /goat dispatcher)
 ```
 
 ## Documentation

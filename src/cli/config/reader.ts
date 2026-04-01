@@ -6,7 +6,7 @@ import { RUBRIC_VERSION } from '../rubric/version.js';
 import type { GoatFlowConfig, LoadedConfig, ValidationIssue, ValidationResult } from './types.js';
 
 const KNOWN_AGENTS = new Set(['claude', 'codex', 'gemini']);
-const KNOWN_TOP_LEVEL_KEYS = new Set(['version', 'footguns', 'lessons', 'decisions', 'evals', 'coding-standards', 'tasks', 'logs', 'agents', 'skills']);
+const KNOWN_TOP_LEVEL_KEYS = new Set(['version', 'footguns', 'lessons', 'decisions', 'evals', 'coding-standards', 'tasks', 'logs', 'agents', 'skills', 'line-limits']);
 
 export const CONFIG_DEFAULTS: GoatFlowConfig = {
   version: RUBRIC_VERSION,
@@ -19,6 +19,7 @@ export const CONFIG_DEFAULTS: GoatFlowConfig = {
   logs: { path: '.goat-flow/logs/' },
   agents: null,
   skills: { install: 'all' },
+  lineLimits: { target: 120, limit: 150 },
 };
 
 function cloneDefaults(): GoatFlowConfig {
@@ -33,6 +34,7 @@ function cloneDefaults(): GoatFlowConfig {
     logs: { ...CONFIG_DEFAULTS.logs },
     agents: CONFIG_DEFAULTS.agents,
     skills: { install: CONFIG_DEFAULTS.skills.install },
+    lineLimits: { ...CONFIG_DEFAULTS.lineLimits },
   };
 }
 
@@ -72,7 +74,7 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   }
 
   // YAML key is `coding-standards` (kebab-case), TypeScript field is `codingStandards` (camelCase)
-  const csRaw = (raw as Record<string, unknown>)['coding-standards'];
+  const csRaw = raw['coding-standards'];
   if (isRecord(csRaw) && typeof csRaw.path === 'string') {
     merged.codingStandards.path = csRaw.path;
   }
@@ -94,6 +96,13 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
     if (install === 'all' || Array.isArray(install)) {
       merged.skills.install = install as string[] | 'all';
     }
+  }
+
+  // YAML key is `line-limits` (kebab-case), TypeScript field is `lineLimits` (camelCase)
+  const llRaw = raw['line-limits'];
+  if (isRecord(llRaw)) {
+    if (typeof llRaw.target === 'number' && llRaw.target > 0) merged.lineLimits.target = llRaw.target;
+    if (typeof llRaw.limit === 'number' && llRaw.limit > 0) merged.lineLimits.limit = llRaw.limit;
   }
 
   return merged;
@@ -171,11 +180,28 @@ export function validateConfig(raw: unknown): ValidationResult {
   }
 
   if ('coding-standards' in raw) {
-    const cs = (raw as Record<string, unknown>)['coding-standards'];
+    const cs = raw['coding-standards'];
     if (!isRecord(cs)) {
       pushError(errors, 'coding-standards', 'must be an object');
     } else if ('path' in cs) {
       validateStringPath(cs.path, 'coding-standards.path', errors);
+    }
+  }
+
+  if ('line-limits' in raw) {
+    const ll = raw['line-limits'];
+    if (!isRecord(ll)) {
+      pushError(errors, 'line-limits', 'must be an object');
+    } else {
+      if ('target' in ll && (typeof ll.target !== 'number' || ll.target <= 0)) {
+        pushError(errors, 'line-limits.target', 'must be a positive number');
+      }
+      if ('limit' in ll && (typeof ll.limit !== 'number' || ll.limit <= 0)) {
+        pushError(errors, 'line-limits.limit', 'must be a positive number');
+      }
+      if (typeof ll.target === 'number' && typeof ll.limit === 'number' && ll.target >= ll.limit) {
+        pushError(errors, 'line-limits', 'target must be less than limit');
+      }
     }
   }
 

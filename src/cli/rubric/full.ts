@@ -199,8 +199,8 @@ export const fullChecks: CheckDef[] = [
   {
     id: '3.3.1', name: 'Handoff template', tier: 'full', category: 'Hygiene',
     pts: 1, confidence: 'high',
-    detect: { type: 'file_exists', path: 'tasks/handoff-template.md' },
-    recommendation: 'Create tasks/handoff-template.md',
+    detect: { type: 'file_exists', path: '.goat-flow/tasks/handoff-template.md' },
+    recommendation: 'Create .goat-flow/tasks/handoff-template.md',
     recommendationKey: 'create-handoff-template',
   },
   {
@@ -254,7 +254,7 @@ export const fullChecks: CheckDef[] = [
         const loops = ctx.facts.agents
           .filter(a => a.instruction.exists && a.instruction.content)
           .map(a => ({ agent: a.agent.instructionFile, loop: extractLoop(a.instruction.content) }));
-        if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
+        if (loops.length <= 1) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Dual-Agent Consistency', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Only one agent instruction file' };
         // Normalize for comparison: lowercase, strip markdown formatting
         const normalize = (s: string): string[] =>
           s.toLowerCase()
@@ -278,8 +278,8 @@ export const fullChecks: CheckDef[] = [
             diverged.push(`${a.agent} vs ${b.agent}`);
           }
         }
-        if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
-        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'standard', category: 'Dual-Agent Consistency', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}. Write the loop in one file, copy verbatim to others` };
+        if (diverged.length === 0) return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Dual-Agent Consistency', status: 'pass', points: 3, maxPoints: 3, confidence: 'medium', message: `Execution loops consistent across ${loops.length} agent files` };
+        return { id: '3.3.4', name: 'Execution loop consistent across agents', tier: 'full', category: 'Dual-Agent Consistency', status: 'fail', points: 0, maxPoints: 3, confidence: 'medium', message: `Execution loops diverged: ${diverged.join(', ')}. Write the loop in one file, copy verbatim to others` };
       },
     },
     recommendation: 'Reconcile execution loop sections across agent instruction files',
