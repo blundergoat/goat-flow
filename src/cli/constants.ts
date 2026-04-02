@@ -1,4 +1,4 @@
-/** Canonical list of all GOAT Flow skill names (v0.9.4: 5 skills + dispatcher = 6) */
+/** Canonical list of all GOAT Flow skill names (v0.10.0: 5 skills + dispatcher = 6) */
 export const SKILL_NAMES = [
   'goat', 'goat-debug', 'goat-review', 'goat-plan',
   'goat-security', 'goat-test',

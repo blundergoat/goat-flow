@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis for competing approaches."
-goat-flow-skill-version: "0.9.4"
+goat-flow-skill-version: "0.10.0"
 ---
 # /goat-plan
 

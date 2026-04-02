@@ -47,7 +47,7 @@ export class TestProject {
   }
 
   withLearningLoop(): this {
-    this.withFile('.goat-flow/config.yaml', 'version: "0.9.4"\nfootguns:\n  committed: docs/footguns/\n  local: .goat-flow/footguns/\nlessons:\n  committed: ai/lessons/\n  local: .goat-flow/lessons/\ndecisions:\n  path: ai/decisions/\ntasks:\n  path: .goat-flow/tasks/\nskills:\n  install: all\n');
+    this.withFile('.goat-flow/config.yaml', 'version: "0.10.0"\nfootguns:\n  committed: docs/footguns/\n  local: .goat-flow/footguns/\nlessons:\n  committed: ai/lessons/\n  local: .goat-flow/lessons/\ndecisions:\n  path: ai/decisions/\ntasks:\n  path: .goat-flow/tasks/\nskills:\n  install: all\n');
     this.withFile('docs/footguns/README.md', '# Footguns\n');
     this.withFile('docs/footguns/example.md', '---\nname: Example footgun\nstatus: active\ncreated: 2026-01-01\nevidence_type: ACTUAL_MEASURED\n---\n\n**Evidence:**\n- `src/auth.ts:42` - broke login\n');
     this.withFile('ai/lessons/README.md', '# Lessons\n');

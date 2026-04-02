@@ -2,6 +2,16 @@
 
 ---
 
+## v0.10.0 - 2026-04-03
+
+Release-level deltas from `v0.9.4` to `v0.10.0`.
+
+- **Install and packaging:** Package metadata updates and lockfile refresh for compatibility (`install goat-flow` workflow updates).
+- **Complexity and preflight:** Refactored high-complexity CLI paths in config parsing, stack detection, fact extraction, rubric/scoring, renderers, terminal serving, and scan/eval pipelines to unblock preflight constraints.
+- **Dashboard and CLI UX:** Added clearer terminal-unavailable handling, terminal launch guidance, and install/readme alignment around node-pty and pnpm onboarding.
+- **Docs and loop model:** Updated execution-loop and standard references to remove fixed read budgets and adopt 3x-estimate re-classification flow.
+- **Governance and learning:** Added ADR-019 and new 2026-04-03 lessons/footguns for critique handling, implementation-skill scope, and scanner/reliability guardrails.
+
 ## v0.9.4 - 2026-04-02
 
 Scanner honesty, config file, directory restructure, embedded terminal, dashboard UX. Driven by 6 cross-project reviews + real-project testing. 275 tests.

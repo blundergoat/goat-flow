@@ -206,7 +206,7 @@ Footguns use \\\`slug.md\\\` with frontmatter \\\`name\\\`, \\\`status\\\`, \\\`
     instruction: `Create \`.goat-flow/config.yaml\`:
 
 \`\`\`yaml
-version: "0.9.4"
+version: "0.10.0"
 footguns:
   committed: docs/footguns/
   local: .goat-flow/footguns/

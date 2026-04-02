@@ -214,7 +214,7 @@ function normalizeLearningLoop(files: Record<string, string>): Record<string, st
   if (hasLearningLoop && !('.goat-flow/config.yaml' in normalized)) {
     const agents = detectAgents(normalized);
     normalized['.goat-flow/config.yaml'] = [
-      'version: "0.9.4"',
+      'version: "0.10.0"',
       'footguns:',
       '  committed: docs/footguns/',
       '  local: .goat-flow/footguns/',
