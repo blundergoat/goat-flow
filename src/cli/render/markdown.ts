@@ -1,5 +1,12 @@
 import type { ScanReport, AgentReport, CheckStatus } from '../types.js';
 
+const RECOMMENDATION_TAGS = {
+  critical: '🔴',
+  high: '🟠',
+  medium: '🟡',
+  low: '🟡',
+} as const;
+
 /** Map check status to a markdown-friendly emoji */
 function statusEmoji(status: CheckStatus): string {
   switch (status) {
@@ -51,6 +58,41 @@ export function renderMarkdown(report: ScanReport): string {
   return lines.join('\n');
 }
 
+function appendFailingChecks(lines: string[], failing: AgentReport['checks']): void {
+  if (failing.length === 0) return;
+
+  lines.push('| Status | Check | Points | Message |');
+  lines.push('|--------|-------|--------|---------|');
+  for (const check of failing) {
+    lines.push(`| ${statusEmoji(check.status)} | ${check.id} ${check.name} | ${check.points}/${check.maxPoints} | ${check.message} |`);
+  }
+  lines.push('');
+}
+
+function appendTriggeredAntiPatterns(lines: string[], agent: AgentReport): void {
+  const triggered = agent.antiPatterns.filter(antiPattern => antiPattern.triggered);
+  if (triggered.length === 0) return;
+
+  lines.push('**Anti-pattern deductions:**');
+  for (const antiPattern of triggered) {
+    lines.push(`- ${antiPattern.id} ${antiPattern.name}: ${antiPattern.deduction} pts - ${antiPattern.message}`);
+  }
+  lines.push('');
+}
+
+function appendRecommendations(lines: string[], agent: AgentReport): void {
+  if (agent.recommendations.length === 0) return;
+
+  lines.push('**Top recommendations:**');
+  for (const recommendation of agent.recommendations.slice(0, 5)) {
+    lines.push(`- ${RECOMMENDATION_TAGS[recommendation.priority]} \`${recommendation.checkId}\` ${recommendation.action}`);
+  }
+  if (agent.recommendations.length > 5) {
+    lines.push(`- ... and ${agent.recommendations.length - 5} more`);
+  }
+  lines.push('');
+}
+
 /** Render a single agent's failing checks and recommendations */
 function renderAgentMarkdown(agent: AgentReport): string[] {
   const lines: string[] = [];
@@ -62,38 +104,9 @@ function renderAgentMarkdown(agent: AgentReport): string[] {
     lines.push(`<details><summary><strong>${agent.agentName}</strong> - ${failing.length} issue${failing.length !== 1 ? 's' : ''}</summary>`);
     lines.push('');
   }
-
-  if (failing.length > 0) {
-    lines.push('| Status | Check | Points | Message |');
-    lines.push('|--------|-------|--------|---------|');
-    for (const check of failing) {
-      lines.push(`| ${statusEmoji(check.status)} | ${check.id} ${check.name} | ${check.points}/${check.maxPoints} | ${check.message} |`);
-    }
-    lines.push('');
-  }
-
-  // Anti-pattern deductions
-  const triggered = agent.antiPatterns.filter(ap => ap.triggered);
-  if (triggered.length > 0) {
-    lines.push('**Anti-pattern deductions:**');
-    for (const ap of triggered) {
-      lines.push(`- ${ap.id} ${ap.name}: ${ap.deduction} pts - ${ap.message}`);
-    }
-    lines.push('');
-  }
-
-  // Top recommendations
-  if (agent.recommendations.length > 0) {
-    lines.push('**Top recommendations:**');
-    for (const rec of agent.recommendations.slice(0, 5)) {
-      const tag = rec.priority === 'critical' ? '🔴' : rec.priority === 'high' ? '🟠' : '🟡';
-      lines.push(`- ${tag} \`${rec.checkId}\` ${rec.action}`);
-    }
-    if (agent.recommendations.length > 5) {
-      lines.push(`- ... and ${agent.recommendations.length - 5} more`);
-    }
-    lines.push('');
-  }
+  appendFailingChecks(lines, failing);
+  appendTriggeredAntiPatterns(lines, agent);
+  appendRecommendations(lines, agent);
 
   if (agent.checks.length > 0) {
     lines.push('</details>');

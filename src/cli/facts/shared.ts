@@ -55,6 +55,48 @@ interface EntryDir {
   files: MarkdownEntry[];
 }
 
+interface FootgunRefSummary {
+  staleRefs: string[];
+  totalRefs: number;
+  validRefs: number;
+}
+
+interface EvalFileAnalysis {
+  hasOrigin: boolean;
+  hasAgents: boolean;
+  hasReplay: boolean;
+  hasFrontmatter: boolean;
+  hasRealContent: boolean;
+  skillNames: string[];
+}
+
+interface EvalAggregate {
+  allHaveOrigin: boolean;
+  allHaveAgents: boolean;
+  allHaveReplay: boolean;
+  allHaveFrontmatter: boolean;
+  realContentCount: number;
+  skillNames: Set<string>;
+}
+
+interface LocalInstructionDir {
+  location: 'ai' | 'github';
+  dir: string;
+}
+
+interface LocalInstructionFlags {
+  hasConventions: boolean;
+  hasFrontend: boolean;
+  hasBackend: boolean;
+  hasCodeReview: boolean;
+  hasGitCommit: boolean;
+}
+
+const CANONICAL_EVAL_SKILLS = ['goat', 'goat-debug', 'goat-review', 'goat-plan', 'goat-security', 'goat-test'];
+const CANONICAL_EVAL_SKILL_SET = new Set(CANONICAL_EVAL_SKILLS);
+const REQUIRED_GITIGNORE_ENTRIES = ['.env', 'settings.local.json'];
+const HANDOFF_SECTIONS = ['status', 'current state', 'key decisions', 'known risks', 'next step'];
+
 function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
   const exists = fs.exists(dir);
   const files = exists
@@ -82,6 +124,45 @@ function mergeDirMentions(target: Map<string, number>, content: string): void {
   }
 }
 
+function hasEvidenceLabel(content: string): boolean {
+  return /^evidence_type:\s*.+$/mi.test(content) || /^\*\*Evidence type:\*\*/m.test(content);
+}
+
+function hasFileEvidence(content: string): boolean {
+  const refs = content.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
+  for (const match of refs) {
+    if (match[1] !== undefined && isFileRef(match[1])) return true;
+  }
+  return false;
+}
+
+function hasFootgunEvidence(content: string): boolean {
+  if (!EVIDENCE_PATTERN.test(content)) return false;
+  return hasFileEvidence(content) || /\(lines?\s+[0-9]+/.test(content);
+}
+
+function summarizeFootgunRefs(fs: ReadonlyFS, content: string): FootgunRefSummary {
+  const summary: FootgunRefSummary = { staleRefs: [], totalRefs: 0, validRefs: 0 };
+  const fileRefs = content.matchAll(/`([^`]+):[0-9]+(?:[-,][0-9]+)*`/g);
+
+  for (const match of fileRefs) {
+    const filePath = match[1];
+    if (filePath === undefined || !isFileRef(filePath) || !isCheckableForStaleness(filePath, fs)) continue;
+    summary.totalRefs++;
+    if (fs.exists(filePath)) {
+      summary.validRefs++;
+      continue;
+    }
+    summary.staleRefs.push(filePath);
+  }
+
+  return summary;
+}
+
+function getMissingFrontmatterDiagnostic(path: string, content: string): string | null {
+  return /^---\n[\s\S]*?\n---\n?/m.test(content) ? null : `${path} missing YAML frontmatter`;
+}
+
 function summarizeFootgunEntries(fs: ReadonlyFS, entries: MarkdownEntry[]): Pick<
   SharedFacts['footguns'],
   'hasEvidence' | 'labelCount' | 'dirMentions' | 'staleRefs' | 'totalRefs' | 'validRefs' | 'formatDiagnostic'
@@ -96,35 +177,15 @@ function summarizeFootgunEntries(fs: ReadonlyFS, entries: MarkdownEntry[]): Pick
 
   for (const entry of entries) {
     const { content, path } = entry;
-    if (/^evidence_type:\s*.+$/mi.test(content) || /^\*\*Evidence type:\*\*/m.test(content)) {
-      labelCount++;
-    }
-
-    if (!hasEvidence && EVIDENCE_PATTERN.test(content)) {
-      const refs = content.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
-      for (const match of refs) {
-        if (match[1] !== undefined && isFileRef(match[1])) {
-          hasEvidence = true;
-          break;
-        }
-      }
-      if (!hasEvidence) hasEvidence = /\(lines?\s+[0-9]+/.test(content);
-    }
-
+    if (hasEvidenceLabel(content)) labelCount++;
+    hasEvidence ||= hasFootgunEvidence(content);
     mergeDirMentions(dirMentions, content);
-
-    const fileRefs = content.matchAll(/`([^`]+):[0-9]+(?:[-,][0-9]+)*`/g);
-    for (const match of fileRefs) {
-      const filePath = match[1];
-      if (filePath === undefined || !isFileRef(filePath) || !isCheckableForStaleness(filePath, fs)) continue;
-      totalRefs++;
-      if (fs.exists(filePath)) validRefs++;
-      else staleRefs.push(filePath);
-    }
-
-    if (!/^---\n[\s\S]*?\n---\n?/m.test(content)) {
-      diagnostics.push(`${path} missing YAML frontmatter`);
-    }
+    const refSummary = summarizeFootgunRefs(fs, content);
+    totalRefs += refSummary.totalRefs;
+    validRefs += refSummary.validRefs;
+    staleRefs.push(...refSummary.staleRefs);
+    const diagnostic = getMissingFrontmatterDiagnostic(path, content);
+    if (diagnostic) diagnostics.push(diagnostic);
   }
 
   return {
@@ -154,9 +215,8 @@ function summarizeLessonEntries(fs: ReadonlyFS, entries: MarkdownEntry[]): Pick<
       const filePath = ref.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
       if (!fs.exists(filePath)) staleRefs.push(filePath);
     }
-    if (!/^---\n[\s\S]*?\n---\n?/m.test(content)) {
-      diagnostics.push(`${path} missing YAML frontmatter`);
-    }
+    const diagnostic = getMissingFrontmatterDiagnostic(path, content);
+    if (diagnostic) diagnostics.push(diagnostic);
   }
 
   return {
@@ -224,105 +284,179 @@ function extractLessonsFacts(fs: ReadonlyFS, configState: LoadedConfig): SharedF
   };
 }
 
+function listEvalFiles(fs: ReadonlyFS, evalsPath: string): string[] {
+  if (!fs.exists(evalsPath)) return [];
+  return fs.listDir(evalsPath).filter(file => file.endsWith('.md') && file !== 'README.md' && file !== 'FORMAT.md');
+}
+
+function createEmptyEvalFacts(dirExists: boolean, count: number, hasReadme: boolean, evalsPath: string): SharedFacts['evals'] {
+  return {
+    dirExists,
+    count,
+    hasReadme,
+    hasOriginLabels: false,
+    hasAgentsLabels: false,
+    hasReplayPrompts: false,
+    hasRealContent: false,
+    hasFrontmatter: false,
+    evalSkillCount: 0,
+    missingSkills: [],
+    path: evalsPath,
+  };
+}
+
+function collectEvalSkillNames(content: string): string[] {
+  const skillNames = new Set<string>();
+  const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
+
+  for (const match of skillMatches) {
+    const name = (match[1] ?? match[2] ?? '').trim().toLowerCase();
+    if (name && CANONICAL_EVAL_SKILL_SET.has(name)) skillNames.add(name);
+  }
+
+  return Array.from(skillNames);
+}
+
+function hasEvalRealContent(content: string): boolean {
+  const scenarioMatch = content.match(/##+ (?:Replay Prompt|Scenario)\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
+  const scenarioBody = scenarioMatch?.[1]?.trim() ?? '';
+  return scenarioBody.length >= 100 && !/^(?:TODO|TBD)/i.test(scenarioBody);
+}
+
+function analyzeEvalFile(fs: ReadonlyFS, evalsPath: string, fileName: string): EvalFileAnalysis {
+  const content = fs.readFile(`${evalsPath}/${fileName}`);
+  if (content === null) {
+    return {
+      hasOrigin: false,
+      hasAgents: false,
+      hasReplay: false,
+      hasFrontmatter: true,
+      hasRealContent: false,
+      skillNames: [],
+    };
+  }
+
+  return {
+    hasOrigin: /\*\*Origin:\*\*/i.test(content) || /^## Origin/im.test(content) || /^origin:/im.test(content),
+    hasAgents: /\*\*Agents:\*\*/i.test(content) || /^agents:/im.test(content),
+    hasReplay: /##+ Replay Prompt/i.test(content) || /##+ Scenario/i.test(content),
+    hasFrontmatter: /^---\n/.test(content),
+    hasRealContent: hasEvalRealContent(content),
+    skillNames: collectEvalSkillNames(content),
+  };
+}
+
+function createEvalAggregate(): EvalAggregate {
+  return {
+    allHaveOrigin: true,
+    allHaveAgents: true,
+    allHaveReplay: true,
+    allHaveFrontmatter: true,
+    realContentCount: 0,
+    skillNames: new Set<string>(),
+  };
+}
+
+function mergeEvalAnalysis(aggregate: EvalAggregate, analysis: EvalFileAnalysis): void {
+  aggregate.allHaveOrigin &&= analysis.hasOrigin;
+  aggregate.allHaveAgents &&= analysis.hasAgents;
+  aggregate.allHaveReplay &&= analysis.hasReplay;
+  aggregate.allHaveFrontmatter &&= analysis.hasFrontmatter;
+  if (analysis.hasRealContent) aggregate.realContentCount++;
+  for (const skillName of analysis.skillNames) {
+    aggregate.skillNames.add(skillName);
+  }
+}
+
 /** Extract eval facts: directory, file count, replay prompts, origin labels, skill coverage. */
 function extractEvalFacts(fs: ReadonlyFS, rawEvalsPath: string): SharedFacts['evals'] {
   const evalsPath = rawEvalsPath.replace(/\/$/, '');
-  /** Whether the evals directory exists */
   const dirExists = fs.exists(evalsPath);
-  /** Markdown eval files (excluding README) found in the evals directory */
-  const evalFiles = dirExists ? fs.listDir(evalsPath).filter(f => f.endsWith('.md') && f !== 'README.md' && f !== 'FORMAT.md') : [];
-  /** Total number of eval files found */
+  const evalFiles = listEvalFiles(fs, evalsPath);
   const count = evalFiles.length;
-  /** Whether the evals directory contains a README.md */
   const hasReadme = dirExists && fs.exists(`${evalsPath}/README.md`);
 
-  if (count === 0) {
-    return { dirExists, count, hasReadme, hasOriginLabels: false, hasAgentsLabels: false, hasReplayPrompts: false, hasRealContent: false, hasFrontmatter: false, evalSkillCount: 0, missingSkills: [], path: evalsPath };
+  if (count === 0) return createEmptyEvalFacts(dirExists, count, hasReadme, evalsPath);
+
+  const aggregate = createEvalAggregate();
+  for (const fileName of evalFiles) {
+    mergeEvalAnalysis(aggregate, analyzeEvalFile(fs, evalsPath, fileName));
   }
 
-  /** The 6 canonical goat-flow skills (5 + dispatcher) */
-  const CANONICAL_SKILLS = new Set(['goat', 'goat-debug', 'goat-review', 'goat-plan', 'goat-security', 'goat-test']);
-  /** Canonical skills with at least one eval */
-  const skillNames = new Set<string>();
-  /** Track whether all eval files pass origin/replay/agents/frontmatter checks */
-  let allHaveOrigin = true;
-  let allHaveAgents = true;
-  let allHaveReplay = true;
-  let allHaveFrontmatter = true;
-  let realContentCount = 0;
-  // Iterate over ALL eval files for quality checks and skill counting
-  for (const f of evalFiles) {
-    /** Raw content of this eval file */
-    const content = fs.readFile(`${evalsPath}/${f}`);
-    if (content === null) {
-      allHaveOrigin = false;
-      allHaveAgents = false;
-      allHaveReplay = false;
-      continue;
-    }
-    if (!/^---\n/.test(content)) allHaveFrontmatter = false;
-    if (/\*\*Origin:\*\*/i.test(content) === false && /^## Origin/im.test(content) === false && /^origin:/im.test(content) === false) allHaveOrigin = false;
-    if (/\*\*Agents:\*\*/i.test(content) === false && /^agents:/im.test(content) === false) allHaveAgents = false;
-    if (/##+ Replay Prompt/i.test(content) === false && /##+ Scenario/i.test(content) === false) allHaveReplay = false;
-    // Check for real scenario content: ≥100 chars after scenario heading, not just TODO/TBD
-    const scenarioMatch = content.match(/##+ (?:Replay Prompt|Scenario)\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
-    const scenarioBody = scenarioMatch?.[1]?.trim() ?? '';
-    if (scenarioBody.length >= 100 && !/^(?:TODO|TBD)/i.test(scenarioBody)) realContentCount++;
-    /** All skill label matches found in the eval content */
-    const skillMatches = content.matchAll(/\*\*Skill:\*\*\s*(.+)|skill:\s*(.+)/gi);
-    // Iterate over skill matches to collect unique skill names
-    for (const m of skillMatches) {
-      /** Normalized skill name from the match */
-      const name = (m[1] ?? m[2] ?? '').trim().toLowerCase();
-      if (name && CANONICAL_SKILLS.has(name)) skillNames.add(name);
-    }
-  }
-  const missingSkills = Array.from(CANONICAL_SKILLS).filter(skill => !skillNames.has(skill)).sort();
-  // hasRealContent: at least 60% of evals have ≥100 char scenarios (not all — dispatcher intent tests and other eval types use shorter formats)
-  const hasRealContent = count > 0 && realContentCount >= Math.ceil(count * 0.60);
-  return { dirExists, count, hasReadme, hasOriginLabels: allHaveOrigin, hasAgentsLabels: allHaveAgents, hasReplayPrompts: allHaveReplay, hasRealContent, hasFrontmatter: allHaveFrontmatter, evalSkillCount: skillNames.size, missingSkills, path: evalsPath };
+  return {
+    dirExists,
+    count,
+    hasReadme,
+    hasOriginLabels: aggregate.allHaveOrigin,
+    hasAgentsLabels: aggregate.allHaveAgents,
+    hasReplayPrompts: aggregate.allHaveReplay,
+    hasRealContent: aggregate.realContentCount >= Math.ceil(count * 0.60),
+    hasFrontmatter: aggregate.allHaveFrontmatter,
+    evalSkillCount: aggregate.skillNames.size,
+    missingSkills: CANONICAL_EVAL_SKILLS.filter(skill => !aggregate.skillNames.has(skill)).sort(),
+    path: evalsPath,
+  };
+}
+
+function extractArchitectureFacts(fs: ReadonlyFS): SharedFacts['architecture'] {
+  const exists = fs.exists('docs/architecture.md');
+  return { exists, lineCount: exists ? fs.lineCount('docs/architecture.md') : 0 };
+}
+
+function hasCIWorkflowCheck(ciContent: string | null, pattern: RegExp): boolean {
+  return ciContent !== null && pattern.test(ciContent);
+}
+
+function checksCILineCount(ciContent: string | null): boolean {
+  if (ciContent === null) return false;
+  return (/wc\s+-l/i.test(ciContent) && /CLAUDE|AGENTS|GEMINI|\.md/i.test(ciContent))
+    || /context-validate/i.test(ciContent);
+}
+
+function checksCIRouter(ciContent: string | null): boolean {
+  return hasCIWorkflowCheck(ciContent, /context-validate/i)
+    || hasCIWorkflowCheck(ciContent, /router.*resolve|router.*check|router.*ref/i);
+}
+
+function checksCISkills(ciContent: string | null): boolean {
+  return hasCIWorkflowCheck(ciContent, /context-validate/i)
+    || hasCIWorkflowCheck(ciContent, /goat-.*SKILL\.md|skills.*goat-/i);
+}
+
+function extractCIFacts(fs: ReadonlyFS): SharedFacts['ci'] {
+  const workflowContent = fs.readFile('.github/workflows/context-validation.yml');
+  return {
+    workflowExists: workflowContent !== null,
+    checksLineCount: checksCILineCount(workflowContent),
+    checksRouter: checksCIRouter(workflowContent),
+    checksSkills: checksCISkills(workflowContent),
+    ciTriggersOnPRs: hasCIWorkflowCheck(workflowContent, /pull_request/i),
+  };
+}
+
+function extractGitignoreFacts(fs: ReadonlyFS): SharedFacts['gitignore'] {
+  const content = fs.readFile('.gitignore');
+  return {
+    exists: content !== null,
+    hasRequiredEntries: content !== null && REQUIRED_GITIGNORE_ENTRIES.every(entry => content.includes(entry)),
+  };
+}
+
+function extractHandoffTemplateFacts(fs: ReadonlyFS): SharedFacts['handoffTemplate'] {
+  const content = fs.readFile('.goat-flow/tasks/handoff-template.md');
+  const sectionCount = content
+    ? HANDOFF_SECTIONS.filter(section => new RegExp(`##\\s*${section}|\\*\\*${section}`, 'i').test(content)).length
+    : 0;
+
+  return {
+    exists: content !== null,
+    sectionCount,
+    hasRequiredSections: sectionCount >= 5,
+  };
 }
 
 /** Extract project-wide shared facts from docs, evals, CI, and config files. */
 export function extractSharedFacts(fs: ReadonlyFS, configState: LoadedConfig): SharedFacts {
-  /** Whether the architecture documentation file exists */
-  const archExists = fs.exists('docs/architecture.md');
-  /** Line count of the architecture file (0 if missing) */
-  const archLineCount = archExists ? fs.lineCount('docs/architecture.md') : 0;
-
-  /** Raw content of the CI workflow file */
-  const ciContent = fs.readFile('.github/workflows/context-validation.yml');
-  /** Whether the CI workflow file exists */
-  const ciExists = ciContent !== null;
-
-  /** Whether a .copilotignore file exists */
-  const copilotignore = fs.exists('.copilotignore');
-  /** Whether a .cursorignore file exists */
-  const cursorignore = fs.exists('.cursorignore');
-  /** Whether a .geminiignore file exists */
-  const geminiignore = fs.exists('.geminiignore');
-
-  /** Raw content of the .gitignore file */
-  const gitignoreContent = fs.readFile('.gitignore');
-  /** Whether the .gitignore file exists */
-  const gitignoreExists = gitignoreContent !== null;
-  /** Entries that must be present in .gitignore for security */
-  const requiredEntries = ['.env', 'settings.local.json'];
-  /** Whether all required entries are present in .gitignore */
-  const hasRequiredEntries = gitignoreExists && requiredEntries.every(e =>
-    gitignoreContent.includes(e)
-  );
-
-  /** Raw content of the shared handoff template */
-  const handoffContent = fs.readFile('.goat-flow/tasks/handoff-template.md');
-  /** Whether the handoff template exists */
-  const handoffExists = handoffContent !== null;
-  /** Count of required handoff sections present - accepts ## H2 headings or **Bold:** labels */
-  const HANDOFF_SECTIONS = ['status', 'current state', 'key decisions', 'known risks', 'next step'];
-  const handoffSectionCount = handoffContent
-    ? HANDOFF_SECTIONS.filter(s => new RegExp(`##\\s*${s}|\\*\\*${s}`, 'i').test(handoffContent)).length
-    : 0;
-
   return {
     footguns: extractFootgunFacts(fs, configState),
     lessons: extractLessonsFacts(fs, configState),
@@ -334,26 +468,16 @@ export function extractSharedFacts(fs: ReadonlyFS, configState: LoadedConfig): S
       parseError: configState.parseError,
       lineLimits: configState.config.lineLimits,
     },
-    architecture: { exists: archExists, lineCount: archLineCount },
+    architecture: extractArchitectureFacts(fs),
     evals: extractEvalFacts(fs, configState.config.evals.path),
-    ci: {
-      workflowExists: ciExists,
-      // Hardened checks: look for actual invocations in `run:` blocks, not just keywords
-      // Accept: wc -l in a run block, or context-validate.sh (which does the check)
-      checksLineCount: ciExists && ((/wc\s+-l/i.test(ciContent) && /CLAUDE|AGENTS|GEMINI|\.md/i.test(ciContent)) || /context-validate/i.test(ciContent)),
-      // Accept: context-validate.sh, or router/reference check in a run block
-      checksRouter: ciExists && (/context-validate/i.test(ciContent) || /router.*resolve|router.*check|router.*ref/i.test(ciContent)),
-      // Accept: goat- pattern in a run block checking skill dirs, or context-validate.sh
-      checksSkills: ciExists && (/context-validate/i.test(ciContent) || /goat-.*SKILL\.md|skills.*goat-/i.test(ciContent)),
-      ciTriggersOnPRs: ciExists && /pull_request/i.test(ciContent),
+    ci: extractCIFacts(fs),
+    handoffTemplate: extractHandoffTemplateFacts(fs),
+    ignoreFiles: {
+      copilotignore: fs.exists('.copilotignore'),
+      cursorignore: fs.exists('.cursorignore'),
+      geminiignore: fs.exists('.geminiignore'),
     },
-    handoffTemplate: {
-      exists: handoffExists,
-      sectionCount: handoffSectionCount,
-      hasRequiredSections: handoffSectionCount >= 5,
-    },
-    ignoreFiles: { copilotignore, cursorignore, geminiignore },
-    gitignore: { exists: gitignoreExists, hasRequiredEntries },
+    gitignore: extractGitignoreFacts(fs),
     guidelinesOwnership: { exists: fs.exists('docs/guidelines-ownership-split.md') },
     domainReference: { exists: fs.exists('docs/domain-reference.md') },
     preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
@@ -400,65 +524,97 @@ function extractDecisionsFacts(fs: ReadonlyFS, rawPath: string): SharedFacts['de
   return { dirExists, fileCount, path, hasRealContent };
 }
 
+function resolveLocalInstructionDir(fs: ReadonlyFS, csPath: string): LocalInstructionDir | null {
+  if (fs.exists(csPath)) return { location: 'ai', dir: csPath };
+  if (fs.exists('.github/instructions')) return { location: 'github', dir: '.github/instructions' };
+  return null;
+}
+
+function createEmptyLocalInstructions(csPath: string): SharedFacts['localInstructions'] {
+  return {
+    dirExists: false,
+    location: null,
+    fileCount: 0,
+    hasRouter: false,
+    hasConventions: false,
+    conventionsHasContent: false,
+    hasFrontend: false,
+    hasBackend: false,
+    hasCodeReview: false,
+    hasGitCommit: false,
+    conventionsContent: null,
+    localFileSizes: [],
+    path: csPath,
+  };
+}
+
+function hasInstructionFile(files: string[], baseName: string): boolean {
+  return files.some(file => file === `${baseName}.md` || file === `${baseName}.instructions.md`);
+}
+
+function collectLocalInstructionFlags(files: string[]): LocalInstructionFlags {
+  return {
+    hasConventions: hasInstructionFile(files, 'conventions'),
+    hasFrontend: hasInstructionFile(files, 'frontend'),
+    hasBackend: hasInstructionFile(files, 'backend'),
+    hasCodeReview: hasInstructionFile(files, 'code-review'),
+    hasGitCommit: hasInstructionFile(files, 'git-commit'),
+  };
+}
+
+function collectLocalFileSizes(fs: ReadonlyFS, dir: string, files: string[]): Array<{ path: string; lines: number }> {
+  return files.map(file => ({ path: `${dir}/${file}`, lines: fs.lineCount(`${dir}/${file}`) }));
+}
+
+function hasConventionsContent(content: string): boolean {
+  const hasCommands = /##.*command|```bash|```sh/i.test(content);
+  const hasConventionRules = /##.*convention|do.*don't|do:.*don't:|good.*bad/i.test(content);
+  const lineCount = content.split('\n').length;
+  return hasCommands && hasConventionRules && lineCount > 15;
+}
+
+function analyzeConventionsContent(
+  fs: ReadonlyFS,
+  location: LocalInstructionDir['location'],
+  csPath: string,
+  hasConventions: boolean,
+): Pick<SharedFacts['localInstructions'], 'conventionsContent' | 'conventionsHasContent'> {
+  if (!hasConventions) return { conventionsContent: null, conventionsHasContent: false };
+
+  const conventionsPath = location === 'ai'
+    ? `${csPath}/conventions.md`
+    : '.github/instructions/conventions.instructions.md';
+  const conventionsContent = fs.readFile(conventionsPath);
+  return {
+    conventionsContent,
+    conventionsHasContent: conventionsContent !== null && hasConventionsContent(conventionsContent),
+  };
+}
+
 /** Detect and analyze local instruction files from coding-standards dir or .github/instructions/. */
 function extractLocalInstructions(fs: ReadonlyFS, rawCsPath: string): SharedFacts['localInstructions'] {
   const csPath = rawCsPath.replace(/\/$/, '');
-  /** Whether the coding-standards directory exists at the configured path */
-  const aiDir = fs.exists(csPath);
-  /** Whether the .github/instructions/ directory exists */
-  const ghDir = fs.exists('.github/instructions');
+  const localInstructionDir = resolveLocalInstructionDir(fs, csPath);
+  if (localInstructionDir === null) return createEmptyLocalInstructions(csPath);
 
-  if (aiDir === false && ghDir === false) {
-    return { dirExists: false, location: null, fileCount: 0, hasRouter: false, hasConventions: false, conventionsHasContent: false, hasFrontend: false, hasBackend: false, hasCodeReview: false, hasGitCommit: false, conventionsContent: null, localFileSizes: [], path: csPath };
-  }
+  const { dir, location } = localInstructionDir;
+  const files = fs.listDir(dir).filter(file => file.endsWith('.md'));
+  const flags = collectLocalInstructionFlags(files);
+  const conventions = analyzeConventionsContent(fs, location, csPath, flags.hasConventions);
 
-  /** Which directory convention is in use ('ai' or 'github') */
-  const location = aiDir ? 'ai' as const : 'github' as const;
-  /** Resolved path to the local instructions directory */
-  const dir = aiDir ? csPath : '.github/instructions';
-  /** Markdown files found in the local instructions directory */
-  const files = fs.listDir(dir).filter(f => f.endsWith('.md'));
-  /** Whether a router README exists for the ai/ convention */
-  const hasRouter = aiDir ? fs.exists('ai/README.md') : false;
-
-  /** Whether a conventions instruction file exists */
-  const hasConventions = files.some(f => f === 'conventions.md' || f === 'conventions.instructions.md');
-  /** Whether a frontend instruction file exists */
-  const hasFrontend = files.some(f => f === 'frontend.md' || f === 'frontend.instructions.md');
-  /** Whether a backend instruction file exists */
-  const hasBackend = files.some(f => f === 'backend.md' || f === 'backend.instructions.md');
-  /** Whether a code-review instruction file exists */
-  const hasCodeReview = files.some(f => f === 'code-review.md' || f === 'code-review.instructions.md');
-  /** Whether a git-commit instruction file exists */
-  const hasGitCommit = files.some(f => f === 'git-commit.md' || f === 'git-commit.instructions.md');
-
-  /** Line counts for each markdown file in the local instructions directory */
-  const localFileSizes: Array<{ path: string; lines: number }> = [];
-  // Iterate over instruction files to record their line counts
-  for (const f of files) {
-    /** Line count for this instruction file */
-    const lines = fs.lineCount(`${dir}/${f}`);
-    localFileSizes.push({ path: `${dir}/${f}`, lines });
-  }
-
-  // Check conventions.md has real content (commands + conventions, not just a header)
-  let conventionsHasContent = false;
-  /** Raw content of the conventions file, stored for anti-pattern checks */
-  let conventionsContent: string | null = null;
-  if (hasConventions) {
-    /** Resolved path to the conventions instruction file */
-    const conventionsPath = aiDir ? `${csPath}/conventions.md` : '.github/instructions/conventions.instructions.md';
-    conventionsContent = fs.readFile(conventionsPath);
-    if (conventionsContent) {
-      /** Whether the conventions file includes command examples */
-      const hasCommands = /##.*command|```bash|```sh/i.test(conventionsContent);
-      /** Whether the conventions file includes convention rules */
-      const hasConvRules = /##.*convention|do.*don't|do:.*don't:|good.*bad/i.test(conventionsContent);
-      /** Line count of the conventions file */
-      const lineCount = conventionsContent.split('\n').length;
-      conventionsHasContent = hasCommands && hasConvRules && lineCount > 15;
-    }
-  }
-
-  return { dirExists: true, location, fileCount: files.length, hasRouter, hasConventions, conventionsHasContent, hasFrontend, hasBackend, hasCodeReview, hasGitCommit, conventionsContent, localFileSizes, path: dir };
+  return {
+    dirExists: true,
+    location,
+    fileCount: files.length,
+    hasRouter: location === 'ai' && fs.exists('ai/README.md'),
+    hasConventions: flags.hasConventions,
+    conventionsHasContent: conventions.conventionsHasContent,
+    hasFrontend: flags.hasFrontend,
+    hasBackend: flags.hasBackend,
+    hasCodeReview: flags.hasCodeReview,
+    hasGitCommit: flags.hasGitCommit,
+    conventionsContent: conventions.conventionsContent,
+    localFileSizes: collectLocalFileSizes(fs, dir, files),
+    path: dir,
+  };
 }

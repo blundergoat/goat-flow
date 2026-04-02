@@ -9,6 +9,51 @@ import { SKILL_NAMES } from '../constants.js';
 // Minimum ratio of skills passing a quality signal to award the point (80%)
 const SKILL_QUALITY_THRESHOLD = 0.8;
 
+function buildStandardCheckResult(
+  id: string,
+  name: string,
+  status: CheckResult['status'],
+  points: number,
+  maxPoints: number,
+  confidence: CheckResult['confidence'],
+  message: string,
+): CheckResult {
+  return {
+    id,
+    name,
+    tier: 'standard',
+    category: 'Hooks',
+    status,
+    points,
+    maxPoints,
+    confidence,
+    message,
+  };
+}
+
+function getDenyPatterns(ctx: FactContext): string[] | null {
+  if (!ctx.agentFacts.settings.hasDenyPatterns || !ctx.agentFacts.settings.parsed) return null;
+
+  const permissions = (ctx.agentFacts.settings.parsed as Record<string, unknown>).permissions as Record<string, unknown> | undefined;
+  return Array.isArray(permissions?.deny) ? (permissions.deny as string[]) : null;
+}
+
+function getEnvDenyCoverage(denyPatterns: string[]): { hasReadEnv: boolean; hasEditEnv: boolean; hasWriteEnv: boolean } {
+  const denyText = denyPatterns.join(' ');
+  return {
+    hasReadEnv: /Read\(.*\.env/.test(denyText),
+    hasEditEnv: /Edit\(.*\.env/.test(denyText),
+    hasWriteEnv: /Write\(.*\.env/.test(denyText),
+  };
+}
+
+function formatMissingEnvDenyActions(hasEditEnv: boolean, hasWriteEnv: boolean): string {
+  const missing: string[] = [];
+  if (!hasEditEnv) missing.push('Edit(.env)');
+  if (!hasWriteEnv) missing.push('Write(.env)');
+  return missing.join(' and ');
+}
+
 /**
  * Tier 2 - Standard (58 pts on a fully configured project; varies with N/A checks)
  * Skills, hooks, learning loop, router, architecture, local context.
@@ -465,22 +510,15 @@ export const standardChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         if (ctx.agentFacts.agent.id === 'codex') {
-          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'Codex uses execpolicy, not settings deny' };
+          return buildStandardCheckResult('2.2.5g', 'Edit/Write deny mirrors Read deny for .env', 'na', 0, 0, 'medium', 'Codex uses execpolicy, not settings deny');
         }
-        if (!ctx.agentFacts.settings.hasDenyPatterns || !ctx.agentFacts.settings.parsed) {
-          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny patterns configured' };
+        const denyPatterns = getDenyPatterns(ctx);
+        if (denyPatterns === null) {
+          return buildStandardCheckResult('2.2.5g', 'Edit/Write deny mirrors Read deny for .env', 'na', 0, 0, 'medium', 'No deny patterns configured');
         }
-        const perms = (ctx.agentFacts.settings.parsed as Record<string, unknown>).permissions as Record<string, unknown> | undefined;
-        const denyArr = perms?.deny;
-        if (!Array.isArray(denyArr)) {
-          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No deny array' };
-        }
-        const denyStr = (denyArr as string[]).join(' ');
-        const hasReadEnv = /Read\(.*\.env/.test(denyStr);
-        const hasEditEnv = /Edit\(.*\.env/.test(denyStr);
-        const hasWriteEnv = /Write\(.*\.env/.test(denyStr);
+        const { hasReadEnv, hasEditEnv, hasWriteEnv } = getEnvDenyCoverage(denyPatterns);
         if (!hasReadEnv) {
-          return { id: '2.2.5g', name: 'Edit/Write deny mirrors Read deny for .env', tier: 'standard', category: 'Hooks', status: 'na', points: 0, maxPoints: 0, confidence: 'medium', message: 'No Read deny for .env — check 2.2.5d covers this' };
+          return buildStandardCheckResult('2.2.5g', 'Edit/Write deny mirrors Read deny for .env', 'na', 0, 0, 'medium', 'No Read deny for .env — check 2.2.5d covers this');
         }
         const pass = hasEditEnv && hasWriteEnv;
         return {
@@ -489,7 +527,7 @@ export const standardChecks: CheckDef[] = [
           points: pass ? 1 : 0, maxPoints: 1, confidence: 'medium',
           message: pass
             ? 'Edit and Write deny patterns exist for .env alongside Read deny'
-            : `Read(.env) is denied but ${!hasEditEnv ? 'Edit(.env)' : ''}${!hasEditEnv && !hasWriteEnv ? ' and ' : ''}${!hasWriteEnv ? 'Write(.env)' : ''} is not — agents can still modify secrets`,
+            : `Read(.env) is denied but ${formatMissingEnvDenyActions(hasEditEnv, hasWriteEnv)} is not — agents can still modify secrets`,
         };
       },
     },

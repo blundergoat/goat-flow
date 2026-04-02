@@ -10,6 +10,48 @@ const TIER_PRIORITY: Record<string, Priority> = {
   full: 'medium',
 };
 
+const PRIORITY_ORDER: Record<Priority, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+function createCheckRecommendation(result: CheckResult, checkDefs: CheckDef[]): Recommendation | null {
+  if (result.status === 'pass' || result.status === 'na') return null;
+
+  const definition = checkDefs.find(check => check.id === result.id);
+  if (definition === undefined) return null;
+
+  return {
+    priority: result.status === 'partial' ? 'low' : TIER_PRIORITY[result.tier] ?? 'medium',
+    checkId: result.id,
+    category: result.category,
+    message: result.message,
+    action: definition.recommendation,
+    key: definition.recommendationKey,
+  };
+}
+
+function createAntiPatternRecommendation(
+  result: AntiPatternResult,
+  antiPatternDefs: AntiPatternDef[],
+): Recommendation | null {
+  if (result.triggered === false) return null;
+
+  const definition = antiPatternDefs.find(antiPattern => antiPattern.id === result.id);
+  if (definition === undefined) return null;
+
+  return {
+    priority: Math.abs(definition.deduction) >= 5 ? 'critical' : 'high',
+    checkId: result.id,
+    category: 'Anti-Pattern',
+    message: result.message,
+    action: definition.recommendation,
+    key: definition.recommendationKey,
+  };
+}
+
 /** Generate prioritised recommendations from failed checks and triggered anti-patterns */
 export function generateRecommendations(
   checkResults: CheckResult[],
@@ -20,57 +62,18 @@ export function generateRecommendations(
   /** Accumulated recommendations sorted before return */
   const recommendations: Recommendation[] = [];
 
-  // Iterate over each check result to create recommendations for failures
   for (const result of checkResults) {
-    if (result.status === 'pass' || result.status === 'na') continue;
-
-    /** Matching check definition for this result */
-    const def = checkDefs.find(c => c.id === result.id);
-    if (def === undefined) continue;
-
-    /** Priority based on partial status or the tier default */
-    const priority: Priority = result.status === 'partial'
-      ? 'low'
-      : TIER_PRIORITY[result.tier] ?? 'medium';
-
-    recommendations.push({
-      priority,
-      checkId: result.id,
-      category: result.category,
-      message: result.message,
-      action: def.recommendation,
-      key: def.recommendationKey,
-    });
+    const recommendation = createCheckRecommendation(result, checkDefs);
+    if (recommendation) recommendations.push(recommendation);
   }
 
-  // Iterate over each anti-pattern result to create recommendations for triggered ones
   for (const result of antiPatternResults) {
-    if (result.triggered === false) continue;
-
-    /** Matching anti-pattern definition for this result */
-    const def = antiPatternDefs.find(ap => ap.id === result.id);
-    if (def === undefined) continue;
-
-    recommendations.push({
-      priority: Math.abs(def.deduction) >= 5 ? 'critical' : 'high',
-      checkId: result.id,
-      category: 'Anti-Pattern',
-      message: result.message,
-      action: def.recommendation,
-      key: def.recommendationKey,
-    });
+    const recommendation = createAntiPatternRecommendation(result, antiPatternDefs);
+    if (recommendation) recommendations.push(recommendation);
   }
-
-  /** Numeric ordering for sorting priorities from most to least urgent */
-  const priorityOrder: Record<Priority, number> = {
-    critical: 0,
-    high: 1,
-    medium: 2,
-    low: 3,
-  };
 
   recommendations.sort((a, b) => {
-    const diff = priorityOrder[a.priority] - priorityOrder[b.priority];
+    const diff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
     if (diff !== 0) return diff;
     return a.checkId.localeCompare(b.checkId);
   });

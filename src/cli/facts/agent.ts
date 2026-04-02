@@ -101,6 +101,42 @@ function hasGlobChars(s: string): boolean {
   return s.includes('*') || s.includes('{');
 }
 
+function pushUniquePath(paths: string[], path: string): void {
+  if (paths.includes(path) === false) {
+    paths.push(path);
+  }
+}
+
+function collectMatchedPaths(
+  content: string,
+  pattern: RegExp,
+  isValid: (path: string) => boolean,
+  paths: string[],
+): void {
+  for (const match of content.matchAll(pattern)) {
+    const path = match[1];
+    if (path === undefined) continue;
+    if (!isValid(path)) continue;
+    pushUniquePath(paths, path);
+  }
+}
+
+function isRouterBacktickPath(path: string): boolean {
+  return !hasGlobChars(path) && looksLikePath(path);
+}
+
+function isRouterLinkPath(path: string): boolean {
+  return !hasGlobChars(path) && !path.startsWith('http') && looksLikePath(path);
+}
+
+function isAskFirstPath(path: string): boolean {
+  if (hasGlobChars(path)) return false;
+  if (path.startsWith('http')) return false;
+  if (!looksLikePath(path)) return false;
+  if (path.includes('|') || path.startsWith('-') || path.startsWith('$')) return false;
+  return true;
+}
+
 /** Extract all file/directory paths referenced in the Router Table section. */
 function extractRouterPaths(content: string): string[] {
   /** Accumulated list of discovered router paths */
@@ -109,33 +145,20 @@ function extractRouterPaths(content: string): string[] {
   const routerSection = extractSection(content, 'router');
   if (routerSection == null) return paths;
 
-  /** Backtick-wrapped path matches (e.g. `docs/footguns/`) */
-  const backtickMatches = routerSection.matchAll(/`([^`]+)`/g);
-  // Iterate over backtick matches to collect file paths from the router table
-  for (const match of backtickMatches) {
-    /** Extracted path string from inside backticks */
-    const path = match[1];
-    if (path === undefined) continue;
-    if (hasGlobChars(path)) continue;
-    if (looksLikePath(path) === false) continue;
-    paths.push(path);
-  }
-
-  /** Markdown link path matches (e.g. [text](path)) */
-  const linkMatches = routerSection.matchAll(/\]\(([^)]+)\)/g);
-  // Iterate over markdown link matches to collect additional file paths
-  for (const match of linkMatches) {
-    /** Extracted path string from inside the link parentheses */
-    const path = match[1];
-    if (path === undefined) continue;
-    if (hasGlobChars(path)) continue;
-    if (path.startsWith('http')) continue;
-    if (looksLikePath(path) === false) continue;
-    // Avoid duplicates from paths already captured via backticks
-    if (paths.includes(path) === false) paths.push(path);
-  }
+  collectMatchedPaths(routerSection, /`([^`]+)`/g, isRouterBacktickPath, paths);
+  collectMatchedPaths(routerSection, /\]\(([^)]+)\)/g, isRouterLinkPath, paths);
 
   return paths;
+}
+
+function extractAskFirstSection(content: string): string | null {
+  const headingMatch = content.match(/##\s+ask\s+first[\s\S]*?(?=\n##\s|$)/i);
+  if (headingMatch) {
+    return headingMatch[0];
+  }
+
+  const boldMatch = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
+  return boldMatch?.[0] ?? null;
 }
 
 /** Extract file paths listed in the Ask First boundaries section. */
@@ -143,35 +166,10 @@ function extractAskFirstPaths(content: string): string[] {
   /** Accumulated list of discovered ask-first boundary paths */
   const paths: string[] = [];
 
-  // Find the Ask First section -- either as a heading or bold text
-  let section: string | null = null;
-  /** Match for a heading-style Ask First section */
-  const headingMatch = content.match(/##\s+ask\s+first[\s\S]*?(?=\n##\s|$)/i);
-  if (headingMatch) {
-    section = headingMatch[0];
-  } else {
-    /** Match for a bold-style Ask First section */
-    const boldMatch = content.match(/\*\*Ask First\*\*[\s\S]*?(?=\n\*\*Never\*\*|\n##\s|$)/i);
-    if (boldMatch) section = boldMatch[0];
-  }
-
+  const section = extractAskFirstSection(content);
   if (section == null) return paths;
 
-  /** Backtick-wrapped path matches from within the Ask First section */
-  const backtickMatches = section.matchAll(/`([^`]+)`/g);
-  // Iterate over backtick matches to collect boundary file paths
-  for (const match of backtickMatches) {
-    /** Extracted path string from inside backticks */
-    const path = match[1];
-    if (path === undefined) continue;
-    if (path.includes('*') || path.includes('{')) continue;
-    if (path.startsWith('http')) continue;
-    // Must look like a file/directory path
-    if (path.includes('/') === false && path.includes('.') === false) continue;
-    // Skip things that are clearly not paths (commands, patterns)
-    if (path.includes('|') || path.startsWith('-') || path.startsWith('$')) continue;
-    if (paths.includes(path) === false) paths.push(path);
-  }
+  collectMatchedPaths(section, /`([^`]+)`/g, isAskFirstPath, paths);
 
   return paths;
 }
@@ -284,107 +282,203 @@ function extractSkillVersion(content: string): string | null {
   return versionMatch?.[1]?.trim() ?? null;
 }
 
-/** Extract skill facts: found/missing skills, versions, and quality metrics. */
-function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['skills'] {
-  /** All installed skill directory names, including stale goat-flow and legacy skills */
-  const installedDirs = fs.listDir(agent.skillsDir)
-    .filter(entry => fs.exists(`${agent.skillsDir}/${entry}/SKILL.md`))
-    .sort();
-  /** Names of skills that were found on disk */
-  const found: string[] = [];
-  /** Names of expected skills that are missing */
-  const missing: string[] = [];
-  /** Version extracted from each skill's frontmatter */
-  const versions: Record<string, string | null> = {};
-  let outdatedCount = 0;
-  let withStep0 = 0;
-  let withHumanGate = 0;
-  let withConstraints = 0;
-  let withPhases = 0;
-  let withConversational = 0;
-  let withChaining = 0;
-  let withChoices = 0;
-  let withOutputFormat = 0;
-  let withSharedConventions = 0;
-  let adaptCommentCount = 0;
-  // Iterate over expected skills to check existence and content quality
-  for (const skill of EXPECTED_SKILLS) {
-    /** Full path to this skill's SKILL.md file */
-    const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
-    if (fs.exists(skillPath)) {
-      found.push(skill);
-      /** Raw content of the skill file for quality analysis */
-      const skillContent = fs.readFile(skillPath);
-      if (skillContent) {
-        // Extract and track version
-        const version = extractSkillVersion(skillContent);
-        versions[skill] = version;
-        if (version === null || version !== SKILL_VERSION) {
-          outdatedCount++;
-        }
+interface SkillQualityCounts {
+  withStep0: number;
+  withHumanGate: number;
+  withConstraints: number;
+  withPhases: number;
+  withConversational: number;
+  withChaining: number;
+  withChoices: number;
+  withOutputFormat: number;
+  withSharedConventions: number;
+}
 
-        // Count remaining ADAPT comments (unanswered template questions)
-        const adaptMatches = skillContent.match(/<!--\s*ADAPT:/g);
-        if (adaptMatches) adaptCommentCount += adaptMatches.length;
+interface SkillInventory {
+  found: string[];
+  missing: string[];
+  versions: Record<string, string | null>;
+  outdatedCount: number;
+  quality: SkillQualityCounts;
+  adaptCommentCount: number;
+}
 
-        if (/step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i.test(skillContent)) withStep0++;
-        if (/human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i.test(skillContent)) withHumanGate++;
-        if (/MUST\s+NOT|MUST\s+/m.test(skillContent)) withConstraints++;
-        if (/##\s*(Phase|Step)\s+[0-9]/i.test(skillContent)) withPhases++;
-        if ((/blocking\s*gate|human\s*gate/i.test(skillContent)) && (/\(a\)|want me to|offer:|proceed\?/i.test(skillContent))) withConversational++;
-        if (/chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i.test(skillContent)) withChaining++;
-        if (/\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i.test(skillContent)) withChoices++;
-        if (/##\s*(Output|Output Format)/i.test(skillContent)) withOutputFormat++;
-        if (/^##\s+shared conventions/im.test(skillContent)) withSharedConventions++;
+const SKILL_QUALITY_PATTERNS: Array<{ key: keyof SkillQualityCounts; pattern: RegExp }> = [
+  { key: 'withStep0', pattern: /step\s*0|gather\s*context|ask.*before|ask\s+the\s+user/i },
+  { key: 'withHumanGate', pattern: /human\s*gate|blocking\s*gate|wait.*approv|wait.*confirm|do\s+not\s+proceed|does this.*look right|does this.*match/i },
+  { key: 'withConstraints', pattern: /MUST\s+NOT|MUST\s+/m },
+  { key: 'withPhases', pattern: /##\s*(Phase|Step)\s+[0-9]/i },
+  { key: 'withConversational', pattern: /blocking\s*gate|human\s*gate/i },
+  { key: 'withChaining', pattern: /chains?\s*with|related\s*skills?|next.*skill|→.*goat-/i },
+  { key: 'withChoices', pattern: /\(a\)|\(b\)|\(c\)|want me to.*\n.*\n/i },
+  { key: 'withOutputFormat', pattern: /##\s*(Output|Output Format)/i },
+  { key: 'withSharedConventions', pattern: /^##\s+shared conventions/im },
+] as const;
+
+function createSkillQualityCounts(): SkillQualityCounts {
+  return {
+    withStep0: 0,
+    withHumanGate: 0,
+    withConstraints: 0,
+    withPhases: 0,
+    withConversational: 0,
+    withChaining: 0,
+    withChoices: 0,
+    withOutputFormat: 0,
+    withSharedConventions: 0,
+  };
+}
+
+function updateSkillQualityCounts(content: string, quality: SkillQualityCounts): void {
+  for (const check of SKILL_QUALITY_PATTERNS) {
+    if (check.key === 'withConversational') {
+      if (
+        /blocking\s*gate|human\s*gate/i.test(content)
+        && /\(a\)|want me to|offer:|proceed\?/i.test(content)
+      ) {
+        quality[check.key]++;
       }
-    } else {
-      missing.push(skill);
+      continue;
+    }
+    if (check.pattern.test(content)) {
+      quality[check.key]++;
     }
   }
+}
 
-  // Skill adaptation quality: compare Step 0 sections against canonical templates
+function countAdaptComments(content: string): number {
+  return content.match(/<!--\s*ADAPT:/g)?.length ?? 0;
+}
+
+function collectInstalledSkillDirs(fs: ReadonlyFS, agent: AgentProfile): string[] {
+  return fs.listDir(agent.skillsDir)
+    .filter(entry => fs.exists(`${agent.skillsDir}/${entry}/SKILL.md`))
+    .sort();
+}
+
+function analyzeSkillContent(
+  skill: string,
+  content: string,
+  versions: Record<string, string | null>,
+  quality: SkillQualityCounts,
+): { outdated: boolean; adaptCommentCount: number } {
+  const version = extractSkillVersion(content);
+  versions[skill] = version;
+  updateSkillQualityCounts(content, quality);
+
+  return {
+    outdated: version === null || version !== SKILL_VERSION,
+    adaptCommentCount: countAdaptComments(content),
+  };
+}
+
+function scanExpectedSkills(fs: ReadonlyFS, agent: AgentProfile): SkillInventory {
+  const found: string[] = [];
+  const missing: string[] = [];
+  const versions: Record<string, string | null> = {};
+  const quality = createSkillQualityCounts();
+  let outdatedCount = 0;
+  let adaptCommentCount = 0;
+
+  for (const skill of EXPECTED_SKILLS) {
+    const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
+    if (!fs.exists(skillPath)) {
+      missing.push(skill);
+      continue;
+    }
+
+    found.push(skill);
+    const skillContent = fs.readFile(skillPath);
+    if (!skillContent) continue;
+
+    const analysis = analyzeSkillContent(skill, skillContent, versions, quality);
+    if (analysis.outdated) outdatedCount++;
+    adaptCommentCount += analysis.adaptCommentCount;
+  }
+
+  return { found, missing, versions, outdatedCount, quality, adaptCommentCount };
+}
+
+function countUnadaptedSkills(
+  fs: ReadonlyFS,
+  agent: AgentProfile,
+  found: string[],
+): number {
   let unadaptedCount = 0;
+
   for (const skill of found) {
     const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
     const installed = fs.readFile(skillPath);
     const templateName = skill.replace(/^goat-/, '');
     const template = fs.readFile(`workflow/skills/goat-${templateName}.md`);
-    if (installed && template) {
-      const installedStep0 = extractSection(installed, 'Step 0');
-      const templateStep0 = extractSection(template, 'Step 0');
-      if (installedStep0 && templateStep0 && jaccardSimilarity(installedStep0, templateStep0) > 0.9) {
-        unadaptedCount++;
-      }
+    if (!installed || !template) continue;
+
+    const installedStep0 = extractSection(installed, 'Step 0');
+    const templateStep0 = extractSection(template, 'Step 0');
+    if (installedStep0 && templateStep0 && jaccardSimilarity(installedStep0, templateStep0) > 0.9) {
+      unadaptedCount++;
     }
   }
 
-  const hasDispatcher = fs.exists(`${agent.skillsDir}/goat/SKILL.md`);
+  return unadaptedCount;
+}
 
-  // Extract dangling file path references from skill content
+function shouldIgnoreDanglingSkillRef(ref: string): boolean {
+  if (/^https?:/.test(ref)) return true;
+  if (/\{|YYYY|file:line|path\/to|monitoring\//i.test(ref)) return true;
+  if (/^(?:\.goat-flow\/)?tasks\/(handoff|todo|commit|release|scratchpad|improvement)/.test(ref)) return true;
+  if (/^(src\/api|config\/|docs\/glossary)/.test(ref)) return true;
+  return false;
+}
+
+function extractDanglingSkillRefs(
+  fs: ReadonlyFS,
+  agent: AgentProfile,
+  found: string[],
+): string[] {
   const danglingRefs: string[] = [];
-  // Match backtick-wrapped paths: must contain /, no spaces/newlines, reasonable length, look like file paths
-  const PATH_REF = /`((?:[a-zA-Z0-9._-]+\/)+[a-zA-Z0-9._-]+(?::[0-9]+)?)`/g;
+  const pathRefPattern = /`((?:[a-zA-Z0-9._-]+\/)+[a-zA-Z0-9._-]+(?::[0-9]+)?)`/g;
+
   for (const skill of found) {
     const content = fs.readFile(`${agent.skillsDir}/${skill}/SKILL.md`);
     if (!content) continue;
-    for (const match of content.matchAll(PATH_REF)) {
-      const ref = match[1]!.replace(/:[0-9]+$/, '');
-      if (/^https?:/.test(ref)) continue;
-      // Skip template placeholders, example paths, and gitignored working files
-      if (/\{|YYYY|file:line|path\/to|monitoring\//i.test(ref)) continue;
-      if (/^(?:\.goat-flow\/)?tasks\/(handoff|todo|commit|release|scratchpad|improvement)/.test(ref)) continue;
-      if (/^(src\/api|config\/|docs\/glossary)/.test(ref)) continue;
-      if (!fs.exists(ref) && !danglingRefs.includes(ref)) {
-        danglingRefs.push(ref);
+    for (const match of content.matchAll(pathRefPattern)) {
+      const rawRef = match[1];
+      if (rawRef === undefined) continue;
+      const ref = rawRef.replace(/:[0-9]+$/, '');
+      if (shouldIgnoreDanglingSkillRef(ref)) continue;
+      if (!fs.exists(ref)) {
+        pushUniquePath(danglingRefs, ref);
       }
     }
   }
 
+  return danglingRefs;
+}
+
+/** Extract skill facts: found/missing skills, versions, and quality metrics. */
+function extractSkillFacts(fs: ReadonlyFS, agent: AgentProfile): AgentFacts['skills'] {
+  const installedDirs = collectInstalledSkillDirs(fs, agent);
+  const inventory = scanExpectedSkills(fs, agent);
+  const unadaptedCount = countUnadaptedSkills(fs, agent, inventory.found);
+  const hasDispatcher = fs.exists(`${agent.skillsDir}/goat/SKILL.md`);
+  const danglingRefs = extractDanglingSkillRefs(fs, agent, inventory.found);
+
   return {
     installedDirs,
-    found, missing, allPresent: missing.length === 0,
-    versions, outdatedCount, hasDispatcher, danglingRefs,
-    quality: { withStep0, withHumanGate, withConstraints, withPhases, withConversational, withChaining, withChoices, withOutputFormat, withSharedConventions, unadaptedCount, adaptCommentCount, total: found.length },
+    found: inventory.found,
+    missing: inventory.missing,
+    allPresent: inventory.missing.length === 0,
+    versions: inventory.versions,
+    outdatedCount: inventory.outdatedCount,
+    hasDispatcher,
+    danglingRefs,
+    quality: {
+      ...inventory.quality,
+      unadaptedCount,
+      adaptCommentCount: inventory.adaptCommentCount,
+      total: inventory.found.length,
+    },
   };
 }
 
@@ -503,75 +597,123 @@ function enrichDenyFromExecpolicy(
   hook.denyIsConfigBased = true;
 }
 
+type HookDenyFacts = Pick<
+  AgentFacts['hooks'],
+  | 'denyExists'
+  | 'denyHasBlocks'
+  | 'denyIsConfigBased'
+  | 'denyUsesJq'
+  | 'denyHandlesChaining'
+  | 'denyBlocksRmRf'
+  | 'denyBlocksForcePush'
+  | 'denyBlocksChmod'
+  | 'denyBlocksCloudDestructive'
+>;
+
+type PostTurnFacts = Pick<
+  AgentFacts['hooks'],
+  | 'postTurnExists'
+  | 'postTurnExitsZero'
+  | 'postTurnHasValidation'
+  | 'postToolExists'
+>;
+
+function detectCompactionHookExists(
+  fs: ReadonlyFS,
+  agent: AgentProfile,
+  settingsParsed: unknown,
+  settingsValid: boolean,
+): boolean {
+  const compactionHookExists = checkCompactionHook(settingsParsed, settingsValid);
+  if (compactionHookExists || agent.id !== 'codex') {
+    return compactionHookExists;
+  }
+
+  const configContent = fs.readFile('.codex/config.toml');
+  return Boolean(configContent && /\[hooks\.session_start\]/.test(configContent));
+}
+
+function resolveDenyHookPath(fs: ReadonlyFS, agent: AgentProfile): string | null {
+  if (agent.hooksDir && fs.exists(`${agent.hooksDir}/deny-dangerous.sh`)) {
+    return `${agent.hooksDir}/deny-dangerous.sh`;
+  }
+  if (agent.denyMechanism.type === 'deny-script') {
+    return agent.denyMechanism.path;
+  }
+  if (agent.denyMechanism.type === 'both') {
+    return agent.denyMechanism.scriptPath;
+  }
+  return null;
+}
+
+function createEmptyDenyFacts(denyExists: boolean): HookDenyFacts {
+  return {
+    denyExists,
+    denyHasBlocks: false,
+    denyIsConfigBased: false,
+    denyUsesJq: false,
+    denyHandlesChaining: false,
+    denyBlocksRmRf: false,
+    denyBlocksForcePush: false,
+    denyBlocksChmod: false,
+    denyBlocksCloudDestructive: false,
+  };
+}
+
+function analyzeDenyHookPath(fs: ReadonlyFS, denyHookPath: string | null): HookDenyFacts {
+  const denyExists = denyHookPath !== null && fs.exists(denyHookPath);
+  const hook = createEmptyDenyFacts(denyExists);
+  if (!denyExists || !denyHookPath) {
+    return hook;
+  }
+
+  const denyContent = fs.readFile(denyHookPath);
+  if (!denyContent) {
+    return hook;
+  }
+
+  const analysis = analyzeDenyScript(denyContent);
+  return {
+    ...hook,
+    denyHasBlocks: analysis.hasBlocks,
+    denyUsesJq: analysis.usesJq,
+    denyHandlesChaining: analysis.handlesChaining,
+    denyBlocksRmRf: analysis.blocksRmRf,
+    denyBlocksForcePush: analysis.blocksForcePush,
+    denyBlocksChmod: analysis.blocksChmod,
+    denyBlocksCloudDestructive: analysis.blocksCloudDestructive,
+  };
+}
+
+function lineHasAbsolutePath(line: string): boolean {
+  return !line.trimStart().startsWith('#')
+    && !/\$\(git rev-parse/.test(line)
+    && /\/(home|Users|tmp|var|opt)\/\w+\//.test(line);
+}
+
+function findAbsolutePathHooks(fs: ReadonlyFS, hooksDir: string | null): string[] {
+  if (!hooksDir || !fs.exists(hooksDir)) return [];
+  const absolutePathHooks: string[] = [];
+
+  for (const hookFile of fs.listDir(hooksDir)) {
+    if (!hookFile.endsWith('.sh')) continue;
+    const hookContent = fs.readFile(`${hooksDir}/${hookFile}`);
+    if (!hookContent) continue;
+    if (hookContent.split('\n').some(lineHasAbsolutePath)) {
+      absolutePathHooks.push(hookFile);
+    }
+  }
+
+  return absolutePathHooks;
+}
+
 /** Extract all hook-related facts: deny hooks, post-turn, post-tool, compaction. */
 function extractHookFacts(
   fs: ReadonlyFS, agent: AgentProfile, settingsParsed: unknown, hasDenyPatterns: boolean, settingsValid: boolean,
 ): Omit<AgentFacts['hooks'], 'readDenyCoversSecrets'> {
-  // Check for compaction notification hook in settings
-  let compactionHookExists = checkCompactionHook(settingsParsed, settingsValid);
-
-  // For Codex: session_start hook serves similar purpose to compaction
-  if (agent.id === 'codex' && compactionHookExists === false) {
-    /** Raw content of the Codex config.toml file */
-    const configContent = fs.readFile('.codex/config.toml');
-    if (configContent && /\[hooks\.session_start\]/.test(configContent)) {
-      compactionHookExists = true;
-    }
-  }
-
-  /** Filesystem path to the deny hook script, if any.
-   *  Check agent-specific hooks dir first, then fall back to the profile's
-   *  deny mechanism path (e.g., scripts/deny-dangerous.sh for Codex). */
-  let denyHookPath: string | null = null;
-  if (agent.hooksDir && fs.exists(`${agent.hooksDir}/deny-dangerous.sh`)) {
-    denyHookPath = `${agent.hooksDir}/deny-dangerous.sh`;
-  } else if (agent.denyMechanism.type === 'deny-script') {
-    denyHookPath = agent.denyMechanism.path;
-  } else if (agent.denyMechanism.type === 'both') {
-    denyHookPath = agent.denyMechanism.scriptPath;
-  }
-
-  const hook = {
-    denyExists: denyHookPath ? fs.exists(denyHookPath) : false,
-    denyHasBlocks: false, denyIsConfigBased: false, denyUsesJq: false, denyHandlesChaining: false,
-    denyBlocksRmRf: false, denyBlocksForcePush: false, denyBlocksChmod: false, denyBlocksCloudDestructive: false,
-  };
-
-  // First: check hook script content (if exists)
-  if (hook.denyExists && denyHookPath) {
-    /** Raw content of the deny hook script */
-    const denyContent = fs.readFile(denyHookPath);
-    if (denyContent) {
-      const analysis = analyzeDenyScript(denyContent);
-      hook.denyHasBlocks = analysis.hasBlocks;
-      hook.denyUsesJq = analysis.usesJq;
-      hook.denyHandlesChaining = analysis.handlesChaining;
-      hook.denyBlocksRmRf = analysis.blocksRmRf;
-      hook.denyBlocksForcePush = analysis.blocksForcePush;
-      hook.denyBlocksChmod = analysis.blocksChmod;
-      hook.denyBlocksCloudDestructive = analysis.blocksCloudDestructive;
-    }
-  }
-
-  // Check for hardcoded absolute paths in hook scripts (not wrapped in $(git rev-parse))
-  const absolutePathHooks: string[] = [];
-  if (agent.hooksDir && fs.exists(agent.hooksDir)) {
-    for (const hookFile of fs.listDir(agent.hooksDir)) {
-      if (!hookFile.endsWith('.sh')) continue;
-      const hookContent = fs.readFile(`${agent.hooksDir}/${hookFile}`);
-      if (!hookContent) continue;
-      // Match absolute paths like /home/user/... or /Users/... that aren't inside $(...)
-      const lines = hookContent.split('\n');
-      for (const line of lines) {
-        if (line.trimStart().startsWith('#')) continue; // skip comments
-        if (/\$\(git rev-parse/.test(line)) continue; // line uses git rev-parse
-        if (/\/(home|Users|tmp|var|opt)\/\w+\//.test(line)) {
-          absolutePathHooks.push(hookFile);
-          break;
-        }
-      }
-    }
-  }
+  const compactionHookExists = detectCompactionHookExists(fs, agent, settingsParsed, settingsValid);
+  const hook = analyzeDenyHookPath(fs, resolveDenyHookPath(fs, agent));
+  const absolutePathHooks = findAbsolutePathHooks(fs, agent.hooksDir);
 
   // Second: also check settings.json Bash deny patterns
   enrichDenyFromSettings(settingsParsed, hasDenyPatterns, hook);
@@ -585,12 +727,80 @@ function extractHookFacts(
 
   return {
     ...hook,
-    postTurnExists: postTurn.postTurnExists,
-    postTurnExitsZero: postTurn.postTurnExitsZero,
-    postTurnHasValidation: postTurn.postTurnHasValidation,
-    postToolExists: postTurn.postToolExists,
+    ...postTurn,
     compactionHookExists,
     absolutePathHooks,
+  };
+}
+
+function analyzeHookScriptAtPath(
+  fs: ReadonlyFS,
+  scriptPath: string,
+): Pick<PostTurnFacts, 'postTurnExitsZero' | 'postTurnHasValidation'> {
+  const hookContent = fs.readFile(scriptPath);
+  if (!hookContent) {
+    return { postTurnExitsZero: false, postTurnHasValidation: false };
+  }
+
+  const analysis = analyzePostTurnScript(hookContent);
+  return {
+    postTurnExitsZero: analysis.exitsZero,
+    postTurnHasValidation: analysis.hasValidation,
+  };
+}
+
+function extractCodexStopScriptPath(configContent: string): string | null {
+  const stopScript = configContent.match(/\[hooks\.stop\]\s*\n\s*command\s*=\s*\[.*?"([^"]+\.sh)"/);
+  return stopScript?.[1] ?? null;
+}
+
+function extractCodexPostTurnFacts(fs: ReadonlyFS): PostTurnFacts {
+  const configContent = fs.readFile('.codex/config.toml');
+  if (!configContent) {
+    return {
+      postTurnExists: false,
+      postTurnExitsZero: false,
+      postTurnHasValidation: false,
+      postToolExists: false,
+    };
+  }
+
+  const postTurnExists = /\[hooks\.stop\]/.test(configContent);
+  const postToolExists = /\[hooks\.after_tool_use\]/.test(configContent);
+  if (!postTurnExists) {
+    return {
+      postTurnExists,
+      postTurnExitsZero: false,
+      postTurnHasValidation: false,
+      postToolExists,
+    };
+  }
+
+  const stopScriptPath = extractCodexStopScriptPath(configContent);
+  return {
+    postTurnExists,
+    postToolExists,
+    ...(
+      stopScriptPath
+        ? analyzeHookScriptAtPath(fs, stopScriptPath)
+        : { postTurnExitsZero: false, postTurnHasValidation: false }
+    ),
+  };
+}
+
+function extractDirectoryPostTurnFacts(fs: ReadonlyFS, hooksDir: string): PostTurnFacts {
+  const stopLintPath = `${hooksDir}/stop-lint.sh`;
+  const postTurnExists = fs.exists(stopLintPath);
+  const postToolExists = fs.exists(`${hooksDir}/format-file.sh`);
+
+  return {
+    postTurnExists,
+    postToolExists,
+    ...(
+      postTurnExists
+        ? analyzeHookScriptAtPath(fs, stopLintPath)
+        : { postTurnExitsZero: false, postTurnHasValidation: false }
+    ),
   };
 }
 
@@ -599,115 +809,95 @@ function extractPostTurnFacts(fs: ReadonlyFS, agent: AgentProfile): {
   postTurnExists: boolean; postTurnExitsZero: boolean;
   postTurnHasValidation: boolean; postToolExists: boolean;
 } {
-  let postTurnExists = false;
-  let postTurnExitsZero = false;
-  let postTurnHasValidation = false;
-  let postToolExists = false;
-
-  // For Codex: detect config.toml and registered hooks
   if (agent.id === 'codex') {
-    /** Path to the Codex configuration file */
-    const configPath = '.codex/config.toml';
-    /** Raw content of the Codex config.toml */
-    const configContent = fs.readFile(configPath);
-    if (configContent) {
-      // Check for Stop hook registration
-      if (/\[hooks\.stop\]/.test(configContent)) {
-        postTurnExists = true;
-        /** Regex match extracting the script path from the stop hook configuration */
-        const stopScript = configContent.match(/\[hooks\.stop\]\s*\n\s*command\s*=\s*\[.*?"([^"]+\.sh)"/);
-        const stopScriptPath = stopScript?.[1];
-        if (stopScriptPath !== undefined) {
-          /** Raw content of the stop hook script */
-          const hookContent = fs.readFile(stopScriptPath);
-          if (hookContent) {
-            const analysis = analyzePostTurnScript(hookContent);
-            postTurnExitsZero = analysis.exitsZero;
-            postTurnHasValidation = analysis.hasValidation;
-          }
-        }
-      }
-      // Check for AfterToolUse hook registration
-      if (/\[hooks\.after_tool_use\]/.test(configContent)) {
-        postToolExists = true;
-      }
-    }
-  } else if (agent.hooksDir) {
-    /** Path to the post-turn lint hook script */
-    const stopLintPath = `${agent.hooksDir}/stop-lint.sh`;
-    postTurnExists = fs.exists(stopLintPath);
-    if (postTurnExists) {
-      /** Raw content of the stop-lint hook script */
-      const hookContent = fs.readFile(stopLintPath);
-      if (hookContent) {
-        const analysis = analyzePostTurnScript(hookContent);
-        postTurnExitsZero = analysis.exitsZero;
-        postTurnHasValidation = analysis.hasValidation;
-      }
-    }
-    postToolExists = fs.exists(`${agent.hooksDir}/format-file.sh`);
+    return extractCodexPostTurnFacts(fs);
   }
 
-  return { postTurnExists, postTurnExitsZero, postTurnHasValidation, postToolExists };
+  if (agent.hooksDir) {
+    return extractDirectoryPostTurnFacts(fs, agent.hooksDir);
+  }
+
+  return {
+    postTurnExists: false,
+    postTurnExitsZero: false,
+    postTurnHasValidation: false,
+    postToolExists: false,
+  };
+}
+
+function resolveReferencedPaths(fs: ReadonlyFS, paths: string[]): {
+  resolved: number;
+  unresolved: string[];
+} {
+  let resolved = 0;
+  const unresolved: string[] = [];
+
+  for (const path of paths) {
+    if (fs.exists(path)) {
+      resolved++;
+    } else {
+      unresolved.push(path);
+    }
+  }
+
+  return { resolved, unresolved };
+}
+
+function extractMarkerPaths(content: string | null): {
+  hasMarkers: boolean;
+  markerPaths: string[];
+} {
+  const markerStart = '<!-- goat-flow:router:start -->';
+  const markerEnd = '<!-- goat-flow:router:end -->';
+  const hasMarkers = content !== null && content.includes(markerStart) && content.includes(markerEnd);
+  if (!hasMarkers) {
+    return { hasMarkers: false, markerPaths: [] };
+  }
+
+  const startIdx = content.indexOf(markerStart) + markerStart.length;
+  const endIdx = content.indexOf(markerEnd);
+  const markerContent = content.slice(startIdx, endIdx);
+  const markerPaths: string[] = [];
+
+  for (const match of markerContent.matchAll(/`([^`]+\/[^`]*)`/g)) {
+    const raw = match[1];
+    if (raw === undefined || raw.includes('*')) continue;
+    const ref = raw.replace(/\/$/, '');
+    if (!ref) continue;
+    pushUniquePath(markerPaths, ref);
+  }
+
+  return { hasMarkers, markerPaths };
 }
 
 /** Extract router table facts: paths found and their resolution status. */
 function extractRouterFacts(fs: ReadonlyFS, content: string | null): AgentFacts['router'] {
-  /** File paths referenced in the router table */
   const paths = content !== null ? extractRouterPaths(content) : [];
-  let resolved = 0;
-  /** Router paths that do not exist on disk */
-  const unresolved: string[] = [];
-  // Iterate over router paths to verify each one exists on disk
-  for (const p of paths) {
-    if (fs.exists(p)) {
-      resolved++;
-    } else {
-      unresolved.push(p);
-    }
-  }
-  // Extract goat-flow-owned marker block paths
-  const markerStart = '<!-- goat-flow:router:start -->';
-  const markerEnd = '<!-- goat-flow:router:end -->';
-  const hasMarkers = content !== null && content.includes(markerStart) && content.includes(markerEnd);
-  const markerPaths: string[] = [];
-  const staleMarkerPaths: string[] = [];
-  if (hasMarkers && content) {
-    const startIdx = content.indexOf(markerStart) + markerStart.length;
-    const endIdx = content.indexOf(markerEnd);
-    const markerContent = content.slice(startIdx, endIdx);
-    // Extract backtick-wrapped paths from the marker block
-    const pathRefs = markerContent.matchAll(/`([^`]+\/[^`]*)`/g);
-    for (const m of pathRefs) {
-      const raw = m[1]!;
-      // Skip glob patterns (e.g., `.claude/skills/goat-*/`) — they represent groups, not checkable paths
-      if (raw.includes('*')) continue;
-      const ref = raw.replace(/\/$/, '');
-      if (ref) {
-        markerPaths.push(ref);
-        if (!fs.exists(ref)) staleMarkerPaths.push(ref);
-      }
-    }
-  }
-  return { exists: paths.length > 0, paths, resolved, unresolved, hasMarkers, markerPaths, staleMarkerPaths };
+  const resolution = resolveReferencedPaths(fs, paths);
+  const markerInfo = extractMarkerPaths(content);
+  const staleMarkerPaths = markerInfo.markerPaths.filter(path => !fs.exists(path));
+
+  return {
+    exists: paths.length > 0,
+    paths,
+    resolved: resolution.resolved,
+    unresolved: resolution.unresolved,
+    hasMarkers: markerInfo.hasMarkers,
+    markerPaths: markerInfo.markerPaths,
+    staleMarkerPaths,
+  };
 }
 
 /** Extract ask-first boundary facts: paths listed and their resolution status. */
 function extractAskFirstFacts(fs: ReadonlyFS, content: string | null): AgentFacts['askFirst'] {
-  /** File paths listed in the Ask First boundaries section */
   const paths = content !== null ? extractAskFirstPaths(content) : [];
-  let resolved = 0;
-  /** Ask-first paths that do not exist on disk */
-  const unresolved: string[] = [];
-  // Iterate over ask-first paths to verify each one exists on disk
-  for (const p of paths) {
-    if (fs.exists(p)) {
-      resolved++;
-    } else {
-      unresolved.push(p);
-    }
-  }
-  return { exists: paths.length > 0, paths, resolved, unresolved };
+  const resolution = resolveReferencedPaths(fs, paths);
+  return {
+    exists: paths.length > 0,
+    paths,
+    resolved: resolution.resolved,
+    unresolved: resolution.unresolved,
+  };
 }
 
 // settingsLocal extraction removed - personal preference file, not a project quality signal.

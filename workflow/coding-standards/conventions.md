@@ -86,6 +86,8 @@ DO: Keep functions under 50 lines (target 40 lines; hard limit 50). Extract a he
 
 DON'T: Add commented-out code. Delete it - git has history.
 
+DON'T: Create `_modified`, `_new`, `_backup`, `_v2` file variants. If a file exists, modify it in-place.
+
 DO: Use named exports, not default exports.
 ```ts
 // Good

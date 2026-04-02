@@ -1,6 +1,84 @@
-import { readFileSync, statSync, readdirSync, accessSync, constants } from 'node:fs';
+import { readFileSync, statSync, readdirSync, accessSync, constants, type Dirent } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 import type { ReadonlyFS } from '../types.js';
+
+function readDirEntries(path: string): Dirent[] {
+  try {
+    return readdirSync(path, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function buildGlobRegex(part: string): RegExp {
+  return new RegExp(
+    '^' + part.replace(/\./g, '\\.').replace(/\*/g, '[^/]*') + '$'
+  );
+}
+
+function walkGlob(
+  root: string,
+  resolvePath: (path: string) => string,
+  parts: string[],
+  dir: string,
+  patternIndex: number,
+  results: string[],
+): void {
+  if (patternIndex >= parts.length) return;
+
+  const part = parts[patternIndex];
+  if (part === undefined) return;
+  if (part === '**') {
+    walkGlobStar(root, resolvePath, parts, dir, patternIndex, results);
+    return;
+  }
+  walkGlobSegment(root, resolvePath, parts, dir, patternIndex, results, part);
+}
+
+function walkGlobStar(
+  root: string,
+  resolvePath: (path: string) => string,
+  parts: string[],
+  dir: string,
+  patternIndex: number,
+  results: string[],
+): void {
+  if (patternIndex + 1 < parts.length) {
+    walkGlob(root, resolvePath, parts, dir, patternIndex + 1, results);
+  }
+
+  for (const entry of readDirEntries(resolvePath(dir))) {
+    if (entry.isDirectory() && isIgnoredDir(entry.name) === false) {
+      walkGlob(root, resolvePath, parts, join(dir, entry.name), patternIndex, results);
+    }
+  }
+}
+
+function walkGlobSegment(
+  root: string,
+  resolvePath: (path: string) => string,
+  parts: string[],
+  dir: string,
+  patternIndex: number,
+  results: string[],
+  part: string,
+): void {
+  const isLast = patternIndex === parts.length - 1;
+  const regex = buildGlobRegex(part);
+
+  for (const entry of readDirEntries(resolvePath(dir))) {
+    if (!regex.test(entry.name)) continue;
+
+    const fullPath = join(dir, entry.name);
+    if (isLast) {
+      results.push(relative(root, resolvePath(fullPath)));
+      continue;
+    }
+    if (entry.isDirectory()) {
+      walkGlob(root, resolvePath, parts, fullPath, patternIndex + 1, results);
+    }
+  }
+}
 
 /** Create a read-only filesystem abstraction rooted at the given path. */
 export function createFS(rootPath: string): ReadonlyFS {
@@ -82,58 +160,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       const results: string[] = [];
       /** Pattern split into path segments for incremental matching */
       const parts = pattern.split('/');
-
-      /** Recursively walk directories matching glob pattern segments. */
-      function walk(dir: string, patternIndex: number): void {
-        if (patternIndex >= parts.length) return;
-
-        /** Current pattern segment being matched */
-        const part = parts[patternIndex];
-        if (part === undefined) return;
-        /** Whether this is the final segment in the pattern */
-        const isLast = patternIndex === parts.length - 1;
-
-        try {
-          /** Directory entries at the current level */
-          const entries = readdirSync(resolvePath(dir), { withFileTypes: true });
-
-          if (part === '**') {
-            // Match zero or more directories
-            // Try matching the next part at this level
-            if (patternIndex + 1 < parts.length) {
-              walk(dir, patternIndex + 1);
-            }
-            // Iterate over directory entries to recurse into non-ignored subdirectories
-            for (const entry of entries) {
-              if (entry.isDirectory() && isIgnoredDir(entry.name) === false) {
-                walk(join(dir, entry.name), patternIndex);
-              }
-            }
-          } else {
-            /** Regex constructed from the glob segment for matching entry names */
-            const regex = new RegExp(
-              '^' + part.replace(/\./g, '\\.').replace(/\*/g, '[^/]*') + '$'
-            );
-
-            // Iterate over directory entries to match against the current glob segment
-            for (const entry of entries) {
-              if (regex.test(entry.name)) {
-                /** Full path combining the current directory and entry name */
-                const fullPath = join(dir, entry.name);
-                if (isLast) {
-                  results.push(relative(root, resolvePath(fullPath)));
-                } else if (entry.isDirectory()) {
-                  walk(fullPath, patternIndex + 1);
-                }
-              }
-            }
-          }
-        } catch {
-          // Directory doesn't exist or not readable
-        }
-      }
-
-      walk('.', 0);
+      walkGlob(root, resolvePath, parts, '.', 0, results);
       return results;
     },
   };

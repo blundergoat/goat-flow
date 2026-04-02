@@ -120,8 +120,9 @@
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors">Scanner</button>
         <button @click="activeView = 'launcher'" :class="activeView === 'launcher' ? 'bg-white dark:bg-gray-700 shadow-sm' : ''"
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors">Launcher</button>
-        <button x-show="terminalAvailable" @click="activeView = 'terminal'"
-          :class="activeView === 'terminal' ? 'bg-white dark:bg-gray-700 shadow-sm' : ''"
+        <button @click="terminalAvailable ? (activeView = 'terminal') : showToast('Terminal requires node-pty. Run: npm install node-pty (or pnpm approve-builds)', true)"
+          :class="activeView === 'terminal' ? 'bg-white dark:bg-gray-700 shadow-sm' : terminalAvailable ? '' : 'opacity-50'"
+          :title="terminalAvailable ? '' : 'Terminal requires node-pty. Install it or run pnpm approve-builds.'"
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors relative">
           Terminal
           <span x-show="terminalSessionId && !terminalEnded && activeView !== 'terminal'" class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -259,6 +260,21 @@
 
     <!-- ═══ Terminal View ═══ -->
     <div x-show="activeView === 'terminal'" x-cloak class="max-w-6xl mx-auto">
+      <!-- node-pty missing message -->
+      <div x-show="!terminalAvailable" class="flex items-center justify-center h-64">
+        <div class="text-center space-y-4 max-w-md">
+          <div class="text-4xl">&#9000;</div>
+          <h2 class="text-xl font-semibold text-gray-600 dark:text-gray-300">Terminal not available</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">The terminal requires <strong>node-pty</strong>, which wasn't installed. This is common with pnpm.</p>
+          <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 text-left space-y-2">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Fix (pick one):</p>
+            <code class="block text-xs font-mono text-gray-700 dark:text-gray-300">npm install node-pty</code>
+            <code class="block text-xs font-mono text-gray-700 dark:text-gray-300">pnpm approve-builds <span class="text-gray-400"># select node-pty</span></code>
+          </div>
+          <p class="text-xs text-gray-400">Restart the dashboard after installing.</p>
+        </div>
+      </div>
+      <div x-show="terminalAvailable">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
           <h2 class="text-lg font-bold">Terminal</h2>
@@ -286,6 +302,7 @@
           </div>
         </div>
       </div>
+      </div><!-- /terminalAvailable -->
     </div>
 
     <!-- ═══ Scan View ═══ -->

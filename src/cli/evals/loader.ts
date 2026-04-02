@@ -22,6 +22,8 @@ import type {
 
 /** Set of filenames to skip when discovering eval files */
 const SKIP_FILES = new Set(['README.md', 'FORMAT.md']);
+const DIFFICULTY_ORDER = ['easy', 'medium', 'hard'] as const;
+const ORIGIN_ORDER = ['real-incident', 'synthetic-seed'] as const;
 
 /** Discover all markdown eval files in the given directory, excluding skip-listed names */
 function discoverEvalFiles(fs: ReadonlyFS, evalsDir: string): string[] {
@@ -131,6 +133,54 @@ export function summarize(evals: ParsedEval[], errors: ParseError[]): EvalSummar
   };
 }
 
+function formatEvalCount(count: number): string {
+  return `${count} eval${count !== 1 ? 's' : ''}`;
+}
+
+function appendSkillSummary(lines: string[], skills: SkillBreakdown[]): void {
+  lines.push('By Skill:');
+  if (skills.length === 0) {
+    lines.push('  (none)');
+    lines.push('');
+    return;
+  }
+
+  for (const skill of skills) {
+    lines.push(`  ${skill.skill}: ${formatEvalCount(skill.count)}`);
+  }
+  lines.push('');
+}
+
+function appendAgentSummary(lines: string[], agents: AgentBreakdown[]): void {
+  lines.push('By Agent:');
+  for (const agent of agents) {
+    lines.push(`  ${agent.agents}: ${formatEvalCount(agent.count)}`);
+  }
+  lines.push('');
+}
+
+function appendNonZeroSection<T extends string>(
+  lines: string[],
+  title: string,
+  order: readonly T[],
+  counts: Record<T, number>,
+): void {
+  lines.push(title);
+  for (const key of order) {
+    if (counts[key] > 0) lines.push(`  ${key}: ${counts[key]}`);
+  }
+  lines.push('');
+}
+
+function appendParseErrorSummary(lines: string[], errors: ParseError[]): void {
+  if (errors.length === 0) return;
+
+  lines.push('Parse Errors:');
+  for (const error of errors) {
+    lines.push(`  ${error.file}: ${error.message}`);
+  }
+}
+
 /** Format an eval summary as human-readable plain text */
 export function formatSummaryText(summary: EvalSummary): string {
   /** Accumulator for output lines */
@@ -140,55 +190,11 @@ export function formatSummaryText(summary: EvalSummary): string {
   lines.push(`============`);
   lines.push(`Total evals: ${summary.totalEvals}`);
   lines.push('');
-
-  // By skill
-  lines.push('By Skill:');
-  if (summary.bySkill.length === 0) {
-    lines.push('  (none)');
-  } else {
-    // Iterate over each skill breakdown entry to format its line
-    for (const s of summary.bySkill) {
-      lines.push(`  ${s.skill}: ${s.count} eval${s.count !== 1 ? 's' : ''}`);
-    }
-  }
-  lines.push('');
-
-  // By agent
-  lines.push('By Agent:');
-  // Iterate over each agent breakdown entry to format its line
-  for (const a of summary.byAgent) {
-    lines.push(`  ${a.agents}: ${a.count} eval${a.count !== 1 ? 's' : ''}`);
-  }
-  lines.push('');
-
-  // By difficulty
-  lines.push('By Difficulty:');
-  // Iterate over each difficulty level to output non-zero counts
-  for (const d of ['easy', 'medium', 'hard'] as const) {
-    if (summary.byDifficulty[d] > 0) {
-      lines.push(`  ${d}: ${summary.byDifficulty[d]}`);
-    }
-  }
-  lines.push('');
-
-  // By origin
-  lines.push('By Origin:');
-  // Iterate over each origin type to output non-zero counts
-  for (const o of ['real-incident', 'synthetic-seed'] as const) {
-    if (summary.byOrigin[o] > 0) {
-      lines.push(`  ${o}: ${summary.byOrigin[o]}`);
-    }
-  }
-
-  // Parse errors
-  if (summary.parseErrors.length > 0) {
-    lines.push('');
-    lines.push('Parse Errors:');
-    // Iterate over each parse error to format its file and message
-    for (const e of summary.parseErrors) {
-      lines.push(`  ${e.file}: ${e.message}`);
-    }
-  }
+  appendSkillSummary(lines, summary.bySkill);
+  appendAgentSummary(lines, summary.byAgent);
+  appendNonZeroSection(lines, 'By Difficulty:', DIFFICULTY_ORDER, summary.byDifficulty);
+  appendNonZeroSection(lines, 'By Origin:', ORIGIN_ORDER, summary.byOrigin);
+  appendParseErrorSummary(lines, summary.parseErrors);
 
   return lines.join('\n');
 }

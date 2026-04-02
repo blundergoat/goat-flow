@@ -18,6 +18,33 @@ export function evaluateCheck(
   /** Common fields shared by all check results */
   const base = { id, name, tier, category, confidence };
 
+  if (detect.type === 'custom') return detect.fn(ctx);
+  if (
+    detect.type === 'json_valid'
+    || detect.type === 'json_contains'
+    || detect.type === 'count_items'
+    || detect.type === 'composite'
+  ) {
+    return evaluateSecondaryCheck(base, pts, partialPts, detect, confidence, ctx);
+  }
+  return evaluatePrimaryCheck(base, pts, partialPts, detect, ctx);
+}
+
+interface CheckBase {
+  id: string;
+  name: string;
+  tier: 'foundation' | 'standard' | 'full';
+  category: string;
+  confidence: Confidence;
+}
+
+function evaluatePrimaryCheck(
+  base: CheckBase,
+  pts: number,
+  partialPts: number | undefined,
+  detect: Extract<Detection, { type: 'file_exists' | 'dir_exists' | 'line_count' | 'grep' | 'grep_count' }>,
+  ctx: FactContext,
+): CheckResult {
   switch (detect.type) {
     case 'file_exists':
       return evalFileExists(base, pts, detect, ctx);
@@ -29,6 +56,18 @@ export function evaluateCheck(
       return evalGrep(base, pts, detect, ctx);
     case 'grep_count':
       return evalGrepCount(base, pts, partialPts, detect, ctx);
+  }
+}
+
+function evaluateSecondaryCheck(
+  base: CheckBase,
+  pts: number,
+  partialPts: number | undefined,
+  detect: Extract<Detection, { type: 'json_valid' | 'json_contains' | 'count_items' | 'composite' }>,
+  confidence: Confidence,
+  ctx: FactContext,
+): CheckResult {
+  switch (detect.type) {
     case 'json_valid':
       return evalJsonValid(base, pts, detect, ctx);
     case 'json_contains':
@@ -37,17 +76,7 @@ export function evaluateCheck(
       return evalCountItems(base, pts, partialPts, detect, ctx);
     case 'composite':
       return evalComposite(base, pts, partialPts, detect, confidence, ctx);
-    case 'custom':
-      return detect.fn(ctx);
   }
-}
-
-interface CheckBase {
-  id: string;
-  name: string;
-  tier: 'foundation' | 'standard' | 'full';
-  category: string;
-  confidence: Confidence;
 }
 
 /** Resolve template placeholders in a path using agent facts. */
@@ -159,37 +188,51 @@ function evalDirExists(base: CheckBase, pts: number, detect: Extract<Detection, 
   };
 }
 
-/** Evaluate a file's line count against pass/fail thresholds. */
-function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'line_count' }>, ctx: FactContext): CheckResult {
-  /** Resolved target file path */
-  const path = resolvePath(detect.path, ctx);
-  /** Number of lines in the target file */
-  let lineCount = 0;
-
+function getLineCountInfo(path: string, ctx: FactContext): { exists: boolean; lineCount: number } {
   if (path === ctx.agentFacts.agent.instructionFile) {
-    lineCount = ctx.agentFacts.instruction.lineCount;
-    if (ctx.agentFacts.instruction.exists === false) {
-      return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${path} not found` };
-    }
-  } else if (path === 'docs/architecture.md') {
-    lineCount = ctx.facts.shared.architecture.lineCount;
-    if (ctx.facts.shared.architecture.exists === false) {
-      return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${path} not found` };
-    }
+    return {
+      exists: ctx.agentFacts.instruction.exists,
+      lineCount: ctx.agentFacts.instruction.lineCount,
+    };
   }
+  if (path === 'docs/architecture.md') {
+    return {
+      exists: ctx.facts.shared.architecture.exists,
+      lineCount: ctx.facts.shared.architecture.lineCount,
+    };
+  }
+  return { exists: true, lineCount: 0 };
+}
 
-  /** Line count at or below which the check passes */
+function formatLineCountResult(
+  base: CheckBase,
+  pts: number,
+  partialPts: number | undefined,
+  detect: Extract<Detection, { type: 'line_count' }>,
+  path: string,
+  lineCount: number,
+): CheckResult {
   const passThreshold = detect.pass ?? 0;
-  /** Line count at or above which the check fails */
   const failThreshold = detect.fail ?? Infinity;
+  const evidence = `${path}: ${lineCount} lines`;
 
   if (lineCount <= passThreshold) {
-    return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${lineCount} lines (at or under ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
+    return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${lineCount} lines (at or under ${passThreshold} target)`, evidence };
   }
   if (detect.partial && partialPts && lineCount <= failThreshold) {
-    return { ...base, status: 'partial', points: partialPts, maxPoints: pts, message: `${lineCount} lines (under ${failThreshold} limit but over ${passThreshold} target)`, evidence: `${path}: ${lineCount} lines` };
+    return { ...base, status: 'partial', points: partialPts, maxPoints: pts, message: `${lineCount} lines (under ${failThreshold} limit but over ${passThreshold} target)`, evidence };
   }
-  return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${lineCount} lines (over ${failThreshold} limit)`, evidence: `${path}: ${lineCount} lines` };
+  return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${lineCount} lines (over ${failThreshold} limit)`, evidence };
+}
+
+/** Evaluate a file's line count against pass/fail thresholds. */
+function evalLineCount(base: CheckBase, pts: number, partialPts: number | undefined, detect: Extract<Detection, { type: 'line_count' }>, ctx: FactContext): CheckResult {
+  const path = resolvePath(detect.path, ctx);
+  const lineCountInfo = getLineCountInfo(path, ctx);
+  if (lineCountInfo.exists === false) {
+    return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${path} not found` };
+  }
+  return formatLineCountResult(base, pts, partialPts, detect, path, lineCountInfo.lineCount);
 }
 
 /** Check whether a regex pattern matches within file or section content. */
@@ -265,53 +308,54 @@ function evalJsonValid(base: CheckBase, pts: number, detect: Extract<Detection, 
   return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `JSON check not implemented for ${path}` };
 }
 
+function getSettingsObject(path: string, ctx: FactContext): Record<string, unknown> | null {
+  if (path !== ctx.agentFacts.agent.settingsFile || !ctx.agentFacts.settings.parsed) return null;
+  return ctx.agentFacts.settings.parsed as Record<string, unknown>;
+}
+
+function resolveJsonFieldValue(obj: Record<string, unknown>, fieldPath: string): unknown {
+  let current: unknown = obj;
+
+  for (const field of fieldPath.split('.')) {
+    if (current && typeof current === 'object' && field in (current as Record<string, unknown>)) {
+      current = (current as Record<string, unknown>)[field];
+      continue;
+    }
+    return undefined;
+  }
+
+  return current;
+}
+
+function stringifyJsonValue(value: unknown): string {
+  if (Array.isArray(value)) return value.join(' ');
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
 /** Check whether a JSON file contains a specific field, optionally matching a pattern. */
 function evalJsonContains(base: CheckBase, pts: number, detect: Extract<Detection, { type: 'json_contains' }>, ctx: FactContext): CheckResult {
-  /** Resolved target file path */
   const path = resolvePath(detect.path, ctx);
+  const obj = getSettingsObject(path, ctx);
+  if (obj === null) return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Cannot check ${path}` };
 
-  if (path === ctx.agentFacts.agent.settingsFile && ctx.agentFacts.settings.parsed) {
-    /** Parsed JSON object from the settings file */
-    const obj = ctx.agentFacts.settings.parsed as Record<string, unknown>;
-    /** Dot-separated field segments to traverse */
-    const fields = detect.field.split('.');
-    /** Current value being traversed through nested fields */
-    let current: unknown = obj;
-    // Iterate over field segments to drill into the nested JSON structure
-    for (const field of fields) {
-      if (current && typeof current === 'object' && field in (current as Record<string, unknown>)) {
-        current = (current as Record<string, unknown>)[field];
-      } else {
-        current = undefined;
-        break;
-      }
-    }
-
-    if (current === undefined) {
-      return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${detect.field} not found in ${path}` };
-    }
-
-    if (detect.pattern) {
-      /** Case-insensitive regex from the detection pattern */
-      const regex = new RegExp(detect.pattern, 'i');
-      /** Stringified value for regex matching - arrays are joined, objects are serialized */
-      const value = Array.isArray(current) ? current.join(' ') : (typeof current === 'string' ? current : JSON.stringify(current));
-      /** Whether the pattern was found in the stringified value */
-      const match = regex.test(value);
-      return {
-        ...base,
-        status: match ? 'pass' : 'fail',
-        points: match ? pts : 0,
-        maxPoints: pts,
-        message: match ? `${detect.field} contains /${detect.pattern}/` : `${detect.field} does not contain /${detect.pattern}/`,
-        evidence: path,
-      };
-    }
-
+  const current = resolveJsonFieldValue(obj, detect.field);
+  if (current === undefined) {
+    return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `${detect.field} not found in ${path}` };
+  }
+  if (!detect.pattern) {
     return { ...base, status: 'pass', points: pts, maxPoints: pts, message: `${detect.field} exists in ${path}` };
   }
 
-  return { ...base, status: 'fail', points: 0, maxPoints: pts, message: `Cannot check ${path}` };
+  const regex = new RegExp(detect.pattern, 'i');
+  const match = regex.test(stringifyJsonValue(current));
+  return {
+    ...base,
+    status: match ? 'pass' : 'fail',
+    points: match ? pts : 0,
+    maxPoints: pts,
+    message: match ? `${detect.field} contains /${detect.pattern}/` : `${detect.field} does not contain /${detect.pattern}/`,
+    evidence: path,
+  };
 }
 
 /** Count distinct items matching a pattern and compare against a pass threshold. */

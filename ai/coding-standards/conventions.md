@@ -91,6 +91,7 @@ goat-flow --min-score 75                 # CI gate
 - Don't hardcode version strings (import from version.ts)
 - Don't use hypothetical examples in docs -- real incidents only
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)
+- Don't create `_modified`, `_new`, `_backup`, `_v2` file variants — modify files in-place
 
 ## Generated / Ignored
 

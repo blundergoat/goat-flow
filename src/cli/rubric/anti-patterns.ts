@@ -3,6 +3,24 @@ import { join } from 'node:path';
 import type { AntiPatternDef, FactContext, AntiPatternResult } from '../types.js';
 import { SKILL_VERSION, SKILL_NAMES } from '../constants.js';
 
+const INSTRUCTION_PATH_PATTERN = /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|ai|agent-evals|\.claude|\.agents|\.github)\/[^`]+)`/g;
+
+function findStaleInstructionRefs(ctx: FactContext): string[] {
+  const content = ctx.agentFacts.instruction.content;
+  const resolvedRoot = ctx.facts.root;
+  if (!content || !resolvedRoot || !existsSync(resolvedRoot)) return [];
+
+  const staleRefs: string[] = [];
+  for (const match of content.matchAll(INSTRUCTION_PATH_PATTERN)) {
+    const path = match[1];
+    if (path === undefined || /[*?{}]/.test(path)) continue;
+    const cleanPath = path.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
+    if (!existsSync(join(resolvedRoot, cleanPath))) staleRefs.push(cleanPath);
+  }
+
+  return staleRefs;
+}
+
 /**
  * Anti-Pattern Deductions (max -15)
  * Add deductions only for misleading or actively harmful states.
@@ -150,22 +168,7 @@ export const antiPatterns: AntiPatternDef[] = [
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const content = ctx.agentFacts.instruction.content;
       if (!content) return { id: 'AP13', name: 'Stale code references in instruction file', triggered: false, deduction: 0, confidence: 'high', message: 'No instruction file' };
-      // Extract backtick-wrapped paths starting with common project directories
-      const pathPattern = /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|ai|agent-evals|\.claude|\.agents|\.github)\/[^`]+)`/g;
-      const stale: string[] = [];
-      for (const m of content.matchAll(pathPattern)) {
-        const p = m[1];
-        if (p === undefined) continue;
-        // Skip glob patterns (e.g., .claude/skills/goat-*/) - not literal paths
-        if (/[*?{}]/.test(p)) continue;
-        // Strip :linenum suffix if present
-        const cleanPath = p.replace(/:[0-9]+(?:[-,][0-9]+)*$/, '');
-        // Only check real filesystem paths - skip virtual test paths
-        const resolvedRoot = ctx.facts.root;
-        if (resolvedRoot && existsSync(resolvedRoot)) {
-          if (!existsSync(join(resolvedRoot, cleanPath))) stale.push(cleanPath);
-        }
-      }
+      const stale = findStaleInstructionRefs(ctx);
       const triggered = stale.length > 0;
       return { id: 'AP13', name: 'Stale code references in instruction file', triggered, deduction: triggered ? -3 : 0, confidence: 'high', message: triggered ? `${stale.length} stale code refs in ${ctx.agentFacts.agent.instructionFile}: ${stale.slice(0, 3).join(', ')}` : 'All code references resolve', evidence: triggered ? stale.join(', ') : undefined };
     },

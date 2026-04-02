@@ -97,14 +97,14 @@ export const foundationChecks: CheckDef[] = [
         if (content === null) {
           return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'No instruction file content' };
         }
-        const hasBudgetTable = /Hotfix.*\d|Standard.*\d|read.*budget|turn.*budget/i.test(content);
-        if (hasBudgetTable) {
-          return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section includes complexity budgets with numbers' };
+        const hasComplexityTiers = /Hotfix|Standard|System.*Change|Infrastructure|re-classify|re-scope|3x.*estimate/i.test(content);
+        if (hasComplexityTiers) {
+          return { id: '1.2.2a', name: 'CLASSIFY has complexity tiers', tier: 'foundation', category: 'Execution Loop', status: 'pass', points: 1, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section includes complexity tiers with re-classification trigger' };
         }
-        return { id: '1.2.2a', name: 'CLASSIFY has budgets', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section has no complexity budget table' };
+        return { id: '1.2.2a', name: 'CLASSIFY has complexity tiers', tier: 'foundation', category: 'Execution Loop', status: 'fail', points: 0, maxPoints: 1, confidence: 'medium', message: 'CLASSIFY section has no complexity tiers' };
       },
     },
-    recommendation: 'Add a complexity budget table to the CLASSIFY step with read/turn budgets per complexity level (Hotfix, Standard, System, Infrastructure)',
+    recommendation: 'Add complexity tiers to the CLASSIFY step (Hotfix / Small Feature / Standard / System / Infrastructure) with a re-classification trigger',
     recommendationKey: 'add-classify-budgets',
   },
   {

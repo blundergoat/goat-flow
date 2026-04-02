@@ -112,7 +112,7 @@ If approved → implement, then Phase D4.
 Declare before reading deeply:
 - **In scope:** [files, directories, or patterns]
 - **Out of scope:** [what we're NOT investigating]
-- **Read budget:** Default 8 files. Narrow: 5. Broad: 12.
+- **Read estimate:** How many files do you expect to read? (If you exceed 3x this estimate, pause and re-scope.)
 
 Read `docs/footguns/` and `.goat-flow/footguns/` for entries mentioning the target area.
 
@@ -127,7 +127,7 @@ Read in layers:
 
 For each file, log: role, connections, evidence tag (OBSERVED / INFERRED).
 
-**CHECKPOINT:** At read budget: "[N] files read. Key findings: [summary]. Continue or present?"
+**CHECKPOINT:** If reads exceed 3x your initial estimate: "[N] files read, estimated [M]. Re-scope or continue?"
 
 ### Phase I3 - Report
 
@@ -178,7 +178,7 @@ Conversational: present findings by severity tier, pause between tiers. Let the 
 - MUST declare scope before deep reading (investigate mode)
 - MUST tag evidence as OBSERVED or INFERRED (investigate mode)
 - MUST include "What I Didn't Read" in every investigation report
-- MUST respect read budget - pause at limit (investigate mode)
+- MUST pause if reads exceed 3x initial estimate — re-scope before continuing (investigate mode)
 - MUST check recurrence against footguns + lessons (diagnose mode)
 - MUST NOT fabricate file paths or function names
 

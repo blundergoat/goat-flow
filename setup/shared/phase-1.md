@@ -50,7 +50,7 @@ For ALL projects:
 - Adapt all examples and Ask First boundaries for THIS project.
 - Do NOT skip sections (f)–(i) - they are small but required.
 - The loop MUST be: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG.
-- CLASSIFY MUST include read/turn budgets per complexity tier.
+- CLASSIFY MUST include complexity tiers (Hotfix / Small Feature / Standard / System / Infrastructure) with 3x-estimate re-classification trigger.
 - If other agent instruction files exist, include multi-agent coordination
   in LOG. Router table MUST cross-reference them.
 - If scripts/ has existing preflight or validation scripts, use them

@@ -19,16 +19,17 @@ BAD:  "The spec says 100 lines for apps" (guessed without reading)
 GOOD: Read docs/system-spec.md:104 → "Target 120 lines. Hard limit 150."
 ```
 
-**CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
+**CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
 
-| Complexity | Read budget | Turn budget |
-|------------|-------------|-------------|
-| Hotfix | 2 reads | 3 turns |
-| Standard Feature | 4 reads | 10 turns |
-| System Change | 6 reads | 20 turns |
-| Infrastructure | 8 reads | 25 turns |
+| Complexity | Guideline | Ceremony |
+|------------|-----------|----------|
+| Hotfix | 1-2 files. If you need more, re-classify. | Minimal — skip goat-plan Phases 2-3, skip closing ceremony |
+| Small Feature | Compressed brief (Problem/Solution/Scope/Success all at once). | Light — skip mob elaboration and triangular tension |
+| Standard | No fixed cap. If reads exceed 3x your initial estimate, re-classify. | Full phases, gates at major decisions |
+| System Change | No fixed cap. Same re-classification trigger. | Full phases + cross-boundary verification |
+| Infrastructure | No fixed cap. Same re-classification trigger. | Full phases + rollback planning + multi-agent coordination |
 
-Over budget = re-classify before continuing.
+Exceeding your estimate doesn't mean you're wrong — it means the task is bigger than classified. Stop, re-scope, continue.
 
 **SCOPE** - MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
 
@@ -87,6 +88,7 @@ Boundaries:
 MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
 
 ## Hard Rules
+- If file exists, modify in-place. NEVER create `_modified`, `_new`, `_backup`, `_v2` variants.
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples

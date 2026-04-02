@@ -10,24 +10,27 @@ import { getAgentTemplates, validateTemplateRefs, mapLanguagesToTemplates, mapSi
 /** Projects at or above this percentage get the short fix list instead of targeted fix */
 const SHORT_FIX_THRESHOLD = 90;
 
-/** Render detected project signals into the setup prompt output */
-function renderSignals(lines: string[], signals: ProjectSignals): void {
+function formatStaticAnalysisTools(signals: ProjectSignals, withLevelLabel: boolean): string {
+  return signals.staticAnalysis
+    .map((signal) => {
+      if (!signal.level) return signal.tool;
+      return withLevelLabel ? `${signal.tool} level ${signal.level}` : `${signal.tool} (${signal.level})`;
+    })
+    .join(', ');
+}
+
+function collectSignalSummaryParts(signals: ProjectSignals): string[] {
   const parts: string[] = [];
   if (signals.codeGenTools.length > 0) parts.push(`**Code gen:** ${signals.codeGenTools.join(', ')}`);
   if (signals.deployPlatforms.length > 0) parts.push(`**Deploy:** ${signals.deployPlatforms.join(', ')}`);
   if (signals.llmIntegration) parts.push('**LLM integration detected**');
-  if (signals.staticAnalysis.length > 0) {
-    const tools = signals.staticAnalysis.map(s => s.level ? `${s.tool} (${s.level})` : s.tool).join(', ');
-    parts.push(`**Static analysis:** ${tools}`);
-  }
+  if (signals.staticAnalysis.length > 0) parts.push(`**Static analysis:** ${formatStaticAnalysisTools(signals, false)}`);
   if (signals.complianceSignals) parts.push('**PHI/compliance signals detected**');
   if (signals.formatterGaps.length > 0) parts.push(`**Formatter gaps:** ${signals.formatterGaps.join(', ')}`);
-  if (parts.length > 0) {
-    lines.push('');
-    lines.push(parts.join(' | '));
-  }
+  return parts;
+}
 
-  // Actionable follow-ups for detected signals
+function collectSignalActionLines(signals: ProjectSignals): string[] {
   const actions: string[] = [];
   if (signals.llmIntegration) {
     actions.push('- **LLM integration:** Add prompt/template file paths to the Router Table. Add "prompt changes require scenario testing" to Ask First boundaries. Seed a learning-loop entry for prompt-regression risk.');
@@ -39,13 +42,25 @@ function renderSignals(lines: string[], signals: ProjectSignals): void {
     actions.push(`- **Formatter gaps (${signals.formatterGaps.join(', ')}):** Add formatters to the PostToolUse hook (format-file.sh). Every detected language should have a formatter running on save.`);
   }
   if (signals.staticAnalysis.length > 0) {
-    const tools = signals.staticAnalysis.map(s => s.level ? `${s.tool} level ${s.level}` : s.tool).join(', ');
+    const tools = formatStaticAnalysisTools(signals, true);
     actions.push(`- **Static analysis (${tools}):** Verify the linter is enforced in hooks (stop-lint.sh), not just configured. Add "MUST maintain ${tools} compliance" to the instruction file.`);
   }
+  return actions;
+}
+
+/** Render detected project signals into the setup prompt output */
+function renderSignals(lines: string[], signals: ProjectSignals): void {
+  const parts = collectSignalSummaryParts(signals);
+  if (parts.length > 0) {
+    lines.push('');
+    lines.push(parts.join(' | '));
+  }
+
+  const actions = collectSignalActionLines(signals);
   if (actions.length > 0) {
     lines.push('');
     lines.push('**Signal-driven setup tasks:**');
-    for (const a of actions) lines.push(a);
+    lines.push(...actions);
   }
 }
 
@@ -107,7 +122,7 @@ function renderAllPass(agentId: AgentId, agentReport: AgentReport, report?: Scan
   lines.push('');
 
   // Summary of what's installed
-  const facts = report?.agents?.find(a => a.agent === agentId);
+  const facts = report?.agents.find(a => a.agent === agentId);
   if (facts) {
     const checks = agentReport.checks;
     const skillCount = checks.filter(c => c.category === 'Skills' && c.status === 'pass').length;
@@ -132,6 +147,94 @@ function renderAllPass(agentId: AgentId, agentReport: AgentReport, report?: Scan
   return lines.join('\n');
 }
 
+function getTriggeredAntiPatterns(agentReport: AgentReport): AgentReport['antiPatterns'] {
+  return agentReport.antiPatterns.filter(ap => ap.triggered);
+}
+
+function renderShortFixSummaryLine(agentReport: AgentReport, failedCount: string, triggeredCount: number): string {
+  const countText = triggeredCount > 0
+    ? `${failedCount} checks + ${triggeredCount} anti-patterns remaining.`
+    : `${failedCount} checks remaining.`;
+  return `This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%). ${countText}`;
+}
+
+function findRecommendationAction(agentReport: AgentReport, key: string): string | null {
+  const recommendation = agentReport.recommendations.find(
+    item => item.checkId
+      && agentReport.checks.some(check => check.id === item.checkId && check.recommendationKey === key),
+  );
+  return recommendation?.action ?? null;
+}
+
+function renderShortFixItem(
+  key: string,
+  agentId: AgentId,
+  agentReport: AgentReport,
+  vars: PromptVariables,
+): string | null {
+  const fragment = getFragment(key);
+  if (!fragment || fragment.phase === 'anti-pattern') return null;
+
+  const isSkillQuality = key.startsWith('add-skill-') || key === 'create-all-skills';
+  const templatePath = isSkillQuality ? null : getFragmentTemplate(key, agentId);
+  if (templatePath) {
+    return `- **${fragment.category}**: Adapt from ${getTemplatePath(templatePath)}`;
+  }
+
+  const recommendationAction = findRecommendationAction(agentReport, key);
+  if (recommendationAction) {
+    return `- **${fragment.category}**: ${recommendationAction}`;
+  }
+
+  const override = fragment.agentOverrides?.[agentId];
+  const instruction = fillTemplate(override ?? fragment.instruction, vars);
+  return `- **${fragment.category}**: ${instruction.split('\n')[0] ?? ''}`;
+}
+
+function renderShortFixItems(
+  lines: string[],
+  neededKeys: Set<string>,
+  agentId: AgentId,
+  agentReport: AgentReport,
+  vars: PromptVariables,
+): void {
+  for (const key of neededKeys) {
+    const line = renderShortFixItem(key, agentId, agentReport, vars);
+    if (line) lines.push(line);
+  }
+}
+
+function renderTriggeredAntiPatternFixes(
+  lines: string[],
+  triggered: AgentReport['antiPatterns'],
+  agentId: AgentId,
+  vars: PromptVariables,
+): void {
+  if (triggered.length === 0) return;
+
+  lines.push('');
+  lines.push('**Anti-patterns to fix:**');
+  lines.push('');
+  for (const antiPattern of triggered) {
+    const fragment = antiPattern.recommendationKey ? getFragment(antiPattern.recommendationKey) : undefined;
+    if (!fragment) {
+      lines.push(`- **${antiPattern.id}**: ${antiPattern.message}`);
+      continue;
+    }
+
+    const override = fragment.agentOverrides?.[agentId];
+    const instruction = fillTemplate(override ?? fragment.instruction, vars);
+    lines.push(`### ${antiPattern.id}: ${antiPattern.name} (${antiPattern.deduction} pts)`);
+    lines.push('');
+    if (antiPattern.evidence) {
+      lines.push(`**Evidence:** ${antiPattern.evidence}`);
+      lines.push('');
+    }
+    lines.push(instruction);
+    lines.push('');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Mode: Short fix (90-99%)
 // ---------------------------------------------------------------------------
@@ -140,76 +243,22 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
   const profile = PROFILES[agentId];
   const vars = extractTemplateVars(report, agentReport);
   const lines: string[] = [];
+  const neededKeys = collectNeededKeys(agentReport);
+  const triggered = getTriggeredAntiPatterns(agentReport);
 
   lines.push(`# GOAT Flow Setup - ${profile.name}`);
   lines.push('');
-  const triggeredAPs = agentReport.antiPatterns.filter(ap => ap.triggered).length;
-  const countText = triggeredAPs > 0
-    ? `${vars.failedCount} checks + ${triggeredAPs} anti-patterns remaining.`
-    : `${vars.failedCount} checks remaining.`;
-  lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%). ${countText}`);
+  lines.push(renderShortFixSummaryLine(agentReport, vars.failedCount, triggered.length));
   renderSignals(lines, report.stack.signals);
   lines.push('');
-
-  // Collect needed fragment keys
-  const neededKeys = collectNeededKeys(agentReport);
-
-  // Even if no check keys, anti-patterns may still need fixing
-  const triggered = agentReport.antiPatterns.filter(ap => ap.triggered);
 
   if (neededKeys.size === 0 && triggered.length === 0) {
     lines.push('No actionable fixes found.');
     return lines.join('\n');
   }
 
-  // Render each failing check with its recommendation or fragment content
-  for (const key of neededKeys) {
-    const fragment = getFragment(key);
-    if (!fragment) continue;
-    // Skip AP fragments here - they're rendered below with evidence
-    if (fragment.phase === 'anti-pattern') continue;
-    // Skip template path for skill-quality keys - they all point to goat-debug.md as an example
-    // reference, not a creation template. Render their actual instruction text instead.
-    const isSkillQuality = key.startsWith('add-skill-') || key === 'create-all-skills';
-    const templatePath = isSkillQuality ? null : getFragmentTemplate(key, agentId);
-    if (templatePath) {
-      lines.push(`- **${fragment.category}**: Adapt from ${getTemplatePath(templatePath)}`);
-    } else {
-      const matchingRec = agentReport.recommendations.find(r => r.checkId && agentReport.checks.some(c => c.id === r.checkId && c.recommendationKey === key));
-      if (matchingRec) {
-        lines.push(`- **${fragment.category}**: ${matchingRec.action}`);
-      } else {
-        const override = fragment.agentOverrides?.[agentId];
-        const instruction = fillTemplate(override ?? fragment.instruction, vars);
-        lines.push(`- **${fragment.category}**: ${instruction.split('\n')[0] ?? ''}`);
-      }
-    }
-  }
-
-  // Anti-patterns - render full fragment instructions with evidence
-  if (triggered.length > 0) {
-    lines.push('');
-    lines.push('**Anti-patterns to fix:**');
-    lines.push('');
-    for (const ap of triggered) {
-      const fragment = ap.recommendationKey ? getFragment(ap.recommendationKey) : undefined;
-      if (fragment) {
-        const override = fragment.agentOverrides?.[agentId];
-        const instruction = fillTemplate(override ?? fragment.instruction, vars);
-        lines.push(`### ${ap.id}: ${ap.name} (${ap.deduction} pts)`);
-        lines.push('');
-        // Include scan evidence if available
-        if (ap.evidence) {
-          lines.push(`**Evidence:** ${ap.evidence}`);
-          lines.push('');
-        }
-        lines.push(instruction);
-        lines.push('');
-      } else {
-        lines.push(`- **${ap.id}**: ${ap.message}`);
-      }
-    }
-  }
+  renderShortFixItems(lines, neededKeys, agentId, agentReport, vars);
+  renderTriggeredAntiPatternFixes(lines, triggered, agentId, vars);
 
   lines.push('');
   lines.push(`**Target: 100% with zero anti-pattern deductions.**`);
@@ -223,106 +272,183 @@ function renderShortFix(report: ScanReport, agentId: AgentId, agentReport: Agent
 // Mode: Targeted fix (1-89%)
 // ---------------------------------------------------------------------------
 
+interface TargetedTemplateRef {
+  category: string;
+  key: string;
+  template: string;
+}
+
+interface TargetedInlineFragment {
+  category: string;
+  instruction: string;
+}
+
+function buildCommandSummary(parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' | ');
+}
+
+function renderTargetedFixHeader(
+  lines: string[],
+  profileName: string,
+  agentReport: AgentReport,
+  vars: PromptVariables,
+): void {
+  lines.push(`# GOAT Flow Setup - ${profileName}`);
+  lines.push('');
+  lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%) for ${profileName}.`);
+  lines.push(`**${vars.failedCount}** checks need attention out of ${vars.totalCount} total.`);
+  lines.push('');
+  lines.push(`**Stack:** ${vars.languages}`);
+  const commands = buildCommandSummary([
+    vars.buildCommand && `**Build:** \`${vars.buildCommand}\``,
+    vars.testCommand && `**Test:** \`${vars.testCommand}\``,
+    vars.lintCommand && `**Lint:** \`${vars.lintCommand}\``,
+  ]);
+  if (commands) lines.push(commands);
+  lines.push('');
+}
+
+function collectPhaseFixes(
+  neededKeys: Set<string>,
+  phase: FragmentPhase,
+  languages: string[],
+  agentId: AgentId,
+  vars: PromptVariables,
+): {
+  templateRefs: TargetedTemplateRef[];
+  inlineFragments: TargetedInlineFragment[];
+} {
+  const templateRefs: TargetedTemplateRef[] = [];
+  const inlineFragments: TargetedInlineFragment[] = [];
+
+  for (const key of neededKeys) {
+    const fragment = getFragment(key);
+    if (!fragment || fragment.phase !== phase) continue;
+
+    const langTemplate = getLanguageTemplate(key, languages);
+    const templatePath = langTemplate ?? getFragmentTemplate(key, agentId);
+    if (templatePath) {
+      templateRefs.push({ category: fragment.category, key, template: templatePath });
+      continue;
+    }
+
+    const override = fragment.agentOverrides?.[agentId];
+    inlineFragments.push({
+      category: fragment.category,
+      instruction: fillTemplate(override ?? fragment.instruction, vars),
+    });
+  }
+
+  return { templateRefs, inlineFragments };
+}
+
+function renderSkillTemplateTasks(
+  lines: string[],
+  refs: TargetedTemplateRef[],
+  agentId: AgentId,
+  languages: string,
+): number {
+  if (refs.length === 0) return 1;
+
+  lines.push(`**Missing Skills (${refs.length} of ${SKILL_NAMES.length})** - create in \`${PROFILES[agentId].skillsDir}/{skill-name}/SKILL.md\``);
+  lines.push('');
+  let taskNum = 1;
+
+  for (const ref of refs) {
+    const name = ref.key === 'create-skill-goat'
+      ? 'goat'
+      : ref.key.replace('create-skill-', 'goat-');
+    const outputPath = `${PROFILES[agentId].skillsDir}/${name}/SKILL.md`;
+    lines.push(renderTask({
+      num: taskNum++,
+      outputPath,
+      templatePath: getTemplatePath(ref.template),
+      adapt: defaultAdaptGuidance(outputPath, undefined, languages),
+      verify: defaultVerify(outputPath),
+    }));
+    lines.push('');
+  }
+
+  return taskNum;
+}
+
+function renderNonSkillTemplateTasks(
+  lines: string[],
+  refs: TargetedTemplateRef[],
+  startTaskNum: number,
+  languages: string,
+): void {
+  let taskNum = startTaskNum;
+
+  for (const ref of refs) {
+    if (ref.key.startsWith('add-skill-') || ref.key === 'create-all-skills') continue;
+    const outputPath = getFragment(ref.key)?.category ?? ref.key.replace(/^create-/, '').replace(/-/g, '/');
+    lines.push(renderTask({
+      num: taskNum++,
+      outputPath,
+      templatePath: getTemplatePath(ref.template),
+      adapt: defaultAdaptGuidance(ref.key, undefined, languages),
+      verify: defaultVerify(ref.key),
+    }));
+    lines.push('');
+  }
+}
+
+function renderInlineTargetedFragments(lines: string[], fragments: TargetedInlineFragment[]): void {
+  for (const fragment of fragments) {
+    lines.push(fragment.instruction);
+    lines.push('');
+  }
+}
+
+function renderStandardPhaseNotes(lines: string[], phase: FragmentPhase, vars: PromptVariables): void {
+  if (phase !== 'standard') return;
+
+  lines.push('**Skill quality check** - every skill MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
+  lines.push('');
+  if (vars.languages && vars.languages !== 'unknown') {
+    lines.push(`**Adaptation for this project:** Replace template Step 0 questions with questions about ${vars.languages} patterns. Replace template examples with patterns from this codebase. Do NOT leave placeholder text like "[Step 1]" or "[describe X]".`);
+    lines.push('');
+  }
+}
+
+function renderPhaseGate(lines: string[], phase: FragmentPhase, agentId: AgentId): void {
+  if (phase === 'anti-pattern') return;
+  lines.push(`**GATE:** Run \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push('');
+}
+
+function renderTargetedPhase(
+  lines: string[],
+  phase: FragmentPhase,
+  templateRefs: TargetedTemplateRef[],
+  inlineFragments: TargetedInlineFragment[],
+  agentId: AgentId,
+  vars: PromptVariables,
+): void {
+  if (templateRefs.length === 0 && inlineFragments.length === 0) return;
+
+  lines.push(`## ${PHASE_HEADINGS[phase]}`);
+  lines.push('');
+  const skillRefs = templateRefs.filter(ref => ref.key.startsWith('create-skill-'));
+  const nonSkillRefs = templateRefs.filter(ref => !ref.key.startsWith('create-skill-'));
+  const nextTaskNum = renderSkillTemplateTasks(lines, skillRefs, agentId, vars.languages);
+  renderNonSkillTemplateTasks(lines, nonSkillRefs, nextTaskNum, vars.languages);
+  renderInlineTargetedFragments(lines, inlineFragments);
+  renderStandardPhaseNotes(lines, phase, vars);
+  renderPhaseGate(lines, phase, agentId);
+}
+
 function renderTargetedFix(report: ScanReport, agentId: AgentId, agentReport: AgentReport): string {
   const profile = PROFILES[agentId];
   const vars = extractTemplateVars(report, agentReport);
   const lines: string[] = [];
-
-  lines.push(`# GOAT Flow Setup - ${profile.name}`);
-  lines.push('');
-  lines.push(`This project scores **${agentReport.score.grade}** (${agentReport.score.percentage}%) for ${profile.name}.`);
-  lines.push(`**${vars.failedCount}** checks need attention out of ${vars.totalCount} total.`);
-  lines.push('');
-  lines.push(`**Stack:** ${vars.languages}`);
-  const cmds = [
-    vars.buildCommand && `**Build:** \`${vars.buildCommand}\``,
-    vars.testCommand && `**Test:** \`${vars.testCommand}\``,
-    vars.lintCommand && `**Lint:** \`${vars.lintCommand}\``,
-  ].filter(Boolean).join(' | ');
-  if (cmds) lines.push(cmds);
-  lines.push('');
-
-  // Collect needed fragment keys
   const neededKeys = collectNeededKeys(agentReport);
+  renderTargetedFixHeader(lines, profile.name, agentReport, vars);
 
-  // Group fragments by phase, rendering template refs or inline content
   for (const phase of PHASE_ORDER) {
-    /** Template references for this phase (grouped by category) */
-    const templateRefs: Array<{ category: string; key: string; template: string }> = [];
-    /** Inline fix instructions for this phase */
-    const inlineFragments: Array<{ category: string; instruction: string }> = [];
-
-    for (const key of neededKeys) {
-      const fragment = getFragment(key);
-      if (!fragment || fragment.phase !== phase) continue;
-
-      // Prefer language-specific template when available (e.g., php.md over generic conventions.md)
-      const langTemplate = getLanguageTemplate(key, report.stack.languages);
-      const templatePath = langTemplate ?? getFragmentTemplate(key, agentId);
-      if (templatePath) {
-        templateRefs.push({ category: fragment.category, key, template: templatePath });
-      } else {
-        const override = fragment.agentOverrides?.[agentId];
-        const instruction = fillTemplate(override ?? fragment.instruction, vars);
-        inlineFragments.push({ category: fragment.category, instruction });
-      }
-    }
-
-    if (templateRefs.length === 0 && inlineFragments.length === 0) continue;
-
-    lines.push(`## ${PHASE_HEADINGS[phase]}`);
-    lines.push('');
-
-    // Render template refs as numbered tasks
-    let taskNum = 1;
-    if (templateRefs.length > 0) {
-      const skillRefs = templateRefs.filter(r => r.key.startsWith('create-skill-'));
-      const nonSkillRefs = templateRefs.filter(r => !r.key.startsWith('create-skill-'));
-
-      // Skills as numbered tasks
-      if (skillRefs.length > 0) {
-        lines.push(`**Missing Skills (${skillRefs.length} of ${SKILL_NAMES.length})** - create in \`${PROFILES[agentId].skillsDir}/{skill-name}/SKILL.md\``);
-        lines.push('');
-        for (const ref of skillRefs) {
-          const name = ref.key === 'create-skill-goat'
-            ? 'goat'
-            : ref.key.replace('create-skill-', 'goat-');
-          const outputPath = `${PROFILES[agentId].skillsDir}/${name}/SKILL.md`;
-          lines.push(renderTask({ num: taskNum++, outputPath, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(outputPath, undefined, vars.languages), verify: defaultVerify(outputPath) }));
-          lines.push('');
-        }
-      }
-
-      // Non-skill template refs as tasks
-      for (const ref of nonSkillRefs) {
-        // Skip skill-quality refs - they're guidance, not file creation
-        if (ref.key.startsWith('add-skill-') || ref.key === 'create-all-skills') continue;
-        const outputPath = ref.key.replace(/^create-/, '').replace(/-/g, '/');
-        const fragment = getFragment(ref.key);
-        lines.push(renderTask({ num: taskNum++, outputPath: fragment?.category ?? outputPath, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.key, undefined, vars.languages), verify: defaultVerify(ref.key) }));
-        lines.push('');
-      }
-    }
-
-    // Inline fragments (fix-kind or fragments without template)
-    for (const frag of inlineFragments) {
-      lines.push(frag.instruction);
-      lines.push('');
-    }
-
-    if (phase === 'standard') {
-      lines.push('**Skill quality check** - every skill MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
-      lines.push('');
-      if (vars.languages && vars.languages !== 'unknown') {
-        lines.push(`**Adaptation for this project:** Replace template Step 0 questions with questions about ${vars.languages} patterns. Replace template examples with patterns from this codebase. Do NOT leave placeholder text like "[Step 1]" or "[describe X]".`);
-        lines.push('');
-      }
-    }
-
-    if (phase !== 'anti-pattern') {
-      lines.push(`**GATE:** Run \`${getCliCommand()} scan . --agent ${agentId}\``);
-      lines.push('');
-    }
+    const phaseFixes = collectPhaseFixes(neededKeys, phase, report.stack.languages, agentId, vars);
+    renderTargetedPhase(lines, phase, phaseFixes.templateRefs, phaseFixes.inlineFragments, agentId, vars);
   }
 
   lines.push('---');
@@ -377,38 +503,31 @@ function defaultVerify(output: string): string {
 // Mode: Multi-agent deduplicated setup
 // ---------------------------------------------------------------------------
 
-/**
- * Compose a deduplicated setup for multiple agents.
- * Shared files (docs, skills, coding-standards, evals, CI) appear once.
- * Per-agent files (instruction file, settings, hooks) appear in agent sections.
- */
-export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]): string {
-  // Validate template refs for ALL agents (same guarantee as single-agent path)
+function validateMultiAgentTemplateRefs(agentIds: AgentId[]): void {
   for (const id of agentIds) {
     const missing = validateTemplateRefs(id);
-    if (missing.length > 0) {
-      const list = missing.map(p => `  - ${getTemplatePath(p)}`).join('\n');
-      throw new Error(`Missing template files for ${id} setup:\n${list}\nRe-install goat-flow or check the installation.`);
-    }
+    if (missing.length === 0) continue;
+    const list = missing.map(path => `  - ${getTemplatePath(path)}`).join('\n');
+    throw new Error(`Missing template files for ${id} setup:\n${list}\nRe-install goat-flow or check the installation.`);
   }
+}
 
-  const lines: string[] = [];
+function renderMultiAgentIntro(lines: string[], report: ScanReport): string {
   const stack = report.stack;
   const languages = stack.languages.join(', ') || 'unknown';
-  const cmds = [
+  const commands = buildCommandSummary([
     stack.buildCommand && `Build: ${stack.buildCommand}`,
     stack.testCommand && `Test: ${stack.testCommand}`,
     stack.lintCommand && `Lint: ${stack.lintCommand}`,
     stack.formatCommand && `Format: ${stack.formatCommand}`,
-  ].filter(Boolean).join(' | ');
+  ]);
 
   lines.push('# GOAT Flow Setup - All Agents');
   lines.push('');
   lines.push(`Stack: ${languages}`);
-  if (cmds) lines.push(cmds);
+  if (commands) lines.push(commands);
   renderSignals(lines, stack.signals);
   lines.push('');
-
   lines.push('## How this works');
   lines.push('');
   lines.push('This prompt references template files in the goat-flow project. For each phase:');
@@ -420,25 +539,52 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
   lines.push(`If any template path below is missing, run \`${getCliCommand()} setup\` again to get updated paths.`);
   lines.push('');
 
-  // Gather shared refs - use generic skill paths instead of first agent's paths
-  const firstId = agentIds[0]!;
-  const allRefs = getAgentTemplates(firstId);
-  const languageRefs = mapLanguagesToTemplates(stack.languages);
-  const signalRefs = mapSignalsToTemplates(stack.signals, stack.languages);
-  const standardShared = allRefs.filter(r => r.phase === 'standard' && !r.output.startsWith('('));
-  const fullShared = allRefs.filter(r => r.phase === 'full' && !r.output.startsWith('('));
+  return languages;
+}
 
-  // --- Per-agent foundation sections ---
+function normalizeSharedOutputPath(output: string): string {
+  return output.includes('/skills/')
+    ? output.replace(/\.[^/]+\/skills\//, '{skills_dir}/')
+    : output;
+}
+
+function renderMultiAgentTaskList(
+  lines: string[],
+  refs: Array<{ output: string; template: string; note?: string }>,
+  languages: string,
+): void {
+  let taskNum = 1;
+  for (const ref of refs) {
+    const output = normalizeSharedOutputPath(ref.output);
+    lines.push(renderTask({
+      num: taskNum++,
+      outputPath: output,
+      templatePath: getTemplatePath(ref.template),
+      adapt: defaultAdaptGuidance(output, ref.note, languages),
+      verify: defaultVerify(output),
+    }));
+    lines.push('');
+  }
+}
+
+function renderMultiAgentFoundationSections(lines: string[], agentIds: AgentId[], languages: string): void {
   for (const agentId of agentIds) {
     const profile = PROFILES[agentId];
-    const agentFoundation = getAgentTemplates(agentId).filter(r => r.phase === 'foundation' && !r.output.startsWith('('));
-    const guideRef = getAgentTemplates(agentId).find(r => r.output.startsWith('(') && r.phase === 'foundation');
+    const templates = getAgentTemplates(agentId);
+    const foundationRefs = templates.filter(ref => ref.phase === 'foundation' && !ref.output.startsWith('('));
+    const guideRef = templates.find(ref => ref.output.startsWith('(') && ref.phase === 'foundation');
 
     lines.push(`## ${profile.name} - Foundation`);
     lines.push('');
     let taskNum = 1;
-    for (const ref of agentFoundation) {
-      lines.push(renderTask({ num: taskNum++, outputPath: ref.output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.output, ref.note, languages), verify: defaultVerify(ref.output) }));
+    for (const ref of foundationRefs) {
+      lines.push(renderTask({
+        num: taskNum++,
+        outputPath: ref.output,
+        templatePath: getTemplatePath(ref.template),
+        adapt: defaultAdaptGuidance(ref.output, ref.note, languages),
+        verify: defaultVerify(ref.output),
+      }));
       lines.push('');
     }
     if (guideRef) {
@@ -446,36 +592,66 @@ export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]):
       lines.push('');
     }
   }
+}
 
+function renderMultiAgentSharedSection(
+  lines: string[],
+  heading: string,
+  refs: Array<{ output: string; template: string; note?: string }>,
+  languages: string,
+  gateText: string,
+  includeSkillNote: boolean,
+): void {
+  lines.push(heading);
+  lines.push('');
+  renderMultiAgentTaskList(lines, refs, languages);
+  if (includeSkillNote) {
+    lines.push('Skills go in each agent\'s skills directory: `.claude/skills/`, `.agents/skills/`');
+    lines.push('');
+    lines.push('**Skill quality check** - every skill file MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
+    lines.push('');
+  }
+  lines.push(gateText);
+  lines.push('');
+}
+
+/**
+ * Compose a deduplicated setup for multiple agents.
+ * Shared files (docs, skills, coding-standards, evals, CI) appear once.
+ * Per-agent files (instruction file, settings, hooks) appear in agent sections.
+ */
+export function composeMultiAgentSetup(report: ScanReport, agentIds: AgentId[]): string {
+  validateMultiAgentTemplateRefs(agentIds);
+
+  const lines: string[] = [];
+  const languages = renderMultiAgentIntro(lines, report);
+  const firstId = agentIds[0];
+  if (!firstId) return lines.join('\n');
+  const allRefs = getAgentTemplates(firstId);
+  const languageRefs = mapLanguagesToTemplates(report.stack.languages);
+  const signalRefs = mapSignalsToTemplates(report.stack.signals, report.stack.languages);
+  const standardShared = allRefs.filter(r => r.phase === 'standard' && !r.output.startsWith('('));
+  const fullShared = allRefs.filter(r => r.phase === 'full' && !r.output.startsWith('('));
+
+  renderMultiAgentFoundationSections(lines, agentIds, languages);
   lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` - foundation tier must be 100% for all agents.`);
   lines.push('');
-
-  // --- Shared standard phase ---
-  lines.push('## Standard (shared across all agents)');
-  lines.push('');
-  let taskNum = 1;
-  for (const ref of [...standardShared, ...languageRefs, ...signalRefs]) {
-    const output = ref.output.includes('/skills/') ? ref.output.replace(/\.[^/]+\/skills\//, '{skills_dir}/') : ref.output;
-    lines.push(renderTask({ num: taskNum++, outputPath: output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(output, ref.note, languages), verify: defaultVerify(output) }));
-    lines.push('');
-  }
-  lines.push('Skills go in each agent\'s skills directory: `.claude/skills/`, `.agents/skills/`');
-  lines.push('');
-  lines.push('**Skill quality check** - every skill file MUST have: **When to Use**, **Process** (phased + human gates), **Constraints**, **Output Format**, **Chaining**. No placeholder text.');
-  lines.push('');
-  lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` - standard tier must be 100% for all agents.`);
-  lines.push('');
-
-  // --- Shared full phase ---
-  lines.push('## Full (shared across all agents)');
-  lines.push('');
-  taskNum = 1;
-  for (const ref of fullShared) {
-    lines.push(renderTask({ num: taskNum++, outputPath: ref.output, templatePath: getTemplatePath(ref.template), adapt: defaultAdaptGuidance(ref.output, ref.note, languages), verify: defaultVerify(ref.output) }));
-    lines.push('');
-  }
-  lines.push(`**GATE:** Run \`${getCliCommand()} scan .\` - target 100% across all agents.`);
-  lines.push('');
+  renderMultiAgentSharedSection(
+    lines,
+    '## Standard (shared across all agents)',
+    [...standardShared, ...languageRefs, ...signalRefs],
+    languages,
+    `**GATE:** Run \`${getCliCommand()} scan .\` - standard tier must be 100% for all agents.`,
+    true,
+  );
+  renderMultiAgentSharedSection(
+    lines,
+    '## Full (shared across all agents)',
+    fullShared,
+    languages,
+    `**GATE:** Run \`${getCliCommand()} scan .\` - target 100% across all agents.`,
+    false,
+  );
 
   lines.push('---');
   lines.push('');

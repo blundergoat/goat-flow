@@ -20,10 +20,10 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      listed in the Ask First boundaries. Known traps prevent repeat mistakes.
    - CLASSIFY: three signals before acting:
      1. Intent: question (answer it) vs directive (act on it)
-     2. Complexity (re-classification triggers — if you exceed these,
-        stop and re-classify before continuing):
-        Hotfix (2 reads / 3 turns), Standard (4 / 10),
-        System Change (6 / 20), Infrastructure (8 / 25)
+     2. Complexity tiers: Hotfix (1-2 files) / Small Feature (compressed brief) /
+        Standard / System Change / Infrastructure.
+        No fixed read/turn caps. If reads exceed 3x your initial estimate,
+        re-classify before continuing.
      3. Mode: Plan / Implement / Explain / Debug / Review
    - SCOPE: declare before acting - files allowed to change, non-goals,
      max blast radius. Expanding beyond scope = stop and re-scope

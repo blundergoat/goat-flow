@@ -32,6 +32,96 @@ function priorityLabel(priority: Priority): string {
   }
 }
 
+function getTriggeredAntiPatterns(antiPatterns: AntiPatternResult[]): AntiPatternResult[] {
+  return antiPatterns.filter(antiPattern => antiPattern.triggered);
+}
+
+function appendTierScores(lines: string[], agent: AgentReport): void {
+  const { foundation, standard, full } = agent.score.tiers;
+  lines.push(`  Foundation:  ${String(foundation.earned).padStart(3)}/${foundation.available}  ${progressBar(foundation.percentage)}  ${foundation.percentage}%`);
+  lines.push(`  Standard:    ${String(standard.earned).padStart(3)}/${standard.available}  ${progressBar(standard.percentage)}  ${standard.percentage}%`);
+  lines.push(`  Full:        ${String(full.earned).padStart(3)}/${full.available}  ${progressBar(full.percentage)}  ${full.percentage}%`);
+}
+
+function appendDeductionSummary(lines: string[], agent: AgentReport): void {
+  lines.push(`  Deductions:  ${agent.score.deductions}`);
+  for (const antiPattern of getTriggeredAntiPatterns(agent.antiPatterns)) {
+    lines.push(`    ${antiPattern.id} ${antiPattern.name}: ${antiPattern.deduction} pts`);
+  }
+}
+
+function appendRecommendations(lines: string[], agent: AgentReport): void {
+  if (agent.recommendations.length === 0) return;
+
+  lines.push('Recommendations:');
+  for (const recommendation of agent.recommendations.slice(0, 10)) {
+    lines.push(`  [${priorityLabel(recommendation.priority)}] ${recommendation.checkId}: ${recommendation.action}`);
+  }
+  if (agent.recommendations.length > 10) {
+    lines.push(`  ... and ${agent.recommendations.length - 10} more`);
+  }
+  lines.push('');
+}
+
+function appendCheckDetails(lines: string[], agent: AgentReport): void {
+  lines.push('Check Details:');
+  for (const check of agent.checks) {
+    lines.push(renderCheck(check));
+  }
+  lines.push('');
+}
+
+function appendAntiPatternDetails(lines: string[], antiPatterns: AntiPatternResult[]): void {
+  if (antiPatterns.length === 0) return;
+
+  lines.push('Anti-Pattern Deductions:');
+  for (const antiPattern of antiPatterns) {
+    lines.push(renderAntiPattern(antiPattern));
+  }
+  lines.push('');
+}
+
+function collectDiagnosticImpacts(agent: AgentReport): Array<{ label: string; points: number; priority: string }> {
+  const impacts: Array<{ label: string; points: number; priority: string }> = [];
+
+  for (const recommendation of agent.recommendations) {
+    const check = agent.checks.find(candidate => candidate.id === recommendation.checkId);
+    const recoverable = check ? check.maxPoints - check.points : 0;
+    if (recoverable > 0) {
+      impacts.push({ label: `${recommendation.checkId}: ${recommendation.action}`, points: recoverable, priority: recommendation.priority });
+    }
+  }
+
+  for (const antiPattern of getTriggeredAntiPatterns(agent.antiPatterns)) {
+    impacts.push({ label: `${antiPattern.id}: ${antiPattern.name}`, points: Math.abs(antiPattern.deduction), priority: 'critical' });
+  }
+
+  impacts.sort((a, b) => b.points - a.points);
+  return impacts;
+}
+
+function appendDiagnosticSummary(
+  lines: string[],
+  impacts: Array<{ label: string; points: number; priority: string }>,
+): void {
+  if (impacts.length === 0) return;
+
+  lines.push('Diagnostic Summary:');
+  for (const item of impacts.slice(0, 5)) {
+    lines.push(`  ${priorityLabel(item.priority as Priority).trim().padEnd(8)} ${item.label} (${item.points} pts recoverable)`);
+  }
+  lines.push('');
+  const top = impacts[0];
+  if (top) lines.push(`  Highest-impact fix: ${top.label} - recovers ${top.points} points`);
+  lines.push('');
+}
+
+function appendVerboseDetails(lines: string[], agent: AgentReport): void {
+  appendCheckDetails(lines, agent);
+  appendAntiPatternDetails(lines, getTriggeredAntiPatterns(agent.antiPatterns));
+  appendDiagnosticSummary(lines, collectDiagnosticImpacts(agent));
+}
+
 /** Render a scan report as human-readable plain text */
 export function renderText(report: ScanReport, verbose: boolean): string {
   /** Accumulated output lines joined into the final text */
@@ -82,86 +172,15 @@ function renderAgent(agent: AgentReport, verbose: boolean): string {
 
   lines.push(`Grade: ${score.grade} (${score.percentage}%)`);
   lines.push('');
-
-  /** Destructured tier scores for foundation, standard, and full */
-  const { foundation, standard, full } = score.tiers;
-  lines.push(`  Foundation:  ${String(foundation.earned).padStart(3)}/${foundation.available}  ${progressBar(foundation.percentage)}  ${foundation.percentage}%`);
-  lines.push(`  Standard:    ${String(standard.earned).padStart(3)}/${standard.available}  ${progressBar(standard.percentage)}  ${standard.percentage}%`);
-  lines.push(`  Full:        ${String(full.earned).padStart(3)}/${full.available}  ${progressBar(full.percentage)}  ${full.percentage}%`);
+  appendTierScores(lines, agent);
 
   if (score.deductions < 0) {
-    lines.push(`  Deductions:  ${score.deductions}`);
-    // Always show which anti-patterns triggered, not just in verbose mode
-    const triggered = agent.antiPatterns.filter(ap => ap.triggered);
-    for (const ap of triggered) {
-      lines.push(`    ${ap.id} ${ap.name}: ${ap.deduction} pts`);
-    }
+    appendDeductionSummary(lines, agent);
   }
 
   lines.push('');
-
-  // Recommendations (always shown when present)
-  if (agent.recommendations.length > 0) {
-    lines.push('Recommendations:');
-    // Iterate over the top 10 recommendations to display priority and action
-    for (const rec of agent.recommendations.slice(0, 10)) {
-      lines.push(`  [${priorityLabel(rec.priority)}] ${rec.checkId}: ${rec.action}`);
-    }
-    if (agent.recommendations.length > 10) {
-      lines.push(`  ... and ${agent.recommendations.length - 10} more`);
-    }
-    lines.push('');
-  }
-
-  // Verbose mode: per-check details
-  if (verbose) {
-    lines.push('Check Details:');
-    // Iterate over every check to render its detailed result
-    for (const check of agent.checks) {
-      lines.push(renderCheck(check));
-    }
-    lines.push('');
-
-    if (agent.antiPatterns.some(ap => ap.triggered)) {
-      lines.push('Anti-Pattern Deductions:');
-      // Iterate over triggered anti-patterns to render their deductions
-      for (const ap of agent.antiPatterns.filter(a => a.triggered)) {
-        lines.push(renderAntiPattern(ap));
-      }
-      lines.push('');
-    }
-
-    // Diagnostic summary: top improvements ranked by point impact
-    const impacts: Array<{ label: string; points: number; priority: string }> = [];
-
-    // Check-based impacts
-    for (const rec of agent.recommendations) {
-      const check = agent.checks.find(c => c.id === rec.checkId);
-      const recoverable = check ? check.maxPoints - check.points : 0;
-      if (recoverable > 0) {
-        impacts.push({ label: `${rec.checkId}: ${rec.action}`, points: recoverable, priority: rec.priority });
-      }
-    }
-
-    // Anti-pattern impacts
-    for (const ap of agent.antiPatterns.filter(a => a.triggered)) {
-      impacts.push({ label: `${ap.id}: ${ap.name}`, points: Math.abs(ap.deduction), priority: 'critical' });
-    }
-
-    // Sort by points descending, take top 5
-    impacts.sort((a, b) => b.points - a.points);
-
-    if (impacts.length > 0) {
-      lines.push('Diagnostic Summary:');
-      for (const item of impacts.slice(0, 5)) {
-        lines.push(`  ${priorityLabel(item.priority as Priority).trim().padEnd(8)} ${item.label} (${item.points} pts recoverable)`);
-      }
-      lines.push('');
-      const top = impacts[0]!;
-      lines.push(`  Highest-impact fix: ${top.label} - recovers ${top.points} points`);
-      lines.push('');
-    }
-  }
+  appendRecommendations(lines, agent);
+  if (verbose) appendVerboseDetails(lines, agent);
 
   return lines.join('\n');
 }

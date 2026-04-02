@@ -49,61 +49,69 @@ function readConfigText(projectRoot: string, fs?: ReadonlyFS): string | null {
   return readFileSync(path, 'utf8');
 }
 
+function mergePairPaths(
+  value: unknown,
+  target: { committed: string; local: string },
+): void {
+  if (!isRecord(value)) return;
+  if (typeof value.committed === 'string') target.committed = value.committed;
+  if (typeof value.local === 'string') target.local = value.local;
+}
+
+function mergeSinglePath(
+  value: unknown,
+  target: { path: string },
+): void {
+  if (isRecord(value) && typeof value.path === 'string') {
+    target.path = value.path;
+  }
+}
+
+function mergeVersion(value: unknown, merged: GoatFlowConfig): void {
+  if (typeof value === 'string') {
+    merged.version = value;
+  }
+}
+
+function mergeAgents(value: unknown, merged: GoatFlowConfig): void {
+  if (value === null || Array.isArray(value)) {
+    merged.agents = value as string[] | null;
+  }
+}
+
+function mergeSkills(value: unknown, merged: GoatFlowConfig): void {
+  if (!isRecord(value)) return;
+  const { install } = value;
+  if (install === 'all' || Array.isArray(install)) {
+    merged.skills.install = install as string[] | 'all';
+  }
+}
+
+function mergeLineLimits(value: unknown, merged: GoatFlowConfig): void {
+  if (!isRecord(value)) return;
+  if (typeof value.target === 'number' && value.target > 0) merged.lineLimits.target = value.target;
+  if (typeof value.limit === 'number' && value.limit > 0) merged.lineLimits.limit = value.limit;
+}
+
 function mergeConfig(raw: unknown): GoatFlowConfig {
   const merged = cloneDefaults();
   if (!isRecord(raw)) return merged;
 
-  if (typeof raw.version === 'string') merged.version = raw.version;
-
-  if (isRecord(raw.footguns)) {
-    if (typeof raw.footguns.committed === 'string') merged.footguns.committed = raw.footguns.committed;
-    if (typeof raw.footguns.local === 'string') merged.footguns.local = raw.footguns.local;
-  }
-
-  if (isRecord(raw.lessons)) {
-    if (typeof raw.lessons.committed === 'string') merged.lessons.committed = raw.lessons.committed;
-    if (typeof raw.lessons.local === 'string') merged.lessons.local = raw.lessons.local;
-  }
-
-  if (isRecord(raw.decisions) && typeof raw.decisions.path === 'string') {
-    merged.decisions.path = raw.decisions.path;
-  }
-
-  if (isRecord(raw.evals) && typeof raw.evals.path === 'string') {
-    merged.evals.path = raw.evals.path;
-  }
+  mergeVersion(raw.version, merged);
+  mergePairPaths(raw.footguns, merged.footguns);
+  mergePairPaths(raw.lessons, merged.lessons);
+  mergeSinglePath(raw.decisions, merged.decisions);
+  mergeSinglePath(raw.evals, merged.evals);
 
   // YAML key is `coding-standards` (kebab-case), TypeScript field is `codingStandards` (camelCase)
-  const csRaw = raw['coding-standards'];
-  if (isRecord(csRaw) && typeof csRaw.path === 'string') {
-    merged.codingStandards.path = csRaw.path;
-  }
-
-  if (isRecord(raw.tasks) && typeof raw.tasks.path === 'string') {
-    merged.tasks.path = raw.tasks.path;
-  }
-
-  if (isRecord(raw.logs) && typeof raw.logs.path === 'string') {
-    merged.logs.path = raw.logs.path;
-  }
-
-  if (raw.agents === null || Array.isArray(raw.agents)) {
-    merged.agents = raw.agents as string[] | null;
-  }
-
-  if (isRecord(raw.skills)) {
-    const install = raw.skills.install;
-    if (install === 'all' || Array.isArray(install)) {
-      merged.skills.install = install as string[] | 'all';
-    }
-  }
+  mergeSinglePath(raw['coding-standards'], merged.codingStandards);
+  mergeSinglePath(raw.tasks, merged.tasks);
+  mergeSinglePath(raw.logs, merged.logs);
+  mergeAgents(raw.agents, merged);
+  mergeSkills(raw.skills, merged);
 
   // YAML key is `line-limits` (kebab-case), TypeScript field is `lineLimits` (camelCase)
-  const llRaw = raw['line-limits'];
-  if (isRecord(llRaw)) {
-    if (typeof llRaw.target === 'number' && llRaw.target > 0) merged.lineLimits.target = llRaw.target;
-    if (typeof llRaw.limit === 'number' && llRaw.limit > 0) merged.lineLimits.limit = llRaw.limit;
-  }
+  mergeLineLimits(raw['line-limits'], merged);
 
   return merged;
 }
@@ -126,6 +134,240 @@ function validateStringPath(
   }
 }
 
+type RawConfig = Record<string, unknown>;
+type ConfigValidator = (
+  raw: RawConfig,
+  warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+) => void;
+
+function validateUnknownTopLevelKeys(raw: RawConfig, warnings: ValidationIssue[]): void {
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_TOP_LEVEL_KEYS.has(key)) {
+      pushWarning(warnings, key, 'unknown top-level key');
+    }
+  }
+}
+
+function validateObjectField(
+  raw: RawConfig,
+  key: string,
+  errors: ValidationIssue[],
+  onValid: (value: RawConfig) => void,
+): void {
+  if (!(key in raw)) return;
+  const value = raw[key];
+  if (!isRecord(value)) {
+    pushError(errors, key, 'must be an object');
+    return;
+  }
+  onValid(value);
+}
+
+function validateOptionalStringField(
+  value: RawConfig,
+  key: string,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (key in value) {
+    validateStringPath(value[key], path, errors);
+  }
+}
+
+function validatePairPathSection(
+  raw: RawConfig,
+  section: 'footguns' | 'lessons',
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, section, errors, (value) => {
+    validateOptionalStringField(value, 'committed', `${section}.committed`, errors);
+    validateOptionalStringField(value, 'local', `${section}.local`, errors);
+  });
+}
+
+function validateSinglePathSection(
+  raw: RawConfig,
+  section: 'decisions' | 'evals' | 'coding-standards' | 'tasks' | 'logs',
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, section, errors, (value) => {
+    validateOptionalStringField(value, 'path', `${section}.path`, errors);
+  });
+}
+
+function validatePositiveNumber(
+  value: unknown,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (typeof value !== 'number' || value <= 0) {
+    pushError(errors, path, 'must be a positive number');
+  }
+}
+
+function validateVersionField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  if ('version' in raw && typeof raw.version !== 'string') {
+    pushError(errors, 'version', 'must be a string');
+  }
+}
+
+function validateFootgunsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validatePairPathSection(raw, 'footguns', errors);
+}
+
+function validateLessonsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validatePairPathSection(raw, 'lessons', errors);
+}
+
+function validateDecisionsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateSinglePathSection(raw, 'decisions', errors);
+}
+
+function validateEvalsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateSinglePathSection(raw, 'evals', errors);
+}
+
+function validateCodingStandardsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateSinglePathSection(raw, 'coding-standards', errors);
+}
+
+function validateLineLimitsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, 'line-limits', errors, (value) => {
+    if ('target' in value) validatePositiveNumber(value.target, 'line-limits.target', errors);
+    if ('limit' in value) validatePositiveNumber(value.limit, 'line-limits.limit', errors);
+    if (
+      typeof value.target === 'number'
+      && typeof value.limit === 'number'
+      && value.target >= value.limit
+    ) {
+      pushError(errors, 'line-limits', 'target must be less than limit');
+    }
+  });
+}
+
+function validateTasksField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateSinglePathSection(raw, 'tasks', errors);
+}
+
+function validateLogsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateSinglePathSection(raw, 'logs', errors);
+}
+
+function validateAgentList(agents: unknown[], warnings: ValidationIssue[], errors: ValidationIssue[]): void {
+  if (agents.length === 0) {
+    pushError(errors, 'agents', 'cannot be empty; omit the field to auto-detect');
+  }
+  for (const [index, value] of agents.entries()) {
+    if (typeof value !== 'string') {
+      pushError(errors, `agents[${index}]`, 'must be a string');
+      continue;
+    }
+    if (!KNOWN_AGENTS.has(value)) {
+      pushWarning(
+        warnings,
+        `agents[${index}]`,
+        `unknown agent "${value}" — known agents: ${Array.from(KNOWN_AGENTS).join(', ')}`,
+      );
+    }
+  }
+}
+
+function validateAgentsField(
+  raw: RawConfig,
+  warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  if (!('agents' in raw)) return;
+  const { agents } = raw;
+  if (agents !== null && !Array.isArray(agents)) {
+    pushError(errors, 'agents', 'must be null or an array');
+    return;
+  }
+  if (Array.isArray(agents)) {
+    validateAgentList(agents, warnings, errors);
+  }
+}
+
+function validateSkillInstallList(install: unknown[], errors: ValidationIssue[]): void {
+  if (install.length === 0) {
+    pushError(errors, 'skills.install', 'cannot be empty');
+  }
+  for (const [index, value] of install.entries()) {
+    if (typeof value !== 'string') {
+      pushError(errors, `skills.install[${index}]`, 'must be a string');
+    }
+  }
+}
+
+function validateSkillsField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, 'skills', errors, (value) => {
+    if (!('install' in value)) return;
+    const { install } = value;
+    if (install !== 'all' && !Array.isArray(install)) {
+      pushError(errors, 'skills.install', 'must be "all" or an array');
+      return;
+    }
+    if (Array.isArray(install)) {
+      validateSkillInstallList(install, errors);
+    }
+  });
+}
+
+const CONFIG_VALIDATORS: ConfigValidator[] = [
+  validateVersionField,
+  validateFootgunsField,
+  validateLessonsField,
+  validateDecisionsField,
+  validateEvalsField,
+  validateCodingStandardsField,
+  validateLineLimitsField,
+  validateTasksField,
+  validateLogsField,
+  validateAgentsField,
+  validateSkillsField,
+];
+
 export function validateConfig(raw: unknown): ValidationResult {
   const warnings: ValidationIssue[] = [];
   const errors: ValidationIssue[] = [];
@@ -135,129 +377,9 @@ export function validateConfig(raw: unknown): ValidationResult {
     return { valid: false, warnings, errors };
   }
 
-  for (const key of Object.keys(raw)) {
-    if (!KNOWN_TOP_LEVEL_KEYS.has(key)) {
-      pushWarning(warnings, key, 'unknown top-level key');
-    }
-  }
-
-  if ('version' in raw && typeof raw.version !== 'string') {
-    pushError(errors, 'version', 'must be a string');
-  }
-
-  if ('footguns' in raw) {
-    if (!isRecord(raw.footguns)) {
-      pushError(errors, 'footguns', 'must be an object');
-    } else {
-      if ('committed' in raw.footguns) validateStringPath(raw.footguns.committed, 'footguns.committed', errors);
-      if ('local' in raw.footguns) validateStringPath(raw.footguns.local, 'footguns.local', errors);
-    }
-  }
-
-  if ('lessons' in raw) {
-    if (!isRecord(raw.lessons)) {
-      pushError(errors, 'lessons', 'must be an object');
-    } else {
-      if ('committed' in raw.lessons) validateStringPath(raw.lessons.committed, 'lessons.committed', errors);
-      if ('local' in raw.lessons) validateStringPath(raw.lessons.local, 'lessons.local', errors);
-    }
-  }
-
-  if ('decisions' in raw) {
-    if (!isRecord(raw.decisions)) {
-      pushError(errors, 'decisions', 'must be an object');
-    } else if ('path' in raw.decisions) {
-      validateStringPath(raw.decisions.path, 'decisions.path', errors);
-    }
-  }
-
-  if ('evals' in raw) {
-    if (!isRecord(raw.evals)) {
-      pushError(errors, 'evals', 'must be an object');
-    } else if ('path' in raw.evals) {
-      validateStringPath(raw.evals.path, 'evals.path', errors);
-    }
-  }
-
-  if ('coding-standards' in raw) {
-    const cs = raw['coding-standards'];
-    if (!isRecord(cs)) {
-      pushError(errors, 'coding-standards', 'must be an object');
-    } else if ('path' in cs) {
-      validateStringPath(cs.path, 'coding-standards.path', errors);
-    }
-  }
-
-  if ('line-limits' in raw) {
-    const ll = raw['line-limits'];
-    if (!isRecord(ll)) {
-      pushError(errors, 'line-limits', 'must be an object');
-    } else {
-      if ('target' in ll && (typeof ll.target !== 'number' || ll.target <= 0)) {
-        pushError(errors, 'line-limits.target', 'must be a positive number');
-      }
-      if ('limit' in ll && (typeof ll.limit !== 'number' || ll.limit <= 0)) {
-        pushError(errors, 'line-limits.limit', 'must be a positive number');
-      }
-      if (typeof ll.target === 'number' && typeof ll.limit === 'number' && ll.target >= ll.limit) {
-        pushError(errors, 'line-limits', 'target must be less than limit');
-      }
-    }
-  }
-
-  if ('tasks' in raw) {
-    if (!isRecord(raw.tasks)) {
-      pushError(errors, 'tasks', 'must be an object');
-    } else if ('path' in raw.tasks) {
-      validateStringPath(raw.tasks.path, 'tasks.path', errors);
-    }
-  }
-
-  if ('logs' in raw) {
-    if (!isRecord(raw.logs)) {
-      pushError(errors, 'logs', 'must be an object');
-    } else if ('path' in raw.logs) {
-      validateStringPath(raw.logs.path, 'logs.path', errors);
-    }
-  }
-
-  if ('agents' in raw) {
-    const { agents } = raw;
-    if (agents !== null && !Array.isArray(agents)) {
-      pushError(errors, 'agents', 'must be null or an array');
-    } else if (Array.isArray(agents)) {
-      if (agents.length === 0) {
-        pushError(errors, 'agents', 'cannot be empty; omit the field to auto-detect');
-      }
-      for (let i = 0; i < agents.length; i++) {
-        const value = agents[i];
-        if (typeof value !== 'string') {
-          pushError(errors, `agents[${i}]`, 'must be a string');
-        } else if (!KNOWN_AGENTS.has(value)) {
-          pushWarning(warnings, `agents[${i}]`, `unknown agent "${value}" — known agents: ${Array.from(KNOWN_AGENTS).join(', ')}`);
-        }
-      }
-    }
-  }
-
-  if ('skills' in raw) {
-    if (!isRecord(raw.skills)) {
-      pushError(errors, 'skills', 'must be an object');
-    } else if ('install' in raw.skills) {
-      const { install } = raw.skills;
-      if (install !== 'all' && !Array.isArray(install)) {
-        pushError(errors, 'skills.install', 'must be "all" or an array');
-      } else if (Array.isArray(install)) {
-        if (install.length === 0) {
-          pushError(errors, 'skills.install', 'cannot be empty');
-        }
-        for (let i = 0; i < install.length; i++) {
-          if (typeof install[i] !== 'string') {
-            pushError(errors, `skills.install[${i}]`, 'must be a string');
-          }
-        }
-      }
-    }
+  validateUnknownTopLevelKeys(raw, warnings);
+  for (const validator of CONFIG_VALIDATORS) {
+    validator(raw, warnings, errors);
   }
 
   return { valid: errors.length === 0, warnings, errors };

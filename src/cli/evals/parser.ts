@@ -219,65 +219,54 @@ function parseAntiPatterns(section: string): string[] {
   return patterns;
 }
 
+function parseEvalFrontmatter(raw: string, filename: string): { frontmatter: EvalFrontmatter; body: string } {
+  if (!FRONTMATTER_RE.test(raw)) {
+    return {
+      frontmatter: parseLegacyFrontmatter(raw, filename),
+      body: raw,
+    };
+  }
+
+  const frontmatter = parseFrontmatter(raw);
+  if (frontmatter == null) {
+    throw new Error(`Invalid frontmatter in ${filename}`);
+  }
+
+  return {
+    frontmatter,
+    body: raw.replace(FRONTMATTER_RE, '').trim(),
+  };
+}
+
+function extractFirstSection(body: string, headings: string[]): string {
+  for (const heading of headings) {
+    const section = extractSection(body, heading);
+    if (section) return section;
+  }
+  return '';
+}
+
+function resolveAntiPatterns(section: string): string[] {
+  const antiPatterns = parseAntiPatterns(section);
+  if (antiPatterns.length === 0 && section.length > 0) return [section];
+  return antiPatterns;
+}
+
 // --- Main parser ---
 
 /** Parse a raw eval markdown file into a structured ParsedEval object */
 export function parseEvalFile(raw: string, filename: string): ParsedEval {
-  /** Whether the raw content starts with YAML frontmatter delimiters */
-  const hasFrontmatter = FRONTMATTER_RE.test(raw);
-
-  let frontmatter: EvalFrontmatter;
-  let body: string;
-
-  if (hasFrontmatter) {
-    /** Parsed frontmatter from the new-format eval file */
-    const parsed = parseFrontmatter(raw);
-    if (parsed == null) {
-      throw new Error(`Invalid frontmatter in ${filename}`);
-    }
-    frontmatter = parsed;
-    body = raw.replace(FRONTMATTER_RE, '').trim();
-  } else {
-    frontmatter = parseLegacyFrontmatter(raw, filename);
-    body = raw;
-  }
-
-  // Extract sections (try both new and legacy heading names)
-  /** Scenario text extracted from Scenario or Replay Prompt heading */
-  const scenario =
-    extractSection(body, 'Scenario') ||
-    extractSection(body, 'Replay Prompt') ||
-    '';
-
-  /** Expected behavior section extracted from various heading name variants */
-  const expectedSection =
-    extractSection(body, 'Expected Behavior') ||
-    extractSection(body, 'Expected Behaviour') ||
-    extractSection(body, 'Expected Outcome') ||
-    '';
-
-  /** Anti-pattern section extracted from Anti-Patterns or Known Failure Mode heading */
-  const antiPatternSection =
-    extractSection(body, 'Anti-Patterns') ||
-    extractSection(body, 'Known Failure Mode') ||
-    '';
-
-  /** Parsed behavioral gates from the expected behavior section */
-  const expectedBehaviors = parseGates(expectedSection);
-  /** Parsed anti-pattern strings from the anti-pattern section */
-  const antiPatterns = parseAntiPatterns(antiPatternSection);
-
-  // If anti-pattern section has no bullets, treat the whole text as one item
-  if (antiPatterns.length === 0 && antiPatternSection.length > 0) {
-    antiPatterns.push(antiPatternSection);
-  }
+  const { frontmatter, body } = parseEvalFrontmatter(raw, filename);
+  const scenario = extractFirstSection(body, ['Scenario', 'Replay Prompt']);
+  const expectedSection = extractFirstSection(body, ['Expected Behavior', 'Expected Behaviour', 'Expected Outcome']);
+  const antiPatternSection = extractFirstSection(body, ['Anti-Patterns', 'Known Failure Mode']);
 
   return {
     file: filename,
     frontmatter,
     scenario: extractScenarioText(scenario),
-    expectedBehaviors,
-    antiPatterns,
+    expectedBehaviors: parseGates(expectedSection),
+    antiPatterns: resolveAntiPatterns(antiPatternSection),
   };
 }
 

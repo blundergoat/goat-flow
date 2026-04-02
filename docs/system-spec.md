@@ -150,7 +150,7 @@ GOOD: Read composer.json first -> "acme-client is installed via Packagist at ^1.
 
 **Problem:** Agent confuses questions with directives and drifts between modes silently.
 
-Complexity (with read/turn budgets): Hotfix (2 reads / 3 turns) / Standard Feature (4 / 10) / System Change (6 / 20) / Infrastructure Change (8 / 25). Over budget = re-classify before continuing.
+Complexity: Hotfix (1-2 files) / Small Feature (compressed brief) / Standard / System Change / Infrastructure. No fixed read/turn caps — if reads exceed 3x your initial estimate, re-classify before continuing.
 Mode: Plan / Implement / Explain / Debug / Review
 
 ```

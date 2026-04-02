@@ -82,146 +82,204 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
     return wssPromise;
   }
 
+  function handleHtmlRequest(url: URL, res: ServerResponse): boolean {
+    if (url.pathname !== '/') return false;
+
+    const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(absDefault)};</script>`;
+    const html = template.replace('</body>', `${injection}\n</body>`);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+    return true;
+  }
+
+  function handleAssetRequest(url: URL, res: ServerResponse): boolean {
+    if (!url.pathname.startsWith('/assets/')) return false;
+
+    const filename = url.pathname.slice('/assets/'.length);
+    if (!/^[a-z0-9_-]+\.js$/i.test(filename)) return false;
+
+    try {
+      const content = loadPackageFile(`src/dashboard/${filename}`);
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+      res.end(content);
+    } catch {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+    return true;
+  }
+
+  function handleScanRequest(url: URL, res: ServerResponse): boolean {
+    if (url.pathname !== '/api/scan') return false;
+
+    const projectPath = resolve(url.searchParams.get('path') || absDefault);
+    try {
+      const fs = createFS(projectPath);
+      const report = scanProject(fs, projectPath, { agentFilter: null });
+      jsonResponse(res, 200, JSON.parse(renderJson(report)));
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  async function handleSetupRequest(url: URL, res: ServerResponse): Promise<boolean> {
+    if (url.pathname !== '/api/setup') return false;
+
+    const projectPath = resolve(url.searchParams.get('path') || absDefault);
+    const agentParam = url.searchParams.get('agent') || 'claude';
+    if (!VALID_AGENTS.has(agentParam)) {
+      jsonResponse(res, 400, { error: `Invalid agent: ${agentParam}. Valid: claude, codex, gemini` });
+      return true;
+    }
+
+    const agent = agentParam as AgentId;
+    try {
+      const fs = createFS(projectPath);
+      const report = scanProject(fs, projectPath, { agentFilter: agent });
+      const { composeSetup } = await import('./prompt/compose-setup.js');
+      const output = composeSetup(report, agent);
+      jsonResponse(res, 200, { output: output ?? 'No setup output generated.' });
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  function isProjectDirectory(dirPath: string): boolean {
+    return ['package.json', 'go.mod', 'Cargo.toml', 'composer.json', 'pyproject.toml', 'CLAUDE.md', 'AGENTS.md'].some((file) => {
+      try {
+        statSync(join(dirPath, file));
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function handleBrowseRequest(url: URL, res: ServerResponse): boolean {
+    if (url.pathname !== '/api/browse') return false;
+
+    const dirPath = resolve(url.searchParams.get('path') || absDefault);
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map(entry => entry.name)
+        .sort();
+      const dirs = entries.map(name => {
+        const full = join(dirPath, name);
+        return { name, path: full, isProject: isProjectDirectory(full) };
+      });
+      jsonResponse(res, 200, { current: dirPath, parent: dirname(dirPath), dirs });
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  function terminalCreateStatus(message: string): number {
+    return message.includes('Maximum')
+      || message.includes('not found')
+      || message.includes('not available')
+      || message.includes('too large')
+      ? 400
+      : 500;
+  }
+
+  async function handleTerminalCreateRequest(
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ): Promise<boolean> {
+    if (url.pathname !== '/api/terminal/create' || req.method !== 'POST') return false;
+
+    try {
+      const manager = await getManager();
+      const body = JSON.parse(await readBody(req)) as { prompt?: string; projectPath?: string; runner?: string };
+      const runner = (body.runner && VALID_RUNNERS.has(body.runner) ? body.runner : 'claude') as Runner;
+      const result = await manager.create(
+        body.prompt ?? '',
+        body.projectPath ?? absDefault,
+        runner,
+      );
+      jsonResponse(res, 200, result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      jsonResponse(res, terminalCreateStatus(message), { error: message });
+    }
+    return true;
+  }
+
+  async function handleTerminalListRequest(
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ): Promise<boolean> {
+    if (url.pathname !== '/api/terminal/list' || req.method !== 'GET') return false;
+
+    try {
+      const manager = await getManager();
+      jsonResponse(res, 200, manager.list());
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  async function handleTerminalDeleteRequest(
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ): Promise<boolean> {
+    if (!url.pathname.startsWith('/api/terminal/') || req.method !== 'DELETE') return false;
+
+    const id = url.pathname.slice('/api/terminal/'.length);
+    try {
+      const manager = await getManager();
+      const killed = manager.kill(id);
+      if (killed) {
+        jsonResponse(res, 200, { ok: true });
+      } else {
+        jsonResponse(res, 404, { error: 'Session not found' });
+      }
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  async function handleHealthRequest(
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ): Promise<boolean> {
+    if (url.pathname !== '/api/health' || req.method !== 'GET') return false;
+
+    try {
+      const manager = await getManager();
+      jsonResponse(res, 200, await manager.health());
+    } catch (err) {
+      jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
   async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+    const routeHandlers = [
+      () => Promise.resolve(handleHtmlRequest(url, res)),
+      () => Promise.resolve(handleAssetRequest(url, res)),
+      () => Promise.resolve(handleScanRequest(url, res)),
+      () => handleSetupRequest(url, res),
+      () => Promise.resolve(handleBrowseRequest(url, res)),
+      () => handleTerminalCreateRequest(req, url, res),
+      () => handleTerminalListRequest(req, url, res),
+      () => handleTerminalDeleteRequest(req, url, res),
+      () => handleHealthRequest(req, url, res),
+    ];
 
-    // Dashboard HTML - inject default project path
-    if (url.pathname === '/') {
-      const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(absDefault)};</script>`;
-      const html = template.replace('</body>', `${injection}\n</body>`);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
-      return;
-    }
-
-    // Static dashboard assets (presets.js, etc.)
-    if (url.pathname.startsWith('/assets/')) {
-      const filename = url.pathname.slice('/assets/'.length);
-      if (/^[a-z0-9_-]+\.js$/i.test(filename)) {
-        try {
-          const content = loadPackageFile(`src/dashboard/${filename}`);
-          res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-          res.end(content);
-        } catch {
-          res.writeHead(404); res.end('Not found');
-        }
-        return;
-      }
-    }
-
-    // Scan API
-    if (url.pathname === '/api/scan') {
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
-      try {
-        const fs = createFS(projectPath);
-        const report = scanProject(fs, projectPath, { agentFilter: null });
-        jsonResponse(res, 200, JSON.parse(renderJson(report)));
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-
-    // Setup API
-    if (url.pathname === '/api/setup') {
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
-      const agentParam = url.searchParams.get('agent') || 'claude';
-      if (!VALID_AGENTS.has(agentParam)) {
-        jsonResponse(res, 400, { error: `Invalid agent: ${agentParam}. Valid: claude, codex, gemini` });
-        return;
-      }
-      const agent = agentParam as AgentId;
-      try {
-        const fs = createFS(projectPath);
-        const report = scanProject(fs, projectPath, { agentFilter: agent });
-        const { composeSetup } = await import('./prompt/compose-setup.js');
-        const output = composeSetup(report, agent);
-        jsonResponse(res, 200, { output: output ?? 'No setup output generated.' });
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-
-    // Browse directories API
-    if (url.pathname === '/api/browse') {
-      const dirPath = resolve(url.searchParams.get('path') || absDefault);
-      try {
-        const entries = readdirSync(dirPath, { withFileTypes: true })
-          .filter(e => e.isDirectory() && !e.name.startsWith('.'))
-          .map(e => e.name)
-          .sort();
-        const dirs = entries.map(name => {
-          const full = join(dirPath, name);
-          const hasProject = ['package.json', 'go.mod', 'Cargo.toml', 'composer.json', 'pyproject.toml', 'CLAUDE.md', 'AGENTS.md'].some(f => {
-            try { statSync(join(full, f)); return true; } catch { return false; }
-          });
-          return { name, path: full, isProject: hasProject };
-        });
-        jsonResponse(res, 200, { current: dirPath, parent: dirname(dirPath), dirs });
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-
-    // Terminal: create session
-    if (url.pathname === '/api/terminal/create' && req.method === 'POST') {
-      try {
-        const manager = await getManager();
-        const body = JSON.parse(await readBody(req)) as { prompt?: string; projectPath?: string; runner?: string };
-        const runner = (body.runner && VALID_RUNNERS.has(body.runner) ? body.runner : 'claude') as Runner;
-        const result = await manager.create(
-          body.prompt ?? '',
-          body.projectPath ?? absDefault,
-          runner,
-        );
-        jsonResponse(res, 200, result);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const status = message.includes('Maximum') || message.includes('not found') || message.includes('not available') || message.includes('too large') ? 400 : 500;
-        jsonResponse(res, status, { error: message });
-      }
-      return;
-    }
-
-    // Terminal: list sessions
-    if (url.pathname === '/api/terminal/list' && req.method === 'GET') {
-      try {
-        const manager = await getManager();
-        jsonResponse(res, 200, manager.list());
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-
-    // Terminal: kill session
-    if (url.pathname.startsWith('/api/terminal/') && req.method === 'DELETE') {
-      const id = url.pathname.slice('/api/terminal/'.length);
-      try {
-        const manager = await getManager();
-        const killed = manager.kill(id);
-        if (killed) {
-          jsonResponse(res, 200, { ok: true });
-        } else {
-          jsonResponse(res, 404, { error: 'Session not found' });
-        }
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
-    }
-
-    // Health
-    if (url.pathname === '/api/health' && req.method === 'GET') {
-      try {
-        const manager = await getManager();
-        jsonResponse(res, 200, await manager.health());
-      } catch (err) {
-        jsonResponse(res, 500, { error: err instanceof Error ? err.message : String(err) });
-      }
-      return;
+    for (const route of routeHandlers) {
+      if (await route()) return;
     }
 
     res.writeHead(404);
@@ -289,6 +347,16 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
     if (!addr || typeof addr === 'string') return;
     const url = `http://127.0.0.1:${addr.port}`;
     console.log(`Dashboard: ${url}`);
+    // Check if terminal is available and warn if not
+    void getManager().then(m => m.health()).then(h => {
+      if (!h.nodePtyAvailable) {
+        console.log('Note: Terminal feature unavailable (node-pty not installed)');
+        console.log('  Fix: npm install node-pty  (or: pnpm approve-builds)');
+      }
+    }).catch(() => {
+      console.log('Note: Terminal feature unavailable (node-pty not installed)');
+      console.log('  Fix: npm install node-pty  (or: pnpm approve-builds)');
+    });
     resolveStart({
       port: addr.port,
       close: async () => {

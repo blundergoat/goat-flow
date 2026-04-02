@@ -301,104 +301,252 @@ const SECURITY_FRAMEWORK_MAP: Record<string, string> = {
   go: 'workflow/coding-standards/security/framework-specific/go.md',
 };
 
+interface SignalTemplateRefSpec {
+  output: string;
+  template: string;
+  note: string;
+}
+
+const ALWAYS_SIGNAL_TEMPLATES: SignalTemplateRefSpec[] = [
+  {
+    output: 'ai/coding-standards/security.md',
+    template: 'workflow/coding-standards/security.md',
+    note: 'Security overview - adapt topics to detected stack',
+  },
+  {
+    output: 'ai/coding-standards/testing.md',
+    template: 'workflow/coding-standards/testing.md',
+    note: 'Testing conventions',
+  },
+  {
+    output: 'ai/coding-standards/secrets-management.md',
+    template: 'workflow/coding-standards/security/secrets-management.md',
+    note: 'Secrets handling baseline',
+  },
+  {
+    output: 'ai/coding-standards/supply-chain.md',
+    template: 'workflow/coding-standards/security/supply-chain.md',
+    note: 'Dependency security',
+  },
+] as const;
+
+const WEB_SIGNAL_TEMPLATES: SignalTemplateRefSpec[] = [
+  {
+    output: 'ai/coding-standards/api-auth.md',
+    template: 'workflow/coding-standards/security/api-auth.md',
+    note: 'Auth patterns for web projects',
+  },
+  {
+    output: 'ai/coding-standards/file-upload.md',
+    template: 'workflow/coding-standards/security/file-upload.md',
+    note: 'Upload security for web projects',
+  },
+  {
+    output: 'ai/coding-standards/sql-injection.md',
+    template: 'workflow/coding-standards/security/sql-injection.md',
+    note: 'SQL injection prevention',
+  },
+] as const;
+
+const FRAMEWORK_BACKEND_LANGS = ['laravel', 'symfony', 'django', 'fastapi', 'express'] as const;
+const GENERIC_BACKEND_LANGS = ['go', 'python', 'rust', 'php'] as const;
+const FRONTEND_FALLBACK_TEMPLATE = 'workflow/coding-standards/frontend/typescript.md';
+
+function buildStandardTemplateRef(
+  output: string,
+  template: string,
+  note: string,
+): TemplateRef {
+  return { output, template, phase: 'standard', note };
+}
+
+function pushIfTemplateExists(
+  refs: TemplateRef[],
+  output: string,
+  template: string,
+  note: string,
+): void {
+  if (!templateExists(template)) return;
+  refs.push(buildStandardTemplateRef(output, template, note));
+}
+
+function pushIfUnseenTemplate(
+  refs: TemplateRef[],
+  seen: Set<string>,
+  output: string,
+  template: string,
+  note: string,
+): void {
+  if (seen.has(template) || !templateExists(template)) return;
+  seen.add(template);
+  refs.push(buildStandardTemplateRef(output, template, note));
+}
+
+function getMappedTemplate(
+  map: Record<string, string>,
+  key: string,
+): string | null {
+  const template = map[key];
+  return Object.hasOwn(map, key) && template !== undefined ? template : null;
+}
+
+function getTemplateBasename(template: string): string {
+  const parts = template.split('/');
+  const filename = parts[parts.length - 1] ?? template;
+  return filename.replace('.md', '');
+}
+
+function findDetectedLanguage(
+  languages: string[],
+  candidates: readonly string[],
+): string | null {
+  return languages.find(language => candidates.includes(language)) ?? null;
+}
+
+function addLanguageTemplateRefs(
+  refs: TemplateRef[],
+  languages: string[],
+  seen: Set<string>,
+): void {
+  for (const language of languages) {
+    const template = getMappedTemplate(LANGUAGE_TEMPLATE_MAP, language);
+    if (!template) continue;
+    pushIfUnseenTemplate(
+      refs,
+      seen,
+      `ai/coding-standards/${getTemplateBasename(template)}.md`,
+      template,
+      `Detected: ${language}`,
+    );
+  }
+}
+
+function addWebCommonTemplate(
+  refs: TemplateRef[],
+  languages: string[],
+): void {
+  if (!languages.some(language => WEB_LANGUAGES.has(language))) return;
+  pushIfTemplateExists(
+    refs,
+    'ai/coding-standards/web-common.md',
+    'workflow/coding-standards/security/web-common.md',
+    'Web security baseline',
+  );
+}
+
+function addFrontendTemplateRef(refs: TemplateRef[], languages: string[]): void {
+  for (const language of languages) {
+    const template = getMappedTemplate(FRONTEND_TEMPLATE_MAP, language);
+    if (!template || !templateExists(template)) continue;
+    refs.push(buildStandardTemplateRef('ai/coding-standards/frontend.md', template, `Detected: ${language}`));
+    return;
+  }
+
+  if (languages.some(language => language === 'typescript' || language === 'javascript')) {
+    pushIfTemplateExists(
+      refs,
+      'ai/coding-standards/frontend.md',
+      FRONTEND_FALLBACK_TEMPLATE,
+      'Detected: typescript/javascript (no framework detected)',
+    );
+  }
+}
+
+function addBackendTemplateRef(refs: TemplateRef[], languages: string[]): void {
+  const detectedBackend = findDetectedLanguage(languages, FRAMEWORK_BACKEND_LANGS)
+    ?? findDetectedLanguage(languages, GENERIC_BACKEND_LANGS);
+  if (!detectedBackend) return;
+
+  const template = getMappedTemplate(LANGUAGE_TEMPLATE_MAP, detectedBackend);
+  if (!template) return;
+  pushIfTemplateExists(
+    refs,
+    'ai/coding-standards/backend.md',
+    template,
+    `Detected: ${detectedBackend}`,
+  );
+}
+
+function addSecurityFrameworkRefs(
+  refs: TemplateRef[],
+  languages: string[],
+  seen: Set<string>,
+): void {
+  for (const language of languages) {
+    const template = getMappedTemplate(SECURITY_FRAMEWORK_MAP, language);
+    if (!template) continue;
+    pushIfUnseenTemplate(
+      refs,
+      seen,
+      `ai/coding-standards/security-${language}.md`,
+      template,
+      `Security: ${language}`,
+    );
+  }
+}
+
 /**
  * Map detected languages to coding-standards template refs.
  * Only includes templates that exist on disk.
  */
 export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
   const refs: TemplateRef[] = [];
-  /** Track which templates we've added to avoid duplicates (e.g., typescript + javascript both map to the same file) */
   const seen = new Set<string>();
-  let hasWeb = false;
-
-  for (const lang of languages) {
-    const template = LANGUAGE_TEMPLATE_MAP[lang];
-    if (template && !seen.has(template) && templateExists(template)) {
-      seen.add(template);
-      refs.push({
-        output: `ai/coding-standards/${template.split('/').pop()!.replace('.md', '')}.md`,
-        template,
-        phase: 'standard',
-        note: `Detected: ${lang}`,
-      });
-    }
-    if (WEB_LANGUAGES.has(lang)) hasWeb = true;
-  }
-
-  // Add web-common security template for any web project
-  const webCommon = 'workflow/coding-standards/security/web-common.md';
-  if (hasWeb && templateExists(webCommon)) {
-    refs.push({
-      output: 'ai/coding-standards/web-common.md',
-      template: webCommon,
-      phase: 'standard',
-      note: 'Web security baseline',
-    });
-  }
-
-  // Add frontend.md based on detected frontend framework (scanner check 2.6.7a)
-  // Priority: framework-specific template > typescript.md fallback for TS/JS projects
-  let frontendMatched = false;
-  for (const lang of languages) {
-    const fTemplate = FRONTEND_TEMPLATE_MAP[lang];
-    if (fTemplate && !frontendMatched && templateExists(fTemplate)) {
-      refs.push({
-        output: 'ai/coding-standards/frontend.md',
-        template: fTemplate,
-        phase: 'standard',
-        note: `Detected: ${lang}`,
-      });
-      frontendMatched = true;
-      break;
-    }
-  }
-  // Fallback: TS/JS without a detected framework → typescript.md
-  if (!frontendMatched) {
-    const hasFrontendLang = languages.some(l => l === 'typescript' || l === 'javascript');
-    const fallbackTemplate = 'workflow/coding-standards/frontend/typescript.md';
-    if (hasFrontendLang && templateExists(fallbackTemplate)) {
-      refs.push({
-        output: 'ai/coding-standards/frontend.md',
-        template: fallbackTemplate,
-        phase: 'standard',
-        note: 'Detected: typescript/javascript (no framework detected)',
-      });
-    }
-  }
-
-  // Add backend.md for backend-language projects (scanner check 2.6.7b)
-  // Framework-specific takes priority over generic language
-  const frameworkBackendLangs = ['laravel', 'symfony', 'django', 'fastapi', 'express'];
-  const backendLangs = ['go', 'python', 'rust', 'php'];
-  const detectedFramework = languages.find(l => frameworkBackendLangs.includes(l));
-  const detectedBackend = detectedFramework ?? languages.find(l => backendLangs.includes(l));
-  if (detectedBackend) {
-    const backendTemplate = LANGUAGE_TEMPLATE_MAP[detectedBackend];
-    if (backendTemplate && templateExists(backendTemplate)) {
-      refs.push({
-        output: 'ai/coding-standards/backend.md',
-        template: backendTemplate,
-        phase: 'standard',
-        note: `Detected: ${detectedBackend}`,
-      });
-    }
-  }
-
-  // Add security framework-specific templates for detected frameworks/languages
-  for (const lang of languages) {
-    const secTemplate = SECURITY_FRAMEWORK_MAP[lang];
-    if (secTemplate && !seen.has(secTemplate) && templateExists(secTemplate)) {
-      seen.add(secTemplate);
-      refs.push({
-        output: `ai/coding-standards/security-${lang}.md`,
-        template: secTemplate,
-        phase: 'standard',
-        note: `Security: ${lang}`,
-      });
-    }
-  }
+  addLanguageTemplateRefs(refs, languages, seen);
+  addWebCommonTemplate(refs, languages);
+  addFrontendTemplateRef(refs, languages);
+  addBackendTemplateRef(refs, languages);
+  addSecurityFrameworkRefs(refs, languages, seen);
 
   return refs;
+}
+
+function addSignalTemplateGroup(
+  refs: TemplateRef[],
+  specs: readonly SignalTemplateRefSpec[],
+): void {
+  for (const spec of specs) {
+    pushIfTemplateExists(refs, spec.output, spec.template, spec.note);
+  }
+}
+
+function addDeploySignalTemplates(refs: TemplateRef[], signals: ProjectSignals): void {
+  if (signals.deployPlatforms.length === 0) return;
+  pushIfTemplateExists(
+    refs,
+    'ai/coding-standards/infrastructure-security.md',
+    'workflow/coding-standards/security/infrastructure.md',
+    `Deploy platforms: ${signals.deployPlatforms.join(', ')}`,
+  );
+
+  if (signals.deployPlatforms.includes('terraform')) {
+    pushIfTemplateExists(
+      refs,
+      'ai/coding-standards/devops-terraform.md',
+      'workflow/coding-standards/devops/terraform.md',
+      'Terraform detected',
+    );
+  }
+}
+
+function addComplianceSignalTemplate(refs: TemplateRef[], signals: ProjectSignals): void {
+  if (!signals.complianceSignals) return;
+  pushIfTemplateExists(
+    refs,
+    'ai/coding-standards/phi-compliance.md',
+    'workflow/coding-standards/security/phi-compliance.md',
+    'PHI/compliance signals detected',
+  );
+}
+
+function addLlmSignalTemplate(refs: TemplateRef[], signals: ProjectSignals): void {
+  if (!signals.llmIntegration) return;
+  pushIfTemplateExists(
+    refs,
+    'ai/coding-standards/llm-security.md',
+    'workflow/coding-standards/security/llm-security.md',
+    'LLM integration detected',
+  );
 }
 
 /**
@@ -408,135 +556,13 @@ export function mapLanguagesToTemplates(languages: string[]): TemplateRef[] {
  */
 export function mapSignalsToTemplates(signals: ProjectSignals, languages: string[] = []): TemplateRef[] {
   const refs: TemplateRef[] = [];
-  const hasWeb = languages.some(l => WEB_LANGUAGES.has(l));
-
-  // --- Always-included templates ---
-
-  const securityOverview = 'workflow/coding-standards/security.md';
-  if (templateExists(securityOverview)) {
-    refs.push({
-      output: 'ai/coding-standards/security.md',
-      template: securityOverview,
-      phase: 'standard',
-      note: 'Security overview - adapt topics to detected stack',
-    });
+  addSignalTemplateGroup(refs, ALWAYS_SIGNAL_TEMPLATES);
+  if (languages.some(language => WEB_LANGUAGES.has(language))) {
+    addSignalTemplateGroup(refs, WEB_SIGNAL_TEMPLATES);
   }
-
-  const testing = 'workflow/coding-standards/testing.md';
-  if (templateExists(testing)) {
-    refs.push({
-      output: 'ai/coding-standards/testing.md',
-      template: testing,
-      phase: 'standard',
-      note: 'Testing conventions',
-    });
-  }
-
-  const secretsMgmt = 'workflow/coding-standards/security/secrets-management.md';
-  if (templateExists(secretsMgmt)) {
-    refs.push({
-      output: 'ai/coding-standards/secrets-management.md',
-      template: secretsMgmt,
-      phase: 'standard',
-      note: 'Secrets handling baseline',
-    });
-  }
-
-  const supplyChain = 'workflow/coding-standards/security/supply-chain.md';
-  if (templateExists(supplyChain)) {
-    refs.push({
-      output: 'ai/coding-standards/supply-chain.md',
-      template: supplyChain,
-      phase: 'standard',
-      note: 'Dependency security',
-    });
-  }
-
-  // --- Web-project templates ---
-
-  if (hasWeb) {
-    const apiAuth = 'workflow/coding-standards/security/api-auth.md';
-    if (templateExists(apiAuth)) {
-      refs.push({
-        output: 'ai/coding-standards/api-auth.md',
-        template: apiAuth,
-        phase: 'standard',
-        note: 'Auth patterns for web projects',
-      });
-    }
-
-    const fileUpload = 'workflow/coding-standards/security/file-upload.md';
-    if (templateExists(fileUpload)) {
-      refs.push({
-        output: 'ai/coding-standards/file-upload.md',
-        template: fileUpload,
-        phase: 'standard',
-        note: 'Upload security for web projects',
-      });
-    }
-
-    const sqlInjection = 'workflow/coding-standards/security/sql-injection.md';
-    if (templateExists(sqlInjection)) {
-      refs.push({
-        output: 'ai/coding-standards/sql-injection.md',
-        template: sqlInjection,
-        phase: 'standard',
-        note: 'SQL injection prevention',
-      });
-    }
-  }
-
-  // --- Signal-driven templates ---
-
-  if (signals.deployPlatforms.length > 0) {
-    const infra = 'workflow/coding-standards/security/infrastructure.md';
-    if (templateExists(infra)) {
-      refs.push({
-        output: 'ai/coding-standards/infrastructure-security.md',
-        template: infra,
-        phase: 'standard',
-        note: `Deploy platforms: ${signals.deployPlatforms.join(', ')}`,
-      });
-    }
-
-    if (signals.deployPlatforms.includes('terraform')) {
-      const tf = 'workflow/coding-standards/devops/terraform.md';
-      if (templateExists(tf)) {
-        refs.push({
-          output: 'ai/coding-standards/devops-terraform.md',
-          template: tf,
-          phase: 'standard',
-          note: 'Terraform detected',
-        });
-      }
-    }
-
-    // Packer template removed (niche, unmaintained)
-  }
-
-  if (signals.complianceSignals) {
-    const template = 'workflow/coding-standards/security/phi-compliance.md';
-    if (templateExists(template)) {
-      refs.push({
-        output: 'ai/coding-standards/phi-compliance.md',
-        template,
-        phase: 'standard',
-        note: 'PHI/compliance signals detected',
-      });
-    }
-  }
-
-  if (signals.llmIntegration) {
-    const template = 'workflow/coding-standards/security/llm-security.md';
-    if (templateExists(template)) {
-      refs.push({
-        output: 'ai/coding-standards/llm-security.md',
-        template,
-        phase: 'standard',
-        note: 'LLM integration detected',
-      });
-    }
-  }
+  addDeploySignalTemplates(refs, signals);
+  addComplianceSignalTemplate(refs, signals);
+  addLlmSignalTemplate(refs, signals);
 
   return refs;
 }
