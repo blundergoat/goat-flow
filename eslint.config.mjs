@@ -32,7 +32,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'off',
 
       // Flag functions with too many branches
-      'complexity': ['warn', { max: 15 }],
+      'complexity': ['error', { max: 10 }],
 
       // Allow unused vars with _ prefix
       '@typescript-eslint/no-unused-vars': ['error', {

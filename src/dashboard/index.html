@@ -12,6 +12,8 @@
   </style>
   <style>
     [x-cloak] { display: none !important; }
+    /* Pointer cursor for all interactive elements */
+    button, select, summary, label, [role="button"] { cursor: pointer; }
     /* xterm.js container */
     .terminal-container { width: 100%; height: calc(100vh - 8rem); }
     .terminal-container .xterm { height: 100%; }
@@ -58,14 +60,17 @@
 <div class="flex min-h-screen">
 
   <!-- Mobile header -->
-  <div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between no-print">
-    <button @click="sidebarOpen = !sidebarOpen" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Toggle sidebar">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
-    <span class="font-bold text-sm">GOAT Flow</span>
-    <span class="text-xs px-2 py-0.5 rounded-full font-bold" x-show="currentAgent"
-      :style="`background-color: ${gradeColor(currentAgent?.score?.grade)}20; color: ${gradeColor(currentAgent?.score?.grade)}`"
-      x-text="currentAgent?.score?.grade"></span>
+  <div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 no-print">
+    <div class="h-1" :style="`background-color: ${projectColor}`"></div>
+    <div class="px-4 py-3 flex items-center justify-between">
+      <button @click="sidebarOpen = !sidebarOpen" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Toggle sidebar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <span class="font-bold text-sm" x-text="projectName"></span>
+      <span class="text-xs px-2 py-0.5 rounded-full font-bold" x-show="currentAgent"
+        :style="`background-color: ${gradeColor(currentAgent?.score?.grade)}20; color: ${gradeColor(currentAgent?.score?.grade)}`"
+        x-text="currentAgent?.score?.grade"></span>
+    </div>
   </div>
 
   <!-- Sidebar overlay (mobile) -->
@@ -75,9 +80,15 @@
   <!-- Sidebar -->
   <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
     class="no-print fixed md:relative z-50 w-64 md:w-48 lg:w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 h-full transition-transform duration-200 ease-in-out">
-    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-      <h1 class="font-bold text-lg">GOAT Flow</h1>
-      <p class="text-xs text-gray-500 dark:text-gray-400" x-text="report ? `Rubric v${report.rubricVersion}` : 'Dashboard'"></p>
+    <div class="border-b border-gray-200 dark:border-gray-700">
+      <div class="h-1" :style="`background-color: ${projectColor}`"></div>
+      <div class="p-4">
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-lg">GOAT Flow</h1>
+          <span class="text-xs text-gray-400" x-text="report ? `v${report.rubricVersion}` : ''"></span>
+        </div>
+        <p class="text-sm font-semibold truncate mt-0.5" :style="`color: ${projectColor}`" x-text="projectName" :title="projectPath"></p>
+      </div>
     </div>
 
     <!-- Project Path -->
@@ -109,7 +120,7 @@
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors">Scanner</button>
         <button @click="activeView = 'launcher'" :class="activeView === 'launcher' ? 'bg-white dark:bg-gray-700 shadow-sm' : ''"
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors">Launcher</button>
-        <button x-show="terminalAvailable" @click="activeView = terminalSessionId && !terminalEnded ? 'terminal' : 'launcher'"
+        <button x-show="terminalAvailable" @click="activeView = 'terminal'"
           :class="activeView === 'terminal' ? 'bg-white dark:bg-gray-700 shadow-sm' : ''"
           class="flex-1 px-2 py-1 text-xs font-medium rounded-md transition-colors relative">
           Terminal
@@ -235,7 +246,7 @@
                 :class="copied ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'">
                 <span x-text="copied ? 'Copied!' : 'Copy'"></span>
               </button>
-              <button x-show="terminalAvailable" @click="launchPreset(preset.prompt)"
+              <button x-show="terminalAvailable" @click="launchPreset(preset.prompt, setupRunner)"
                 class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
                 Launch
               </button>
@@ -298,6 +309,12 @@
             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
             <span x-text="copyLabel">Copy</span>
+          </button>
+          <button x-show="terminalAvailable" @click="launchInTerminal(setupOutput, setupRunner)"
+            :disabled="launching || (terminalSessionId && !terminalEnded)"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Open Terminal
           </button>
           <button @click="setupOutput = ''" class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Back to scan</button>
         </div>
@@ -732,6 +749,14 @@ function app() {
     darkMode: localStorage.getItem('gf-dark') === 'true' || (!localStorage.getItem('gf-dark') && window.matchMedia('(prefers-color-scheme: dark)').matches),
     scanning: false, toast: '', toastError: false, setupOutput: '', copyLabel: 'Copy', sidebarOpen: false, srAnnouncement: '',
     activeView: 'scan',
+    get projectName() { return this.projectPath.split('/').filter(Boolean).pop() || this.projectPath; },
+    get projectColor() {
+      const name = this.projectName;
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+      const hue = Math.abs(hash) % 360;
+      return `hsl(${hue}, 60%, 50%)`;
+    },
     showBrowser: false, browserCurrent: '', browserParent: '', browserDirs: [],
 
     // --- Scanner state ---
@@ -776,6 +801,10 @@ function app() {
         localStorage.setItem('gf-dark', v);
         document.documentElement.classList.toggle('dark', v);
       });
+      // Dynamic browser tab title
+      const updateTitle = () => { document.title = `\uD83D\uDC10 ${this.projectName} | GOAT Flow`; };
+      this.$watch('projectPath', updateTitle);
+      updateTitle();
       // Sync initial state (anti-FOUC script may have added 'dark' before Alpine)
       document.documentElement.classList.toggle('dark', this.darkMode);
       if (location.protocol === 'http:' || location.protocol === 'https:') {
@@ -970,9 +999,13 @@ function app() {
           ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
         }
       };
-      // Retry fit — container may still be transitioning
+      // Retry fit — container may still be transitioning from x-show
       setTimeout(doFit, 50);
       setTimeout(doFit, 200);
+      setTimeout(doFit, 500);
+      // ResizeObserver — catches container size changes (split-pane, sidebar toggle, etc.)
+      const ro = new ResizeObserver(() => { doFit(); });
+      ro.observe(container);
       // Resize on window resize
       const resizeHandler = () => { doFit(); };
       window.addEventListener('resize', resizeHandler);
@@ -996,6 +1029,21 @@ function app() {
       };
       ws.onclose = () => { this.terminalConnected = false; if (!this.terminalEnded) this.terminalEnded = true; };
       ws.onerror = () => { this.terminalConnected = false; };
+      // Clipboard paste (Ctrl+V) — intercept before xterm sends raw \x16
+      term.attachCustomKeyEventHandler(e => {
+        if (e.type === 'keydown' && e.ctrlKey && e.key === 'v') {
+          navigator.clipboard.readText().then(text => {
+            if (text && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'input', data: text }));
+          }).catch(() => {}); // clipboard empty or denied
+          return false; // prevent xterm from handling it
+        }
+        // Ctrl+C with selection → copy to clipboard instead of sending SIGINT
+        if (e.type === 'keydown' && e.ctrlKey && e.key === 'c' && term.hasSelection()) {
+          navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+          return false;
+        }
+        return true;
+      });
       // Send input from xterm to WS
       term.onData(data => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'input', data }));
@@ -1006,6 +1054,7 @@ function app() {
       });
       // Cleanup handler
       this._terminalCleanup = () => {
+        ro.disconnect();
         window.removeEventListener('resize', resizeHandler);
         try { ws.close(); } catch {}
         try { term.dispose(); } catch {}
