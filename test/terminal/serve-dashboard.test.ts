@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+
+// Check if claude CLI is available (skip PTY tests on CI)
+let claudeAvailable = false;
+try { execFileSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }); claudeAvailable = true; } catch { /* not installed */ }
+const skipReason = 'claude CLI not installed (CI environment)';
+const requiresClaude = { skip: claudeAvailable ? false : skipReason };
 
 // Helper: make an HTTP request to the dashboard server
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
@@ -82,7 +89,7 @@ describe('serve-dashboard API', () => {
     assert.equal((data as unknown[]).length, 0);
   });
 
-  it('POST /api/terminal/create with valid path succeeds', async () => {
+  it('POST /api/terminal/create with valid path succeeds', requiresClaude, async () => {
     const { status, data } = await request(port, 'POST', '/api/terminal/create', {
       prompt: 'hello',
       projectPath: tempDir,
@@ -96,7 +103,7 @@ describe('serve-dashboard API', () => {
     await request(port, 'DELETE', `/api/terminal/${d.id}`);
   });
 
-  it('POST /api/terminal/create with invalid path returns 400/500', async () => {
+  it('POST /api/terminal/create with invalid path returns 400/500', requiresClaude, async () => {
     const { status, data } = await request(port, 'POST', '/api/terminal/create', {
       prompt: 'hello',
       projectPath: '/tmp/nonexistent-goat-test-xyz',
@@ -105,7 +112,7 @@ describe('serve-dashboard API', () => {
     assert.ok((data as { error: string }).error.includes('does not exist'));
   });
 
-  it('POST /api/terminal/create with invalid runner returns 400', async () => {
+  it('POST /api/terminal/create with invalid runner returns 400', requiresClaude, async () => {
     const { status, data } = await request(port, 'POST', '/api/terminal/create', {
       prompt: 'hello',
       projectPath: tempDir,
@@ -118,7 +125,7 @@ describe('serve-dashboard API', () => {
     await request(port, 'DELETE', `/api/terminal/${d.id}`);
   });
 
-  it('DELETE /api/terminal/:id kills a session', async () => {
+  it('DELETE /api/terminal/:id kills a session', requiresClaude, async () => {
     const createRes = await request(port, 'POST', '/api/terminal/create', {
       prompt: '',
       projectPath: tempDir,

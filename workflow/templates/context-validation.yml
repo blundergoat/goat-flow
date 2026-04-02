@@ -19,17 +19,28 @@ jobs:
           echo "All instruction files within line limit"
 
       - name: Check router references
-        run: bash scripts/context-validate.sh || true
+        run: |
+          if [ -f scripts/context-validate.sh ]; then
+            bash scripts/context-validate.sh
+          else
+            echo "::warning::scripts/context-validate.sh not found, skipping"
+          fi
 
       - name: Check skills exist
         run: |
-          found=0
+          fail=0
           for skill in goat goat-debug goat-plan goat-review goat-security goat-test; do
+            found=0
             for dir in .claude/skills .agents/skills; do
-              if [ -d "$dir/$skill" ]; then
-                echo "✓ $dir/$skill"
-                found=$((found + 1))
+              if [ -f "$dir/$skill/SKILL.md" ]; then
+                echo "✓ $dir/$skill/SKILL.md"
+                found=1
               fi
             done
+            if [ "$found" -eq 0 ]; then
+              echo "::error::Missing skill: $skill (not in .claude/skills/ or .agents/skills/)"
+              fail=1
+            fi
           done
-          echo "$found skill directories found"
+          if [ "$fail" -eq 1 ]; then exit 1; fi
+          echo "All 6 canonical skills present"

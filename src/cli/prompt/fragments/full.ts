@@ -211,10 +211,10 @@ Without this, PRs can merge without context validation passing.`,
     instruction: `Create the telemetry logs directory for session tracking:
 
 \`\`\`bash
-mkdir -p .goat-flow/tasks/logs/sessions
+mkdir -p .goat-flow/logs/sessions
 \`\`\`
 
-Copy the README from the goat-flow templates: \`workflow/evaluation/logs-README.md\` → \`.goat-flow/tasks/logs/README.md\`.
+Copy the README from the goat-flow templates: \`workflow/evaluation/logs-README.md\` → \`.goat-flow/logs/README.md\`.
 
 Add to \`.gitignore\`:
 \`\`\`

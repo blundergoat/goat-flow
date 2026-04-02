@@ -235,9 +235,9 @@ SESSION LOG REMINDER (optional Stop hook):
    The hook should:
    - Check if the conversation contained a skill invocation (grep for
      "Running /goat-" in recent output)
-   - If yes, check if .goat-flow/tasks/logs/sessions/ has a file with today's date
+   - If yes, check if .goat-flow/logs/sessions/ has a file with today's date
    - If no file found, print a reminder to stderr:
-     "Skill session detected but no log written to .goat-flow/tasks/logs/sessions/.
+     "Skill session detected but no log written to .goat-flow/logs/sessions/.
       Write a session summary before closing."
    - Always exit 0 (informational only — don't block the agent)
 

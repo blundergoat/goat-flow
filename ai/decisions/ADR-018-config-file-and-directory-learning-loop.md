@@ -11,7 +11,7 @@ Cross-repository review during the milestone planning showed recurring pressure 
 
 ## Decision
 
-Adopt a YAML `goat-flow.yaml` config file at repo root with explicit paths for learning-loop sources:
+Adopt a YAML config file at `.goat-flow/config.yaml` with explicit paths for learning-loop sources:
 
 - `footguns.committed`: canonical, committed entries (default `docs/footguns/`)
 - `footguns.local`: session-local entries (default `.goat-flow/footguns/`)

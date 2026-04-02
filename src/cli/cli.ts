@@ -164,7 +164,13 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     verbose: values.verbose === true,
     minScore,
     minGrade,
-    output: values.output ? resolve(values.output) : null,
+    output: values.output
+      ? resolve(
+          values.output.includes('/') || values.output.includes('\\')
+            ? values.output
+            : join(positionals[0] ?? '.', '.goat-flow', values.output),
+        )
+      : null,
     help: values.help === true,
     version: values.version === true,
   };
@@ -351,13 +357,9 @@ async function main(): Promise<void> {
     }
 
     if (options.output) {
-      // Default scan output to .goat-flow/ directory
-      const outputPath = options.output.includes('/') || options.output.includes('\\')
-        ? options.output
-        : join(options.projectPath, '.goat-flow', options.output);
-      mkdirSync(dirname(outputPath), { recursive: true });
-      writeFileSync(outputPath, rendered + '\n', 'utf-8');
-      console.error(`Written to ${outputPath}`);
+      mkdirSync(dirname(options.output), { recursive: true });
+      writeFileSync(options.output, rendered + '\n', 'utf-8');
+      console.error(`Written to ${options.output}`);
     } else {
       process.stdout.write(rendered + '\n');
     }

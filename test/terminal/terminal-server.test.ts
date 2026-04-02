@@ -2,8 +2,15 @@ import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { TerminalManager, validateProjectPath } from '../../src/cli/terminal-server.js';
+
+// Check if claude CLI is available (skip PTY tests on CI where it's not installed)
+let claudeAvailable = false;
+try { execFileSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }); claudeAvailable = true; } catch { /* not installed */ }
+const skipReason = 'claude CLI not installed (CI environment)';
+const requiresClaude = { skip: claudeAvailable ? false : skipReason };
 
 // Create a real temp directory for path validation tests
 let tempDir: string;
@@ -84,7 +91,7 @@ describe('TerminalManager', () => {
     );
   });
 
-  it('enforces max 3 sessions', async () => {
+  it('enforces max 3 sessions', requiresClaude, async () => {
     const manager = new TerminalManager();
     try {
       const sessions = [];
@@ -108,7 +115,7 @@ describe('TerminalManager', () => {
     }
   });
 
-  it('create rejects invalid projectPath', async () => {
+  it('create rejects invalid projectPath', requiresClaude, async () => {
     const manager = new TerminalManager();
     await assert.rejects(
       () => manager.create('hello', '/tmp/does-not-exist-goat-flow-xyz'),
@@ -116,7 +123,7 @@ describe('TerminalManager', () => {
     );
   });
 
-  it('session includes runner info', async () => {
+  it('session includes runner info', requiresClaude, async () => {
     const manager = new TerminalManager();
     try {
       const session = await manager.create('', tempDir);
@@ -130,7 +137,7 @@ describe('TerminalManager', () => {
 });
 
 describe('idle timeout', () => {
-  it('terminates session after idle period', async () => {
+  it('terminates session after idle period', requiresClaude, async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
 
     const manager = new TerminalManager();
@@ -152,7 +159,7 @@ describe('idle timeout', () => {
 });
 
 describe('shell metacharacter safety', () => {
-  it('prompt with semicolon is passed as literal argument', async () => {
+  it('prompt with semicolon is passed as literal argument', requiresClaude, async () => {
     const manager = new TerminalManager();
     try {
       const session = await manager.create('"; rm -rf /"', tempDir);
@@ -163,7 +170,7 @@ describe('shell metacharacter safety', () => {
     }
   });
 
-  it('prompt with $() is passed as literal argument', async () => {
+  it('prompt with $() is passed as literal argument', requiresClaude, async () => {
     const manager = new TerminalManager();
     try {
       const session = await manager.create('$(whoami)', tempDir);
@@ -174,7 +181,7 @@ describe('shell metacharacter safety', () => {
     }
   });
 
-  it('prompt with backticks is passed as literal argument', async () => {
+  it('prompt with backticks is passed as literal argument', requiresClaude, async () => {
     const manager = new TerminalManager();
     try {
       const session = await manager.create('`id`', tempDir);
