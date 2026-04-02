@@ -446,6 +446,8 @@ export interface CLIOptions {
   minGrade: Grade | null;
   // Write output to a file instead of stdout
   output: string | null;
+  // Open browser automatically for dashboard command
+  openDashboard: boolean;
   help: boolean;
   version: boolean;
 }

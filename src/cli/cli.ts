@@ -53,6 +53,7 @@ Flags:
   --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
   --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
   --output <file>   Write output to file instead of stdout
+  --no-open         Dashboard: do not auto-open browser
   --help, -h        Show this help
   --version, -v     Show version
 
@@ -171,6 +172,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       'min-score': { type: 'string' },
       'min-grade': { type: 'string' },
       output: { type: 'string', short: 'o' },
+      'no-open': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -187,6 +189,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     minScore: parseMinScoreArg(values['min-score']),
     minGrade: parseMinGradeArg(values['min-grade']),
     output: resolveOutputPath(values.output, positionals),
+    openDashboard: values['no-open'] !== true,
     help: values.help === true,
     version: values.version === true,
   };
@@ -367,7 +370,10 @@ async function main(): Promise<void> {
   }
   if (options.command === 'dashboard') {
     const { serveDashboard } = await import('./serve-dashboard.js');
-    await serveDashboard({ projectPath: options.projectPath });
+    await serveDashboard({
+      projectPath: options.projectPath,
+      openBrowser: options.openDashboard,
+    });
     return;
   }
 

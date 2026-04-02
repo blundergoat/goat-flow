@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { createFS } from './facts/fs.js';
 import { scanProject } from './scanner/scan.js';
 import { renderJson } from './render/json.js';
@@ -47,11 +48,45 @@ function jsonResponse(res: ServerResponse, status: number, body: unknown): void 
 
 interface DashboardOptions {
   projectPath: string;
+  openBrowser: boolean;
 }
 
 export interface DashboardServer {
   close: () => Promise<void>;
   port: number;
+}
+
+function getDashboardOpenFlagPath(projectPath: string): string {
+  return join(projectPath, '.goat-flow', '.goat-flow-dashboard-opened');
+}
+
+function markDashboardOpened(projectPath: string): void {
+  const flagPath = getDashboardOpenFlagPath(projectPath);
+  try {
+    mkdirSync(dirname(flagPath), { recursive: true });
+    writeFileSync(flagPath, '');
+  } catch { /* ignore */ }
+}
+
+function shouldOpenDashboardInBrowser(projectPath: string): boolean {
+  return !existsSync(getDashboardOpenFlagPath(projectPath));
+}
+
+function openBrowserWindow(url: string): void {
+  const [command, args] = (() => {
+    if (process.platform === 'darwin') {
+      return ['open', [url] as string[]] as const;
+    }
+    if (process.platform === 'win32') {
+      return ['cmd', ['/c', 'start', '', url] as string[]] as const;
+    }
+    return ['xdg-open', [url] as string[]] as const;
+  })();
+
+  try {
+    const proc = spawn(command, args, { detached: true, stdio: 'ignore' });
+    proc.unref();
+  } catch { /* ignore */ }
 }
 
 /**
@@ -63,6 +98,7 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
   return new Promise((resolveStart) => {
   const template = loadPackageFile('src/dashboard/index.html');
   const absDefault = resolve(options.projectPath);
+  const openBrowser = options.openBrowser === true;
 
   // Lazy-init terminal manager + WSS on first terminal request
   let managerPromise: Promise<TerminalManager> | null = null;
@@ -347,15 +383,21 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
     if (!addr || typeof addr === 'string') return;
     const url = `http://127.0.0.1:${addr.port}`;
     console.log(`Dashboard: ${url}`);
+    if (openBrowser && shouldOpenDashboardInBrowser(absDefault)) {
+      openBrowserWindow(url);
+      markDashboardOpened(absDefault);
+    }
     // Check if terminal is available and warn if not
     void getManager().then(m => m.health()).then(h => {
       if (!h.nodePtyAvailable) {
         console.log('Note: Terminal feature unavailable (node-pty not installed)');
-        console.log('  Fix: npm install node-pty  (or: pnpm approve-builds)');
+        console.log('  Fix: npm install node-pty (or: pnpm approve-builds)');
+        console.log('  See: https://github.com/blundergoat/goat-flow#troubleshooting');
       }
     }).catch(() => {
       console.log('Note: Terminal feature unavailable (node-pty not installed)');
-      console.log('  Fix: npm install node-pty  (or: pnpm approve-builds)');
+      console.log('  Fix: npm install node-pty (or: pnpm approve-builds)');
+      console.log('  See: https://github.com/blundergoat/goat-flow#troubleshooting');
     });
     resolveStart({
       port: addr.port,

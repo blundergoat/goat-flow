@@ -7,7 +7,7 @@
 
 ## What This Is
 
-A structured workflow system for AI coding agents - Claude Code, Gemini CLI, and Codex. Gives your agent a 6-step execution loop (READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG) instead of a wall of rules. A design doc (the system spec) and a set of prompts do the work. You paste the prompts; your agent builds the system for your project.
+A structured workflow system for AI coding agents - Claude Code, Gemini CLI, and Codex. The execution loop is defined in the system spec (`READ -> CLASSIFY -> SCOPE -> ACT -> VERIFY -> LOG`), which centralizes behavior into one canonical reference and keeps setup prompts aligned.
 
 ## Reading Order
 

@@ -43,7 +43,7 @@ HYGIENE:
    ## Date, ## Status, ## Current State, ## Key Decisions Made,
    ## Known Risks, ## Next Step
 
-6. Create tasks/.gitignore:
+6. Create .goat-flow/tasks/.gitignore:
    *
    !.gitignore
    !handoff-template.md

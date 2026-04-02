@@ -9,49 +9,42 @@ npm install --save-dev @blundergoat/goat-flow
 npx goat-flow dashboard
 ```
 
-Open the dashboard, click **Scan**, see your score. Click **Setup** to generate setup instructions, then paste them into your coding agent.
+Open the dashboard, click **Scan**, and see your score. Click **Setup** to generate setup instructions, then paste them into your coding agent.
+The dashboard auto-opens in your browser on first run.
 
 ![Dashboard](docs/assets/dashboard-preview.png)
 
 ## Install Options
 
-**Recommended (project-level):**
+### Recommended (project-level)
 
-```bash
-# npm
-npm install --save-dev @blundergoat/goat-flow
+| Manager | Commands | Notes |
+|---|---|---|
+| npm | `npm install --save-dev @blundergoat/goat-flow` | ✅ tested |
+| pnpm | `pnpm add -D @blundergoat/goat-flow` then `pnpm approve-builds` | ✅ tested; terminal may require approving `node-pty` |
+| yarn | `yarn add -D @blundergoat/goat-flow` | ⚪ not executed here (yarn missing) |
+| bun | `bun add -d @blundergoat/goat-flow` | ⚪ not executed here (bun missing) |
+| npx | `npx @blundergoat/goat-flow@0.10.0 scan .` | ⚪ not verifiable yet (registry currently resolves to 0.9.4) |
 
-# pnpm (extra step for terminal feature)
-pnpm add -D @blundergoat/goat-flow
-pnpm approve-builds    # select node-pty when prompted
-
-# yarn
-yarn add -D @blundergoat/goat-flow
-```
-
-**Global (optional):**
+### Global (optional)
 
 ```bash
 npm install -g @blundergoat/goat-flow
-goat-flow dashboard    # works without npx
+goat-flow dashboard
 ```
+✅ global install tested.
 
-**Try without installing (scan only — no terminal):**
-
-```bash
-npx @blundergoat/goat-flow scan .
-```
 
 ## Commands
 
 ```bash
-npx goat-flow dashboard                   # Visual dashboard with scanner + terminal
-npx goat-flow scan                        # CLI scanner (text output)
-npx goat-flow setup --agent claude        # Generate setup prompt for Claude Code
-npx goat-flow setup --agent codex         # Generate setup prompt for Codex
-npx goat-flow setup --agent gemini        # Generate setup prompt for Gemini CLI
-npx goat-flow scan --min-score 75         # CI gate (exit 1 if below)
-npx goat-flow scan --format json          # Machine-readable output
+goat-flow dashboard        # Visual dashboard + optional terminal
+goat-flow scan             # Scanner output + score report
+goat-flow setup            # Setup prompt for your project agent
+
+# Optional:
+goat-flow scan --format json
+goat-flow setup --agent claude|codex|gemini
 ```
 
 ## What It Does
@@ -101,7 +94,7 @@ pnpm blocks native builds by default. Run `pnpm approve-builds` and select node-
 Expected. Run `npx goat-flow setup --agent claude` to generate setup instructions, then paste into your agent.
 
 **npx: command not found?**
-Install Node.js 18+.
+Install Node.js 20+.
 
 ## Documentation
 

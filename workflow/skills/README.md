@@ -7,7 +7,7 @@ no external references required.
 For skill documentation (when to use, design rationale, decision table), see
 [docs/system/skills.md](../../docs/system/skills.md).
 
-## Active Skills (5)
+## Active Skills (5 + dispatcher)
 
 | Template | Creates |
 |----------|---------|

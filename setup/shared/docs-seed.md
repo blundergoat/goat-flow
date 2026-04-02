@@ -48,7 +48,7 @@ These files are created regardless of which agent you use. They form the learnin
    State (including files changed), Key Decisions, Known Risks,
    Next Step.
 
-4. tasks/.gitignore - Ignore runtime working files:
+4. .goat-flow/tasks/.gitignore - Ignore runtime working files:
    todo.md
    handoff.md
    (The template is committed; the filled-in copies are not.)

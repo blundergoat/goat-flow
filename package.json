@@ -33,6 +33,7 @@
     "docs/reference",
     "docs/guides",
     "docs/examples",
+    "scripts/warn-node-pty.mjs",
     "setup",
     "workflow"
   ],
@@ -43,6 +44,7 @@
     "build": "tsc",
     "test": "node --import tsx --test test/*/*.test.ts",
     "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/warn-node-pty.mjs",
     "scan": "node dist/cli/cli.js scan .",
     "scan:verbose": "node dist/cli/cli.js scan . --verbose",
     "scan:json": "node dist/cli/cli.js scan . --format json",

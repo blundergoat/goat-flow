@@ -4,28 +4,64 @@
 
 ## v0.10.0 - 2026-04-03
 
-Release-level deltas from `v0.9.4` to `v0.10.0`.
+Execution-loop canonicalization, install-flow refinement, and preflight-unblocking CLI refactors.
 
-- **Install and packaging:** Package metadata updates and lockfile refresh for compatibility (`install goat-flow` workflow updates).
-- **Complexity and preflight:** Refactored high-complexity CLI paths in config parsing, stack detection, fact extraction, rubric/scoring, renderers, terminal serving, and scan/eval pipelines to unblock preflight constraints.
-- **Dashboard and CLI UX:** Added clearer terminal-unavailable handling, terminal launch guidance, and install/readme alignment around node-pty and pnpm onboarding.
-- **Docs and loop model:** Updated execution-loop and standard references to remove fixed read budgets and adopt 3x-estimate re-classification flow.
-- **Governance and learning:** Added ADR-019 and new 2026-04-03 lessons/footguns for critique handling, implementation-skill scope, and scanner/reliability guardrails.
+#### Install and Packaging
+- Package metadata and lockfile updates for `install goat-flow` compatibility
+- Added `postinstall` warning helper (`scripts/warn-node-pty.mjs`) and included it in package `files`.
+- Updated README with install matrix, tested command notes for npm/pnpm/yarn/bun, and CLI Node runtime guidance.
+
+#### Complexity and Preflight
+- Refactored high-complexity CLI paths in config parsing, stack detection, fact extraction, rendering, terminal serving, and scan/eval pipelines
+- Reduced control-flow complexity so max-complexity lint constraints pass.
+
+#### Dashboard and CLI UX
+- Added first-run dashboard browser auto-open with persistent `--no-open` option
+- Improved terminal-unavailable messaging with install/approval troubleshooting guidance in dashboard and CLI paths
+
+#### Docs and Execution Loop
+- Made `docs/system-spec.md` the canonical execution-loop definition
+- Reduced duplicate loop writeups in `docs/system/six-steps.md` and `docs/reference/design-rationale.md` to compatibility pointers
+- Aligned setup shared templates with loop provenance requirements
+
+#### Workflow and Learning
+- Removed obsolete session-logging ritual language from five skill close-paths and runtime reminder hooks
+- Moved completion handoff focus to `.goat-flow/tasks/handoff.md`.
+- Added 2026-04-03 lesson/footgun updates and template metadata checks in `scripts/context-validate.sh`.
 
 ## v0.9.4 - 2026-04-02
 
 Scanner honesty, config file, directory restructure, embedded terminal, dashboard UX. Driven by 6 cross-project reviews + real-project testing. 275 tests.
 
-- **Scanner:** stop faking Codex enforcement facts, remove harmful AP2, fix goat-goat derivation bug, new AP20/AP21, `.env` Edit/Write deny check, devDeps-only JS detection
-- **Config:** `.goat-flow/config.yaml` with `js-yaml`, directory-based footguns/lessons (YAML frontmatter entries), committed vs local split, migration scripts
-- **Restructure:** `docs/lessons/` -> `ai/lessons/`, `docs/decisions/` -> `ai/decisions/`, `agent-evals/` -> `ai/evals/`, `ai/instructions/` -> `ai/coding-standards/`, `tasks/` -> `.goat-flow/tasks/` (gitignored)
-- **Skills:** all 5 check footguns in Step 0, dispatcher enriched with modes/chaining, version sync to 0.9.4
-- **Setup:** stale skill cleanup (8 old names), router rewrite, static CI template, format hook wires into settings.json
-- **Terminal backend:** `node-pty` + `ws` as optionalDeps, `TerminalManager` with multi-runner (claude/codex/gemini), REST API (create/list/delete/health), WebSocket streaming, idle timeout, Origin check
-- **Terminal launcher:** xterm.js lazy-loaded from CDN, Launch button on preset cards, Setup Launcher panel (pick agent + runner), Terminal nav button with session indicator, Ctrl+Shift+D exit
-- **Dashboard UX:** dark mode toggle fixed, copy feedback on cards, Escape collapses checks, agent switch preserves tab, Reset filters, brighter focus rings, anti-patterns hidden during search
-- **Deep Critique preset** added (audit category) - 6-phase system review prompt
-- **Tests:** 239 -> 275 (+36). New: eval parser/loader, serve-dashboard API, terminal server
+### Scanner
+- stop faking Codex enforcement facts, remove harmful AP2, fix goat-goat derivation bug, new AP20/AP21, `.env` Edit/Write deny check, devDeps-only JS detection
+
+### Config
+- `.goat-flow/config.yaml` with `js-yaml`, directory-based footguns/lessons (YAML frontmatter entries), committed vs local split, migration scripts
+
+### Restructure
+- `docs/lessons/` -> `ai/lessons/`, `docs/decisions/` -> `ai/decisions/`, `agent-evals/` -> `ai/evals/`, `ai/instructions/` -> `ai/coding-standards/`, `tasks/` -> `.goat-flow/tasks/` (gitignored)
+
+### Skills
+- all 5 check footguns in Step 0, dispatcher enriched with modes/chaining, version sync to 0.9.4
+
+### Setup
+- stale skill cleanup (8 old names), router rewrite, static CI template, format hook wires into settings.json
+
+### Terminal Backend
+- `node-pty` + `ws` as optionalDeps, `TerminalManager` with multi-runner (claude/codex/gemini), REST API (create/list/delete/health), WebSocket streaming, idle timeout, Origin check
+
+### Terminal Launcher
+- xterm.js lazy-loaded from CDN, Launch button on preset cards, Setup Launcher panel (pick agent + runner), Terminal nav button with session indicator, Ctrl+Shift+D exit
+
+### Dashboard UX
+- dark mode toggle fixed, copy feedback on cards, Escape collapses checks, agent switch preserves tab, Reset filters, brighter focus rings, anti-patterns hidden during search
+
+### Deep Critique Preset
+- added (audit category) - 6-phase system review prompt
+
+### Tests
+- 239 -> 275 (+36). New: eval parser/loader, serve-dashboard API, terminal server
 
 
 ---

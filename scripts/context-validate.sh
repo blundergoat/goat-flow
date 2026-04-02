@@ -175,6 +175,34 @@ for script in scripts/preflight-checks.sh scripts/context-validate.sh scripts/de
 done
 info "Codex scripts are executable"
 
+# Validate template consistency for deduplicated execution-loop + execution docs
+template_errors=0
+
+if ! grep -Fq "generated from \`docs/system-spec.md\`" setup/shared/execution-loop.md; then
+    warn "setup/shared/execution-loop.md should note it is generated from docs/system-spec.md"
+    template_errors=1
+fi
+
+if ! grep -Fq 'Active Skills (5 + dispatcher)' workflow/skills/README.md; then
+    warn "workflow/skills/README.md should keep the canonical active skills header"
+    template_errors=1
+fi
+
+if ! grep -Fq 'name: [Title]' workflow/evaluation/lessons.md; then
+    warn "workflow/evaluation/lessons.md should describe the per-entry frontmatter"
+    template_errors=1
+fi
+
+if ! grep -Fq 'name: [descriptive title]' workflow/evaluation/footguns.md; then
+    warn "workflow/evaluation/footguns.md should describe the per-entry frontmatter"
+    template_errors=1
+fi
+
+if [[ "$template_errors" -ne 0 ]]; then
+    fail "Template consistency checks failed"
+fi
+info "Template consistency checks passed"
+
 # Validate setup prompt template refs (M2.11)
 # Uses the built CLI to check all template paths referenced by the setup renderer
 if [[ -f dist/cli/prompt/template-refs.js ]]; then

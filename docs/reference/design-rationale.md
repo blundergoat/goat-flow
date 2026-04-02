@@ -188,53 +188,20 @@ flowchart TD
 
 ---
 
-## Execution Loop Steps
+## Execution Loop (Pointer)
 
-### READ
+The execution loop is the core behavior contract and is fully specified in `docs/system-spec.md`:
+`READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG`.
 
-**Problem:** Claude fabricates codebase facts -- guesses file contents, dependency versions, API contracts without reading the actual files.
+This section intentionally points to the canonical spec to avoid drift. Keep all
+operational detail there and in root instruction files; this rationale page
+stores only why that loop exists and what changed when tuning it.
 
-**Incident:** Asked about a dependency, Claude said it was a local path dependency; it was actually installed from a package registry. It never read the manifest. (BlunderGOAT CC)
-
-### CLASSIFY
-
-**Problem:** (1) Claude can't distinguish questions from directives -- "did you also improve X?" gets treated as "improve X." (2) Claude drifts between modes silently.
-
-**Incident:** The question/directive confusion was exposed by the anti-rationalisation hook. A correct "No -- want me to?" answer was rejected as "asking permission instead of implementing." (BlunderGOAT CC, Oruç)
-
-### SCOPE (v0.1 addition)
-
-**Problem:** Agent touches files and systems outside the task's intended boundary. A "Standard Feature" task silently modifies auth code, deployment config, or unrelated modules. On the Rampart project, the agent changed 57 files across 3 codebases without declaring scope - a circular dependency between `agentStore.ts` and `agentBridge.ts` went undetected because neither file was in the original task's intended boundary. In the same session, the agent built a pre-commit hook feature nobody asked for - a non-goal that would have been surfaced by a scope declaration.
-
-**Design decision:** After classifying, declare scope before acting: files allowed to change, non-goals, max blast radius. If changes need to extend beyond declared scope, stop and re-scope with the human. This was initially part of CLASSIFY but the Rampart retrospective showed that scope violations were the single most common preventable failure mode (2 of 6 real bugs). Promoting SCOPE to its own step makes it harder to skip.
-
-**Source:** ChatGPT external review (round 2), Rampart retrospective (2026-03-20).
-
-### CLASSIFY: Complexity Budgets (v0.1 addition)
-
-**Problem:** Complexity tiers (Hotfix / Standard / System / Infrastructure) were labels with no mechanical consequence. On the Rampart project, the initial implementation was an Infrastructure-level change but the agent never re-classified - it blew past any reasonable read or turn budget without checkpoints.
-
-**Design decision:** Each complexity tier now has explicit read and turn budgets: Hotfix (2 reads / 3 turns), Standard (4 / 10), System Change (6 / 20), Infrastructure (8 / 25). Over budget = re-classify before continuing. Budgets are soft limits - the agent doesn't stop automatically, but exceeding them forces a conscious decision to upgrade the complexity tier rather than silently expanding.
-
-**Source:** Claude external review (round 1), Gemini external review (round 2), Rampart retrospective.
-
-### ACT
-
-**Problem:** Planning loops and premature fixes. In Plan mode, Claude reads file after file without producing an artefact. In Debug mode, Claude starts fixing before understanding the bug.
-
-**Design decision:** Each mode has explicit behaviour constraints. The "4th file read without writing = stop exploring" heuristic was calibrated from repeated planning loops where Claude read 8-12 files and produced nothing. (Oruç, Microsoft AutoDev)
-
-### VERIFY
-
-**Problem:** Claude declares victory early. Tests pass, but the old function name still appears in three files because nobody grepped after the rename.
-
-**Incident:** Post-rename grep finding stale references was the specific incident that led to DoD gate #6. (awslabs/aidlc, Microsoft AutoDev)
-
-### LOG
-
-**Problem:** The agent repeats the same mistakes across sessions. Without a learning loop, every conversation starts from zero.
-
-**Source:** The same lesson was learned 3-4 times before being written down. The two-file split (lessons.md for agent behaviour, footguns.md for architectural landmines) emerged because they serve different purposes and load at different times. (BlunderGOAT CC)
+In short:
+- **Problem prevention:** prevents fabrication, scope drift, rushed acting, and repeated release of known mistakes without learning.
+- **Why this form:** explicit step boundaries make failures observable and
+  gateable (especially `VERIFY` and `LOG`), which reduced mode-switching bugs
+  in early iterations.
 
 ---
 

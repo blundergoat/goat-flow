@@ -14,17 +14,15 @@ bash scripts/preflight-checks.sh
 
 ## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 
+The full step behavior is defined in `docs/system-spec.md`:
+`READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG`.
+
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts.
-
-**CLASSIFY** - Assess complexity: Hotfix (2 reads, 3 turns), Standard (4 reads, 10 turns), System (6 reads, 20 turns).
-
+**CLASSIFY** - Follow project complexity buckets and re-classify on drift (see `docs/system-spec.md`).
 **SCOPE** - Declare files allowed to change, non-goals, max blast radius.
-
 **ACT** - Declare mode (Plan/Implement/Debug) with goal and exit condition.
-
 **VERIFY** - Run shellcheck on .sh changes. Check cross-references after renames. Two corrections on same approach = rewind.
-
-**LOG** - Update ai/lessons/ (behavioral mistakes) or docs/footguns/ (architectural traps) when tripped.
+**LOG** - Update `ai/lessons/` (behavioral mistakes) or `docs/footguns/` (architectural traps) when tripped.
 
 ## Autonomy Tiers
 

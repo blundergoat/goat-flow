@@ -14,23 +14,21 @@ Create or update ai/lessons/ for this project.
 This file is for behavioural mistakes by the agent, not ordinary product
 bugs. Add entries only after a real mistake or correction happened.
 
-If ai/lessons/ does not exist, create it with this structure:
+If ai/lessons/ does not exist, create it with this frontmatter:
 
-# Lessons
+```markdown
+---
+name: [Title]
+created: YYYY-MM-DD
+---
 
-Behavioural mistakes made by the agent during this project. Each entry
-describes what went wrong and how to avoid repeating it.
+**What happened:** [real mistake and impact]
+**Evidence:** `file:line` - [what was found]
+**Prevention:** [action that would have prevented the mistake]
+```
 
-## Entries
-
-### Short lesson title
-**What happened:** Brief description of the real mistake. Include file:line
-evidence when that is the clearest way to explain it.
-
-**Prevention:** The behavioural rule or verification step that should stop
-this from happening again.
-
-**created_at:** YYYY-MM-DD
+For existing ai/lessons/, append one new file entry in the same format.
+Use short filenames in this format: `YYYY-MM-DD-slug.md`.
 
 ## Patterns
 ### Pattern: recurring theme

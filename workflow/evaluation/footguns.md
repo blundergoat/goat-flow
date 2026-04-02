@@ -9,7 +9,9 @@ different part of the system through hidden coupling or stale assumptions.
 ## The Prompt
 
 ```
-Create or update docs/footguns/ for this project.
+Create or update `docs/footguns/` for this project.
+
+Each footgun is one markdown file (for example: `docs/footguns/2026-03-31-short-title.md`).
 
 IF docs/footguns/ already exists:
   MERGE with it carefully. Keep existing confirmed entries unless newer
@@ -17,7 +19,7 @@ IF docs/footguns/ already exists:
   over deleting history.
 
 IF docs/footguns/ does NOT exist:
-  Create it and seed with REAL footguns found by reading the codebase.
+  Create the directory and seed with one file per real, code-proven footgun.
 
 WHAT TO LOOK FOR:
 - Cross-domain coupling where changing file A silently breaks file B
@@ -31,7 +33,14 @@ WHAT TO LOOK FOR:
 
 FORMAT - every entry MUST follow this structure:
 
-# Footguns
+---
+name: [descriptive title]
+status: active
+created: YYYY-MM-DD
+evidence_type: ACTUAL_MEASURED
+---
+
+# Footgun Entry
 
 ## Footgun: [descriptive title]
 **Evidence type:** ACTUAL_MEASURED

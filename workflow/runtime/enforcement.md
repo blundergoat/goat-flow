@@ -227,23 +227,19 @@ HOOK CONFIGURATION PITFALLS:
 - Check git diff before running expensive checks - don't lint
   unchanged files
 
-SESSION LOG REMINDER (optional Stop hook):
-   Add a Stop hook that checks whether a session log was written when
-   a skill was invoked. This catches the common failure mode where agents
-   skip the closing protocol after delivering their output.
+SESSION NOTES REMINDER (optional Stop hook):
+   Add a Stop hook that checks for skill handoff artifacts when a
+   skill session appears incomplete. This helps avoid losing context.
 
    The hook should:
    - Check if the conversation contained a skill invocation (grep for
      "Running /goat-" in recent output)
-   - If yes, check if .goat-flow/logs/sessions/ has a file with today's date
-   - If no file found, print a reminder to stderr:
-     "Skill session detected but no log written to .goat-flow/logs/sessions/.
-      Write a session summary before closing."
+   - If yes, check whether `.goat-flow/tasks/handoff.md` exists and
+     contains a recent write timestamp
+   - If no handoff is present, print a reminder to stderr:
+     "Skill session ended without a handoff. If work is incomplete, write
+     `.goat-flow/tasks/handoff.md`."
    - Always exit 0 (informational only — don't block the agent)
-
-   This pairs with the Shared Conventions closing protocol which says
-   "FIRST: write session summary" to make logging happen during delivery,
-   not as an afterthought.
 
 4. Compaction hook (Notification, optional but recommended)
 

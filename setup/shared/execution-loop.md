@@ -1,6 +1,6 @@
 # Instruction File Sections
 
-These sections go in every project's root instruction file (CLAUDE.md, AGENTS.md, or equivalent). They are the same regardless of which agent you use.
+These sections go in every project's root instruction file (CLAUDE.md, AGENTS.md, or equivalent). They are generated from `docs/system-spec.md` and kept in sync with it.
 
 **MULTI-AGENT SYNC:** When multiple agent files exist (CLAUDE.md + AGENTS.md + GEMINI.md), the execution loop content is duplicated in each (no import mechanism exists). Changes to the loop MUST be propagated to all copies. The scanner checks for divergence (check 3.3.4).
 
@@ -38,10 +38,6 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Recovery protocols: include 2-3 common failure patterns with fixes
      (e.g., missing context → read X first, out-of-scope → name boundary
      and redirect, conflicting instructions → flag and ask)
-     Telemetry: if `.goat-flow/tasks/logs/` exists, append to
-     `.goat-flow/tasks/logs/incidents.jsonl` when VERIFY catches a failure or
-     two-corrections-rewind fires. If >200 lines, trim oldest half first.
-     Schema in `.goat-flow/tasks/logs/README.md`.
    - LOG: MUST update when tripped (DoD gate #4). Create one markdown
      file per entry - do NOT append to a monolithic log.
      Lessons: `ai/lessons/` or `.goat-flow/lessons/` using
@@ -58,9 +54,6 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      Skip = DoD gate #4 blocks completion. This is not optional.
      Dual-agent projects: learning loop files are shared. Read the
      current file before appending to avoid duplicating entries.
-     Incident telemetry: after writing to `ai/lessons/` or `docs/footguns/`,
-     also append to `.goat-flow/tasks/logs/incidents.jsonl` if the directory exists
-     (trim oldest half if >200 lines). Schema in `.goat-flow/tasks/logs/README.md`.
 
 c) Autonomy Tiers: Always / Ask First / Never
    - Never tier MUST include:
