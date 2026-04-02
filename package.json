@@ -41,7 +41,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test 'test/*/*.test.ts'",
+    "test": "node --import tsx --test test/*/*.test.ts",
     "typecheck": "tsc --noEmit",
     "scan": "node dist/cli/cli.js scan .",
     "scan:verbose": "node dist/cli/cli.js scan . --verbose",
