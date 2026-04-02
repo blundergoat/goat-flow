@@ -13,6 +13,12 @@ import type {
   Runner,
 } from './terminal-types.js';
 
+// node-pty types — optional dep, can't use static import
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+type NodePtyModule = typeof import('node-pty');
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+type IPty = ReturnType<typeof import('node-pty').spawn>;
+
 const MAX_SESSIONS = 3;
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -30,7 +36,7 @@ interface TerminalSession {
   projectPath: string;
   runner: Runner;
   lastInputAt: number;
-  pty: ReturnType<typeof import('node-pty').spawn> | null;
+  pty: IPty | null;
   ws: WebSocket | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -79,7 +85,7 @@ function sendMessage(ws: WebSocket, msg: ServerMessage): void {
 export class TerminalManager {
   private sessions = new Map<string, TerminalSession>();
   private runnerPaths = new Map<Runner, string>();
-  private nodePtyModule: typeof import('node-pty') | null = null;
+  private nodePtyModule: NodePtyModule | null = null;
   private nodePtyAvailable: boolean | null = null;
   private startedAt = Date.now();
 
@@ -92,7 +98,7 @@ export class TerminalManager {
   }
 
   /** Lazy-load node-pty on first use. */
-  private async loadNodePty(): Promise<typeof import('node-pty')> {
+  private async loadNodePty(): Promise<NodePtyModule> {
     if (this.nodePtyModule) return this.nodePtyModule;
     try {
       this.nodePtyModule = await import('node-pty');
@@ -228,7 +234,7 @@ export class TerminalManager {
     };
   }
 
-  async shutdown(): Promise<void> {
+  shutdown(): void {
     for (const session of this.sessions.values()) {
       if (session.ws) {
         sendMessage(session.ws, { type: 'shutdown' });

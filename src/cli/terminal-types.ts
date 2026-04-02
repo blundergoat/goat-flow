@@ -23,12 +23,6 @@ export interface SessionInfo {
   runner: Runner;
 }
 
-export interface CreateRequest {
-  prompt: string;
-  projectPath: string;
-  runner?: Runner;
-}
-
 export interface CreateResponse {
   id: string;
   status: SessionStatus;

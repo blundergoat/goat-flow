@@ -7,6 +7,8 @@ import { scanProject } from './scanner/scan.js';
 import { renderJson } from './render/json.js';
 import type { AgentId } from './types.js';
 import type { Runner } from './terminal-types.js';
+import type { TerminalManager } from './terminal-server.js';
+import type { WebSocketServer, WebSocket as WsWebSocket } from 'ws';
 
 const VALID_AGENTS = new Set<string>(['claude', 'codex', 'gemini']);
 const VALID_RUNNERS = new Set<string>(['claude', 'codex', 'gemini']);
@@ -32,7 +34,7 @@ function readBody(req: IncomingMessage): Promise<string> {
       if (size > MAX_BODY_BYTES) { req.destroy(); reject(new Error('Request body too large')); return; }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    req.on('end', () => { resolve(Buffer.concat(chunks).toString('utf-8')); });
     req.on('error', reject);
   });
 }
@@ -43,7 +45,7 @@ function jsonResponse(res: ServerResponse, status: number, body: unknown): void 
   res.end(JSON.stringify(body));
 }
 
-export interface DashboardOptions {
+interface DashboardOptions {
   projectPath: string;
 }
 
@@ -63,28 +65,24 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
   const absDefault = resolve(options.projectPath);
 
   // Lazy-init terminal manager + WSS on first terminal request
-  let managerPromise: Promise<import('./terminal-server.js').TerminalManager> | null = null;
-  let wssPromise: Promise<import('ws').WebSocketServer> | null = null;
+  let managerPromise: Promise<TerminalManager> | null = null;
+  let wssPromise: Promise<WebSocketServer> | null = null;
 
-  async function getManager(): Promise<import('./terminal-server.js').TerminalManager> {
+  async function getManager(): Promise<TerminalManager> {
     if (!managerPromise) {
-      managerPromise = import('./terminal-server.js').then(({ TerminalManager }) => {
-        return new TerminalManager();
-      });
+      managerPromise = import('./terminal-server.js').then(({ TerminalManager: TM }) => new TM());
     }
     return managerPromise;
   }
 
-  async function getWSS(): Promise<import('ws').WebSocketServer> {
+  async function getWSS(): Promise<WebSocketServer> {
     if (!wssPromise) {
-      wssPromise = import('ws').then(({ WebSocketServer }) => {
-        return new WebSocketServer({ noServer: true });
-      });
+      wssPromise = import('ws').then(({ WebSocketServer: WSS }) => new WSS({ noServer: true }));
     }
     return wssPromise;
   }
 
-  const server = createServer(async (req, res) => {
+  async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
     // Dashboard HTML - inject default project path
@@ -228,10 +226,18 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
 
     res.writeHead(404);
     res.end('Not found');
+  }
+
+  const server = createServer((req, res) => {
+    handleRequest(req, res).catch((err: unknown) => {
+      if (!res.headersSent) {
+        jsonResponse(res, 500, { error: err instanceof Error ? err.message : 'Internal error' });
+      }
+    });
   });
 
   // WebSocket upgrade for terminal sessions
-  server.on('upgrade', async (req, socket, head) => {
+  server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', `http://127.0.0.1`);
 
     if (!url.pathname.startsWith('/ws/terminal/')) {
@@ -252,28 +258,31 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
 
     const sessionId = url.pathname.slice('/ws/terminal/'.length);
 
-    try {
-      const wss = await getWSS();
-      const manager = await getManager();
-
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        manager.attachWebSocket(sessionId, ws as unknown as import('ws').WebSocket);
-      });
-    } catch {
-      socket.destroy();
-    }
+    void (async () => {
+      try {
+        const wss = await getWSS();
+        const manager = await getManager();
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          manager.attachWebSocket(sessionId, ws as unknown as WsWebSocket);
+        });
+      } catch {
+        socket.destroy();
+      }
+    })();
   });
 
   // Graceful shutdown
-  const shutdown = async () => {
-    if (managerPromise) {
-      const manager = await managerPromise;
-      await manager.shutdown();
-    }
-    process.exit(0);
+  const doShutdown = (): void => {
+    void (async () => {
+      if (managerPromise) {
+        const manager = await managerPromise;
+        manager.shutdown();
+      }
+      process.exit(0);
+    })();
   };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', doShutdown);
+  process.on('SIGINT', doShutdown);
 
   server.listen(0, '127.0.0.1', () => {
     const addr = server.address();
@@ -285,7 +294,7 @@ export function serveDashboard(options: DashboardOptions): Promise<DashboardServ
       close: async () => {
         if (managerPromise) {
           const manager = await managerPromise;
-          await manager.shutdown();
+          manager.shutdown();
         }
         server.close();
       },
