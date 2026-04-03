@@ -63,7 +63,7 @@ When one of those changes without the others, the setup guidance stops matching 
 
 The scanner awards 100% (A grade) to projects that have:
 - Broken `ai/README.md:3` (invalid content)
-- `settings.json` missing hook registration that the rubric claims exists (`src/cli/facts/agent.ts:630`, `src/cli/rubric/standard.ts:292` check file existence only)
+- `settings.json` missing hook registration that the rubric claims exists (`src/cli/facts/agent/hooks.ts:479`, `src/cli/rubric/standard/hooks.ts:55` check file existence only)
 - Physically broken skill files (`.claude/skills/goat-plan/SKILL.md:182` — stale tail, `:198` — references deleted goat-investigate)
 - Malformed eval frontmatter (duplicate YAML blocks)
 - CI workflow containing literal scanner-bait comments (`.github/workflows/context-validation.yml:40`)

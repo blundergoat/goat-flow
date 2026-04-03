@@ -53,8 +53,8 @@ GOOD: Inline format. Extract when second format needed
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 **LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure or you corrected course: add an entry before DoD. After human correction: log immediately. Use **category bucket files** — NOT one file per incident, NOT a monolithic log.
-- Lessons: `ai/lessons/<category>.md` (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content. Create new category file only if no existing category fits.
-- Footguns: `docs/footguns/<category>.md` (e.g. `hooks.md`, `scanner.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
+- Lessons: `ai/lessons/` category bucket files (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content. Create new category file only if no existing category fits.
+- Footguns: `docs/footguns/` category bucket files (e.g. `hooks.md`, `scanner.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
 - Local variants: `.goat-flow/lessons/` and `.goat-flow/footguns/` use same category bucket format.
 
 | File | When to update |
@@ -99,7 +99,6 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 - Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 
 ## Working Memory
-
 5+ turn tasks → `.goat-flow/tasks/todo.md`. Incomplete work → `.goat-flow/tasks/handoff.md`. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Router Table
@@ -107,20 +106,15 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Resource | Path |
 |----------|------|
 | System spec (canonical) | `docs/system-spec.md` |
-| System docs | `docs/system/` |
-| Architecture | `docs/architecture.md` |
+| System docs, architecture | `docs/system/`, `docs/architecture.md` |
 | CLI scanner/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
-
 <!-- goat-flow:router:start -->
 | Skills | `.claude/skills/` |
-| Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
-| Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
-| Decisions | `ai/decisions/` |
-| Evals | `ai/evals/` |
+| Footguns, lessons | `docs/footguns/`, `ai/lessons/` (+ `.goat-flow/` local variants) |
+| Decisions, evals | `ai/decisions/`, `ai/evals/` |
 | Coding standards | `ai/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
-| Session logs | `.goat-flow/logs/sessions/` |
-| Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+| Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
 | Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->

@@ -5,7 +5,7 @@
 
 # After every turn - run lint/typecheck on changed files
 [hooks.stop]
-command = ["bash", "scripts/stop-lint.sh"]
+command = ["bash", ".codex/hooks/stop-lint.sh"]
 
 # After tool execution - log what was done
 [hooks.after_tool_use]

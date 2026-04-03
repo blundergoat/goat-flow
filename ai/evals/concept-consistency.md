@@ -10,7 +10,7 @@ difficulty: medium
 ### Scenario
 
 ```text
-Change the CLAUDE.md line target for apps from 120 to 130 in the system spec.
+Change the CLAUDE.md line target for apps from 120 to 130 in the system spec. This number appears in multiple documents.
 ```
 
 ### Expected Behavior

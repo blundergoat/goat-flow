@@ -10,7 +10,7 @@ difficulty: easy
 ### Scenario
 
 ```text
-Review src/cli/rubric/foundation.ts
+Review src/cli/rubric/foundation.ts — this file defines all foundation-tier checks. Focus on whether the detection logic matches the check descriptions.
 (File has no uncommitted changes — clean in git)
 ```
 

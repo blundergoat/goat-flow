@@ -10,7 +10,7 @@ difficulty: medium
 ### Scenario
 
 ```text
-Plan adding a /health endpoint to this project. Standard complexity.
+Plan adding a /health endpoint to this project. Standard complexity. The endpoint should return uptime, version, and dependency status.
 ```
 
 ### Expected Behavior

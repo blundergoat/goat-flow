@@ -19,7 +19,7 @@ cd "$ROOT" || exit 0
 ERRORS=""
 
 # Check which file types were modified
-CHANGED_SH=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.sh$' || true)
+CHANGED_SH=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.sh$') || CHANGED_SH=""
 
 # Shell scripts: syntax check + shellcheck
 if [ -n "$CHANGED_SH" ]; then
@@ -32,8 +32,7 @@ if [ -n "$CHANGED_SH" ]; then
 
       # Shellcheck (if available)
       if command -v shellcheck >/dev/null 2>&1; then
-        SC_OUT=$(shellcheck "$f" 2>&1) || true
-        if [ -n "$SC_OUT" ]; then
+        if ! SC_OUT=$(shellcheck "$f" 2>&1); then
           ERRORS="${ERRORS}shellcheck issues in $f:\n${SC_OUT}\n"
         fi
       fi

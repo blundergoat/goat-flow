@@ -20,6 +20,28 @@ function getLineIndent(line: string): number {
   return match?.[1]?.length ?? 0;
 }
 
+/** Collect continuation lines for a YAML block scalar (| or >) starting after baseIndent. */
+function collectBlockScalar(
+  lines: string[],
+  startIndex: number,
+  baseIndent: number,
+): { command: string; endIndex: number } {
+  const blockLines: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const nextLine = lines[nextIndex] ?? '';
+    if (nextLine.trim().length === 0) {
+      blockLines.push('');
+      nextIndex++;
+      continue;
+    }
+    if (getLineIndent(nextLine) <= baseIndent) break;
+    blockLines.push(nextLine.trimStart());
+    nextIndex++;
+  }
+  return { command: blockLines.join('\n').trim(), endIndex: nextIndex };
+}
+
 /** Extract raw `run:` commands from a workflow file. */
 function collectWorkflowRunCommands(ciContent: string | null): string[] {
   if (ciContent === null) return [];
@@ -32,38 +54,14 @@ function collectWorkflowRunCommands(ciContent: string | null): string[] {
     const match = line.match(/^\s*(?:-\s*)?run:\s*(.+)\s*$/);
     if (!match) continue;
 
-    const baseIndent = getLineIndent(line);
     const runValue = match[1]?.trim() ?? '';
     if (!runValue) continue;
 
     if (/^[>|]/.test(runValue)) {
-      const blockLines: string[] = [];
-      let nextIndex = index + 1;
-      while (nextIndex < lines.length) {
-        const nextLine = lines[nextIndex] ?? '';
-        if (nextLine.trim().length === 0) {
-          blockLines.push('');
-          nextIndex++;
-          continue;
-        }
-
-        if (getLineIndent(nextLine) <= baseIndent) {
-          break;
-        }
-
-        blockLines.push(nextLine.trimStart());
-        nextIndex++;
-      }
-
-      const blockCommand = blockLines.join('\n').trim();
-      if (blockCommand.length > 0) {
-        commands.push(blockCommand);
-      }
-      index = nextIndex - 1;
-      continue;
-    }
-
-    if (runValue.length > 0) {
+      const block = collectBlockScalar(lines, index + 1, getLineIndent(line));
+      if (block.command.length > 0) commands.push(block.command);
+      index = block.endIndex - 1;
+    } else {
       commands.push(runValue);
     }
   }
@@ -104,38 +102,41 @@ function checksCILineCount(ciContent: string | null): boolean {
   );
 }
 
+/** Detect the grep-based instruction-file ref checker pattern (reads instruction file, iterates backtick paths, checks -e). */
+function isInstructionRefChecker(lower: string): boolean {
+  return (
+    /grep\b/.test(lower) &&
+    /while\s+read/.test(lower) &&
+    (/tr\s+-d/.test(lower) || /missing path/.test(lower)) &&
+    (/\[\s*!?\s*-e\b/.test(lower) || /missing path/.test(lower)) &&
+    (/(claude|agents|gemini)\.md/.test(lower) || /\$inst\b/.test(lower))
+  );
+}
+
+/** Detect explicit router-keyword validation commands. */
+function isExplicitRouterChecker(lower: string): boolean {
+  return (
+    /router/.test(lower) &&
+    /(check|validation|validate|resolve|ref|reference|missing path)/.test(lower) &&
+    (/grep\b/.test(lower) ||
+      /\[\s*!?\s*-e\b/.test(lower) ||
+      /while\s+read/.test(lower) ||
+      /context-validate/.test(lower))
+  );
+}
+
+/** Match ad-hoc workflow commands that validate router references. */
+function isRouterValidationCommand(command: string): boolean {
+  const lower = command.toLowerCase();
+  return isInstructionRefChecker(lower) || isExplicitRouterChecker(lower);
+}
+
 /** Detect whether CI validates router references. */
 function checksCIRouter(ciContent: string | null): boolean {
-  if (hasRunCommand(ciContent, isContextValidationCommand)) return true;
-
-  /** Match ad-hoc workflow commands that explicitly validate router references. */
-  const runCommandChecksRouter = (command: string): boolean => {
-    const lower = command.toLowerCase();
-    const checksInstructionRefs =
-      /grep\b/.test(lower) &&
-      /while\s+read/.test(lower) &&
-      (/tr\s+-d/.test(lower) || /missing path/.test(lower)) &&
-      (/\[\s*!?\s*-e\b/.test(lower) || /missing path/.test(lower)) &&
-      (/(claude|agents|gemini)\.md/.test(lower) || /\$inst\b/.test(lower));
-
-    return (
-      checksInstructionRefs ||
-      (/router/.test(lower) &&
-        /(check|validation|validate|resolve|ref|reference|missing path)/.test(
-          lower,
-        ) &&
-        (/grep\b/.test(lower) ||
-          /\[\s*!?\s*-e\b/.test(lower) ||
-          /while\s+read/.test(lower) ||
-          /context-validate/.test(lower)))
-    );
-  };
-
-  const hasExplicitRouterCheck = hasRunCommand(
-    ciContent,
-    runCommandChecksRouter,
+  return (
+    hasRunCommand(ciContent, isContextValidationCommand) ||
+    hasRunCommand(ciContent, isRouterValidationCommand)
   );
-  return hasExplicitRouterCheck;
 }
 
 /** Detect whether CI validates installed skill files. */

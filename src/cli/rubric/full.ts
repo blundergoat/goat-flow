@@ -287,35 +287,21 @@ export const fullChecks: CheckDef[] = [
     confidence: 'high',
     detect: {
       type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '3.2.1',
-        name: 'CI workflow exists',
-        tier: 'full',
-        category: 'CI Validation',
-        status:
-          ctx.facts.shared.ci.workflowExists &&
-          (ctx.facts.shared.ci.checksLineCount ||
-            ctx.facts.shared.ci.checksRouter ||
-            ctx.facts.shared.ci.checksSkills)
-            ? 'pass'
-            : 'fail',
-        points:
-          ctx.facts.shared.ci.workflowExists &&
-          (ctx.facts.shared.ci.checksLineCount ||
-            ctx.facts.shared.ci.checksRouter ||
-            ctx.facts.shared.ci.checksSkills)
-            ? 2
-            : 0,
-        maxPoints: 2,
-        confidence: 'high',
-        message: ctx.facts.shared.ci.workflowExists
-          ? ctx.facts.shared.ci.checksLineCount ||
-            ctx.facts.shared.ci.checksRouter ||
-            ctx.facts.shared.ci.checksSkills
+      fn: (ctx: FactContext): CheckResult => {
+        const ci = ctx.facts.shared.ci;
+        const hasValidation = ci.checksLineCount || ci.checksRouter || ci.checksSkills;
+        const passes = ci.workflowExists && hasValidation;
+        const message = !ci.workflowExists
+          ? 'Missing `.github/workflows/context-validation.yml`. Expected a dedicated context-validation workflow in GitHub Actions.'
+          : hasValidation
             ? 'CI workflow found at `.github/workflows/context-validation.yml` and it runs validation commands'
-            : 'CI workflow exists but no real validation commands were detected. Add runnable checks such as `bash scripts/context-validate.sh`, line-count enforcement, router validation, or full skill validation.'
-          : 'Missing `.github/workflows/context-validation.yml`. Expected a dedicated context-validation workflow in GitHub Actions.',
-      }),
+            : 'CI workflow exists but no real validation commands were detected. Add runnable checks such as `bash scripts/context-validate.sh`, line-count enforcement, router validation, or full skill validation.';
+        return {
+          id: '3.2.1', name: 'CI workflow exists', tier: 'full', category: 'CI Validation',
+          status: passes ? 'pass' : 'fail', points: passes ? 2 : 0, maxPoints: 2,
+          confidence: 'high', message,
+        };
+      },
     },
     recommendation: 'Create .github/workflows/context-validation.yml',
     recommendationKey: 'create-ci-workflow',

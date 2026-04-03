@@ -61,8 +61,8 @@ GOOD: Inline format. Extract when second format needed
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 **LOG** - MUST update when tripped (DoD gate #4), SHOULD after routine sessions. If VERIFY caught a failure or you corrected course: add an entry before DoD. After human correction: log immediately. Use **category bucket files** — NOT one file per incident, NOT a monolithic log.
-- Lessons: `ai/lessons/<category>.md` (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content.
-- Footguns: `docs/footguns/<category>.md` (e.g. `hooks.md`, `scanner.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
+- Lessons: `ai/lessons/` category bucket files (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content.
+- Footguns: `docs/footguns/` category bucket files (e.g. `hooks.md`, `scanner.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
 - Local variants: `.goat-flow/lessons/` and `.goat-flow/footguns/` use same category bucket format.
 
 | File | When to update |
@@ -94,14 +94,12 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-refs (3) no unapprov
 Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one question + default.
 
 ## Hard Rules
-
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples
 - MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
 
 ## Working Memory
-
 5+ turns -> `.goat-flow/tasks/todo.md`. Handoff -> `.goat-flow/tasks/handoff.md` (read if exists).
 Context health: compact at 60% util. Noise pruning before compacting. `/clear` between unrelated tasks.
 
@@ -109,18 +107,14 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 
 | Resource | Path |
 |----------|------|
-| Architecture | `docs/architecture.md` |
-| System docs | `docs/system/` |
+| System docs, architecture | `docs/system/`, `docs/architecture.md` |
 | Scripts | `scripts/` |
 <!-- goat-flow:router:start -->
 | Skills | `.agents/skills/` |
-| Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
-| Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
-| Decisions | `ai/decisions/` |
-| Evals | `ai/evals/` |
+| Footguns, lessons | `docs/footguns/`, `ai/lessons/` (+ `.goat-flow/` local variants) |
+| Decisions, evals | `ai/decisions/`, `ai/evals/` |
 | Coding standards | `ai/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
-| Session logs | `.goat-flow/logs/sessions/` |
-| Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+| Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
 | Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->

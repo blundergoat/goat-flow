@@ -369,9 +369,9 @@ function extractTomlSection(config: string, section: string): string | null {
 
 /** Extract command strings from a Codex TOML hook section. */
 function extractTomlCommandValues(section: string): string[] {
-  const commandMatch = section.match(/command\\s*=\\s*\\[(.*?)\\]/s);
+  const commandMatch = section.match(/command\s*=\s*\[(.*?)\]/s);
   if (commandMatch?.[1]) {
-    return Array.from(commandMatch[1].matchAll(/"([^"\\\\]*)"|'([^'\\\\]*)'/g))
+    return Array.from(commandMatch[1].matchAll(/"([^"\\]*)"|'([^'\\]*)'/g))
       .map((m) => m[1] ?? m[2])
       .filter(
         (value): value is string =>
@@ -379,7 +379,7 @@ function extractTomlCommandValues(section: string): string[] {
       );
   }
 
-  const inlineMatch = section.match(/command\\s*=\\s*["']([^"']+)["']/);
+  const inlineMatch = section.match(/command\s*=\s*["']([^"']+)["']/);
   return inlineMatch?.[1] ? [inlineMatch[1]] : [];
 }
 

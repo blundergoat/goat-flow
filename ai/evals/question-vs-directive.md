@@ -10,7 +10,7 @@ difficulty: medium
 ### Scenario
 
 ```text
-What does the enforcement gradient look like in this project?
+What does the enforcement gradient look like in this project? Walk me through how the deny hook, stop hook, and CI workflow layer together.
 ```
 
 ### Expected Behavior

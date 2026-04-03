@@ -10,7 +10,7 @@ difficulty: easy
 ### Scenario
 
 ```text
-Review src/cli/rubric/standard.ts
+Review the standard-tier rubric checks under src/cli/rubric/standard/. Focus on whether hook and skill checks verify real behavior, not just file existence.
 (File has uncommitted changes visible in git diff)
 ```
 
