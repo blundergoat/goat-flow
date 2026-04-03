@@ -61,14 +61,14 @@ export const foundationChecks: CheckDef[] = [
             status: 'partial',
             points: 1,
             maxPoints: 3,
-            message: `${lines} lines (under ${limit} limit but over ${target} target)`,
+            message: `${lines} lines found. Expected at or under ${target}; currently still under the ${limit}-line hard limit. Trim ${lines - target} lines to get back under target.`,
           };
         return {
           ...base,
           status: 'fail',
           points: 0,
           maxPoints: 3,
-          message: `${lines} lines (over ${limit} limit)`,
+          message: `${lines} lines found. Expected at or under ${limit} hard limit (${target} target). Trim at least ${lines - limit} lines.`,
         };
       },
     },
@@ -374,7 +374,8 @@ export const foundationChecks: CheckDef[] = [
             points: 0,
             maxPoints: 3,
             confidence: 'medium',
-            message: 'No Ask First section found',
+            message:
+              'No Ask First section found. Expected a `**Ask First**` block with project-specific boundaries and backtick-wrapped repo paths.',
           };
         }
         const lines = section.split('\n').filter((l) => l.trim()).length;
@@ -404,7 +405,7 @@ export const foundationChecks: CheckDef[] = [
             points: 1,
             maxPoints: 3,
             confidence: 'medium',
-            message: `Ask First has ${lines} lines but may be generic`,
+            message: `Ask First has ${lines} non-empty lines, but no project-specific backtick paths were found. Add concrete boundaries like \`docs/system-spec.md\` or \`.github/workflows/\`.`,
           };
         }
         return {
@@ -416,7 +417,7 @@ export const foundationChecks: CheckDef[] = [
           points: 0,
           maxPoints: 3,
           confidence: 'medium',
-          message: `Ask First section too short (${lines} lines)`,
+          message: `Ask First section is too short (${lines} non-empty lines). Expected more than 5 lines plus concrete repo-specific boundaries.`,
         };
       },
     },
@@ -445,7 +446,8 @@ export const foundationChecks: CheckDef[] = [
             points: 0,
             maxPoints: 0,
             confidence: 'high',
-            message: 'No backtick-wrapped paths in Ask First section',
+            message:
+              'No backtick-wrapped paths in Ask First section. Add concrete repo paths like `docs/system-spec.md` or `.github/workflows/` so the boundary can be verified.',
           };
         }
         if (unresolved.length === 0) {
@@ -471,7 +473,7 @@ export const foundationChecks: CheckDef[] = [
             points: 1,
             maxPoints: 2,
             confidence: 'high',
-            message: `${resolved}/${paths.length} resolve. Broken: ${unresolved.join(', ')}`,
+            message: `${resolved}/${paths.length} Ask First paths resolve. Broken paths: ${unresolved.join(', ')}. Update the section so every referenced file or directory exists.`,
             evidence: unresolved.join(', '),
           };
         }
@@ -484,7 +486,7 @@ export const foundationChecks: CheckDef[] = [
           points: 0,
           maxPoints: 2,
           confidence: 'high',
-          message: `0/${paths.length} resolve. Broken: ${unresolved.join(', ')}`,
+          message: `None of the ${paths.length} Ask First paths resolve. Broken paths: ${unresolved.join(', ')}. Replace them with real repo locations.`,
           evidence: unresolved.join(', '),
         };
       },

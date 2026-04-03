@@ -91,8 +91,8 @@ describe('project fixture corpus', () => {
         .map((check) => check.id),
     );
     assert.ok(
-      failingChecks.has('2.2.4b'),
-      `Expected 2.2.4b to fail. Saw: ${Array.from(failingChecks).join(', ')}`,
+      failingChecks.has('2.2.3'),
+      `Expected 2.2.3 to fail. Saw: ${Array.from(failingChecks).join(', ')}`,
     );
     assert.ok(
       failingChecks.has('2.6.2'),
@@ -107,8 +107,8 @@ describe('project fixture corpus', () => {
     const output = renderText(fixture.report, false);
     assert.match(
       output,
-      /2\.2\.4b/,
-      'Expected rendered output to include check 2.2.4b',
+      /2\.2\.3/,
+      'Expected rendered output to include check 2.2.3',
     );
     assert.match(
       output,

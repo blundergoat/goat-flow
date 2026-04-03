@@ -72,7 +72,7 @@ Boundaries:
 | Resource | Path |
 |----------|------|
 | System spec | `docs/system-spec.md` |
-| Skills | `.claude/skills/goat-*/` |
+| Skills | `.claude/skills/` |
 | Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
 | Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
 | Decisions | `ai/decisions/` |

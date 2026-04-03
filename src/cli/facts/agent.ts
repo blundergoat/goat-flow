@@ -634,15 +634,24 @@ function checkCompactionHook(
   return false;
 }
 
-const VALIDATION_COMMAND_PATTERN =
-  /\b(shellcheck|eslint|tsc|phpstan|ruff|mypy|flake8|pytest|rubocop)\b|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:lint|test)|cargo\s+check|go\s+test|prettier\s+--check/i;
+const POST_TURN_VALIDATION_COMMAND_PATTERN =
+  /\b(shellcheck|eslint|tsc|phpstan|ruff|mypy|flake8|rubocop|stylelint|ktlint|swiftlint)\b|biome\s+check|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:lint|typecheck|format(?::check)?)\b|cargo\s+check|go\s+vet|prettier\s+--check|bash\s+-n\b|(?:^|\s)(?:bash\s+)?(?:\.\/)?scripts\/preflight-checks\.sh\b/i;
 
 /** Detect shell lines that intentionally mask validation failures with `|| true`. */
 function lineSwallowsValidationFailure(line: string): boolean {
   if (line.includes('|| true') === false) return false;
   if (line.trimStart().startsWith('#')) return false;
   if (/\bcommand\s+-v\b/.test(line)) return false;
-  return VALIDATION_COMMAND_PATTERN.test(line);
+  return POST_TURN_VALIDATION_COMMAND_PATTERN.test(line);
+}
+
+/** Detect whether a post-turn hook runs real lint, typecheck, or format-check commands. */
+function hasPostTurnValidationCommands(hookContent: string): boolean {
+  return hookContent
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line.startsWith('#') === false)
+    .some((line) => POST_TURN_VALIDATION_COMMAND_PATTERN.test(line));
 }
 
 /** Analyze a hook script for post-turn validation characteristics. */
@@ -660,9 +669,7 @@ function analyzePostTurnScript(hookContent: string): {
   const lastLine = lines[lines.length - 1];
   return {
     exitsZero: lastLine !== undefined && lastLine.trim() === 'exit 0',
-    hasValidation:
-      VALIDATION_COMMAND_PATTERN.test(hookContent) &&
-      hookContent.split('\n').length > 10,
+    hasValidation: hasPostTurnValidationCommands(hookContent),
     swallowsFailures: lines.some(lineSwallowsValidationFailure),
   };
 }
@@ -675,6 +682,7 @@ function analyzeDenyScript(denyContent: string): {
   blocksRmRf: boolean;
   blocksForcePush: boolean;
   blocksChmod: boolean;
+  blocksPipeToShell: boolean;
   blocksCloudDestructive: boolean;
 } {
   return {
@@ -688,6 +696,9 @@ function analyzeDenyScript(denyContent: string): {
     blocksRmRf: /rm\s*.*-.*r.*f|rm\s*-rf/i.test(denyContent),
     blocksForcePush: /force.*push|--force/i.test(denyContent),
     blocksChmod: /chmod.*777/.test(denyContent),
+    blocksPipeToShell:
+      /(curl|wget)[^|]*\|[[:space:]]*(ba)?sh/i.test(denyContent) ||
+      /pipe-to-shell/i.test(denyContent),
     blocksCloudDestructive:
       /docker\s+push|terraform\s+(destroy|apply.*-auto-approve)|aws\s+(s3\s+rm|ec2\s+terminate)/i.test(
         denyContent,
@@ -707,6 +718,7 @@ function applySettingsDenyOverrides(
     denyBlocksRmRf: boolean;
     denyBlocksForcePush: boolean;
     denyBlocksChmod: boolean;
+    denyBlocksPipeToShell: boolean;
     denyBlocksCloudDestructive: boolean;
   },
 ): void {
@@ -724,6 +736,12 @@ function applySettingsDenyOverrides(
   if (/Bash\(.*--force|Bash\(.*force.*push/i.test(denyStr))
     hook.denyBlocksForcePush = true;
   if (/Bash\(.*chmod 777/i.test(denyStr)) hook.denyBlocksChmod = true;
+  if (
+    /Bash\(.*(curl|wget).*(\|\s*(ba)?sh|\|\s*sh)/i.test(denyStr) ||
+    /Bash\(.*pipe-to-shell/i.test(denyStr)
+  ) {
+    hook.denyBlocksPipeToShell = true;
+  }
   if (
     /Bash\(.*(docker push|terraform destroy|terraform apply|aws s3 rm|aws ec2 terminate)/i.test(
       denyStr,
@@ -745,6 +763,7 @@ function enrichDenyFromSettings(
     denyBlocksRmRf: boolean;
     denyBlocksForcePush: boolean;
     denyBlocksChmod: boolean;
+    denyBlocksPipeToShell: boolean;
     denyBlocksCloudDestructive: boolean;
   },
 ): void {
@@ -773,6 +792,7 @@ function enrichDenyFromExecpolicy(
     denyBlocksRmRf: boolean;
     denyBlocksForcePush: boolean;
     denyBlocksChmod: boolean;
+    denyBlocksPipeToShell: boolean;
   },
 ): void {
   /** Path to the Codex execpolicy Starlark rule file */
@@ -787,6 +807,8 @@ function enrichDenyFromExecpolicy(
   hook.denyBlocksRmRf = /rm.*-.*rf|rm.*-.*fr/i.test(ruleContent);
   hook.denyBlocksForcePush = /force.*push|--force/i.test(ruleContent);
   hook.denyBlocksChmod = /chmod.*777/.test(ruleContent);
+  hook.denyBlocksPipeToShell =
+    /curl.*\|\s*(ba)?sh|wget.*\|\s*(ba)?sh|pipe-to-shell/i.test(ruleContent);
   // Execpolicy is config-based — jq/chaining checks are not applicable
   hook.denyIsConfigBased = true;
 }
@@ -801,6 +823,7 @@ type HookDenyFacts = Pick<
   | 'denyBlocksRmRf'
   | 'denyBlocksForcePush'
   | 'denyBlocksChmod'
+  | 'denyBlocksPipeToShell'
   | 'denyBlocksCloudDestructive'
 >;
 
@@ -1073,6 +1096,7 @@ function createEmptyDenyFacts(denyExists: boolean): HookDenyFacts {
     denyBlocksRmRf: false,
     denyBlocksForcePush: false,
     denyBlocksChmod: false,
+    denyBlocksPipeToShell: false,
     denyBlocksCloudDestructive: false,
   };
 }
@@ -1102,6 +1126,7 @@ function analyzeDenyHookPath(
     denyBlocksRmRf: analysis.blocksRmRf,
     denyBlocksForcePush: analysis.blocksForcePush,
     denyBlocksChmod: analysis.blocksChmod,
+    denyBlocksPipeToShell: analysis.blocksPipeToShell,
     denyBlocksCloudDestructive: analysis.blocksCloudDestructive,
   };
 }
@@ -1140,6 +1165,20 @@ function usesClaudeTopLevelFilePath(hookContent: string): boolean {
   return /(^|[^A-Za-z0-9_])\.file_path\b/.test(hookContent);
 }
 
+/** Detect whether a post-tool hook skips agent-managed config directories before formatting. */
+function skipsAgentConfigDirectories(hookContent: string): boolean {
+  const nonCommentContent = hookContent
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('#') === false)
+    .join('\n');
+  return (
+    /\.claude\//.test(nonCommentContent) &&
+    /\.agents\//.test(nonCommentContent) &&
+    /\.gemini\//.test(nonCommentContent) &&
+    /exit 0/.test(nonCommentContent)
+  );
+}
+
 /** Detect whether Claude post-tool hooks read the expected top-level `.file_path` field. */
 function detectPostToolPathField(
   fs: ReadonlyFS,
@@ -1151,6 +1190,17 @@ function detectPostToolPathField(
   const hookContent = fs.readFile(registeredPath);
   if (!hookContent) return false;
   return usesClaudeTopLevelFilePath(hookContent);
+}
+
+/** Detect whether a registered post-tool hook skips agent config directories. */
+function detectPostToolConfigSkip(
+  fs: ReadonlyFS,
+  registeredPath: string | null,
+): boolean {
+  if (registeredPath === null || !fs.exists(registeredPath)) return false;
+  const hookContent = fs.readFile(registeredPath);
+  if (!hookContent) return false;
+  return skipsAgentConfigDirectories(hookContent);
 }
 
 /** Extract all hook-related facts: deny hooks, post-turn, post-tool, compaction. */
@@ -1189,6 +1239,10 @@ function extractHookFacts(
     postToolUsesExpectedPathField: detectPostToolPathField(
       fs,
       agent,
+      registration.postToolRegisteredPath,
+    ),
+    postToolSkipsAgentConfigPaths: detectPostToolConfigSkip(
+      fs,
       registration.postToolRegisteredPath,
     ),
     compactionHookExists,

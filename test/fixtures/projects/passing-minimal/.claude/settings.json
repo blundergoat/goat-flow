@@ -6,6 +6,8 @@
       "Bash(rm -rf *)",
       "Bash(git push --force*)",
       "Bash(chmod 777*)",
+      "Bash(curl *| bash*)",
+      "Bash(wget *| sh*)",
       "Read(.env*)",
       "Read(.ssh/**)",
       "Read(.aws/**)",

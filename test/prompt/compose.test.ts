@@ -85,10 +85,12 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-references (3) no un
 
 | Resource | Path |
 |----------|------|
-| Skills | \`.claude/skills/goat-*/\` |
+| Skills | \`.claude/skills/\` |
 | Footguns | \`docs/footguns/\` |
 | Lessons | \`ai/lessons/\` |
 | Architecture | \`docs/architecture.md\` |
+| Config | \`.goat-flow/config.yaml\` |
+| Handoff | \`.goat-flow/tasks/handoff-template.md\` |
 `;
 
 const HANDOFF_TEMPLATE = `# Handoff Template
@@ -1116,7 +1118,7 @@ describe('M2.14: hasEvidence edge cases', () => {
       'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
       'package.json': JSON.stringify({ name: 'test' }),
       'docs/footguns/':
-        '# Footguns\n\n- `localhost:3000` - dev\n- `src/auth.ts:42` - real ref\n',
+        '# Footguns\n\n- `localhost:3000` - dev\n- `src/auth.ts:1` - real ref\n',
       'src/auth.ts': 'export const x = 1;\n',
     });
     const report = scanProject(fs, '/test', { agentFilter: null });
@@ -1129,7 +1131,7 @@ describe('M2.14: hasEvidence edge cases', () => {
     );
   });
 
-  it('footguns with only prose-style evidence passes', () => {
+  it('footguns with only prose-style evidence fails', () => {
     const fs = createMockFS({
       'CLAUDE.md': '# CLAUDE.md\n\nBasic.\n',
       'package.json': JSON.stringify({ name: 'test' }),
@@ -1141,8 +1143,8 @@ describe('M2.14: hasEvidence edge cases', () => {
     assert.ok(check, 'Check 2.3.4 should exist');
     assert.equal(
       check.status,
-      'pass',
-      'Prose-style (lines N) evidence should count',
+      'fail',
+      'Prose-style (lines N) evidence should NOT count without a real file:line ref',
     );
   });
 

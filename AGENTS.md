@@ -94,7 +94,7 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Architecture | `docs/architecture.md` |
 | Scripts | `scripts/` |
 <!-- goat-flow:router:start -->
-| Skills | `.agents/skills/goat-*/` |
+| Skills | `.agents/skills/` |
 | Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
 | Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
 | Decisions | `ai/decisions/` |
@@ -103,6 +103,7 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Config | `.goat-flow/config.yaml` |
 | Session logs | `.goat-flow/logs/sessions/` |
 | Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+| Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->
 
 ## Hard Rules

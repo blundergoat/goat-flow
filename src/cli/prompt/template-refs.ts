@@ -739,6 +739,11 @@ const FRAGMENT_TEMPLATE_MAP: Record<
     codex: 'setup/setup-codex.md',
     gemini: 'setup/setup-gemini.md',
   },
+  'fix-deny-pipe-to-shell': {
+    claude: 'workflow/runtime/enforcement.md',
+    codex: 'setup/setup-codex.md',
+    gemini: 'setup/setup-gemini.md',
+  },
   'fix-deny-cloud-destructive': {
     claude: 'workflow/runtime/enforcement.md',
     codex: 'setup/setup-codex.md',
@@ -838,6 +843,7 @@ const FRAGMENT_TEMPLATE_MAP: Record<
   // Fix-kind - anti-patterns (ones with clear template sources)
   'ap-add-footgun-evidence': 'setup/shared/docs-seed.md',
   'ap-fix-empty-scaffolding': 'setup/shared/docs-seed.md',
+  'ap-fix-duplicate-learning-loop-surfaces': 'setup/shared/docs-seed.md',
   'ap-fix-dangling-skill-refs': 'workflow/skills/goat-debug.md',
   'ap-fix-adapt-comments': 'workflow/skills/goat-debug.md',
   'ap-fix-hook-paths': 'workflow/runtime/enforcement.md',

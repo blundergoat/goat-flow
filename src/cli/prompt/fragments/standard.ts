@@ -376,6 +376,22 @@ fi
 Also block in settings.json deny list: \`"Bash(chmod 777*)"\`.`,
   },
   {
+    key: 'fix-deny-pipe-to-shell',
+    phase: 'standard',
+    category: 'Hooks',
+    kind: 'fix',
+    instruction: `The deny hook MUST block pipe-to-shell patterns such as \`curl | bash\` and \`wget | sh\`. These commands execute remote code without inspection.
+
+\`\`\`bash
+# Block pipe-to-shell downloads
+if [[ "$cmd" =~ (curl|wget)[^|]*\|[[:space:]]*(ba)?sh ]]; then
+  block "pipe-to-shell"
+fi
+\`\`\`
+
+Safer alternative: download the script first, inspect it, then run it explicitly if it is trusted.`,
+  },
+  {
     key: 'fix-read-deny-secrets',
     phase: 'standard',
     category: 'Hooks',
@@ -701,6 +717,30 @@ Session logs capture what happened in a session so the next agent can pick up co
     instruction:
       'Add \`ai/evals/\` to the router table in \`{{instructionFile}}\`.',
   },
+  {
+    key: 'route-handoff',
+    phase: 'standard',
+    category: 'Router Table',
+    kind: 'fix',
+    instruction:
+      'Add \`.goat-flow/tasks/handoff-template.md\` to the router table in \`{{instructionFile}}\`.',
+  },
+  {
+    key: 'route-config',
+    phase: 'standard',
+    category: 'Router Table',
+    kind: 'fix',
+    instruction:
+      'Add \`.goat-flow/config.yaml\` to the router table in \`{{instructionFile}}\`.',
+  },
+  {
+    key: 'fix-duplicate-instruction-surfaces',
+    phase: 'standard',
+    category: 'Local Instructions',
+    kind: 'fix',
+    instruction:
+      'Keep one canonical local-instructions surface. Prefer `ai/coding-standards/` for goat-flow-managed docs, migrate any useful files from `.github/instructions/`, then delete the duplicate directory so agents do not have to choose between two competing instruction trees.',
+  },
   // === Router Table ===
   {
     key: 'add-router',
@@ -715,7 +755,7 @@ Session logs capture what happened in a session so the next agent can pick up co
 <!-- goat-flow:router:start -->
 | Resource | Path |
 |----------|------|
-| Skills | \\\`{{skillsDir}}/goat-*/\\\` |
+| Skills | \\\`{{skillsDir}}/\\\` |
 | Footguns | \\\`docs/footguns/\\\`, \\\`.goat-flow/footguns/\\\` |
 | Lessons | \\\`ai/lessons/\\\`, \\\`.goat-flow/lessons/\\\` |
 | Decisions | \\\`ai/decisions/\\\` |
@@ -723,6 +763,7 @@ Session logs capture what happened in a session so the next agent can pick up co
 | Coding standards | \\\`ai/coding-standards/\\\` |
 | Config | \\\`.goat-flow/config.yaml\\\` |
 | Local workspace | \\\`.goat-flow/tasks/\\\`, \\\`.goat-flow/logs/\\\` |
+| Handoff | \\\`.goat-flow/tasks/handoff-template.md\\\` |
 <!-- goat-flow:router:end -->
 \`\`\`
 
@@ -749,8 +790,10 @@ Every router path MUST point to something that exists.`,
     instruction: `Add skill directories to the router table in \`{{instructionFile}}\`:
 
 \`\`\`markdown
-| Skills | \\\`{{skillsDir}}/goat-*/\\\` |
-\`\`\``,
+| Skills | \\\`{{skillsDir}}/\\\` |
+\`\`\`
+
+Use the skills root, not \`goat-*/\`, so the router covers both the \`goat/\` dispatcher and the 5 \`goat-*\` skills.`,
   },
 
   // === Architecture ===

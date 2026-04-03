@@ -71,6 +71,7 @@ interface EntryDir {
 
 interface FootgunRefSummary {
   staleRefs: string[];
+  invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
 }
@@ -120,6 +121,19 @@ const CANONICAL_EVAL_SKILLS = [
   'goat-security',
   'goat-test',
 ];
+const FOOTGUN_SURFACE_CANDIDATES = [
+  'docs/footguns/',
+  '.goat-flow/footguns/',
+  'docs/footguns.md',
+  '.goat-flow/footguns.md',
+];
+const LESSON_SURFACE_CANDIDATES = [
+  'ai/lessons/',
+  '.goat-flow/lessons/',
+  'docs/lessons/',
+  'docs/lessons.md',
+  '.goat-flow/lessons.md',
+];
 const CANONICAL_EVAL_SKILL_SET = new Set(CANONICAL_EVAL_SKILLS);
 const REQUIRED_GITIGNORE_ENTRIES = ['.env', 'settings.local.json'];
 export const HANDOFF_SECTIONS = [
@@ -133,6 +147,26 @@ export const HANDOFF_SECTIONS = [
   'next step',
   'context files',
 ];
+
+/** Normalize a surface path so trailing slashes do not affect comparisons. */
+function normalizeSurfacePath(path: string): string {
+  return path.replace(/\/$/, '');
+}
+
+/** Detect competing artifact surfaces outside the configured committed/local split. */
+function findCompetingArtifactSurfaces(
+  fs: ReadonlyFS,
+  canonicalPaths: string[],
+  knownPaths: string[],
+): string[] {
+  if (!canonicalPaths.some((path) => fs.exists(path))) return [];
+
+  const canonicalSet = new Set(canonicalPaths.map(normalizeSurfacePath));
+  return knownPaths
+    .filter((path) => !canonicalSet.has(normalizeSurfacePath(path)))
+    .filter((path) => fs.exists(path))
+    .sort((a, b) => a.localeCompare(b));
+}
 
 /** List markdown entries. */
 function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
@@ -219,7 +253,7 @@ function hasEvidenceLabel(content: string): boolean {
 
 /** Detect whether markdown content cites at least one file reference. */
 function hasFileEvidence(content: string): boolean {
-  const refs = content.matchAll(new RegExp(FILE_REF_REGEX.source, 'g'));
+  const refs = content.matchAll(/`([^`]+\.[a-zA-Z]{1,10}:[0-9]+(?:[-,][0-9]+)*)`/g);
   for (const match of refs) {
     if (match[1] !== undefined && isFileRef(match[1])) return true;
   }
@@ -229,7 +263,7 @@ function hasFileEvidence(content: string): boolean {
 /** Detect whether a footgun entry includes usable file or line evidence. */
 function hasFootgunEvidence(content: string): boolean {
   if (!EVIDENCE_PATTERN.test(content)) return false;
-  return hasFileEvidence(content) || /\(lines?\s+[0-9]+/.test(content);
+  return hasFileEvidence(content);
 }
 
 /** Check referenced `file:line` evidence for stale footgun paths. */
@@ -239,25 +273,47 @@ function summarizeFootgunRefs(
 ): FootgunRefSummary {
   const summary: FootgunRefSummary = {
     staleRefs: [],
+    invalidLineRefs: [],
     totalRefs: 0,
     validRefs: 0,
   };
-  const fileRefs = content.matchAll(/`([^`]+):[0-9]+(?:[-,][0-9]+)*`/g);
+  const fileRefs = content.matchAll(
+    /`([^`]+):([0-9]+(?:[-,][0-9]+)*)`/g,
+  );
 
   for (const match of fileRefs) {
     const filePath = match[1];
+    const rawLines = match[2];
     if (
       filePath === undefined ||
+      rawLines === undefined ||
       !isFileRef(filePath) ||
       !isCheckableForStaleness(filePath, fs)
     )
       continue;
     summary.totalRefs++;
-    if (fs.exists(filePath)) {
-      summary.validRefs++;
+    if (!fs.exists(filePath)) {
+      summary.staleRefs.push(`${filePath}:${rawLines}`);
       continue;
     }
-    summary.staleRefs.push(filePath);
+
+    const lineCount = fs.lineCount(filePath);
+    const lineNumbers = Array.from(rawLines.matchAll(/[0-9]+/g)).flatMap(
+      (lineMatch) => {
+        const value = Number.parseInt(lineMatch[0], 10);
+        return Number.isNaN(value) ? [] : [value];
+      },
+    );
+    const hasOutOfBoundsLine = lineNumbers.some(
+      (lineNumber) => lineNumber < 1 || lineNumber > lineCount,
+    );
+
+    if (hasOutOfBoundsLine) {
+      summary.invalidLineRefs.push(`${filePath}:${rawLines}`);
+      continue;
+    }
+
+    summary.validRefs++;
   }
 
   return summary;
@@ -304,12 +360,14 @@ function summarizeFootgunEntries(
   | 'labelCount'
   | 'dirMentions'
   | 'staleRefs'
+  | 'invalidLineRefs'
   | 'totalRefs'
   | 'validRefs'
   | 'formatDiagnostic'
 > {
   const dirMentions = new Map<string, number>();
   const staleRefs: string[] = [];
+  const invalidLineRefs: string[] = [];
   const diagnostics: string[] = [];
   let hasEvidence = false;
   let entryCount = 0;
@@ -327,6 +385,7 @@ function summarizeFootgunEntries(
     totalRefs += refSummary.totalRefs;
     validRefs += refSummary.validRefs;
     staleRefs.push(...refSummary.staleRefs);
+    invalidLineRefs.push(...refSummary.invalidLineRefs);
     const diagnostic = getMissingFrontmatterDiagnostic(path, content);
     if (diagnostic) diagnostics.push(diagnostic);
   }
@@ -337,6 +396,7 @@ function summarizeFootgunEntries(
     labelCount,
     dirMentions,
     staleRefs,
+    invalidLineRefs,
     totalRefs,
     validRefs,
     formatDiagnostic: diagnostics.length > 0 ? diagnostics.join('; ') : null,
@@ -412,6 +472,12 @@ function extractFootgunFacts(
       summary.entryCount > 0 && summary.labelCount >= summary.entryCount,
     dirMentions: summary.dirMentions,
     staleRefs: summary.staleRefs,
+    invalidLineRefs: summary.invalidLineRefs,
+    duplicateSurfacePaths: findCompetingArtifactSurfaces(
+      fs,
+      [configState.config.footguns.committed, configState.config.footguns.local],
+      FOOTGUN_SURFACE_CANDIDATES,
+    ),
     totalRefs: summary.totalRefs,
     validRefs: summary.validRefs,
     formatDiagnostic,
@@ -450,6 +516,11 @@ function extractLessonsFacts(
     committedCount,
     localCount,
     staleRefs: summary.staleRefs,
+    duplicateSurfacePaths: findCompetingArtifactSurfaces(
+      fs,
+      [configState.config.lessons.committed, configState.config.lessons.local],
+      LESSON_SURFACE_CANDIDATES,
+    ),
     formatDiagnostic,
     paths: {
       committed: configState.config.lessons.committed,
@@ -627,16 +698,57 @@ function hasCIWorkflowCheck(
   return ciContent !== null && pattern.test(ciContent);
 }
 
+/** Count the indentation prefix on one YAML line. */
+function getLineIndent(line: string): number {
+  const match = line.match(/^(\s*)/);
+  return match?.[1]?.length ?? 0;
+}
+
 /** Extract raw `run:` commands from a workflow file. */
 function collectWorkflowRunCommands(ciContent: string | null): string[] {
   if (ciContent === null) return [];
 
   const commands: string[] = [];
-  const runCommandPattern = /^\s*-\s*run:\s*(.+)$/gim;
-  for (const match of ciContent.matchAll(runCommandPattern)) {
-    const command = match[1];
-    if (command !== undefined && command.trim().length > 0) {
-      commands.push(command.trim());
+  const lines = ciContent.split('\n');
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
+    const match = line.match(/^\s*(?:-\s*)?run:\s*(.+)\s*$/);
+    if (!match) continue;
+
+    const baseIndent = getLineIndent(line);
+    const runValue = match[1]?.trim() ?? '';
+    if (!runValue) continue;
+
+    if (/^[>|]/.test(runValue)) {
+      const blockLines: string[] = [];
+      let nextIndex = index + 1;
+      while (nextIndex < lines.length) {
+        const nextLine = lines[nextIndex] ?? '';
+        if (nextLine.trim().length === 0) {
+          blockLines.push('');
+          nextIndex++;
+          continue;
+        }
+
+        if (getLineIndent(nextLine) <= baseIndent) {
+          break;
+        }
+
+        blockLines.push(nextLine.trimStart());
+        nextIndex++;
+      }
+
+      const blockCommand = blockLines.join('\n').trim();
+      if (blockCommand.length > 0) {
+        commands.push(blockCommand);
+      }
+      index = nextIndex - 1;
+      continue;
+    }
+
+    if (runValue.length > 0) {
+      commands.push(runValue);
     }
   }
 
@@ -655,9 +767,10 @@ function hasRunCommand(
 function isContextValidationCommand(command: string): boolean {
   const trimmed = command.toLowerCase();
   return (
-    /\bscripts\/context-validate\.sh\b/.test(trimmed) ||
-    /\bcontext-validate\b/.test(trimmed) ||
-    /\bgoat-flow\s+scan\b/.test(trimmed)
+    /\b(?:bash|sh)\s+(?:\.\/)?scripts\/context-validate\.sh\b/.test(trimmed) ||
+    /\b(?:\.\/)?scripts\/context-validate\.sh\b/.test(trimmed) ||
+    /\bnode\b[^\n]*\bdist\/cli\/cli\.js\s+scan\b/.test(trimmed) ||
+    /\b(?:npx\s+)?goat-flow\s+scan\b/.test(trimmed)
   );
 }
 
@@ -682,11 +795,23 @@ function checksCIRouter(ciContent: string | null): boolean {
   /** Match ad-hoc workflow commands that explicitly validate router references. */
   const runCommandChecksRouter = (command: string): boolean => {
     const lower = command.toLowerCase();
+    const checksInstructionRefs =
+      /grep\b/.test(lower) &&
+      /while\s+read/.test(lower) &&
+      (/tr\s+-d/.test(lower) || /missing path/.test(lower)) &&
+      (/\[\s*!?\s*-e\b/.test(lower) || /missing path/.test(lower)) &&
+      (/(claude|agents|gemini)\.md/.test(lower) || /\$inst\b/.test(lower));
+
     return (
-      /router/.test(lower) &&
-      /(check|validation|validate|resolve|ref|reference)/.test(lower) &&
-      (/(goat-flow|scan|context|context-validate)/.test(lower) ||
-        /\.yml|\.yaml/.test(lower))
+      checksInstructionRefs ||
+      (/router/.test(lower) &&
+        /(check|validation|validate|resolve|ref|reference|missing path)/.test(
+          lower,
+        ) &&
+        (/grep\b/.test(lower) ||
+          /\[\s*!?\s*-e\b/.test(lower) ||
+          /while\s+read/.test(lower) ||
+          /context-validate/.test(lower)))
     );
   };
 
@@ -706,8 +831,13 @@ function checksCISkills(ciContent: string | null): boolean {
     const lower = command.toLowerCase();
     return (
       /skills/.test(lower) &&
-      /goat-/.test(lower) &&
-      /(check|validation|validate|scan|ls|find|grep)/.test(lower)
+      /(goat-|skill\.md)/.test(lower) &&
+      (/for\s+skill\s+in/.test(lower) ||
+        /missing skill/.test(lower) ||
+        /fail=/.test(lower) ||
+        /exit 1/.test(lower) ||
+        (/find\b/.test(lower) && /skill\.md/.test(lower)) ||
+        (/grep\b/.test(lower) && /skill\.md/.test(lower)))
     );
   };
 
@@ -848,11 +978,12 @@ function extractDecisionsFacts(
 
 /** Resolve the local instruction directory in either `ai/` or `.github/instructions/`. */
 function resolveLocalInstructionDir(
-  fs: ReadonlyFS,
+  aiDirExists: boolean,
+  githubDirExists: boolean,
   csPath: string,
 ): LocalInstructionDir | null {
-  if (fs.exists(csPath)) return { location: 'ai', dir: csPath };
-  if (fs.exists('.github/instructions'))
+  if (aiDirExists) return { location: 'ai', dir: csPath };
+  if (githubDirExists)
     return { location: 'github', dir: '.github/instructions' };
   return null;
 }
@@ -864,6 +995,9 @@ function createEmptyLocalInstructions(
   return {
     dirExists: false,
     location: null,
+    aiDirExists: false,
+    githubDirExists: false,
+    duplicateSurfacePaths: [],
     fileCount: 0,
     hasRouter: false,
     hasValidRouter: false,
@@ -1030,7 +1164,15 @@ function extractLocalInstructions(
   rawCsPath: string,
 ): SharedFacts['localInstructions'] {
   const csPath = rawCsPath.replace(/\/$/, '');
-  const localInstructionDir = resolveLocalInstructionDir(fs, csPath);
+  const aiDirExists = fs.exists(csPath);
+  const githubDirExists = fs.exists('.github/instructions');
+  const duplicateSurfacePaths =
+    aiDirExists && githubDirExists ? [csPath, '.github/instructions'] : [];
+  const localInstructionDir = resolveLocalInstructionDir(
+    aiDirExists,
+    githubDirExists,
+    csPath,
+  );
   if (localInstructionDir === null) return createEmptyLocalInstructions(csPath);
 
   const { dir, location } = localInstructionDir;
@@ -1055,6 +1197,9 @@ function extractLocalInstructions(
   return {
     dirExists: true,
     location,
+    aiDirExists,
+    githubDirExists,
+    duplicateSurfacePaths,
     fileCount: files.length,
     hasRouter,
     hasValidRouter: routerValidation.hasValidRouter && hasRouter,

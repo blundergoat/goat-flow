@@ -168,10 +168,12 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Resource | Path |
 |----------|------|
 | System spec | \`docs/system-spec.md\` |
-| Skills | \`.claude/skills/goat-*/\` |
+| Skills | \`.claude/skills/\` |
 | Footguns | \`docs/footguns/\` |
 | Lessons | \`ai/lessons/\` |
 | Architecture | \`docs/architecture.md\` |
+| Config | \`.goat-flow/config.yaml\` |
+| Handoff | \`.goat-flow/tasks/handoff-template.md\` |
 `;
 
 const MINIMAL_CLAUDE_MD = `# CLAUDE.md
@@ -832,6 +834,32 @@ describe('Fixture 10b: project with .github/instructions/ only', () => {
   });
 });
 
+describe('Regression: duplicate local-instruction surfaces should fail', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': MINIMAL_CLAUDE_MD,
+    'package.json': JSON.stringify({ name: 'duplicate-instruction-surfaces' }),
+    'ai/README.md':
+      '# Coding Guidelines\n\nSee [Conventions](ai/coding-standards/conventions.md).\n',
+    'ai/coding-standards/conventions.md':
+      '# Conventions\n\n## Commands\n\n```bash\nnpm test\n```\n\n## Conventions\n\nDo: use TypeScript\nDon\'t: use any\n\nLine.\n'.repeat(
+        4,
+      ),
+    '.github/instructions/conventions.instructions.md': '# Conventions\n',
+    '.github/instructions/code-review.instructions.md': '# Review\n',
+  });
+  const report = scanProject(fs, '/test/duplicate-instruction-surfaces', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 2.6.1a when both ai/ and .github/instructions/ exist', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.6.1a');
+    assert.ok(check, 'Expected check 2.6.1a');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /ai\/coding-standards/);
+    assert.match(check.message, /\.github\/instructions/);
+  });
+});
+
 describe('Fixture 10c: project without instructions', () => {
   const fs = createMockFS({
     'CLAUDE.md': FULL_CLAUDE_MD,
@@ -905,6 +933,123 @@ describe('Regression: hooks exist without registration should fail', () => {
   });
 });
 
+describe('Regression: registered hook paths must exist on disk', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'registered-hook-paths-missing',
+      scripts: { test: 'node --test', format: 'prettier --write .' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: '.claude/hooks/missing-stop-lint.sh',
+              },
+            ],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: 'Write|Edit|MultiEdit',
+            hooks: [
+              {
+                type: 'command',
+                command: '.claude/hooks/missing-format-file.sh',
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  });
+  const report = scanProject(fs, '/test/registered-hook-paths-missing', {
+    agentFilter: 'claude',
+  });
+
+  it('fails check 2.2.2a when a registered hook script path does not exist', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.2a');
+    assert.ok(check, 'Expected check 2.2.2a');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /missing-stop-lint\.sh/);
+    assert.match(check.message, /missing-format-file\.sh/);
+  });
+});
+
+describe('Regression: registered post-turn hook without validation should fail', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'registered-hook-without-validation',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+      hooks: {
+        Stop: [
+          {
+            hooks: [{ type: 'command', command: '.claude/hooks/stop-lint.sh' }],
+          },
+        ],
+      },
+    }),
+    '.claude/hooks/stop-lint.sh':
+      '#!/usr/bin/env bash\nset -euo pipefail\necho "checked" >&2\nexit 0\n',
+  });
+  const report = scanProject(fs, '/test/registered-hook-without-validation', {
+    agentFilter: 'claude',
+  });
+
+  it('fails check 2.2.2 when the registered hook is a no-op wrapper', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.2');
+    assert.ok(check, 'Expected check 2.2.2');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /\.claude\/hooks\/stop-lint\.sh/);
+    assert.match(check.message, /no lint, typecheck, or format-check commands/i);
+  });
+
+  it('fails check 2.2.4b for missing validation logic', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.4b');
+    assert.ok(check, 'Expected check 2.2.4b');
+    assert.equal(check.status, 'fail');
+  });
+});
+
+describe('Regression: deny hook must block pipe-to-shell', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'deny-hook-missing-pipe-to-shell',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    '.claude/hooks/deny-dangerous.sh': `#!/usr/bin/env bash
+block() { echo "BLOCKED: $1" >&2; exit 2; }
+cmd="$(cat)"
+if [[ "$cmd" =~ rm[[:space:]]+-rf ]]; then block "rm -rf"; fi
+if [[ "$cmd" =~ --force ]]; then block "force push"; fi
+if [[ "$cmd" =~ chmod[[:space:]]+777 ]]; then block "chmod 777"; fi
+exit 0
+`,
+  });
+  const report = scanProject(fs, '/test/deny-hook-missing-pipe-to-shell', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 2.2.5i when the deny hook omits pipe-to-shell blocking', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.5i');
+    assert.ok(check, 'Expected check 2.2.5i');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /curl \| bash|wget \| sh|pipe-to-shell/i);
+  });
+});
+
 describe('Regression: post-turn hook swallowing failures should fail honesty checks', () => {
   const fs = createMockFS({
     'CLAUDE.md': FULL_CLAUDE_MD,
@@ -949,6 +1094,50 @@ describe('Regression: post-turn hook swallowing failures should fail honesty che
     assert.ok(antiPattern, 'Expected anti-pattern AP6');
     assert.equal(antiPattern.triggered, true);
     assert.ok(antiPattern.message.includes('|| true'), antiPattern.message);
+  });
+});
+
+describe('Regression: post-tool hook behavior checks should fail on schema drift', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'post-tool-schema-drift',
+      scripts: { test: 'node --test', format: 'prettier --write .' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: 'Write|Edit|MultiEdit',
+            hooks: [
+              { type: 'command', command: '.claude/hooks/format-file.sh' },
+            ],
+          },
+        ],
+      },
+    }),
+    '.claude/hooks/format-file.sh':
+      '#!/usr/bin/env bash\nINPUT=$(cat)\nFILE=$(echo "$INPUT" | jq -r \'.tool_input.file_path // empty\' 2>/dev/null)\n[ -z "$FILE" ] && exit 0\nprettier --write "$FILE"\nexit 0\n',
+  });
+  const report = scanProject(fs, '/test/post-tool-schema-drift', {
+    agentFilter: 'claude',
+  });
+
+  it('fails check 2.2.4d when the hook reads the wrong event field', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.4d');
+    assert.ok(check, 'Expected check 2.2.4d');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /Expected top-level `?\.file_path`?/);
+  });
+
+  it('fails check 2.2.4e when the hook does not skip agent config dirs', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.2.4e');
+    assert.ok(check, 'Expected check 2.2.4e');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /\.claude\//);
+    assert.match(check.message, /\.agents\//);
+    assert.match(check.message, /\.gemini\//);
   });
 });
 
@@ -1012,6 +1201,95 @@ describe('Regression: broken ai/README router should fail', () => {
   });
 });
 
+describe('Regression: multiline CI run blocks are parsed as real validation', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'multiline-ci-validation',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    '.github/workflows/context-validation.yml': `name: Context Validation
+on: [pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check instruction file line count
+        run: |
+          for f in CLAUDE.md AGENTS.md GEMINI.md; do
+            [ -f "$f" ] && wc -l "$f"
+          done
+      - name: Check router references
+        run: |
+          grep -oP '\`[^\`]+\`' CLAUDE.md | tr -d '\`' | while read -r ref; do
+            [ ! -e "$ref" ] && echo "missing path: $ref"
+          done
+      - name: Check skills exist
+        run: |
+          fail=0
+          for skill in goat goat-debug goat-plan goat-review goat-security goat-test; do
+            [ ! -f ".claude/skills/$skill/SKILL.md" ] && fail=1
+          done
+          [ "$fail" -eq 0 ] || exit 1
+`,
+  });
+  const report = scanProject(fs, '/test/multiline-ci-validation', {
+    agentFilter: 'claude',
+  });
+
+  it('passes 3.2.1 when the workflow contains real multiline validation commands', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '3.2.1');
+    assert.ok(check, 'Expected check 3.2.1');
+    assert.equal(check.status, 'pass');
+  });
+
+  it('passes the line/router/skills CI checks for block-style workflows', () => {
+    const lineCount = report.agents[0].checks.find((c) => c.id === '3.2.2');
+    const router = report.agents[0].checks.find((c) => c.id === '3.2.3');
+    const skills = report.agents[0].checks.find((c) => c.id === '3.2.4');
+    assert.ok(lineCount, 'Expected check 3.2.2');
+    assert.ok(router, 'Expected check 3.2.3');
+    assert.ok(skills, 'Expected check 3.2.4');
+    assert.equal(lineCount.status, 'pass');
+    assert.equal(router.status, 'pass');
+    assert.equal(skills.status, 'pass');
+  });
+});
+
+describe('Regression: CI scanner bait should not satisfy skill validation', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'ci-scanner-bait',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    '.github/workflows/context-validation.yml':
+      'name: Context Validation\non: [pull_request]\njobs:\n  validate:\n    steps:\n      - run: echo "checking skills goat-debug"\n      - run: ls .claude/skills/goat-debug/SKILL.md\n',
+  });
+  const report = scanProject(fs, '/test/ci-scanner-bait', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 3.2.1 when the workflow has no real validation commands', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '3.2.1');
+    assert.ok(check, 'Expected check 3.2.1');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /no real validation commands/i);
+  });
+
+  it('fails 3.2.4 when the workflow only lists one skill path', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '3.2.4');
+    assert.ok(check, 'Expected check 3.2.4');
+    assert.equal(check.status, 'fail');
+  });
+});
+
 describe('Regression: category bucket learning loop counts entries, not files', () => {
   const fs = createMockFS({
     'CLAUDE.md': FULL_CLAUDE_MD,
@@ -1048,6 +1326,186 @@ describe('Regression: category bucket learning loop counts entries, not files', 
     assert.ok(check, 'Expected check 2.3.5a');
     assert.equal(check.status, 'pass');
     assert.ok(check.message.includes('2/2 footgun entries'), check.message);
+  });
+});
+
+describe('Regression: footgun line refs must stay within file bounds', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'footgun-line-bounds',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    'src/auth.ts': 'export function login() {}\n',
+    'docs/footguns/hooks.md':
+      '---\ncategory: hooks\n---\n\n## Footgun: Out-of-range line ref\n**Status:** active\n**Created:** 2026-04-03\n**Evidence type:** ACTUAL_MEASURED\n**Symptoms:** Scanner trusted a stale line ref.\n**Why it happens:** The cited file changed after the incident was logged.\n**Evidence:**\n- `src/auth.ts:99` - no such line exists anymore.\n**Prevention:** Update the cited line after refactors.\n',
+  });
+  const report = scanProject(fs, '/test/footgun-line-bounds', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 2.3.4 when a cited footgun line is out of bounds', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.3.4');
+    assert.ok(check, 'Expected check 2.3.4');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /out-of-range lines/i);
+  });
+
+  it('does not trigger AP12 when the file exists but the line number is stale', () => {
+    const antiPattern = report.agents[0].antiPatterns.find(
+      (ap) => ap.id === 'AP12',
+    );
+    assert.ok(antiPattern, 'Expected anti-pattern AP12');
+    assert.equal(antiPattern.triggered, false);
+  });
+});
+
+describe('Regression: duplicate legacy learning-loop surfaces trigger AP22', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'duplicate-learning-loop-surfaces',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    'src/auth.ts': 'export function login() {}\n',
+    'docs/footguns/hooks.md':
+      '---\ncategory: hooks\n---\n\n## Footgun: Bucket entry\n**Status:** active\n**Created:** 2026-04-03\n**Evidence type:** ACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:1` - current bucket evidence.\n',
+    'ai/lessons/verification.md':
+      '---\ncategory: verification\n---\n\n## Lesson: Bucket entry\n**Created:** 2026-04-03\nUse the bucket layout.\n',
+    'docs/footguns.md':
+      '# Footguns\n\n## Footgun: Legacy duplicate\n\n**Evidence:**\n- `src/auth.ts:1` - old flat-file surface.\n',
+    'docs/lessons.md':
+      '# Lessons\n\n## Entries\n\n### Legacy duplicate\n**What happened:** old flat-file lesson still exists.\n',
+  });
+  const report = scanProject(fs, '/test/duplicate-learning-loop-surfaces', {
+    agentFilter: 'claude',
+  });
+
+  it('triggers AP22 for legacy flat files that compete with bucket dirs', () => {
+    const antiPattern = report.agents[0].antiPatterns.find(
+      (ap) => ap.id === 'AP22',
+    );
+    assert.ok(antiPattern, 'Expected anti-pattern AP22');
+    assert.equal(antiPattern.triggered, true);
+    assert.match(antiPattern.message, /docs\/footguns\.md/);
+    assert.match(antiPattern.message, /docs\/lessons\.md/);
+  });
+
+  it('fails 2.3.5b for the same duplicate learning-loop surfaces', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.3.5b');
+    assert.ok(check, 'Expected check 2.3.5b');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /docs\/footguns\.md/);
+    assert.match(check.message, /docs\/lessons\.md/);
+  });
+
+  it('adds the duplicate-surface recommendation', () => {
+    const recommendation = report.agents[0].recommendations.find(
+      (rec) => rec.key === 'ap-fix-duplicate-learning-loop-surfaces',
+    );
+    assert.ok(
+      recommendation,
+      'Expected duplicate learning-loop surfaces recommendation',
+    );
+  });
+});
+
+describe('Regression: committed plus local bucket split does not trigger AP22', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD,
+    'package.json': JSON.stringify({
+      name: 'canonical-learning-loop-split',
+      scripts: { test: 'node --test' },
+    }),
+    '.claude/settings.json': JSON.stringify({
+      permissions: { deny: ['Bash(git commit*)', 'Bash(git push*)'] },
+    }),
+    'src/auth.ts': 'export function login() {}\n',
+    'docs/footguns/hooks.md':
+      '---\ncategory: hooks\n---\n\n## Footgun: Committed bucket\n**Status:** active\n**Created:** 2026-04-03\n**Evidence type:** ACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:1` - committed evidence.\n',
+    '.goat-flow/footguns/local.md':
+      '---\ncategory: local\n---\n\n## Footgun: Local bucket\n**Status:** active\n**Created:** 2026-04-03\n**Evidence type:** ACTUAL_MEASURED\n**Evidence:**\n- `src/auth.ts:1` - local evidence.\n',
+    'ai/lessons/verification.md':
+      '---\ncategory: verification\n---\n\n## Lesson: Committed bucket\n**Created:** 2026-04-03\nCommitted lesson.\n',
+    '.goat-flow/lessons/local.md':
+      '---\ncategory: local\n---\n\n## Lesson: Local bucket\n**Created:** 2026-04-03\nLocal-only lesson.\n',
+  });
+  const report = scanProject(fs, '/test/canonical-learning-loop-split', {
+    agentFilter: 'claude',
+  });
+
+  it('keeps AP22 clear when only the configured committed/local split exists', () => {
+    const antiPattern = report.agents[0].antiPatterns.find(
+      (ap) => ap.id === 'AP22',
+    );
+    assert.ok(antiPattern, 'Expected anti-pattern AP22');
+    assert.equal(antiPattern.triggered, false);
+  });
+
+  it('passes 2.3.5b when only the configured committed/local split exists', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.3.5b');
+    assert.ok(check, 'Expected check 2.3.5b');
+    assert.equal(check.status, 'pass');
+  });
+});
+
+describe('Regression: router skills row must cover dispatcher and goat-star skills', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD.replace(
+      '| Skills | `.claude/skills/` |',
+      '| Skills | `.claude/skills/goat-*/` |',
+    ),
+    'package.json': JSON.stringify({
+      name: 'router-skills-glob',
+      scripts: { test: 'node --test' },
+    }),
+  });
+  const report = scanProject(fs, '/test/router-skills-glob', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 2.4.3 when the router only points at goat-*', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.4.3');
+    assert.ok(check, 'Expected check 2.4.3');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /misses the `goat\/` dispatcher/i);
+  });
+});
+
+describe('Regression: router must reference handoff template and config', () => {
+  const fs = createMockFS({
+    'CLAUDE.md': FULL_CLAUDE_MD
+      .replace('| Config | `.goat-flow/config.yaml` |\n', '')
+      .replace('| Handoff | `.goat-flow/tasks/handoff-template.md` |\n', ''),
+    'package.json': JSON.stringify({
+      name: 'router-missing-handoff-and-config',
+      scripts: { test: 'node --test' },
+    }),
+    '.goat-flow/tasks/handoff-template.md': HANDOFF_TEMPLATE,
+    '.goat-flow/config.yaml': 'version: 0.10.0\n',
+  });
+  const report = scanProject(fs, '/test/router-missing-handoff-and-config', {
+    agentFilter: 'claude',
+  });
+
+  it('fails 2.4.7 when the handoff template path is missing from the router', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.4.7');
+    assert.ok(check, 'Expected check 2.4.7');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /\.goat-flow\/tasks\/handoff-template\.md/);
+  });
+
+  it('fails 2.4.8 when the config path is missing from the router', () => {
+    const check = report.agents[0].checks.find((c) => c.id === '2.4.8');
+    assert.ok(check, 'Expected check 2.4.8');
+    assert.equal(check.status, 'fail');
+    assert.match(check.message, /\.goat-flow\/config\.yaml/);
   });
 });
 

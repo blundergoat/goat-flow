@@ -32,14 +32,6 @@ if (( agents_lines > 135 )); then
 fi
 info "AGENTS.md line count: $agents_lines"
 
-allowed_missing_paths=(
-    "ai/decisions/"
-    ".goat-flow/footguns/"
-    ".goat-flow/lessons/"
-    ".goat-flow/tasks/"
-    ".goat-flow/logs/"
-)
-
 trim_yaml_value() {
     sed -E 's/[[:space:]]+#.*$//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | sed -E "s/^'(.*)'$/\\1/; s/^\"(.*)\"$/\\1/"
 }
@@ -73,6 +65,32 @@ config_path() {
         printf '%s\n' "$default_value"
     fi
 }
+
+warn_if_legacy_surface_exists() {
+    local legacy_path=$1
+    local canonical_path=$2
+    local kind=$3
+
+    if [[ -e "$legacy_path" ]]; then
+        warn "Legacy $kind surface still exists at $legacy_path. Canonical path is $canonical_path"
+    fi
+}
+
+footguns_committed_dir="$(config_path footguns committed "docs/footguns/")"
+footguns_local_dir="$(config_path footguns local ".goat-flow/footguns/")"
+lessons_committed_dir="$(config_path lessons committed "ai/lessons/")"
+lessons_local_dir="$(config_path lessons local ".goat-flow/lessons/")"
+evals_dir="$(config_path evals path "ai/evals/")"
+tasks_dir="$(config_path tasks path ".goat-flow/tasks/")"
+logs_dir="$(config_path logs path ".goat-flow/logs/")"
+
+allowed_missing_paths=(
+    "ai/decisions/"
+    "$footguns_local_dir"
+    "$lessons_local_dir"
+    "$tasks_dir"
+    "$logs_dir"
+)
 
 router_errors=0
 while IFS= read -r ref; do
@@ -130,27 +148,31 @@ for skill in "${required_skills[@]}"; do
 done
 info "All 6 skills (5 + dispatcher) exist with required sections and frontmatter"
 
-if [[ -d ai/evals ]]; then
-    [[ -f ai/evals/README.md ]] || fail "Missing ai/evals/README.md"
-    info "Agent eval directory exists (ai/evals/)"
-elif [[ -d agent-evals ]]; then
-    [[ -f agent-evals/README.md ]] || fail "Missing agent-evals/README.md"
-    info "Agent eval directory exists (agent-evals/) [legacy path]"
-elif [[ -d codex-evals ]]; then
-    [[ -f codex-evals/README.md ]] || fail "Missing codex-evals/README.md"
-    info "Codex eval directory exists (codex-evals/) [legacy path]"
+if [[ -d "$evals_dir" ]]; then
+    [[ -f "$evals_dir/README.md" ]] || fail "Missing $evals_dir/README.md"
+    info "Agent eval directory exists ($evals_dir)"
 else
-    fail "Missing eval directory (ai/evals/ or agent-evals/ or codex-evals/)"
+    fail "Missing canonical eval directory ($evals_dir)"
 fi
+warn_if_legacy_surface_exists "agent-evals" "$evals_dir" "eval"
+warn_if_legacy_surface_exists "codex-evals" "$evals_dir" "eval"
 
-footguns_committed_dir="$(config_path footguns committed "docs/footguns/")"
-legacy_dir="docs"
-legacy_footguns_file="$legacy_dir/footguns.md"
+if [[ -d "$lessons_committed_dir" ]]; then
+    mapfile -t lesson_entries < <(find "$lessons_committed_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | sort)
+    if (( ${#lesson_entries[@]} == 0 )); then
+        fail "$lessons_committed_dir exists but contains no lesson category files"
+    else
+        info "$lessons_committed_dir contains lesson category files"
+    fi
+else
+    fail "Missing canonical lessons directory ($lessons_committed_dir)"
+fi
+warn_if_legacy_surface_exists "docs/lessons.md" "$lessons_committed_dir" "lesson"
 
 if [[ -d "$footguns_committed_dir" ]]; then
     mapfile -t footgun_entries < <(find "$footguns_committed_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | sort)
     if (( ${#footgun_entries[@]} == 0 )); then
-        fail "$footguns_committed_dir exists but contains no footgun bucket or legacy entry files"
+        fail "$footguns_committed_dir exists but contains no footgun category files"
     elif grep -Rqi 'none confirmed yet' "$footguns_committed_dir"; then
         info "$footguns_committed_dir explicitly states no confirmed footguns yet"
     elif ! grep -REq "$evidence_ref_pattern" "${footgun_entries[@]}"; then
@@ -158,17 +180,10 @@ if [[ -d "$footguns_committed_dir" ]]; then
     else
         info "$footguns_committed_dir contains footgun entries with file path evidence"
     fi
-elif [[ -f "$legacy_footguns_file" ]]; then
-    if grep -qi 'none confirmed yet' "$legacy_footguns_file"; then
-        info "$legacy_footguns_file explicitly states no confirmed footguns yet"
-    elif ! grep -Eq "$evidence_ref_pattern" "$legacy_footguns_file"; then
-        fail "$legacy_footguns_file has no file path evidence"
-    else
-        info "$legacy_footguns_file contains file path evidence"
-    fi
 else
-    fail "Missing footguns directory ($footguns_committed_dir) and legacy fallback ($legacy_footguns_file)"
+    fail "Missing canonical footguns directory ($footguns_committed_dir)"
 fi
+warn_if_legacy_surface_exists "docs/footguns.md" "$footguns_committed_dir" "footgun"
 
 for script in scripts/preflight-checks.sh scripts/context-validate.sh scripts/deny-dangerous.sh; do
     [[ -x "$script" ]] || fail "Script is not executable: $script"

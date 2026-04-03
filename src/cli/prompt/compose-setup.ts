@@ -969,7 +969,7 @@ function renderSetupRedirect(
   lines.push('| Resource | Path |');
   lines.push('|----------|------|');
   lines.push(
-    '| Skills | `.claude/skills/goat-*/` (or equivalent agent skills dir) |',
+    '| Skills | `.claude/skills/` (or equivalent agent skills dir) |',
   );
   lines.push('```');
   lines.push(

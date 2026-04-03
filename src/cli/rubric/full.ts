@@ -286,8 +286,36 @@ export const fullChecks: CheckDef[] = [
     pts: 2,
     confidence: 'high',
     detect: {
-      type: 'file_exists',
-      path: '.github/workflows/context-validation.yml',
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => ({
+        id: '3.2.1',
+        name: 'CI workflow exists',
+        tier: 'full',
+        category: 'CI Validation',
+        status:
+          ctx.facts.shared.ci.workflowExists &&
+          (ctx.facts.shared.ci.checksLineCount ||
+            ctx.facts.shared.ci.checksRouter ||
+            ctx.facts.shared.ci.checksSkills)
+            ? 'pass'
+            : 'fail',
+        points:
+          ctx.facts.shared.ci.workflowExists &&
+          (ctx.facts.shared.ci.checksLineCount ||
+            ctx.facts.shared.ci.checksRouter ||
+            ctx.facts.shared.ci.checksSkills)
+            ? 2
+            : 0,
+        maxPoints: 2,
+        confidence: 'high',
+        message: ctx.facts.shared.ci.workflowExists
+          ? ctx.facts.shared.ci.checksLineCount ||
+            ctx.facts.shared.ci.checksRouter ||
+            ctx.facts.shared.ci.checksSkills
+            ? 'CI workflow found at `.github/workflows/context-validation.yml` and it runs validation commands'
+            : 'CI workflow exists but no real validation commands were detected. Add runnable checks such as `bash scripts/context-validate.sh`, line-count enforcement, router validation, or full skill validation.'
+          : 'Missing `.github/workflows/context-validation.yml`. Expected a dedicated context-validation workflow in GitHub Actions.',
+      }),
     },
     recommendation: 'Create .github/workflows/context-validation.yml',
     recommendationKey: 'create-ci-workflow',
@@ -312,7 +340,7 @@ export const fullChecks: CheckDef[] = [
         confidence: 'high',
         message: ctx.facts.shared.ci.checksLineCount
           ? 'CI workflow checks line count'
-          : 'CI workflow does not check line count',
+          : 'CI workflow does not check line count. Add a step that enforces the instruction-file line target or runs `bash scripts/context-validate.sh`.',
       }),
     },
     recommendation: 'Add line count check to CI workflow',
@@ -338,7 +366,7 @@ export const fullChecks: CheckDef[] = [
         confidence: 'high',
         message: ctx.facts.shared.ci.checksRouter
           ? 'CI workflow checks router'
-          : 'CI workflow does not check router references',
+          : 'CI workflow does not check router references. Add a router validation step or run `bash scripts/context-validate.sh` in CI.',
       }),
     },
     recommendation: 'Add router reference check to CI workflow',
@@ -364,7 +392,7 @@ export const fullChecks: CheckDef[] = [
         confidence: 'high',
         message: ctx.facts.shared.ci.checksSkills
           ? 'CI workflow checks skills'
-          : 'CI workflow does not check skills',
+          : 'CI workflow does not check installed skills. Add a skill validation step or run `bash scripts/context-validate.sh` in CI.',
       }),
     },
     recommendation: 'Add skills check to CI workflow',

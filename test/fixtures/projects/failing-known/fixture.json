@@ -5,7 +5,7 @@
     "claude": {
       "maxPercentage": 99,
       "failedChecks": [
-        "2.2.4b",
+        "2.2.3",
         "2.6.2"
       ]
     }

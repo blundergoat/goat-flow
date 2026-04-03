@@ -113,7 +113,7 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Scripts | `scripts/` |
 
 <!-- goat-flow:router:start -->
-| Skills | `.claude/skills/goat-*/` |
+| Skills | `.claude/skills/` |
 | Footguns | `docs/footguns/`, `.goat-flow/footguns/` |
 | Lessons | `ai/lessons/`, `.goat-flow/lessons/` |
 | Decisions | `ai/decisions/` |
@@ -122,4 +122,5 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Config | `.goat-flow/config.yaml` |
 | Session logs | `.goat-flow/logs/sessions/` |
 | Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+| Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->

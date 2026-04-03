@@ -218,6 +218,8 @@ export interface SharedFacts {
     hasEvidenceLabels: boolean;
     dirMentions: Map<string, number>;
     staleRefs: string[];
+    invalidLineRefs: string[];
+    duplicateSurfacePaths: string[];
     totalRefs: number;
     validRefs: number;
     formatDiagnostic: string | null;
@@ -232,6 +234,7 @@ export interface SharedFacts {
     committedCount: number;
     localCount: number;
     staleRefs: string[];
+    duplicateSurfacePaths: string[];
     formatDiagnostic: string | null;
     paths: { committed: string; local: string };
   };
@@ -289,6 +292,9 @@ export interface SharedFacts {
     dirExists: boolean;
     // Which directory convention is used: ai/ or .github/
     location: 'ai' | 'github' | null;
+    aiDirExists: boolean;
+    githubDirExists: boolean;
+    duplicateSurfacePaths: string[];
     fileCount: number;
     hasRouter: boolean;
     hasValidRouter: boolean;
@@ -367,6 +373,7 @@ export interface AgentFacts {
     denyBlocksRmRf: boolean;
     denyBlocksForcePush: boolean;
     denyBlocksChmod: boolean;
+    denyBlocksPipeToShell: boolean;
     denyBlocksCloudDestructive: boolean;
     postTurnExists: boolean;
     postTurnRegistered: boolean;
@@ -378,6 +385,7 @@ export interface AgentFacts {
     postToolRegisteredPath: string | null;
     postToolExists: boolean;
     postToolUsesExpectedPathField: boolean;
+    postToolSkipsAgentConfigPaths: boolean;
     compactionHookExists: boolean;
     /** Hook scripts containing hardcoded absolute paths (not wrapped in $(git rev-parse)) */
     absolutePathHooks: string[];

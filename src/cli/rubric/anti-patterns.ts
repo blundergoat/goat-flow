@@ -348,6 +348,33 @@ export const antiPatterns: AntiPatternDef[] = [
       'Update or remove stale file:line references in footguns.md',
     recommendationKey: 'ap-fix-stale-references',
   },
+  {
+    id: 'AP22',
+    name: 'Duplicate learning-loop surfaces',
+    deduction: -3,
+    confidence: 'high',
+    evaluate: (ctx: FactContext): AntiPatternResult => {
+      const evidence = [
+        ...ctx.facts.shared.footguns.duplicateSurfacePaths,
+        ...ctx.facts.shared.lessons.duplicateSurfacePaths,
+      ].sort((a, b) => a.localeCompare(b));
+      const triggered = evidence.length > 0;
+      return {
+        id: 'AP22',
+        name: 'Duplicate learning-loop surfaces',
+        triggered,
+        deduction: triggered ? -3 : 0,
+        confidence: 'high',
+        message: triggered
+          ? `Competing learning-loop surfaces found alongside the configured bucket layout: ${evidence.join(', ')}`
+          : 'No competing legacy learning-loop surfaces detected',
+        evidence: triggered ? evidence.join(', ') : undefined,
+      };
+    },
+    recommendation:
+      'Remove or migrate legacy lessons/footguns surfaces so only the configured bucket paths remain',
+    recommendationKey: 'ap-fix-duplicate-learning-loop-surfaces',
+  },
 
   // === AP13-AP15: New anti-patterns (B3-B5) ===
   {

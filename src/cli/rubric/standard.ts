@@ -36,6 +36,167 @@ function buildHooksCheckResult(
   };
 }
 
+/** Extract the Router Table section from an instruction file without falling back to unrelated content. */
+function extractRouterSection(content: string | null): string | null {
+  if (content === null) return null;
+  const lines = content.split('\n');
+  const section: string[] = [];
+  let inRouterSection = false;
+
+  for (const line of lines) {
+    if (/^##\s+router(?:\s+table)?\s*$/i.test(line)) {
+      inRouterSection = true;
+      section.push(line);
+      continue;
+    }
+
+    if (inRouterSection && /^##\s+/.test(line)) break;
+    if (inRouterSection) section.push(line);
+  }
+
+  return section.length > 0 ? section.join('\n') : null;
+}
+
+/** Normalize a router path reference into a comparable local path, or drop non-path refs. */
+function normalizeRouterReference(path: string): string | null {
+  const trimmed = path.trim();
+  if (trimmed.length === 0 || trimmed.startsWith('http')) return null;
+  return trimmed.replace(/\/+$/, '');
+}
+
+/** Extract every local path reference from the Router Table section. */
+function extractRouterReferences(content: string | null): string[] {
+  const section = extractRouterSection(content);
+  if (section === null) return [];
+
+  const refs: string[] = [];
+  for (const match of section.matchAll(/`([^`]+)`/g)) {
+    const candidate = match[1];
+    if (candidate === undefined) continue;
+    const normalized = normalizeRouterReference(candidate);
+    if (normalized !== null && refs.includes(normalized) === false) {
+      refs.push(normalized);
+    }
+  }
+
+  for (const match of section.matchAll(/\]\(([^)]+)\)/g)) {
+    const candidate = match[1];
+    if (candidate === undefined) continue;
+    const normalized = normalizeRouterReference(candidate);
+    if (normalized !== null && refs.includes(normalized) === false) {
+      refs.push(normalized);
+    }
+  }
+
+  return refs;
+}
+
+/** Extract every skills-path reference from the Router Table section. */
+function extractRouterSkillsReferences(content: string | null): string[] {
+  return extractRouterReferences(content).filter((path) =>
+    /\/skills(?:\/|$)/.test(path),
+  );
+}
+
+/** Return whether the Router Table explicitly references one required repo path. */
+function routerReferencesPath(content: string | null, expectedPath: string): boolean {
+  const normalizedExpected = normalizeRouterReference(expectedPath);
+  if (normalizedExpected === null) return false;
+  return extractRouterReferences(content).includes(normalizedExpected);
+}
+
+/** Build a router completeness check result for one required literal path. */
+function getRequiredRouterPathCheckResult(
+  id: string,
+  name: string,
+  expectedPath: string,
+  missingWhy: string,
+  ctx: FactContext,
+): CheckResult {
+  const hasReference = routerReferencesPath(
+    ctx.agentFacts.instruction.content,
+    expectedPath,
+  );
+  return {
+    id,
+    name,
+    tier: 'standard',
+    category: 'Router Table',
+    status: hasReference ? 'pass' : 'fail',
+    points: hasReference ? 1 : 0,
+    maxPoints: 1,
+    confidence: 'high',
+    message: hasReference
+      ? `Router references ${expectedPath}`
+      : `Router does not reference ${expectedPath}. ${missingWhy}`,
+  };
+}
+
+/** Score whether the Router Table points at the full skills directory instead of the buggy `goat-*` glob. */
+function getRouterSkillsCheckResult(ctx: FactContext): CheckResult {
+  const expectedDir = ctx.agentFacts.agent.skillsDir.replace(/\/+$/, '');
+  const actualRefs = extractRouterSkillsReferences(
+    ctx.agentFacts.instruction.content,
+  );
+  const legacyGlob = `${expectedDir}/goat-*`;
+
+  if (actualRefs.includes(expectedDir)) {
+    return {
+      id: '2.4.3',
+      name: 'Skills referenced in router',
+      tier: 'standard',
+      category: 'Router Table',
+      status: 'pass',
+      points: 1,
+      maxPoints: 1,
+      confidence: 'high',
+      message: `Router points at ${expectedDir}/, covering both the \`goat/\` dispatcher and the 5 \`goat-*\` skills.`,
+    };
+  }
+
+  if (actualRefs.includes(legacyGlob)) {
+    return {
+      id: '2.4.3',
+      name: 'Skills referenced in router',
+      tier: 'standard',
+      category: 'Router Table',
+      status: 'fail',
+      points: 0,
+      maxPoints: 1,
+      confidence: 'high',
+      message: `Router points at ${legacyGlob}/, which misses the \`goat/\` dispatcher. Route the skills root ${expectedDir}/ instead so the router matches the real layout.`,
+      evidence: legacyGlob,
+    };
+  }
+
+  if (actualRefs.length === 0) {
+    return {
+      id: '2.4.3',
+      name: 'Skills referenced in router',
+      tier: 'standard',
+      category: 'Router Table',
+      status: 'fail',
+      points: 0,
+      maxPoints: 1,
+      confidence: 'high',
+      message: `No skills directory path found in the Router Table. Add ${expectedDir}/ so agents can find the dispatcher and the 5 goat-* skills.`,
+    };
+  }
+
+  return {
+    id: '2.4.3',
+    name: 'Skills referenced in router',
+    tier: 'standard',
+    category: 'Router Table',
+    status: 'fail',
+    points: 0,
+    maxPoints: 1,
+    confidence: 'high',
+    message: `Router references skill paths ${actualRefs.join(', ')}, but the canonical entry for this agent is ${expectedDir}/.`,
+    evidence: actualRefs.join(', '),
+  };
+}
+
 /** Return the configured settings-based deny patterns when they exist. */
 function getDenyPatterns(ctx: FactContext): string[] | null {
   if (
@@ -94,7 +255,7 @@ function formatMissingHookRegistrationMessage(
     hookKind === 'post-tool' && ctx.facts.stack.formatCommand
       ? ` Formatter detected: ${ctx.facts.stack.formatCommand}.`
       : '';
-  return `Expected ${hookKind} hook registration in ${settingsPath} for event "${eventName}" pointing at ${expectedPath}, but no matching hook entry was found.${formatterDetail}`;
+  return `Expected ${hookKind} hook registration in ${settingsPath}: event "${eventName}" should point at ${expectedPath}, but no matching hook entry was found.${formatterDetail} Add the hook in settings so the script is actually invoked.`;
 }
 
 /** Gather the facts needed to score the post-tool hook check. */
@@ -167,6 +328,92 @@ function buildPostToolHookCheckResult(ctx: FactContext): CheckResult {
     confidence: 'high',
     message: getPostToolHookMessage(ctx, status),
   };
+}
+
+/** Gather the facts needed to score the post-turn hook registration and enforcement check. */
+function getPostTurnHookStatus(ctx: FactContext): {
+  registered: boolean;
+  exists: boolean;
+  hasValidation: boolean;
+  registeredPath: string | null;
+  passes: boolean;
+} {
+  const registered = ctx.agentFacts.hooks.postTurnRegistered;
+  const exists = ctx.agentFacts.hooks.postTurnExists;
+  const hasValidation = ctx.agentFacts.hooks.postTurnHasValidation;
+  return {
+    registered,
+    exists,
+    hasValidation,
+    registeredPath: ctx.agentFacts.hooks.postTurnRegisteredPath,
+    passes: registered && exists && hasValidation,
+  };
+}
+
+/** Build the user-facing status message for the post-turn hook registration and enforcement check. */
+function getPostTurnHookMessage(
+  ctx: FactContext,
+  status: ReturnType<typeof getPostTurnHookStatus>,
+): string {
+  if (status.registered === false) {
+    return formatMissingHookRegistrationMessage(
+      ctx,
+      'post-turn',
+      ctx.agentFacts.agent.hookEvents.postTurn,
+      `${ctx.agentFacts.agent.hooksDir ?? '.'}/stop-lint.sh`,
+    );
+  }
+
+  if (status.exists === false) {
+    return `Post-turn hook is registered at ${status.registeredPath} but the script file does not exist. Registered hooks only count when the referenced stop-lint script resolves on disk.`;
+  }
+
+  if (status.hasValidation === false) {
+    return `Post-turn hook is registered at ${status.registeredPath} but no lint, typecheck, or format-check commands were detected. Expected real enforcement such as shellcheck, eslint, tsc, phpstan, or prettier --check instead of a wrapper that only echoes and exits 0.`;
+  }
+
+  return `Post-turn hook registered and runs validation: ${status.registeredPath}`;
+}
+
+/** Return the list of registered hook paths whose backing script files are missing. */
+function getMissingRegisteredHookPaths(ctx: FactContext): string[] {
+  const missing: string[] = [];
+
+  if (
+    ctx.agentFacts.hooks.postTurnRegistered &&
+    ctx.agentFacts.hooks.postTurnExists === false &&
+    ctx.agentFacts.hooks.postTurnRegisteredPath
+  ) {
+    missing.push(`Stop: ${ctx.agentFacts.hooks.postTurnRegisteredPath}`);
+  }
+
+  if (
+    ctx.agentFacts.hooks.postToolRegistered &&
+    ctx.agentFacts.hooks.postToolExists === false &&
+    ctx.agentFacts.hooks.postToolRegisteredPath
+  ) {
+    missing.push(`PostToolUse: ${ctx.agentFacts.hooks.postToolRegisteredPath}`);
+  }
+
+  return missing;
+}
+
+/** Count the registered hook paths that already resolve on disk. */
+function countExistingRegisteredHookPaths(ctx: FactContext): number {
+  let count = 0;
+  if (
+    ctx.agentFacts.hooks.postTurnRegistered &&
+    ctx.agentFacts.hooks.postTurnExists
+  ) {
+    count++;
+  }
+  if (
+    ctx.agentFacts.hooks.postToolRegistered &&
+    ctx.agentFacts.hooks.postToolExists
+  ) {
+    count++;
+  }
+  return count;
 }
 
 /**
@@ -742,7 +989,7 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'add-skill-shared-conventions',
   },
 
-  // === 2.2 Hooks / Verification Scripts (16 pts) ===
+  // === 2.2 Hooks / Verification Scripts (20 pts) ===
   {
     id: '2.2.1',
     name: 'Settings/config valid',
@@ -757,37 +1004,82 @@ export const standardChecks: CheckDef[] = [
   },
   {
     id: '2.2.2',
-    name: 'Post-turn hook registered',
+    name: 'Post-turn hook registered and enforces validation',
     tier: 'standard',
     category: 'Hooks',
     pts: 2,
     confidence: 'high',
     detect: {
       type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '2.2.2',
-        name: 'Post-turn hook registered',
-        tier: 'standard',
-        category: 'Hooks',
-        status: ctx.agentFacts.hooks.postTurnRegistered ? 'pass' : 'fail',
-        points: ctx.agentFacts.hooks.postTurnRegistered ? 2 : 0,
-        maxPoints: 2,
-        confidence: 'high',
-        message:
-          ctx.agentFacts.hooks.postTurnRegistered &&
-          ctx.agentFacts.hooks.postTurnRegisteredPath
-            ? `Post-turn hook registered: ${ctx.agentFacts.hooks.postTurnRegisteredPath}`
-            : ctx.agentFacts.hooks.postTurnRegistered
-              ? 'Post-turn hook registered but script path is missing'
-              : formatMissingHookRegistrationMessage(
-                  ctx,
-                  'post-turn',
-                  ctx.agentFacts.agent.hookEvents.postTurn,
-                  `${ctx.agentFacts.agent.hooksDir ?? '.'}/stop-lint.sh`,
-                ),
-      }),
+      fn: (ctx: FactContext): CheckResult => {
+        const status = getPostTurnHookStatus(ctx);
+        return buildHooksCheckResult(
+          '2.2.2',
+          'Post-turn hook registered and enforces validation',
+          status.passes ? 'pass' : 'fail',
+          status.passes ? 2 : 0,
+          2,
+          'high',
+          getPostTurnHookMessage(ctx, status),
+        );
+      },
     },
-    recommendation: 'Create stop-lint hook for post-turn verification',
+    recommendation:
+      'Register a real stop-lint hook and make sure it runs lint, typecheck, or format-check commands instead of a no-op wrapper',
+    recommendationKey: 'create-stop-lint',
+  },
+  {
+    id: '2.2.2a',
+    name: 'Registered hook paths exist',
+    tier: 'standard',
+    category: 'Hooks',
+    pts: 1,
+    confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const hasRegisteredHooks =
+          ctx.agentFacts.hooks.postTurnRegistered ||
+          ctx.agentFacts.hooks.postToolRegistered;
+        if (!hasRegisteredHooks) {
+          return buildHooksCheckResult(
+            '2.2.2a',
+            'Registered hook paths exist',
+            'na',
+            0,
+            0,
+            'high',
+            'No registered hook paths to validate',
+          );
+        }
+
+        const missing = getMissingRegisteredHookPaths(ctx);
+        if (missing.length === 0) {
+          const existingCount = countExistingRegisteredHookPaths(ctx);
+          return buildHooksCheckResult(
+            '2.2.2a',
+            'Registered hook paths exist',
+            'pass',
+            1,
+            1,
+            'high',
+            `All ${existingCount} registered hook paths resolve on disk`,
+          );
+        }
+
+        return buildHooksCheckResult(
+          '2.2.2a',
+          'Registered hook paths exist',
+          'fail',
+          0,
+          1,
+          'high',
+          `Hook registration points at missing script files: ${missing.join(', ')}. Fix the registered path or create the missing hook script.`,
+        );
+      },
+    },
+    recommendation:
+      'If settings register a hook command, the referenced hook script must exist at that exact path',
     recommendationKey: 'create-stop-lint',
   },
   {
@@ -825,7 +1117,7 @@ export const standardChecks: CheckDef[] = [
           maxPoints: 1,
           confidence: 'high',
           message: ctx.agentFacts.hooks.postTurnSwallowsFailures
-            ? 'Post-turn hook swallows validation failures with || true - lint/typecheck errors will be hidden'
+            ? 'Post-turn hook swallows validation failures with `|| true`. Expected lint/typecheck/format checks to fail the hook honestly; current setup will hide broken validation runs.'
             : 'Post-turn hook preserves validation failures (no || true on validation commands)',
         };
       },
@@ -847,6 +1139,128 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation:
       'Create format-file hook or document why it was skipped (no formatter). Claude PostToolUse hooks must read top-level `.file_path` from stdin JSON.',
+    recommendationKey: 'create-format-hook',
+  },
+  {
+    id: '2.2.4d',
+    name: 'Post-tool hook reads expected JSON key',
+    tier: 'standard',
+    category: 'Hooks',
+    pts: 1,
+    confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.facts.stack.formatCommand === null) {
+          return buildHooksCheckResult(
+            '2.2.4d',
+            'Post-tool hook reads expected JSON key',
+            'na',
+            0,
+            0,
+            'high',
+            'No formatter detected - post-tool schema check not applicable',
+          );
+        }
+        if (ctx.agentFacts.hooks.postToolRegistered === false) {
+          return buildHooksCheckResult(
+            '2.2.4d',
+            'Post-tool hook reads expected JSON key',
+            'na',
+            0,
+            0,
+            'high',
+            'No post-tool hook registered',
+          );
+        }
+        if (ctx.agentFacts.hooks.postToolExists === false) {
+          return buildHooksCheckResult(
+            '2.2.4d',
+            'Post-tool hook reads expected JSON key',
+            'na',
+            0,
+            0,
+            'high',
+            'Registered post-tool hook file is missing',
+          );
+        }
+
+        return buildHooksCheckResult(
+          '2.2.4d',
+          'Post-tool hook reads expected JSON key',
+          ctx.agentFacts.hooks.postToolUsesExpectedPathField ? 'pass' : 'fail',
+          ctx.agentFacts.hooks.postToolUsesExpectedPathField ? 1 : 0,
+          1,
+          'high',
+          ctx.agentFacts.hooks.postToolUsesExpectedPathField
+            ? 'Post-tool hook reads the expected top-level path field from the event payload'
+            : `Post-tool hook at ${ctx.agentFacts.hooks.postToolRegisteredPath} reads the wrong JSON key. Expected top-level \`.file_path\` for the current agent event schema.`,
+        );
+      },
+    },
+    recommendation:
+      'Update the post-tool hook to read the event schema the agent actually emits. Claude PostToolUse hooks should read top-level `.file_path`.',
+    recommendationKey: 'create-format-hook',
+  },
+  {
+    id: '2.2.4e',
+    name: 'Post-tool hook skips agent config dirs',
+    tier: 'standard',
+    category: 'Hooks',
+    pts: 1,
+    confidence: 'medium',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.facts.stack.formatCommand === null) {
+          return buildHooksCheckResult(
+            '2.2.4e',
+            'Post-tool hook skips agent config dirs',
+            'na',
+            0,
+            0,
+            'medium',
+            'No formatter detected - config-dir skip check not applicable',
+          );
+        }
+        if (ctx.agentFacts.hooks.postToolRegistered === false) {
+          return buildHooksCheckResult(
+            '2.2.4e',
+            'Post-tool hook skips agent config dirs',
+            'na',
+            0,
+            0,
+            'medium',
+            'No post-tool hook registered',
+          );
+        }
+        if (ctx.agentFacts.hooks.postToolExists === false) {
+          return buildHooksCheckResult(
+            '2.2.4e',
+            'Post-tool hook skips agent config dirs',
+            'na',
+            0,
+            0,
+            'medium',
+            'Registered post-tool hook file is missing',
+          );
+        }
+
+        return buildHooksCheckResult(
+          '2.2.4e',
+          'Post-tool hook skips agent config dirs',
+          ctx.agentFacts.hooks.postToolSkipsAgentConfigPaths ? 'pass' : 'fail',
+          ctx.agentFacts.hooks.postToolSkipsAgentConfigPaths ? 1 : 0,
+          1,
+          'medium',
+          ctx.agentFacts.hooks.postToolSkipsAgentConfigPaths
+            ? 'Post-tool hook skips agent config directories before formatting'
+            : `Post-tool hook at ${ctx.agentFacts.hooks.postToolRegisteredPath} does not clearly skip agent config directories. Add guards for paths under \`.claude/\`, \`.agents/\`, and \`.gemini/\`.`,
+        );
+      },
+    },
+    recommendation:
+      'Format hooks should skip agent-owned config directories (`.claude/`, `.agents/`, `.gemini/`) instead of rewriting runtime files.',
     recommendationKey: 'create-format-hook',
   },
   {
@@ -924,8 +1338,8 @@ export const standardChecks: CheckDef[] = [
           maxPoints: 1,
           confidence: 'medium',
           message: ctx.agentFacts.hooks.postTurnHasValidation
-            ? 'Post-turn hook runs actual checks'
-            : 'Post-turn hook exists but has no validation logic (lint/typecheck/format)',
+            ? 'Post-turn hook runs lint/typecheck/format checks'
+            : 'Post-turn hook exists but no lint/typecheck/format commands were detected. Expected shellcheck, eslint, tsc, prettier --check, `npm run lint`, or `bash scripts/preflight-checks.sh` instead of a bare `exit 0` wrapper.',
         };
       },
     },
@@ -1323,6 +1737,50 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'fix-deny-chmod',
   },
   {
+    id: '2.2.5i',
+    name: 'Deny hook blocks pipe-to-shell',
+    tier: 'standard',
+    category: 'Hooks',
+    pts: 1,
+    confidence: 'high',
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        if (ctx.agentFacts.hooks.denyExists === false) {
+          return {
+            id: '2.2.5i',
+            name: 'Deny hook blocks pipe-to-shell',
+            tier: 'standard',
+            category: 'Hooks',
+            status: 'na',
+            points: 0,
+            maxPoints: 0,
+            confidence: 'high',
+            message: 'No deny hook',
+          };
+        }
+        return {
+          id: '2.2.5i',
+          name: 'Deny hook blocks pipe-to-shell',
+          tier: 'standard',
+          category: 'Hooks',
+          status: ctx.agentFacts.hooks.denyBlocksPipeToShell
+            ? 'pass'
+            : 'fail',
+          points: ctx.agentFacts.hooks.denyBlocksPipeToShell ? 1 : 0,
+          maxPoints: 1,
+          confidence: 'high',
+          message: ctx.agentFacts.hooks.denyBlocksPipeToShell
+            ? 'Deny hook blocks pipe-to-shell commands'
+            : 'Deny hook does not block pipe-to-shell commands like `curl | bash` or `wget | sh`, which let agents execute remote code without inspection',
+        };
+      },
+    },
+    recommendation:
+      'Deny hook MUST block pipe-to-shell patterns such as `curl | bash` and `wget | sh`. Agents should download scripts for inspection instead of piping them straight into a shell.',
+    recommendationKey: 'fix-deny-pipe-to-shell',
+  },
+  {
     id: '2.2.5',
     name: 'Preflight script',
     tier: 'standard',
@@ -1391,20 +1849,66 @@ export const standardChecks: CheckDef[] = [
     confidence: 'high',
     detect: {
       type: 'custom',
-      fn: (ctx: FactContext): CheckResult => ({
-        id: '2.3.4',
-        name: 'Footguns have file:line evidence',
-        tier: 'standard',
-        category: 'Learning Loop',
-        status: ctx.facts.shared.footguns.hasEvidence ? 'pass' : 'fail',
-        points: ctx.facts.shared.footguns.hasEvidence ? 2 : 0,
-        maxPoints: 2,
-        confidence: 'high',
-        message: ctx.facts.shared.footguns.hasEvidence
-          ? 'Footguns have file:line evidence'
-          : (ctx.facts.shared.footguns.formatDiagnostic ??
-            'Footguns missing file:line evidence. Expected: backtick-wrapped paths like `src/auth.ts:42` or `src/auth.ts:42-50`. Bare paths without line numbers and URLs do not count.'),
-      }),
+      fn: (ctx: FactContext): CheckResult => {
+        const { hasEvidence, staleRefs, invalidLineRefs, formatDiagnostic } =
+          ctx.facts.shared.footguns;
+
+        if (hasEvidence === false) {
+          return {
+            id: '2.3.4',
+            name: 'Footguns have file:line evidence',
+            tier: 'standard',
+            category: 'Learning Loop',
+            status: 'fail',
+            points: 0,
+            maxPoints: 2,
+            confidence: 'high',
+            message:
+              formatDiagnostic ??
+              'Footguns are missing file:line evidence. Expected backtick-wrapped refs like `src/auth.ts:42` or `src/auth.ts:42-50`; bare paths, URLs, and prose-only incidents do not count.',
+          };
+        }
+
+        if (staleRefs.length > 0) {
+          return {
+            id: '2.3.4',
+            name: 'Footguns have file:line evidence',
+            tier: 'standard',
+            category: 'Learning Loop',
+            status: 'fail',
+            points: 0,
+            maxPoints: 2,
+            confidence: 'high',
+            message: `Footgun evidence cites missing files: ${staleRefs.slice(0, 3).join(', ')}. Update the cited paths or remove the stale incident.`,
+          };
+        }
+
+        if (invalidLineRefs.length > 0) {
+          return {
+            id: '2.3.4',
+            name: 'Footguns have file:line evidence',
+            tier: 'standard',
+            category: 'Learning Loop',
+            status: 'fail',
+            points: 0,
+            maxPoints: 2,
+            confidence: 'high',
+            message: `Footgun evidence cites out-of-range lines: ${invalidLineRefs.slice(0, 3).join(', ')}. Update the line numbers so they point at real lines in the cited file.`,
+          };
+        }
+
+        return {
+          id: '2.3.4',
+          name: 'Footguns have file:line evidence',
+          tier: 'standard',
+          category: 'Learning Loop',
+          status: 'pass',
+          points: 2,
+          maxPoints: 2,
+          confidence: 'high',
+          message: 'Footguns have file:line evidence',
+        };
+      },
     },
     recommendation: 'Add file:line evidence to footgun entries',
     recommendationKey: 'add-footgun-evidence',
@@ -1459,7 +1963,7 @@ export const standardChecks: CheckDef[] = [
           confidence: 'high',
           message:
             diagnostic ??
-            'No lesson entries. Add 1+ real incidents from git history, or a placeholder explaining why none apply yet.',
+            'No lesson entries found across `ai/lessons/` and `.goat-flow/lessons/`. Add at least one real incident from git history, or a placeholder explaining why none apply yet.',
         };
       },
     },
@@ -1474,7 +1978,7 @@ export const standardChecks: CheckDef[] = [
     tier: 'standard',
     category: 'Learning Loop',
     pts: 1,
-    confidence: 'medium',
+    confidence: 'high',
     na: (ctx) =>
       ctx.facts.shared.footguns.exists === false ||
       ctx.facts.shared.footguns.hasEvidence === false,
@@ -1491,7 +1995,7 @@ export const standardChecks: CheckDef[] = [
           status: hasEvidenceLabels ? 'pass' : 'fail',
           points: hasEvidenceLabels ? 1 : 0,
           maxPoints: 1,
-          confidence: 'medium',
+          confidence: 'high',
           message: hasEvidenceLabels
             ? `${labelCount}/${entryCount} footgun entries have evidence labels`
             : (ctx.facts.shared.footguns.formatDiagnostic ??
@@ -1502,6 +2006,44 @@ export const standardChecks: CheckDef[] = [
     recommendation:
       'Add evidence type labels to footgun entries. Expected format: `**Evidence type:** ACTUAL_MEASURED` (or DESIGN_TARGET, HYPOTHETICAL_EXAMPLE)',
     recommendationKey: 'add-footgun-labels',
+  },
+  {
+    id: '2.3.5b',
+    name: 'Learning-loop surfaces are canonical',
+    tier: 'standard',
+    category: 'Learning Loop',
+    pts: 1,
+    confidence: 'high',
+    na: (ctx) =>
+      ctx.facts.shared.footguns.exists === false &&
+      ctx.facts.shared.lessons.exists === false,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const duplicates = [
+          ...ctx.facts.shared.footguns.duplicateSurfacePaths,
+          ...ctx.facts.shared.lessons.duplicateSurfacePaths,
+        ].sort((a, b) => a.localeCompare(b));
+
+        return {
+          id: '2.3.5b',
+          name: 'Learning-loop surfaces are canonical',
+          tier: 'standard',
+          category: 'Learning Loop',
+          status: duplicates.length === 0 ? 'pass' : 'fail',
+          points: duplicates.length === 0 ? 1 : 0,
+          maxPoints: 1,
+          confidence: 'high',
+          message:
+            duplicates.length === 0
+              ? 'Only the configured committed/local learning-loop bucket paths are present'
+              : `Competing learning-loop surfaces found: ${duplicates.join(', ')}. Keep only the configured bucket paths from .goat-flow/config.yaml.`,
+        };
+      },
+    },
+    recommendation:
+      'Remove or migrate duplicate lessons/footguns surfaces so only the configured bucket paths remain',
+    recommendationKey: 'ap-fix-duplicate-learning-loop-surfaces',
   },
 
   {
@@ -1566,7 +2108,7 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'add-session-logs',
   },
 
-  // === 2.4 Router Table (8 pts) ===
+  // === 2.4 Router Table (10 pts) ===
   {
     id: '2.4.1',
     name: 'Router section exists',
@@ -1604,7 +2146,8 @@ export const standardChecks: CheckDef[] = [
             points: 0,
             maxPoints: 3,
             confidence: 'high',
-            message: 'No router paths found',
+            message:
+              'No router paths found. Expected the router table to include backtick-wrapped repo paths or directories that agents can navigate to.',
           };
         }
         if (unresolved.length === 0) {
@@ -1630,7 +2173,7 @@ export const standardChecks: CheckDef[] = [
             points: 1,
             maxPoints: 3,
             confidence: 'high',
-            message: `${resolved}/${paths.length} resolve. Missing: ${unresolved.join(', ')}`,
+            message: `${resolved}/${paths.length} router paths resolve. Missing paths: ${unresolved.join(', ')}. Fix or remove the broken entries so the router is trustworthy.`,
             evidence: unresolved.join(', '),
           };
         }
@@ -1643,7 +2186,7 @@ export const standardChecks: CheckDef[] = [
           points: 0,
           maxPoints: 3,
           confidence: 'high',
-          message: `0/${paths.length} resolve`,
+          message: `None of the ${paths.length} router paths resolve. Replace the router entries with real repo paths before relying on it.`,
         };
       },
     },
@@ -1658,16 +2201,14 @@ export const standardChecks: CheckDef[] = [
     pts: 1,
     confidence: 'high',
     detect: {
-      type: 'grep',
-      path: '{instruction_file}',
-      section: 'router',
-      pattern: 'skills|goat-',
+      type: 'custom',
+      fn: getRouterSkillsCheckResult,
     },
     recommendation: 'Add skill directories to the router table',
     recommendationKey: 'route-skills',
   },
 
-  // === 2.4.4-2.4.6 Router completeness (3 pts) ===
+  // === 2.4.4-2.4.8 Router completeness (5 pts) ===
   {
     id: '2.4.4',
     name: 'Learning loop in router',
@@ -1722,6 +2263,53 @@ export const standardChecks: CheckDef[] = [
     },
     recommendation: 'Add ai/evals/ to the router table',
     recommendationKey: 'route-evals',
+  },
+  {
+    id: '2.4.7',
+    name: 'Handoff template in router',
+    tier: 'standard',
+    category: 'Router Table',
+    pts: 1,
+    confidence: 'high',
+    na: (ctx) =>
+      !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult =>
+        getRequiredRouterPathCheckResult(
+          '2.4.7',
+          'Handoff template in router',
+          '.goat-flow/tasks/handoff-template.md',
+          'Add the shared handoff template path so agents can jump straight to the canonical incomplete-work artifact.',
+          ctx,
+        ),
+    },
+    recommendation:
+      'Add .goat-flow/tasks/handoff-template.md to the router table',
+    recommendationKey: 'route-handoff',
+  },
+  {
+    id: '2.4.8',
+    name: 'Config in router',
+    tier: 'standard',
+    category: 'Router Table',
+    pts: 1,
+    confidence: 'high',
+    na: (ctx) =>
+      !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult =>
+        getRequiredRouterPathCheckResult(
+          '2.4.8',
+          'Config in router',
+          '.goat-flow/config.yaml',
+          'Add the config path so agents can find project settings without guessing.',
+          ctx,
+        ),
+    },
+    recommendation: 'Add .goat-flow/config.yaml to the router table',
+    recommendationKey: 'route-config',
   },
 
   // === 2.5 Architecture Docs (3 pts) ===
@@ -1831,6 +2419,41 @@ export const standardChecks: CheckDef[] = [
     recommendationKey: 'create-instructions-dir',
   },
   {
+    id: '2.6.1a',
+    name: 'Instruction surfaces are canonical',
+    tier: 'standard',
+    category: 'Local Instructions',
+    pts: 1,
+    confidence: 'high',
+    na: (ctx) => ctx.facts.shared.localInstructions.dirExists === false,
+    detect: {
+      type: 'custom',
+      fn: (ctx: FactContext): CheckResult => {
+        const { duplicateSurfacePaths } = ctx.facts.shared.localInstructions;
+        const hasDuplicateSurfaces = duplicateSurfacePaths.length > 0;
+        return {
+          id: '2.6.1a',
+          name: 'Instruction surfaces are canonical',
+          tier: 'standard',
+          category: 'Local Instructions',
+          status: hasDuplicateSurfaces ? 'fail' : 'pass',
+          points: hasDuplicateSurfaces ? 0 : 1,
+          maxPoints: 1,
+          confidence: 'high',
+          message: hasDuplicateSurfaces
+            ? `Duplicate instruction surfaces found: ${duplicateSurfacePaths.join(', ')}. Keep one canonical local-instructions surface instead of maintaining both.`
+            : 'Exactly one local-instructions surface is in use',
+          evidence: hasDuplicateSurfaces
+            ? duplicateSurfacePaths.join(', ')
+            : undefined,
+        };
+      },
+    },
+    recommendation:
+      'Keep one canonical local-instructions surface and remove the duplicate copy',
+    recommendationKey: 'fix-duplicate-instruction-surfaces',
+  },
+  {
     id: '2.6.2',
     name: 'Router exists',
     tier: 'standard',
@@ -1852,7 +2475,8 @@ export const standardChecks: CheckDef[] = [
             points: 0,
             maxPoints: 1,
             confidence: 'high',
-            message: 'No instructions directory - router not applicable',
+            message:
+              'No local instructions directory found. Expected `ai/` with an `ai/README.md` router when project instruction files exist.',
           };
         }
         if (!hasValidRouter && routerNeedsFix !== null) {
@@ -1879,7 +2503,7 @@ export const standardChecks: CheckDef[] = [
           confidence: 'high',
           message: hasRouter
             ? 'ai/README.md exists and router links are valid'
-            : 'ai/README.md not found - agents need a router to discover instruction files',
+            : 'ai/README.md not found. Create a router file so agents can discover instruction files under `ai/`.',
         };
       },
     },

@@ -4,7 +4,7 @@
 
 ## v0.10.0 - 2026-04-03
 
-Category bucket learning loop, scanner hardening, session logs, 48-file CLI refactor, execution-loop dedup. Rubric v0.10.0: 104 checks + 18 anti-patterns. 291 tests.
+Category bucket learning loop, scanner honesty, session logs, 48-file CLI refactor, execution-loop dedup. Rubric v0.10.0: 112 checks + 19 anti-patterns. 314 tests.
 
 ### Install & Packaging
 - added `pnpm.onlyBuiltDependencies` for `node-pty` so pnpm installs can build the embedded terminal without manual manifest edits
@@ -18,17 +18,21 @@ Category bucket learning loop, scanner hardening, session logs, 48-file CLI refa
 
 ### Scanner & Rubric
 - refactored high-complexity rubric and scanner paths to clear preflight complexity failures
-- hook registration checks now verify settings/config registration and expected script paths instead of treating hook files as sufficient
+- hook honesty checks now verify settings/config registration, registered-path existence, real post-turn validation commands, swallowed-failure wrappers, post-tool event schema, agent-config skips, and deny coverage for pipe-to-shell patterns
 - `ai/README.md` router validation now checks referenced paths, so broken local-instruction routers fail `2.6.2` instead of scoring 100%
+- local-instruction honesty now fails duplicate instruction surfaces when `ai/coding-standards/` and `.github/instructions/` coexist
+- router completeness now enforces the canonical skills root (not `goat-*/`), plus explicit `.goat-flow/config.yaml` and `.goat-flow/tasks/handoff-template.md` entries
+- duplicate learning-loop surfaces now fail both a positive canonical-surface check and anti-pattern `AP22`, while preserving the intended committed/local split
 - new check `2.3.7`: verifies instruction file references session logs (`.goat-flow/logs/sessions/`)
 - replaced fixed read/turn budgets with 5-tier complexity model (Hotfix/Small Feature/Standard/System/Infrastructure) and 3x-estimate re-classification trigger; rubric check `1.2.2a` updated to validate new format
 - text and markdown scan output now group failures by severity, show fail/partial/pass summaries, and surface "Top N to fix first" diagnostic priorities
 - CI validation heuristics now inspect actual workflow `run:` commands instead of keyword presence
 
 ### Test Infrastructure
-- added rubric regression fixture corpus: `passing-minimal` (100%), `passing-full` (100%), `failing-known` (expected failures for 2.2.3, 2.6.2)
+- added rubric regression fixture corpus: `passing-minimal` (100%), `passing-full` (100%), `failing-known` (expected failures for 2.2.3, 2.6.2), plus targeted regressions for hook honesty, duplicate surfaces, router completeness, and local-instruction duplication
 - new `test/fixtures/project-fixtures.test.ts` and `test/helpers/fixture-scanner.ts` for fixture-based rubric regression testing
-- 282 → 291 tests
+- added `test/helpers/hook-runner.ts` and `test/hooks/format-file.test.ts` for real hook-behavior coverage
+- 314 tests
 
 ### Dashboard & CLI UX
 - added first-run browser auto-open for `goat-flow dashboard` with persistent opt-out via `--no-open`
@@ -51,12 +55,14 @@ Category bucket learning loop, scanner hardening, session logs, 48-file CLI refa
 - migrated from per-incident files to category bucket files (ADR-021): 20 footgun files → 5 buckets, 31 lesson files → 5 buckets
 - format: `## Footgun: <name>` / `## Lesson: <name>` entries inside category files (e.g., `hooks.md`, `verification.md`)
 - fixed scanner evidence label detection to match new inline `**Evidence:** ACTUAL_MEASURED` format
+- scanner now enforces canonical learning-loop surfaces and validates footgun line bounds instead of rewarding stale or duplicate artifact layouts
 - updated LOG instructions in all 3 instruction files, 20 skill files, workflow templates, and setup templates
 
 ### Session Logs & Handoff
 - added session log path (`.goat-flow/logs/sessions/`) to all instruction files, skill closing protocols, and setup templates
 - new rubric check `2.3.7`: validates instruction file references session logs
 - improved handoff template: added Errors & Corrections, Learnings, and Context Files sections; now tracked in git
+- router table now includes the shared handoff-template path so incomplete-work handoffs are discoverable from the canonical index
 - added ADR-019 (no-implementation-skill), ADR-021 (category bucket learning loop)
 - new 2026-04-03 lessons/footguns covering critique handling, doer-verifier theater, scanner reliability traps, setup duplication
 

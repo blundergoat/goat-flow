@@ -139,6 +139,26 @@ For each stale reference:
 Every file:line reference must point to a real file on disk.`,
   },
   {
+    key: 'ap-fix-duplicate-learning-loop-surfaces',
+    phase: 'anti-pattern',
+    category: 'Anti-Pattern Fix',
+    kind: 'fix',
+    instruction: `This project still has competing learning-loop surfaces alongside the configured bucket layout.
+
+**Duplicate surfaces found:** {{evidence.ap-fix-duplicate-learning-loop-surfaces}}
+
+Keep the configured split only:
+- committed lessons bucket dir from \`.goat-flow/config.yaml\`
+- local lessons bucket dir from \`.goat-flow/config.yaml\`
+- committed footguns bucket dir from \`.goat-flow/config.yaml\`
+- local footguns bucket dir from \`.goat-flow/config.yaml\`
+
+For each duplicate surface:
+1. If it contains unique history, migrate the entries into the configured bucket files first
+2. If it is a stale legacy artifact (\`docs/lessons.md\`, \`docs/footguns.md\`, etc.), delete it
+3. Re-run the scan and confirm only the configured bucket paths remain`,
+  },
+  {
     key: 'ap-fix-stale-instruction-refs',
     phase: 'anti-pattern',
     category: 'Anti-Pattern Fix',
