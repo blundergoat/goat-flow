@@ -1,183 +1,156 @@
     <!-- ═══ Scanner View ═══ -->
     <div x-show="activeView === 'scan'" style="height: calc(100vh - 3.5rem); overflow-y: auto;">
 
-      <!-- Level 1: All Agents Overview (no agent selected for detail) -->
-      <div x-show="!scanDetailAgent">
-
-        <!-- No data empty state -->
-        <div x-show="!report && !scanning" class="flex items-center justify-center" style="min-height: 60vh">
-          <div class="text-center space-y-4 max-w-md">
-            <p class="text-4xl">&#128016;</p>
-            <h2 class="text-xl font-semibold text-gray-600 dark:text-gray-300">Scan a project to get started</h2>
-            <p class="text-sm text-gray-400">Set your project path in the header, then click Scan.</p>
-            <button @click="runScan()" :disabled="scanning"
-              class="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait transition-colors">
-              Scan
-            </button>
-          </div>
-        </div>
-
-        <!-- Has report: scan button + agent grid -->
-        <div x-show="report" class="max-w-5xl mx-auto space-y-4">
-          <div class="flex items-center gap-2">
-            <button @click="runScan()" :disabled="scanning"
-              class="px-3 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait transition-colors">
-              <span x-text="scanning ? 'Scanning...' : 'Re-scan'"></span>
-            </button>
-            <div class="flex-1"></div>
-          </div>
-
-          <!-- Agent cards grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <template x-for="agent in report.agents" :key="agent.agent">
-              <button @click="scanDetailAgent = agent.agent; selectedAgent = agent.agent"
-                class="bg-white dark:bg-gray-800 rounded-xl shadow p-5 text-left hover:shadow-md hover:ring-1 hover:ring-blue-300 dark:hover:ring-blue-600 transition-all">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-sm font-bold" x-text="agent.agentName"></h3>
-                  <span class="text-3xl font-black" :style="`color: ${gradeColor(agent.score.grade)}`"
-                    x-text="agent.score.grade === 'insufficient-data' ? '?' : agent.score.grade"></span>
-                </div>
-                <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  <span x-text="`${agent.score.percentage}%`" class="font-semibold text-sm" :style="`color: ${gradeColor(agent.score.grade)}`"></span>
-                  <span x-text="`${agent.checks.length} checks`"></span>
-                  <span x-show="agent.antiPatterns.filter(a => a.triggered).length > 0"
-                    class="text-red-500" x-text="`${agent.antiPatterns.filter(a => a.triggered).length} anti-patterns`"></span>
-                </div>
-                <!-- Mini tier bars -->
-                <div class="mt-3 space-y-1">
-                  <template x-for="tier in ['foundation', 'standard', 'full']" :key="agent.agent + '-' + tier">
-                    <div class="flex items-center gap-2">
-                      <span class="text-[10px] text-gray-400 w-16 capitalize" x-text="tier"></span>
-                      <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                        <div class="h-1.5 rounded-full transition-all" :style="`width: ${agent.score.tiers[tier].percentage}%; background-color: ${agent.score.tiers[tier].percentage === 100 ? '#10b981' : agent.score.tiers[tier].percentage >= 75 ? '#3b82f6' : agent.score.tiers[tier].percentage >= 50 ? '#f59e0b' : '#ef4444'}`"></div>
-                      </div>
-                      <span class="text-[10px] text-gray-400 w-8 text-right" x-text="`${agent.score.tiers[tier].percentage}%`"></span>
-                    </div>
-                  </template>
-                </div>
-              </button>
-            </template>
-          </div>
-
-          <!-- No agents detected -->
-          <div x-show="report.agents.length === 0" class="flex items-center justify-center py-16">
-            <div class="text-center space-y-2">
-              <p class="text-xl text-gray-400">No agents detected</p>
-              <p class="text-sm text-gray-500">Click <strong>Setup</strong> to generate setup instructions.</p>
-            </div>
-          </div>
+      <!-- No data empty state -->
+      <div x-show="!report && !scanning" class="flex items-center justify-center" style="min-height: 60vh">
+        <div class="text-center space-y-4 max-w-md">
+          <p class="text-4xl">&#128016;</p>
+          <h2 class="text-xl font-semibold gf-text-secondary">Scan a project to get started</h2>
+          <p class="text-sm gf-text-muted">Set your project path in Config, then click Scan.</p>
+          <button @click="runScan()" :disabled="scanning"
+            style="padding: 6px 20px; font-size: 12px; border-radius: 6px; border: 0.5px solid #166534; background: none; color: #4ade80; cursor: pointer; font-weight: 500;">
+            Scan
+          </button>
         </div>
       </div>
 
-      <!-- Level 2: Single Agent Detail -->
-      <template x-if="scanDetailAgent && currentAgent">
-        <div class="max-w-5xl mx-auto space-y-6">
+      <!-- Has report -->
+      <div x-show="report" style="max-width: 880px; margin: 0 auto; padding: 12px 28px 24px;">
 
-          <!-- Back button + header -->
-          <div class="flex items-center gap-3">
-            <button @click="scanDetailAgent = null" class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-              All Agents
+        <!-- Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <span class="gf-text-primary" style="font-size: 20px; font-weight: 500;">Scanner</span>
+          <button @click="runScan()" :disabled="scanning"
+            style="font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 0.5px solid #166534; background: none; color: #4ade80; cursor: pointer; font-weight: 500;">
+            <span x-text="scanning ? 'Scanning...' : 'Re-scan'"></span>
+          </button>
+        </div>
+
+        <!-- Agent cards grid -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+          <template x-for="agent in (report?.agents || [])" :key="agent.agent">
+            <button @click="scanDetailAgent = (scanDetailAgent === agent.agent ? null : agent.agent); selectedAgent = agent.agent"
+              class="gf-card" style="padding: 20px 24px; cursor: pointer; transition: border-color 0.1s;"
+              :style="{ borderColor: scanDetailAgent === agent.agent ? '#4ade80' : '' }"
+              onmouseenter="if(!this.style.borderColor || this.style.borderColor==='#2a2a2e' || this.style.borderColor==='') this.style.borderColor='#3f3f46'"
+              onmouseleave="if(this.style.borderColor==='#3f3f46') this.style.borderColor=''">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <span class="gf-text-primary" style="font-size: 14px; font-weight: 500;" x-text="agent.agentName"></span>
+                <span style="font-size: 20px; font-weight: 500;" :style="{ color: gradeColor(agent.score.grade) }" x-text="agent.score.grade === 'insufficient-data' ? '?' : agent.score.grade"></span>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px;">
+                <span style="font-size: 14px; font-weight: 500;" :style="{ color: gradeColor(agent.score.grade) }" x-text="`${agent.score.percentage}%`"></span>
+                <span class="gf-text-secondary" style="font-size: 12px;" x-text="`${agent.checks.filter(c => !c.hidden && c.status !== 'na').length} checks`"></span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <template x-for="tier in ['foundation', 'standard', 'full']" :key="agent.agent + '-' + tier">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="gf-text-secondary" style="font-size: 12px; width: 70px;" x-text="tier"></span>
+                    <div style="flex: 1; height: 4px; border-radius: 2px; background: #3f3f46; overflow: hidden;">
+                      <div class="gf-tier-bar" :style="`width:${agent.score.tiers[tier].percentage}%`"></div>
+                    </div>
+                    <span class="gf-text-muted" style="font-size: 12px; width: 32px; text-align: right;" x-text="`${agent.score.tiers[tier].percentage}%`"></span>
+                  </div>
+                </template>
+              </div>
             </button>
-            <div class="flex-1"></div>
-            <p class="text-xs text-gray-400 font-mono" x-text="report.target || ''"></p>
-          </div>
+          </template>
+        </div>
 
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-2xl font-bold" x-text="currentAgent.agentName"></h2>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                <span x-text="`${currentAgent.checks.length} checks`"></span> &middot;
-                <span x-text="`${currentAgent.antiPatterns.filter(a => a.triggered).length} anti-patterns`"></span> &middot;
-                <span x-text="report.stack.languages.join(', ')"></span>
-              </p>
-            </div>
-          </div>
+        <!-- No agents detected -->
+        <div x-show="report?.agents?.length === 0" style="padding: 64px 0; text-align: center;">
+          <p class="gf-text-muted" style="font-size: 16px;">No agents detected</p>
+          <p class="gf-text-disabled" style="font-size: 13px; margin-top: 4px;">Click <strong>Setup</strong> to generate setup instructions.</p>
+        </div>
 
-          <!-- Grade + Tiers -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex flex-col items-center justify-center">
-              <div class="relative w-32 h-32">
-                <svg viewBox="0 0 36 36" class="w-32 h-32">
-                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e5e7eb" stroke-width="3" class="dark:stroke-gray-700"/>
-                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" :stroke="gradeColor(currentAgent.score.grade)" stroke-width="3" :stroke-dasharray="`${currentAgent.score.percentage}, 100`" stroke-linecap="round"/>
-                </svg>
-                <div class="absolute inset-0 flex flex-col items-center justify-center">
-                  <template x-if="currentAgent.score.grade !== 'insufficient-data'">
-                    <span class="text-4xl font-black" :style="`color: ${gradeColor(currentAgent.score.grade)}`" x-text="currentAgent.score.grade"></span>
+        <!-- Inline detail panel (appears below grid when an agent is selected) -->
+        <template x-if="scanDetailAgent && currentAgent">
+          <div style="margin-top: 20px; border-top: 0.5px solid #2a2a2e; padding-top: 20px;">
+
+            <!-- Agent name + grade -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+              <div>
+                <div class="gf-text-primary" style="font-size: 20px; font-weight: 500;" x-text="currentAgent.agentName"></div>
+                <div class="gf-text-muted" style="font-size: 12px; margin-top: 4px;">
+                  <span x-text="`${currentAgent.checks.filter(c => !c.hidden && c.status !== 'na').length} checks`"></span> -
+                  <span x-text="`${currentAgent.antiPatterns.filter(a => a.triggered).length} anti-patterns`"></span>
+                  <template x-if="lastScanTime">
+                    <span x-text="' - Last scanned ' + formatTimeAgo(lastScanTime)"></span>
                   </template>
-                  <template x-if="currentAgent.score.grade === 'insufficient-data'">
-                    <span class="text-lg font-bold text-gray-400">N/D</span>
-                  </template>
-                  <span class="text-sm text-gray-500 dark:text-gray-400" x-text="`${currentAgent.score.percentage}%`"></span>
                 </div>
               </div>
-              <p class="mt-2 text-xs text-gray-400" x-text="`v${report.packageVersion}`"></p>
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                <span class="gf-grade" :class="'gf-grade-' + (currentAgent.score.grade || '').toLowerCase()" style="width: 48px; height: 48px; font-size: 36px;" x-text="currentAgent.score.grade === 'insufficient-data' ? '?' : currentAgent.score.grade"></span>
+                <span class="gf-text-secondary" style="font-size: 14px;" x-text="`${currentAgent.score.percentage}%`"></span>
+              </div>
             </div>
-            <div class="md:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow p-6 space-y-4">
-              <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tier Breakdown</h3>
+
+            <!-- Tier stat cards -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
               <template x-for="tier in ['foundation', 'standard', 'full']" :key="tier">
-                <div>
-                  <div class="flex justify-between text-sm mb-1">
-                    <span class="capitalize font-medium" x-text="tier"></span>
-                    <span class="text-gray-500 dark:text-gray-400" x-text="`${currentAgent.score.tiers[tier].earned}/${currentAgent.score.tiers[tier].available} (${currentAgent.score.tiers[tier].percentage}%)`"></span>
-                  </div>
-                  <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                    <div class="h-2.5 rounded-full transition-all duration-500" :style="`width: ${currentAgent.score.tiers[tier].percentage}%; background-color: ${currentAgent.score.tiers[tier].percentage === 100 ? '#10b981' : currentAgent.score.tiers[tier].percentage >= 75 ? '#3b82f6' : currentAgent.score.tiers[tier].percentage >= 50 ? '#f59e0b' : '#ef4444'}`"></div>
+                <div style="background: #27272a; border-radius: 8px; padding: 12px 16px;">
+                  <div class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;" x-text="tier"></div>
+                  <div class="gf-text-primary" style="font-size: 16px; font-weight: 500; margin-top: 2px;" x-text="`${currentAgent.score.tiers[tier].earned} / ${currentAgent.score.tiers[tier].available}`"></div>
+                  <div style="height: 4px; border-radius: 2px; background: #3f3f46; margin-top: 8px; overflow: hidden;">
+                    <div class="gf-tier-bar" :style="`width:${currentAgent.score.tiers[tier].percentage}%`"></div>
                   </div>
                 </div>
               </template>
             </div>
-          </div>
 
-          <!-- AP Deductions -->
-          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6" x-show="triggeredAPs.length > 0">
-            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Anti-Pattern Deductions <span class="text-red-500 ml-1" x-text="`(${currentAgent.score.deductions} pts)`"></span></h3>
-            <div class="space-y-2">
-              <template x-for="ap in triggeredAPs" :key="ap.id">
-                <div class="flex items-start gap-3 text-sm">
-                  <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" x-text="ap.deduction"></span>
-                  <div>
-                    <span class="font-medium" x-text="`${ap.id}: ${ap.name}`"></span>
-                    <p class="text-gray-500 dark:text-gray-400 mt-0.5" x-text="ap.message" x-show="ap.evidence"></p>
+            <!-- AP Deductions -->
+            <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;" x-show="triggeredAPs.length > 0">
+              <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Anti-Pattern Deductions <span style="color: #f87171; margin-left: 4px;" x-text="`(${currentAgent.score.deductions} pts)`"></span></h3>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <template x-for="ap in triggeredAPs" :key="ap.id">
+                  <div style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px;">
+                    <span style="flex-shrink: 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #450a0a; color: #f87171;" x-text="ap.deduction"></span>
+                    <div>
+                      <span class="gf-text-primary" style="font-weight: 500;" x-text="`${ap.id}: ${ap.name}`"></span>
+                      <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px;" x-text="ap.message" x-show="ap.evidence"></p>
+                    </div>
                   </div>
-                </div>
-              </template>
+                </template>
+              </div>
             </div>
-          </div>
 
-          <!-- Recommendations -->
-          <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6" x-show="currentAgent.recommendations.length > 0">
-            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Recommendations <span class="text-gray-400 ml-1" x-text="`(${currentAgent.recommendations.length})`"></span></h3>
-            <div class="space-y-2">
-              <template x-for="rec in currentAgent.recommendations" :key="rec.key">
-                <div class="flex items-start gap-3 text-sm border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0">
-                  <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold"
-                    :class="{'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300': rec.priority==='critical', 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300': rec.priority==='high', 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300': rec.priority==='medium', 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300': rec.priority==='low'}"
-                    x-text="rec.priority.toUpperCase()"></span>
-                  <div class="flex-1 min-w-0">
-                    <span class="font-medium" x-text="`${rec.checkId}: ${rec.category}`"></span>
-                    <p class="text-gray-500 dark:text-gray-400 mt-0.5" x-text="rec.action"></p>
+            <!-- Recommendations -->
+            <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;" x-show="currentAgent.recommendations.length > 0">
+              <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Recommendations <span style="color: #71717a; margin-left: 4px;" x-text="`(${currentAgent.recommendations.length})`"></span></h3>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <template x-for="rec in currentAgent.recommendations" :key="rec.key">
+                  <div style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; padding-bottom: 8px; border-bottom: 0.5px solid #2a2a2e;">
+                    <span style="flex-shrink: 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;"
+                      :style="rec.priority==='critical' ? 'background:#450a0a;color:#f87171' : rec.priority==='high' ? 'background:#451a03;color:#fb923c' : rec.priority==='medium' ? 'background:#422006;color:#fbbf24' : 'background:#1e3a5f;color:#818cf8'"
+                      x-text="rec.priority.toUpperCase()"></span>
+                    <div style="flex: 1; min-width: 0;">
+                      <span class="gf-text-primary" style="font-weight: 500;" x-text="`${rec.checkId}: ${rec.category}`"></span>
+                      <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px;" x-text="rec.action"></p>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                      <button @click="copyFixPrompt(rec)" style="padding: 2px 8px; font-size: 11px; border-radius: 4px; background: #27272a; color: #a1a1aa; border: none; cursor: pointer;">Copy</button>
+                      <button x-show="terminalAvailable && (!terminalSessionId || terminalEnded)" @click="launchPreset(buildFixPrompt(rec), activeRunner); activeView = 'workspace'; workspacePanel = 'terminal'"
+                        style="padding: 2px 8px; font-size: 11px; border-radius: 4px; background: #14532d; color: #4ade80; border: none; cursor: pointer;">Run</button>
+                      <button x-show="terminalSessionId && !terminalEnded" @click="sendToTerminal(buildFixPrompt(rec)); activeView = 'workspace'; workspacePanel = 'terminal'"
+                        style="padding: 2px 8px; font-size: 11px; border-radius: 4px; background: #14532d; color: #4ade80; border: none; cursor: pointer;">Send</button>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1.5 shrink-0">
-                    <button @click="copyFixPrompt(rec)" class="px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" title="Copy fix prompt">Copy</button>
-                    <button x-show="terminalAvailable && (!terminalSessionId || terminalEnded)" @click="launchPreset(buildFixPrompt(rec), activeRunner); activeView = 'workspace'; workspacePanel = 'terminal'"
-                      class="px-2 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors" title="Run in terminal">Run</button>
-                    <button x-show="terminalSessionId && !terminalEnded" @click="sendToTerminal(buildFixPrompt(rec)); activeView = 'workspace'; workspacePanel = 'terminal'"
-                      class="px-2 py-1 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 transition-colors" title="Send to running session">Send</button>
-                  </div>
-                </div>
-              </template>
+                </template>
+              </div>
             </div>
-          </div>
 
-          <!-- All Pass -->
-          <div x-show="currentAgent.recommendations.length === 0 && triggeredAPs.length === 0"
-            class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-8 text-center">
-            <p class="text-2xl">&#10003;</p>
-            <p class="text-emerald-700 dark:text-emerald-300 font-semibold mt-2">All checks pass. Nothing to fix.</p>
+            <!-- All checks pass -->
+            <div class="gf-card" style="border-radius: 8px; padding: 16px 20px;"
+              x-show="currentAgent.recommendations.length === 0 && triggeredAPs.length === 0">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0;">
+                <div style="width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; background: #166534; color: #4ade80;">&#10003;</div>
+                <span style="font-size: 14px; font-weight: 500; color: #4ade80;">All checks pass. Nothing to fix.</span>
+              </div>
+            </div>
+
           </div>
-        </div>
-      </template>
+        </template>
+
+      </div>
 
     </div><!-- /scan view -->

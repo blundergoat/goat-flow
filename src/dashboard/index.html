@@ -83,7 +83,7 @@
     .gf-grade-text { color: #4ade80 !important; }
 
     /* Agents table card */
-    .gf-card { background: #111114; border: 0.5px solid #2a2a2e; }
+    .gf-card { background: #111114; border: 0.5px solid #2a2a2e; border-radius: 8px; padding: 16px 20px; text-align: left; }
     .gf-card-header { border-bottom: 0.5px solid #2a2a2e; }
     .gf-link { color: #4ade80; }
     .gf-link:hover { opacity: 0.8; }
@@ -227,7 +227,7 @@
     <div style="flex: 1;"></div>
     <div class="gf-nav-wrap"><div class="gf-nav">
       <button @click="activeView = 'home'" class="gf-nb" :class="activeView === 'home' && 'gf-nb-active'">Home</button>
-      <button @click="activeView = 'scan'; scanDetailAgent = null" class="gf-nb" :class="activeView === 'scan' && 'gf-nb-active'">Scanner</button>
+      <button @click="activeView = 'scan'; scanDetailAgent = scanDetailAgent || report?.agents?.[0]?.agent || null; selectedAgent = scanDetailAgent" class="gf-nb" :class="activeView === 'scan' && 'gf-nb-active'">Scanner</button>
       <button @click="activeView = 'workspace'" class="gf-nb" :class="activeView === 'workspace' && 'gf-nb-active'" style="position: relative;">Workspace
         <span x-show="terminalSessionId && !terminalEnded && activeView !== 'workspace'" style="position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: #4ade80;"></span>
       </button>
@@ -511,6 +511,7 @@ function app() {
         this.report = data;
         this.selectedAgent = data.agents?.[0]?.agent || null;
         this.lastScanTime = new Date();
+        if (!this.scanDetailAgent) { this.scanDetailAgent = data.agents?.[0]?.agent || null; }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(msg.includes('Failed to fetch') ? 'Server not running. Start with: goat-flow dashboard .' : msg, true);
@@ -783,7 +784,7 @@ function app() {
     get triggeredAPs() { return this.currentAgent?.antiPatterns?.filter(ap => ap.triggered) || []; },
 
     // -- Helpers --
-    gradeColor(grade) { return { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#f97316', F: '#ef4444', 'insufficient-data': '#94a3b8' }[grade] || '#94a3b8'; },
+    gradeColor(grade) { return { A: '#4ade80', B: '#facc15', C: '#fb923c', D: '#f87171', F: '#f87171', 'insufficient-data': '#71717a' }[grade] || '#71717a'; },
     formatTimeAgo(date) {
       if (!date) return '';
       const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
