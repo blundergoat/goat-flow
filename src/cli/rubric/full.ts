@@ -30,7 +30,7 @@ export const fullChecks: CheckDef[] = [
   },
   {
     id: '3.1.3',
-    name: '3+ eval files with real content',
+    name: '5+ eval files with real content',
     tier: 'full',
     category: 'Agent Evals',
     pts: 1,
@@ -39,53 +39,16 @@ export const fullChecks: CheckDef[] = [
       type: 'custom',
       fn: (ctx: FactContext): CheckResult => {
         const { count, hasRealContent } = ctx.facts.shared.evals;
+        const base = { id: '3.1.3', name: '5+ eval files with real content', tier: 'full' as const, category: 'Agent Evals', confidence: 'high' as const, maxPoints: 1 };
+        if (count >= 5 && hasRealContent)
+          return { ...base, status: 'pass', points: 1, message: `${count} eval files with real scenario content` };
         if (count >= 3 && hasRealContent)
-          return {
-            id: '3.1.3',
-            name: '3+ eval files with real content',
-            tier: 'full',
-            category: 'Agent Evals',
-            status: 'pass',
-            points: 1,
-            maxPoints: 1,
-            confidence: 'high',
-            message: `${count} eval files with real scenario content`,
-          };
+          return { ...base, status: 'pass', points: 1, message: `${count} eval files with real content (target 5+ for best coverage)` };
         if (count >= 3)
-          return {
-            id: '3.1.3',
-            name: '3+ eval files with real content',
-            tier: 'full',
-            category: 'Agent Evals',
-            status: 'fail',
-            points: 0,
-            maxPoints: 1,
-            confidence: 'high',
-            message: `${count} eval files but scenarios lack real content (need ≥100 chars, not TODO/TBD)`,
-          };
+          return { ...base, status: 'fail', points: 0, message: `${count} eval files but scenarios lack real content (need ≥100 chars, not TODO/TBD)` };
         if (count >= 1)
-          return {
-            id: '3.1.3',
-            name: '3+ eval files with real content',
-            tier: 'full',
-            category: 'Agent Evals',
-            status: 'fail',
-            points: 0,
-            maxPoints: 1,
-            confidence: 'high',
-            message: `${count} eval files (need 3+ with real content)`,
-          };
-        return {
-          id: '3.1.3',
-          name: '3+ eval files with real content',
-          tier: 'full',
-          category: 'Agent Evals',
-          status: 'fail',
-          points: 0,
-          maxPoints: 1,
-          confidence: 'high',
-          message: 'No eval files',
-        };
+          return { ...base, status: 'fail', points: 0, message: `${count} eval file(s) (need 3+ with real content)` };
+        return { ...base, status: 'fail', points: 0, message: 'No eval files' };
       },
     },
     recommendation:
