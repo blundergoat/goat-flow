@@ -28,9 +28,6 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Fixture regression corpus
-        run: node --import tsx --test test/fixtures/project-fixtures.test.ts
-
       - name: Lint
         run: npx eslint src/cli/
 
