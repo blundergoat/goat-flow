@@ -16,26 +16,40 @@ src/cli/
   cli.ts              # Entry point, arg parsing (node:util parseArgs)
   index.ts            # Library re-exports
   types.ts            # All type definitions
-  detect/             # Agent and stack detection (agents.ts, stack.ts)
-  facts/              # Fact extraction (orchestrator.ts, agent.ts, shared.ts, fs.ts)
-  scanner/            # Check evaluators (check-evaluator.ts, scan.ts)
-  rubric/             # Check definitions by tier (foundation.ts, standard.ts, full.ts, anti-patterns.ts, registry.ts, version.ts)
-  scoring/            # Score computation and recommendations (scorer.ts, recommendations.ts)
-  prompt/             # Prompt generation (compose-setup.ts, render.ts, template-filler.ts, registry.ts)
+  constants.ts        # Shared constants
+  paths.ts            # Path resolution utilities
+  config/             # Configuration (index.ts, reader.ts, types.ts)
+  detect/             # Agent and stack detection (agents.ts, project-stack.ts)
+  facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
+  scanner/            # Check evaluators (evaluate-check.ts, scan.ts, custom/)
+  rubric/             # Check definitions by tier:
+    foundation.ts     #   Foundation tier checks
+    standard/         #   Standard tier (skills.ts, hooks.ts, learning-loop.ts, router.ts, architecture.ts, local-context.ts, signals.ts, helpers, index.ts)
+    full.ts           #   Full tier checks
+    anti-patterns.ts  #   Anti-pattern deductions
+    registry.ts       #   Assembles all checks into canonical scan order
+    version.ts        #   RUBRIC_VERSION and SCHEMA_VERSION
+  scoring/            # Score computation (calculate.ts, recommendations.ts)
+  prompt/             # Prompt generation (compose-setup.ts, template-filler.ts, template-refs.ts, registry.ts)
   prompt/fragments/   # Per-check fix/setup instructions (foundation.ts, standard.ts, full.ts, anti-patterns.ts)
   prompt/types.ts     # Fragment, ComposedPrompt, PromptVariables
   evals/              # Agent eval parser (types.ts, loader.ts, parser.ts)
-  render/             # Output formatters (json.ts, text.ts)
+  render/             # Output formatters (text.ts, html.ts, json.ts, markdown.ts, guide.ts, shared.ts)
+  server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
+  telemetry/          # Scan logging (scan-logger.ts)
 scripts/
   preflight-checks.sh  # Full preflight gate (shellcheck, tsc, tests, version, ADR)
   context-validate.sh  # Validate GOAT Flow structure (router paths, skills, frontmatter)
   deny-dangerous.sh    # Codex deny policy with --self-test
   maintenance/         # Utility scripts (git-cleanup, scan-secrets, etc.)
 test/
+  unit/                # Unit tests
+  integration/         # Integration tests
+  contract/            # Contract tests
+  journeys/            # Journey tests
+  smoke/               # Smoke tests
+  fixtures/            # Test fixtures
   helpers/             # mock-fs.ts, test-project.ts
-  facts/               # detect.test.ts
-  prompt/              # fragments.test.ts, compose.test.ts
-  fixtures/            # scan-fixtures.test.ts
 ```
 
 ## Commands

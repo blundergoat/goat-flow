@@ -2,6 +2,51 @@
     <div x-show="activeView === 'settings'" x-cloak class="max-w-6xl mx-auto space-y-4" style="height: calc(100vh - 5rem); overflow-y: auto;">
       <h2 class="text-2xl font-bold">Config</h2>
 
+      <!-- Role selector -->
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4" x-data="{
+        currentRole: (() => {
+          const match = (localConfigYaml || '').match(/^\s*userRole:\s*(\w+)/m);
+          return match ? match[1] : 'developer';
+        })(),
+        roles: [
+          { id: 'developer', label: 'Developer', desc: 'Full access - investigate, plan, and implement code changes', icon: '🛠' },
+          { id: 'investigator', label: 'Investigator', desc: 'Read-only - investigate, plan, and review only. No code changes.', icon: '🔍' },
+          { id: 'tester', label: 'Tester', desc: 'Test-focused - generate test plans, verify coverage, run QA analysis', icon: '🧪' }
+        ],
+        setRole(role) {
+          this.currentRole = role;
+          let yaml = localConfigYaml || '';
+          if (/^\s*userRole:\s*\w+/m.test(yaml)) {
+            yaml = yaml.replace(/^\s*userRole:\s*\w+/m, 'userRole: ' + role);
+          } else if (/^#\s*userRole:/m.test(yaml)) {
+            yaml = yaml.replace(/^#\s*userRole:\s*\w+/m, 'userRole: ' + role);
+          } else {
+            yaml = yaml.trimEnd() + '\nuserRole: ' + role + '\n';
+          }
+          localConfigYaml = yaml;
+          configDirty = true;
+        }
+      }">
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">I am a...</h3>
+          <span class="text-xs text-gray-400" title="Controls which skill modes are available and whether the agent can make code changes. Stored in config.local.yaml (gitignored - personal preference, not shared with the team).">?</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <template x-for="role in roles" :key="role.id">
+            <button @click="setRole(role.id)"
+              class="p-3 rounded-lg border text-left transition-colors"
+              :class="currentRole === role.id ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-400' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'">
+              <div class="flex items-center gap-2">
+                <span class="text-lg" x-text="role.icon"></span>
+                <span class="text-sm font-medium" x-text="role.label"></span>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" x-text="role.desc"></p>
+            </button>
+          </template>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">Saved to config.local.yaml (gitignored). Click Save below after changing.</p>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Left panel: config.yaml (read-only) -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col">

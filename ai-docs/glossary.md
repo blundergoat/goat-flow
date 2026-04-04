@@ -4,7 +4,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 
 | Term | Definition | Canonical File | Aliases |
 |------|-----------|----------------|---------|
-| Anti-Pattern Deduction | A scored penalty (up to -15 total) applied when a project violates structural rules such as oversized instruction files or empty learning loops. | `docs/system-spec.md` | AP1-AP11 |
+| Anti-Pattern Deduction | A scored penalty (up to -15 total) applied when a project violates structural rules such as oversized instruction files or empty learning loops. | `docs/system-spec.md` | AP1-AP23 |
 | Ask First | The middle autonomy tier requiring the agent to pause and confirm with the human before touching high-risk boundaries. | `docs/system-spec.md` | Micro-checklist |
 | Autonomy Tiers | Three-level permission system (Always / Ask First / Never) controlling what the agent can do without human approval. | `docs/system-spec.md` | -- |
 | Blast Radius | The declared maximum scope of files and systems a task is allowed to touch before the agent must stop and re-scope. | `docs/system-spec.md` | -- |
@@ -30,7 +30,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | SBAO | Signal-Based Adaptive Orchestration — multi-agent plan critique with semantic signals and human checkpoints. Main agent + sub-agents (2 using the core trio, 1 fresh-context control group) generate competing improvements, rank them, then the human decides what to keep/drop/decide before synthesizing a prime plan. Used in goat-plan Phase 3. | `workflow/skills/goat-plan.md` | SBAO ranking, Signal-Based Adaptive Orchestration |
 | Core Trio | The three adversarial perspectives used by SBAO sub-agents: **SKEPTIC** (what could go wrong?), **ANALYST** (what does evidence say about cost/benefit?), **STRATEGIST** (what's the fastest path to shipping?). | `workflow/skills/goat-plan.md` | SKEPTIC/ANALYST/STRATEGIST, triangular tension |
 | Severity Scale | The fixed priority order for findings: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. | `workflow/skills/reference/shared-preamble.md` | -- |
-| Skill | A slash-command-invoked capability (goat-security, goat-debug, goat-review, goat-plan, goat-test) loaded on demand at Layer 3. | `docs/skills/README.md` | goat-* skills |
+| Skill | A slash-command-invoked capability (5 specialized: goat-security, goat-debug, goat-review, goat-plan, goat-test + 1 dispatcher: goat = 6 total) loaded on demand at Layer 3. | `docs/skills/README.md` | goat-* skills |
 | Skill Justification Test | The gate requiring each skill to have at least one of: distinct artefact, hard workflow gate, special failure mode, or repeatable structured output. | `docs/system-spec.md` | -- |
 | State Declaration | The required format (`State: [MODE] \| Goal: [one line] \| Exit: [condition]`) an agent must announce before acting. | `docs/system-spec.md` | -- |
 | Stop-the-Line | A Level 2 VERIFY escalation requiring the agent to fully stop, preserve error output, and wait for human review. | `docs/system-spec.md` | Level 2 escalation |

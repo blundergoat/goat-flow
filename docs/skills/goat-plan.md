@@ -18,7 +18,7 @@ flowchart TD
     subgraph Plan["Plan Mode"]
         P1["Phase 1: Feature Brief\n8 sections, one at a time"]
         P1 -->|"BLOCKING GATE"| P2["Phase 2: Mob Elaboration\n3-5 sharp questions per round\nDo NOT self-answer"]
-        P2 -->|"CHECKPOINT"| P3["Phase 3: Triangular Tension\nSKEPTIC vs ANALYST vs STRATEGIST"]
+        P2 -->|"CHECKPOINT"| P3["Phase 3: SBAO\nSub-agents use Core Trio\n(SKEPTIC/ANALYST/STRATEGIST)"]
         P3 -->|"BLOCKING GATE"| P4["Phase 4: Milestones\nExit criteria + kill criteria per milestone"]
     end
 

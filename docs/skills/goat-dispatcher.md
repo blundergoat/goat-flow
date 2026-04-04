@@ -29,9 +29,9 @@ flowchart TD
 | review, PR, diff, code review | /goat-review | Standard |
 | audit, quality sweep | /goat-review | Audit |
 | simplify, clean up, naming | /goat-review | Simplify |
-| security, vulnerability, OWASP | /goat-security | Threat model |
+| security, vulnerability, CVE, CVEs, OWASP | /goat-security | Threat model |
 | HIPAA, GDPR, compliance | /goat-security | Compliance |
-| dependencies, CVEs, supply chain | /goat-security | Dependency audit |
+| dependencies, outdated packages, supply chain | /goat-security | Dependency audit |
 | plan, design, architect | /goat-plan | Plan |
 | rename, refactor, restructure | /goat-plan | Refactor |
 | test, coverage, test plan | /goat-test | -- |
