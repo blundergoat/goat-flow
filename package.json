@@ -54,6 +54,7 @@
     "scan:verbose": "node dist/cli/cli.js scan . --verbose",
     "scan:json": "node dist/cli/cli.js scan . --format json",
     "setup": "node dist/cli/cli.js setup . --agent claude",
+    "dev": "tsc && node dist/cli/cli.js dashboard . --dev",
     "dashboard": "node dist/cli/cli.js dashboard .",
     "preflight": "bash scripts/preflight-checks.sh",
     "validate": "bash scripts/context-validate.sh",

@@ -550,6 +550,8 @@ export interface CLIOptions {
   guide: boolean;
   // Open browser automatically for dashboard command
   openDashboard: boolean;
+  // Enable live reload for dashboard development
+  dev: boolean;
   help: boolean;
   version: boolean;
 }

@@ -15,6 +15,7 @@ import {
   existsSync,
   mkdirSync,
   unlinkSync,
+  watch,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,6 +106,7 @@ function jsonResponse(
 interface DashboardOptions {
   projectPath: string;
   openBrowser: boolean;
+  dev?: boolean;
 }
 
 /** Handle returned by serveDashboard for closing the server and reading the port */
@@ -163,9 +165,20 @@ export function serveDashboard(
   options: DashboardOptions,
 ): Promise<DashboardServer> {
   return new Promise((resolveStart) => {
-    const template = assembleHtml(resolvePackageFile('src/dashboard/index.html'));
+    const shellPath = resolvePackageFile('src/dashboard/index.html');
+    const devMode = options.dev === true;
+    // In dev mode, re-read on every request. In prod, cache once.
+    let cachedTemplate: string | null = devMode ? null : assembleHtml(shellPath);
+    function getTemplate(): string {
+      if (devMode) return assembleHtml(shellPath);
+      if (!cachedTemplate) cachedTemplate = assembleHtml(shellPath);
+      return cachedTemplate;
+    }
     const absDefault = resolve(options.projectPath);
     const openBrowser = options.openBrowser === true;
+
+    // Live reload state (dev mode only)
+    const liveReloadClients = new Set<WsWebSocket>();
 
     // Lazy-init terminal manager + WSS on first terminal request
     let managerPromise: Promise<TerminalManager> | null = null;
@@ -196,7 +209,10 @@ export function serveDashboard(
       if (url.pathname !== '/') return false;
 
       const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(absDefault)};</script>`;
-      const html = template.replace('</body>', `${injection}\n</body>`);
+      const liveReloadScript = devMode
+        ? `<script>(function(){var ws=new WebSocket('ws://'+location.host+'/ws/livereload');ws.onmessage=function(){location.reload()};ws.onclose=function(){setTimeout(function(){location.reload()},1000)}})()</script>`
+        : '';
+      const html = getTemplate().replace('</body>', `${injection}\n${liveReloadScript}\n</body>`);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
       return true;
@@ -847,9 +863,42 @@ export function serveDashboard(
       });
     });
 
-    // WebSocket upgrade for terminal sessions
+    // Dev mode: watch dashboard files and notify connected browsers
+    if (devMode) {
+      const dashDir = dirname(shellPath);
+      const notifyReload = (): void => {
+        for (const client of liveReloadClients) {
+          try { client.send('reload'); } catch { /* ignore */ }
+        }
+      };
+      let debounce: ReturnType<typeof setTimeout> | null = null;
+      const watcher = watch(dashDir, { recursive: true }, () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(notifyReload, 100);
+      });
+      process.on('exit', () => { watcher.close(); });
+      console.log('Dev mode: watching src/dashboard/ for changes');
+    }
+
+    // WebSocket upgrade for terminal and live-reload sessions
     server.on('upgrade', (req, socket, head) => {
       const url = new URL(req.url ?? '/', `http://127.0.0.1`);
+
+      // Live reload WebSocket (dev mode)
+      if (url.pathname === '/ws/livereload' && devMode) {
+        void (async () => {
+          try {
+            const wss = await getWSS();
+            wss.handleUpgrade(req, socket, head, (ws) => {
+              liveReloadClients.add(ws as unknown as WsWebSocket);
+              (ws as unknown as WsWebSocket).on('close', () => {
+                liveReloadClients.delete(ws as unknown as WsWebSocket);
+              });
+            });
+          } catch { socket.destroy(); }
+        })();
+        return;
+      }
 
       if (!url.pathname.startsWith('/ws/terminal/')) {
         socket.destroy();

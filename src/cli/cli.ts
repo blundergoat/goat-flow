@@ -50,6 +50,7 @@ Flags:
   --output <file>   Write output to file instead of stdout
   --guide           Show prioritized setup guidance instead of scores
   --no-open         Dashboard: do not auto-open browser
+  --dev             Dashboard: live reload on file changes
   --help, -h        Show this help
   --version, -v     Show version
 
@@ -203,6 +204,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       output: { type: 'string', short: 'o' },
       guide: { type: 'boolean', default: false },
       'no-open': { type: 'boolean', default: false },
+      dev: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -221,6 +223,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     output: resolveOutputPath(values.output, positionals),
     guide: values.guide === true,
     openDashboard: values['no-open'] !== true,
+    dev: values.dev === true,
     help: values.help === true,
     version: values.version === true,
   };
@@ -445,6 +448,7 @@ async function main(): Promise<void> {
     await serveDashboard({
       projectPath: options.projectPath,
       openBrowser: options.openDashboard,
+      dev: options.dev,
     });
     return;
   }
