@@ -35,7 +35,6 @@
     "docs/rubrics.md",
     "docs/examples",
     "scripts/warn-node-pty.mjs",
-    "setup",
     "workflow"
   ],
   "engines": {

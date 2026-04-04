@@ -22,8 +22,8 @@ export function checkDenyPatterns(
       | undefined;
     /** Raw deny array from permissions */
     const rawDeny = permissions?.deny;
-    /** Deny patterns as a string array, defaulting to empty */
-    const denyList = Array.isArray(rawDeny) ? (rawDeny as string[]) : [];
+    /** Deny patterns as a string array, filtering non-strings for safety */
+    const denyList = Array.isArray(rawDeny) ? rawDeny.filter((p): p is string => typeof p === 'string') : [];
     return {
       gitCommitBlocked: denyList.some((p) => p.includes('git commit')),
       gitPushBlocked: denyList.some((p) => p.includes('git push')),

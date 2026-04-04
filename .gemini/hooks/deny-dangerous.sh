@@ -24,7 +24,7 @@ check_segment() {
 
   # rm -rf without scoping (handles both -rf and -fr flag order)
   if [[ "$cmd" =~ rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r ]]; then
-    if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\./[a-zA-Z]|[a-zA-Z]|/tmp/) ]]; then
+    if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\./[a-zA-Z]|[a-zA-Z]|/tmp/[a-zA-Z0-9._-]) ]]; then
       block "rm -rf without safe scoping"
     fi
   fi

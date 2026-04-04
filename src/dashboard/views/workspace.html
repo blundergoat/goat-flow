@@ -36,7 +36,7 @@
         <!-- Prompt list (scrollable) -->
         <div class="flex-1 overflow-y-auto pb-16">
           <template x-for="preset in filteredPresets" :key="preset.id">
-            <div class="border-b border-gray-100 dark:border-gray-700 border-l-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-750 flex items-start gap-2"
+            <div class="border-b border-gray-100 dark:border-gray-700 border-l-2 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700/50 flex items-start gap-2"
               :class="{
                 'border-l-blue-400': preset.cat === 'debug & explore',
                 'border-l-purple-400': preset.cat === 'review',

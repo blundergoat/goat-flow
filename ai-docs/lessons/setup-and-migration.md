@@ -6,7 +6,7 @@ category: setup-and-migration
 
 **Created:** 2026-03-21
 
-**What happened:** Gemini CLI was asked to set up GOAT Flow. It modified 6 shared documentation files (`docs/system-spec.md`, `docs/five-layers.md`, `docs/system-spec.md`, `docs/design-rationale.md`, `docs/getting-started.md`, `workflow/runtime/enforcement.md`), replacing Claude Code references with Gemini-specific equivalents. The skills table in `architecture.md` had its Claude Code row deleted. The enforcement template ended up in a hybrid state - half `.claude/` paths, half `.gemini/` paths.
+**What happened:** Gemini CLI was asked to set up GOAT Flow. It modified 6 shared documentation files (`docs/system-spec.md`, `docs/five-layers.md`, `docs/design-rationale.md`, `docs/getting-started.md`, `workflow/runtime/enforcement.md`, and skill files), replacing Claude Code references with Gemini-specific equivalents. The skills table in `docs/five-layers.md` had its Claude Code row deleted. The enforcement template ended up in a hybrid state - half `.claude/` paths, half `.gemini/` paths.
 
 **Prevention:** Agent setup prompts must include explicit scope constraints. For Gemini: "Only create/modify files under `.gemini/` and `GEMINI.md`. Do NOT modify `docs/`, `workflow/`, or any file outside the `.gemini/` directory." For any agent: treat shared documentation as a boundary that requires Ask First permission.
 

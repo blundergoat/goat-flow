@@ -17,8 +17,14 @@ errors=0
 warnings=0
 checks=0
 
-# Millisecond-precision timing using date +%s%N
-now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+# Millisecond-precision timing with portable fallback (macOS date lacks %N)
+if date +%s%N 2>/dev/null | grep -qv N; then
+    now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+elif command -v node >/dev/null 2>&1; then
+    now_ms() { node -e 'process.stdout.write(String(Date.now()))'; }
+else
+    now_ms() { echo $(( $(date +%s) * 1000 )); }
+fi
 fmt_elapsed() {
     local ms=$(( $1 ))
     local secs=$(( ms / 1000 ))

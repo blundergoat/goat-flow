@@ -272,7 +272,12 @@ function app() {
       }
       return list;
     },
-    copyPreset(prompt) { this.copyText(prompt); },
+    /** Adapt /goat prefix for the active runner (Codex uses $goat) */
+    adaptPrompt(prompt) {
+      if (this.activeRunner === 'codex') return prompt.replace(/^\/goat\b/, '$goat');
+      return prompt;
+    },
+    copyPreset(prompt) { this.copyText(this.adaptPrompt(prompt)); },
     sendToTerminal(text) {
       if (!this._terminalWs || this._terminalWs.readyState !== WebSocket.OPEN) {
         this.showToast('No active terminal session', true);
@@ -281,7 +286,8 @@ function app() {
       // Use bracketed paste mode so the terminal receives the entire text as a single paste,
       // not as individual keystrokes that trigger line-by-line execution.
       // \x1b[200~ = start bracketed paste, \x1b[201~ = end bracketed paste
-      const escaped = text.replace(/\r?\n/g, ' ');
+      const adapted = this.adaptPrompt(text);
+      const escaped = adapted.replace(/\r?\n/g, ' ');
       this._terminalWs.send(JSON.stringify({ type: 'input', data: escaped + '\r' }));
     },
 
@@ -510,7 +516,7 @@ function app() {
     },
     async launchPreset(prompt, runner) {
       if (this.launching) return;
-      await this.launchInTerminal(prompt, runner || 'claude');
+      await this.launchInTerminal(this.adaptPrompt(prompt), runner || 'claude');
     },
     async launchInTerminal(prompt, runner = 'claude') {
       if (this.terminalSessionId && !this.terminalEnded) {

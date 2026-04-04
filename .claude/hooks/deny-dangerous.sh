@@ -26,7 +26,7 @@ check_segment() {
   # Block: rm -rf / , rm -rf ./ , rm -rf ~ , rm -rf without a real path
   # Allow: rm -rf ./node_modules , rm -rf dist/ , rm -rf /tmp/goat-flow-*
   if [[ "$cmd" =~ rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r ]]; then
-    if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\./[a-zA-Z]|[a-zA-Z]|/tmp/) ]]; then
+    if ! [[ "$cmd" =~ rm[[:space:]]+-(rf|fr)[[:space:]]+(\./[a-zA-Z]|[a-zA-Z]|/tmp/[a-zA-Z0-9._-]) ]]; then
       block "rm -rf without safe scoping"
     fi
   fi
