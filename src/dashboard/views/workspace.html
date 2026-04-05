@@ -12,7 +12,8 @@
       </div>
 
       <!-- Left Panel: Prompts -->
-      <div :class="workspacePanel === 'prompts' ? '' : 'hidden md:flex'"
+      <div x-show="!sidebarCollapsed" x-transition:enter="transition-all duration-200" x-transition:leave="transition-all duration-200"
+        :class="workspacePanel === 'prompts' ? '' : 'hidden md:flex'"
         class="w-full md:w-72 lg:w-80 shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col overflow-hidden md:pt-0 pt-10">
 
         <!-- Search + Category filters (sticky) -->
@@ -88,6 +89,16 @@
           <p x-show="filteredPresets.length === 0 && presetFilter !== 'favorites'" class="text-xs text-gray-400 p-3 text-center">No presets in this category.</p>
         </div>
       </div>
+
+      <!-- Sidebar toggle -->
+      <button @click="sidebarCollapsed = !sidebarCollapsed"
+        class="hidden md:flex items-center justify-center shrink-0 w-5 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer border-r border-gray-200 dark:border-gray-700"
+        :title="sidebarCollapsed ? 'Show prompts' : 'Hide prompts'"
+        style="background: transparent; border-left: none; border-top: none; border-bottom: none;">
+        <svg :style="sidebarCollapsed ? 'transform: rotate(180deg)' : ''" style="width: 12px; height: 12px; color: #71717a; transition: transform 0.2s;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
 
       <!-- Right Panel: Terminal -->
       <div :class="workspacePanel === 'terminal' ? '' : 'hidden md:flex'"

@@ -27,8 +27,9 @@ type IPty = ReturnType<typeof import('node-pty').spawn>;
 
 /** Maximum number of concurrent terminal sessions allowed */
 const MAX_SESSIONS = 3;
-/** Idle timeout before a terminal session is automatically killed */
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+/** Idle timeout before a terminal session is automatically killed.
+ *  Resets on both user input (ws 'input' message) and agent output (pty onData). */
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 /** CLI binary names for each runner. */
 const RUNNER_BINARIES: Record<Runner, string> = {
@@ -226,6 +227,7 @@ export class TerminalManager {
 
     session.pty!.onData((data: string) => {
       sendMessage(ws, { type: 'output', data });
+      this.resetIdleTimer(session);
     });
 
     ws.on('message', (raw: Buffer | string) => {
@@ -335,7 +337,7 @@ export class TerminalManager {
       if (session.ws) {
         sendMessage(session.ws, {
           type: 'error',
-          message: 'Session killed: idle timeout (30 min)',
+          message: 'Session killed: idle timeout (60 min)',
         });
       }
       this.killSession(session);

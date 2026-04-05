@@ -12,6 +12,7 @@ function app() {
     activeRunner: 'claude',
     userRole: '',
     workspacePanel: 'prompts',
+    sidebarCollapsed: false,
     scanDetailAgent: null,
     get projectName() { return this.projectPath.split('/').filter(Boolean).pop() || this.projectPath; },
     get projectColor() {
