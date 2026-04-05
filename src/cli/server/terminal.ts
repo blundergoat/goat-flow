@@ -95,6 +95,13 @@ function validateProjectPath(projectPath: string): string {
 }
 
 /** Send a terminal event to the browser when the socket is still open. */
+/** Clamp a terminal dimension to a safe integer range. */
+function clampDim(value: unknown, max: number, fallback: number): number {
+  return Number.isInteger(value) && (value as number) > 0 && (value as number) <= max
+    ? (value as number)
+    : fallback;
+}
+
 function sendMessage(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === 1) {
     // WebSocket.OPEN
@@ -234,7 +241,7 @@ export class TerminalManager {
         this.resetIdleTimer(session);
         session.pty!.write(msg.data);
       } else if (msg.type === 'resize') {
-        session.pty!.resize(msg.cols, msg.rows);
+        session.pty!.resize(clampDim(msg.cols, 500, 80), clampDim(msg.rows, 200, 24));
       }
     });
 
@@ -315,6 +322,7 @@ export class TerminalManager {
       }
       session.ws = null;
     }
+    this.sessions.delete(session.id);
   }
 
   /** Reset the idle-timeout timer for a session. */

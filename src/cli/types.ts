@@ -260,7 +260,7 @@ export interface SharedFacts {
     parseError: string | null;
     lineLimits: { target: number; limit: number };
     configLocalExists: boolean;
-    userRole: string;
+    userRole: 'developer' | 'investigator' | 'tester';
   };
   architecture: { exists: boolean; lineCount: number };
   evals: {

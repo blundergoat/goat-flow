@@ -30,6 +30,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   'skills',
   'line-limits',
   'userRole',
+  'telemetry',
 ]);
 
 /** Built-in default values used when config.yaml is missing or omits fields. */
@@ -126,7 +127,7 @@ function mergeSkills(value: unknown, merged: GoatFlowConfig): void {
 }
 
 /** Valid userRole values accepted in the config file. */
-const KNOWN_USER_ROLES = new Set(['developer', 'investigator']);
+const KNOWN_USER_ROLES = new Set(['developer', 'investigator', 'tester']);
 
 /** Apply a valid userRole override from the raw config. */
 function mergeUserRole(value: unknown, merged: GoatFlowConfig): void {

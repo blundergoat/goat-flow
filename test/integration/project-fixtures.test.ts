@@ -152,8 +152,8 @@ describe('project fixture corpus', () => {
     // Whether this triggers a check failure or anti-pattern depends on rubric version,
     // but the score should not be a perfect 100.
     assert.ok(
-      claude.score.percentage <= 100,
-      `stale-refs scored ${claude.score.percentage}`,
+      claude.score.percentage < 100,
+      'stale-refs fixture should not score 100%',
     );
   });
 

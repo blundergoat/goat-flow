@@ -27,7 +27,7 @@ describe('Canonical path contract: no duplicate surfaces in goat-flow itself', (
 
   it('does not have both docs/lessons.md (flat) and ai-docs/lessons/ (directory)', () => {
     const flatFile = existsSync(join(ROOT, 'docs/lessons.md'));
-    const dirExists = existsSync(join(ROOT, 'ai/lessons'));
+    const dirExists = existsSync(join(ROOT, 'ai-docs/lessons'));
     if (flatFile && dirExists) {
       assert.fail(
         'Both docs/lessons.md and ai-docs/lessons/ exist. ' +
@@ -38,7 +38,7 @@ describe('Canonical path contract: no duplicate surfaces in goat-flow itself', (
 
   it('does not have both agent-evals/ and ai-docs/evals/', () => {
     const legacyDir = existsSync(join(ROOT, 'agent-evals'));
-    const canonicalDir = existsSync(join(ROOT, 'ai/evals'));
+    const canonicalDir = existsSync(join(ROOT, 'ai-docs/evals'));
     if (legacyDir && canonicalDir) {
       assert.fail(
         'Both agent-evals/ and ai-docs/evals/ exist. ' +
@@ -49,7 +49,7 @@ describe('Canonical path contract: no duplicate surfaces in goat-flow itself', (
 
   it('does not have both codex-evals/ and ai-docs/evals/', () => {
     const legacyDir = existsSync(join(ROOT, 'codex-evals'));
-    const canonicalDir = existsSync(join(ROOT, 'ai/evals'));
+    const canonicalDir = existsSync(join(ROOT, 'ai-docs/evals'));
     if (legacyDir && canonicalDir) {
       assert.fail(
         'Both codex-evals/ and ai-docs/evals/ exist. ' +

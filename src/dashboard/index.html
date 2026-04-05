@@ -35,7 +35,6 @@
   <!-- ═══ Header ═══ -->
   <header class="no-print gf-header shrink-0 z-30">
     <button @click="activeView = 'home'" class="gf-logo">🐐 GOAT Flow</button>
-    <span class="gf-header-ver" x-text="report ? `v${report.rubricVersion}` : 'v0.10.0'"></span>
     <span class="gf-header-proj" x-text="projectName"></span>
     <div style="flex: 1;"></div>
     <div class="gf-nav-wrap"><div class="gf-nav">
@@ -47,7 +46,7 @@
       <button @click="activeView = 'wizard'; detectStack()" class="gf-nb" :class="activeView === 'wizard' && 'gf-nb-active'">Setup</button>
       <button @click="activeView = 'settings'; loadConfig()" class="gf-nb" :class="activeView === 'settings' && 'gf-nb-active'">Config</button>
     </div></div>
-    <span class="gf-text-muted" style="font-size: 11px; margin-right: 4px;">Terminal Agent:</span>
+    <span class="gf-text-muted" style="font-size: 11px; margin-right: 4px;">Terminal:</span>
     <div class="gf-asel">
       <template x-for="agent in installedAgents" :key="agent.id">
         <button @click="activeRunner = agent.id" class="gf-ab" :class="activeRunner === agent.id && 'gf-ab-active'"
@@ -128,6 +127,7 @@ function app() {
     terminalConnected: false,
     terminalEnded: false,
     lastRunPrompt: null,
+    selectedPreset: null,
     lastRunAgent: null,
     promptRunStates: {},
     launching: false,
@@ -374,8 +374,12 @@ function app() {
       } catch { this.showToast('Failed to load config', true); }
     },
     _parseUserRole() {
-      const match = (this.localConfigYaml || '').match(/^\s*userRole:\s*(\w+)/m);
-      this.userRole = (match && ['developer', 'investigator', 'tester'].includes(match[1])) ? match[1] : '';
+      const valid = ['developer', 'investigator', 'tester'];
+      const localMatch = (this.localConfigYaml || '').match(/^\s*userRole:\s*(\w+)/m);
+      if (localMatch && valid.includes(localMatch[1])) { this.userRole = localMatch[1]; return; }
+      const configMatch = (this.configYaml || '').match(/^\s*userRole:\s*(\w+)/m);
+      if (configMatch && valid.includes(configMatch[1])) { this.userRole = configMatch[1]; return; }
+      this.userRole = '';
     },
     async saveLocalConfig() {
       try {
@@ -393,7 +397,7 @@ function app() {
     async resetLocalConfig() {
       try {
         const res = await fetch(`/api/config/local?path=${encodeURIComponent(this.projectPath)}`, {
-          method: 'POST',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: this._localConfigPlaceholder }),
         });

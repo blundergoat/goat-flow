@@ -2,6 +2,8 @@
     <div x-show="activeView === 'wizard'" x-cloak style="height: calc(100vh - 3.5rem); overflow-y: auto;">
       <div style="max-width: 1100px; margin: 0 auto; padding: 20px 24px;">
 
+        <div class="gf-text-primary" style="font-size: 20px; font-weight: 500; margin-bottom: 16px;">Setup</div>
+
         <!-- Two columns -->
         <div style="display: flex; gap: 16px; height: calc(100vh - 10rem);">
 
@@ -126,7 +128,7 @@
 
         <!-- Footer -->
         <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 12px 0;">
-          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · MIT License · <a href="https://github.com/blundergoat/goat-flow" target="_blank" class="gf-footer-link">GitHub</a>
+          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · <span x-text="report ? `v${report.rubricVersion}` : ''"></span>
         </div>
 
       </div>

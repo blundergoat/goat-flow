@@ -276,7 +276,6 @@ function shouldUseMultiAgentSetup(
 ): boolean {
   return (
     agentIds.length > 1 &&
-    process.env.GOAT_FLOW_INLINE_SETUP !== '1' &&
     agentIds.every((id) => {
       const agentReport = report.agents.find((a) => a.agent === id);
       return !agentReport || agentReport.score.percentage === 0;

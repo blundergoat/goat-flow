@@ -19,7 +19,7 @@ export interface GoatFlowConfig {
   /** Instruction-file line limits: target for setup, hard limit for CI gate */
   lineLimits: { target: number; limit: number };
   /** User role that controls read-only vs read-write mode */
-  userRole: 'developer' | 'investigator';
+  userRole: 'developer' | 'investigator' | 'tester';
   /** Opt-in skill usage telemetry (logs invocations to .goat-flow/logs/skill-usage.jsonl) */
   telemetry: boolean;
 }

@@ -23,7 +23,7 @@ Replace inline skeleton generation with reference-based prompts that point agent
 - The agent reads each template from disk at setup time, getting the canonical current version - no inline copy to drift
 - Language-to-coding-standards mapper auto-selects the right backend/frontend/security templates based on detected stack
 - Per-agent `--agent claude|codex|gemini` flag replaces `--agent all` (which tried to generate one prompt for all agents and produced confused output)
-- `GOAT_FLOW_INLINE_SETUP=1` env var preserves the old fragment-based renderer as a rollback mechanism
+- ~~`GOAT_FLOW_INLINE_SETUP=1` env var preserves the old fragment-based renderer as a rollback mechanism~~ Removed in v0.10.0 -- the inline fragment renderer was deleted and this env var is no longer checked
 
 ## Consequences
 

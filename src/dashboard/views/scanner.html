@@ -31,9 +31,7 @@
           <template x-for="agent in (report?.agents || [])" :key="agent.agent">
             <button @click="scanDetailAgent = (scanDetailAgent === agent.agent ? null : agent.agent); selectedAgent = agent.agent"
               class="gf-card" style="padding: 20px 24px; cursor: pointer; transition: border-color 0.1s;"
-              :style="{ borderColor: scanDetailAgent === agent.agent ? '#4ade80' : '' }"
-              onmouseenter="if(!this.style.borderColor || this.style.borderColor==='#2a2a2e' || this.style.borderColor==='') this.style.borderColor='#3f3f46'"
-              onmouseleave="if(this.style.borderColor==='#3f3f46') this.style.borderColor=''">
+              :style="{ borderColor: scanDetailAgent === agent.agent ? '#4ade80' : '' }">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <span class="gf-text-primary" style="font-size: 14px; font-weight: 500;" x-text="agent.agentName"></span>
                 <span style="font-size: 20px; font-weight: 500;" :style="{ color: gradeColor(agent.score.grade) }" x-text="agent.score.grade === 'insufficient-data' ? '?' : agent.score.grade"></span>
@@ -127,13 +125,6 @@
                       <span class="gf-text-primary" style="font-weight: 500;" x-text="`${rec.checkId}: ${rec.category}`"></span>
                       <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px;" x-text="rec.action"></p>
                     </div>
-                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                      <button @click="copyFixPrompt(rec)" class="gf-btn-muted" style="padding: 2px 8px; font-size: 11px; border-radius: 4px; cursor: pointer;">Copy</button>
-                      <button x-show="terminalAvailable && (!terminalSessionId || terminalEnded)" @click="launchPreset(buildFixPrompt(rec), activeRunner); activeView = 'workspace'; workspacePanel = 'terminal'"
-                        class="gf-btn-green" style="padding: 2px 8px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer;">Run</button>
-                      <button x-show="terminalSessionId && !terminalEnded" @click="sendToTerminal(buildFixPrompt(rec)); activeView = 'workspace'; workspacePanel = 'terminal'"
-                        class="gf-btn-green" style="padding: 2px 8px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer;">Send</button>
-                    </div>
                   </div>
                 </template>
               </div>
@@ -152,8 +143,8 @@
         </template>
 
         <!-- Footer -->
-        <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 8px 0;">
-          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · MIT License · <a href="https://github.com/blundergoat/goat-flow" target="_blank" class="gf-footer-link">GitHub</a>
+        <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 16px 0 8px;">
+          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · <span x-text="report ? `v${report.rubricVersion}` : ''"></span>
         </div>
       </div>
 

@@ -177,6 +177,15 @@ export function serveDashboard(
     const absDefault = resolve(options.projectPath);
     const openBrowser = options.openBrowser === true;
 
+    /** Resolve and validate a user-supplied path. Rejects paths outside the project root. */
+    function safeResolvePath(raw: string | null): string {
+      const resolved = resolve(raw || absDefault);
+      if (!resolved.startsWith(absDefault)) {
+        throw new Error('Path outside project root');
+      }
+      return resolved;
+    }
+
     // Live reload state (dev mode only)
     const liveReloadClients = new Set<WsWebSocket>();
 
@@ -243,7 +252,7 @@ export function serveDashboard(
     function handleScanRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== '/api/scan') return false;
 
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
+      const projectPath = safeResolvePath(url.searchParams.get('path'));
       try {
         const fs = createFS(projectPath);
         const report = scanProject(fs, projectPath, { agentFilter: null });
@@ -263,7 +272,7 @@ export function serveDashboard(
     ): Promise<boolean> {
       if (url.pathname !== '/api/setup') return false;
 
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
+      const projectPath = safeResolvePath(url.searchParams.get('path'));
       const agentParam = url.searchParams.get('agent') || 'claude';
       if (!VALID_AGENTS.has(agentParam)) {
         jsonResponse(res, 400, {
@@ -505,7 +514,7 @@ export function serveDashboard(
     ): boolean {
       if (url.pathname !== '/api/setup/detect') return false;
 
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
+      const projectPath = safeResolvePath(url.searchParams.get('path'));
 
       try {
         jsonResponse(res, 200, {
@@ -548,7 +557,7 @@ export function serveDashboard(
     function handleBrowseRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== '/api/browse') return false;
 
-      const dirPath = resolve(url.searchParams.get('path') || absDefault);
+      const dirPath = resolve(url.searchParams.get('path') || absDefault); // browse intentionally allows navigation outside project root
       try {
         const entries = readdirSync(dirPath, { withFileTypes: true })
           .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
@@ -577,7 +586,8 @@ export function serveDashboard(
 
       const agents = ['claude', 'codex', 'gemini', 'copilot'].map(name => {
         try {
-          execFileSync('which', [name], { timeout: 3000, stdio: 'pipe' });
+          const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+          execFileSync(whichCmd, [name], { timeout: 3000, stdio: 'pipe' });
           let version: string | null = null;
           try {
             version = execFileSync(name, ['--version'], { timeout: 5000, stdio: 'pipe' }).toString().trim().split('\n')[0] ?? null;
@@ -703,7 +713,7 @@ export function serveDashboard(
     function handleConfigReadRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== '/api/config') return false;
 
-      const projectPath = resolve(url.searchParams.get('path') || absDefault);
+      const projectPath = safeResolvePath(url.searchParams.get('path'));
       const configPath = join(projectPath, '.goat-flow', 'config.yaml');
       const localConfigPath = join(
         projectPath,
@@ -779,7 +789,7 @@ export function serveDashboard(
           return true;
         }
 
-        const projectPath = resolve(url.searchParams.get('path') || absDefault);
+        const projectPath = safeResolvePath(url.searchParams.get('path'));
         const dirPath = join(projectPath, '.goat-flow');
         const localConfigPath = join(dirPath, 'config.local.yaml');
 
@@ -804,7 +814,7 @@ export function serveDashboard(
         return false;
 
       try {
-        const projectPath = resolve(url.searchParams.get('path') || absDefault);
+        const projectPath = safeResolvePath(url.searchParams.get('path'));
         const localConfigPath = join(
           projectPath,
           '.goat-flow',
@@ -829,6 +839,21 @@ export function serveDashboard(
       res: ServerResponse,
     ): Promise<void> {
       const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+
+      // DNS rebinding protection: validate Host header on API routes
+      if (url.pathname.startsWith('/api/')) {
+        const host = req.headers.host;
+        const addr = server.address();
+        if (addr && typeof addr !== 'string') {
+          const allowed = [`127.0.0.1:${addr.port}`, `localhost:${addr.port}`];
+          if (!host || !allowed.includes(host)) {
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+          }
+        }
+      }
+
       const routeHandlers = [
         () => Promise.resolve(handleHtmlRequest(url, res)),
         () => Promise.resolve(handleAssetRequest(url, res)),

@@ -3,7 +3,7 @@
 # MUST exit 0 even on errors (non-zero causes infinite loops).
 # Errors go to stderr as informational feedback.
 
-# Infinite loop guard
+# Infinite loop guard (convention from enforcement.md)
 if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then
   exit 0
 fi

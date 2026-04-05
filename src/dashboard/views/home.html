@@ -117,6 +117,37 @@
           </table>
         </div>
 
+        <!-- Recommended actions (issues found) -->
+        <div x-show="report && !report.agents.every(a => a.score.grade === 'A')" x-cloak>
+          <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
+            <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Recommended actions</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <template x-for="rec in (report.agents[0]?.recommendations || []).slice(0, 5)" :key="rec.key">
+                <div style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; padding-bottom: 8px; border-bottom: 0.5px solid #2a2a2e; cursor: pointer;"
+                  @click="activeView = 'scan'; scanDetailAgent = report.agents[0].agent">
+                  <span style="flex-shrink: 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;"
+                    :class="'gf-badge-' + rec.priority"
+                    x-text="rec.priority.toUpperCase()"></span>
+                  <div style="flex: 1; min-width: 0;">
+                    <span class="gf-text-primary" style="font-weight: 500;" x-text="`${rec.checkId}: ${rec.category}`"></span>
+                    <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px;" x-text="rec.action"></p>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- All checks pass message -->
+        <div x-show="report && report.agents.every(a => a.score.grade === 'A')" x-cloak>
+          <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0;">
+              <div class="gf-check-pass" style="width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 16px;">&#10003;</div>
+              <span style="font-size: 14px; font-weight: 500; color: #4ade80;">All checks pass. Nothing to fix.</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Quick actions -->
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
           <button @click="runScan()" class="gf-action-btn">
@@ -134,8 +165,8 @@
         </div>
 
         <!-- Footer -->
-        <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 8px 0;">
-          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · MIT License · <a href="https://github.com/blundergoat/goat-flow" target="_blank" class="gf-footer-link">GitHub</a>
+        <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 16px 0 8px;">
+          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · <span x-text="report ? `v${report.rubricVersion}` : ''"></span>
         </div>
       </div>
     </div>

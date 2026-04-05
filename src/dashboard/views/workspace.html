@@ -28,7 +28,8 @@
         <div class="px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 flex flex-wrap gap-1 bg-white dark:bg-gray-800 sticky top-8 z-10">
           <template x-for="cat in presetCats" :key="cat.id">
             <button @click="presetFilter = cat.id"
-              :class="presetFilter === cat.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
+              :class="presetFilter === cat.id ? (cat.id === 'plan' ? 'text-gray-900' : 'text-white') : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
+              :style="presetFilter === cat.id ? 'background:' + ({'all':'#4ade80','favorites':'#4ade80','debug & explore':'#60a5fa','review':'#c084fc','plan':'#fbbf24','test':'#4ade80','security':'#f87171'}[cat.id] || '#4ade80') : ''"
               class="px-2 py-0.5 text-xs font-medium rounded-full transition-colors" x-text="cat.label + (cat.id !== 'all' && cat.id !== 'favorites' ? ' (' + presets.filter(p => p.cat === cat.id).length + ')' : '')"></button>
           </template>
         </div>
@@ -36,8 +37,9 @@
         <!-- Prompt list (scrollable) -->
         <div class="flex-1 overflow-y-auto pb-16">
           <template x-for="preset in filteredPresets" :key="preset.id">
-            <div class="border-b border-gray-100 dark:border-gray-700 border-l-2 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700/50 flex items-start gap-2"
+            <div @click="selectedPreset = preset" class="border-b border-gray-100 dark:border-gray-700 border-l-2 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700/50 flex items-start gap-2 cursor-pointer transition-all"
               :class="{
+                'ring-1 ring-emerald-500/50': selectedPreset?.id === preset.id,
                 'border-l-amber-400 bg-gray-800/50': promptRunStates[preset.id] === 'running',
                 'border-l-emerald-400': promptRunStates[preset.id] === 'pass',
                 'border-l-red-400': promptRunStates[preset.id] === 'fail',
@@ -45,8 +47,7 @@
                 'border-l-purple-400': !promptRunStates[preset.id] && preset.cat === 'review',
                 'border-l-amber-400': !promptRunStates[preset.id] && preset.cat === 'plan',
                 'border-l-green-400': !promptRunStates[preset.id] && preset.cat === 'test',
-                'border-l-red-400': !promptRunStates[preset.id] && preset.cat === 'security',
-                'border-l-gray-400': !promptRunStates[preset.id] && preset.cat === 'utility'
+                'border-l-red-400': !promptRunStates[preset.id] && preset.cat === 'security'
               }">
               <button @click.stop="toggleFavorite(preset.id)" class="shrink-0 text-sm transition-colors"
                 :class="isFavorite(preset.id) ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-300'"
@@ -61,8 +62,7 @@
                     'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400': preset.cat === 'review',
                     'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400': preset.cat === 'plan',
                     'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400': preset.cat === 'test',
-                    'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400': preset.cat === 'security',
-                    'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400': preset.cat === 'utility'
+                    'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400': preset.cat === 'security'
                   }" x-text="preset.cat"></span>
               </div>
               <button x-data="{ copied: false }" @click="copyPreset(preset.prompt); copied = true; setTimeout(() => copied = false, 1000)"
@@ -106,12 +106,31 @@
           </div>
         </div>
 
-        <!-- No session placeholder -->
-        <div x-show="terminalAvailable && !terminalSessionId" class="flex-1 flex items-center justify-center">
+        <!-- No session: prompt preview OR empty state -->
+        <div x-show="terminalAvailable && !terminalSessionId && selectedPreset" class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+            <span class="text-sm font-semibold gf-text-primary truncate" x-text="selectedPreset.name"></span>
+            <div class="flex items-center gap-2 shrink-0">
+              <button x-data="{ copied: false }" @click="copyPreset(selectedPreset.prompt); copied = true; setTimeout(() => copied = false, 1000)"
+                class="gf-btn-copy" :style="copied ? 'background:#14532d;color:#4ade80;border-color:#166534' : ''"
+                x-text="copied ? 'Copied!' : 'Copy'"></button>
+              <button @click="launchPreset(selectedPreset.prompt, activeRunner); workspacePanel = 'terminal'"
+                class="gf-btn-terminal">Launch</button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto" style="background: #0f1729;">
+            <pre class="p-4 text-sm font-mono leading-relaxed whitespace-pre-wrap" style="color: #e4e4e7;" x-text="adaptPrompt(selectedPreset.prompt)"></pre>
+          </div>
+          <div class="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+            <span class="text-xs gf-text-muted">Will run with: <strong x-text="activeRunner"></strong></span>
+          </div>
+        </div>
+
+        <div x-show="terminalAvailable && !terminalSessionId && !selectedPreset" class="flex-1 flex items-center justify-center">
           <div class="text-center space-y-3">
             <svg class="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             <p class="text-sm text-gray-400 dark:text-gray-500">No active terminal session</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500">Click <strong>Launch</strong> on a prompt to start one.</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500">Click a prompt to preview, or <strong>Launch</strong> to start a session.</p>
           </div>
         </div>
 

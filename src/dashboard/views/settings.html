@@ -2,6 +2,8 @@
     <div x-show="activeView === 'settings'" x-cloak style="height: calc(100vh - 3.5rem); overflow-y: auto;">
       <div style="max-width: 960px; margin: 0 auto; padding: 20px 24px;">
 
+        <div class="gf-text-primary" style="font-size: 20px; font-weight: 500; margin-bottom: 16px;">Config</div>
+
         <!-- Top row: path (1fr) + role (2fr) -->
         <div class="gf-top-row">
 
@@ -94,10 +96,10 @@
               <span class="gf-badge-ro">read-only</span>
             </div>
             <template x-if="configNote">
-              <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center;">
+              <div class="flex items-center justify-center h-32 text-center">
                 <div>
                   <p class="gf-text-muted" style="font-size: 12px;" x-text="configNote"></p>
-                  <p class="gf-text-disabled" style="font-size: 11px; margin-top: 8px;">Run <code class="gf-code-inline" style="font-family: monospace; padding: 1px 4px; border-radius: 3px;">goat-flow setup</code> to create one.</p>
+                  <button @click="activeView = 'wizard'; detectStack()" class="gf-btn-scan" style="padding: 6px 16px; font-size: 12px; border-radius: 6px; cursor: pointer; font-weight: 500; margin-top: 12px;">Open Setup Wizard</button>
                 </div>
               </div>
             </template>
@@ -132,7 +134,7 @@
 
         <!-- Footer -->
         <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 12px 0;">
-          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · MIT License · <a href="https://github.com/blundergoat/goat-flow" target="_blank" class="gf-footer-link">GitHub</a>
+          Built by <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a> · <span x-text="report ? `v${report.rubricVersion}` : ''"></span>
         </div>
 
       </div>
