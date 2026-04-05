@@ -404,7 +404,7 @@ function validateAgentList(
       pushWarning(
         warnings,
         `agents[${index}]`,
-        `unknown agent "${value}" — known agents: ${Array.from(KNOWN_AGENTS).join(', ')}`,
+        `unknown agent "${value}" - known agents: ${Array.from(KNOWN_AGENTS).join(', ')}`,
       );
     }
   }

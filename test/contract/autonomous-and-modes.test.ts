@@ -225,7 +225,7 @@ describe('M12: userRole structural checks', () => {
       join(import.meta.dirname, '../../.goat-flow/config.yaml'),
       'utf-8',
     );
-    // Persona is documented in config.yaml — dispatcher reads it at runtime
+    // Persona is documented in config.yaml - dispatcher reads it at runtime
     assert.ok(
       configContent.includes('userRole: developer'),
       'config.yaml should set userRole: developer as default',
@@ -237,7 +237,7 @@ describe('M12: userRole structural checks', () => {
   });
 
   it('investigation-mode skills are read-only by design', () => {
-    // goat-review and goat-security are read-only skills — no implementation phases
+    // goat-review and goat-security are read-only skills - no implementation phases
     const review = readSkill('goat-review');
     const security = readSkill('goat-security');
 

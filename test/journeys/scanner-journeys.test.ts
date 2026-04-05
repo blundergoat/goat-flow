@@ -23,12 +23,12 @@ describe('Journey: scan-broken-project', () => {
     // Score should be below 100
     assert.ok(claude.score.percentage < 100, `Expected < 100, got ${claude.score.percentage}`);
 
-    // Render text output — should mention the specific failure
+    // Render text output - should mention the specific failure
     const output = renderText(fixture.report, false);
     assert.ok(output.length > 0, 'Text output should not be empty');
     assert.match(output, /2\.2\.3/, 'Should mention the swallowed-failure check');
 
-    // Render guide output — should have prioritized fix items
+    // Render guide output - should have prioritized fix items
     const guide = renderGuide(fixture.report);
     assert.ok(guide.length > 0, 'Guide output should not be empty');
     assert.match(guide, /items to fix/i, 'Guide should list items to fix');

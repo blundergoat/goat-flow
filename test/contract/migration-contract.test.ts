@@ -153,7 +153,7 @@ describe('Fixture passing-minimal uses canonical paths only', () => {
     const flatFile = existsSync(join(fixtureDir, 'docs/lessons.md'));
     assert.ok(
       !flatFile,
-      'passing-minimal should not have docs/lessons.md (flat file) — use ai-docs/lessons/ only',
+      'passing-minimal should not have docs/lessons.md (flat file) - use ai-docs/lessons/ only',
     );
   });
 
@@ -161,7 +161,7 @@ describe('Fixture passing-minimal uses canonical paths only', () => {
     const legacyDir = existsSync(join(fixtureDir, 'agent-evals'));
     assert.ok(
       !legacyDir,
-      'passing-minimal should not have agent-evals/ — use ai-docs/evals/ only',
+      'passing-minimal should not have agent-evals/ - use ai-docs/evals/ only',
     );
   });
 
@@ -169,7 +169,7 @@ describe('Fixture passing-minimal uses canonical paths only', () => {
     const flatFile = existsSync(join(fixtureDir, 'docs/footguns.md'));
     assert.ok(
       !flatFile,
-      'passing-minimal should not have docs/footguns.md (flat file) — use ai-docs/footguns/ (dir) only',
+      'passing-minimal should not have docs/footguns.md (flat file) - use ai-docs/footguns/ (dir) only',
     );
   });
 });

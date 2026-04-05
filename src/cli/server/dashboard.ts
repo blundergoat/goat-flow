@@ -223,13 +223,14 @@ export function serveDashboard(
       if (!url.pathname.startsWith('/assets/')) return false;
 
       const filename = url.pathname.slice('/assets/'.length);
-      if (!/^[a-z0-9_-]+\.js$/i.test(filename)) return false;
+      if (!/^[a-z0-9_-]+\.(js|css)$/i.test(filename)) return false;
 
+      const contentType = filename.endsWith('.css')
+        ? 'text/css; charset=utf-8'
+        : 'application/javascript; charset=utf-8';
       try {
         const content = loadPackageFile(`src/dashboard/${filename}`);
-        res.writeHead(200, {
-          'Content-Type': 'application/javascript; charset=utf-8',
-        });
+        res.writeHead(200, { 'Content-Type': contentType });
         res.end(content);
       } catch {
         res.writeHead(404);

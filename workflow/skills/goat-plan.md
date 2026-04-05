@@ -114,6 +114,8 @@ Repeat until the user says "locked in" or 3 rounds complete (whichever first).
 
 ## Phase 3 - Signal-Based Adaptive Orchestration (SBAO)
 
+**SBAO agents: 2 with core trio + 1 fresh-context. Never split SKEPTIC/ANALYST/STRATEGIST into separate agents.**
+
 **For Hotfix / Small Feature:** "SBAO launches 3 sub-agents — that's heavy for a small change. Skip to Phase 4, or run SBAO anyway?" Let the user decide.
 
 <!-- ADAPT: Adjust sub-agent count for your budget/tooling -->

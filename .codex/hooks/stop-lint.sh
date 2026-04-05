@@ -2,7 +2,7 @@
 # Stop hook: runs after every Codex turn.
 # MUST exit 0 even on errors (non-zero causes infinite loops).
 # Errors go to stderr as informational feedback.
-set -u  # Catch unbound variables (no -e/-o pipefail — must always exit 0)
+set -u  # Catch unbound variables (no -e/-o pipefail - must always exit 0)
 
 # Infinite loop guard
 if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then

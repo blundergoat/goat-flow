@@ -994,7 +994,7 @@ function renderSetupRedirect(
   );
   lines.push('');
   lines.push(
-    '**Step 0b — Migrate, don\'t duplicate (check BEFORE creating files):**',
+    '**Step 0b - Migrate, don\'t duplicate (check BEFORE creating files):**',
   );
   lines.push('');
   lines.push(
@@ -1092,7 +1092,7 @@ function renderSetupRedirect(
       ? ` (detected ~${fileCount} source files)`
       : '';
   lines.push(
-    `**Scale to project size${sizeLabel}** — do NOT over-scaffold:`,
+    `**Scale to project size${sizeLabel}** - do NOT over-scaffold:`,
   );
   lines.push(
     '- **Small projects (<100 source files):** Skip ADR framework, handoff template, and keep evals to 3 max. Use 2-3 skills with modes instead of all 6.',
@@ -1107,7 +1107,7 @@ function renderSetupRedirect(
     'If the goat-flow scaffolding would be larger than the project source code, you are over-scaffolding.',
   );
   lines.push('');
-  lines.push('**File categories** — know what to keep vs skip:');
+  lines.push('**File categories** - know what to keep vs skip:');
   lines.push(
     '- **Hot-path (loaded every session):** Instruction file (CLAUDE.md), skills, hooks, `.goat-flow/config.yaml`',
   );

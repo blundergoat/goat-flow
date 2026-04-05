@@ -1,6 +1,6 @@
 ---
 name: gates-pause-standard
-description: "Agent pauses at BLOCKING GATEs for Standard complexity — does not auto-advance past human decision points"
+description: "Agent pauses at BLOCKING GATEs for Standard complexity - does not auto-advance past human decision points"
 origin: synthetic-seed
 agents: all
 skill: goat-plan

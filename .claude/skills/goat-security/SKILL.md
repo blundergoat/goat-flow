@@ -9,11 +9,11 @@ goat-flow-skill-version: "0.10.0"
 
 ### Severity & Evidence
 - **Severity order:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. Order findings by severity, not by file or discovery order.
-- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced — state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced - state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
 
 ### Human Gates
-- **BLOCKING GATE** — agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
-- **CHECKPOINT** — agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
+- **BLOCKING GATE** - agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
+- **CHECKPOINT** - agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
 
 ### Adaptive Step 0
 1. Read the user's invocation for context already provided
@@ -21,7 +21,7 @@ goat-flow-skill-version: "0.10.0"
 3. If ALL questions answered by invocation → condensed confirmation, proceed
 4. If user says "skip Step 0" → confirm understanding, proceed
 
-**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context — it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
+**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context - it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
 
 ### Stuck Protocol
 If 3 consecutive reads produce no new signal: (1) present what you have so far, (2) state what you were looking for and didn't find, (3) ask to redirect, narrow scope, or close.
@@ -36,10 +36,10 @@ If 3 consecutive reads produce no new signal: (1) present what you have so far, 
 **Sub-agent mode:** GATEs become CHECKPOINTs automatically. Step 0 proceeds with auto-detected scope.
 
 ### Footgun Fast-Path
-If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files — footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
+If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files - footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
 
 ### Flush Protocol
-If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient — do not commit.
+If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient - do not commit.
 
 ### Learning Loop
 After completing the skill, check if this run uncovered anything worth logging:
@@ -84,7 +84,7 @@ handling, when touching secrets/credentials, or for a security-focused audit.
 **Structural questions (always ask or confirm):**
 1. Which component or area? (or I'll scan the full project)
 2. What's the deployment context? (user-facing web app, internal tool, CLI, library, API)
-3. Any specific threat concern? (injection, auth bypass, data exposure — or "general audit")
+3. Any specific threat concern? (injection, auth bypass, data exposure - or "general audit")
 
 **Illustrative questions (adapt):**
 4. What auth boundaries exist? (dashboard server has no auth, CLI runs locally, no user-facing auth)
@@ -144,7 +144,7 @@ framing catches more false positives than "check if it's handled."
 |-----------|---------|-------------------|---------------|
 | Node.js `http` | localhost-only binding | Remote access to dashboard | Check `server.listen()` binds to `127.0.0.1`, not `0.0.0.0` |
 | TypeScript | Strict mode | Type confusion, null errors | Check `tsconfig.json` has `strict: true` |
-| Bash scripts | `shellcheck` linting | Injection, quoting bugs, globbing | Run `shellcheck scripts/*.sh` — zero warnings |
+| Bash scripts | `shellcheck` linting | Injection, quoting bugs, globbing | Run `shellcheck scripts/*.sh` - zero warnings |
 | File I/O | Path validation | Path traversal in scanner/facts | Check user-supplied paths are validated before `fs.readFile` |
 | Dashboard | Static HTML+JS | XSS via injected content | Check no `innerHTML` with unsanitized data in `src/dashboard/` |
 

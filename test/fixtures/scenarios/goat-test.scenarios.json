@@ -14,7 +14,7 @@
     {
       "vagueInput": "make sure it works",
       "expectedQuestions": ["what specifically", "what changed", "risk"],
-      "idealSpecificInput": "Test the webhook retry logic in src/api/webhooks.ts — changed from 3 to 5 retries with exponential backoff. Risk: failed deliveries could be lost."
+      "idealSpecificInput": "Test the webhook retry logic in src/api/webhooks.ts - changed from 3 to 5 retries with exponential backoff. Risk: failed deliveries could be lost."
     }
   ]
 }

@@ -212,7 +212,7 @@ describe('Check 1.5.7: config.local.yaml exists', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.4.3 — Skills referenced in router (caught the goat-* glob bug)
+// 2.4.3 - Skills referenced in router (caught the goat-* glob bug)
 // ---------------------------------------------------------------
 describe('Check 2.4.3: Skills referenced in router', () => {
   const check = getCheck('2.4.3');
@@ -275,7 +275,7 @@ describe('Check 2.4.3: Skills referenced in router', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.1.11 — All 6 skills present
+// 2.1.11 - All 6 skills present
 // ---------------------------------------------------------------
 describe('Check 2.1.11: All 6 skills present', () => {
   const check = getCheck('2.1.11');
@@ -306,7 +306,7 @@ describe('Check 2.1.11: All 6 skills present', () => {
 });
 
 // ---------------------------------------------------------------
-// 1.1.1 — Instruction file exists
+// 1.1.1 - Instruction file exists
 // ---------------------------------------------------------------
 describe('Check 1.1.1: Instruction file exists', () => {
   const check = getCheck('1.1.1');
@@ -334,7 +334,7 @@ describe('Check 1.1.1: Instruction file exists', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.2.5 — Preflight script exists
+// 2.2.5 - Preflight script exists
 // ---------------------------------------------------------------
 describe('Check 2.2.5: Preflight script', () => {
   const check = getCheck('2.2.5');
@@ -358,7 +358,7 @@ describe('Check 2.2.5: Preflight script', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.3.4 — Footguns have file:line evidence (had real bugs)
+// 2.3.4 - Footguns have file:line evidence (had real bugs)
 // ---------------------------------------------------------------
 describe('Check 2.3.4: Footgun evidence', () => {
   const check = getCheck('2.3.4');
@@ -434,7 +434,7 @@ describe('Check 2.3.4: Footgun evidence', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.1.12 — Step 0 context gathering
+// 2.1.12 - Step 0 context gathering
 // ---------------------------------------------------------------
 describe('Check 2.1.12: Skills have Step 0', () => {
   const check = getCheck('2.1.12');
@@ -465,7 +465,7 @@ describe('Check 2.1.12: Skills have Step 0', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.2.6 — Context validation script exists
+// 2.2.6 - Context validation script exists
 // ---------------------------------------------------------------
 describe('Check 2.2.6: Context validation', () => {
   const check = getCheck('2.2.6');
@@ -482,7 +482,7 @@ describe('Check 2.2.6: Context validation', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP1 — Instruction file over 150 lines
+// Anti-Pattern: AP1 - Instruction file over 150 lines
 // ---------------------------------------------------------------
 describe('Anti-pattern AP1: Instruction file over 150 lines', () => {
   const ap = getAntiPattern('AP1');
@@ -508,7 +508,7 @@ describe('Anti-pattern AP1: Instruction file over 150 lines', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP12 — Stale file references in footguns
+// Anti-Pattern: AP12 - Stale file references in footguns
 // ---------------------------------------------------------------
 describe('Anti-pattern AP12: Stale file references in footguns', () => {
   const ap = getAntiPattern('AP12');
@@ -555,7 +555,7 @@ describe('Anti-pattern AP12: Stale file references in footguns', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP22 — Duplicate learning-loop surfaces
+// Anti-Pattern: AP22 - Duplicate learning-loop surfaces
 // ---------------------------------------------------------------
 describe('Anti-pattern AP22: Duplicate learning-loop surfaces', () => {
   const ap = getAntiPattern('AP22');
@@ -598,7 +598,7 @@ describe('Anti-pattern AP22: Duplicate learning-loop surfaces', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP3 — DoD in both instruction file and guidelines
+// Anti-Pattern: AP3 - DoD in both instruction file and guidelines
 // ---------------------------------------------------------------
 describe('Anti-pattern AP3: DoD duplication', () => {
   const ap = getAntiPattern('AP3');
@@ -621,7 +621,7 @@ describe('Anti-pattern AP3: DoD duplication', () => {
 });
 
 // ---------------------------------------------------------------
-// 2.2.8 — Agent ignore files for sensitive paths
+// 2.2.8 - Agent ignore files for sensitive paths
 // ---------------------------------------------------------------
 describe('Check 2.2.8: Agent ignore files', () => {
   const check = getCheck('2.2.8');
@@ -657,7 +657,7 @@ describe('Check 2.2.8: Agent ignore files', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP23 — Overly broad deny patterns
+// Anti-Pattern: AP23 - Overly broad deny patterns
 // ---------------------------------------------------------------
 describe('Anti-pattern AP23: Overly broad deny patterns', () => {
   const ap = getAntiPattern('AP23');
@@ -677,7 +677,7 @@ describe('Anti-pattern AP23: Overly broad deny patterns', () => {
     assert.equal(result.triggered, false, `Expected not triggered: ${result.message}`);
   });
 
-  it('triggers on Bash(*git*) — too broad', () => {
+  it('triggers on Bash(*git*) - too broad', () => {
     const ctx = createMockContext({
       agentFacts: {
         settings: {
@@ -692,7 +692,7 @@ describe('Anti-pattern AP23: Overly broad deny patterns', () => {
     assert.equal(result.deduction, -2);
   });
 
-  it('triggers on Bash(*run*) — blocks npm run, cargo run', () => {
+  it('triggers on Bash(*run*) - blocks npm run, cargo run', () => {
     const ctx = createMockContext({
       agentFacts: {
         settings: {
@@ -718,7 +718,7 @@ describe('Anti-pattern AP23: Overly broad deny patterns', () => {
 });
 
 // ---------------------------------------------------------------
-// 1.5.1 — Deny mechanism has 3+ distinct patterns
+// 1.5.1 - Deny mechanism has 3+ distinct patterns
 // ---------------------------------------------------------------
 describe('Check 1.5.1: Deny mechanism patterns', () => {
   const check = getCheck('1.5.1');
@@ -737,7 +737,7 @@ describe('Check 1.5.1: Deny mechanism patterns', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP13 — Stale code references in instruction file
+// Anti-Pattern: AP13 - Stale code references in instruction file
 // ---------------------------------------------------------------
 describe('Anti-pattern AP13: Stale instruction refs', () => {
   const ap = getAntiPattern('AP13');
@@ -769,7 +769,7 @@ describe('Anti-pattern AP13: Stale instruction refs', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP14 — Duplicate skill directories
+// Anti-Pattern: AP14 - Duplicate skill directories
 // ---------------------------------------------------------------
 describe('Anti-pattern AP14: Duplicate skills', () => {
   const ap = getAntiPattern('AP14');
@@ -802,7 +802,7 @@ describe('Anti-pattern AP14: Duplicate skills', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP15 — Outdated skill versions
+// Anti-Pattern: AP15 - Outdated skill versions
 // ---------------------------------------------------------------
 describe('Anti-pattern AP15: Outdated skill versions', () => {
   const ap = getAntiPattern('AP15');
@@ -831,7 +831,7 @@ describe('Anti-pattern AP15: Outdated skill versions', () => {
 });
 
 // ---------------------------------------------------------------
-// Anti-Pattern: AP17 — Dangling file references in skills
+// Anti-Pattern: AP17 - Dangling file references in skills
 // ---------------------------------------------------------------
 describe('Anti-pattern AP17: Dangling skill refs', () => {
   const ap = getAntiPattern('AP17');

@@ -64,7 +64,7 @@
               }
             }
           }">
-            <div class="gf-text-secondary" style="font-size: 12px; font-weight: 500; margin-bottom: 8px;">User role <span class="gf-text-disabled" style="font-weight: 400;">— injected into terminal sessions</span></div>
+            <div class="gf-text-secondary" style="font-size: 12px; font-weight: 500; margin-bottom: 8px;">User role <span class="gf-text-disabled" style="font-weight: 400;">- injected into terminal sessions</span></div>
             <div class="gf-role-strip">
               <template x-for="r in [
                 { id: 'developer', name: 'Developer', desc: 'Investigate, plan, and implement' },
@@ -125,7 +125,7 @@
               </div>
             </div>
             <textarea class="gf-yaml-edit" x-model="localConfigYaml" @input="configDirty = true; _parseUserRole()" spellcheck="false" placeholder="# Local overrides"></textarea>
-            <div class="gf-panel-note">Saved to config.local.yaml (gitignored) — not shared with the team.</div>
+            <div class="gf-panel-note">Saved to config.local.yaml (gitignored) - not shared with the team.</div>
           </div>
 
         </div>

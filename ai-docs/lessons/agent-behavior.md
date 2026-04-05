@@ -98,3 +98,14 @@ category: agent-behavior
 **Why it matters:** Each round of "fix this one thing" costs the user time and patience. The mockup HTML was a working reference with every structural decision already made. The agent's job was to wire up Alpine.js data bindings to the mockup's DOM structure — not to redesign the layout.
 
 **Prevention:** When a mockup HTML file exists, open it and copy the structure directly. Map mockup CSS classes to existing `gf-*` classes or create matching ones. Do not reorganize the DOM structure based on what "seems right." The mockup is the spec — match it element-for-element, then add the dynamic bindings.
+
+---
+
+## Lesson: SBAO uses 2 core-trio agents + 1 fresh-context agent, not 3 single-perspective agents
+**Created:** 2026-04-05
+
+**What happened:** When running SBAO on the M32 plan, the agent launched 3 sub-agents — one as SKEPTIC, one as ANALYST, one as STRATEGIST. This splits the core trio into isolated perspectives instead of having each agent generate internal tension between all three. The correct structure is: 2 agents each running the full core trio (SKEPTIC + ANALYST + STRATEGIST internally), plus 1 fresh-context agent with no framework at all.
+
+**Why it matters:** The core trio's value comes from triangular tension — one agent weighing "what could go wrong" against "what's the cost/benefit" against "what's the fastest path." Splitting them into separate agents eliminates that tension. The fresh-context agent exists to catch blind spots the framework creates — if all 3 agents use the framework, there's no control group.
+
+**Prevention:** Before launching SBAO sub-agents, re-read the SBAO spec in `workflow/skills/goat-plan.md` or `.claude/skills/goat-plan/SKILL.md`. The structure is always: 2 agents with core trio, 1 agent without. Never split SKEPTIC/ANALYST/STRATEGIST into separate agents.

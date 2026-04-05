@@ -9,11 +9,11 @@ goat-flow-skill-version: "0.10.0"
 
 ### Severity & Evidence
 - **Severity order:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. Order findings by severity, not by file or discovery order.
-- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced — state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced - state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
 
 ### Human Gates
-- **BLOCKING GATE** — agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
-- **CHECKPOINT** — agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
+- **BLOCKING GATE** - agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
+- **CHECKPOINT** - agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
 
 ### Adaptive Step 0
 1. Read the user's invocation for context already provided
@@ -21,7 +21,7 @@ goat-flow-skill-version: "0.10.0"
 3. If ALL questions answered by invocation → condensed confirmation, proceed
 4. If user says "skip Step 0" → confirm understanding, proceed
 
-**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context — it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
+**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context - it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
 
 ### Stuck Protocol
 If 3 consecutive reads produce no new signal: (1) present what you have so far, (2) state what you were looking for and didn't find, (3) ask to redirect, narrow scope, or close.
@@ -36,10 +36,10 @@ If 3 consecutive reads produce no new signal: (1) present what you have so far, 
 **Sub-agent mode:** GATEs become CHECKPOINTs automatically. Step 0 proceeds with auto-detected scope.
 
 ### Footgun Fast-Path
-If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files — footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
+If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files - footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
 
 ### Flush Protocol
-If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient — do not commit.
+If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient - do not commit.
 
 ### Learning Loop
 After completing the skill, check if this run uncovered anything worth logging:
@@ -166,20 +166,22 @@ Repeat until the user says "locked in" or 3 rounds complete (whichever first).
 
 ## Phase 3 - Signal-Based Adaptive Orchestration (SBAO)
 
-**For Hotfix / Small Feature:** "SBAO launches 3 sub-agents — that's heavy for a small change. Skip to Phase 4, or run SBAO anyway?" Let the user decide.
+**SBAO agents: 2 with core trio + 1 fresh-context. Never split SKEPTIC/ANALYST/STRATEGIST into separate agents.**
+
+**For Hotfix / Small Feature:** "SBAO launches 3 sub-agents - that's heavy for a small change. Skip to Phase 4, or run SBAO anyway?" Let the user decide.
 
 Critique and improve the plan from Phase 1-2 using multiple perspectives.
 The **core trio** (SKEPTIC / ANALYST / STRATEGIST) provides adversarial tension.
 
-### Step 1 — Generate competing critiques
+### Step 1 - Generate competing critiques
 
 Launch 3 sub-agents in parallel. Each reads the codebase and the Phase 1-2 brief,
 then produces plan improvement ideas.
 
-**Sub-agent A (core trio — risk focus):**
+**Sub-agent A (core trio - risk focus):**
 > Review this plan as a SKEPTIC, ANALYST, and STRATEGIST. What could go wrong? What does the evidence say about cost/benefit? What's the fastest path to shipping? Propose specific improvements.
 
-**Sub-agent B (core trio — alternatives focus):**
+**Sub-agent B (core trio - alternatives focus):**
 > Review this plan as a SKEPTIC, ANALYST, and STRATEGIST. Generate 2-3 alternative approaches. For each, evaluate risk, effort, speed to feedback, and reversibility. Propose specific improvements.
 
 **Sub-agent C (fresh context — control group):**

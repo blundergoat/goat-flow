@@ -1,6 +1,6 @@
 ---
 name: subagent-skips-gates
-description: "When invoked as a sub-agent, BLOCKING GATEs become CHECKPOINTs — agent logs but does not pause"
+description: "When invoked as a sub-agent, BLOCKING GATEs become CHECKPOINTs - agent logs but does not pause"
 origin: synthetic-seed
 agents: all
 skill: goat-review

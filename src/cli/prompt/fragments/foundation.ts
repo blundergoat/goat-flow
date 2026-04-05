@@ -275,7 +275,7 @@ Ensure \`.goat-flow/config.local.yaml\` is gitignored (the default \`.goat-flow/
     instruction: `Create \`.goat-flow/config.local.yaml\` for personal overrides (gitignored):
 
 \`\`\`yaml
-# Local overrides — this file is gitignored.
+# Local overrides - this file is gitignored.
 # Values here merge on top of config.yaml.
 # Uncomment and edit as needed.
 

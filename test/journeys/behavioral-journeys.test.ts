@@ -42,13 +42,13 @@ function parseEval(filePath: string): ParsedEval {
     }
   }
 
-  // Extract scenario — new format (### Scenario + code fence) or legacy (## Replay Prompt / ## Scenario N:)
+  // Extract scenario - new format (### Scenario + code fence) or legacy (## Replay Prompt / ## Scenario N:)
   const scenarioMatch = content.match(/### Scenario\s*\n+```(?:text)?\n([\s\S]*?)```/)
     ?? content.match(/## Replay Prompt\s*\n([\s\S]*?)(?=\n## |$)/)
     ?? content.match(/## Scenario 1:.*\n\*\*Replay:\*\*\s*(.+)/);
   const scenario = scenarioMatch?.[1]?.trim() ?? null;
 
-  // Extract behavioral gates — new format (### Expected Behavior checkboxes) or legacy (## Expected Outcome numbered list)
+  // Extract behavioral gates - new format (### Expected Behavior checkboxes) or legacy (## Expected Outcome numbered list)
   const behaviorSection = content.match(/### Expected Behavior\s*\n([\s\S]*?)(?=\n### |$)/)
     ?? content.match(/## Expected Outcome\s*\n([\s\S]*?)(?=\n## |$)/);
   const gates: string[] = [];
@@ -69,7 +69,7 @@ function parseEval(filePath: string): ParsedEval {
     }
   }
 
-  // Extract anti-patterns — new format (### Anti-Patterns) or legacy (## Known Failure Mode)
+  // Extract anti-patterns - new format (### Anti-Patterns) or legacy (## Known Failure Mode)
   const apSection = content.match(/### Anti-Patterns\s*\n([\s\S]*?)(?=\n### |$)/)
     ?? content.match(/## Known Failure Mode\s*\n([\s\S]*?)(?=\n## |$)/);
   const antiPatterns: string[] = [];
@@ -127,7 +127,7 @@ describe('All evals parse correctly', () => {
         if (eval_.antiPatterns.length === 0) {
           assert.ok(
             eval_.frontmatter.difficulty === 'easy' || eval_.gates.length >= 4,
-            `${file}: no anti-patterns and not marked easy — consider adding anti-patterns`,
+            `${file}: no anti-patterns and not marked easy - consider adding anti-patterns`,
           );
         }
       });

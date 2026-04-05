@@ -150,7 +150,7 @@ GOOD: Read composer.json first -> "acme-client is installed via Packagist at ^1.
 
 **Problem:** Agent confuses questions with directives and drifts between modes silently.
 
-Complexity: Hotfix (1-2 files) / Small Feature (compressed brief) / Standard / System Change / Infrastructure. No fixed read/turn caps — if reads exceed 3x your initial estimate, re-classify before continuing.
+Complexity: Hotfix (1-2 files) / Small Feature (compressed brief) / Standard / System Change / Infrastructure. No fixed read/turn caps - if reads exceed 3x your initial estimate, re-classify before continuing.
 Mode: Plan / Implement / Explain / Debug / Review
 
 ```
@@ -297,7 +297,7 @@ Max -15 total. Applied after tier scoring. Final score cannot drop below 0.
 | ID | Anti-Pattern | Detection | Deduction |
 |----|-------------|-----------|-----------|
 | AP1 | Instruction file over 150 lines | `wc -l {instruction_file}` > 150 | -3 |
-| ~~AP2~~ | ~~Skill name conflicts with built-in~~ | Removed — penalized project-specific skills | — |
+| ~~AP2~~ | ~~Skill name conflicts with built-in~~ | Removed - penalized project-specific skills | - |
 | AP3 | DoD in both instruction file and guidelines | DoD section found in both files | -3 |
 | AP4 | Footguns without evidence | `ai-docs/footguns/` exists but zero `file:|line:` references | -5 |
 | AP5 | Settings.json invalid JSON | `JSON.parse()` throws | -5 |

@@ -29,6 +29,7 @@ The other 5 skills remain directly invocable. `/goat` is a convenience layer, no
 | HIPAA, GDPR, PHI, compliance, regulation | **/goat-security** | Compliance |
 | dependencies, outdated packages, supply chain, dependency audit | **/goat-security** | Dependency audit |
 | plan, design, feature, architect, build (new thing) | **/goat-plan** | Plan |
+| SBAO, critique a plan, sub-agents, core trio, triangular tension | **/goat-plan** | SBAO (Phase 3) |
 | rename, move, extract, restructure, refactor, cross-file | **/goat-plan** | Refactor |
 | test, testing, verification, coverage, test plan | **/goat-test** | — |
 

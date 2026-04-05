@@ -349,7 +349,7 @@ describe('Session log path consistency in setup templates', () => {
       if (content.includes('session')) {
         assert.ok(
           !content.includes('.goat-flow/tasks/logs/sessions'),
-          `${file} uses wrong path .goat-flow/tasks/logs/sessions — should be .goat-flow/logs/sessions/`,
+          `${file} uses wrong path .goat-flow/tasks/logs/sessions - should be .goat-flow/logs/sessions/`,
         );
       }
     }

@@ -9,11 +9,11 @@ goat-flow-skill-version: "0.10.0"
 
 ### Severity & Evidence
 - **Severity order:** SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. Order findings by severity, not by file or discovery order.
-- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced — state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
+- **Evidence:** Every finding needs `file:line`. Tag as OBSERVED (directly verified in code) or INFERRED (deduced - state what direct evidence is missing). Before presenting findings, re-read each cited `file:line` to confirm accuracy. MUST NOT fabricate file paths, function names, or behaviour.
 
 ### Human Gates
-- **BLOCKING GATE** — agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
-- **CHECKPOINT** — agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
+- **BLOCKING GATE** - agent MUST stop and wait for human decision. Used for: scope approval, phase transitions, final output review. Do NOT auto-advance.
+- **CHECKPOINT** - agent presents status and continues unless interrupted. Used for: progress reports, intermediate findings. Format: "Phase N complete. [summary]. Continuing to Phase N+1."
 
 ### Adaptive Step 0
 1. Read the user's invocation for context already provided
@@ -21,7 +21,7 @@ goat-flow-skill-version: "0.10.0"
 3. If ALL questions answered by invocation → condensed confirmation, proceed
 4. If user says "skip Step 0" → confirm understanding, proceed
 
-**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context — it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
+**Gate rule:** Step 0 MUST end with the agent presenting its understanding and waiting for the user before Phase 1. Auto-detect pre-fills context - it does not replace confirmation. Bare invocation = zero context = ask all structural questions and wait.
 
 ### Stuck Protocol
 If 3 consecutive reads produce no new signal: (1) present what you have so far, (2) state what you were looking for and didn't find, (3) ask to redirect, narrow scope, or close.
@@ -36,10 +36,10 @@ If 3 consecutive reads produce no new signal: (1) present what you have so far, 
 **Sub-agent mode:** GATEs become CHECKPOINTs automatically. Step 0 proceeds with auto-detected scope.
 
 ### Footgun Fast-Path
-If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files — footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
+If Step 0 footgun check matches a known trap: (1) surface match immediately, (2) offer mitigation path from the entry, (3) still require READ + VERIFY on actual files - footguns are incident records, not executable specs, (4) do NOT skip to implementation on a match alone.
 
 ### Flush Protocol
-If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient — do not commit.
+If 10+ tool calls pass without a gate/checkpoint (skip for Hotfix/Small Feature): (1) write 3-sentence status to `.goat-flow/tasks/handoff.md` (what, where, next), (2) if working from a plan/milestone file: tick all completed checkboxes NOW before continuing, (3) ask: continue, compact, or redirect? Counter resets at every BLOCKING GATE, CHECKPOINT, or human message. Handoff file is transient - do not commit.
 
 ### Learning Loop
 After completing the skill, check if this run uncovered anything worth logging:
@@ -102,7 +102,7 @@ That's the failure mode this skill exists to prevent.
 - Explore/understand/how does/new to → Investigate mode
 - Onboard/new project/set up instructions → Onboard mode
 
-**Escape hatch:** If the user says "I'll figure it out from the code" or provides minimal info, proceed with what you have — auto-detect from error output, `git diff`, or named files.
+**Escape hatch:** If the user says "I'll figure it out from the code" or provides minimal info, proceed with what you have - auto-detect from error output, `git diff`, or named files.
 
 **Auto-detect:** Read the error message or test output if provided inline.
 If the user said `/goat-debug the test in auth.test.ts fails with TypeError`,
@@ -124,7 +124,7 @@ Surface the mismatch, suggest re-classification. Don't silently proceed.
 
 ### Phase D1 - Investigate (no fixes)
 
-(Recurrence check already done in Step 0 — do not repeat here.)
+(Recurrence check already done in Step 0 - do not repeat here.)
 
 **HYPOTHESIS TRACKING:** After initial read of the primary file,
 write 2-3 hypotheses. Hypotheses MUST span at least 2 categories:
@@ -164,9 +164,9 @@ the user whether to proceed or dig deeper.
 **BLOCKING GATE:** Present diagnosis. Offer:
 (a) investigate deeper
 (b) propose a fix plan (→ Phase D3)
-(c) this matches a known issue — close
+(c) this matches a known issue - close
 (d) switch to investigate mode for deeper exploration
-(e) just report findings — don't fix (stop here)
+(e) just report findings - don't fix (stop here)
 
 If the user's original intent was "just diagnose" or "investigate" (no implementation verbs), default to (e).
 
@@ -281,7 +281,7 @@ Conversational: present findings by severity tier, pause between tiers. Let the 
 - MUST declare scope before deep reading (investigate mode)
 - MUST tag evidence as OBSERVED or INFERRED (investigate mode)
 - MUST include "What I Didn't Read" in every investigation report
-- MUST pause if reads exceed 3x initial estimate — re-scope before continuing (investigate mode)
+- MUST pause if reads exceed 3x initial estimate - re-scope before continuing (investigate mode)
 - MUST check recurrence against footguns + lessons (diagnose mode)
 - MUST NOT fabricate file paths or function names
 - MUST verify fix doesn't violate architecture constraints

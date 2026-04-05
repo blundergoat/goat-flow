@@ -14,7 +14,7 @@
     {
       "vagueInput": "make it better",
       "expectedQuestions": ["what problem", "complexity", "scope"],
-      "idealSpecificInput": "Improve the dashboard load time — currently 3s on first paint. Target: under 1s. Focus on the preset list rendering and scan data fetch."
+      "idealSpecificInput": "Improve the dashboard load time - currently 3s on first paint. Target: under 1s. Focus on the preset list rendering and scan data fetch."
     }
   ]
 }

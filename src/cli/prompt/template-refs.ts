@@ -273,7 +273,7 @@ function getSetupGuideRefs(agentId: AgentId): TemplateRef[] {
 const LANGUAGE_TEMPLATE_MAP: Record<string, string> = {
   typescript: 'workflow/coding-standards/backend/typescript-node.md',
   javascript: 'workflow/coding-standards/backend/typescript-node.md',
-  // Generic php.md does not exist — PHP routes via framework-specific templates (laravel, symfony)
+  // Generic php.md does not exist - PHP routes via framework-specific templates (laravel, symfony)
   python: 'workflow/coding-standards/backend/python.md',
   go: 'workflow/coding-standards/backend/go.md',
   rust: 'workflow/coding-standards/backend/rust.md',
