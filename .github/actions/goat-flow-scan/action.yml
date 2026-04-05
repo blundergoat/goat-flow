@@ -21,6 +21,14 @@ runs:
     - name: Build scanner
       shell: bash
       run: cd ${{ github.action_path }}/../../.. && npx tsc
+    - name: Create config.local.yaml if missing
+      shell: bash
+      run: |
+        CONFIG_LOCAL="${{ inputs.path }}/.goat-flow/config.local.yaml"
+        if [ ! -f "$CONFIG_LOCAL" ]; then
+          mkdir -p "$(dirname "$CONFIG_LOCAL")"
+          echo "# Local overrides - this file is gitignored." > "$CONFIG_LOCAL"
+        fi
     - name: Run scan
       id: scan
       shell: bash

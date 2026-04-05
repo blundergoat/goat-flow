@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npx tsc && mkdir -p dist/dashboard && cp src/dashboard/index.html dist/dashboard/ && cp -r src/dashboard/views dist/dashboard/
+        run: npx tsc && cp -r src/dashboard dist/
 
       - name: Test
         run: npm test

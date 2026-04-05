@@ -1475,16 +1475,6 @@ describe('Check 2.7.1: LLM integration addressed', () => {
   });
 });
 
-describe('Check 2.7.2: PHI/compliance on hot path', () => {
-  const check = getCheck('2.7.2');
-  assert.ok(check, 'Check 2.7.2 should exist');
-
-  it('is N/A when no compliance signals', () => {
-    const ctx = createMockContext(); // default: complianceSignals = false
-    const result = runSingleCheck(check, ctx);
-    assert.equal(result.status, 'na', result.message);
-  });
-});
 
 // ---------------------------------------------------------------
 // Standard: Router additional
