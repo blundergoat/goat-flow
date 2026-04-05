@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis. Includes refactor planning mode for cross-file restructuring."
-goat-flow-skill-version: "0.10.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-plan
 

@@ -158,7 +158,7 @@ describe('Installed skills have valid YAML frontmatter', () => {
 describe('Installed skill version tags', () => {
   const installed = getInstalledSkillDirs();
   // Read RUBRIC_VERSION from the built source
-  let rubricVersion = '0.10.0'; // fallback
+  let rubricVersion = '1.0.0'; // fallback
   const versionPath = join(ROOT, 'src/cli/rubric/version.ts');
   if (existsSync(versionPath)) {
     const versionContent = readFileSync(versionPath, 'utf-8');

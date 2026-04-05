@@ -1,6 +1,6 @@
 # GOAT Flow -- Getting Started
 
-**Version:** v0.10.0 | 2026-03-31
+**Version:** v1.0.0 | 2026-04-05
 **Companion to:** `workflow/setup/` (agent setup guides) and `docs/system-spec.md` (canonical spec)
 
 ---

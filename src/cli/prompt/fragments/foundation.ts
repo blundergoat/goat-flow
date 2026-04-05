@@ -234,7 +234,7 @@ Footguns use category files such as \\\`hooks.md\\\` with frontmatter \\\`catego
     instruction: `Create \`.goat-flow/config.yaml\`:
 
 \`\`\`yaml
-version: "0.10.0"
+version: "1.0.0"
 footguns:
   committed: ai-docs/footguns/
   local: .goat-flow/footguns/

@@ -19,7 +19,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createFS } from '../facts/fs.js';
 import { scanProject } from '../scanner/scan.js';
 import { renderJson } from '../render/json.js';
@@ -105,7 +105,6 @@ function jsonResponse(
 /** Configuration options for launching the dashboard server */
 interface DashboardOptions {
   projectPath: string;
-  openBrowser: boolean;
   dev?: boolean;
 }
 
@@ -115,46 +114,6 @@ export interface DashboardServer {
   port: number;
 }
 
-/** Return the workspace-local flag that suppresses first-run browser auto-open. */
-function getDashboardOpenFlagPath(projectPath: string): string {
-  return join(projectPath, '.goat-flow', '.goat-flow-dashboard-opened');
-}
-
-/** Record that the dashboard has already auto-opened for this workspace. */
-function markDashboardOpened(projectPath: string): void {
-  const flagPath = getDashboardOpenFlagPath(projectPath);
-  try {
-    mkdirSync(dirname(flagPath), { recursive: true });
-    writeFileSync(flagPath, '');
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Auto-open the dashboard only until this workspace has been marked as seen. */
-function shouldOpenDashboardInBrowser(projectPath: string): boolean {
-  return !existsSync(getDashboardOpenFlagPath(projectPath));
-}
-
-/** Open the dashboard URL in the platform-default browser. */
-function openBrowserWindow(url: string): void {
-  const [command, args] = (() => {
-    if (process.platform === 'darwin') {
-      return ['open', [url] as string[]] as const;
-    }
-    if (process.platform === 'win32') {
-      return ['cmd', ['/c', 'start', '', url] as string[]] as const;
-    }
-    return ['xdg-open', [url] as string[]] as const;
-  })();
-
-  try {
-    const proc = spawn(command, args, { detached: true, stdio: 'ignore' });
-    proc.unref();
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * Start a local dashboard server. Serves the HTML dashboard and
@@ -175,7 +134,6 @@ export function serveDashboard(
       return cachedTemplate;
     }
     const absDefault = resolve(options.projectPath);
-    const openBrowser = options.openBrowser === true;
 
     /** Resolve and validate a user-supplied path. Rejects paths outside the project root. */
     /** Resolve a user-supplied path to an absolute path. Host header check prevents remote exploitation. */
@@ -985,10 +943,6 @@ export function serveDashboard(
       if (!addr || typeof addr === 'string') return;
       const url = `http://127.0.0.1:${addr.port}`;
       console.log(`Dashboard: ${url}`);
-      if (openBrowser && shouldOpenDashboardInBrowser(absDefault)) {
-        openBrowserWindow(url);
-        markDashboardOpened(absDefault);
-      }
       // Warn once at startup when the embedded terminal backend is unavailable.
       void getManager()
         .then((m) => m.health())

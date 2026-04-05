@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "goat-plan skill"
-goat-flow-skill-version: "0.10.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-plan
 

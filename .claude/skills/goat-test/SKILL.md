@@ -1,7 +1,7 @@
 ---
 name: goat-test
 description: "3-phase test plan generation with automated commands, AI verification prompts, and human testing checklists. Doer-verifier principle."
-goat-flow-skill-version: "0.10.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-test
 

@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "description": "CLI scanner, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
   "author": {
     "name": "Matthew Hansen",
@@ -64,15 +64,22 @@
   },
   "keywords": [
     "ai",
+    "ai-agent",
     "audit",
     "claude",
+    "claude-code",
     "codex",
     "coding-agent",
+    "copilot",
+    "dashboard",
     "gemini",
+    "llm",
+    "scanner",
     "workflow"
   ],
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -85,7 +92,6 @@
     "typescript-eslint": "^8.57.1"
   },
   "optionalDependencies": {
-    "node-pty": "1.1.0",
-    "ws": "^8.20.0"
+    "node-pty": "1.1.0"
   }
 }

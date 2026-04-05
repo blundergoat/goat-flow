@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "4-phase planning workflow with complexity routing, kill criteria, and triangular tension analysis. Includes refactor planning mode for cross-file restructuring."
-goat-flow-skill-version: "0.10.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-plan
 
@@ -92,7 +92,7 @@ Use before non-trivial implementation or cross-file restructuring.
 
 **Continuation detection:** Before starting fresh, check for existing planning artifacts:
 - `.goat-flow/tasks/todo.md`, `.goat-flow/tasks/handoff.md`
-- `.goat-flow/tasks/0.10.0/*.md` (version-specific milestone files, e.g., `M24-install-and-readme.md`)
+- `.goat-flow/tasks/1.0.0/*.md` (version-specific milestone files, e.g., `M24-install-and-readme.md`)
 - `.goat-flow/tasks/_archived/roadmaps/` (prior version roadmaps and milestones)
 
 Also check for staleness: `git log --since="2 weeks ago" -- [artifact]`. If the artifact hasn't been touched while code diverged, flag it.

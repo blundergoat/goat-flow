@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Structured code review and quality audit with RFC 2119 severity, diff-aware analysis, footgun matching, negative verification, simplify mode for readability, and instruction-file audit mode."
-goat-flow-skill-version: "0.10.0"
+goat-flow-skill-version: "1.0.0"
 ---
 # /goat-review
 

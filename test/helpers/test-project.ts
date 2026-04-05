@@ -75,7 +75,7 @@ export class TestProject {
   withLearningLoop(): this {
     this.withFile(
       '.goat-flow/config.yaml',
-      'version: "0.10.0"\nfootguns:\n  committed: ai-docs/footguns/\n  local: .goat-flow/footguns/\nlessons:\n  committed: ai-docs/lessons/\n  local: .goat-flow/lessons/\ndecisions:\n  path: ai-docs/decisions/\ntasks:\n  path: .goat-flow/tasks/\nskills:\n  install: all\n',
+      'version: "1.0.0"\nfootguns:\n  committed: ai-docs/footguns/\n  local: .goat-flow/footguns/\nlessons:\n  committed: ai-docs/lessons/\n  local: .goat-flow/lessons/\ndecisions:\n  path: ai-docs/decisions/\ntasks:\n  path: .goat-flow/tasks/\nskills:\n  install: all\n',
     );
     this.withFile('ai-docs/footguns/README.md', '# Footguns\n');
     this.withFile(

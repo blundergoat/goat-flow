@@ -548,8 +548,6 @@ export interface CLIOptions {
   output: string | null;
   // Show prioritized setup guidance instead of scores
   guide: boolean;
-  // Open browser automatically for dashboard command
-  openDashboard: boolean;
   // Enable live reload for dashboard development
   dev: boolean;
   help: boolean;

@@ -2,6 +2,16 @@
 
 ---
 
+## v1.0.0 - 2026-04-05
+
+Version bump from v0.10.0 for semver compatibility (`^0.9.x` won't resolve to `0.10.0`).
+
+**CLI** - Removed `--no-open` flag and auto-open browser logic from dashboard. Removed `spawn` import. Dashboard always prints URL, user opens manually.
+**Dependencies** - `ws` moved from optionalDependencies to dependencies (required for dashboard WebSocket). `node-pty` stays optional.
+**Keywords** - Added `ai-agent`, `claude-code`, `copilot`, `dashboard`, `llm`, `scanner` to package.json for npm discoverability.
+
+---
+
 ## v0.10.0 - 2026-04-05
 
 SBAO Phase 3, dashboard redesign, rubric priority grading, security hardening, copilot support, 48-file CLI refactor. 115 checks + 20 anti-patterns. 1,166 tests.

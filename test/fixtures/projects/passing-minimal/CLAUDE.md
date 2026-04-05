@@ -1,4 +1,4 @@
-# CLAUDE.md - v0.10.0 (2026-04-03)
+# CLAUDE.md - v1.0.0 (2026-04-05)
 GOAT Flow test fixture.
 
 ## Essential Commands

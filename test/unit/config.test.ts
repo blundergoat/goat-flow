@@ -57,7 +57,7 @@ describe('config reader', () => {
 
   it('warns on unknown keys', () => {
     const result = validateConfig({
-      version: '0.10.0',
+      version: '1.0.0',
       unknownField: true,
     });
 
@@ -97,7 +97,7 @@ describe('config reader', () => {
 describe('config userRole parsing', () => {
   it('defaults userRole to developer when not specified', () => {
     const fs = createMockFS({
-      '.goat-flow/config.yaml': 'version: "0.10.0"\n',
+      '.goat-flow/config.yaml': 'version: "1.0.0"\n',
     });
     const loaded = loadConfig('/test', fs);
     assert.equal(loaded.config.userRole, 'developer');

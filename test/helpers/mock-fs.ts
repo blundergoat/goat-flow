@@ -285,7 +285,7 @@ function normalizeLearningLoop(
   if (hasLearningLoop && !('.goat-flow/config.yaml' in normalized)) {
     const agents = detectAgents(normalized);
     normalized['.goat-flow/config.yaml'] = [
-      'version: "0.10.0"',
+      'version: "1.0.0"',
       'footguns:',
       '  committed: ai-docs/footguns/',
       '  local: .goat-flow/footguns/',
