@@ -181,12 +181,6 @@ function getStandardRefs(agentId: AgentId): TemplateRef[] {
       phase: 'standard',
       note: 'Under 100 lines',
     },
-    {
-      output: '.goat-flow/tasks/handoff-template.md',
-      template: 'workflow/evaluation/handoff.md',
-      phase: 'standard',
-      note: 'Copy template',
-    },
   ];
 
   /** Role-specific coding-standards refs that the scanner checks for */
@@ -657,7 +651,6 @@ const FRAGMENT_TEMPLATE_MAP: Record<
   'create-lessons': 'workflow/setup/shared/docs-seed.md',
   'create-footguns': 'workflow/setup/shared/docs-seed.md',
   'create-architecture': 'workflow/runtime/architecture.md',
-  'create-handoff-template': 'workflow/evaluation/handoff.md',
   'create-evals-dir': 'workflow/evaluation/evals.md',
   'add-evals': 'workflow/evaluation/evals.md',
   'create-ci-workflow': 'workflow/evaluation/ci-validation.md',

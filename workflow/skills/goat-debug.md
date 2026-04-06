@@ -5,12 +5,21 @@ goat-flow-skill-version: "1.0.0"
 ---
 # /goat-debug
 
-<!-- Shared Conventions: inline from workflow/skills/reference/shared-preamble.md during setup.
-     Setup agents: read shared-preamble.md and include its content as "## Shared Conventions" at the top of the installed SKILL.md. -->
+## Shared Conventions
+
+Read `.goat-flow/skill-conventions.md` for full shared conventions.
+If unavailable, use these essentials:
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- Evidence: every finding MUST include file:line, tag OBSERVED vs INFERRED
+- Learning loop: check ai-docs/lessons/ and ai-docs/footguns/ after completion
+- Gates: BLOCKING GATE = stop and wait. CHECKPOINT = continue unless interrupted.
+- Task tracking: tick checkboxes immediately when completed, not at the end.
 
 ## When to Use
 
 Use when diagnosing a bug, understanding unfamiliar code, or onboarding to a new project.
+
+**Complexity classification:** A 1-2 file bug fix is a Hotfix — minimal ceremony. A cross-system investigation is Standard. Don't over-classify: if you can describe the fix in one sentence, it's a Hotfix regardless of project size.
 
 **Mode routing:**
 - Has a specific bug/symptom → **Diagnose mode** (Phases D1-D4)

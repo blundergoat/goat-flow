@@ -174,58 +174,7 @@ Without this, PRs can merge without context validation passing.`,
   },
 
   // === Hygiene ===
-  {
-    key: 'create-handoff-template',
-    phase: 'full',
-    category: 'Hygiene',
-    kind: 'create',
-    instruction: `Create \`.goat-flow/tasks/handoff-template.md\`:
-
-\`\`\`markdown
-# Agent Session Handoff Template
-
-**Purpose:** Copy this template to \`.goat-flow/tasks/handoff.md\` when work stops mid-task. The next session reads that file before doing new work.
-
-**When to create:** unfinished work, blocked progress, or repeated failed attempts.
-
-**When to read:** at the start of a session, if \`.goat-flow/tasks/handoff.md\` exists.
-
-## Date
-[YYYY-MM-DD]
-
-## Status
-[In Progress / Blocked / Ready for Review]
-
-## Current State
-[What was done, what remains, files changed]
-
-## Key Decisions
-[Decisions made during this session]
-
-## Errors & Corrections
-[What went wrong, what was fixed, what was abandoned]
-
-## Learnings
-[What worked well, what did not, surprising findings]
-
-## Known Risks
-[What could go wrong]
-
-## Next Step
-[Exactly what to do next]
-
-## Context Files
-[Files the next session should read first]
-\`\`\``,
-  },
-  {
-    key: 'fix-handoff-sections',
-    phase: 'full',
-    category: 'Hygiene',
-    kind: 'fix',
-    instruction:
-      '`.goat-flow/tasks/handoff-template.md` is missing required sections. It must include: ## Date, ## Status, ## Current State, ## Key Decisions, ## Errors & Corrections, ## Learnings, ## Known Risks, ## Next Step, and ## Context Files.',
-  },
+  // create-handoff-template and fix-handoff-sections removed - handoff is workspace-level, not a rubric concern.
   {
     key: 'create-logs-dir',
     phase: 'full',
@@ -282,5 +231,15 @@ Note: the execution loop MUST be duplicated (each file is loaded independently).
     category: 'Agent Evals',
     kind: 'fix',
     instruction: `Add YAML frontmatter to eval files: \`---\` block with name, description, origin, agents, skill, and difficulty fields. Use \`### Scenario\`, checkbox gates in \`### Expected Behavior\`, and bullet list \`### Anti-Patterns\`.`,
+  },
+
+  // === Skill Conventions ===
+  {
+    key: 'create-skill-conventions',
+    phase: 'full',
+    category: 'Skill Conventions',
+    kind: 'create',
+    instruction:
+      'Create `.goat-flow/skill-conventions.md` with project-specific shared preamble for skills. Copy from `workflow/skills/reference/shared-preamble.md` and adapt to your project.',
   },
 ];

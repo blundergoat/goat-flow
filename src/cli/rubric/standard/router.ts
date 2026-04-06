@@ -164,31 +164,7 @@ export const routerChecks: CheckDef[] = [
     recommendation: 'Add ai-docs/evals/ to the router table',
     recommendationKey: 'route-evals',
   },
-  {
-    id: '2.4.7',
-    name: 'Handoff template in router',
-    tier: 'standard',
-    category: 'Router Table',
-    pts: 1,
-    confidence: 'high',
-    priority: 'optional',
-    na: (ctx) =>
-      !ctx.agentFacts.instruction.content?.toLowerCase().includes('router'),
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult =>
-        getRequiredRouterPathCheckResult(
-          '2.4.7',
-          'Handoff template in router',
-          '.goat-flow/tasks/handoff-template.md',
-          'Add the shared handoff template path so agents can jump straight to the canonical incomplete-work artifact.',
-          ctx,
-        ),
-    },
-    recommendation:
-      'Add .goat-flow/tasks/handoff-template.md to the router table',
-    recommendationKey: 'route-handoff',
-  },
+  // 2.4.7 (handoff template in router) removed - handoff is workspace-level, not a rubric concern.
   {
     id: '2.4.8',
     name: 'Config in router',

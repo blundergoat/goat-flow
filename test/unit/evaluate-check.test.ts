@@ -1309,37 +1309,7 @@ describe('Check 3.1.5a: Evals have agents labels', () => {
 // ---------------------------------------------------------------
 // Full tier: Hygiene
 // ---------------------------------------------------------------
-describe('Check 3.3.1: Handoff template exists', () => {
-  const check = getCheck('3.3.1');
-  assert.ok(check, 'Check 3.3.1 should exist');
-
-  it('passes with default mock', () => {
-    const ctx = createMockContext();
-    const result = runSingleCheck(check, ctx);
-    assert.equal(result.status, 'pass', result.message);
-  });
-});
-
-describe('Check 3.3.1a: Handoff template has sections', () => {
-  const check = getCheck('3.3.1a');
-  assert.ok(check, 'Check 3.3.1a should exist');
-
-  it('passes when all required sections present', () => {
-    const ctx = createMockContext({
-      shared: { handoffTemplate: { exists: true, hasRequiredSections: true, sectionCount: 9 } },
-    });
-    const result = runSingleCheck(check, ctx);
-    assert.equal(result.status, 'pass', result.message);
-  });
-
-  it('fails when sections missing', () => {
-    const ctx = createMockContext({
-      shared: { handoffTemplate: { exists: true, hasRequiredSections: false, sectionCount: 3 } },
-    });
-    const result = runSingleCheck(check, ctx);
-    assert.equal(result.status, 'fail', result.message);
-  });
-});
+// Checks 3.3.1 and 3.3.1a (handoff template) removed - handoff is workspace-level, not a rubric concern.
 
 // ---------------------------------------------------------------
 // Standard: Learning Loop batch

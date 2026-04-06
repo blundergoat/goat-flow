@@ -5,5 +5,3 @@
 **/credentials*
 **/.git/
 .gemini/settings.local.json
-tasks/todo.md
-tasks/handoff.md

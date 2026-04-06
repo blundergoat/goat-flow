@@ -1,6 +1,6 @@
 # ADR-024: Flush protocol checkbox enforcement
 
-**Status:** Accepted
+**Status:** Superseded by ADR-028
 **Date:** 2026-04-04
 **Context:** The same checkbox-ticking failure occurred twice in 4 days (M1 on 2026-03-31, M29 on 2026-04-04). In both cases the agent completed all tasks, ran verification, marked the milestone done, and ticked zero checkboxes. The CLAUDE.md VERIFY rule ("MUST tick `- [x]` on each task as it's completed - not at the end") was known and ignored because parallel agent orchestration displaced the tracking step. Behavioral reminders are insufficient - the failure recurred despite a documented lesson.
 

@@ -712,9 +712,7 @@ function checkSharedPath(path: string, ctx: FactContext): boolean {
     [shared.lessons.paths.committed]: shared.lessons.committedExists,
     [shared.lessons.paths.local]: shared.lessons.localExists,
     'ai-docs/architecture.md': shared.architecture.exists,
-    'ai-docs/guidelines-ownership-split.md': shared.guidelinesOwnership.exists,
-    'ai-docs/domain-reference.md': shared.domainReference.exists,
-    '.goat-flow/tasks/handoff-template.md': shared.handoffTemplate.exists,
+    '.goat-flow/skill-conventions.md': shared.skillConventions.exists,
     [shared.evals.path]: shared.evals.dirExists,
     [shared.evals.path.replace(/\/$/, '')]: shared.evals.dirExists,
     [shared.evals.path.replace(/\/$/, '') + '/README.md']:

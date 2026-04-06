@@ -5,10 +5,19 @@ goat-flow-skill-version: "1.0.0"
 ---
 # /goat-test
 
-<!-- Shared Conventions: inline from workflow/skills/reference/shared-preamble.md during setup.
-     Setup agents: read shared-preamble.md and include its content as "## Shared Conventions" at the top of the installed SKILL.md. -->
+## Shared Conventions
+
+Read `.goat-flow/skill-conventions.md` for full shared conventions.
+If unavailable, use these essentials:
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- Evidence: every finding MUST include file:line, tag OBSERVED vs INFERRED
+- Learning loop: check ai-docs/lessons/ and ai-docs/footguns/ after completion
+- Gates: BLOCKING GATE = stop and wait. CHECKPOINT = continue unless interrupted.
+- Task tracking: tick checkboxes immediately when completed, not at the end.
 
 ## When to Use
+
+**Before generating a test plan:** Consider whether this change needs automated tests at all. goat-flow follows Development Driven Testing (DDT): code first, verify manually, let preflight checks and static analysis catch what they catch, then decide if automated tests add value. If the code is readable, preflight checks pass, and static analysis covers the risk surface — that may be sufficient. goat-test is for when automated tests genuinely add value: complex business logic, cross-service integration, or locking in a bug fix. Don't generate test plans as ceremony.
 
 Use after a coding milestone or every 30-60 minutes of implementation to
 generate testing instructions. Testing after 30-60 min keeps the blast radius

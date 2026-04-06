@@ -19,7 +19,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Execution Loop | The six-step agent workflow: READ, CLASSIFY, SCOPE, ACT, VERIFY, LOG. | `docs/system-spec.md` | Default loop |
 | Footgun | A documented architectural trap with `file:line` evidence stored in category bucket files under `ai-docs/footguns/`. | `docs/system-spec.md` | Architectural landmine |
 | Guide Mode | A scanner rendering mode that turns the CLI scanner into an interactive setup assistant. | `src/cli/render/guide.ts` | -- |
-| Handoff | A structured file (`.goat-flow/tasks/handoff.md`) written when ending incomplete work so another session can resume. | `docs/system-spec.md` | -- |
+| Handoff | Deprecated in v1.1.0. Replaced by milestone files with ticked checkboxes as the continuity mechanism. See Task Tracking in `.goat-flow/skill-conventions.md`. | `.goat-flow/skill-conventions.md` | -- |
 | Hot Path | Instruction content loaded every session (CLAUDE.md, local instruction files) with a strict line budget. | `docs/system-spec.md` | -- |
 | Instruction Budget | The practical limit (~100-150 instructions) an agent can follow reliably; exceeding it degrades all instructions uniformly. | `docs/system-spec.md` | Line budget |
 | Layer 1-5 | The five-layer architecture: Runtime (always on), Local Context (auto-load), Skills (on demand), Playbooks (on demand), Evaluation (on demand). | `docs/five-layers.md` | 5-layer system |
@@ -36,4 +36,4 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | State Declaration | The required format (`State: [MODE] \| Goal: [one line] \| Exit: [condition]`) an agent must announce before acting. | `docs/system-spec.md` | -- |
 | Stop-the-Line | A Level 2 VERIFY escalation requiring the agent to fully stop, preserve error output, and wait for human review. | `docs/system-spec.md` | Level 2 escalation |
 | Triangular Tension | A mob elaboration technique that stress-tests a plan from three competing perspectives to surface hidden risks. | `CLAUDE.md` | -- |
-| Working Memory | The escalation ladder for long tasks: scratchpad, then todo.md, then handoff file, then ask human. | `docs/system-spec.md` | Working Notes |
+| Working Memory | Progress tracking via milestone file checkboxes (`.goat-flow/tasks/<version>/`). On `/compact`, session log written to `.goat-flow/logs/sessions/`. | `.goat-flow/skill-conventions.md` | Working Notes |

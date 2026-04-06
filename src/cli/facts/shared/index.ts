@@ -10,43 +10,12 @@ import { extractEvalFacts } from './evals.js';
 import { extractCIFacts, extractGitignoreFacts } from './ci.js';
 import { extractLocalInstructions } from './local-instructions.js';
 
-/** Required section headings for a well-formed handoff template. */
-export const HANDOFF_SECTIONS = [
-  'date',
-  'status',
-  'current state',
-  'key decisions',
-  'errors & corrections',
-  'learnings',
-  'known risks',
-  'next step',
-  'context files',
-];
-
 /** Extract existence and line-count facts for the architecture doc. */
 function extractArchitectureFacts(fs: ReadonlyFS): SharedFacts['architecture'] {
   const exists = fs.exists('ai-docs/architecture.md');
   return {
     exists,
     lineCount: exists ? fs.lineCount('ai-docs/architecture.md') : 0,
-  };
-}
-
-/** Extract existence and section coverage facts for the shared handoff template. */
-function extractHandoffTemplateFacts(
-  fs: ReadonlyFS,
-): SharedFacts['handoffTemplate'] {
-  const content = fs.readFile('.goat-flow/tasks/handoff-template.md');
-  const sectionCount = content
-    ? HANDOFF_SECTIONS.filter((section) =>
-        new RegExp(`##\\s*${section}|\\*\\*${section}`, 'i').test(content),
-      ).length
-    : 0;
-
-  return {
-    exists: content !== null,
-    sectionCount,
-    hasRequiredSections: sectionCount >= HANDOFF_SECTIONS.length,
   };
 }
 
@@ -113,18 +82,14 @@ export function extractSharedFacts(
     architecture: extractArchitectureFacts(fs),
     evals: extractEvalFacts(fs, configState.config.evals.path),
     ci: extractCIFacts(fs),
-    handoffTemplate: extractHandoffTemplateFacts(fs),
     ignoreFiles: {
       copilotignore: fs.exists('.copilotignore'),
       cursorignore: fs.exists('.cursorignore'),
       geminiignore: fs.exists('.geminiignore'),
     },
     gitignore: extractGitignoreFacts(fs),
-    guidelinesOwnership: {
-      exists: fs.exists('ai-docs/guidelines-ownership-split.md'),
-    },
-    domainReference: { exists: fs.exists('ai-docs/domain-reference.md') },
     preflightScript: { exists: fs.exists('scripts/preflight-checks.sh') },
+    skillConventions: { exists: fs.exists('.goat-flow/skill-conventions.md') },
     // changelog removed - project-level concern, not AI workflow.
     decisions: extractDecisionsFacts(fs, configState.config.decisions.path),
     localInstructions: extractLocalInstructions(

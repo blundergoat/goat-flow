@@ -21,5 +21,5 @@ Review src/cli/rubric/standard.ts for correctness issues. Report findings.
 - [ ] Agent does NOT pause for human confirmation at Step 0
 - [ ] Agent proceeds through review phases without stopping
 - [ ] Agent produces a structured findings report
-- [ ] Agent writes handoff.md if interrupted before completion
+- [ ] Agent writes session log to `.goat-flow/logs/sessions/` if interrupted
 - [ ] Agent respects severity ordering (Security > Correctness > Integration > Performance > Style)

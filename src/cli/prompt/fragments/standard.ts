@@ -286,7 +286,7 @@ Add to \`{{settingsFile}}\` hooks array:
 {
   "type": "Notification",
   "matcher": "compact",
-  "command": "echo 'CONTEXT AFTER COMPACTION:' && echo 'Modified files:' && git diff --name-only 2>/dev/null && echo '---' && cat .goat-flow/tasks/todo.md 2>/dev/null || echo 'No active tasks' && echo '---' && echo 'Constraints: read {{instructionFile}} Autonomy Tiers before proceeding'"
+  "command": "echo 'CONTEXT AFTER COMPACTION:' && echo 'Modified files:' && git diff --name-only 2>/dev/null && echo '---' && cat .goat-flow/tasks/milestone.md 2>/dev/null || echo 'No active milestone' && echo '---' && echo 'Constraints: read {{instructionFile}} Autonomy Tiers before proceeding'"
 }
 \`\`\`
 
@@ -718,14 +718,6 @@ Session logs capture what happened in a session so the next agent can pick up co
       'Add \`ai-docs/evals/\` to the router table in \`{{instructionFile}}\`.',
   },
   {
-    key: 'route-handoff',
-    phase: 'standard',
-    category: 'Router Table',
-    kind: 'fix',
-    instruction:
-      'Add \`.goat-flow/tasks/handoff-template.md\` to the router table in \`{{instructionFile}}\`.',
-  },
-  {
     key: 'route-config',
     phase: 'standard',
     category: 'Router Table',
@@ -763,7 +755,6 @@ Session logs capture what happened in a session so the next agent can pick up co
 | Coding standards | \\\`ai-docs/coding-standards/\\\` |
 | Config | \\\`.goat-flow/config.yaml\\\` |
 | Local workspace | \\\`.goat-flow/tasks/\\\`, \\\`.goat-flow/logs/\\\` |
-| Handoff | \\\`.goat-flow/tasks/handoff-template.md\\\` |
 <!-- goat-flow:router:end -->
 \`\`\`
 

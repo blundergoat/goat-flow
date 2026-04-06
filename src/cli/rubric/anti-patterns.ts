@@ -290,7 +290,7 @@ export const antiPatterns: AntiPatternDef[] = [
   {
     id: 'AP11',
     name: 'Empty learning loop scaffolding',
-    deduction: -2,
+    deduction: 0, // v1.1.0: structure presence = pass, content is a maturity indicator not a setup gate
     confidence: 'high',
     evaluate: (ctx: FactContext): AntiPatternResult => {
       const { lessons, footguns } = ctx.facts.shared;
@@ -298,22 +298,22 @@ export const antiPatterns: AntiPatternDef[] = [
       const footgunsEmpty = footguns.exists && !footguns.hasEvidence;
       const triggered = lessonsEmpty || footgunsEmpty;
       const parts: string[] = [];
-      if (lessonsEmpty) parts.push('lessons.md is empty');
-      if (footgunsEmpty) parts.push('footguns.md has no evidence');
+      if (lessonsEmpty) parts.push('lessons directory has no entries yet');
+      if (footgunsEmpty) parts.push('footguns directory has no evidence yet');
       const message = triggered
-        ? `Learning loop incomplete: ${parts.join(', ')}`
+        ? `Learning loop directories exist but have no content yet (normal for new projects): ${parts.join(', ')}`
         : 'Learning loop files have content';
       return {
         id: 'AP11',
         name: 'Empty learning loop scaffolding',
         triggered,
-        deduction: triggered ? -2 : 0,
+        deduction: 0, // No penalty — empty directories are correctly set up projects
         confidence: 'high',
         message,
       };
     },
     recommendation:
-      'Populate learning loop files with real incidents or remove empty scaffolding',
+      'Content accumulates through real work, not setup. Add entries when real incidents occur.',
     recommendationKey: 'ap-fix-empty-scaffolding',
   },
   {

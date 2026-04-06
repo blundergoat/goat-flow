@@ -38,7 +38,7 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-references (3) no un
 
 ## Working Memory
 
-5+ turn tasks → .goat-flow/tasks/todo.md. Incomplete work → .goat-flow/tasks/handoff.md.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end.
 
 ## Sub-Agent Objectives
 
@@ -63,4 +63,3 @@ One question with recommended default.
 | Coding standards | `ai-docs/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
 | Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
-| Handoff | `.goat-flow/tasks/handoff-template.md` |

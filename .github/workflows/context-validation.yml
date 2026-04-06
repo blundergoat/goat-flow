@@ -108,28 +108,6 @@ jobs:
       - name: Create gitignored workspace dirs
         run: |
           mkdir -p .goat-flow/footguns .goat-flow/lessons .goat-flow/tasks .goat-flow/logs/sessions
-          if [ ! -f .goat-flow/tasks/handoff-template.md ]; then
-            printf '%s\n' \
-              '# Agent Session Handoff Template' \
-              '' \
-              '## Date' \
-              '' \
-              '## Status' \
-              '' \
-              '## Current State' \
-              '' \
-              '## Key Decisions Made' \
-              '' \
-              '## Errors & Corrections' \
-              '' \
-              '## Learnings' \
-              '' \
-              '## Known Risks' \
-              '' \
-              '## Next Step' \
-              '' \
-              '## Context Files' > .goat-flow/tasks/handoff-template.md
-          fi
 
       - name: Validate Codex workflow
         run: |

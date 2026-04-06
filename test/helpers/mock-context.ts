@@ -108,20 +108,14 @@ function defaultSharedFacts(): SharedFacts {
       checksSkills: true,
       ciTriggersOnPRs: true,
     },
-    handoffTemplate: {
-      exists: true,
-      sectionCount: 9,
-      hasRequiredSections: true,
-    },
     ignoreFiles: {
       copilotignore: false,
       cursorignore: false,
       geminiignore: false,
     },
     gitignore: { exists: true, hasRequiredEntries: true },
-    guidelinesOwnership: { exists: false },
-    domainReference: { exists: false },
     preflightScript: { exists: true },
+    skillConventions: { exists: false },
     localInstructions: {
       dirExists: true,
       location: 'ai' as const,

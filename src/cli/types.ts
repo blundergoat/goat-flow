@@ -283,20 +283,14 @@ export interface SharedFacts {
     checksSkills: boolean;
     ciTriggersOnPRs: boolean;
   };
-  handoffTemplate: {
-    exists: boolean;
-    sectionCount: number;
-    hasRequiredSections: boolean;
-  };
   ignoreFiles: {
     copilotignore: boolean;
     cursorignore: boolean;
     geminiignore: boolean;
   };
   gitignore: { exists: boolean; hasRequiredEntries: boolean };
-  guidelinesOwnership: { exists: boolean };
-  domainReference: { exists: boolean };
   preflightScript: { exists: boolean };
+  skillConventions: { exists: boolean };
   // changelog removed - project-level concern, not AI workflow.
   localInstructions: {
     dirExists: boolean;

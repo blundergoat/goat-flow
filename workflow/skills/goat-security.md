@@ -5,13 +5,22 @@ goat-flow-skill-version: "1.0.0"
 ---
 # /goat-security
 
-<!-- Shared Conventions: inline from workflow/skills/reference/shared-preamble.md during setup.
-     Setup agents: read shared-preamble.md and include its content as "## Shared Conventions" at the top of the installed SKILL.md. -->
+## Shared Conventions
+
+Read `.goat-flow/skill-conventions.md` for full shared conventions.
+If unavailable, use these essentials:
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- Evidence: every finding MUST include file:line, tag OBSERVED vs INFERRED
+- Learning loop: check ai-docs/lessons/ and ai-docs/footguns/ after completion
+- Gates: BLOCKING GATE = stop and wait. CHECKPOINT = continue unless interrupted.
+- Task tracking: tick checkboxes immediately when completed, not at the end.
 
 ## When to Use
 
 Use when assessing security posture: before deployment, after adding auth/input
 handling, when touching secrets/credentials, or for a security-focused audit.
+
+**Boundary with /goat-review:** goat-security owns: threat models, compliance frameworks (HIPAA/GDPR), dependency CVEs, auth/authz boundaries. goat-review owns: code quality, style, hook correctness, instruction staleness. If you find a code quality issue during security assessment, flag it and suggest `/goat-review`.
 
 **NOT this skill:**
 - General code quality sweep → /goat-review (audit mode)

@@ -1,10 +1,8 @@
 /**
  * Full-tier rubric checks for mature adoption.
- * This tier focuses on eval coverage, CI validation, and handoff hygiene once the basics are already in place.
+ * This tier focuses on eval coverage, CI validation, and mature-adoption hygiene once the basics are already in place.
  */
 import type { CheckDef, FactContext, CheckResult } from '../types.js';
-import { HANDOFF_SECTIONS } from '../facts/shared/index.js';
-
 // Confidence criteria:
 //   high   = deterministic (file exists, line count, JSON valid, exact match)
 //   medium = heuristic (regex pattern, ratio threshold, keyword detection)
@@ -402,55 +400,8 @@ export const fullChecks: CheckDef[] = [
     recommendationKey: 'ci-trigger-prs',
   },
 
-  // === 3.3 Hygiene (5 pts) ===
-  {
-    id: '3.3.1',
-    name: 'Handoff template',
-    tier: 'full',
-    category: 'Hygiene',
-    pts: 1,
-    confidence: 'high',
-    priority: 'optional',
-    detect: {
-      type: 'file_exists',
-      path: '.goat-flow/tasks/handoff-template.md',
-    },
-    recommendation: 'Create .goat-flow/tasks/handoff-template.md',
-    recommendationKey: 'create-handoff-template',
-  },
-  {
-    id: '3.3.1a',
-    name: 'Handoff template has required sections',
-    tier: 'full',
-    category: 'Hygiene',
-    pts: 1,
-    confidence: 'medium',
-    priority: 'optional',
-    na: (ctx) => !ctx.facts.shared.handoffTemplate.exists,
-    detect: {
-      type: 'custom',
-      fn: (ctx: FactContext): CheckResult => {
-        const { hasRequiredSections, sectionCount } =
-          ctx.facts.shared.handoffTemplate;
-        return {
-          id: '3.3.1a',
-          name: 'Handoff template has required sections',
-          tier: 'full',
-          category: 'Hygiene',
-          status: hasRequiredSections ? 'pass' : 'fail',
-          points: hasRequiredSections ? 1 : 0,
-          maxPoints: 1,
-          confidence: 'medium',
-          message: hasRequiredSections
-            ? `Found ${sectionCount}/${HANDOFF_SECTIONS.length} required sections`
-            : `Found ${sectionCount}/${HANDOFF_SECTIONS.length} required sections`,
-        };
-      },
-    },
-    recommendation:
-      'Add required sections to handoff template: Date, Status, Current State, Key Decisions, Errors & Corrections, Learnings, Known Risks, Next Step, Context Files',
-    recommendationKey: 'fix-handoff-sections',
-  },
+  // === 3.3 Hygiene ===
+  // 3.3.1 (handoff template) removed - handoff is workspace-level, not a rubric concern.
   // 3.3.2 (RFC 2119 keyword count) removed - incentivized keyword sprinkling, not meaningful usage.
   // 3.3.3 (changelog) removed - CHANGELOG.md is a project-level concern, not an AI workflow check.
   {
@@ -555,4 +506,22 @@ export const fullChecks: CheckDef[] = [
   },
 
   // 3.4.1 removed - duplicate of 3.1.6 after both were updated to require all 6 canonical skills.
+
+  // === 3.5 Skill Conventions ===
+  {
+    id: '3.5.1',
+    name: 'Skill conventions file exists',
+    tier: 'full',
+    category: 'Skill Conventions',
+    pts: 1,
+    confidence: 'high',
+    priority: 'optional',
+    detect: {
+      type: 'file_exists',
+      path: '.goat-flow/skill-conventions.md',
+    },
+    recommendation:
+      'Missing `.goat-flow/skill-conventions.md`. Skills will use inline fallback only. Copy from `workflow/skills/reference/shared-preamble.md`.',
+    recommendationKey: 'create-skill-conventions',
+  },
 ];

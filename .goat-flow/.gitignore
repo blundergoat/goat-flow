@@ -1,6 +1,5 @@
 # Everything in .goat-flow/ is gitignored EXCEPT config.yaml, tasks/, and logs/sessions/
 # config.yaml is committed - the whole team shares the same paths
-# handoff-template.md is committed - shared template for session handoffs
 # logs/sessions/ directory is committed (contents gitignored) so router table path resolves
 *
 !.gitignore

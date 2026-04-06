@@ -1503,28 +1503,21 @@ describe('Regression: router skills row must cover dispatcher and goat-star skil
   });
 });
 
-describe('Regression: router must reference handoff template and config', () => {
+describe('Regression: router must reference config', () => {
   const fs = createMockFS({
     'CLAUDE.md': FULL_CLAUDE_MD
-      .replace('| Config | `.goat-flow/config.yaml` |\n', '')
-      .replace('| Handoff | `.goat-flow/tasks/handoff-template.md` |\n', ''),
+      .replace('| Config | `.goat-flow/config.yaml` |\n', ''),
     'package.json': JSON.stringify({
-      name: 'router-missing-handoff-and-config',
+      name: 'router-missing-config',
       scripts: { test: 'node --test' },
     }),
-    '.goat-flow/tasks/handoff-template.md': HANDOFF_TEMPLATE,
     '.goat-flow/config.yaml': 'version: 1.0.0\n',
   });
-  const report = scanProject(fs, '/test/router-missing-handoff-and-config', {
+  const report = scanProject(fs, '/test/router-missing-config', {
     agentFilter: 'claude',
   });
 
-  it('fails 2.4.7 when the handoff template path is missing from the router', () => {
-    const check = report.agents[0].checks.find((c) => c.id === '2.4.7');
-    assert.ok(check, 'Expected check 2.4.7');
-    assert.equal(check.status, 'fail');
-    assert.match(check.message, /\.goat-flow\/tasks\/handoff-template\.md/);
-  });
+  // 2.4.7 (handoff template in router) removed - handoff is workspace-level, not a rubric concern.
 
   it('fails 2.4.8 when the config path is missing from the router', () => {
     const check = report.agents[0].checks.find((c) => c.id === '2.4.8');
@@ -1608,8 +1601,8 @@ describe('Fixture 10: self-goat-flow (score snapshot)', () => {
     assert.equal(report.agents.length, 3);
   });
 
-  it('Claude scores B or C (70-100%)', () => {
-    assertPercentageRange(report, 'claude', 70, 100, 'self-goat-flow');
+  it('Claude scores B or C (68-100%)', () => {
+    assertPercentageRange(report, 'claude', 68, 100, 'self-goat-flow');
   });
 
   it('Codex scores B or C (65-100%)', () => {

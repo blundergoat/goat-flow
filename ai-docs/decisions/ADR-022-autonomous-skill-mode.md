@@ -8,7 +8,7 @@
 
 Two mechanisms, not a flag:
 
-1. **Complexity-conditional ceremony:** For Hotfix/Small Feature complexity, skip closing ceremony, flush rule, goat-plan Phases 2-3, and footgun MATCH/CLEAR annotation. Full ceremony only for System/Infrastructure.
+1. **Complexity-conditional ceremony:** For Hotfix/Small Feature complexity, skip closing ceremony, goat-plan Phases 2-3, and footgun MATCH/CLEAR annotation. Full ceremony only for System/Infrastructure.
 
 2. **Sub-agent detection:** When invoked as a sub-agent (context indicates forked execution), BLOCKING GATEs automatically become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope.
 

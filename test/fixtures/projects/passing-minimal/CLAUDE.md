@@ -65,13 +65,13 @@ Boundaries:
 2. bash scripts/context-validate.sh passes
 3. No unapproved boundary changes
 4. logs updated if tripped
-5. handoff notes current
+5. milestone checkboxes current
 6. rg old pattern after rename
 
 ## Router Table
 | Resource | Path |
 |----------|------|
-| System spec | `docs/system-spec.md` |
+| Architecture | `ai-docs/architecture.md` |
 | Skills | `.claude/skills/` |
 | Footguns | `ai-docs/footguns/`, `.goat-flow/footguns/` |
 | Lessons | `ai-docs/lessons/`, `.goat-flow/lessons/` |
@@ -80,5 +80,4 @@ Boundaries:
 | Coding standards | `ai-docs/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
 | Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
-| Handoff | `.goat-flow/tasks/handoff-template.md` |
-| Architecture | `ai-docs/architecture.md` |
+| Skill conventions | `.goat-flow/skill-conventions.md` |

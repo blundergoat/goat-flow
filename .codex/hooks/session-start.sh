@@ -8,7 +8,7 @@ cd "$ROOT_DIR" || exit 0
 echo "PROJECT CONTEXT:"
 echo "Modified files:" && (git diff --name-only 2>/dev/null | head -20 || true)
 echo "---"
-cat .goat-flow/tasks/todo.md 2>/dev/null || echo "No active tasks"
+echo "Check milestone files in .goat-flow/tasks/ for progress"
 echo "---"
 echo "Constraints: read AGENTS.md Autonomy Tiers before proceeding"
 exit 0

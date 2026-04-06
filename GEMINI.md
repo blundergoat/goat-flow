@@ -97,7 +97,7 @@ Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one q
 - MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
 
 ## Working Memory
-5+ turns -> `.goat-flow/tasks/todo.md`. Handoff -> `.goat-flow/tasks/handoff.md` (read if exists).
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end.
 Context health: compact at 60% util. Noise pruning before compacting. `/clear` between unrelated tasks.
 
 ## Router Table
@@ -115,5 +115,4 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 | Coding standards | `ai-docs/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->

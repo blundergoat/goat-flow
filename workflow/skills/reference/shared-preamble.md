@@ -93,7 +93,7 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks.
 
 | Complexity | Ceremony |
 |------------|----------|
-| Hotfix / Small Feature | Skip: closing ceremony, flush rule, footgun MATCH/CLEAR annotations. Skip goat-plan Phases 2-3. |
+| Hotfix / Small Feature | Skip: closing ceremony, footgun MATCH/CLEAR annotations. Skip goat-plan Phases 2-3. |
 | Standard | Full phases, gates at major decisions. |
 | System / Infrastructure | Full phases + cross-boundary verification + rollback planning. |
 
@@ -107,15 +107,15 @@ If Step 0's footgun check produces a direct match with a documented trap:
 3. Still require READ and VERIFY on the actual target files - footguns are incident records, not executable specs
 4. Do NOT skip straight to implementation based on a footgun match alone
 
-## Flush Protocol
+## Task Tracking
 
-If 10+ tool calls pass without a human gate or checkpoint (Hotfix/Small Feature: skip this rule):
-1. Write a 3-sentence status to `.goat-flow/tasks/handoff.md` (what you're doing, where you are, what's next)
-2. If working from a plan/milestone file: tick all completed checkboxes NOW before continuing
-3. Ask the user: continue, compact, or redirect?
+When working from a plan or milestone file in `.goat-flow/tasks/`:
+- Tick each task `- [x]` immediately when completed — not at the end of a batch, not when you remember, not in the closing protocol
+- The checkbox is the single source of truth for progress
+- If interrupted, compacted, or crashed, the checkboxes are how the next session knows where to resume
+- If you completed a task 3 steps ago and forgot to tick it — go tick it NOW before continuing
 
-The counter resets at every BLOCKING GATE, CHECKPOINT, or human message.
-`.goat-flow/tasks/handoff.md` is transient - do not commit it.
+On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
 
 ## Recovery
 
@@ -123,18 +123,10 @@ When a skill fails mid-execution (context limit, sub-agent dies, tool error):
 
 | Situation | Action |
 |-----------|--------|
-| Partial completion | Identify last completed step (last `[x]` checkbox), resume from next |
+| Partial completion | Identify last completed step (last `[x]` checkbox in milestone file), resume from next |
 | Missing artifacts | Return to the step that generates them, re-execute |
-| User wants restart | Archive current output to handoff, re-run from Step 0 |
+| User wants restart | Re-run from Step 0 |
 | User wants to skip | Document skip reason in output, proceed to closing |
-
-In sub-agent/autonomous mode, recovery is especially critical - there's no human to ask "what now?" Write `.goat-flow/tasks/handoff.md` with enough context to resume.
-
-## Working Memory
-
-For tasks exceeding 5 turns within this skill:
-- Maintain state in `.goat-flow/tasks/todo.md`
-- If interrupted or compacted, write `.goat-flow/tasks/handoff.md`
 
 ## Autonomy Awareness
 
@@ -145,7 +137,7 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 ## Closing Protocol
 
 When the skill completes:
-1. If work is incomplete: write `.goat-flow/tasks/handoff.md` using the standard handoff template (Date, Status, Current State, Key Decisions, Errors & Corrections, Learnings, Known Risks, Next Step, Context Files)
+1. Verify all checkboxes in any active milestone/plan file are current
 2. Check the Learning Loop (above) for anything worth logging
 3. Write session log to `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` (what happened, files changed, decisions, learnings)
 4. Suggest the most relevant next skill if applicable (see Chains With in each skill)

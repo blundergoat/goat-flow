@@ -1447,18 +1447,18 @@ describe('M19: setup redirect includes migration guidance', () => {
     );
   });
 
-  it('setup redirect includes project size scaling guidance', () => {
+  it('setup redirect includes system-overview.md reference instead of scaling table', () => {
     const fs = buildMinimalProject();
     const report = scanProject(fs, '/test', { agentFilter: null });
     const output = composeSetup(report, 'claude');
     assert.ok(output);
     assert.ok(
-      output.includes('Small projects'),
-      'Should include small project guidance',
+      output.includes('system-overview.md'),
+      'Should reference system-overview.md for design intent (scaling table removed in v1.1.0)',
     );
     assert.ok(
-      output.includes('Hot-path'),
-      'Should categorize files as hot-path vs cold-path',
+      !output.includes('Small projects'),
+      'Should NOT include old scaling guidance (removed in v1.1.0)',
     );
   });
 

@@ -126,7 +126,7 @@ describe('Setup templates mention migration behavior', () => {
 
   it('setup templates do not hardcode both flat footguns and directory footguns', () => {
     const sharedFiles = readdirSync(setupSharedDir).filter((f) =>
-      f.endsWith('.md'),
+      f.endsWith('.md') && f !== 'system-overview.md', // system-overview.md deliberately mentions both for migration context
     );
     for (const file of sharedFiles) {
       const content = readFileSync(join(setupSharedDir, file), 'utf-8');

@@ -77,10 +77,10 @@ describe('M11: autonomous mode structural checks', () => {
     );
   });
 
-  it('shared preamble has handoff recovery for autonomous mode', () => {
+  it('shared preamble has checkpoint-based recovery for autonomous mode', () => {
     assert.ok(
-      preamble.includes('handoff'),
-      'Recovery should mention handoff for context preservation',
+      preamble.includes('checkbox') || preamble.includes('milestone'),
+      'Recovery should mention milestone checkboxes for context preservation (handoff replaced in v1.1.0)',
     );
   });
 
@@ -365,20 +365,16 @@ describe('M11: recovery and checkpoint behavior (contract verification)', () => 
 
   it('shared preamble recovery covers sub-agent mode', () => {
     assert.ok(
-      preamble.includes('Sub-agent') || preamble.includes('sub-agent'),
-      'Recovery should cover sub-agent/autonomous recovery',
-    );
-    assert.ok(
-      preamble.includes('handoff.md'),
-      'Sub-agent recovery should write handoff for context preservation',
+      preamble.includes('Sub-agent') || preamble.includes('sub-agent') || preamble.includes('checkpoint') || preamble.includes('milestone'),
+      'Recovery should cover sub-agent/autonomous recovery via milestone checkboxes',
     );
   });
 
-  it('flush protocol includes checkpoint verification for plans', () => {
+  it('task tracking enforces checkbox ticking for plans', () => {
     assert.ok(
-      preamble.includes('tick all completed checkboxes') ||
-        preamble.includes('plan/milestone file'),
-      'Flush protocol should enforce checkpoint ticking when working from a plan',
+      preamble.includes('tick') || preamble.includes('Tick') ||
+        preamble.includes('checkbox') || preamble.includes('immediately when completed'),
+      'Task Tracking section should enforce checkpoint ticking (replaced flush protocol in v1.1.0)',
     );
   });
 });

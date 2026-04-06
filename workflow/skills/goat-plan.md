@@ -5,8 +5,15 @@ goat-flow-skill-version: "1.0.0"
 ---
 # /goat-plan
 
-<!-- Shared Conventions: inline from workflow/skills/reference/shared-preamble.md during setup.
-     Setup agents: read shared-preamble.md and include its content as "## Shared Conventions" at the top of the installed SKILL.md. -->
+## Shared Conventions
+
+Read `.goat-flow/skill-conventions.md` for full shared conventions.
+If unavailable, use these essentials:
+- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
+- Evidence: every finding MUST include file:line, tag OBSERVED vs INFERRED
+- Learning loop: check ai-docs/lessons/ and ai-docs/footguns/ after completion
+- Gates: BLOCKING GATE = stop and wait. CHECKPOINT = continue unless interrupted.
+- Task tracking: tick checkboxes immediately when completed, not at the end.
 
 ## When to Use
 
@@ -22,6 +29,8 @@ Use before non-trivial implementation or cross-file restructuring.
 - **Standard** → Phase 1 brief + Phase 4 milestones. SHOULD skip Phase 2-3 (only use if approach is genuinely uncertain).
 - **System** → Full 4-phase process with human gates
 - **Infrastructure** → Full process + rollback planning
+
+**Classification reminder:** A 1-2 file change is a Hotfix even in a 500-file project. Only classify as Standard when the approach is genuinely uncertain or multiple components are involved.
 
 **NOT this skill:**
 - Diagnosing a bug → /goat-debug
@@ -187,7 +196,15 @@ After completing each milestone, re-read the NEXT milestone and rewrite it
 based on what you learned. Plans evolve - the Phase 4 milestones written
 before implementation are hypotheses, not commitments.
 
-**BLOCKING GATE:** Present milestones. "Approve and start implementing?"
+**BLOCKING GATE:** Before presenting full milestones, generate a **10-bullet TL;DR summary** of the plan. Each bullet = one sentence covering a key decision, scope boundary, or deliverable.
+
+Present the summary: "Does this capture the right approach? Say 'yes' to confirm, or flag which bullets need changing."
+
+On confirmation: add the confirmed bullets as a `## TL;DR` section at the top of the plan file. This becomes the contract — the human approved THESE bullets.
+
+Then present the full milestones: "Approve and start implementing?"
+
+Skip the 10-bullet step for Hotfix and Small Feature complexity.
 
 ---
 

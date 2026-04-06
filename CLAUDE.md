@@ -93,18 +93,17 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - MUST maintain cross-file consistency: same concept, same description everywhere
 - MUST preserve file:line evidence format in footguns and examples
-- MUST use real incidents, never hypothetical. docs/system-spec.md is canonical source of truth
+- MUST use real incidents, never hypothetical
 - Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 
 ## Working Memory
-5+ turn tasks → `.goat-flow/tasks/todo.md`. Incomplete work → `.goat-flow/tasks/handoff.md`. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Router Table
 
 | Resource | Path |
 |----------|------|
-| System spec (canonical) | `docs/system-spec.md` |
-| System docs, architecture | `docs/five-layers.md`, `ai-docs/architecture.md` |
+| Architecture | `ai-docs/architecture.md` |
 | CLI scanner/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
 <!-- goat-flow:router:start -->
@@ -115,5 +114,4 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 | Coding standards | `ai-docs/coding-standards/` |
 | Config | `.goat-flow/config.yaml` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Handoff | `.goat-flow/tasks/handoff-template.md` |
 <!-- goat-flow:router:end -->
