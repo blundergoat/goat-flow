@@ -935,6 +935,8 @@ function renderSetupRedirect(
   // Pre-instructions
   lines.push('## Before you start');
   lines.push('');
+  lines.push('**If this project already has goat-flow:** Read `workflow/setup/upgrade.md` for the upgrade path instead of running a full setup.');
+  lines.push('');
   lines.push('**Step 0 - Clean up stale artifacts (if upgrading):**');
   lines.push('');
   lines.push(

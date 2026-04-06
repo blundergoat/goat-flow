@@ -8,7 +8,7 @@
 import { parseArgs } from 'node:util';
 import { resolve, dirname, join } from 'node:path';
 import { writeFileSync, mkdirSync } from 'node:fs';
-import type { CLIOptions, Grade, AgentId, ScanReport } from './types.js';
+import type { CLIOptions, Grade, AgentId, ScanReport, Tier } from './types.js';
 
 import { getPackageVersion } from './paths.js';
 
@@ -37,6 +37,8 @@ Commands:
   scan              Score a project (default)
   setup             Generate setup prompt (adapts to project state)
   eval              Parse and summarize agent evals
+  info rubrics      List all rubric checks (filter: --tier foundation|standard|full)
+  info anti-patterns List all anti-pattern deductions
 
 Arguments:
   project-path    Target project directory (default: .)
@@ -74,10 +76,10 @@ function printVersion(): void {
 }
 
 /** Supported CLI subcommand names */
-type Command = 'scan' | 'setup' | 'eval' | 'dashboard';
+type Command = 'scan' | 'setup' | 'eval' | 'dashboard' | 'info';
 
 /** List of recognized CLI subcommands */
-const COMMANDS: Command[] = ['scan', 'setup', 'eval', 'dashboard'];
+const COMMANDS: Command[] = ['scan', 'setup', 'eval', 'dashboard', 'info'];
 /** Previously valid commands that now produce a helpful deprecation error */
 const REMOVED_COMMANDS = ['fix', 'audit'];
 /** Accepted values for the --format flag */
@@ -95,6 +97,7 @@ const MULTI_AGENT_SYNC_BANNER = [
 /** Fully resolved CLI options including the dispatched command */
 export interface ParsedCLI extends CLIOptions {
   command: Command;
+  tier: Tier | null;
 }
 
 /** Parse the positional subcommand from raw CLI args, defaulting to `scan`. */
@@ -162,6 +165,21 @@ function parseMinScoreArg(value: string | undefined): number | null {
   return minScore;
 }
 
+/** Accepted values for the --tier flag */
+const VALID_TIERS: Tier[] = ['foundation', 'standard', 'full'];
+
+/** Parse the `--tier` flag for filtering rubric checks by tier. */
+function parseTierArg(value: string | undefined): Tier | null {
+  if (!value) return null;
+  if (!VALID_TIERS.includes(value as Tier)) {
+    throw new CLIError(
+      `Invalid tier: ${value}. Use: foundation, standard, full`,
+      2,
+    );
+  }
+  return value as Tier;
+}
+
 /** Parse the `--min-grade` threshold using the supported letter grades. */
 function parseMinGradeArg(value: string | undefined): Grade | null {
   if (!value) return null;
@@ -202,6 +220,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       'min-grade': { type: 'string' },
       output: { type: 'string', short: 'o' },
       guide: { type: 'boolean', default: false },
+      tier: { type: 'string' },
       dev: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
@@ -220,6 +239,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     minGrade: parseMinGradeArg(values['min-grade']),
     output: resolveOutputPath(values.output, positionals),
     guide: values.guide === true,
+    tier: parseTierArg(values.tier),
     dev: values.dev === true,
     help: values.help === true,
     version: values.version === true,
@@ -416,6 +436,46 @@ async function handleScanCommand(
   appendScanHistory(report, options.projectPath);
 }
 
+/** Handle the info command: list rubric checks or anti-pattern deductions */
+async function handleInfoCommand(options: ParsedCLI): Promise<void> {
+  const { allChecks, allAntiPatterns } = await import(
+    './rubric/registry.js'
+  );
+
+  // The subcommand is the first positional arg after 'info'.
+  // parseCLIArgs resolves projectPath to an absolute path, so extract the basename.
+  const sub = options.projectPath.split('/').pop() ?? '';
+
+  if (sub === 'rubrics') {
+    const tiers = ['foundation', 'standard', 'full'] as const;
+    const tiersToShow = options.tier ? [options.tier] : tiers;
+
+    for (const t of tiersToShow) {
+      const tierChecks = allChecks.filter((c) => c.tier === t);
+      if (tierChecks.length === 0) continue;
+      console.log(
+        `\n## ${t.charAt(0).toUpperCase() + t.slice(1)} Tier\n`,
+      );
+      console.log('| ID | Name | Points | Description |');
+      console.log('|----|------|--------|-------------|');
+      for (const c of tierChecks) {
+        console.log(`| ${c.id} | ${c.name} | ${c.pts} | ${c.recommendation} |`);
+      }
+    }
+  } else if (sub === 'anti-patterns') {
+    console.log('\n## Anti-Patterns\n');
+    console.log('| ID | Name | Deduction | Remediation |');
+    console.log('|----|------|-----------|-------------|');
+    for (const ap of allAntiPatterns) {
+      console.log(`| ${ap.id} | ${ap.name} | ${ap.deduction} | ${ap.recommendation} |`);
+    }
+  } else {
+    console.log('Usage: goat-flow info <rubrics|anti-patterns>');
+    console.log('  rubrics         List all rubric checks');
+    console.log('  anti-patterns   List all anti-pattern deductions');
+  }
+}
+
 /** Entry point that dispatches to the appropriate command handler */
 async function main(): Promise<void> {
   // Gracefully handle EPIPE (e.g., output piped to `head`)
@@ -445,6 +505,10 @@ async function main(): Promise<void> {
       projectPath: options.projectPath,
       dev: options.dev,
     });
+    return;
+  }
+  if (options.command === 'info') {
+    await handleInfoCommand(options);
     return;
   }
 
