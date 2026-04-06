@@ -33,4 +33,4 @@ If unavailable, use these essentials:
 - Updates to shared conventions are 1 file edit instead of 15
 - The drift surface drops from 2,280 lines to ~35 lines (7-line fallback × 5 skills)
 - Scanner gains a check for `.goat-flow/skill-conventions.md` existence
-- `upgrade.md` must include skill-conventions.md as an upgrade surface
+- `upgrade-0.9.x.md` and `upgrade-1.0.0.md` must include skill-conventions.md as an upgrade surface

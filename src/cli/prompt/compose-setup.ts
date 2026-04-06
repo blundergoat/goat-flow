@@ -936,7 +936,7 @@ function renderSetupRedirect(
       'This project has goat-flow v1.0. Follow the upgrade path:',
     );
     lines.push(
-      'Read and implement `workflow/setup/upgrade.md` **Step 2b** (v1.0 → current).',
+      'Read and implement `workflow/setup/upgrade-1.0.0.md`.',
     );
     lines.push('');
     lines.push(
@@ -958,7 +958,7 @@ function renderSetupRedirect(
       'This project has old goat-flow skills (v0.9 era). Follow the migration path:',
     );
     lines.push(
-      'Read and implement `workflow/setup/upgrade.md` **Step 2a** (v0.9 → current).',
+      'Read and implement `workflow/setup/upgrade-0.9.x.md`.',
     );
     lines.push('');
     lines.push(

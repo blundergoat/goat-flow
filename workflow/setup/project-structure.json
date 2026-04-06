@@ -1,0 +1,114 @@
+{
+  "description": "Expected goat-flow project structure. Source of truth for setup, scanner, and upgrade paths. Not a JSON Schema — this is a manifest of what should exist on disk.",
+  "version": "1.1.0",
+
+  "required_files": [
+    ".goat-flow/config.yaml",
+    ".goat-flow/skill-conventions.md",
+    ".goat-flow/README.md",
+    "ai-docs/README.md",
+    "ai-docs/architecture.md",
+    "ai-docs/glossary.md",
+    "ai-docs/coding-standards/conventions.md",
+    "ai-docs/decisions/ADR-000-template.md",
+    ".goat-flow/config.local.yaml"
+  ],
+
+  "required_dirs": [
+    "ai-docs/footguns/",
+    "ai-docs/lessons/",
+    "ai-docs/evals/",
+    "ai-docs/decisions/",
+    ".goat-flow/footguns/",
+    ".goat-flow/lessons/",
+    ".goat-flow/tasks/",
+    ".goat-flow/logs/sessions/"
+  ],
+
+  "optional_files": {
+    "_note": "Create only for gaps not already covered by existing project files (.github/instructions/, docs/, etc.). Lookup order: (1) check if the project already has equivalent content, (2) if yes, reference it from ai-docs/coding-standards/conventions.md as a pointer, (3) if no existing content, create using templates from workflow/coding-standards/ adapted to the project stack.",
+    "ai-docs/coding-standards/code-review.md": "workflow/coding-standards/code-review.md",
+    "ai-docs/coding-standards/git-commit.md": "workflow/coding-standards/git-commit.md",
+    "ai-docs/coding-standards/backend.md": "workflow/coding-standards/backend/",
+    "ai-docs/coding-standards/frontend.md": "workflow/coding-standards/frontend/",
+    "ai-docs/coding-standards/security.md": "workflow/coding-standards/security.md",
+    "ai-docs/coding-standards/testing.md": "workflow/coding-standards/testing.md"
+  },
+
+  "never_create": [
+    "ai-docs/domain-reference.md",
+    "ai-docs/guidelines-ownership-split.md",
+    ".goat-flow/tasks/handoff-template.md",
+    ".goat-flow/tasks/todo.md",
+    ".goat-flow/tasks/handoff.md"
+  ],
+
+  "skills": {
+    "canonical": ["goat", "goat-debug", "goat-plan", "goat-review", "goat-security", "goat-test"],
+    "stale_names": ["goat-audit", "goat-investigate", "goat-onboard", "goat-reflect", "goat-resume", "goat-context", "goat-simplify", "goat-refactor"],
+    "stale_generic": ["audit", "review", "preflight", "debug", "plan", "test", "security"]
+  },
+
+  "agents": {
+    "claude": {
+      "instruction_file": "CLAUDE.md",
+      "skills_dir": ".claude/skills/",
+      "hooks_dir": ".claude/hooks/",
+      "settings": ".claude/settings.json",
+      "hooks": ["deny-dangerous.sh", "stop-lint.sh"]
+    },
+    "codex": {
+      "instruction_file": "AGENTS.md",
+      "skills_dir": ".agents/skills/",
+      "hooks_dir": ".codex/hooks/",
+      "settings": ".codex/config.toml"
+    },
+    "gemini": {
+      "instruction_file": "GEMINI.md",
+      "skills_dir": ".agents/skills/",
+      "hooks_dir": ".gemini/hooks/",
+      "settings": ".gemini/settings.json"
+    },
+    "copilot": {
+      "instruction_file": ".github/copilot-instructions.md",
+      "skills_dir": ".github/skills/"
+    }
+  },
+
+  "instruction_file": {
+    "line_target": 120,
+    "line_limit": 150,
+    "required_sections": [
+      "Essential Commands",
+      "Execution Loop",
+      "Autonomy Tiers",
+      "Definition of Done",
+      "Working Memory",
+      "Router Table"
+    ],
+    "version_header_pattern": "# {FILE} - v{VERSION} ({DATE})"
+  },
+
+  "legacy_surfaces": {
+    "v0.9": {
+      "migrate_to_ai_docs": [
+        "docs/footguns.md",
+        "docs/lessons.md",
+        "docs/architecture.md",
+        "docs/decisions/",
+        "agent-evals/"
+      ],
+      "delete_after_migration": [
+        "docs/footguns.md",
+        "docs/lessons.md",
+        "docs/architecture.md",
+        "docs/decisions/",
+        "docs/guidelines-ownership-split.md",
+        "agent-evals/",
+        "tasks/handoff-template.md",
+        "tasks/handoff.md",
+        "tasks/todo.md"
+      ]
+    }
+  }
+}
