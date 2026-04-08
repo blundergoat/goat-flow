@@ -420,6 +420,8 @@ function app() {
       await this.launchInTerminal(adapted, runner || this.activeRunner);
     },
     detachTerminal() {
+      // Flag prevents ws.onclose from setting terminalEnded during intentional detach
+      this._detaching = true;
       // Save current session to project map before detaching
       if (this.terminalSessionId && !this.terminalEnded) {
         this._projectSessions[this.projectPath] = {
@@ -439,6 +441,7 @@ function app() {
       this.lastRunPrompt = null;
       this.lastRunAgent = null;
       this.promptRunStates = {};
+      this._detaching = false;
     },
     async reconnectTerminal() {
       const saved = this._projectSessions[this.projectPath];
@@ -579,7 +582,7 @@ function app() {
           else if (msg.type === 'shutdown') { this.terminalEnded = true; this.terminalConnected = false; }
         } catch { /* ignore malformed messages */ }
       };
-      ws.onclose = () => { this.terminalConnected = false; if (!this.terminalEnded) this.terminalEnded = true; };
+      ws.onclose = () => { this.terminalConnected = false; if (!this.terminalEnded && !this._detaching) this.terminalEnded = true; };
       ws.onerror = () => { this.terminalConnected = false; };
       term.attachCustomKeyEventHandler(e => {
         if (e.type === 'keydown' && e.ctrlKey && e.key === 'v') {
