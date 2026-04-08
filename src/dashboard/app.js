@@ -232,7 +232,13 @@ function app() {
       } catch { this.showToast('Browse failed', true); }
     },
     selectDir(dir) {
-      if (dir.isProject) { this.projectPath = dir.path; this.showBrowser = false; this.runScan(); }
+      if (dir.isProject) {
+        const switching = this.projectPath !== dir.path;
+        this.projectPath = dir.path;
+        this.showBrowser = false;
+        if (switching) this.detachTerminal();
+        this.runScan();
+      }
       else this.browseTo(dir.path);
     },
 
@@ -409,6 +415,19 @@ function app() {
         adapted = 'You are in tester mode. Test-focused - generate test plans, verify coverage, run QA analysis. Do NOT make code changes beyond test files.\n\n' + adapted;
       }
       await this.launchInTerminal(adapted, runner || this.activeRunner);
+    },
+    detachTerminal() {
+      if (this._terminalWs) { this._terminalWs.close(); this._terminalWs = null; }
+      if (this._terminalXterm) { this._terminalXterm.dispose(); this._terminalXterm = null; }
+      if (this._ageInterval) { clearInterval(this._ageInterval); this._ageInterval = null; }
+      this.terminalSessionId = null;
+      this.terminalConnected = false;
+      this.terminalEnded = false;
+      this.terminalAge = '';
+      this._terminalStartTime = null;
+      this.lastRunPrompt = null;
+      this.lastRunAgent = null;
+      this.promptRunStates = {};
     },
     async launchInTerminal(prompt, runner = 'claude') {
       if (this.terminalSessionId && !this.terminalEnded) {

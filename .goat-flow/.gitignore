@@ -19,3 +19,7 @@
 !lessons/**
 !tasks/
 !tasks/**
+!logs/
+!logs/sessions/
+!logs/sessions/.gitkeep
+logs/sessions/*.md
