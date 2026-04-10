@@ -13,7 +13,7 @@
     >
       <div
         class="gf-text-primary"
-        style="font-size: 14px; font-weight: 500; margin-bottom: 10px"
+        style="font-size: 16px; font-weight: 600; margin-bottom: 10px"
         x-text="report?.agents?.length === 0 ? 'Welcome - get started with GOAT Flow' : (report?.agents?.[0]?.recommendations?.length || 0) + ' issues to fix'"
       ></div>
       <div
@@ -127,7 +127,7 @@
     >
       <div
         class="gf-text-primary"
-        style="font-size: 14px; font-weight: 500; margin-bottom: 10px"
+        style="font-size: 16px; font-weight: 600; margin-bottom: 10px"
       >
         All clear - run a prompt
       </div>
@@ -194,7 +194,7 @@
       <div style="flex: 1; min-width: 0">
         <div
           class="gf-banner-title"
-          style="font-size: 14px; font-weight: 500"
+          style="font-size: 16px; font-weight: 600"
           x-text="allPass ? 'All checks passing' : (report?.agents?.filter(a => a.score.grade !== 'A').length + ' agent(s) need attention')"
         ></div>
         <div
@@ -256,7 +256,7 @@
           margin-bottom: 10px;
         "
       >
-        <span class="gf-text-primary" style="font-size: 14px; font-weight: 500"
+        <span class="gf-text-primary" style="font-size: 16px; font-weight: 600"
           >Scanner</span
         >
         <button
@@ -297,7 +297,7 @@
             >
               <span
                 class="gf-text-primary"
-                style="font-size: 14px; font-weight: 500"
+                style="font-size: 16px; font-weight: 600"
                 x-text="agent.agentName"
               ></span>
               <span
@@ -315,7 +315,7 @@
               "
             >
               <span
-                style="font-size: 14px; font-weight: 500"
+                style="font-size: 16px; font-weight: 600"
                 :style="{ color: gradeColor(agent.score.grade) }"
                 x-text="`${agent.score.percentage}%`"
               ></span>
@@ -375,7 +375,7 @@
             >
               <span
                 class="gf-text-disabled"
-                style="font-size: 14px; font-weight: 500"
+                style="font-size: 16px; font-weight: 600"
                 x-text="{ claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', copilot: 'Copilot' }[agent.id] || agent.id"
               ></span>
               <span class="gf-grade gf-grade-na">&mdash;</span>
@@ -404,7 +404,7 @@
           padding: 12px 16px;
         "
       >
-        <span class="gf-text-primary" style="font-size: 14px; font-weight: 500"
+        <span class="gf-text-primary" style="font-size: 16px; font-weight: 600"
           >Agents</span
         >
       </div>
