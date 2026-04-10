@@ -286,8 +286,9 @@
                 x-text="agent.agentName"
               ></span>
               <span
-                style="font-size: 20px; font-weight: 500"
-                :style="{ color: gradeColor(agent.score.grade) }"
+                class="gf-grade"
+                :class="agent.score.grade === 'insufficient-data' ? 'gf-grade-na' : 'gf-grade-' + (agent.score.grade || '').toLowerCase()"
+                style="width: 32px; height: 32px; font-size: 24px"
                 x-text="agent.score.grade === 'insufficient-data' ? '?' : agent.score.grade"
               ></span>
             </div>

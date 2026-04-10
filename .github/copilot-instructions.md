@@ -14,7 +14,7 @@ bash scripts/preflight-checks.sh
 
 ## Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
 
-The full step behavior is defined in `workflow/setup/execution-loop.md`:
+The full step behavior is defined in `workflow/setup/reference/execution-loop.md`:
 `READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG`.
 
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts.

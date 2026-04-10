@@ -31,7 +31,7 @@ Read it completely before changing anything. Then:
 
 ## Required sections (both paths)
 
-The instruction file MUST include these sections. Use `workflow/setup/execution-loop.md` as the template:
+The instruction file MUST include these sections. Use `workflow/setup/reference/execution-loop.md` as the template:
 
 - (a) Version header — set to the current goat-flow release version (match the `goat-flow-skill-version` in the installed skill files)
 - (b) Execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG

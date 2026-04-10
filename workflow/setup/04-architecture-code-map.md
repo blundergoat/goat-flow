@@ -33,7 +33,7 @@ Rules:
 Create these directories and files if they don't already exist:
 
 - `.goat-flow/decisions/` — for architecture decision records
-- `.goat-flow/decisions/ADR-000-template.md` — copy from `workflow/setup/ADR-000-template.md`
+- `.goat-flow/decisions/ADR-000-template.md` — copy from `workflow/setup/reference/ADR-000-template.md`
 - `.goat-flow/tasks/` — for milestone and task tracking files
 - `.goat-flow/logs/sessions/` — for session logs (if not already created by step 01)
 - `.goat-flow/playbooks/` — copy from `workflow/playbooks/` verbatim. These contain detailed procedures (SBAO, Mob Elaboration, milestone planning, testing workflow) that skills reference on demand.

@@ -7,6 +7,7 @@ const ROOT = join(import.meta.dirname, "../..");
 const WORKFLOW_SKILLS_DIR = join(ROOT, "workflow/skills");
 const INSTALLED_SKILLS_DIR = join(ROOT, ".claude/skills");
 const SETUP_DIR = join(ROOT, "workflow/setup");
+const SETUP_REF_DIR = join(ROOT, "workflow/setup/reference");
 const EVALUATION_DIR = join(ROOT, "workflow/evaluation");
 
 const DELETED_SKILLS = [
@@ -139,12 +140,12 @@ describe("Evaluation template: footguns.md", () => {
 // 6. execution-loop.md mentions "3x" or "re-classify"
 // ---------------------------------------------------------------
 describe("Execution loop: dynamic read budgets", () => {
-  const execLoopPath = join(SETUP_DIR, "execution-loop.md");
+  const execLoopPath = join(SETUP_REF_DIR, "execution-loop.md");
 
   it("exists", () => {
     assert.ok(
       existsSync(execLoopPath),
-      "workflow/setup/execution-loop.md should exist",
+      "workflow/setup/reference/execution-loop.md should exist",
     );
   });
 
@@ -164,7 +165,7 @@ describe("Execution loop: dynamic read budgets", () => {
 // ---------------------------------------------------------------
 describe("Execution loop: session logs", () => {
   it('mentions "session logs" or "logs/sessions"', () => {
-    const content = readFileSync(join(SETUP_DIR, "execution-loop.md"), "utf-8");
+    const content = readFileSync(join(SETUP_REF_DIR, "execution-loop.md"), "utf-8");
     const hasSessionLogs = content.toLowerCase().includes("session logs");
     const hasLogsSessions = content.includes("logs/sessions");
     assert.ok(
@@ -177,8 +178,8 @@ describe("Execution loop: session logs", () => {
 // ---------------------------------------------------------------
 // 8. execution-loop.md references .goat-flow/ paths consistently
 // ---------------------------------------------------------------
-describe("workflow/setup/execution-loop.md .goat-flow/ path consistency", () => {
-  const execLoopPath = join(SETUP_DIR, "execution-loop.md");
+describe("workflow/setup/reference/execution-loop.md .goat-flow/ path consistency", () => {
+  const execLoopPath = join(SETUP_REF_DIR, "execution-loop.md");
 
   it("no disagreement on log paths (.goat-flow/logs vs .goat-flow/tasks/logs)", () => {
     const content = readFileSync(execLoopPath, "utf-8");
@@ -209,14 +210,14 @@ describe("workflow/setup/execution-loop.md .goat-flow/ path consistency", () => 
 // 9. execution-loop.md does not reference deleted skill names
 // ---------------------------------------------------------------
 describe("No setup/execution-loop references to deleted skills", () => {
-  const execLoopPath = join(SETUP_DIR, "execution-loop.md");
+  const execLoopPath = join(SETUP_REF_DIR, "execution-loop.md");
   const content = readFileSync(execLoopPath, "utf-8");
 
   for (const deleted of DELETED_SKILLS) {
     it(`execution-loop.md does not reference deleted skill ${deleted}`, () => {
       assert.ok(
         !content.includes(deleted),
-        `workflow/setup/execution-loop.md still references deleted skill "${deleted}"`,
+        `workflow/setup/reference/execution-loop.md still references deleted skill "${deleted}"`,
       );
     });
   }
@@ -251,7 +252,7 @@ describe("No installed skill references to deleted skills", () => {
 // ---------------------------------------------------------------
 describe("Execution loop matches CLAUDE.md complexity tiers", () => {
   const claudeMdPath = join(ROOT, "CLAUDE.md");
-  const execLoopPath = join(SETUP_DIR, "execution-loop.md");
+  const execLoopPath = join(SETUP_REF_DIR, "execution-loop.md");
 
   it("CLAUDE.md has complexity tiers", () => {
     const content = readFileSync(claudeMdPath, "utf-8");
@@ -297,7 +298,7 @@ describe("Execution loop matches CLAUDE.md complexity tiers", () => {
 // 12. execution-loop.md references .goat-flow/logs/sessions/ consistently
 // ---------------------------------------------------------------
 describe("Session log path consistency in setup templates", () => {
-  const execLoopPath = join(SETUP_DIR, "execution-loop.md");
+  const execLoopPath = join(SETUP_REF_DIR, "execution-loop.md");
 
   it("execution-loop.md uses logs/sessions/ (not tasks/logs/)", () => {
     const content = readFileSync(execLoopPath, "utf-8");

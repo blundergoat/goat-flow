@@ -24,7 +24,7 @@ Three changes:
 
 ## Rationale
 
-- The execution loop (`docs/system-spec.md:154`, `docs/system-spec.md:185`, retired in v1.1.0; see `workflow/setup/execution-loop.md`) already defines Implement as a core execution mode
+- The execution loop (`docs/system-spec.md:154`, `docs/system-spec.md:185`, retired in v1.1.0; see `workflow/setup/reference/execution-loop.md`) already defines Implement as a core execution mode
 - ADR-017 says edits happen in the normal ACT step, not inside goat-plan
 - Skills must NOT jump into implementation early - investigation/diagnosis/planning must complete first
 - Real verification comes from /goat-review or /goat-test in a fresh invocation, not from the same agent re-reading its own diff

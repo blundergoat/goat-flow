@@ -70,6 +70,7 @@ export function getProjectStructure(): Record<string, unknown> {
     GOAT_FLOW_ROOT,
     "workflow",
     "setup",
+    "reference",
     "project-structure.json",
   );
   try {

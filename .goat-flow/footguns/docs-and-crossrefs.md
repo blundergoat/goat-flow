@@ -11,12 +11,12 @@ category: docs-and-crossrefs
 **Why it happens:** The execution loop, autonomy tiers, anti-pattern table, and other core concepts were historically described in `docs/system-spec.md`, `docs/five-layers.md`, `docs/getting-started.md`, and `docs/design-rationale.md` (all retired in v1.1.0). Updating one without updating the others created drift. The same risk applies to their replacements.
 
 **Evidence:**
-- `docs/system-spec.md` → execution loop definition (file retired in v1.1.0, see `workflow/setup/execution-loop.md`)
-- `docs/system-spec.md` → execution loop definition, detailed version (file retired in v1.1.0, see `workflow/setup/execution-loop.md`)
+- `docs/system-spec.md` → execution loop definition (file retired in v1.1.0, see `workflow/setup/reference/execution-loop.md`)
+- `docs/system-spec.md` → execution loop definition, detailed version (file retired in v1.1.0, see `workflow/setup/reference/execution-loop.md`)
 - `docs/getting-started.md` → execution loop summary (file retired in v1.1.0, see `workflow/setup/`)
 - `docs/design-rationale.md` → execution loop rationale with repeated content (file retired in v1.1.0, see `workflow/setup/01-system-overview.md`)
 
-**Prevention:** When editing a core concept, grep for the concept name across all docs and update every occurrence. `workflow/setup/execution-loop.md` is the canonical source for the execution loop; `workflow/setup/01-system-overview.md` for design intent.
+**Prevention:** When editing a core concept, grep for the concept name across all docs and update every occurrence. `workflow/setup/reference/execution-loop.md` is the canonical source for the execution loop; `workflow/setup/01-system-overview.md` for design intent.
 
 ---
 

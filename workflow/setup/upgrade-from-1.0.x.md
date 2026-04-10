@@ -69,7 +69,7 @@ Use the reorganise approach (not copy-and-replace):
 5. Add missing goat-flow sections (see `02-instruction-file.md`)
 6. Update version header to v1.1.0
 7. Update Router Table: all paths should reference current goat-flow surfaces
-8. Update examples to reference current paths (e.g., `workflow/setup/execution-loop.md`)
+8. Update examples to reference current paths (e.g., `workflow/setup/reference/execution-loop.md`)
 
 **Verification:** Instruction file under 120 lines. Domain content preserved in `.goat-flow/`.
 

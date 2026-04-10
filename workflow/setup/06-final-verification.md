@@ -1,6 +1,6 @@
 # Step 06 — Final Verification
 
-This is the only setup gate. The goal is simple: `goat-flow scan . --agent {agent}` reaches 100% and the created file set matches `workflow/setup/project-structure.json`.
+This is the only setup gate. The goal is simple: `goat-flow scan . --agent {agent}` reaches 100% and the created file set matches `workflow/setup/reference/project-structure.json`.
 
 ## Scanner
 
@@ -38,7 +38,7 @@ List every setup-owned file as one of:
 - `skipped`
 - `failed`
 
-Compare that manifest against `workflow/setup/project-structure.json`:
+Compare that manifest against `workflow/setup/reference/project-structure.json`:
 
 - Every `required_file` must exist
 - Every `required_dir` must exist
@@ -67,6 +67,6 @@ Use one shared file: `.goat-flow/logs/sessions/YYYY-MM-DD-setup.md`
 
 **Verification gate:**
 - [ ] `goat-flow scan . --agent {agent}` passes at 100%
-- [ ] All required files and directories in `workflow/setup/project-structure.json` exist
+- [ ] All required files and directories in `workflow/setup/reference/project-structure.json` exist
 - [ ] Stale-reference checks and Essential Commands smoke tests are complete
 - [ ] Shared setup session log finalised with time/tokens

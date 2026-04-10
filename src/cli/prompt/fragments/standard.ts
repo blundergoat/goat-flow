@@ -809,7 +809,7 @@ Do NOT invent hypothetical lessons.`,
     kind: "create",
     instruction: `Create \`.goat-flow/decisions/\` and seed it with an ADR template.
 
-Copy \`workflow/setup/ADR-000-template.md\` to \`.goat-flow/decisions/ADR-000-template.md\`. Real ADRs are added when significant architectural decisions are made - name them \`ADR-NNN-short-title.md\`.`,
+Copy \`workflow/setup/reference/ADR-000-template.md\` to \`.goat-flow/decisions/ADR-000-template.md\`. Real ADRs are added when significant architectural decisions are made - name them \`ADR-NNN-short-title.md\`.`,
   },
   // Ask First enforcement hook removed - see ADR-006.
 

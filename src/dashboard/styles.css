@@ -294,6 +294,7 @@ button, select, summary, label, [role="button"] { cursor: pointer; }
   cursor: pointer;
   white-space: nowrap;
   font-family: var(--font-body);
+  border: 0.5px solid transparent;
   transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
 
@@ -316,7 +317,7 @@ button, select, summary, label, [role="button"] { cursor: pointer; }
 .gf-btn-scan:hover { background: var(--accent-bg); border-color: var(--accent); }
 
 /* Variant: Ghost (no border, no bg) */
-.gf-btn-ghost { background: none; border: none; color: var(--accent); }
+.gf-btn-ghost { background: none; color: var(--accent); }
 .gf-btn-ghost:hover { opacity: 0.8; }
 
 /* Variant: Muted (gray) */
@@ -324,7 +325,7 @@ button, select, summary, label, [role="button"] { cursor: pointer; }
 .gf-btn-muted:hover { background: var(--border-default); color: var(--text-primary); }
 
 /* Variant: Danger (red ghost) */
-.gf-btn-danger { background: none; border: none; color: var(--red-400); }
+.gf-btn-danger { background: none; color: var(--red-400); }
 .gf-btn-danger:hover { opacity: 0.8; }
 
 /* Convenience: green indicator badge */

@@ -457,19 +457,19 @@ function app() {
         "",
         "## Coding style",
         this.preferencesForm.codingStyle.trim() ||
-          "<!-- e.g., prefer early returns, minimal comments, small functions, specific naming conventions -->",
+          "(No preference set yet)",
         "",
         "## Review preferences",
         this.preferencesForm.reviewPreferences.trim() ||
-          "<!-- e.g., focus on correctness over style, prefer terse findings, skip praise -->",
+          "(No preference set yet)",
         "",
         "## Planning depth",
         this.preferencesForm.planningDepth.trim() ||
-          "<!-- e.g., always run SBAO for features, skip Mob for hotfixes, prefer detailed milestones -->",
+          "(No preference set yet)",
         "",
         "## Communication",
         this.preferencesForm.communication.trim() ||
-          "<!-- e.g., be concise, don't summarise what you just did, skip preamble -->",
+          "(No preference set yet)",
         "",
       ].join("\n");
     },

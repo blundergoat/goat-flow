@@ -30,13 +30,13 @@ function getFoundationRefs(agentId: AgentId): TemplateRef[] {
   const shared: TemplateRef[] = [
     {
       output: ".goat-flow/config.yaml",
-      template: "workflow/setup/execution-loop.md",
+      template: "workflow/setup/reference/execution-loop.md",
       phase: "foundation",
       note: "Create config file with default paths and detected agents",
     },
     {
       output: p.instructionFile,
-      template: "workflow/setup/execution-loop.md",
+      template: "workflow/setup/reference/execution-loop.md",
       phase: "foundation",
       note: "Adapt BAD/GOOD examples",
     },
@@ -245,7 +245,7 @@ const FRAGMENT_TEMPLATE_MAP: Record<
   "create-skill-test": "workflow/skills/goat-test.md",
 
   // File-level creates - instruction file and docs
-  "create-instruction-file": "workflow/setup/execution-loop.md",
+  "create-instruction-file": "workflow/setup/reference/execution-loop.md",
   "create-lessons": "workflow/setup/05-customise-to-project.md",
   "create-footguns": "workflow/setup/05-customise-to-project.md",
   "create-architecture": "workflow/setup/04-architecture-code-map.md",
@@ -262,28 +262,28 @@ const FRAGMENT_TEMPLATE_MAP: Record<
   },
   // File-level creates - optional local instructions
   "create-conventions-instructions":
-    "workflow/setup/reference-coding-guidelines.md",
+    "workflow/setup/reference/reference-coding-guidelines.md",
   // create-code-review-instructions removed - check 2.6.4 removed
   // create-git-commit-instructions removed - check 2.6.5 removed
 
   // Section-level creates - execution loop steps (all point to same parent)
-  "add-read-step": "workflow/setup/execution-loop.md",
-  "add-classify-step": "workflow/setup/execution-loop.md",
-  "add-scope-step": "workflow/setup/execution-loop.md",
-  "add-act-step": "workflow/setup/execution-loop.md",
-  "add-verify-step": "workflow/setup/execution-loop.md",
-  "add-log-step": "workflow/setup/execution-loop.md",
+  "add-read-step": "workflow/setup/reference/execution-loop.md",
+  "add-classify-step": "workflow/setup/reference/execution-loop.md",
+  "add-scope-step": "workflow/setup/reference/execution-loop.md",
+  "add-act-step": "workflow/setup/reference/execution-loop.md",
+  "add-verify-step": "workflow/setup/reference/execution-loop.md",
+  "add-log-step": "workflow/setup/reference/execution-loop.md",
 
   // Section-level creates - autonomy tiers
-  "add-autonomy-tiers": "workflow/setup/execution-loop.md",
-  "add-never-guards": "workflow/setup/execution-loop.md",
-  "add-micro-checklist": "workflow/setup/execution-loop.md",
+  "add-autonomy-tiers": "workflow/setup/reference/execution-loop.md",
+  "add-never-guards": "workflow/setup/reference/execution-loop.md",
+  "add-micro-checklist": "workflow/setup/reference/execution-loop.md",
 
   // Section-level creates - definition of done
-  "add-dod": "workflow/setup/execution-loop.md",
-  "add-dod-gates": "workflow/setup/execution-loop.md",
-  "add-grep-gate": "workflow/setup/execution-loop.md",
-  "add-log-gate": "workflow/setup/execution-loop.md",
+  "add-dod": "workflow/setup/reference/execution-loop.md",
+  "add-dod-gates": "workflow/setup/reference/execution-loop.md",
+  "add-grep-gate": "workflow/setup/reference/execution-loop.md",
+  "add-log-gate": "workflow/setup/reference/execution-loop.md",
 
   // Fix-kind - skill quality (all templates demonstrate these sections)
   "create-all-skills": "workflow/skills/goat-debug.md",
@@ -356,9 +356,9 @@ const FRAGMENT_TEMPLATE_MAP: Record<
   // File-level creates - security, testing, devops, domain
   "create-security-instructions": "workflow/reference/security/README.md",
   "create-testing-instructions":
-    "workflow/setup/reference-coding-guidelines.md",
-  "create-copilot-bridge": "workflow/setup/reference-coding-guidelines.md",
-  "create-domain-instructions": "workflow/setup/reference-coding-guidelines.md",
+    "workflow/setup/reference/reference-coding-guidelines.md",
+  "create-copilot-bridge": "workflow/setup/reference/reference-coding-guidelines.md",
+  "create-domain-instructions": "workflow/setup/reference/reference-coding-guidelines.md",
   "create-security-auth": "workflow/reference/security/api-auth.md",
   "create-security-upload": "workflow/reference/security/file-upload.md",
   "create-security-infra": "workflow/reference/security/infrastructure.md",
@@ -379,20 +379,20 @@ const FRAGMENT_TEMPLATE_MAP: Record<
 
   // Fix-kind - local instructions
   "improve-conventions-instructions":
-    "workflow/setup/reference-coding-guidelines.md",
+    "workflow/setup/reference/reference-coding-guidelines.md",
   "create-instructions-dir": "workflow/setup/05-customise-to-project.md",
   "create-instructions-router": "workflow/setup/05-customise-to-project.md",
   "create-frontend-instructions":
-    "workflow/setup/reference-coding-guidelines.md",
+    "workflow/setup/reference/reference-coding-guidelines.md",
   // create-github-git-commit removed - check 2.6.6 removed
 
   // Fix-kind - foundation (instruction file sections)
-  "add-version-header": "workflow/setup/execution-loop.md",
-  "add-essential-commands": "workflow/setup/execution-loop.md",
-  "add-concrete-examples": "workflow/setup/execution-loop.md",
-  "add-classify-budgets": "workflow/setup/execution-loop.md",
-  "add-router": "workflow/setup/execution-loop.md",
-  "route-skills": "workflow/setup/execution-loop.md",
+  "add-version-header": "workflow/setup/reference/execution-loop.md",
+  "add-essential-commands": "workflow/setup/reference/execution-loop.md",
+  "add-concrete-examples": "workflow/setup/reference/execution-loop.md",
+  "add-classify-budgets": "workflow/setup/reference/execution-loop.md",
+  "add-router": "workflow/setup/reference/execution-loop.md",
+  "route-skills": "workflow/setup/reference/execution-loop.md",
   "add-deny-mechanism": {
     claude: "workflow/hooks/deny-dangerous.sh",
     codex: "workflow/setup/agents/codex.md",
@@ -409,7 +409,7 @@ const FRAGMENT_TEMPLATE_MAP: Record<
     gemini: "workflow/setup/agents/gemini.md",
   },
   // add-rfc2119 intentionally excluded - inline instruction is self-contained
-  "fix-execution-loop-sync": "workflow/setup/execution-loop.md",
+  "fix-execution-loop-sync": "workflow/setup/reference/execution-loop.md",
 
   // Fix-kind - anti-patterns (ones with clear template sources)
   // ap-add-footgun-evidence removed - AP4 removed
@@ -444,7 +444,7 @@ export function getLanguageTemplate(
   _languages: string[],
 ): string | null {
   if (key === "create-backend-instructions") {
-    return "workflow/setup/reference-coding-guidelines.md";
+    return "workflow/setup/reference/reference-coding-guidelines.md";
   }
   return null;
 }

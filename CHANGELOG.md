@@ -35,7 +35,7 @@ Setup overhaul driven by 10 real-project reviews. Setup agents now understand de
 - Setup guard: state gate in all 4 agent setup files + system-overview + phase-1 prevents rogue rewrites on current projects
 - compose-setup.ts: v0.9/v1.0 blocks return early — no more fall-through to fresh-install path that caused parallel surfaces on 5 projects
 - Split `upgrade.md` into `upgrade-0.9.x.md` and `upgrade-1.0.0.md` with destructive migration instructions
-- Created `workflow/setup/project-structure.json` — single source of truth for expected file layout
+- Created `workflow/setup/reference/project-structure.json` — single source of truth for expected file layout
 - Scanner: removed CI Validation checks 3.2.1–3.2.5 (6pts, not AI workflow), fixed grep -P false positive (9/11 projects), fixed 2.6.1a pointer-file exemption (8/11 projects)
 - Removed format-file.sh and guard-write-size.sh from goat-flow system — only deny-dangerous.sh and stop-lint.sh ship
 - Skills: purged all stale v1.0 refs (todo.md, handoff.md, TODO_*_prime, flush), SBAO opt-in, compliance mode opt-in, fixed skill-conventions.md contradiction

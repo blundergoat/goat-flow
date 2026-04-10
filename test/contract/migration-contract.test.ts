@@ -88,8 +88,8 @@ describe("Setup templates use new numbered structure", () => {
     );
   });
 
-  it("workflow/setup/execution-loop.md exists (reference template)", () => {
-    assert.ok(existsSync(join(setupDir, "execution-loop.md")));
+  it("workflow/setup/reference/execution-loop.md exists (reference template)", () => {
+    assert.ok(existsSync(join(setupDir, "reference/execution-loop.md")));
   });
 
   it("numbered setup files exist (01 through 06)", () => {
@@ -103,11 +103,12 @@ describe("Setup templates use new numbered structure", () => {
   });
 
   it("reference setup docs exist for optional follow-on work", () => {
+    const refDir = join(setupDir, "reference");
     for (const file of [
       "reference-coding-guidelines.md",
       "reference-polish.md",
     ]) {
-      assert.ok(existsSync(join(setupDir, file)), `Expected ${file}`);
+      assert.ok(existsSync(join(refDir, file)), `Expected ${file}`);
     }
   });
 

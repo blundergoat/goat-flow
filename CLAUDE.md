@@ -13,7 +13,7 @@ bash scripts/context-validate.sh         # Validate GOAT Flow structure
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
 ```
 BAD:  "The spec says 100 lines for apps" (guessed without reading)
-GOOD: Read workflow/setup/execution-loop.md:3 → "Target: under 120 lines. Hard limit: 150."
+GOOD: Read workflow/setup/reference/execution-loop.md:3 → "Target: under 120 lines. Hard limit: 150."
 ```
 
 **CLASSIFY** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity (below). (3) Mode: Plan / Implement / Explain / Debug / Review.
