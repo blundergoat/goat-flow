@@ -430,6 +430,12 @@ function app() {
     // -- Projects --
     async addProject() {
       if (!this.newProjectPath) return;
+      // Prevent duplicates
+      if (this.projectsList.some((p) => p.path === this.newProjectPath)) {
+        this.showAddProject = false;
+        this.newProjectPath = "";
+        return;
+      }
       this.projectsList.push({
         path: this.newProjectPath,
         state: "...",
@@ -533,7 +539,7 @@ function app() {
       }
     },
     _saveProjectsList() {
-      const paths = this.projectsList.map((p) => p.path);
+      const paths = [...new Set(this.projectsList.map((p) => p.path))];
       // Save to both localStorage and server
       localStorage.setItem("goat-flow-projects", JSON.stringify(paths));
       fetch("/api/projects/list", {
