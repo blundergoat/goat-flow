@@ -98,8 +98,8 @@ d) Definition of Done: 6 gates
 e) Router table: MUST include at minimum:
      - All 6 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)
      - Learning loop directories (`.goat-flow/footguns/`, `.goat-flow/lessons/`)
-     - Architecture doc
-     - Project guidelines: `.goat-flow/README.md`
+     - Architecture doc (`.goat-flow/architecture.md`)
+     - Config (`.goat-flow/config.yaml`)
      - Any playbooks, profiles, or domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's
      instruction file (AGENTS.md or CLAUDE.md).

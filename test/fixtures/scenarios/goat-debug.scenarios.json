@@ -13,7 +13,7 @@
     },
     {
       "vagueInput": "it crashed",
-      "expectedQuestions": ["error", "what were you doing", "area"],
+      "expectedQuestions": ["error", "symptom", "area"],
       "idealSpecificInput": "TypeError at src/auth/session.ts:42 - cannot read property 'id' of undefined when logging in with OAuth."
     }
   ]

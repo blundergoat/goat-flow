@@ -1,6 +1,6 @@
 ---
 name: goat-test
-description: "3-phase test plan generation with automated commands, AI verification prompts, and human testing checklists. Doer-verifier principle."
+description: "Test plan generation with DDT philosophy: code first, verify, then decide if automated tests add value. Doer-verifier principle."
 goat-flow-skill-version: "1.1.0"
 ---
 # /goat-test
@@ -17,153 +17,59 @@ If unavailable, use these essentials:
 
 ## When to Use
 
-**Before generating a test plan:** Consider whether this change needs automated tests at all. goat-flow follows Development Driven Testing (DDT): code first, verify manually, let preflight checks and static analysis catch what they catch, then decide if automated tests add value. If the code is readable, preflight checks pass, and static analysis covers the risk surface — that may be sufficient. goat-test is for when automated tests genuinely add value: complex business logic, cross-service integration, or locking in a bug fix. Don't generate test plans as ceremony.
+DDT philosophy: code first, verify manually, then decide if automated tests add value. Use when tests genuinely help: complex business logic, cross-service integration, or locking in a bug fix. Don't generate test plans as ceremony.
 
-Use after a coding milestone or every 30-60 minutes of implementation to
-generate testing instructions. Testing after 30-60 min keeps the blast radius
-narrow enough that failures point to a specific change.
+Use after a coding milestone or every 30-60 minutes of implementation.
 
-The coding agent runs Phase 1 commands (automated tests). Phase 2 (AI verification)
-and Phase 3 (human testing) MUST be performed by a separate agent or human - not the
-agent that wrote the code. In single-agent mode, present Phase 2/3 as instructions
-for the user to execute or delegate.
+**NOT this skill:** Running tests --> just run them. Debugging failures --> /goat-debug. Code quality --> /goat-review.
 
-**NOT this skill:**
-- Running tests → just run them directly
-- Debugging a test failure → /goat-debug
-- Reviewing code quality → /goat-review
-- Understanding test infrastructure → /goat-debug (investigate mode)
+## Step 0 - Choose Depth
 
-**Quick path:** For changes touching ≤2 files with no interface changes:
-Phase 1 only + abbreviated Phase 3 (1-2 manual checks). Skip Phase 2.
+> "Testing [X] -- quick test commands + gaps, or the full 3-phase plan?"
 
-## Step 0 - Choose Depth and Frame the Verification Work
+- If user says "quick", "full", or "audit", confirm and continue.
+- If arriving from the dispatcher with depth already chosen, skip the depth question.
+- If vague, ask one follow-up covering: what changed, what to verify, risk if it breaks.
+- If minimal info, auto-detect from `git diff --stat` and existing test files, confirm.
 
-Start with the depth choice, not a checklist.
+**Read existing tests first:** Before generating anything, read 1-2 existing test files in the affected area. Match the project's assertion style, fixture conventions, and patterns.
 
-Default opener:
-> "Testing [X] — do you want a quick test plan, or the full plan with change manifest, AI verification, and human checklist?"
+**Footgun check:** Read `.goat-flow/footguns/` for entries mentioning the changed area. Surface matches.
 
-**Adaptive Step 0:**
-- If the user already says "quick", "full", "audit", or names a specific test scope, confirm and continue.
-- If the request is vague, ask one natural follow-up that covers what changed, what specifically should be verified, the risk if it breaks, and what is already tested.
-- If the user says "just test what changed" or provides minimal info, auto-detect scope from `git diff --stat` and existing test files, then continue with confirmation.
+**Auto-detect mode:** Changes exist --> Standard. No changes --> Audit (gap analysis). User says "quick" --> Quick.
 
-**Quick test-plan path:**
-- Gather what changed, the main risk, and current coverage in one short exchange.
-- Produce Phase 1 commands, the biggest coverage gaps, and a short human check list without extra gating.
+---
 
-**Full plan path:**
-- Confirm the change set, risk level, existing coverage, and mode.
-- Run the complete workflow: change manifest → automated tests → AI verification → human testing.
+## Quick Path
 
-**Auto-detect mode (unless user explicitly specifies):**
+Produce directly, no extra gating:
+1. **Test commands** -- copy-pasteable commands for the changed area
+2. **Coverage gaps** -- what isn't tested and the risk level
+3. **Manual checks** -- 1-2 things to verify by hand
 
-Scope detection priority: (1) explicit user input, (2) staged changes, (3) unstaged changes to target, (4) git diff. If user names a specific file, use THAT - not the full worktree diff.
+---
 
-- Changes to target exist → **Standard mode** (Phase 0 Change Manifest)
-- No changes to target → **Audit mode** (coverage gap analysis, skip Phase 0)
-- Audit mode: analyze module's public API surface, map existing test files, identify untested paths
-- User says "quick" → **Quick mode** (most recent commit only)
-- User explicitly says "audit" or "standard" → respect override
+## Full Path
 
-**Pattern read:** Before generating test instructions, read 1-2 existing test files in the affected area. Match the project's assertion style, selector patterns, and fixture conventions exactly. Generate tests that look like the ones already there - not textbook examples.
+Read `.goat-flow/playbooks/testing/testing-workflow.md` for the complete 3-phase procedure.
 
-**Footgun check:** If `.goat-flow/footguns/` exists, read entries mentioning the changed area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant to your test plan?"
+**Phase 1 - Automated Tests** (coding agent runs these): test commands (copy-pasteable), integration gaps with reasons, mocking awareness (what mocks hide).
 
-**Before proceeding:** present what you know (what changed, risk, selected depth, test stack, what is already tested) and what you still need. For the full path, wait for the user to confirm before Phase 0. For the quick path, confirm and continue unless the user stops you.
+**Phase 2 - AI Verification** (separate agent, fresh context): self-contained prompts including project context, changed files, footguns. Recommend a different model. If skipped, note in "What ISN'T Tested".
 
-## Phase 0 - Change Manifest
+**Phase 3 - Human Testing** (what automation can't verify): visual regressions, UX, multi-step workflows, judgment calls. Use table: What to test | Where | What "good" looks like | What to look for.
 
-Summarize what changed using a structured table:
+**What ISN'T Tested:** Explicitly list gaps -- what, why, risk level.
 
-| File | Component | Change Type | Risk | Verification Ratio |
-|------|-----------|-------------|------|-------------------|
-<!-- fill from git diff -->
+**BLOCKING GATE:** Present the full plan, then pause. Human decides: run Phase 1, adjust scope, switch to /goat-debug, or close.
 
-**Verification ratio** by autonomy tier:
-- Never/Ask First changes → 1:1 (every changed behavior gets a check)
-- Always changes → 1:3 (critical paths only)
-
-State the ratio at the top of the output.
-
-**Spec compliance:** If `requirements-{feature}.md` or acceptance criteria exist,
-cross-reference the change manifest. Flag gaps: "Acceptance criterion [X] has no
-corresponding change."
-
-## Phase 1 - Automated Tests
-
-Generate commands for the coding agent to run:
-```bash
-# Run relevant test suite
-
-# Run full preflight if available
-```
-
-**Phase 1 executor:** The coding agent runs these commands. Phase 2 and 3 are
-for independent verifiers.
-
-**Integration Gaps:**
-Risk areas from Phase 0 NOT covered by automated tests:
-- [area] - no automated test exists because [reason]
-- [area] - test exists at `file:line` but doesn't exercise the changed path because [reason]
-
-**Mocking awareness:** Note which tests use mocks. Schema changes, API contract
-changes, and integration issues won't be caught by mocked tests. Flag: "These
-tests mock [X] - real [X] changes won't be caught."
-
-## Phase 2 - AI Verification
-
-Generate prompts for a SEPARATE agent with NO shared conversation context.
-The verifier agent starts fresh - the prompts must be completely self-contained.
-
-Include in each prompt: project architecture summary (2-3 lines), list of changed
-files with purpose, and relevant footguns for the changed area.
-
-Different models catch different blind spots. The coding model has confirmation
-bias toward its own work. Recommend a different model for verification.
-
-**If Phase 2 will be skipped:** Note it explicitly in "What ISN'T Tested":
-"AI verification not performed - [reason]. Coverage relies on automated tests
-(Phase 1) and human testing (Phase 3) only. Cross-model blind spots are NOT covered."
-
-**Failure Signatures:**
-| If this breaks... | You'll see... |
-|-------------------|---------------|
-| Auth change broken | 401 responses on `/api/user` |
-| Migration failed | Missing columns in `users` table |
-| Build regression | `npm run build` exits non-zero |
-
-## Phase 3 - Human Testing
-
-| What to test | Where | What "good" looks like | What to look for |
-|-------------|-------|----------------------|-----------------|
-<!-- fill - focus on what automation CAN'T verify -->
-
-Human testing catches: visual regressions, UX issues, multi-step workflows,
-cross-browser behavior, real device behavior, and anything requiring judgment.
-
-## What ISN'T Tested
-
-Explicitly list coverage gaps. Be honest about what's NOT verified:
-- [gap] - why it's not tested, and the risk level if it breaks
-- [gap] - would require [access/environment/data] we don't have
-
-## Closing
-
-**BLOCKING GATE:** Present the full test plan, then pause so the human can run Phase 1 commands, adjust scope or coverage, switch to `/goat-debug` if a failure appears, or close.
-
-## Common Failure Modes
-
-1. **Generic Phase 2 prompts** - verifier gets "[CHANGES]" instead of actual file list. The self-contained requirement prevents this.
-2. **Phase 3 is trivially obvious** - "click the button" instead of testing what automation can't. Focus human testing on judgment calls.
-3. **Full 3-phase for a 1-line fix** - the quick path prevents this.
+---
 
 ## Constraints
 
 <!-- FIXED: Do not adapt these -->
 - Phase 2/3 verification MUST NOT be performed by the coding agent (doer-verifier principle)
-- MUST fill ALL bracketed values in Phase 2 prompts - no [PLACEHOLDER] in output
+- MUST fill ALL bracketed values in Phase 2 prompts -- no [PLACEHOLDER] in output
 - MUST list what ISN'T tested
 - MUST note which tests use mocks and what they can't catch
 - MUST NOT fabricate file paths or function names
@@ -171,42 +77,21 @@ Explicitly list coverage gaps. Be honest about what's NOT verified:
 ## Output Format
 
 ```markdown
-## TL;DR
-<!-- What changed, what's tested, what isn't -->
-
-## Phase 0: Change Manifest
-| File | Component | Change Type | Risk | Verification Ratio |
-|------|-----------|-------------|------|-------------------|
-
+## TL;DR         <!-- What changed, what's tested, what isn't -->
 ## Phase 1: Automated Tests
-```bash
-# Commands for the coding agent to run
-```
-
-### Integration Gaps
-<!-- Risk areas NOT covered by automated tests -->
-
+<!-- bash commands (copy-pasteable) + Integration Gaps -->
 ## Phase 2: AI Verification
 <!-- Self-contained prompts for a SEPARATE agent -->
-
-### Failure Signatures
-| If this breaks... | You'll see... |
-|-------------------|---------------|
-
 ## Phase 3: Human Testing
-| What to test | Where | What "good" looks like | What to look for |
-|-------------|-------|----------------------|-----------------|
-
+<!-- Table: What to test | Where | What "good" looks like | What to look for -->
 ## What ISN'T Tested
-<!-- Explicit gaps in coverage -->
+<!-- Explicit gaps -->
 ```
-
-Phase 1 commands should be copy-pasteable into CI or terminal.
 
 ## Chains With
 
-- /goat-debug - test reveals a failure → diagnosis needed
+- /goat-debug - test reveals a failure, diagnosis needed
 - /goat-plan - test verifies milestone criteria
 - /goat-review - test results inform review decisions
 
-**Handoff shape:** `{change_manifest, test_commands, coverage_gaps, failure_signatures}`
+**Handoff shape:** `{change_manifest, test_commands, coverage_gaps}`

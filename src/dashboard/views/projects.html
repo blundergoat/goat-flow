@@ -32,7 +32,7 @@
           <span x-text="projectsScanning ? 'Scanning...' : 'Scan All'"></span>
         </button>
         <button
-          @click="showAddProject = true"
+          @click="showAddProject = true; $nextTick(() => $refs.addProjectInput?.focus())"
           class="gf-btn-scan"
           style="
             font-size: 12px;
@@ -64,6 +64,7 @@
         <input
           type="text"
           x-model="newProjectPath"
+          x-ref="addProjectInput"
           class="gf-input"
           style="
             flex: 1;
@@ -117,14 +118,25 @@
         <thead>
           <tr>
             <template
-              x-for="col in ['Project', 'State', 'Action', 'Details', '']"
+              x-for="col in [{label: 'Project', key: 'name'}, {label: 'State', key: 'state'}, {label: 'Action', key: 'action'}, {label: 'Details', key: 'details'}, {label: '', key: null}]"
             >
-              <th class="gf-th" x-text="col"></th>
+              <th
+                class="gf-th"
+                :style="col.key ? 'cursor: pointer; user-select: none;' : ''"
+                @click="col.key && sortProjects(col.key)"
+              >
+                <span x-text="col.label"></span>
+                <span
+                  x-show="col.key && projectsSortKey === col.key"
+                  x-text="projectsSortAsc ? ' ▲' : ' ▼'"
+                  style="font-size: 9px; opacity: 0.6;"
+                ></span>
+              </th>
             </template>
           </tr>
         </thead>
         <tbody>
-          <template x-for="project in projectsList" :key="project.path">
+          <template x-for="project in sortedProjectsList" :key="project.path">
             <tr class="gf-tr">
               <td class="gf-td">
                 <span

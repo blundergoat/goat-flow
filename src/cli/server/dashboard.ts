@@ -902,6 +902,48 @@ export function serveDashboard(
       return true;
     }
 
+    /** Server-side project list persistence file path. */
+    const projectsListFile = join(absDefault, ".goat-flow", "dashboard-projects.json");
+
+    /** Save/load the project list to/from disk so it survives server restarts. */
+    async function handleProjectsListRequest(
+      req: IncomingMessage,
+      url: URL,
+      res: ServerResponse,
+    ): Promise<boolean> {
+      if (url.pathname !== "/api/projects/list") return false;
+
+      if (req.method === "GET") {
+        try {
+          const data = await import("node:fs/promises").then((fs) =>
+            fs.readFile(projectsListFile, "utf-8"),
+          );
+          jsonResponse(res, 200, JSON.parse(data));
+        } catch {
+          jsonResponse(res, 200, { paths: [] });
+        }
+        return true;
+      }
+
+      if (req.method === "POST") {
+        const body = await readBody(req);
+        try {
+          const parsed = JSON.parse(body);
+          const paths: string[] = Array.isArray(parsed.paths) ? parsed.paths : [];
+          const { mkdir, writeFile } = await import("node:fs/promises");
+          await mkdir(join(absDefault, ".goat-flow"), { recursive: true });
+          await writeFile(projectsListFile, JSON.stringify({ paths }, null, 2));
+          jsonResponse(res, 200, { ok: true });
+        } catch (err) {
+          jsonResponse(res, 400, { error: String(err) });
+        }
+        return true;
+      }
+
+      jsonResponse(res, 405, { error: "Method not allowed" });
+      return true;
+    }
+
     /** Classify project adoption state for one or more paths. */
     function handleProjectsStatusRequest(
       url: URL,
@@ -985,6 +1027,7 @@ export function serveDashboard(
         () => handlePreferencesRequest(req, url, res),
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
+        () => handleProjectsListRequest(req, url, res),
         () => Promise.resolve(handleProjectsStatusRequest(url, res)),
         () => Promise.resolve(handleRubricsRequest(url, res)),
         () => handleTerminalCreateRequest(req, url, res),

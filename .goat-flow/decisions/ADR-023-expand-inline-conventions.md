@@ -21,6 +21,6 @@ Sections added that were previously missing:
 
 - ~50 additional lines per skill template (×5 = 250 total across skill templates)
 - Drift surface grows from 60 lines (12×5) to 310 lines (62×5), but content gap is closed
-- M03.2 drift check must compare against the expanded canonical source in `workflow/skills/reference/shared-preamble.md`
-- `shared-preamble.md` remains the canonical source - update there first, then propagate
+- M03.2 drift check must compare against the expanded canonical source in `workflow/skills/reference/skill-conventions.md`
+- `skill-conventions.md` remains the canonical source - update there first, then propagate
 - No structural change to skill distribution model - templates remain single-file, self-contained

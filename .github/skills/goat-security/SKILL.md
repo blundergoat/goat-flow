@@ -1,6 +1,6 @@
 ---
 name: goat-security
-description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and concrete dependency auditing."
+description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and confidence classification."
 goat-flow-skill-version: "1.1.0"
 ---
 # /goat-security
@@ -17,203 +17,65 @@ If unavailable, use these essentials:
 
 ## When to Use
 
-Use when assessing security posture: before deployment, after adding auth/input
-handling, when touching secrets/credentials, or for a security-focused audit.
+Use when assessing security posture: before deployment, after adding auth/input handling, when touching secrets/credentials, or for a security-focused audit.
 
-**Boundary with /goat-review:** goat-security owns: threat models, compliance frameworks (HIPAA/GDPR), dependency CVEs, auth/authz boundaries. goat-review owns: code quality, style, hook correctness, instruction staleness. If you find a code quality issue during security assessment, flag it and suggest `/goat-review`.
+**Boundary:** goat-security owns threat models, compliance, dependency CVEs, auth/authz boundaries. goat-review owns code quality, style, correctness. If you find a code quality issue, flag it and suggest `/goat-review`.
 
-**NOT this skill:**
-- General code quality sweep → /goat-review (audit mode)
-- Reviewing a specific diff for issues → /goat-review
-- Diagnosing a specific vulnerability → /goat-debug
-- Understanding code before securing it → /goat-debug (investigate mode)
+**NOT this skill:** Code quality sweep -> /goat-review. Reviewing a diff -> /goat-review. Diagnosing a vulnerability -> /goat-debug.
 
-## Step 0 - Choose Depth and Frame the Assessment
+## Step 0 - Choose Depth
 
-Start with the depth choice, not a checklist.
+> "Assessing [X] -- quick scan, or full assessment with threat model, framework verification, and confidence classification?"
 
-Default opener:
-> "Assessing [X] — do you want a quick scan, or the full assessment with threat model, framework verification, confidence classification, and dependency audit?"
+- If user already says "quick", "full", or names a threat concern, confirm and continue.
+- If arriving from the dispatcher with depth already chosen, skip the depth question.
+- If vague, ask one follow-up covering: component, threat concern, deployment context, framework.
+- Auto-detect framework from package files (package.json, go.mod, etc.). Present: "This is a [framework] project."
 
-**Adaptive Step 0:**
-- If the user already says "quick", "full", "compliance", or names a specific threat concern, confirm and continue.
-- If the request is vague, ask one natural follow-up that covers the component, threat model or concern, deployment context, and framework.
-- If the user says "just scan everything" or provides minimal info, auto-detect the framework from package files and run a broad threat surface scan with confirmation.
+**Footgun check:** Read `.goat-flow/footguns/` for entries mentioning the target area. Present matches.
 
-**Quick scan path:**
-- Gather the component, deployment context, threat concern, and framework in one short exchange.
-- Run the threat surface scan, call out the highest-risk findings, and keep moving unless the user interrupts.
+## Quick Scan Path
 
-**Full assessment path:**
-- Confirm the component, threat model, auth boundaries, framework, and any known issues to skip.
-- Run the complete workflow: threat surface scan → framework verification → confidence classification → exploitability ranking → self-check.
+Identify framework, run threat surface scan, call out highest-risk findings. Keep moving unless user interrupts.
 
-**Auto-detect:** Read package.json/composer.json/go.mod to identify framework.
-Present: "This is a [framework] project. I'll check [framework]'s built-in
-security features during verification."
+## Full Assessment Path
 
-**Footgun check:** If `.goat-flow/footguns/` exists, read entries mentioning the target area. If a match is found, present it: "This area has a known issue: [footgun]. Relevant?"
+### Phase 1 - Threat Surface Scan
 
-**Before proceeding:** present what you know (component, threat model, framework, selected depth, auth boundaries) and what you still need. For the full path, wait for the user to confirm before Phase 1. For the quick path, confirm and continue unless the user stops you.
+Scan these categories. **Skip categories that don't apply** based on threat model. Log every finding with `file:line`.
 
-## Phase 1 - Threat Surface Scan
+Input validation (skip: no user input) | Auth/authz (skip: no HTTP) | Secret handling | SQL injection (skip: no DB) | XSS (skip: no HTML) | Command injection (skip: no shell) | Path traversal (skip: no FS) | Dependency CVEs (run `npm audit`/`pip-audit`/`cargo audit`/equivalent) | CORS/CSP (skip: no HTTP server) | Permission escalation (skip: single-role)
 
-Scan against the checklist below. **Skip categories that don't apply** based
-on Step 0 threat model (a CLI tool doesn't need CORS/CSP checks).
+### Phase 2 - Framework-Aware Verification
 
-| Category | Check | Skip If | Example |
-|----------|-------|---------|---------|
-| Input validation | User input reaches backend without sanitization | No user input (library) | `req.body.name` passed directly to SQL |
-| Auth/authz | Missing or bypassable authentication on sensitive routes | No HTTP endpoints | Session token in URL, missing CSRF on POST |
-| Secret handling | Hardcoded secrets, .env committed, secrets in logs | No secrets in codebase | API key in source, token in error message |
-| SQL injection | User input in raw queries without parameterization | No database | `db.query("SELECT * FROM users WHERE id=" + id)` |
-| XSS | User input rendered without escaping | No HTML output | `innerHTML = userInput`, unescaped template |
-| Command injection | User input in shell commands | No shell execution | `exec("convert " + filename)`, unsanitized args |
-| Path traversal | User input in file paths | No file system access | `fs.readFile(basePath + userInput)` |
-| Dependency CVEs | Known vulnerabilities in dependencies | - | Run audit command below |
-| CORS/CSP | Misconfigured cross-origin policies | No HTTP server | `Access-Control-Allow-Origin: *` |
-| Permission escalation | Role/privilege checks missing or bypassable | Single-role system | Admin routes without role check |
+**Key differentiator.** For EACH finding, check if the project's framework already mitigates it. Attempt to DISPROVE each finding. Is the mitigation installed, configured, and applied to the specific route/endpoint? Remove false positives. Flag partial mitigations.
 
-**Dependency audit commands:**
-```bash
-npm audit              # Node.js
-pip-audit              # Python
-cargo audit            # Rust
-composer audit          # PHP
-bundler-audit check    # Ruby
-dotnet list package --vulnerable  # .NET
-```
+**BLOCKING GATE:** Present verified findings, then pause.
 
-Log every finding with `file:line` evidence.
+### Phase 3 - Confidence Classification
 
-## Phase 2 - Framework-Aware Verification
+- **CONFIRMED** - input traced entry to sink. Show: `[entry] -> ... -> [sink]`. Tag: OBSERVED.
+- **PROBABLE** - vulnerable pattern, input source unclear. Identify missing trace. Tag: INFERRED.
+- **THEORETICAL** - best-practice gap, no exploit path. Show what controls must fail. Tag: INFERRED.
 
-**THIS IS THE KEY DIFFERENTIATOR.** For EACH Phase 1 finding, check if the
-framework already mitigates it. Attempt to DISPROVE each finding - the adversarial
-framing catches more false positives than "check if it's handled."
+Standard report: CONFIRMED + PROBABLE in "Needs Verification". Full report: all findings.
 
-**Framework verification examples:**
+### Phase 4 - Exploitability Ranking
 
-| Framework | Feature | What it mitigates | How to verify |
-|-----------|---------|-------------------|---------------|
-| Express | `helmet()` middleware | XSS, clickjacking, MIME sniffing | Check `app.use(helmet())` exists AND is before route handlers |
-| Express | `csurf` / `csrf()` | CSRF attacks | Check middleware registered on state-changing routes |
-| Django | ORM queries | SQL injection | Check no `.raw()` or `.extra()` with user input |
-| Django | `CsrfViewMiddleware` | CSRF | Check not in `CSRF_EXEMPT` for sensitive views |
-| Rails | `strong_parameters` | Mass assignment | Check `params.require(:model).permit(...)` on controllers |
-| Rails | Auto-escaping in ERB | XSS | Check no `raw()` or `.html_safe` on user content |
-| React | JSX auto-escaping | XSS | Check no `dangerouslySetInnerHTML` with user content |
-| Next.js | Server actions | CSRF, input validation | Check server actions validate input, don't trust client |
-| Symfony | CSRF token component | CSRF | Check forms include `csrf_token()` |
-| Spring | Security filter chain | Auth bypass | Check `SecurityFilterChain` covers the route |
+Critical (no auth) > High (low-privilege) > Medium (specific conditions) > Low (theoretical). For Critical/High, write attack scenario: "An [attacker] can [action] via [vector], resulting in [impact]."
 
-**Verification protocol:**
-For each finding: is the mitigation installed, configured, and applied
-to the specific route/endpoint? Flag partial mitigation: "helmet() is installed
-but `contentSecurityPolicy` is disabled."
+### Phase 5 - Self-Check
 
-Remove confirmed false positives. Flag partial mitigations as findings.
+Re-read `file:line` for Critical/High. Does code match the finding? Is the scenario realistic? Remove failures.
 
-**BLOCKING GATE:** Present verified findings, then pause so the human can verify a specific finding against the framework, check a different attack surface, test an edge case, or proceed to ranking.
-
-## Phase 2.5 - Confidence Classification
-
-Classify every finding from Phase 2 before presenting:
-
-**CONFIRMED** — Attacker-controlled input traced from entry point to sink.
-- Show data flow: `[entry] → [transform] → ... → [sink]`
-- Tag: `OBSERVED`
-
-**PROBABLE** — Vulnerable pattern found, input source unclear or partially traced.
-- Show pattern, identify missing trace element
-- Tag: `INFERRED`
-
-**THEORETICAL** — Best-practice violation or defence-in-depth gap, no confirmed exploit path.
-- Show gap and what controls would need to fail
-- Tag: `INFERRED`
-
-**Reporting defaults:**
-- Standard report: CONFIRMED only. PROBABLE in "Needs Verification" section. THEORETICAL omitted.
-- Full report ("thorough" / "full audit"): All findings, labelled by confidence.
-
-## Phase 3 - Exploitability Ranking
-
-Rank verified findings by exploitability, not just severity:
-
-- **Critical:** Exploitable without authentication. Immediate action required.
-- **High:** Exploitable with low-privilege access. Should fix before deployment.
-- **Medium:** Exploitable with specific conditions or chained with another issue.
-- **Low:** Theoretical risk, mitigated by other controls or very hard to exploit.
-
-For each **Critical** and **High** finding, write a one-sentence attack scenario:
-"An [attacker profile] can [action] via [vector], resulting in [impact]."
-
-Example: "An unauthenticated user can extract the users table by submitting
-`' OR 1=1--` in the search field at `src/api/search.ts:42`."
-
-## Phase 4 - Self-Check
-
-Re-read each cited `file:line` for Critical and High findings.
-- Does the code actually do what the finding claims?
-- Did the framework verification in Phase 2 actually check the right thing?
-- Is the attack scenario realistic given the deployment context?
-
-Remove findings that don't survive re-verification.
-
-**BLOCKING GATE:** Present final report using the Output Format template below.
-
----
+**BLOCKING GATE:** Present final report.
 
 ## Compliance Mode
 
-<!-- EVOLVING: This mode will be expanded as compliance standards are added -->
-
-**Compliance mode is opt-in.** Only activate when the user explicitly mentions HIPAA, GDPR, PHI, or regulatory compliance. Most projects do not need this section.
-
-Activated when Step 0 identifies a regulatory compliance concern (HIPAA, GDPR, SOC2, PCI-DSS).
-
-### Phase C1 - Regulation Detection
-
-Identify which regulations apply from project context:
-- HIPAA: PHI/healthcare data, patient records, health APIs
-- GDPR: EU user data, consent flows, data subject rights
-- SOC2: Enterprise SaaS, audit logging, access controls
-- PCI-DSS: Payment processing, card data, tokenization
-
-If unclear, ask: "Which regulatory framework applies? (HIPAA, GDPR, SOC2, PCI-DSS, or tell me more)"
-
-Load relevant coding standards if they exist: `.goat-flow/coding-standards/security.md` and framework-specific security files.
-
-### Phase C2 - Compliance Scan
-
-For each applicable regulation, check against its core requirements using the Phase 1 threat surface categories as a base. Add regulation-specific checks:
-- **HIPAA:** minimum necessary principle, tenant scoping, audit trail, PHI in logs
-- **GDPR:** consent mechanisms, data subject access/deletion, data processing agreements, cross-border transfer
-- **SOC2:** access control logging, change management, incident response procedures
-- **PCI-DSS:** cardholder data isolation, encryption at rest/transit, key management
-
-Log findings with `file:line` evidence and regulation citation.
-
-### Phase C3 - Gap Report
-
-Present compliance gaps ordered by risk:
-- **Non-compliant:** Direct violation of a regulatory requirement. Cite the specific regulation clause.
-- **Partially compliant:** Implementation exists but is incomplete or misconfigured.
-- **Not assessed:** Requires access/context the agent doesn't have (e.g., infrastructure config, vendor agreements).
-
-**BLOCKING GATE:** Present the compliance report, then pause so the human can drill into a specific finding, check a different regulation, proceed to exploitability ranking for technical findings, or close.
-
----
-
-## Common Failure Modes
-
-1. **Generic OWASP checklist** - agent runs through web categories on a CLI tool. The skip conditions in Phase 1 prevent this.
-2. **False positives from framework ignorance** - agent flags "no input sanitization" in a Rails app where strong params handle it. Phase 2 catches this.
-3. **Missing dependency audit** - agent scans code but skips `npm audit`. The concrete commands in Phase 1 prevent this.
+Compliance checks are opt-in. Only activate when the user explicitly mentions HIPAA, GDPR, SOC2, PCI-DSS, or regulatory compliance. Run the standard assessment first, then layer regulation-specific checks on top. Present gaps as non-compliant / partially compliant / not assessed with regulation clause citations.
 
 ## Constraints
 
-<!-- FIXED: Do not adapt these -->
 - MUST NOT flag framework-mitigated issues as vulnerabilities
 - MUST include attack scenario for Critical and High findings
 - MUST run dependency audit using project's package manager
@@ -222,63 +84,24 @@ Present compliance gaps ordered by risk:
 - MUST re-verify Critical and High findings before presenting
 - MUST classify every finding as CONFIRMED, PROBABLE, or THEORETICAL
 - MUST show data flow path for CONFIRMED findings
-- MUST identify missing trace element for PROBABLE findings
 - MUST default to standard report (CONFIRMED only) unless user requests full
 
 ## Output Format
 
 ```markdown
-## TL;DR
-<!-- 3 sentences: threat model, key findings, posture assessment -->
-
-## Threat Surface
-| Category | Status | Skip Reason |
-|----------|--------|-------------|
-| Input validation | Scanned / Skipped | [if skipped: why] |
-| Auth/authz | ... | ... |
-| Secret handling | ... | ... |
-| SQL injection | ... | ... |
-| XSS | ... | ... |
-| Command injection | ... | ... |
-| Path traversal | ... | ... |
-| Dependency CVEs | ... | ... |
-| CORS/CSP | ... | ... |
-| Permission escalation | ... | ... |
-
-## Findings (by exploitability × confidence)
-<!-- Order: [CRITICAL/CONFIRMED] > [CRITICAL/PROBABLE] > [HIGH/CONFIRMED] > [HIGH/PROBABLE] > [MEDIUM/CONFIRMED] > etc. -->
-
-### Critical (exploitable without auth)
-- **[CRITICAL/CONFIRMED] [title]** - `file:line`
-  **Data flow:** `[entry] → [transform] → ... → [sink]`
-  **Attack scenario:** An [attacker] can [action] via [vector], resulting in [impact]
-  **Framework mitigation:** [not mitigated | mitigated by X - downgraded]
-
+## TL;DR  <!-- threat model, key findings, posture -->
+## Threat Surface - | Category | Status | Skip Reason |
+## Findings (exploitability x confidence)
+### Critical - **[CRITICAL/CONFIRMED] [title]** `file:line` | Data flow | Attack scenario | Framework mitigation
 ### High / Medium / Low
-
-## Needs Verification
-<!-- PROBABLE findings: vulnerable pattern found, input source unclear -->
-- **[HIGH/PROBABLE] [title]** - `file:line`
-  **Pattern:** [vulnerable pattern found]
-  **Missing trace:** [what input source or intermediate step is unconfirmed]
-
-<!-- Standard mode: N theoretical findings omitted. Request "full audit" to include. -->
-
-## Framework Mitigations Verified
-| Feature | Installed | Configured | Applied to routes |
-|---------|-----------|------------|-------------------|
-
+## Needs Verification - **[sev/PROBABLE] [title]** `file:line` | Pattern | Missing trace
+## Framework Mitigations Verified - | Feature | Installed | Configured | Applied |
 ## What I Didn't Check
-<!-- Threat surfaces skipped and why -->
-
-## Dependency Audit
-<!-- Output of npm audit / pip-audit / cargo audit / etc. -->
 ```
 
 ## Chains With
 
 - /goat-review - security findings feed into change review
 - /goat-debug - specific vulnerability needs deeper diagnosis
-- /goat-review - security scan reveals broader quality issues → audit mode
 
 **Handoff shape:** `{threat_model, findings_by_exploitability, framework_mitigations, dependency_audit_results}`

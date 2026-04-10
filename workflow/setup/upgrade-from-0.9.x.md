@@ -74,7 +74,7 @@ These files contain real project memory. Migrate the content, don't discard it.
 ## Step 4 — Create goat-flow infrastructure
 
 - Create `.goat-flow/config.yaml` with version 1.1.0
-- Create `.goat-flow/skill-conventions.md` from `workflow/skills/reference/shared-preamble.md`
+- Create `.goat-flow/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md`
 - Create `.goat-flow/glossary.md` with project-specific terms
 - Create or enhance `.goat-flow/architecture.md`
 

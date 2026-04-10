@@ -71,6 +71,8 @@ function app() {
     projectsList: [],
     projectsScanning: false,
     showAddProject: false,
+    projectsSortKey: null,
+    projectsSortAsc: true,
     newProjectPath: "",
 
     // --- Rubrics state ---
@@ -550,17 +552,29 @@ function app() {
         /* silent */
       }
       this.newProjectPath = "";
-      localStorage.setItem(
-        "goat-flow-projects",
-        JSON.stringify(this.projectsList.map((p) => p.path)),
-      );
+      this._saveProjectsList();
     },
     removeProject(path) {
       this.projectsList = this.projectsList.filter((p) => p.path !== path);
-      localStorage.setItem(
-        "goat-flow-projects",
-        JSON.stringify(this.projectsList.map((p) => p.path)),
-      );
+      this._saveProjectsList();
+    },
+    sortProjects(key) {
+      if (this.projectsSortKey === key) {
+        this.projectsSortAsc = !this.projectsSortAsc;
+      } else {
+        this.projectsSortKey = key;
+        this.projectsSortAsc = true;
+      }
+    },
+    get sortedProjectsList() {
+      if (!this.projectsSortKey) return this.projectsList;
+      const key = this.projectsSortKey;
+      const dir = this.projectsSortAsc ? 1 : -1;
+      return [...this.projectsList].sort((a, b) => {
+        let av = key === "name" ? a.path.split("/").filter(Boolean).pop() || "" : (a[key] || "");
+        let bv = key === "name" ? b.path.split("/").filter(Boolean).pop() || "" : (b[key] || "");
+        return av.localeCompare(bv) * dir;
+      });
     },
     async scanAllProjects() {
       this.projectsScanning = true;
@@ -576,28 +590,51 @@ function app() {
       }
       this.projectsScanning = false;
     },
-    _loadSavedProjects() {
+    async _loadSavedProjects() {
+      let saved = [];
+      // Load from server first (persists across restarts), fallback to localStorage
       try {
-        const saved = JSON.parse(
-          localStorage.getItem("goat-flow-projects") || "[]",
-        );
-        // Auto-add the launch directory so users can navigate back after switching
-        const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
-        if (launchPath && !saved.includes(launchPath)) {
-          saved.unshift(launchPath);
-          localStorage.setItem("goat-flow-projects", JSON.stringify(saved));
-        }
-        if (saved.length > 0) {
-          this.projectsList = saved.map((path) => ({
-            path,
-            state: "...",
-            action: "...",
-            details: "Not scanned",
-          }));
+        const res = await fetch("/api/projects/list");
+        const data = await res.json();
+        if (Array.isArray(data.paths) && data.paths.length > 0) {
+          saved = data.paths;
         }
       } catch {
-        /* ignore */
+        /* server unavailable, try localStorage */
       }
+      if (saved.length === 0) {
+        try {
+          saved = JSON.parse(
+            localStorage.getItem("goat-flow-projects") || "[]",
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+      // Auto-add the launch directory so users can navigate back after switching
+      const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
+      if (launchPath && !saved.includes(launchPath)) {
+        saved.unshift(launchPath);
+      }
+      if (saved.length > 0) {
+        this.projectsList = saved.map((path) => ({
+          path,
+          state: "...",
+          action: "...",
+          details: "Not scanned",
+        }));
+        this._saveProjectsList();
+      }
+    },
+    _saveProjectsList() {
+      const paths = this.projectsList.map((p) => p.path);
+      // Save to both localStorage and server
+      localStorage.setItem("goat-flow-projects", JSON.stringify(paths));
+      fetch("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths }),
+      }).catch(() => {/* silent */});
     },
 
     // -- Rubrics --

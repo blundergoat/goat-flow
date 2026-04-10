@@ -6,9 +6,11 @@
     ".goat-flow/config.yaml",
     ".goat-flow/skill-conventions.md",
     ".goat-flow/architecture.md",
+    ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
     ".goat-flow/patterns.md",
-    ".goat-flow/decisions/ADR-000-template.md"
+    ".goat-flow/decisions/ADR-000-template.md",
+    ".goat-flow/personal-preferences.md"
   ],
 
   "required_dirs": [
@@ -16,7 +18,9 @@
     ".goat-flow/lessons/",
     ".goat-flow/decisions/",
     ".goat-flow/tasks/",
-    ".goat-flow/logs/sessions/"
+    ".goat-flow/logs/sessions/",
+    ".goat-flow/playbooks/planning/",
+    ".goat-flow/playbooks/testing/"
   ],
 
   "directory_purposes": {
@@ -25,9 +29,6 @@
 
   "optional_files": {
     "_note": "Optional local instructions are a later optimisation pass, not base setup. Prefer existing project docs first; otherwise derive these files from observed codebase patterns rather than generic templates.",
-    ".goat-flow/personal-preferences.md": "Optional gitignored local preferences for coding style, review tone, planning depth, and communication.",
-    ".goat-flow/code-map.md": "Optional quick-reference tree for repo navigation.",
-    ".goat-flow/README.md": "Optional router for local instruction files if the project later adds them.",
     ".goat-flow/coding-standards/conventions.md": "Optional universal project contract added after setup.",
     ".goat-flow/coding-standards/backend.md": "Optional backend-specific conventions added after setup.",
     ".goat-flow/coding-standards/frontend.md": "Optional frontend-specific conventions added after setup.",

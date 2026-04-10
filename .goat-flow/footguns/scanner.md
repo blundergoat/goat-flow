@@ -41,7 +41,7 @@ category: scanner
 
 The scanner awards 100% (A grade) to projects that have:
 - `settings.json` missing hook registration that the rubric claims exists (`src/cli/facts/agent/hooks.ts:479`, `src/cli/rubric/standard/hooks.ts:55` check file existence only)
-- Physically broken skill files (`.claude/skills/goat-plan/SKILL.md:182` - stale tail, `:198` - references deleted goat-investigate)
+- Skill files that pass structural checks but have stale internal references or missing playbook dependencies
 - CI workflow containing literal scanner-bait comments (`.github/workflows/context-validation.yml:40`)
 
 **Evidence:** Found by Codex on blundergoat-platform (100% score, broken goat-plan SKILL.md + unregistered hook), strands-php-client (100% score with structural issues).

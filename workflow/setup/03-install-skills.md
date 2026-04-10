@@ -25,9 +25,13 @@ Each SKILL.md MUST include:
 
 **IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Skills are the same for every project — project-specific context comes from the instruction file, `.goat-flow/footguns/`, `.goat-flow/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
+## Skill conventions
+
+Install `.goat-flow/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md`. This is the shared preamble that all skills reference for evidence format, confidence markers, and learning loop triggers.
+
 ## Version check
 
-After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version`. Check the expected version in `workflow/skills/goat-debug.md` line 4. Mismatched versions trigger AP15 deduction (-2 per skill, max -10).
+After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version`. Check the expected version in `workflow/skills/goat-debug.md` line 4. Mismatched versions will cause the scanner to flag them.
 
 ---
 
@@ -35,6 +39,7 @@ After installing, verify each SKILL.md frontmatter has the correct `goat-flow-sk
 - [ ] All 6 skill files exist in the agent's skills directory
 - [ ] goat/SKILL.md (dispatcher) exists
 - [ ] All 6 skills have matching `goat-flow-skill-version` tags
+- [ ] `.goat-flow/skill-conventions.md` exists
 - [ ] Instruction file router table references the skills directory
 
 **Progress marker:** Append one line to the shared setup session log:

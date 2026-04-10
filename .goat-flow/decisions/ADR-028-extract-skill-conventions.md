@@ -11,7 +11,7 @@ By v1.1.0, the shared conventions had grown to 152 lines. With 5 functional skil
 
 ## Decision
 
-Extract shared conventions from inline in each skill to a single file: `.goat-flow/skill-conventions.md`. Setup copies this from `workflow/skills/reference/shared-preamble.md`.
+Extract shared conventions from inline in each skill to a single file: `.goat-flow/skill-conventions.md`. Setup copies this from `workflow/skills/reference/skill-conventions.md`.
 
 Each skill retains a 7-line inline fallback so skills degrade gracefully (not catastrophically) if the file is missing:
 

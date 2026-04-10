@@ -72,6 +72,6 @@ Note: the execution loop MUST be duplicated (each file is loaded independently).
     category: "Skill Conventions",
     kind: "create",
     instruction:
-      "Create `.goat-flow/skill-conventions.md` with project-specific shared preamble for skills. Copy from `workflow/skills/reference/shared-preamble.md` and adapt to your project.",
+      "Create `.goat-flow/skill-conventions.md` with project-specific shared preamble for skills. Copy from `workflow/skills/reference/skill-conventions.md` and adapt to your project.",
   },
 ];

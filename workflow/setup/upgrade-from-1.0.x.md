@@ -30,7 +30,7 @@ You're in the right place if the project has `.goat-flow/config.yaml` with versi
 
 ## Step 2 — Update shared goat-flow surfaces
 
-- Install or update `.goat-flow/skill-conventions.md` from `workflow/skills/reference/shared-preamble.md`
+- Install or update `.goat-flow/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md`
 - Ensure learning-loop content lives under `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/decisions/`
 - Update `.goat-flow/architecture.md` and `.goat-flow/glossary.md` if the older setup left them thin or stale
 
@@ -42,7 +42,7 @@ You're in the right place if the project has `.goat-flow/config.yaml` with versi
 
 - Update all 5 skill templates to current version (check `goat-flow-skill-version` tag)
 - Install skills verbatim from the current `workflow/skills/goat-*.md` templates
-- Install `.goat-flow/skill-conventions.md` from `workflow/skills/reference/shared-preamble.md`
+- Install `.goat-flow/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md`
 - Install or update the `/goat` dispatcher from `workflow/skills/goat.md`
 
 **Verification:** All 6 skills have `goat-flow-skill-version: "1.1.0"`.

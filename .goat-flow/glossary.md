@@ -14,7 +14,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Definition of Done | Six explicit gates that must all pass before a task is considered complete. | `workflow/setup/execution-loop.md` | DoD |
 | Doer-Verifier | The principle that the agent which wrote the code must not be the one that verifies it. | `workflow/skills/goat-test.md` | -- |
 | Enforcement Gradient | Three-layer enforcement stack: permissions deny (hardest) > hooks > CLAUDE.md rules (softest). | `workflow/hooks/README.md` | -- |
-| Evidence Standard | The requirement that every finding must include `file:line` references and be tagged OBSERVED or INFERRED. | `workflow/skills/reference/shared-preamble.md` | -- |
+| Evidence Standard | The requirement that every finding must include `file:line` references and be tagged OBSERVED or INFERRED. | `workflow/skills/reference/skill-conventions.md` | -- |
 | Execution Loop | The six-step agent workflow: READ, CLASSIFY, SCOPE, ACT, VERIFY, LOG. | `workflow/setup/execution-loop.md` | Default loop |
 | Footgun | A documented architectural trap with `file:line` evidence stored in category bucket files under `.goat-flow/footguns/`. | `workflow/setup/05-customise-to-project.md` | Architectural landmine |
 | Guide Mode | A scanner rendering mode that turns the CLI scanner into an interactive setup assistant. | `src/cli/render/guide.ts` | -- |
@@ -29,7 +29,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Router Table | An index at the end of CLAUDE.md pointing to all project resources; tools listed here get 160x more agent usage. | `workflow/setup/execution-loop.md` | -- |
 | SBAO | Signal-Based Adaptive Orchestration - multi-agent plan critique with semantic signals and human checkpoints. Main agent + sub-agents (2 using the core trio, 1 fresh-context control group) generate competing improvements, rank them, then the human decides what to keep/drop/decide before synthesizing a prime plan. Used in goat-plan Phase 3. | `workflow/skills/goat-plan.md` | SBAO ranking, Signal-Based Adaptive Orchestration |
 | Core Trio | The three adversarial perspectives used by SBAO sub-agents: **SKEPTIC** (what could go wrong?), **ANALYST** (what does evidence say about cost/benefit?), **STRATEGIST** (what's the fastest path to shipping?). | `workflow/skills/goat-plan.md` | SKEPTIC/ANALYST/STRATEGIST, triangular tension |
-| Severity Scale | The fixed priority order for findings: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. | `workflow/skills/reference/shared-preamble.md` | -- |
+| Severity Scale | The fixed priority order for findings: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE. | `workflow/skills/reference/skill-conventions.md` | -- |
 | Skill | A slash-command-invoked capability (5 specialized: goat-security, goat-debug, goat-review, goat-plan, goat-test + 1 dispatcher: goat = 6 total) loaded on demand at Layer 3. | `docs/skills/README.md` | goat-* skills |
 | Skill Justification Test | The gate requiring each skill to have at least one of: distinct artefact, hard workflow gate, special failure mode, or repeatable structured output. | `.goat-flow/decisions/ADR-030-skill-consolidation.md` | -- |
 | State Declaration | The required format (`State: [MODE] \| Goal: [one line] \| Exit: [condition]`) an agent must announce before acting. | `workflow/setup/execution-loop.md` | -- |

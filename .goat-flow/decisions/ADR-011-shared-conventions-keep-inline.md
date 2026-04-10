@@ -16,7 +16,7 @@ The tension is real - duplication invites drift, but extraction breaks self-cont
 Keep shared conventions inline in each skill template. Self-contained skills are a core design principle that outweighs the duplication cost.
 
 To manage drift without breaking self-containment:
-- The canonical source for shared conventions is `workflow/skills/reference/shared-preamble.md` - update there first
+- The canonical source for shared conventions is `workflow/skills/reference/skill-conventions.md` - update there first
 - Propagate changes from the canonical source to all skill templates in `workflow/skills/`
 - M03.2 drift check compares each skill's conventions block against the canonical source and flags divergence
 - Skill template updates must touch all 8 files as a single change
@@ -26,5 +26,5 @@ To manage drift without breaking self-containment:
 - M03.2 drift check becomes critical infrastructure - it is the only mechanism preventing silent divergence
 - duplication across skills is accepted as the cost of self-containment
 - Skill template updates are inherently 8-file changes; contributors must update all templates together
-- The canonical source (`workflow/skills/reference/shared-preamble.md`) is never loaded by agents in target projects - it exists only as a reference for the goat-flow framework itself
+- The canonical source (`workflow/skills/reference/skill-conventions.md`) is never loaded by agents in target projects - it exists only as a reference for the goat-flow framework itself
 - No extraction, no includes, no preprocessing - skills remain plain markdown files

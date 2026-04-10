@@ -327,7 +327,7 @@
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px">
               <template
-                x-for="tier in ['foundation', 'standard', 'full']"
+                x-for="tier in ['foundation', 'standard', 'full'].filter(t => agent.score.tiers[t]?.available > 0)"
                 :key="agent.agent + '-' + tier"
               >
                 <div style="display: flex; align-items: center; gap: 8px">

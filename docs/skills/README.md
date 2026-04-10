@@ -57,7 +57,7 @@ Every skill shares:
 - **Learning loop** -- log lessons and footguns after completion
 - **Ceremony scaling** -- hotfixes skip ceremony, system changes get full treatment
 
-See `workflow/skills/reference/shared-preamble.md` for the canonical shared conventions.
+See `workflow/skills/reference/skill-conventions.md` for the canonical shared conventions.
 
 ---
 

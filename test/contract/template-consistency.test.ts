@@ -311,18 +311,18 @@ describe("Session log path consistency in setup templates", () => {
 });
 
 // ---------------------------------------------------------------
-// 13. shared-preamble.md has required sections
+// 13. skill-conventions.md has required sections
 // ---------------------------------------------------------------
 describe("Shared preamble required sections", () => {
   const preamblePath = join(
     WORKFLOW_SKILLS_DIR,
-    "reference/shared-preamble.md",
+    "reference/skill-conventions.md",
   );
 
   it("exists", () => {
     assert.ok(
       existsSync(preamblePath),
-      "workflow/skills/reference/shared-preamble.md should exist",
+      "workflow/skills/reference/skill-conventions.md should exist",
     );
   });
 
@@ -331,21 +331,21 @@ describe("Shared preamble required sections", () => {
   it("has Ceremony Level section", () => {
     assert.ok(
       content.includes("Ceremony Level"),
-      'shared-preamble.md should have a "Ceremony Level" section',
+      'skill-conventions.md should have a "Ceremony Level" section',
     );
   });
 
   it("has Footgun Fast-Path section", () => {
     assert.ok(
       content.includes("Footgun Fast-Path"),
-      'shared-preamble.md should have a "Footgun Fast-Path" section',
+      'skill-conventions.md should have a "Footgun Fast-Path" section',
     );
   });
 
   it("has Recovery section", () => {
     assert.ok(
       content.includes("## Recovery"),
-      'shared-preamble.md should have a "Recovery" section',
+      'skill-conventions.md should have a "Recovery" section',
     );
   });
 
@@ -356,7 +356,7 @@ describe("Shared preamble required sections", () => {
       content.includes("logs/sessions");
     assert.ok(
       hasSessionLog,
-      "shared-preamble.md should reference session logs (Session Log section or logs/sessions path)",
+      "skill-conventions.md should reference session logs (Session Log section or logs/sessions path)",
     );
   });
 });

@@ -60,8 +60,9 @@ Build a short brief like:
 - Keep the request in Implement mode. Do not force it through planning just because the verb is "change" or "build."
 
 **Handoff rule:**
-- The target skill can skip redundant Step 0 questions already answered by the dispatcher.
-- Pass the enriched brief, not just the raw user sentence.
+- Pass the enriched brief AND the depth choice (if made) to the target skill.
+- If the user already chose "quick" or "full" via the dispatcher, include `Depth: quick` or `Depth: full` in the handoff. The target skill skips its own depth question.
+- If depth was not discussed, omit it — the target skill will ask.
 
 ## Common Ambiguities
 
