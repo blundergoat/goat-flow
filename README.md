@@ -56,7 +56,7 @@ A local web UI opens with scanning, setup, and an integrated terminal.
 goat-flow scan .
 ```
 
-The scanner checks 90+ rules across three tiers (Foundation, Standard, Full) and gives you a score. A fresh project scores 0% -- that's expected.
+The scanner checks 79 rules across two tiers (Foundation, Standard) plus 12 anti-pattern deductions, and gives you a score. A fresh project scores 0% -- that's expected.
 
 ### 4. Generate setup for your agent
 
@@ -88,7 +88,7 @@ Skills are structured workflows the agent follows. `/goat` auto-routes to the ri
 
 **Skills** -- Six structured workflows (`/goat-debug`, `/goat-review`, `/goat-plan`, `/goat-security`, `/goat-test`, `/goat`) with phases and human gates. The `/goat` dispatcher classifies your request and routes to the right skill automatically.
 
-**Enforcement Hooks** -- Pre-tool hooks block dangerous commands (`rm -rf`, force push, secret file access) before they execute. Post-turn hooks run linting and type checking after every change. Rules alone get ~70% compliance; hooks get ~100%.
+**Enforcement Hooks** -- Pre-tool hooks intercept dangerous commands (`rm -rf`, force push, secret file access) and reject them with an explanation. Post-turn hooks run linting and type checking after every change. The deny-dangerous hook is advisory by default and blocking when registered as a pre-tool hook.
 
 **Learning Loop** -- Agents record footguns, lessons, decisions, and session logs in `.goat-flow/`. Next session, they read these before acting. Mistakes stop repeating.
 
@@ -100,7 +100,7 @@ Skills are structured workflows the agent follows. `/goat` auto-routes to the ri
 
 ```bash
 goat-flow dashboard .                  # Visual dashboard with integrated terminal
-goat-flow scan .                       # Score your project (90+ checks)
+goat-flow scan .                       # Score your project (79 checks + 12 anti-patterns)
 goat-flow setup . --agent claude       # Generate setup prompt for Claude Code
 
 goat-flow scan . --format json         # JSON output for CI

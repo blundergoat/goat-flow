@@ -394,6 +394,7 @@ export interface AgentFacts {
 export interface FactContext {
   facts: ProjectFacts;
   agentFacts: AgentFacts;
+  fs: ReadonlyFS;
 }
 
 // === Scoring ===

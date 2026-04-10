@@ -12,9 +12,7 @@ import {
   readdirSync,
   statSync,
   existsSync,
-  mkdirSync,
   watch,
-  writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,25 +35,6 @@ const VALID_RUNNERS = new Set<string>(["claude", "codex", "gemini", "copilot"]);
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 /** Current goat-flow package version for dashboard UI */
 const PACKAGE_VERSION = getPackageVersion();
-/** Default starter content for local personal preferences. */
-const DEFAULT_PERSONAL_PREFERENCES = `# Personal Preferences
-
-This file is gitignored — it's personal to you, not shared with the team.
-Edit this to teach your coding agent your style. Examples:
-
-## Coding style
-<!-- e.g., prefer early returns, minimal comments, small functions, specific naming conventions -->
-
-## Review preferences
-<!-- e.g., focus on correctness over style, prefer terse findings, skip praise -->
-
-## Planning depth
-<!-- e.g., always run SBAO for features, skip Mob for hotfixes, prefer detailed milestones -->
-
-## Communication
-<!-- e.g., be concise, don't summarise what you just did, skip preamble -->
-`;
-
 /** Resolve the absolute path to a file in the package root by walking up */
 function resolvePackageFile(name: string): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -275,76 +254,6 @@ export function serveDashboard(
           error: err instanceof Error ? err.message : String(err),
         });
       }
-      return true;
-    }
-
-    /** Return the canonical personal-preferences path for one project root. */
-    function getPreferencesPath(projectPath: string): string {
-      return join(projectPath, ".goat-flow", "personal-preferences.md");
-    }
-
-    /** Return the GET payload for the preferences editor. */
-    function buildPreferencesResponse(projectPath: string): {
-      exists: boolean;
-      path: string;
-      content: string;
-    } {
-      const prefPath = getPreferencesPath(projectPath);
-      const exists = existsSync(prefPath);
-      return {
-        exists,
-        path: prefPath,
-        content: exists
-          ? readFileSync(prefPath, "utf-8")
-          : DEFAULT_PERSONAL_PREFERENCES,
-      };
-    }
-
-    /** Persist the local preferences file from one POST body. */
-    async function savePreferences(req: IncomingMessage): Promise<string> {
-      const raw = await readBody(req);
-      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      const projectPath = safeResolvePath(
-        typeof body.path === "string" ? body.path : null,
-      );
-      const prefPath = getPreferencesPath(projectPath);
-      const content =
-        typeof body.content === "string"
-          ? body.content
-          : DEFAULT_PERSONAL_PREFERENCES;
-
-      mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
-      writeFileSync(prefPath, content, "utf-8");
-      return prefPath;
-    }
-
-    /** Read or update the local personal-preferences.md file for the current project. */
-    async function handlePreferencesRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/preferences") return false;
-
-      if (req.method === "GET") {
-        const projectPath = safeResolvePath(url.searchParams.get("path"));
-        jsonResponse(res, 200, buildPreferencesResponse(projectPath));
-        return true;
-      }
-
-      if (req.method === "POST") {
-        try {
-          const prefPath = await savePreferences(req);
-          jsonResponse(res, 200, { ok: true, path: prefPath });
-        } catch (err) {
-          jsonResponse(res, 500, {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-        return true;
-      }
-
-      jsonResponse(res, 405, { error: "Method not allowed" });
       return true;
     }
 
@@ -1024,7 +933,7 @@ export function serveDashboard(
         () => Promise.resolve(handleScanRequest(url, res)),
         () => Promise.resolve(handleSetupDetectRequest(url, res)),
         () => handleSetupRequest(url, res),
-        () => handlePreferencesRequest(req, url, res),
+
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
         () => handleProjectsListRequest(req, url, res),

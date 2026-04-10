@@ -20,7 +20,7 @@ Three changes:
 2. **goat-plan gets Phase 5 (Execute).** Per-milestone implementation with checkpoints. Only triggers when user approved and intent was "build/create."
 3. **Local persona override (historical).** `persona: investigator` locks out Implement mode across all skills for non-developer users (testers, service team, monitoring).
 
-**Supersession note (M13):** The old gitignored local config surface was removed. `config.yaml` is now the only machine-readable config surface, and local style preferences moved to `.goat-flow/personal-preferences.md` (gitignored).
+**Supersession note (M13):** The old gitignored local config surface was removed. `config.yaml` is now the only machine-readable config surface.
 
 ## Rationale
 
@@ -36,4 +36,4 @@ Three changes:
 - goat-plan grows by ~15 lines (Phase 5)
 - Dispatcher routing table gains implementation-intent rows
 - .goat-flow/config.yaml gains `persona` field
-- Historical note: the old gitignored override surface was removed in M13 and replaced with `.goat-flow/personal-preferences.md` for local-only style preferences
+- Historical note: the old gitignored override surface was removed in M13

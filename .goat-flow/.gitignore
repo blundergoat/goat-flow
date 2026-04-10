@@ -1,6 +1,5 @@
 # Ignore everything by default
 *
-personal-preferences.md
 
 # Committed goat-flow files
 !.gitignore

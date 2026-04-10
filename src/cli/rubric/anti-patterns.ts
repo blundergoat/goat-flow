@@ -2,8 +2,6 @@
  * Anti-pattern definitions for the scanner.
  * These deductions model harmful workflow smells that are easier to flag as penalties than as ordinary rubric checks.
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type {
   AntiPatternDef,
   FactContext,
@@ -16,18 +14,20 @@ import { getProjectStructure } from "../paths.js";
 const INSTRUCTION_PATH_PATTERN =
   /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|ai|\.claude|\.agents|\.github)\/[^`]+)`/g;
 
-/** Find stale instruction refs. */
+/** Find stale instruction refs using the ReadonlyFS abstraction. */
 function findStaleInstructionRefs(ctx: FactContext): string[] {
   const content = ctx.agentFacts.instruction.content;
-  const resolvedRoot = ctx.facts.root;
-  if (!content || !resolvedRoot || !existsSync(resolvedRoot)) return [];
+  if (!content) return [];
 
   const staleRefs: string[] = [];
   for (const match of content.matchAll(INSTRUCTION_PATH_PATTERN)) {
     const path = match[1];
     if (path === undefined || /[*?{}]/.test(path)) continue;
     const cleanPath = path.replace(/:[0-9]+(?:[-,][0-9]+)*$/, "");
-    if (!existsSync(join(resolvedRoot, cleanPath))) staleRefs.push(cleanPath);
+    // Skip framework paths (workflow/) — these exist in the goat-flow repo
+    // but not in user projects. They appear in CLAUDE.md as examples.
+    if (cleanPath.startsWith("workflow/")) continue;
+    if (!ctx.fs.exists(cleanPath)) staleRefs.push(cleanPath);
   }
 
   return staleRefs;

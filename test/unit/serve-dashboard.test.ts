@@ -6,7 +6,7 @@ import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -223,54 +223,7 @@ describe("serve-dashboard API", () => {
     assert.ok(Array.isArray(d.dirs));
   });
 
-  it("GET /api/preferences returns the default template when no file exists", async () => {
-    const { status, data } = await request(
-      port,
-      "GET",
-      `/api/preferences?path=${encodeURIComponent(tempDir)}`,
-    );
-    assert.equal(status, 200);
-    const body = data as { exists: boolean; content: string };
-    assert.equal(body.exists, false);
-    assert.match(body.content, /# Personal Preferences/);
-    assert.match(body.content, /## Coding style/);
-  });
 
-  it("POST /api/preferences saves personal-preferences.md", async () => {
-    const content = [
-      "# Personal Preferences",
-      "",
-      "## Coding style",
-      "Prefer terse helpers.",
-      "",
-      "## Review preferences",
-      "Findings first.",
-      "",
-      "## Planning depth",
-      "Use milestones for cross-file work.",
-      "",
-      "## Communication",
-      "Be concise.",
-      "",
-    ].join("\n");
-
-    const { status, data } = await request(port, "POST", "/api/preferences", {
-      path: tempDir,
-      content,
-    });
-    assert.equal(status, 200);
-    assert.deepEqual(data, {
-      ok: true,
-      path: join(tempDir, ".goat-flow", "personal-preferences.md"),
-    });
-    assert.equal(
-      readFileSync(
-        join(tempDir, ".goat-flow", "personal-preferences.md"),
-        "utf8",
-      ),
-      content,
-    );
-  });
 
   it("GET /unknown returns 404", async () => {
     const { status } = await request(port, "GET", "/nonexistent");

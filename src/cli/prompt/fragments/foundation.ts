@@ -262,7 +262,7 @@ If you want auto-detection, omit \`agents\`. If multiple agents are installed, l
 
 Use \`toolchain\` for real project commands and \`ask_first\` for structured high-risk boundaries. Do not invent commands or fake paths.
 
-Personal preferences do **not** belong in a second config file. Use \`.goat-flow/personal-preferences.md\` (gitignored) for local style and communication preferences instead.`,
+Personal preferences do **not** belong in a second config file.`,
   },
   // create-config-local removed - check 1.5.7 removed.
   {

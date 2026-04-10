@@ -41,7 +41,7 @@ export function scanProject(
   /** Per-agent scan reports containing scores, check results, and recommendations */
   const agentReports: AgentReport[] = facts.agents.map((agentFacts) => {
     /** Evaluation context combining shared and agent-specific facts */
-    const ctx = { facts, agentFacts };
+    const ctx = { facts, agentFacts, fs };
 
     /** Results from running all rubric checks */
     const checkResults = runChecks(allChecks, ctx);

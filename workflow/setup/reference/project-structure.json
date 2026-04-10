@@ -10,8 +10,7 @@
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
     ".goat-flow/patterns.md",
-    ".goat-flow/decisions/ADR-000-template.md",
-    ".goat-flow/personal-preferences.md"
+    ".goat-flow/decisions/ADR-000-template.md"
   ],
 
   "required_dirs": [

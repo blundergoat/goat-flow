@@ -7,7 +7,7 @@ This step should take the longest — it's doing real work, not copying template
 ## First: resume project context
 
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` if they exist
-- Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md`, or `.goat-flow/personal-preferences.md` already exist
+- Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns.md` already exist
 - Merge with what's there — do not replace existing project memory
 
 ## Config sync — populate structured context
@@ -58,10 +58,9 @@ Examples:
 - `` `src/auth/login.ts` (12 commits in 30 days, last: abc123) ``
 - `` `src/api/users.ts` + `src/db/users.ts` (co-committed 4 times, last: def456) ``
 
-## Patterns and preferences — capture memory beyond mistakes
+## Patterns — capture memory beyond mistakes
 
 - Ensure `.goat-flow/patterns.md` exists. Use it for successful repeatable approaches, not incidents
-- Create `.goat-flow/personal-preferences.md` if it does not exist. This file is gitignored and local-only — create the template, but do NOT fill it out for the user
 
 ## Architecture and code map — make them real
 
@@ -91,7 +90,7 @@ Examples:
 - [ ] Every lesson references a real git commit or incident
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
 - [ ] `.goat-flow/patterns.md` exists
-- [ ] `.goat-flow/personal-preferences.md` exists locally and remains gitignored
+
 - [ ] architecture.md mentions at least 2 real components by name
 - [ ] glossary.md has at least 3 project-specific terms
 - [ ] Ask First boundaries reference real directories that exist on disk
