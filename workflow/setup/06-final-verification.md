@@ -6,6 +6,8 @@ This is the only setup gate. The goal is simple: `goat-flow scan . --agent {agen
 
 Run `goat-flow scan . --agent {agent}` and fix all failures until 100%.
 
+The `--agent` flag scopes the scan to one agent's surfaces: it checks that agent's instruction file, skills directory, hooks, and settings. It does NOT check other agents' files. For multi-agent projects, run the scan once per agent.
+
 No build/test/lint requirement. No separate human checklist. Fix scanner findings until the current combined scanner reaches 100%.
 
 **If a check cannot be fixed** (binary not installed locally, CI tool unavailable, platform constraint), document it as a known exception in the setup session log:
@@ -33,6 +35,17 @@ For each backtick-wrapped path or hook path:
 - Verify the instruction file version header matches the goat-flow release version
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
 - For auto-seeded footgun entries, spot-check that each cited `file:line` actually shows the described trap. If the line is unrelated (a closing brace, an import, a comment), fix the reference or remove the line number
+
+## Dual-homing check
+
+Check for duplicate content surfaces — warn if both exist without one being a bridge to the other:
+- `docs/footguns.md` AND `.goat-flow/footguns/`
+- `docs/lessons.md` AND `.goat-flow/lessons/`
+- `docs/architecture.md` AND `.goat-flow/architecture.md`
+- `docs/code-map.md` AND `.goat-flow/code-map.md`
+- `docs/decisions/` AND `.goat-flow/decisions/`
+
+If dual-homing is found, the router table should point to one canonical location. Report which surface is canonical and which should be removed or converted to a bridge.
 
 ## File manifest
 

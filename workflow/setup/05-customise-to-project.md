@@ -4,6 +4,16 @@ Steps 02–04 created the structure. This step makes it useful. Stop following t
 
 This step should take the longest — it's doing real work, not copying templates.
 
+## Preserve existing docs/ surfaces
+
+If the project already has `docs/architecture.md`, `docs/footguns.md`, `docs/lessons.md`, `docs/code-map.md`, or `docs/decisions/`, do NOT create duplicates in `.goat-flow/`. Instead: reference the existing surface from the router table and config.yaml. The existing content is likely higher quality than anything setup can generate.
+
+If the user explicitly wants consolidation into `.goat-flow/`, migrate content (merge, don't overwrite), update all references including local CLAUDE.md files (e.g., `strands_agents/CLAUDE.md`), and delete the original. Check for inbound references (README, CI, external links) before deleting.
+
+## Check compaction hooks for stale paths
+
+If existing `settings.json` notification hooks reference `tasks/todo.md`, `tasks/handoff.md`, or other legacy paths, update them to `.goat-flow/tasks/` or `.goat-flow/logs/sessions/`. Stale hook paths cause broken context recovery after compaction.
+
 ## First: resume project context
 
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` if they exist
@@ -90,7 +100,9 @@ Examples:
 - [ ] Every lesson references a real git commit or incident
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
 - [ ] `.goat-flow/patterns.md` exists
-
+- [ ] If `docs/` surfaces exist, they are referenced (not duplicated) in `.goat-flow/`
+- [ ] Compaction hooks reference current paths (not legacy `tasks/todo.md`)
+- [ ] If `tasks/todo.md` or `tasks/handoff.md` exist as stale legacy files, they are reported in the session log
 - [ ] architecture.md mentions at least 2 real components by name
 - [ ] glossary.md has at least 3 project-specific terms
 - [ ] Ask First boundaries reference real directories that exist on disk

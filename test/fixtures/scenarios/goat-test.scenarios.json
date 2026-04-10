@@ -9,7 +9,7 @@
     {
       "vagueInput": "we need tests",
       "expectedQuestions": ["what changed", "risk", "what tested"],
-      "idealSpecificInput": "Write tests for the dashboard preset system in src/dashboard/presets.js. No existing tests. High risk: guided presets construct prompts from user input."
+      "idealSpecificInput": "Write tests for the dashboard preset system in src/dashboard/preset-prompts.js. No existing tests. High risk: guided presets construct prompts from user input."
     },
     {
       "vagueInput": "make sure it works",

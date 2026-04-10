@@ -17,7 +17,7 @@ const PRESETS_PATH = join(
   "..",
   "src",
   "dashboard",
-  "presets.js",
+  "preset-prompts.js",
 );
 
 function loadPresets(): Preset[] {

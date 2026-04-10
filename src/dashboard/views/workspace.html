@@ -70,7 +70,7 @@
         <button
           @click="presetFilter = cat.id"
           :class="presetFilter === cat.id ? (cat.id === 'plan' ? 'text-gray-900' : 'text-white') : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
-          :style="presetFilter === cat.id ? 'background:' + ({'all':'#4ade80','favorites':'#4ade80','debug & explore':'#60a5fa','review':'#c084fc','plan':'#fbbf24','test':'#4ade80','security':'#f87171'}[cat.id] || '#4ade80') : ''"
+          :style="presetFilter === cat.id ? 'background:' + ({'all':'#4ade80','favorites':'#4ade80','debug':'#60a5fa','review':'#c084fc','plan':'#fbbf24','critique':'#a78bfa','test':'#4ade80','security':'#f87171'}[cat.id] || '#4ade80') : ''"
           class="px-2 py-0.5 text-xs font-medium rounded-full transition-colors"
           x-text="cat.label + (cat.id !== 'all' && cat.id !== 'favorites' ? ' (' + presets.filter(p => p.cat === cat.id).length + ')' : '')"
         ></button>
@@ -88,7 +88,7 @@
                 'border-l-amber-400 bg-amber-900/20': promptRunStates[preset.id] === 'running',
                 'border-l-emerald-400': promptRunStates[preset.id] === 'pass',
                 'border-l-red-400': promptRunStates[preset.id] === 'fail',
-                'border-l-blue-400': !promptRunStates[preset.id] && preset.cat === 'debug & explore',
+                'border-l-blue-400': !promptRunStates[preset.id] && preset.cat === 'debug',
                 'border-l-purple-400': !promptRunStates[preset.id] && preset.cat === 'review',
                 'border-l-amber-400': !promptRunStates[preset.id] && preset.cat === 'plan',
                 'border-l-green-400': !promptRunStates[preset.id] && preset.cat === 'test',
@@ -114,7 +114,7 @@
             <span
               class="text-xs px-1.5 py-0.5 rounded-full mt-1 inline-block"
               :class="{
-                    'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400': preset.cat === 'debug & explore',
+                    'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400': preset.cat === 'debug',
                     'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400': preset.cat === 'review',
                     'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400': preset.cat === 'plan',
                     'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400': preset.cat === 'test',

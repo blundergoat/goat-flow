@@ -13,9 +13,9 @@ Read the detailed templates in `workflow/skills/goat-*.md` before creating. Crea
 1. **goat-debug/SKILL.md** — Diagnosis-first debugging. Hypothesis tracking, recurrence checks. Includes investigate and onboard modes.
 2. **goat-review/SKILL.md** — Structured code review + quality audit + simplify mode. RFC 2119 severity, footgun matching.
 3. **goat-security/SKILL.md** — Threat-model-driven security assessment. Exploitability ranking, dependency auditing.
-4. **goat-plan/SKILL.md** — Planning with SBAO (multi-perspective sub-agent critique) and Mob Elaboration. Kill criteria, milestone archetypes. Includes refactor planning mode.
-5. **goat-sbao/SKILL.md** — Multi-perspective critique using sub-agent orchestration. Generates competing analyses, ranks them, cross-examines disagreements, and synthesises a prime output.
-6. **goat-test/SKILL.md** — 3-phase test plan generation. Doer-verifier principle.
+4. **goat-plan/SKILL.md** — Milestone task file generator and manager. Creates structured milestone files with testing gates and assumption tracking.
+5. **goat-sbao/SKILL.md** — Multi-perspective critique using sub-agent orchestration. 3 agents (risk, alternatives, fresh eyes), 5 phases, cross-examination, and synthesis.
+6. **goat-test/SKILL.md** — Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
 7. **goat/SKILL.md** — Dispatcher. Routes natural language to the right skill. Required — scanner checks for it (check 2.1.20).
 
 ## Requirements for each skill
@@ -32,9 +32,19 @@ Install both convention files from `workflow/skills/reference/`:
 - `.goat-flow/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` — essential preamble read on every skill invocation
 - `.goat-flow/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` — full conventions reference read only on full-depth invocations
 
+## Clean stale cross-agent skills
+
+After installing canonical skills for the current agent, check OTHER agent skill directories (`.agents/skills/`, `.gemini/skills/`, `.claude/skills/`, `.github/skills/`) for stale goat-flow skill names:
+
+`goat-audit`, `goat-investigate`, `goat-onboard`, `goat-reflect`, `goat-resume`, `goat-preflight`, `goat-research`, `goat-simplify`, `goat-refactor`, `goat-context`
+
+Delete any stale directories found. Then check the corresponding agent instruction file (`AGENTS.md`, `GEMINI.md`, `CLAUDE.md`) for references to deleted skills — remove or update those references.
+
+Do NOT delete non-goat-prefixed skills (e.g., `audit/`, `review/`, `migration-debug/`) — those are the project's custom skills.
+
 ## Version check
 
-After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version`. Check the expected version in `workflow/skills/goat-debug.md` line 4. Mismatched versions will cause the scanner to flag them.
+After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version` key. Compare against the version in any `workflow/skills/goat-*.md` template frontmatter. Mismatched versions will cause the scanner to flag them.
 
 ---
 

@@ -26,19 +26,20 @@ Read it completely before changing anything. Then:
 3. If the existing file mixes project/domain knowledge into the hot path, move that material to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`. Keep behavioral rules in the instruction file.
 4. If it IS an existing goat-flow instruction file (has execution loop, autonomy tiers, router table already), update it in place — fix stale paths, update version header, add missing sections.
 5. **If the existing file references `tasks/todo.md` or `tasks/handoff.md`**, remove those references. goat-flow uses `.goat-flow/logs/sessions/` for session state — not todo/handoff files.
-6. **After adding goat-flow sections, check total length.** If over 120 lines, compress: move domain knowledge to `.goat-flow/architecture.md`, remove redundant sections, tighten prose. The instruction file is loaded every turn — keep it lean.
+6. **After adding goat-flow sections, check total length.** If over 120 lines, compress: move domain knowledge to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`, remove redundant sections, tighten prose. "Compress" means relocate verbose material, not delete it — the user's content is preserved in `.goat-flow/` files, just not in the hot-path instruction file.
 7. Do NOT create "original-*" backup files. Git history preserves the original.
 
 ## Required sections (both paths)
 
 The instruction file MUST include these sections. Use `workflow/setup/reference/execution-loop.md` as the template:
 
-- (a) Version header — set to the current goat-flow release version (match the `goat-flow-skill-version` in the installed skill files)
-- (b) Execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
-- (c) Autonomy tiers: Always / Ask First / Never
-- (d) Definition of Done
-- (e) Router table
-- (f) Essential commands
+- (a) Project identity — Start with 1-2 lines describing what the project is: name, domain, core technology, and the primary invariant or constraint. Example: `BlunderGoat — chess PGN analyzer producing XLSX reports. Core invariant: all engine evaluations use actor-POV.`
+- (b) Version header — set to the current goat-flow release version (match the `goat-flow-skill-version` in the installed skill files)
+- (c) Execution loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+- (d) Autonomy tiers: Always / Ask First / Never
+- (e) Definition of Done
+- (f) Router table
+- (g) Essential commands
 
 Adapt all examples, Ask First boundaries, and essential commands for THIS project's real codebase. Use real file paths, real commands, real boundaries. Preserve the composition rule: when a goat-* skill is active, the skill's Step 0 satisfies READ/CLASSIFY/SCOPE and the instruction file resumes at ACT.
 
@@ -58,7 +59,7 @@ After writing/updating the instruction file:
 
 **Verification gate:**
 - [ ] Instruction file exists at the correct path
-- [ ] All sections (a) through (f) are present
+- [ ] All sections (a) through (g) are present
 - [ ] Examples and boundaries reference real project files
 - [ ] If Path B: no useful existing content was lost
 - [ ] `.gitignore` updated for agent-local files

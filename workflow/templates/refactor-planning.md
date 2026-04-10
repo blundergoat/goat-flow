@@ -13,9 +13,10 @@ Use when restructuring existing code: renames, extractions, moves, interface cha
 
 Before changing anything:
 
-1. **Declare scope:**
+1. **Declare scope** (include non-code surfaces — `.md`, `.json`, `.yaml`, config, manifests):
    - Files to change: [list]
    - Files that might break: [list]
+   - Non-code surfaces affected: [docs, config, manifests — these often reference renamed code]
    - Files out of scope: [list]
 
 2. **Read both sides of every interface being changed:**

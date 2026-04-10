@@ -31,6 +31,7 @@ b) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LO
      escalation. Revert-and-rescope tactic.
      Before presenting findings, re-read every `file:line` you plan to cite.
      If you cannot re-read it, mark the claim UNVERIFIED.
+     **Rename sweep:** after any rename or move, grep for the old name across all files. Zero remaining = pass.
      Plan tracking: if working from a plan/milestone file, tick each
      checkbox (`- [x]`) as the task is completed - not at the end.
      Recovery protocols: include 2-3 common failure patterns with fixes
@@ -91,7 +92,7 @@ d) Definition of Done: 6 gates
    (3) no unapproved boundary changes
    (4) logs updated if tripped
    (5) current state recorded before stopping incomplete work
-   (6) grep old pattern after renames
+   (6) After any rename or move, grep for the old name across ALL files (including .md, .json, .yaml, config). Zero remaining references = pass. This is the most common failure mode — stale cross-references after renames cause more bugs than any other single pattern.
 
 e) Router table: MUST include at minimum:
      - All 6 skill directories (Claude/Gemini/Codex/Copilot: .claude/skills/, .agents/skills/, .github/skills/)

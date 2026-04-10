@@ -32,7 +32,10 @@
     ".goat-flow/coding-standards/backend.md": "Optional backend-specific conventions added after setup.",
     ".goat-flow/coding-standards/frontend.md": "Optional frontend-specific conventions added after setup.",
     ".goat-flow/coding-standards/security.md": "Optional project-local security rules added after setup.",
-    ".goat-flow/coding-standards/testing.md": "Optional project-local testing rules added after setup."
+    ".goat-flow/coding-standards/testing.md": "Optional project-local testing rules added after setup.",
+    ".copilotignore": "Excludes secret/sensitive paths from Copilot context.",
+    ".cursorignore": "Excludes secret/sensitive paths from Cursor context.",
+    ".geminiignore": "Excludes secret/sensitive paths from Gemini context."
   },
 
   "never_create": [],

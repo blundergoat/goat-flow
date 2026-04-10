@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 // Load presets from the source file
 const presetsContent = readFileSync(
-  join(import.meta.dirname, "../../src/dashboard/presets.js"),
+  join(import.meta.dirname, "../../src/dashboard/preset-prompts.js"),
   "utf-8",
 );
 // Extract the PRESETS array by evaluating the JS
@@ -43,9 +43,10 @@ describe("Preset launcher content validation", () => {
 
   it("categories are from the allowed set", () => {
     const allowed = new Set([
-      "debug & explore",
+      "debug",
       "review",
       "plan",
+      "critique",
       "test",
       "security",
     ]);
@@ -62,28 +63,25 @@ describe("Preset launcher content validation", () => {
     assert.ok(!ids.includes("question"), "Quick Question should be deleted");
     assert.ok(!ids.includes("docs"), "Generate Docs should be deleted");
     assert.ok(!ids.includes("compare"), "Compare & Rate should be deleted");
-    assert.ok(
-      !ids.includes("targeted-test"),
-      "Targeted Test Plan should be replaced by qa-gaps",
-    );
-    assert.ok(
-      !ids.includes("diagram"),
-      "Architecture Diagram should be replaced by user-flow",
-    );
+    assert.ok(!ids.includes("triage"), "Triage Ideas should be deleted");
   });
 
   it("current presets exist", () => {
     const ids = PRESETS.map((p) => p.id);
     assert.ok(ids.includes("fix-bug"), "Fix Bug preset missing");
-    assert.ok(ids.includes("quick-test"), "Quick Test preset missing");
     assert.ok(ids.includes("dep-scan"), "Dependency Scan preset missing");
-    assert.ok(ids.includes("qa-gaps"), "QA Testing Gaps preset missing");
     assert.ok(ids.includes("user-flow"), "User Flow Diagram preset missing");
     assert.ok(
       ids.includes("review-instructions"),
       "Review Instructions preset missing",
     );
-    assert.ok(ids.includes("compliance"), "Compliance Check preset missing");
+    assert.ok(ids.includes("sbao"), "SBAO Critique preset missing");
+    assert.ok(ids.includes("milestones"), "Milestones preset missing");
+    assert.ok(ids.includes("test-audit"), "Coverage Audit preset missing");
+    assert.ok(
+      ids.includes("test-regression"),
+      "Regression Guard preset missing",
+    );
   });
 
   it("every preset with a skill prefix uses a valid skill", () => {
@@ -91,6 +89,7 @@ describe("Preset launcher content validation", () => {
       "/goat-debug",
       "/goat-review",
       "/goat-plan",
+      "/goat-sbao",
       "/goat-test",
       "/goat-security",
       "/goat",
@@ -115,8 +114,8 @@ describe("Preset launcher content validation", () => {
       "All filter returns everything",
     );
     assert.ok(
-      filterByCategory("debug & explore").length >= 3,
-      "Debug & explore category has presets",
+      filterByCategory("debug").length >= 2,
+      "Debug category has presets",
     );
     assert.ok(
       filterByCategory("security").length >= 2,
@@ -125,6 +124,10 @@ describe("Preset launcher content validation", () => {
     assert.ok(
       filterByCategory("review").length >= 3,
       "Review category has presets",
+    );
+    assert.ok(
+      filterByCategory("critique").length >= 1,
+      "Critique category has presets",
     );
     assert.ok(
       filterByCategory("nonexistent").length === 0,
