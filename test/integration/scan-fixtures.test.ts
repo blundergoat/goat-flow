@@ -418,7 +418,8 @@ describe("Fixture 4: full-claude", () => {
       "name: Context Validation\non: [push, pull_request]\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    steps:\n      - run: wc -l CLAUDE.md\n      - run: bash scripts/validate-goat-flow-setup.sh\n      - run: ls .claude/skills/goat-debug/SKILL.md\n",
     // Preflight + validation
     "scripts/preflight-checks.sh": '#!/usr/bin/env bash\necho "preflight"\n',
-    "scripts/validate-goat-flow-setup.sh": '#!/usr/bin/env bash\necho "validate"\n',
+    "scripts/validate-goat-flow-setup.sh":
+      '#!/usr/bin/env bash\necho "validate"\n',
     // Handoff
     ".goat-flow/tasks/handoff-template.md": HANDOFF_TEMPLATE,
     // Gitignore
@@ -1427,7 +1428,8 @@ GOOD: Inline format. Extract when second format needed
     ".goat-flow/architecture.md":
       "# Architecture\n\n" + "System overview line.\n".repeat(8),
     "scripts/preflight-checks.sh": '#!/usr/bin/env bash\necho "preflight"\n',
-    "scripts/validate-goat-flow-setup.sh": '#!/usr/bin/env bash\necho "validate"\n',
+    "scripts/validate-goat-flow-setup.sh":
+      '#!/usr/bin/env bash\necho "validate"\n',
     ".goat-flow/tasks/handoff-template.md": HANDOFF_TEMPLATE,
     ".gitignore": ".env\nsettings.local.json\nnode_modules/\n",
     ".goat-flow/README.md":

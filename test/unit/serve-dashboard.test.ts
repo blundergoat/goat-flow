@@ -246,7 +246,11 @@ describe("serve-dashboard API", () => {
   });
 
   it("GET /assets/preset-prompts.js returns JS", async () => {
-    const { status, data } = await request(port, "GET", "/assets/preset-prompts.js");
+    const { status, data } = await request(
+      port,
+      "GET",
+      "/assets/preset-prompts.js",
+    );
     assert.equal(status, 200);
     assert.ok(typeof data === "string" && data.includes("PRESETS"));
   });
