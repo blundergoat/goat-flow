@@ -20,27 +20,13 @@
         <button
           @click="scanAllProjects()"
           :disabled="projectsScanning"
-          class="gf-btn-scan"
-          style="
-            font-size: 12px;
-            padding: 4px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-          "
+          class="gf-btn gf-btn-md gf-btn-scan"
         >
           <span x-text="projectsScanning ? 'Scanning...' : 'Scan All'"></span>
         </button>
         <button
           @click="showAddProject = true; $nextTick(() => $refs.addProjectInput?.focus())"
-          class="gf-btn-scan"
-          style="
-            font-size: 12px;
-            padding: 4px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-          "
+          class="gf-btn gf-btn-md gf-btn-scan"
         >
           Add Project
         </button>
@@ -80,28 +66,14 @@
         />
         <button
           @click="addProject()"
-          class="gf-btn-scan"
-          style="
-            font-size: 12px;
-            padding: 4px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-          "
+          class="gf-btn gf-btn-md gf-btn-scan"
         >
           Add
         </button>
         <button
           @click="showAddProject = false; newProjectPath = ''"
-          style="
-            font-size: 12px;
-            padding: 4px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            background: none;
-            border: none;
-            color: #71717a;
-          "
+          class="gf-btn gf-btn-md"
+          style="background: none; border: none; color: var(--text-muted)"
         >
           Cancel
         </button>
@@ -182,44 +154,22 @@
               <td class="gf-td" style="text-align: right; white-space: nowrap">
                 <button
                   @click="projectPath = project.path; activeView = 'scan'; runScan()"
-                  class="gf-btn-scan"
-                  style="
-                    font-size: 11px;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    margin-right: 4px;
-                  "
+                  class="gf-btn gf-btn-sm gf-btn-scan"
+                  style="margin-right: 4px"
                 >
                   Scan
                 </button>
                 <button
                   @click="projectPath = project.path; activeView = 'workspace'"
                   x-show="terminalAvailable"
-                  style="
-                    font-size: 11px;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    background: none;
-                    border: none;
-                    color: #4ade80;
-                    margin-right: 4px;
-                  "
+                  class="gf-btn gf-btn-sm gf-btn-ghost"
+                  style="margin-right: 4px"
                 >
                   Terminal
                 </button>
                 <button
                   @click="removeProject(project.path)"
-                  style="
-                    font-size: 11px;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    background: none;
-                    border: none;
-                    color: #f87171;
-                  "
+                  class="gf-btn gf-btn-sm gf-btn-danger"
                 >
                   Remove
                 </button>

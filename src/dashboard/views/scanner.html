@@ -20,14 +20,7 @@
       <button
         @click="runScan()"
         :disabled="scanning"
-        class="gf-btn-scan"
-        style="
-          padding: 6px 20px;
-          font-size: 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: 500;
-        "
+        class="gf-btn gf-btn-md gf-btn-scan"
       >
         Scan
       </button>
@@ -54,14 +47,7 @@
       <button
         @click="runScan()"
         :disabled="scanning"
-        class="gf-btn-scan"
-        style="
-          font-size: 12px;
-          padding: 4px 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: 500;
-        "
+        class="gf-btn gf-btn-md gf-btn-scan"
       >
         <span x-text="scanning ? 'Scanning...' : 'Re-scan'"></span>
       </button>
@@ -163,7 +149,7 @@
     >
       <p class="gf-text-muted" style="font-size: 16px">No agents detected</p>
       <p class="gf-text-disabled" style="font-size: 13px; margin-top: 4px">
-        Click <button @click="activeView = 'wizard'; detectStack()" class="gf-link" style="font-size: 13px; font-weight: 600; background: none; border: none; padding: 0; cursor: pointer;">Setup</button> to generate setup instructions.
+        Click <button @click="activeView = 'wizard'; detectStack()" class="gf-link" style="background: none; border: none; padding: 0; cursor: pointer;">Setup</button> to generate setup instructions.
       </p>
     </div>
 
