@@ -190,3 +190,10 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 1. Document which files are safe for concurrent access in the plugin instructions
 2. For learning loop writes during parallel sessions, use unique filenames (date-agent-slug) rather than appending to shared buckets
 3. Session logs already use unique filenames - extend this pattern to footgun/lesson entries when multi-agent mode is detected
+
+## Lesson: Framework paths vs project paths in verbatim-installed skills
+
+**Created:** 2026-04-11
+**What happened:** M17a extracted skill modes to `workflow/templates/` and left `workflow/templates/` references in the skill files. Skills are installed verbatim, so every project received skills pointing to `workflow/templates/*.md` — a path that only exists in the goat-flow repo, not in installed projects. R9 scored system avg 42 (down from 53.7) largely because of this single bug.
+**Evidence:** R9 critiques — 6 of 7 projects flagged broken template references. `workflow/skills/goat.md:71,74`, `workflow/skills/goat-security.md:71`, `workflow/skills/goat-test.md:108,145` all used `workflow/templates/` instead of `.goat-flow/templates/`.
+**Prevention:** After editing any skill file that references a path, verify the path exists from the PROJECT's perspective, not the goat-flow repo's perspective. Add to DoD: "grep skill files for `workflow/` paths — they should reference `.goat-flow/` paths instead."

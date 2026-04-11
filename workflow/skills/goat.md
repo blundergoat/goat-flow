@@ -68,10 +68,10 @@ Planning follows the same UNDERSTAND → GATHER → ROUTE flow.
 Check `.goat-flow/tasks/` for existing plans before creating new ones.
 
 ### Feature Brief
-Use `workflow/templates/feature-brief.md`.
+Use `.goat-flow/templates/feature-brief.md`.
 
 ### Mob Elaboration
-Use `workflow/templates/mob-elaboration.md` only if requirements sharpening is needed.
+Use `.goat-flow/templates/mob-elaboration.md` only if requirements sharpening is needed.
 
 ### Complexity Gating
 

@@ -68,7 +68,7 @@ Re-read `file:line` for Critical/High. Does code match the finding? Is the scena
 
 ## Compliance Mode
 
-For compliance checks, read `workflow/templates/compliance-checklist.md`.
+For compliance checks, read `.goat-flow/templates/compliance-checklist.md`.
 
 ## Constraints
 

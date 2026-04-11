@@ -59,3 +59,19 @@ category: docs-and-crossrefs
 **Status:** resolved | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
 
 **Prevention:** Line target is 120 for all shapes, stated in `.goat-flow/decisions/ADR-029-instruction-budget-constraint.md` (`docs/system-spec.md` retired in v1.1.0). If this number appears differently in any other file, the ADR is canonical.
+
+## Footgun: Skill template paths use framework-local paths instead of project-local paths
+
+**Status:** active | **Created:** 2026-04-11 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Installed skills reference `workflow/templates/*.md` which only exists in the goat-flow repo, not in projects where skills are installed. The dispatcher's Planning Route hits dead ends. Security and test skills can't find their extracted mode templates.
+
+**Why it happens:** When content is extracted from skills to `workflow/templates/` in the goat-flow repo, the skill file references use the framework-local path (`workflow/templates/`) instead of the project-local path (`.goat-flow/templates/`). Skills are installed verbatim, so the framework path ships to every project.
+
+**Evidence:**
+- `workflow/skills/goat.md:71,74` — referenced `workflow/templates/feature-brief.md` and `workflow/templates/mob-elaboration.md`
+- `workflow/skills/goat-security.md:71` — referenced `workflow/templates/compliance-checklist.md`
+- `workflow/skills/goat-test.md:108,145` — referenced `workflow/templates/flow-diagram-guide.md`
+- R9 critiques: 6/7 projects flagged broken template references as a top finding
+
+**Prevention:** After ANY content extraction to `workflow/templates/`, grep all skill files for `workflow/templates/` and replace with `.goat-flow/templates/`. The rule: skill files must only reference paths that exist on the PROJECT, not paths that exist in the goat-flow REPO.
