@@ -17,10 +17,10 @@ Order findings by severity, not by file or discovery order.
 
 ## Evidence Standard
 
-- Every finding MUST include file evidence — either `file:line` when the specific line demonstrates the issue, or `file` when the trap is file-level. Path-only evidence is valid when a line number would be fabricated.
+- Every finding MUST include file evidence - either `file:line` when the specific line demonstrates the issue, or `file` when the trap is file-level. Path-only evidence is valid when a line number would be fabricated.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited `file:line` to confirm accuracy
-- Tag evidence quality: **OBSERVED** (directly verified in code) vs **INFERRED** (deduced but not directly confirmed — state what direct evidence is missing)
+- Tag evidence quality: **OBSERVED** (directly verified in code) vs **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing)
 - If you cannot re-read the cited evidence before responding, mark the claim **UNVERIFIED**
 - Before citing a function or symbol name, verify it exists with a repo search
 - Before citing a CLI flag, verify it with `--help` or the command's docs
@@ -39,7 +39,7 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks.
 
 | Complexity | Ceremony |
 |------------|----------|
-| Hotfix | Skip goat-plan — just implement directly. Skip goat-sbao entirely. |
+| Hotfix | Skip goat-plan - just implement directly. Skip goat-sbao entirely. |
 | Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-sbao. |
 | Standard | goat-plan: full milestone breakdown with testing gates. Use goat-sbao if approach is genuinely uncertain. |
 | System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. goat-sbao strongly recommended. |
@@ -95,5 +95,5 @@ After completing the skill, check if this run uncovered anything worth logging:
 
 ## Human Gates
 
-- **BLOCKING GATE** — stop and wait for human decision. Used for: scope approval, phase transitions, final review.
-- **CHECKPOINT** — present status and continue unless interrupted.
+- **BLOCKING GATE** - stop and wait for human decision. Used for: scope approval, phase transitions, final review.
+- **CHECKPOINT** - present status and continue unless interrupted.

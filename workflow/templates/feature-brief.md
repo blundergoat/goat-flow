@@ -5,7 +5,7 @@
 > `requirements-<feature-name>.md` and fill it in.
 >
 > The goat dispatcher walks through these same sections interactively when
-> you ask it to plan a feature — you don't need to fill this out manually
+> you ask it to plan a feature - you don't need to fill this out manually
 > unless you prefer to write the brief yourself first.
 
 Create a `requirements-<feature-name>.md` file using the template below. A brain dump is fine to start - the most important thing is capturing *why* this feature was requested and how it benefits users. For formal requirement tracking with REQ-IDs and acceptance tests, see `requirements-template.md`.

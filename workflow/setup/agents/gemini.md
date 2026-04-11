@@ -1,4 +1,4 @@
-# Agent Config — Gemini CLI
+# Agent Config - Gemini CLI
 
 ## Paths
 
@@ -14,7 +14,7 @@
 
 GEMINI.md, `.gemini/`, and shared `.goat-flow/`.
 
-`.agents/skills/` is a **shared surface** — both Codex and Gemini use it as their skills directory. Either agent's setup can create/update skills here.
+`.agents/skills/` is a **shared surface** - both Codex and Gemini use it as their skills directory. Either agent's setup can create/update skills here.
 
 ## Hands off
 

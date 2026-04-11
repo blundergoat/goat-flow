@@ -7,7 +7,7 @@
 
 ADR-011 (2026-03-28) chose to keep shared conventions inline in each skill template for self-containment. At 12 lines per skill, the duplication cost was acceptable. ADR-023 (2026-04-04) expanded the inline block from 12 to 62 lines, preserving the self-containment principle while closing content gaps (recovery, working memory, autonomy awareness, closing protocol).
 
-By v1.1.0, the shared conventions had grown to 152 lines. With 5 functional skills across 3 agent directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`), this meant 2,280 lines of duplicated content. The M03.2 drift check — the only mechanism preventing divergence — could not keep pace with the maintenance burden. The duplication surface was now actively causing the drift it was designed to prevent.
+By v1.1.0, the shared conventions had grown to 152 lines. With 5 functional skills across 3 agent directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`), this meant 2,280 lines of duplicated content. The M03.2 drift check - the only mechanism preventing divergence - could not keep pace with the maintenance burden. The duplication surface was now actively causing the drift it was designed to prevent.
 
 ## Decision
 
@@ -28,7 +28,7 @@ If unavailable, use these essentials:
 
 ## Consequences
 
-- Skills are no longer fully self-contained — they require one external file read at invocation
+- Skills are no longer fully self-contained - they require one external file read at invocation
 - The inline fallback preserves the self-containment principle in spirit: skills still function (degraded) without the file
 - Updates to shared conventions are 1 file edit instead of 15
 - The drift surface drops from 2,280 lines to ~35 lines (7-line fallback × 5 skills)

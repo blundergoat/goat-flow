@@ -24,7 +24,7 @@ function findStaleInstructionRefs(ctx: FactContext): string[] {
     const path = match[1];
     if (path === undefined || /[*?{}]/.test(path)) continue;
     const cleanPath = path.replace(/:[0-9]+(?:[-,][0-9]+)*$/, "");
-    // Skip framework paths (workflow/) — these exist in the goat-flow repo
+    // Skip framework paths (workflow/) - these exist in the goat-flow repo
     // but not in user projects. They appear in CLAUDE.md as examples.
     if (cleanPath.startsWith("workflow/")) continue;
     if (!ctx.fs.exists(cleanPath)) staleRefs.push(cleanPath);

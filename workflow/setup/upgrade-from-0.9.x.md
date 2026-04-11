@@ -19,7 +19,7 @@ Read `01-system-overview.md` first if you haven't already.
 
 ---
 
-## Step 0 — Run the automated migration script
+## Step 0 - Run the automated migration script
 
 Before doing anything manually, run the migration script. It handles most of the mechanical work:
 
@@ -35,7 +35,7 @@ The script migrates docs/ surfaces to .goat-flow/, deletes stale skills, removes
 
 ---
 
-## Step 1 — Confirm v0.9 state
+## Step 1 - Confirm v0.9 state
 
 You're in the right place if the project has old skill names and no `.goat-flow/config.yaml`.
 
@@ -47,19 +47,19 @@ You're in the right place if the project has old skill names and no `.goat-flow/
 
 ---
 
-## Step 2 — Delete old skills (skip if migration script already ran)
+## Step 2 - Delete old skills (skip if migration script already ran)
 
 Delete from ALL agent skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`):
 
 **Delete these:** goat-audit, goat-investigate, goat-onboard, goat-reflect, goat-resume, goat-context, goat-simplify, goat-refactor
 
-Also delete generic pre-goat skills if present: `audit/`, `review/`, `preflight/`
+Also delete these older goat-prefixed skills if present: `goat-audit/`, `goat-review/`, `goat-preflight/`
 
 **Verification:** No old skill directories remain. `ls {skills-dir}` shows no goat-audit etc.
 
 ---
 
-## Step 3 — Migrate learning loop content
+## Step 3 - Migrate learning loop content
 
 These files contain real project memory. Migrate the content, don't discard it.
 
@@ -84,11 +84,11 @@ These files contain real project memory. Migrate the content, don't discard it.
 
 **Parallel surfaces are an anti-pattern.** Do not leave old `docs/` files alongside new `.goat-flow/` equivalents.
 
-**Verification:** `ls docs/footguns.md docs/lessons.md 2>&1` — "No such file". `.goat-flow/footguns/` and `.goat-flow/lessons/` exist with migrated content.
+**Verification:** `ls docs/footguns.md docs/lessons.md 2>&1` - "No such file". `.goat-flow/footguns/` and `.goat-flow/lessons/` exist with migrated content.
 
 ---
 
-## Step 4 — Create goat-flow infrastructure
+## Step 4 - Create goat-flow infrastructure
 
 - Create `.goat-flow/config.yaml` with version 1.1.0
 - Create `.goat-flow/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md`
@@ -99,7 +99,7 @@ These files contain real project memory. Migrate the content, don't discard it.
 
 ---
 
-## Step 5 — Install current skills
+## Step 5 - Install current skills
 
 Install the 7 current skills from `workflow/skills/goat-*.md` templates into the agent's skills directory. Each skill must have `goat-flow-skill-version: "1.1.0"` in frontmatter.
 
@@ -109,7 +109,7 @@ Check expected version: `workflow/skills/goat-debug.md` line 4.
 
 ---
 
-## Step 6 — Instruction file
+## Step 6 - Instruction file
 
 Follow the numbered setup steps starting at `02-instruction-file.md`, then continue through `03-install-skills.md` to `06-final-verification.md`.
 
@@ -123,16 +123,16 @@ The agent config file (`agents/claude.md`, `agents/codex.md`, etc.) has agent-sp
 
 - Existing project source code, configs, scripts
 - Other agents' files (single-agent scoping)
-- `.github/instructions/` content — reference, don't duplicate
-- Existing hooks with project-specific deny rules — merge, don't overwrite
+- `.github/instructions/` content - reference, don't duplicate
+- Existing hooks with project-specific deny rules - merge, don't overwrite
 
 ---
 
 ## Post-upgrade verification
 
-1. `goat-flow scan . --agent {agent}` — target 100%
+1. `goat-flow scan . --agent {agent}` - target 100%
 2. Verify required goat-flow files and directories exist
-3. Review git diff — every change should be intentional
+3. Review git diff - every change should be intentional
 4. Confirm no parallel surfaces exist
 
 **Session log:** Append to `.goat-flow/logs/sessions/YYYY-MM-DD-upgrade.md`:

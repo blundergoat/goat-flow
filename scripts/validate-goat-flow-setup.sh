@@ -239,7 +239,7 @@ if [[ -d "$lessons_dir" ]]; then
         info "$lessons_dir contains lesson category files"
     fi
 else
-    info "No lessons directory ($lessons_dir) — acceptable if setup could not seed real entries"
+    info "No lessons directory ($lessons_dir) - acceptable if setup could not seed real entries"
 fi
 warn_if_legacy_surface_exists "docs/lessons.md" "$lessons_dir" "lesson"
 
@@ -257,7 +257,7 @@ if [[ -d "$footguns_dir" ]]; then
         info "$footguns_dir contains footgun entries with file path evidence"
     fi
 else
-    info "No footguns directory ($footguns_dir) — acceptable if setup could not seed real entries"
+    info "No footguns directory ($footguns_dir) - acceptable if setup could not seed real entries"
 fi
 warn_if_legacy_surface_exists "docs/footguns.md" "$footguns_dir" "footgun"
 

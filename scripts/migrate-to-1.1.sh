@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# migrate-to-1.1.sh — Migrate goat-flow 0.9/1.0 projects to 1.1.0 layout
+# migrate-to-1.1.sh - Migrate goat-flow 0.9/1.0 projects to 1.1.0 layout
 # =============================================================================
 # Usage: bash /path/to/goat-flow/scripts/migrate-to-1.1.sh /path/to/project
 #
@@ -17,7 +17,7 @@
 # Safe by design:
 # - Never overwrites existing .goat-flow/ content (merges or skips)
 # - Creates backups in .goat-flow/_migrated-from-0.9/
-# - Dry-run mode by default — pass --execute to actually make changes
+# - Dry-run mode by default - pass --execute to actually make changes
 # =============================================================================
 set -euo pipefail
 
@@ -75,7 +75,7 @@ fi
 # --- 1. Migrate docs/footguns.md → .goat-flow/footguns/ ---
 if [[ -f "docs/footguns.md" ]]; then
   if [[ -d ".goat-flow/footguns" ]] && ls .goat-flow/footguns/*.md >/dev/null 2>&1; then
-    log "docs/footguns.md exists AND .goat-flow/footguns/ has content — MERGE needed"
+    log "docs/footguns.md exists AND .goat-flow/footguns/ has content - MERGE needed"
     action "Copy docs/footguns.md → $BACKUP_DIR/footguns.md (backup)"
     action "Append unique entries from docs/footguns.md to .goat-flow/footguns/migrated.md"
     if $EXECUTE; then
@@ -127,7 +127,7 @@ if [[ -d "docs/decisions" ]]; then
       continue
     fi
     if [[ -f ".goat-flow/decisions/$base" ]]; then
-      log "Already exists: .goat-flow/decisions/$base — skipping"
+      log "Already exists: .goat-flow/decisions/$base - skipping"
     else
       action "Copy $f → .goat-flow/decisions/$base"
       if $EXECUTE; then
@@ -157,7 +157,7 @@ fi
 # --- 5. Migrate docs/code-map.md ---
 if [[ -f "docs/code-map.md" ]]; then
   if [[ -f ".goat-flow/code-map.md" ]]; then
-    log "Both docs/code-map.md and .goat-flow/code-map.md exist — keeping .goat-flow/ version"
+    log "Both docs/code-map.md and .goat-flow/code-map.md exist - keeping .goat-flow/ version"
     action "Backup docs/code-map.md → $BACKUP_DIR/code-map.md"
     $EXECUTE && cp docs/code-map.md "$BACKUP_DIR/code-map.md"
   else
@@ -235,7 +235,7 @@ if [[ -d "docs" ]]; then
   if [[ "$remaining" -eq 0 ]]; then
     log "docs/ is empty after migration"
   else
-    log "docs/ still has $remaining .md files — not removing (may have non-goat-flow content)"
+    log "docs/ still has $remaining .md files - not removing (may have non-goat-flow content)"
   fi
 fi
 

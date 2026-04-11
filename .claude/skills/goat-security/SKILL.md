@@ -57,7 +57,7 @@ Critical (no auth) > High (low-privilege) > Medium (specific conditions) > Low (
 
 Re-read `file:line` for Critical/High. Does code match the finding? Is the scenario realistic? Remove failures.
 
-**Dependency audit:** If the project uses dependency management (npm, pip, cargo, composer, etc.), check for known vulnerabilities using the project's audit tool. If the audit tool isn't installed (e.g., `pip-audit` for Python), note it as a gap: "Dependency audit skipped — [tool] not available. Install with [command] for future scans." Do NOT fabricate audit results.
+**Dependency audit:** If the project uses dependency management (npm, pip, cargo, composer, etc.), check for known vulnerabilities using the project's audit tool. If the audit tool isn't installed (e.g., `pip-audit` for Python), note it as a gap: "Dependency audit skipped - [tool] not available. Install with [command] for future scans." Do NOT fabricate audit results.
 
 **BLOCKING GATE:** Present final report. If PROBABLE > CONFIRMED, run `/goat-sbao` cross-examination.
 

@@ -1,4 +1,4 @@
-# Reference — Coding Guidelines
+# Reference - Coding Guidelines
 
 Coding guidelines are no longer part of the base setup flow. Add them later, after the agent has real project context and repeated examples to learn from.
 

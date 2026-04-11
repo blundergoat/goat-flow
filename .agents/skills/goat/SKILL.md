@@ -15,9 +15,9 @@ Use when the user describes an outcome and wants the right workflow chosen.
 
 ## How It Works
 
-1. **UNDERSTAND** — classify intent and target from the user's request.
-2. **GATHER** — collect minimal context: ask-first boundaries, footgun matches, recent git activity, config/architecture if relevant. Format: `User wants [intent] on [target] with boundaries [none / ask-first]. Recent git [summary / none].`
-3. **ROUTE** — dispatch to the target skill using the preamble routing table. Include a one-line rationale: "Routing to `/goat-debug` — you described a symptom ([symptom]), and the target is [area]."
+1. **UNDERSTAND** - classify intent and target from the user's request.
+2. **GATHER** - collect minimal context: ask-first boundaries, footgun matches, recent git activity, config/architecture if relevant. Format: `User wants [intent] on [target] with boundaries [none / ask-first]. Recent git [summary / none].`
+3. **ROUTE** - dispatch to the target skill using the preamble routing table. Include a one-line rationale: "Routing to `/goat-debug` - you described a symptom ([symptom]), and the target is [area]."
 
 ## Planning Route
 

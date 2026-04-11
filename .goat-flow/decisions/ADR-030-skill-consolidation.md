@@ -1,4 +1,4 @@
-# ADR-030: Skill consolidation — 9 skills to 5 + dispatcher
+# ADR-030: Skill consolidation - 9 skills to 5 + dispatcher
 
 **Status:** Partially superseded (goat-sbao extracted as 6th functional skill in v1.1.0)
 **Date:** 2026-04-06
@@ -28,15 +28,15 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 
 | Former Skill | Now Lives | Why |
 |-------------|-----------|-----|
-| `/annotation-cycle` | Mob elaboration playbook | Planning refinement — no distinct artefact |
+| `/annotation-cycle` | Mob elaboration playbook | Planning refinement - no distinct artefact |
 | `/sbao-synthesis` | SBAO planning playbook | Template, not a workflow with gates |
 | `/review-triage` | ACT step review branch | Normal review behaviour, not a distinct mode |
-| `/goat-audit` | `/goat-review` (Audit Mode) | Merged — negative verification + fabrication self-check |
-| `/goat-reflect` | `/goat-review` (Instruction Review Mode) | Merged — friction signals + staleness audit |
-| `/goat-onboard` | `/goat-debug` (Onboard Mode) | Merged — stack detection + instruction drafting |
-| `/goat-investigate` | `/goat-debug` (Investigate Mode) | Merged — deep codebase investigation |
-| `/goat-simplify` | `/goat-review` (Simplify Mode) | Merged — readability without behaviour change |
-| `/goat-refactor` | `/goat-plan` (Refactor Planning Mode) | Merged — cross-file refactoring with blast radius |
+| `/goat-audit` | `/goat-review` (Audit Mode) | Merged - negative verification + fabrication self-check |
+| `/goat-reflect` | `/goat-review` (Instruction Review Mode) | Merged - friction signals + staleness audit |
+| `/goat-onboard` | `/goat-debug` (Onboard Mode) | Merged - stack detection + instruction drafting |
+| `/goat-investigate` | `/goat-debug` (Investigate Mode) | Merged - deep codebase investigation |
+| `/goat-simplify` | `/goat-review` (Simplify Mode) | Merged - readability without behaviour change |
+| `/goat-refactor` | `/goat-plan` (Refactor Planning Mode) | Merged - cross-file refactoring with blast radius |
 | `/goat-context` | Removed | Session resumption handled by agent built-in context |
 | `/revert-rescope` | VERIFY/stop-the-line paragraph | Tactic, not a workflow |
 

@@ -12,14 +12,14 @@ On full-depth, also read `.goat-flow/skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in `.goat-flow/tasks/` — the shared state between human and coding agent.
+Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in `.goat-flow/tasks/` - the shared state between human and coding agent.
 
 **Invoke when:**
 - A feature, project, or significant change needs structured milestones before implementation
 - The dispatcher's Planning Route has produced a brief and now needs milestone breakdown
-- A goat-sbao critique recommends restructuring the approach — milestones need rewriting
+- A goat-sbao critique recommends restructuring the approach - milestones need rewriting
 - Mid-implementation: scope changed, something unexpected happened, milestones need updating
-- Resuming work after a break — milestone files show where you stopped and what's next
+- Resuming work after a break - milestone files show where you stopped and what's next
 
 **NOT this skill:**
 - Writing a feature brief → dispatcher Planning Route
@@ -29,12 +29,12 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 - Diagnosing a bug → /goat-debug
 - Reviewing code → /goat-review
 
-## Step 0 — Intake
+## Step 0 - Intake
 
 **Check for existing milestones first:**
 - Read `.goat-flow/tasks/` for any existing milestone files
 - If found: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
-- If found but stale: check `git log --since="2 weeks ago" -- .goat-flow/tasks/` — if code has moved on but milestones haven't been updated, flag it
+- If found but stale: check `git log --since="2 weeks ago" -- .goat-flow/tasks/` - if code has moved on but milestones haven't been updated, flag it
 - Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). If found, note them so the user knows about existing planning artifacts.
 
 **If starting fresh:**
@@ -47,49 +47,49 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 
 **CHECKPOINT:** "Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]. Proceeding to milestone breakdown."
 
-## Phase 1 — Milestone Breakdown
+## Phase 1 - Milestone Breakdown
 
-Structure the work into milestones using these archetypes. Adapt the count to the project — small features might need 2, large ones might need 5+.
+Structure the work into milestones using these archetypes. Adapt the count to the project - small features might need 2, large ones might need 5+.
 
 ### Milestone Archetypes
 
-1. **Prove It Works** — Validate the riskiest assumption. Throwaway spike if needed. No polish, no edge cases, no auth. If this fails, we stop before investing further.
-2. **Make It Real** — End-to-end pipeline working. Someone other than the builder can test it. The full flow works with real data. Rough edges are fine.
-3. **Make It Solid** — Handle edge cases, errors, security, and UX. Incorporate feedback from previous milestones. Shippable after this.
-4. **Make It Shine** — Polish, performance, docs, open source prep. Explicitly optional — mark as such.
+1. **Prove It Works** - Validate the riskiest assumption. Throwaway spike if needed. No polish, no edge cases, no auth. If this fails, we stop before investing further.
+2. **Make It Real** - End-to-end pipeline working. Someone other than the builder can test it. The full flow works with real data. Rough edges are fine.
+3. **Make It Solid** - Handle edge cases, errors, security, and UX. Incorporate feedback from previous milestones. Shippable after this.
+4. **Make It Shine** - Polish, performance, docs, open source prep. Explicitly optional - mark as such.
 
-**Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point — that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
+**Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
 ### For each milestone, produce:
 
-- **Objective** — 1-2 sentences: what this milestone proves or delivers
-- **Tasks** — Checkboxes. Ordered by dependency. Each task is a concrete action, not a vague goal.
-- **Assumptions to validate** — What must be proven true during this milestone (not tasks — beliefs about the system)
-- **Exit criteria** — Testable, binary pass/fail. Not "performance is acceptable" — instead "p95 latency under 500ms"
-- **Testing gate** — What must be verified before starting the next milestone:
+- **Objective** - 1-2 sentences: what this milestone proves or delivers
+- **Tasks** - Checkboxes. Ordered by dependency. Each task is a concrete action, not a vague goal.
+- **Assumptions to validate** - What must be proven true during this milestone (not tasks - beliefs about the system)
+- **Exit criteria** - Testable, binary pass/fail. Not "performance is acceptable" - instead "p95 latency under 500ms"
+- **Testing gate** - What must be verified before starting the next milestone:
   - Automated: which test commands must pass
   - Manual: what a human must check
   - Acceptance: who signs off (developer self-check, QA review, or stakeholder demo)
-- **Kill criteria** — What would make us stop at this milestone rather than continue
-- **Depends on** — Which milestone must complete first
+- **Kill criteria** - What would make us stop at this milestone rather than continue
+- **Depends on** - Which milestone must complete first
 
 ### Task quality rules
 
 Good tasks:
 - `[ ] Add /api/export endpoint returning CSV for a single report`
-- `[ ] Spike: benchmark memory usage under load — target: under 2GB RSS`
+- `[ ] Spike: benchmark memory usage under load - target: under 2GB RSS`
 - `[ ] Add background task processor with 5-minute timeout and status tracking`
 
 Bad tasks:
-- `[ ] Set up the backend` — too vague, what specifically?
-- `[ ] Make it work` — not a task, it's a wish
-- `[ ] Research options` — open-ended with no exit criteria
+- `[ ] Set up the backend` - too vague, what specifically?
+- `[ ] Make it work` - not a task, it's a wish
+- `[ ] Research options` - open-ended with no exit criteria
 
 Each task should be completable in a single coding session. If it's bigger, split it.
 
 ### Assumption tracking
 
-Assumptions are not tasks — they're beliefs about the system that affect the plan:
+Assumptions are not tasks - they're beliefs about the system that affect the plan:
 
 ```markdown
 ## Assumptions
@@ -99,11 +99,11 @@ Assumptions are not tasks — they're beliefs about the system that affect the p
 - [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
 ```
 
-When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately — don't continue building on a false premise.
+When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
 
 **BLOCKING GATE:** Present all milestones. "Approve milestones and start implementing, or adjust?"
 
-## Phase 2 — Write Milestone Files
+## Phase 2 - Write Milestone Files
 
 ### Small-work Inline Mode
 
@@ -151,12 +151,12 @@ After approval, write each milestone to `.goat-flow/tasks/` as a separate file:
 ## Testing Gate
 **Automated:** Run integration tests filtered to the changed module
 **Manual:** Trigger the API call, verify response, check error handling path
-**Acceptance:** Developer self-check — demo to self before proceeding to M02
+**Acceptance:** Developer self-check - demo to self before proceeding to M02
 ```
 
 **CHECKPOINT:** "Milestone files written to `.goat-flow/tasks/`. Ready to start implementation."
 
-## Phase 3 — Between Milestones
+## Phase 3 - Between Milestones
 
 After each milestone, run the testing gate first; any failure is BLOCKING.
 Capture what was learned, then re-read the next milestone and update invalidated assumptions, tasks, or exit criteria.
@@ -169,17 +169,17 @@ If updates are needed mid-flight, follow the detailed milestone retrospective pr
 
 - MUST write milestone files to `.goat-flow/tasks/` for Standard complexity and above. Hotfix and Small Feature may use inline milestones.
 - MUST check for existing milestone files before creating new ones
-- MUST include a testing gate on every milestone — no milestone ships without verification
+- MUST include a testing gate on every milestone - no milestone ships without verification
 - MUST re-read and potentially update the next milestone after completing each one
-- MUST check kill criteria between milestones — a triggered criterion is a BLOCKING GATE
+- MUST check kill criteria between milestones - a triggered criterion is a BLOCKING GATE
 - MUST tick assumption checkboxes with evidence when validated or invalidated
-- MUST present milestone updates to human for approval — never silently change
+- MUST present milestone updates to human for approval - never silently change
 - MUST order tasks within a milestone so the riskiest work comes first
-- MUST ensure each task is completable in a single coding session — split if not
+- MUST ensure each task is completable in a single coding session - split if not
 - MUST NOT create vague tasks ("set up backend", "make it work", "research options")
 - MUST NOT skip the testing gate between milestones
 - Universal constraints from skill-preamble.md apply.
-- MUST NOT continue building on an invalidated assumption — update the plan first
+- MUST NOT continue building on an invalidated assumption - update the plan first
 - Status tracking: update milestone file status field as work progresses
 
 ## Output Format
@@ -191,12 +191,12 @@ Summary format for presentation:
 ```markdown
 ## Milestones for [feature]
 
-### M01: [name] — [archetype]
+### M01: [name] - [archetype]
 **Objective:** [1-2 sentences]
 **Tasks:** [N] | **Exit criteria:** [N] | **Testing gate:** [auto + manual + acceptance]
 **Kill criteria:** [condition]
 
-### M02: [name] — [archetype]
+### M02: [name] - [archetype]
 ...
 
 **Total milestones:** [N] | **Estimated sessions:** [rough guess]

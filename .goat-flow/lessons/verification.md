@@ -195,7 +195,7 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 
 **Created:** 2026-04-11
 **What happened:** M17a extracted skill modes into the repository template directory and left repository-local template references in the skill files. Skills are installed verbatim, so every project received instructions that pointed back into the goat-flow repo instead of the installed project. R9 scored system avg 42 (down from 53.7) largely because of this single bug.
-**Evidence:** R9 critiques — 6 of 7 projects flagged broken template references. `workflow/skills/goat.md:71,74`, `workflow/skills/goat-security.md:71`, `workflow/skills/goat-test.md:108,145` all used repository-local template paths instead of installed-project template paths.
+**Evidence:** R9 critiques - 6 of 7 projects flagged broken template references. `workflow/skills/goat.md:71,74`, `workflow/skills/goat-security.md:71`, `workflow/skills/goat-test.md:108,145` all used repository-local template paths instead of installed-project template paths.
 **Prevention:** After editing any skill file that references a path, verify the path exists from the PROJECT's perspective, not the goat-flow repo's perspective. Add to DoD: "grep skill files for repository-local template paths and replace them with the installed project-local equivalent before shipping."
 
 ---
@@ -205,13 +205,13 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 **Created:** 2026-04-11
 **What happened:** After receiving 8 critic reviews of the goat-flow framework, the agent started fixing every cited `file:line` without first checking whether the findings were still valid. Several of the cited issues had already been fixed by sub-agents earlier in the same session. The agent was about to edit files that were already correct, potentially reintroducing bugs or making nonsensical changes.
 
-**Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it — especially when multiple agents are editing the same repo in the same session.
+**Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it - especially when multiple agents are editing the same repo in the same session.
 
 **Prevention:**
 1. Before acting on any review finding, verify the cited evidence is still current: read the actual file at the cited line
 2. Batch-verify all findings first (`grep`, `sed -n`, `head`), then fix only what's actually broken
 3. Reviews from agents that didn't run the latest code are particularly likely to cite stale evidence
-4. "8 critics agree" does not mean "8 critics are right" — they may all be reading the same stale state
+4. "8 critics agree" does not mean "8 critics are right" - they may all be reading the same stale state
 
 ---
 
@@ -221,13 +221,13 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 **What happened:** After M17, 6 external critics independently reviewed the goat-flow framework itself (not installed projects). They found 14 verified bugs that had survived all prior milestones: foundation.ts emitting v1.0, SKILL_TEMPLATES missing goat-sbao, config.yaml referencing a renamed script, README overclaiming hooks, stale test fixtures encoding the wrong skill count, setup fragments still creating coding-standards (removed in M13), classify-state marking "healthy" from version alone, and more. Every bug was a 1-5 line fix.
 
 **Why these were missed:**
-1. **Tests validated shape, not truth.** Contract tests checked "does this section heading exist" not "is the skill count correct." `evaluate-check.test.ts:270` literally says "All 6 skills present" — nobody noticed when goat-sbao made it 7.
+1. **Tests validated shape, not truth.** Contract tests checked "does this section heading exist" not "is the skill count correct." `evaluate-check.test.ts:270` literally says "All 6 skills present" - nobody noticed when goat-sbao made it 7.
 2. **Self-critique was pipeline-focused.** Every milestone ran `tsc`, `npm test`, `scan`, `preflight`. All passed. None caught that README said "Six" or that foundation.ts hardcoded v1.0. The pipeline tests what it tests; it doesn't read prose.
 3. **No external review until R8+.** The first 7 rounds critiqued goat-flow as installed on OTHER projects. Nobody reviewed the goat-flow repo itself until round 8. Self-review is blind to self-consistency.
 4. **Rename survivors.** `context-validate.sh` was renamed to `validate-goat-flow-setup.sh` but config.yaml kept the old name. `presets.js` was renamed to `preset-prompts.js` but architecture.md kept the old name. No grep-after-rename discipline for config/docs (only code).
 
 **Prevention:**
 1. Add contract tests that link canonical constants to docs: `SKILL_NAMES.length` must match README, docs, config, SKILL_TEMPLATES, and test fixtures
-2. After any rename, grep ALL file types (not just `.ts` and `.md` — also `.yaml`, `.json`, `.sh`)
+2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
 3. Periodically invite external review of the goat-flow repo itself, not just installed output
 4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces

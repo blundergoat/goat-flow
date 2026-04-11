@@ -1,4 +1,4 @@
-# ADR-031: Setup file ownership — what setup can and cannot touch
+# ADR-031: Setup file ownership - what setup can and cannot touch
 
 **Status:** Accepted
 **Date:** 2026-04-06
@@ -17,7 +17,7 @@ Users also don't typically want all 3 agents set up at once. A Claude setup that
 - Do NOT delete domain content from the existing file.
 - Reorganise in-place: extract domain knowledge to `.goat-flow/architecture.md` and `.goat-flow/glossary.md`, keep behavioral rules in the instruction file, add missing goat-flow sections.
 - The user's original domain knowledge is preserved in `.goat-flow/`, not destroyed.
-- Never create "original-*" backup copies — reorganise instead. Git history preserves the original.
+- Never create "original-*" backup copies - reorganise instead. Git history preserves the original.
 
 **All other project files** (`.github/instructions/`, `docs/`, `src/`, config files, scripts, etc.):
 - Never edit, never delete.
@@ -35,4 +35,4 @@ Users also don't typically want all 3 agents set up at once. A Claude setup that
 - Setup agents reorganise existing instruction files in-place (extract domain knowledge to `.goat-flow/`, keep behavioral rules, add goat-flow sections)
 - Scanner anti-pattern check (AP-duplicate-surfaces) catches setups that create parallel surfaces
 - compose-setup.ts must detect which agent is being set up and scope file operations accordingly
-- Users running setup for a second agent later will find `.goat-flow/` already populated — setup should merge, not overwrite
+- Users running setup for a second agent later will find `.goat-flow/` already populated - setup should merge, not overwrite

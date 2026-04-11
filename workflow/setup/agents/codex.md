@@ -1,4 +1,4 @@
-# Agent Config — Codex
+# Agent Config - Codex
 
 ## Paths
 
@@ -14,7 +14,7 @@
 
 AGENTS.md, `.codex/`, and shared `.goat-flow/`.
 
-`.agents/skills/` is a **shared surface** — both Codex and Gemini use it as their skills directory. Either agent's setup can create/update skills here.
+`.agents/skills/` is a **shared surface** - both Codex and Gemini use it as their skills directory. Either agent's setup can create/update skills here.
 
 ## Hands off
 
@@ -26,9 +26,9 @@ CLAUDE.md, GEMINI.md, `.claude/`, `.gemini/`.
 
 - AGENTS.md is the root instruction file (not CLAUDE.md)
 - Hook events: `SessionStart`, `UserPromptSubmit`, `Stop`, `AfterToolUse`, `AfterAgent`
-- No PreToolUse — use execpolicy rules for command blocking
+- No PreToolUse - use execpolicy rules for command blocking
 - `apply_patch` for edits (not Edit/Write tool)
-- No `/compact`, no `/clear` — context is per-task
+- No `/compact`, no `/clear` - context is per-task
 
 ### Hooks + Execpolicy
 

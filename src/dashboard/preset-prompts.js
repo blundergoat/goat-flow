@@ -4,7 +4,7 @@ const PRESETS = [
     id: "explore",
     name: "Explore Codebase",
     desc: "Investigate an unfamiliar area",
-    prompt: "/goat-debug investigate this codebase — start with an overview",
+    prompt: "/goat-debug investigate this codebase - start with an overview",
     cat: "debug",
   },
   {
@@ -79,7 +79,7 @@ const PRESETS = [
     id: "refactor",
     name: "Plan Refactor",
     desc: "Blast radius analysis for a restructure",
-    prompt: "/goat I need to refactor — ask me what to restructure",
+    prompt: "/goat I need to refactor - ask me what to restructure",
     cat: "plan",
   },
 
@@ -94,7 +94,7 @@ const PRESETS = [
   {
     id: "sbao-artifact",
     name: "Critique Any Artifact",
-    desc: "SBAO critique of any artifact — assessment, strategy, findings",
+    desc: "SBAO critique of any artifact - assessment, strategy, findings",
     prompt: "/goat-sbao critique this artifact",
     cat: "critique",
   },

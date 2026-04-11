@@ -127,7 +127,7 @@ Common chains:
 With:
 
 \`\`\`
-"Reviewing X — do you want a quick review, or the full review with audit depth?"
+"Reviewing X - do you want a quick review, or the full review with audit depth?"
 
 "I found the issue. I can drill deeper, check a related concern, or stop here."
 \`\`\`
@@ -388,7 +388,7 @@ Place them alongside the existing \`Read(**/.env*)\` deny rule.`,
     phase: "standard",
     category: "Hooks",
     kind: "create",
-    instruction: `goat-flow does not ship a post-turn lint hook — every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop/AfterAgent event using your project's actual lint commands.
+    instruction: `goat-flow does not ship a post-turn lint hook - every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop/AfterAgent event using your project's actual lint commands.
 
 See \`workflow/hooks/README.md\` for hook guidance. The script MUST exit 0 even if checks fail (non-zero causes infinite retry loops). Report issues to stderr as informational feedback.`,
   },

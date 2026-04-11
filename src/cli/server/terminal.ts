@@ -202,7 +202,7 @@ export class TerminalManager {
       detachBufferSize: 0,
     };
 
-    // Wire PTY output at creation — routes to WebSocket if attached, buffer if detached
+    // Wire PTY output at creation - routes to WebSocket if attached, buffer if detached
     pty.onData((data: string) => {
       if (session.ws) {
         this.resetIdleTimer(session);
@@ -290,7 +290,7 @@ export class TerminalManager {
       }
     });
 
-    // Detach on WebSocket close — session keeps running
+    // Detach on WebSocket close - session keeps running
     // Guard: only null if this socket is still the active one (prevents race with reconnect)
     ws.on("close", () => {
       if (session.ws === ws) {

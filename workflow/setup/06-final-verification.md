@@ -1,4 +1,4 @@
-# Step 06 — Final Verification
+# Step 06 - Final Verification
 
 This is the only setup gate. The goal is simple: `goat-flow scan . --agent {agent}` reaches 100% and the created file set matches `workflow/setup/reference/project-structure.json`.
 
@@ -11,7 +11,7 @@ The `--agent` flag scopes the scan to one agent's surfaces: it checks that agent
 No build/test/lint requirement. No separate human checklist. Fix scanner findings until the current combined scanner reaches 100%.
 
 **If a check cannot be fixed** (binary not installed locally, CI tool unavailable, platform constraint), document it as a known exception in the setup session log:
-> `Known exception: check [ID] — [reason it can't be fixed]. Follow-up: [action to resolve later, or "accepted as permanent exception"].`
+> `Known exception: check [ID] - [reason it can't be fixed]. Follow-up: [action to resolve later, or "accepted as permanent exception"].`
 
 Do NOT silently skip unfixable checks. The exception must be visible in the session log so the next agent knows why the scanner isn't at 100%.
 
@@ -46,11 +46,11 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 3. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-## Config ↔ instruction file sync — BLOCKING
+## Config ↔ instruction file sync - BLOCKING
 
 Compare:
-1. Ask First boundaries in instruction file vs `ask_first:` in config.yaml — must list same paths
-2. Essential Commands in instruction file vs `toolchain:` in config.yaml — must list same commands
+1. Ask First boundaries in instruction file vs `ask_first:` in config.yaml - must list same paths
+2. Essential Commands in instruction file vs `toolchain:` in config.yaml - must list same commands
 
 If they differ: update the instruction file to match config.yaml (config is canonical for structured data).
 
@@ -66,7 +66,7 @@ If duplicates exist, pick the one with better content as canonical, set it in co
 
 ## Path integrity check
 
-**CRITICAL:** Installed skill files must NEVER contain `workflow/` paths — those are framework-local and don't exist in target projects. Only `.goat-flow/` paths are valid.
+**CRITICAL:** Installed skill files must NEVER contain `workflow/` paths - those are framework-local and don't exist in target projects. Only `.goat-flow/` paths are valid.
 
 Verify: no `workflow/` path references in any installed skill file. Every `.goat-flow/` path in installed skills must resolve on disk.
 
@@ -103,7 +103,7 @@ Before finalising, add a gap report to the setup session log:
 - **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
 - **Things skipped:** [list anything setup chose not to do, with reason]
 
-For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun — do not create a footgun entry for missing tests. The gap report goes in the session log only.
+For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun - do not create a footgun entry for missing tests. The gap report goes in the session log only.
 
 ## Shared setup session log
 

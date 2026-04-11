@@ -34,7 +34,7 @@ goat-flow setup --agent codex     # Codex setup/upgrade prompt
 
 ### `goat-flow info rubrics`
 
-List all rubric checks with ID, name, tier, points, and description. Reads directly from scanner code — always current.
+List all rubric checks with ID, name, tier, points, and description. Reads directly from scanner code - always current.
 
 ```bash
 goat-flow info rubrics                    # All checks

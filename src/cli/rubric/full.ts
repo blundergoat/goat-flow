@@ -1,6 +1,6 @@
 /**
  * Full-tier rubric checks for mature adoption.
- * These checks were originally in a separate "Full" tier but merged into Standard — they use N/A gating to self-select.
+ * These checks were originally in a separate "Full" tier but merged into Standard - they use N/A gating to self-select.
  */
 import type { CheckDef, FactContext, CheckResult } from "../types.js";
 // Confidence criteria:
@@ -9,7 +9,7 @@ import type { CheckDef, FactContext, CheckResult } from "../types.js";
 //   low    = semantic inference (content quality judgment)
 
 /**
- * Formerly Tier 3 (Full) — now part of Standard.
+ * Formerly Tier 3 (Full) - now part of Standard.
  * Dual-agent consistency, skill conventions hygiene.
  */
 export const fullChecks: CheckDef[] = [

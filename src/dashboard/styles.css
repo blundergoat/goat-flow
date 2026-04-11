@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   GOAT Flow Dashboard — Design Tokens & Component Styles
+   GOAT Flow Dashboard - Design Tokens & Component Styles
    ═══════════════════════════════════════════════════════════ */
 
 /* ═══ Color Palette ═══ */
@@ -654,7 +654,7 @@ label,
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Button System — 3 sizes × 5 variants
+   Button System - 3 sizes × 5 variants
    ═══════════════════════════════════════════════════════════ */
 
 /* Base reset */
@@ -673,7 +673,7 @@ label,
     color 0.1s;
 }
 
-/* Size: Small — table inline actions */
+/* Size: Small - table inline actions */
 .gf-btn-sm {
   font-size: 11px;
   font-weight: 500;
@@ -681,7 +681,7 @@ label,
   border-radius: 4px;
 }
 
-/* Size: Medium — toolbar buttons */
+/* Size: Medium - toolbar buttons */
 .gf-btn-md {
   font-size: 12px;
   font-weight: 500;
@@ -689,7 +689,7 @@ label,
   border-radius: 6px;
 }
 
-/* Size: Large — primary CTAs */
+/* Size: Large - primary CTAs */
 .gf-btn-lg {
   font-size: 14px;
   font-weight: 600;
@@ -1049,7 +1049,7 @@ label,
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Light Mode — Specialized Overrides
+   Light Mode - Specialized Overrides
    Only for components where semantic tokens don't match.
    ═══════════════════════════════════════════════════════════ */
 

@@ -23,7 +23,7 @@ err() { echo "FAIL: $1" >&2; errors=$((errors + 1)); }
 
 # ── 1. workflow/ paths in installed skills are INVALID ──────────────
 # The R9 regression was exactly this: workflow/templates/* leaked into
-# installed skills. In the goat-flow repo, those paths resolve — so a
+# installed skills. In the goat-flow repo, those paths resolve - so a
 # naive "does it exist?" check would miss the bug. Any workflow/ path
 # in installed skill files is an error regardless of resolution.
 for agent_dir in ".claude/skills" ".agents/skills" ".github/skills"; do

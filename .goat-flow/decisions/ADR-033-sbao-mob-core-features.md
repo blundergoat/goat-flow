@@ -7,7 +7,7 @@
 
 Round 5 critiques across 7 projects consistently scored SBAO (Sub-Agent Based Adversarial Opinion) and Mob Elaboration as "ceremony" and "too heavy for default use." Every critique recommended cutting, demoting, or auto-skipping them. The SBAO plan critique (3 sub-agents) also ranked ceremony reduction as the #1 priority.
 
-However, the primary purpose of goat-flow is to make it easier for coding agents to plan with SBAO and Mob Elaboration. These are the core features — the execution loop, hooks, scanner, learning loop, and dispatcher are support infrastructure for the planning workflow.
+However, the primary purpose of goat-flow is to make it easier for coding agents to plan with SBAO and Mob Elaboration. These are the core features - the execution loop, hooks, scanner, learning loop, and dispatcher are support infrastructure for the planning workflow.
 
 The critique methodology was flawed: it evaluated SBAO/Mob as mandatory overhead on all tasks, when in reality they are user-prompted (M10d made them opt-in, not complexity-gated). The user chooses when to run them.
 

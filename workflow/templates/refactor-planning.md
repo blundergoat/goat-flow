@@ -9,14 +9,14 @@
 
 Use when restructuring existing code: renames, extractions, moves, interface changes.
 
-## Phase R1 — Blast Radius Analysis
+## Phase R1 - Blast Radius Analysis
 
 Before changing anything:
 
-1. **Declare scope** (include non-code surfaces — `.md`, `.json`, `.yaml`, config, manifests):
+1. **Declare scope** (include non-code surfaces - `.md`, `.json`, `.yaml`, config, manifests):
    - Files to change: [list]
    - Files that might break: [list]
-   - Non-code surfaces affected: [docs, config, manifests — these often reference renamed code]
+   - Non-code surfaces affected: [docs, config, manifests - these often reference renamed code]
    - Files out of scope: [list]
 
 2. **Read both sides of every interface being changed:**
@@ -32,7 +32,7 @@ Before changing anything:
 
 **BLOCKING GATE:** "This refactor touches [N] files across [M] boundaries. Blast radius: [assessment]. Proceed?"
 
-## Phase R2 — Execution Sequence
+## Phase R2 - Execution Sequence
 
 Plan the execution order. Do NOT change everything at once.
 
@@ -48,7 +48,7 @@ Plan the execution order. Do NOT change everything at once.
 
 **Checkpoints:** Run lint/test after EACH step.
 
-## Phase R3 — Verification Plan
+## Phase R3 - Verification Plan
 
 Comprehensive verification after all changes:
 

@@ -926,7 +926,7 @@ function renderSetupRedirect(
       lines.push(
         `Run \`${getCliCommand()} scan . --agent ${agentId}\` and fix any failing checks.`,
       );
-      lines.push("No setup changes needed — the project is up to date.");
+      lines.push("No setup changes needed - the project is up to date.");
       lines.push("");
       return lines.join("\n");
     }
@@ -1083,7 +1083,7 @@ function renderSetupRedirect(
       "   Agents need to know where the sensitive LLM-facing files are.",
     );
     lines.push(
-      "3. **goat-security** is especially important — the threat model should cover:",
+      "3. **goat-security** is especially important - the threat model should cover:",
     );
     lines.push(
       "   prompt injection, output validation, credential exposure, and LLM cost controls.",
@@ -1097,7 +1097,7 @@ function renderSetupRedirect(
     lines.push("");
   }
 
-  // Pre-instructions — only for bare/partial/error states
+  // Pre-instructions - only for bare/partial/error states
   // (v0.9 and v1.0 already have their upgrade header with specific instructions)
   if (
     projectState.state === "bare" ||
@@ -1228,22 +1228,22 @@ function renderSetupRedirect(
   );
   lines.push("");
   lines.push(
-    "- **01-system-overview.md** — Design intent, state check, session-log setup",
+    "- **01-system-overview.md** - Design intent, state check, session-log setup",
   );
   lines.push(
-    "- **02-instruction-file.md** — Create or update the instruction file",
+    "- **02-instruction-file.md** - Create or update the instruction file",
   );
   lines.push(
-    "- **03-install-skills.md** — Install the 7 verbatim skill templates",
+    "- **03-install-skills.md** - Install the 7 verbatim skill templates",
   );
   lines.push(
-    "- **04-architecture-code-map.md** — Create architecture and code map docs",
+    "- **04-architecture-code-map.md** - Create architecture and code map docs",
   );
   lines.push(
-    "- **05-customise-to-project.md** — Deep codebase read, real footguns/lessons, auto-seeded git signals, and `toolchain` / `ask_first` config sync",
+    "- **05-customise-to-project.md** - Deep codebase read, real footguns/lessons, auto-seeded git signals, and `toolchain` / `ask_first` config sync",
   );
   lines.push(
-    "- **06-final-verification.md** — Scanner 100%, stale-ref check, file manifest, command smoke test",
+    "- **06-final-verification.md** - Scanner 100%, stale-ref check, file manifest, command smoke test",
   );
   lines.push("");
   lines.push(

@@ -64,27 +64,27 @@ category: docs-and-crossrefs
 
 **Status:** active | **Created:** 2026-04-11 | **Evidence:** OBSERVED
 
-**Symptoms:** The repo describes different skill counts in different places. Code says 7, config says 6, README says "Six", docs say "Five+dispatcher", tests say 5 or 6. External critics independently flagged this as a trust problem — the system sells coherence but can't maintain it internally.
+**Symptoms:** The repo describes different skill counts in different places. Code says 7, config says 6, README says "Six", docs say "Five+dispatcher", tests say 5 or 6. External critics independently flagged this as a trust problem - the system sells coherence but can't maintain it internally.
 
 **Why it happens:** When a new skill is added (goat-sbao was extracted from goat-plan), the skill template file and constants.ts get updated, but secondary surfaces don't. These secondary surfaces have no automated check linking them to the canonical SKILL_NAMES constant.
 
 **Evidence (14 verified bugs, 2026-04-11):**
-- `src/cli/prompt/template-refs.ts:108` — SKILL_TEMPLATES has 6 entries, missing goat-sbao
-- `src/cli/prompt/fragments/foundation.ts:23,60,237` — hardcodes `v1.0` in a v1.1.0 release
-- `.goat-flow/config.yaml:12` — skills.install lists 6 skills, goat-sbao absent
-- `.goat-flow/config.yaml:40` — references `scripts/context-validate.sh` (renamed to `scripts/validate-goat-flow-setup.sh`)
-- `src/cli/config/reader.ts:20-35` — KNOWN_TOP_LEVEL_KEYS missing `known-gaps` and `skill-overrides`
-- `README.md:89` — "Six structured workflows" (should be Seven)
-- `README.md:91` — overclaims post-turn hooks; `workflow/hooks/README.md:29` contradicts
-- `docs/skills/README.md:1` — "Five focused capabilities", diagram omits goat-sbao
-- `workflow/setup/04-architecture-code-map.md:38` — "Skills do NOT read templates at runtime" — contradicted by goat.md:25, goat-security.md:71, goat-test.md:108 (FIXED: step 04 now acknowledges runtime template usage)
-- `src/cli/prompt/fragments/standard.ts:617` — still creates `.goat-flow/coding-standards/` (removed in M13)
-- `src/cli/classify-state.ts:62` — marks "healthy" from config version alone
-- `src/cli/rubric/full.ts:129` — check named "Skill conventions" but checks `skill-preamble.md`
-- `workflow/skills/goat-plan.md:115,175` — inline mode contradicts "MUST write" constraint
-- `src/cli/facts/shared/learning-loop.ts:112` — `listMarkdownEntries()` only handles directories, not flat files
-- `test/unit/evaluate-check.test.ts` — previously said "All 6 skills present" (FIXED: file restructured, skill count updated to 7)
-- `.goat-flow/architecture.md:27,55` — stale paths (`agents/claude.md`, `presets.js`)
+- `src/cli/prompt/template-refs.ts:108` - SKILL_TEMPLATES has 6 entries, missing goat-sbao
+- `src/cli/prompt/fragments/foundation.ts:23,60,237` - hardcodes `v1.0` in a v1.1.0 release
+- `.goat-flow/config.yaml:12` - skills.install lists 6 skills, goat-sbao absent
+- `.goat-flow/config.yaml:40` - references `scripts/context-validate.sh` (renamed to `scripts/validate-goat-flow-setup.sh`)
+- `src/cli/config/reader.ts:20-35` - KNOWN_TOP_LEVEL_KEYS missing `known-gaps` and `skill-overrides`
+- `README.md:89` - "Six structured workflows" (should be Seven)
+- `README.md:91` - overclaims post-turn hooks; `workflow/hooks/README.md:29` contradicts
+- `docs/skills/README.md:1` - "Five focused capabilities", diagram omits goat-sbao
+- `workflow/setup/04-architecture-code-map.md:38` - "Skills do NOT read templates at runtime" - contradicted by goat.md:25, goat-security.md:71, goat-test.md:108 (FIXED: step 04 now acknowledges runtime template usage)
+- `src/cli/prompt/fragments/standard.ts:617` - still creates `.goat-flow/coding-standards/` (removed in M13)
+- `src/cli/classify-state.ts:62` - marks "healthy" from config version alone
+- `src/cli/rubric/full.ts:129` - check named "Skill conventions" but checks `skill-preamble.md`
+- `workflow/skills/goat-plan.md:115,175` - inline mode contradicts "MUST write" constraint
+- `src/cli/facts/shared/learning-loop.ts:112` - `listMarkdownEntries()` only handles directories, not flat files
+- `test/unit/evaluate-check.test.ts` - previously said "All 6 skills present" (FIXED: file restructured, skill count updated to 7)
+- `.goat-flow/architecture.md:27,55` - stale paths (`agents/claude.md`, `presets.js`)
 
 **Root cause:** No automated check validates that the canonical SKILL_NAMES is reflected consistently across README, docs, config, template-refs, test fixtures, and setup fragments. Each surface drifts silently.
 
@@ -104,9 +104,9 @@ category: docs-and-crossrefs
 **Why it happens:** When content is extracted from skills to `workflow/templates/` in the goat-flow repo, the skill file references use the framework-local path (`workflow/templates/`) instead of the project-local path (`.goat-flow/templates/`). Skills are installed verbatim, so the framework path ships to every project.
 
 **Evidence:**
-- `workflow/skills/goat.md:25,26` — now correctly references `.goat-flow/templates/feature-brief.md` and `.goat-flow/templates/mob-elaboration.md` (FIXED)
-- `workflow/skills/goat-security.md:71` — referenced `workflow/templates/compliance-checklist.md`
-- `workflow/skills/goat-test.md:108,145` — referenced `workflow/templates/flow-diagram-guide.md`
+- `workflow/skills/goat.md:25,26` - now correctly references `.goat-flow/templates/feature-brief.md` and `.goat-flow/templates/mob-elaboration.md` (FIXED)
+- `workflow/skills/goat-security.md:71` - referenced `workflow/templates/compliance-checklist.md`
+- `workflow/skills/goat-test.md:108,145` - referenced `workflow/templates/flow-diagram-guide.md`
 - R9 critiques: 6/7 projects flagged broken template references as a top finding
 
 **Prevention:** After ANY content extraction to `workflow/templates/`, grep all skill files for `workflow/templates/` and replace with `.goat-flow/templates/`. The rule: skill files must only reference paths that exist on the PROJECT, not paths that exist in the goat-flow REPO.

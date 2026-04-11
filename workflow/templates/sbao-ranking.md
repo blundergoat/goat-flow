@@ -1,10 +1,10 @@
 # Template: SBAO Ranking
 
-> **What this is:** A template for running SBAO critique manually — useful when you want
+> **What this is:** A template for running SBAO critique manually - useful when you want
 > to orchestrate across separate AI sessions with different providers, or when you want
 > full human control over the process.
 >
-> For most uses, `/goat-sbao` is easier — it handles sub-agent orchestration, ranking,
+> For most uses, `/goat-sbao` is easier - it handles sub-agent orchestration, ranking,
 > cross-examination, and synthesis automatically within a single session.
 >
 > When to use this template instead:
@@ -18,17 +18,17 @@ of accepting the first plausible answer.
 
 ## Step 1: Generate competing critiques
 
-Spawn 3 sub-agents (or open 3 sessions). Vary the context intentionally — informational diversity catches more than tonal diversity.
+Spawn 3 sub-agents (or open 3 sessions). Vary the context intentionally - informational diversity catches more than tonal diversity.
 
-**Agent A (Risk Focus — full context):**
+**Agent A (Risk Focus - full context):**
 Give: the artifact + architecture.md + footguns + lessons.
 Directive: "Focus on RISKS. What could go wrong? What's the cost/benefit? What's the fastest safe path forward? Propose specific improvements."
 
-**Agent B (Alternatives Focus — full context):**
+**Agent B (Alternatives Focus - full context):**
 Give: the artifact + architecture.md + footguns + lessons.
 Directive: "Focus on ALTERNATIVES. Generate 2-3 different approaches to the key decisions. For each, evaluate risk, evidence, and delivery speed. Propose specific improvements."
 
-**Agent C (Fresh Eyes — NO project context):**
+**Agent C (Fresh Eyes - NO project context):**
 Give: the artifact ONLY. No architecture, no footguns, no lessons, no project history.
 Directive: "Critique this as if you know nothing about the project. What's unclear? What assumptions aren't stated? What wouldn't make sense to a newcomer?"
 
@@ -73,9 +73,9 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED.
 ## Step 4: Clarify with the human
 
 Before synthesising, present unresolved items:
-- Still-disputed findings — which position to adopt?
-- Material trade-offs — which path matters more?
-- Context drift signals from Agent C — intentional or oversight?
+- Still-disputed findings - which position to adopt?
+- Material trade-offs - which path matters more?
+- Context drift signals from Agent C - intentional or oversight?
 
 **STOP and wait for answers.** Do not synthesise until the human has decided.
 
@@ -89,7 +89,7 @@ Synthesise using:
 - Retracted findings (listed so user sees what was considered and dismissed)
 
 **Decision Debt:** Tag any recommendation where evidence is INFERRED or cross-examination was inconclusive:
-> **Decision Debt:** [recommendation] — Confidence: LOW/MEDIUM — Revisit when: [trigger]
+> **Decision Debt:** [recommendation] - Confidence: LOW/MEDIUM - Revisit when: [trigger]
 
 Write to the tasks directory as `<feature-name>-critique-prime.md`.
 

@@ -144,7 +144,7 @@ export function classifyProjectState(fs: StateFS): ProjectState {
     return {
       state: "v1.0",
       action: "upgrade",
-      details: `Version ${version} — upgrade available`,
+      details: `Version ${version} - upgrade available`,
     };
   }
 

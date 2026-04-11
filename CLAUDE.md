@@ -91,7 +91,7 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 - Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 
 ## Working Memory
-If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Router Table
 

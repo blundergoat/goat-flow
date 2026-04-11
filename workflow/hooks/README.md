@@ -26,4 +26,4 @@ All hook paths use `$(git rev-parse --show-toplevel)` so they work regardless of
 
 ## Post-Turn Linting (project-specific)
 
-goat-flow does not ship a lint hook — every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop/AfterAgent event.
+goat-flow does not ship a lint hook - every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop/AfterAgent event.

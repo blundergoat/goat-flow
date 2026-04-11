@@ -705,7 +705,7 @@ function app() {
       // Flag prevents ws.onclose from setting terminalEnded during intentional detach
       this._detaching = true;
       // Save current session to project map before detaching.
-      // Use forProjectPath when provided (project switch — projectPath already updated).
+      // Use forProjectPath when provided (project switch - projectPath already updated).
       const savePath = forProjectPath || this.projectPath;
       if (this.terminalSessionId && !this.terminalEnded) {
         this._projectSessions[savePath] = {

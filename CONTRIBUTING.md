@@ -43,7 +43,7 @@ For shell scripts only: `shellcheck scripts/maintenance/*.sh`
 | Directory | What lives there |
 |-----------|-----------------|
 | `src/cli/` | CLI scanner, rubric checks (`rubric/`), stack detector (`detect/`), setup prompt generator |
-| `src/dashboard/` | Browser-based dashboard — HTML + Alpine.js + vanilla JS |
+| `src/dashboard/` | Browser-based dashboard - HTML + Alpine.js + vanilla JS |
 | `workflow/` | Setup templates, skill templates, hooks, coding standards |
 | `.goat-flow/` | Project-specific config, architecture, decisions, footguns, lessons |
 | `scripts/` | Shell scripts for validation, maintenance, publishing |
@@ -71,7 +71,7 @@ Stack detection lives in `src/cli/detect/project-stack.ts`. Add a new detection 
 
 ## PR Conventions
 
-- Single-line summary, plain English — no `feat:`/`fix:` prefixes
+- Single-line summary, plain English - no `feat:`/`fix:` prefixes
 - Multi-line body when spanning multiple areas (blank line after summary)
 - Before opening: `npm run typecheck`, `npm test`, and `shellcheck` on any changed `.sh` files must all pass
 - See `.goat-flow/coding-standards/git-commit.md` for full conventions

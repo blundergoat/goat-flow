@@ -118,7 +118,7 @@ export const localContextChecks: CheckDef[] = [
             status: "partial",
             points: 1,
             maxPoints: 2,
-            message: `${valid}/${total} footgun citations resolve (${Math.round(ratio * 100)}%) — some stale`,
+            message: `${valid}/${total} footgun citations resolve (${Math.round(ratio * 100)}%) - some stale`,
           };
         }
         return {
@@ -126,7 +126,7 @@ export const localContextChecks: CheckDef[] = [
           status: "fail",
           points: 0,
           maxPoints: 2,
-          message: `${valid}/${total} footgun citations resolve (${Math.round(ratio * 100)}%) — mostly stale`,
+          message: `${valid}/${total} footgun citations resolve (${Math.round(ratio * 100)}%) - mostly stale`,
         };
       },
     },
@@ -188,7 +188,7 @@ export const localContextChecks: CheckDef[] = [
             status: "partial",
             points: 1,
             maxPoints: 2,
-            message: `Only ${count} project-specific path(s) — may be too generic`,
+            message: `Only ${count} project-specific path(s) - may be too generic`,
           };
         }
         return {
@@ -197,7 +197,7 @@ export const localContextChecks: CheckDef[] = [
           points: 0,
           maxPoints: 2,
           message:
-            "No project-specific paths — instruction file appears generic",
+            "No project-specific paths - instruction file appears generic",
         };
       },
     },

@@ -1,10 +1,10 @@
-# Step 05 — Customise to Project
+# Step 05 - Customise to Project
 
 Steps 02–04 created the structure. This step makes it useful. Stop following templates and start reading the actual codebase to write project-specific content.
 
-This step should take the longest — it's doing real work, not copying templates.
+This step should take the longest - it's doing real work, not copying templates.
 
-## Preserve existing docs/ surfaces — bridge via config
+## Preserve existing docs/ surfaces - bridge via config
 
 If existing documentation surfaces exist, use them as canonical and point config.yaml to them:
 
@@ -25,27 +25,27 @@ If existing `settings.json` notification hooks reference `tasks/todo.md`, `tasks
 
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` if they exist
 - Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns.md` already exist
-- Merge with what's there — do not replace existing project memory
+- Merge with what's there - do not replace existing project memory
 
-## Config sync — populate structured context
+## Config sync - populate structured context
 
 Update `.goat-flow/config.yaml` with real project data:
 
-- `toolchain:` — populate `test`, `lint`, `build`, `package`, and `format` arrays from the commands you detected in Step 02 or from the actual manifests/scripts
-- `ask_first:` — copy the instruction file's real Ask First boundaries into structured `{ path, reason }` entries
+- `toolchain:` - populate `test`, `lint`, `build`, `package`, and `format` arrays from the commands you detected in Step 02 or from the actual manifests/scripts
+- `ask_first:` - copy the instruction file's real Ask First boundaries into structured `{ path, reason }` entries
 
 Use empty arrays only when the project truly has no command for that slot. Do not invent tool commands.
 
-## Footguns — find real traps in the code
+## Footguns - find real traps in the code
 
 **Quality standard:** Every footgun entry MUST include:
 1. A `file:line` or file-path citation
 2. A non-obvious failure mode (what goes wrong and why it's not obvious)
 
 **Reject these as footguns:**
-- "This file changes a lot" — that's git log, not a footgun
-- "This module is complex" — that's obvious from reading it
-- "Tests are missing for X" — that's a known gap, not a footgun
+- "This file changes a lot" - that's git log, not a footgun
+- "This module is complex" - that's obvious from reading it
+- "Tests are missing for X" - that's a known gap, not a footgun
 
 ```bash
 grep -rn 'TODO\|FIXME\|HACK\|XXX' src/ --include='*.ts' --include='*.php' --include='*.py' | head -20
@@ -56,13 +56,13 @@ git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
 - Write findings to `.goat-flow/footguns/` bucket files with real file paths as evidence
 - Every entry MUST cite specific file paths. Use `ACTUAL_MEASURED` evidence labels.
 - Add `hallucination-risk: high` when the area is easy to misread from names alone (generated code, env-specific config, external contracts)
-- If `.goat-flow/footguns/` already has entries, MERGE — do not replace
+- If `.goat-flow/footguns/` already has entries, MERGE - do not replace
 
-## Lessons — extract from git history
+## Lessons - extract from git history
 
-- Use the same `git log` scan — for each incident, what was the root cause and what should have been done differently?
+- Use the same `git log` scan - for each incident, what was the root cause and what should have been done differently?
 - Write to `.goat-flow/lessons/` category bucket files
-- If `.goat-flow/lessons/` already has entries, MERGE — do not replace
+- If `.goat-flow/lessons/` already has entries, MERGE - do not replace
 
 ## Auto-seed the learning loop from strong git signals
 
@@ -74,7 +74,7 @@ After creating or merging the manual entries, seed 2-3 strong candidates from gi
 
 Rules:
 
-- Evidence format for auto-seeded entries is **file path + commit hash**, not fabricated line numbers. `src/auth.ts` is valid evidence. `src/auth.ts:65` pointing at a closing brace is fabricated evidence — never cite a line number unless you have verified it shows the actual trap.
+- Evidence format for auto-seeded entries is **file path + commit hash**, not fabricated line numbers. `src/auth.ts` is valid evidence. `src/auth.ts:65` pointing at a closing brace is fabricated evidence - never cite a line number unless you have verified it shows the actual trap.
 - If you cannot identify the specific code that demonstrates the trap, use the file path without a line number. Path-only evidence is honest; fake line numbers are not.
 - Mark each generated entry with `**Source:** git history (auto-seeded)`
 - Only seed strong signals. Skip noisy one-off commits
@@ -84,29 +84,29 @@ Examples:
 - `` `src/auth/login.ts` (12 commits in 30 days, last: abc123) ``
 - `` `src/api/users.ts` + `src/db/users.ts` (co-committed 4 times, last: def456) ``
 
-## Patterns — capture memory beyond mistakes
+## Patterns - capture memory beyond mistakes
 
 - Ensure `.goat-flow/patterns.md` exists. Use it for successful repeatable approaches, not incidents
 
-## Architecture and code map — make them real
+## Architecture and code map - make them real
 
 - Review `.goat-flow/architecture.md` and `.goat-flow/code-map.md` created in step 04
 - Is it generic or does it reflect the actual system?
 - Add: data flows, non-obvious constraints, deliberate trade-offs, deployment topology
 - Remove anything that reads like template fill
 
-## Glossary — add real domain terms
+## Glossary - add real domain terms
 
 - Read the codebase for domain-specific terminology (model names, service names, acronyms)
 - Update `.goat-flow/glossary.md` with terms a new contributor would need
 
-## Instruction file — adapt Ask First boundaries
+## Instruction file - adapt Ask First boundaries
 
 - Review the Ask First section. Are the boundaries specific to this project's real risk areas?
 - Are there directories with complex ownership, migration scripts, config that shouldn't be touched?
 - Update with real paths and real reasons
 - Keep `.goat-flow/config.yaml` `ask_first:` in sync with the final instruction file wording
-- If existing instruction files exist in `.github/instructions/` or `ai/instructions/`, reference them from config.yaml and the router table. Do NOT create thin copies in `.goat-flow/coding-standards/` — the existing files are likely better than anything setup can generate
+- If existing instruction files exist in `.github/instructions/` or `ai/instructions/`, reference them from config.yaml and the router table. Do NOT create thin copies in `.goat-flow/coding-standards/` - the existing files are likely better than anything setup can generate
 
 ---
 

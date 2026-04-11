@@ -1,4 +1,4 @@
-# ADR-029: Instruction budget constraint — why 120 lines, why it matters
+# ADR-029: Instruction budget constraint - why 120 lines, why it matters
 
 **Status:** Accepted
 **Date:** 2026-04-06
@@ -7,18 +7,18 @@
 
 Extracted from `docs/system-spec.md` (being retired in v1.1.0) to preserve design reasoning.
 
-Frontier models follow ~150-200 instructions reliably. Claude Code's system prompt consumes ~50, leaving ~100-150 for CLAUDE.md. Degradation is **uniform, not sequential** — too many instructions makes the model worse at ALL of them equally, not just the ones at the bottom.
+Frontier models follow ~150-200 instructions reliably. Claude Code's system prompt consumes ~50, leaving ~100-150 for CLAUDE.md. Degradation is **uniform, not sequential** - too many instructions makes the model worse at ALL of them equally, not just the ones at the bottom.
 
 Key evidence:
 - Tools mentioned in AGENTS.md are used **160x more often** than unmentioned ones (GitHub 2,500-repo analysis)
 - Auto-generated context files reduce success by ~3% while increasing inference cost by 20%+ (HumanLayer)
-- Code examples beat prose — higher signal per token
+- Code examples beat prose - higher signal per token
 
 ## Decision
 
 CLAUDE.md (and equivalent instruction files) MUST stay under 150 lines. Target 120.
 
-Every rule MUST apply to every session. Situation-specific guidance belongs in skills, playbooks, or local instruction files — not the hot path.
+Every rule MUST apply to every session. Situation-specific guidance belongs in skills, playbooks, or local instruction files - not the hot path.
 
 **Cut priority** (what to trim first if over target):
 1. Essential commands → move to separate referenced file
@@ -29,7 +29,7 @@ Every rule MUST apply to every session. Situation-specific guidance belongs in s
 
 **Never cut:** The execution loop, autonomy tiers, or definition of done.
 
-**Router table placement:** Position at the END of the instruction file. Research shows the beginning and end of the context window receive higher attention than the middle. The router table is the highest-leverage section (160x usage uplift) — placing it at the end exploits the end-of-context attention zone.
+**Router table placement:** Position at the END of the instruction file. Research shows the beginning and end of the context window receive higher attention than the middle. The router table is the highest-leverage section (160x usage uplift) - placing it at the end exploits the end-of-context attention zone.
 
 ## Consequences
 

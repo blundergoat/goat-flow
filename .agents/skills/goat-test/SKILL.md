@@ -27,9 +27,9 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 
 **NOT this skill:** Running tests → just run them. Debugging test failures → /goat-debug. Code quality → /goat-review. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
 
-## Step 0 — Intake
+## Step 0 - Intake
 
-**Mode detection — confirm, don't silently decide:**
+**Mode detection - confirm, don't silently decide:**
 
 - Changed files + no specific ask → offer standard or audit
 - "audit"/"coverage"/"gaps" → Audit mode
@@ -45,11 +45,11 @@ If arriving from the dispatcher with context already gathered, confirm and proce
 
 **CHECKPOINT:** "Analysing [N] changed files against [existing test plan / no test plan]. Audience: [dev/tester/both]. Proceed?"
 
-## Phase 1 — Change Risk Analysis
+## Phase 1 - Change Risk Analysis
 
 Read every changed file. For each, understand WHAT changed and WHY it's risky.
 
-**Diff analysis — not just file names.** Read the actual diff, not just `--stat`. A one-line change to an auth check is CRITICAL. A 200-line change to a CSS file is LOW.
+**Diff analysis - not just file names.** Read the actual diff, not just `--stat`. A one-line change to an auth check is CRITICAL. A 200-line change to a CSS file is LOW.
 
 Classify each change:
 
@@ -72,7 +72,7 @@ Classify each change:
 
 **CHECKPOINT:** "Risk map complete. [N] CRITICAL, [M] HIGH risk changes. Proceeding to gap analysis."
 
-## Phase 2 — Gap Analysis
+## Phase 2 - Gap Analysis
 
 Compare risk vs coverage in both directions:
 - If a test plan exists, map cases to CRITICAL/HIGH changes and check reverse coverage.
@@ -87,7 +87,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 **BLOCKING GATE:** Present the gap analysis. "Here are the testing gaps. Want me to produce a targeted testing plan, a QA flow diagram, or both?" After gap analysis, suggest `/goat-plan` to add testing tasks to the current milestone.
 
-## Phase 3 — Targeted Testing Plan
+## Phase 3 - Targeted Testing Plan
 
 Based on the gaps, produce a focused plan and order by risk.
 
@@ -98,7 +98,7 @@ Based on the gaps, produce a focused plan and order by risk.
 
 **CHECKPOINT:** "Targeted testing plan ready. Want a flow diagram for any CRITICAL item?"
 
-## Phase 4 — Flow Diagram
+## Phase 4 - Flow Diagram
 
 For flow diagrams, read the flow diagram guide in `.goat-flow/templates/flow-diagram-guide.md`.
 
@@ -108,13 +108,13 @@ For flow diagrams, read the flow diagram guide in `.goat-flow/templates/flow-dia
 
 Analyse existing code areas with no recent change.
 
-### A1 — Scope
+### A1 - Scope
 Declare scope and existing test coverage.
 
-### A2 — Coverage Analysis
+### A2 - Coverage Analysis
 For each file: test exists? behavior covered or only structure? flag mock-heavy or integration-only blind spots.
 
-### A3 — Gap Report
+### A3 - Gap Report
 Produce a risk-ordered table and recommendation list for the coding agent.
 
 **BLOCKING GATE:** Present gap report.
@@ -125,8 +125,8 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 
 ## Constraints
 
-- goat-test is a testing GAP ANALYSER — it finds mismatches between code changes and testing coverage
-- MUST read the actual diff, not just file names — a one-line auth change outranks a 200-line CSS change
+- goat-test is a testing GAP ANALYSER - it finds mismatches between code changes and testing coverage
+- MUST read the actual diff, not just file names - a one-line auth change outranks a 200-line CSS change
 - MUST classify every change by risk level with plain-English description of what changed
 - MUST trace blast radius for CRITICAL/HIGH changes
 - MUST compare changes against existing testing coverage (manual plan, automated tests, or neither)
@@ -134,7 +134,7 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 - MUST produce "must test / should test / safe to skip" tiers with rationale for skips
 - MUST include time estimates for manual testing items
 - MUST include Verification Integrity section
-- MUST NOT generate test code — hand off to the coding agent
+- MUST NOT generate test code - hand off to the coding agent
 - Universal constraints from skill-preamble.md apply.
 - Audit mode: MUST include gap report with risk-of-gap ratings
 - If flow diagrams are requested, follow `.goat-flow/templates/flow-diagram-guide.md`.

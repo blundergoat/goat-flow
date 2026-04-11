@@ -1,4 +1,4 @@
-# Agent Config — Claude Code
+# Agent Config - Claude Code
 
 ## Paths
 

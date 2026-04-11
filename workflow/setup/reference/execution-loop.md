@@ -6,7 +6,7 @@ These sections go in the project's instruction file. Target: under 120 lines. Ha
 
 ## Required Sections
 
-a) Project identity — 1-2 lines: project name, domain, core technology, primary invariant
+a) Project identity - 1-2 lines: project name, domain, core technology, primary invariant
 
 b) Version header (v1.1 - YYYY-MM-DD)
 
@@ -60,7 +60,7 @@ e) Definition of Done: 6 gates
    (3) no unapproved boundary changes
    (4) logs updated if tripped
    (5) current state recorded before stopping incomplete work
-   (6) After any rename or move, grep for the old name across ALL files (including .md, .json, .yaml, config). Zero remaining references = pass. This is the most common failure mode — stale cross-references after renames cause more bugs than any other single pattern.
+   (6) After any rename or move, grep for the old name across ALL files (including .md, .json, .yaml, config). Zero remaining references = pass. This is the most common failure mode - stale cross-references after renames cause more bugs than any other single pattern.
 
 f) Router table: MUST include at minimum:
      - Skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`)

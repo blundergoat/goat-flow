@@ -5,9 +5,9 @@ in `skill-preamble.md` is always loaded first.
 
 ---
 
-## Learning Loop — Entry Formats
+## Learning Loop - Entry Formats
 
-Bucket conventions (examples — actual bucket names are project-specific):
+Bucket conventions (examples - actual bucket names are project-specific):
 - Lessons: category files like `verification.md`, `workflow.md`, `coordination.md`
 - Footguns: category files like `runtime.md`, `integration.md`, `data-stores.md`
 
@@ -74,7 +74,7 @@ Skills that gather context before acting follow this pattern:
 
 **The gate rule:** If intent, target, and boundary are clear from the user's request, proceed without asking. Ask only at a genuine fork where the user's preference is not obvious. Bare invocation with no arguments = zero context = ask all structural questions and wait.
 
-**Dispatcher invocation:** When a skill is invoked via `/goat`, Step 0 is the single entry gate. The dispatcher already announced the skill — Step 0 goes straight to its questions without re-announcing. There is no double-gate: one announcement from the dispatcher, one gate (Step 0) in the skill.
+**Dispatcher invocation:** When a skill is invoked via `/goat`, Step 0 is the single entry gate. The dispatcher already announced the skill - Step 0 goes straight to its questions without re-announcing. There is no double-gate: one announcement from the dispatcher, one gate (Step 0) in the skill.
 
 ## Contradiction Check
 
@@ -92,15 +92,15 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
-**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** safety-critical gates (goat-debug D2→D3 "human decides before fixing", goat-security final report) MUST remain blocking even in sub-agent mode — these exist to prevent auto-fixing without human review.
+**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** safety-critical gates (goat-debug D2→D3 "human decides before fixing", goat-security final report) MUST remain blocking even in sub-agent mode - these exist to prevent auto-fixing without human review.
 
 ## Task Tracking
 
 When working from a plan or milestone file:
-- Tick each task `- [x]` immediately when completed — not at the end of a batch, not when you remember, not in the closing protocol
+- Tick each task `- [x]` immediately when completed - not at the end of a batch, not when you remember, not in the closing protocol
 - The checkbox is the single source of truth for progress
 - If interrupted, compacted, or crashed, the checkboxes are how the next session knows where to resume
-- If you completed a task 3 steps ago and forgot to tick it — go tick it NOW before continuing
+- If you completed a task 3 steps ago and forgot to tick it - go tick it NOW before continuing
 
 On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
 

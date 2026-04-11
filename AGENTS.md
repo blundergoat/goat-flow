@@ -81,7 +81,7 @@ MUST confirm all 6 gates:
 5. Current state recorded before stopping incomplete work
 6. Grep old pattern/path after rename, move, or terminology change
 ## Working Memory
-If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end. If context drifts or two approaches fail, restate scope and start fresh.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. If context drifts or two approaches fail, restate scope and start fresh.
 Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 ## Router Table
 | Resource | Path |

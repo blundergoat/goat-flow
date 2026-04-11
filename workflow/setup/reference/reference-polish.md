@@ -1,4 +1,4 @@
-# Reference — Instruction File Polish
+# Reference - Instruction File Polish
 
 Step 02 now folds the old polish pass into instruction-file creation. Use this reference only if the finished instruction file is still noisy.
 

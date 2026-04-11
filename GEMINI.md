@@ -94,7 +94,7 @@ Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one q
 - MUST use real incidents, never hypothetical. `.goat-flow/architecture.md` is canonical source of truth
 
 ## Working Memory
-If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end.
 Context health: compact at 60% util. Noise pruning before compacting. `/clear` between unrelated tasks.
 
 ## Router Table

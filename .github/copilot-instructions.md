@@ -38,7 +38,7 @@ MUST confirm ALL: (1) shellcheck passes (2) no broken cross-references (3) no un
 
 ## Working Memory
 
-If working from a plan/milestone file, tick `- [x]` on each completed task immediately — not at the end.
+If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end.
 
 ## Sub-Agent Objectives
 

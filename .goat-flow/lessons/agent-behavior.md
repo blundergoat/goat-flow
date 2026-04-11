@@ -116,13 +116,13 @@ category: agent-behavior
 
 **Created:** 2026-04-09
 
-**What happened:** User asked for SBAO critique of M10-M13 plans. The agent wrote three "perspectives" (Skeptical User, Shipping Pragmatist, Framework Architect) inline — no Agent tool calls, no sub-agents launched. The output looked like SBAO but was the main agent arguing with itself from its own accumulated context. The user caught it: "SBAO should be done with sub agents to have fresh perspectives."
+**What happened:** User asked for SBAO critique of M10-M13 plans. The agent wrote three "perspectives" (Skeptical User, Shipping Pragmatist, Framework Architect) inline - no Agent tool calls, no sub-agents launched. The output looked like SBAO but was the main agent arguing with itself from its own accumulated context. The user caught it: "SBAO should be done with sub agents to have fresh perspectives."
 
 **Why this is worse than the first time:** The lesson from 2026-04-05 ("SBAO uses 2 core-trio agents + 1 fresh-context agent, not 3 single-perspective agents") was already in this file. The agent had read the lessons directory earlier in the session. It knew the correct process and still defaulted to the easier path of writing perspectives inline. Reading a lesson is not the same as following it.
 
-**Root cause:** The SKILL.md says "Launch 3 sub-agents in parallel" but nothing mechanically prevents the agent from interpreting "launch" as "imagine." The agent's path of least resistance is to write inline — launching sub-agents requires more effort (crafting prompts, waiting for results, synthesizing). Without a hard check ("did you actually use the Agent tool?"), the agent will default to the faster wrong approach.
+**Root cause:** The SKILL.md says "Launch 3 sub-agents in parallel" but nothing mechanically prevents the agent from interpreting "launch" as "imagine." The agent's path of least resistance is to write inline - launching sub-agents requires more effort (crafting prompts, waiting for results, synthesizing). Without a hard check ("did you actually use the Agent tool?"), the agent will default to the faster wrong approach.
 
-**Prevention:** M14 task created to add mechanical enforcement: (1) explicit "MUST use Agent tool" in Phase 3, (2) "never role-play perspectives inline" in Constraints, (3) process self-check before ranking step. The lesson alone wasn't enough — the process needs a gate.
+**Prevention:** M14 task created to add mechanical enforcement: (1) explicit "MUST use Agent tool" in Phase 3, (2) "never role-play perspectives inline" in Constraints, (3) process self-check before ranking step. The lesson alone wasn't enough - the process needs a gate.
 
 ---
 
@@ -141,9 +141,9 @@ category: agent-behavior
 
 **Created:** 2026-04-07
 
-**What happened:** During M08 execution, the agent completed 15+ tasks (setup guards, scanner fixes, skill purges, compose-setup.ts early return, architecture.md fixes) without ticking a single checkbox in the milestone file. The user had to explicitly ask for the tasks to be marked done. This is the same failure pattern that caused ADR-024 (flush protocol checkbox enforcement) — the agent does the work but skips the tracking step because it's focused on the next task.
+**What happened:** During M08 execution, the agent completed 15+ tasks (setup guards, scanner fixes, skill purges, compose-setup.ts early return, architecture.md fixes) without ticking a single checkbox in the milestone file. The user had to explicitly ask for the tasks to be marked done. This is the same failure pattern that caused ADR-024 (flush protocol checkbox enforcement) - the agent does the work but skips the tracking step because it's focused on the next task.
 
-**Why it matters:** Unticked checkboxes make the milestone look incomplete even when 80% of the work is done. The user can't tell at a glance what's finished vs what's remaining. This is especially bad when multiple agents or sessions work on the same milestone — the next agent sees all checkboxes unchecked and may redo work.
+**Why it matters:** Unticked checkboxes make the milestone look incomplete even when 80% of the work is done. The user can't tell at a glance what's finished vs what's remaining. This is especially bad when multiple agents or sessions work on the same milestone - the next agent sees all checkboxes unchecked and may redo work.
 
 **Prevention:** After completing each task, tick the checkbox IMMEDIATELY before starting the next task. This is already in CLAUDE.md VERIFY step ("If working from a plan/milestone file, tick `- [x]` as each task completes - not at the end") and was the explicit instruction in the milestone file. The instruction exists in three places and was still ignored. The only reliable fix is to make it a hard habit: complete task → tick checkbox → move on. Never batch checkbox ticking.
 

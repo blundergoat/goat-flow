@@ -58,7 +58,7 @@ assert.equal(result.deduction, -N);
 
 ## Adding a Behavioral Journey
 
-Behavioral journeys validate scanner contracts via `test/journeys/scanner-journeys.test.ts`. The eval surface (`.goat-flow/evals/`) was removed — journey tests now validate scanner check behavior directly against fixture projects.
+Behavioral journeys validate scanner contracts via `test/journeys/scanner-journeys.test.ts`. The eval surface (`.goat-flow/evals/`) was removed - journey tests now validate scanner check behavior directly against fixture projects.
 
 ## Running Smoke Tests (Layer 7)
 

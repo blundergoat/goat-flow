@@ -1,4 +1,4 @@
-# Agent Config — GitHub Copilot
+# Agent Config - GitHub Copilot
 
 ## Paths
 
@@ -6,7 +6,7 @@
 |----------|------|
 | Instruction file | `.github/copilot-instructions.md` |
 | Skills directory | `.github/skills/` |
-| Hooks | None — Copilot has no hook mechanism |
+| Hooks | None - Copilot has no hook mechanism |
 
 ## Owns
 
@@ -28,7 +28,7 @@ applyTo: "src/frontend/**"
 ---
 ```
 
-Then inline the content. Copilot needs inline content — it doesn't follow markdown links.
+Then inline the content. Copilot needs inline content - it doesn't follow markdown links.
 
 ### Copilot CLI skills
 
