@@ -12,7 +12,7 @@ import { getProjectStructure } from "../paths.js";
 
 /** Regex matching backtick-wrapped project paths in instruction file content. */
 const INSTRUCTION_PATH_PATTERN =
-  /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|ai|\.claude|\.agents|\.github)\/[^`]+)`/g;
+  /`((?:src|config|templates?|app|apps|lib|docs|scripts|setup|workflow|ai|\.goat-flow|\.claude|\.agents|\.github)\/[^`]+)`/g;
 
 /** Find stale instruction refs using the ReadonlyFS abstraction. */
 function findStaleInstructionRefs(ctx: FactContext): string[] {
@@ -406,12 +406,12 @@ export const antiPatterns: AntiPatternDef[] = [
           ? `Found ${allStale.length} non-canonical skill dir(s): ${allStale.join(", ")}. These are likely from a previous goat-flow version and confuse agents.`
           : "All skill directories are canonical",
         evidence: triggered
-          ? `Run \`goat-flow upgrade\` or manually delete: ${allStale.join(", ")}`
+          ? `Manually delete stale skill directories: ${allStale.join(", ")}`
           : undefined,
       };
     },
     recommendation:
-      "Non-canonical skill directories left from a previous goat-flow version confuse agents -- they may invoke stale workflows with outdated instructions, missing gates, or incompatible output formats. Remove them with `goat-flow upgrade` or delete manually so agents only find current, supported skills.",
+      "Non-canonical skill directories left from a previous goat-flow version confuse agents -- they may invoke stale workflows with outdated instructions, missing gates, or incompatible output formats. Delete them manually so agents only find current, supported skills.",
     recommendationKey: "ap-remove-stale-skills",
   },
   // AP21 (Stale goat-flow-owned router entries) removed - marker system removed.

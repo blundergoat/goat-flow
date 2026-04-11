@@ -495,14 +495,18 @@ export function serveDashboard(
         config: false,
       };
 
-      const skillsDir = join(projectPath, ".claude", "skills");
-      if (existsSync(skillsDir)) {
-        try {
-          existing.skills = readdirSync(skillsDir).some((e) =>
-            e.startsWith("goat-"),
-          );
-        } catch {
-          /* unreadable */
+      const skillRoots = [".claude/skills", ".agents/skills", ".github/skills"];
+      for (const root of skillRoots) {
+        const skillsDir = join(projectPath, root);
+        if (existsSync(skillsDir)) {
+          try {
+            if (readdirSync(skillsDir).some((e) => e.startsWith("goat-"))) {
+              existing.skills = true;
+              break;
+            }
+          } catch {
+            /* unreadable */
+          }
         }
       }
 
@@ -514,7 +518,8 @@ export function serveDashboard(
         existsSync(join(projectPath, "ai", "lessons"));
       existing.footguns =
         existsSync(join(projectPath, ".goat-flow", "footguns")) ||
-        existsSync(join(projectPath, "docs", "footguns"));
+        existsSync(join(projectPath, "docs", "footguns")) ||
+        existsSync(join(projectPath, "docs", "footguns.md"));
       existing.config = existsSync(
         join(projectPath, ".goat-flow", "config.yaml"),
       );
@@ -648,6 +653,8 @@ export function serveDashboard(
       return message.includes("Maximum") ||
         message.includes("not found") ||
         message.includes("not available") ||
+        message.includes("not a directory") ||
+        message.includes("does not exist") ||
         message.includes("too large")
         ? 400
         : 500;

@@ -37,7 +37,16 @@ const SKILL_ROOTS = [
   ".agents/skills",
   ".github/skills",
 ] as const;
-const OLD_SKILLS = ["goat-audit", "goat-investigate"] as const;
+const OLD_SKILLS = [
+  "goat-audit",
+  "goat-investigate",
+  "goat-refactor",
+  "goat-simplify",
+  "goat-context",
+  "goat-onboard",
+  "goat-reflect",
+  "goat-resume",
+] as const;
 
 function collectInstalledSkills(fs: StateFS): string[] {
   return SKILL_NAMES.filter((skill) =>
@@ -77,7 +86,7 @@ function buildIncompleteDetails(
     missing.push("missing .goat-flow/skill-preamble.md");
   }
 
-  return `Config says v1.1.0 but install is incomplete: ${missing.join("; ")}`;
+  return `Config says v1.1.x but install is incomplete: ${missing.join("; ")}`;
 }
 
 /** Detect which adoption stage a project is at based on its on-disk artifacts. */
@@ -97,9 +106,18 @@ export function classifyProjectState(fs: StateFS): ProjectState {
     const versionMatch = configContent?.match(
       /version:\s*["']?(\d+\.\d+\.\d+)/,
     );
-    const version = versionMatch?.[1] || "0.0.0";
+    const version = versionMatch?.[1];
 
-    if (version === "1.1.0") {
+    if (!version) {
+      return {
+        state: "error" as ProjectStateName,
+        action: "fix" as ProjectAction,
+        details:
+          "Config exists but version could not be parsed from .goat-flow/config.yaml",
+      };
+    }
+
+    if (version.startsWith("1.1.")) {
       const isHealthy =
         currentSkillCount === SKILL_NAMES.length &&
         hasInstructionFile &&

@@ -82,6 +82,19 @@ function buildGuideItems(agent: AgentReport): GuideItem[] {
     });
   }
 
+  // Include triggered anti-patterns as guide items
+  for (const ap of agent.antiPatterns) {
+    if (!ap.triggered) continue;
+    items.push({
+      priority: 300 + Math.abs(ap.deduction),
+      tier: "anti-pattern",
+      id: ap.id,
+      name: ap.name,
+      action: ap.message,
+      effort: "moderate",
+    });
+  }
+
   // Sort by priority (lowest number = highest priority)
   items.sort((a, b) => a.priority - b.priority);
   return items;
@@ -102,7 +115,9 @@ function renderAgentGuide(agent: AgentReport): string {
   lines.push("");
 
   if (items.length === 0) {
-    lines.push("All checks pass. Nothing to do.");
+    lines.push(
+      "All checks pass and no anti-patterns triggered. Nothing to do.",
+    );
     return lines.join("\n");
   }
 

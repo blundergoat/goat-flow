@@ -58,16 +58,7 @@ assert.equal(result.deduction, -N);
 
 ## Adding a Behavioral Journey
 
-Behavioral journeys validate agent workflow contracts from `.goat-flow/evals/`.
-
-1. Create an eval in `.goat-flow/evals/` following `FORMAT.md`:
-   - YAML frontmatter with `name`, `origin`, `agents`, `skill`
-   - `### Scenario` with a code-fenced prompt
-   - `### Expected Behavior` with checkbox gates (`- [ ] Agent does X`)
-   - `### Anti-Patterns` with failure modes to watch for
-2. The eval is automatically picked up by `test/journeys/scanner-journeys.test.ts`
-3. Layer 6 validates the eval is parseable and well-formed
-4. Layer 7 (smoke tests) runs the prompt against a real agent and scores gates
+Behavioral journeys validate scanner contracts via `test/journeys/scanner-journeys.test.ts`. The eval surface (`.goat-flow/evals/`) was removed — journey tests now validate scanner check behavior directly against fixture projects.
 
 ## Running Smoke Tests (Layer 7)
 

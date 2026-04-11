@@ -1,6 +1,6 @@
 # ADR-030: Skill consolidation — 9 skills to 5 + dispatcher
 
-**Status:** Accepted
+**Status:** Partially superseded (goat-sbao extracted as 6th functional skill in v1.1.0)
 **Date:** 2026-04-06
 
 ## Context
@@ -44,7 +44,7 @@ There is no implementation skill (see ADR-019). Implementation is what the agent
 
 ## Consequences
 
-- Canonical skill count: 6 (5 specialized + 1 dispatcher)
+- Canonical skill count: 7 (6 specialized + 1 dispatcher). Originally 5+1; goat-sbao was later extracted as a standalone critique skill (see ADR-033).
 - Fewer skills = less maintenance, less drift, less context consumed
 - Each surviving skill has clear justification and distinct output
 - New skills must pass the justification test before being added

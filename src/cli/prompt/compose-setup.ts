@@ -125,6 +125,13 @@ export function composeSetup(
     return renderSetupRedirect(report, agentId, null);
   }
 
+  // State-aware routing: v1.0/v0.9 projects need upgrade guidance regardless of score
+  const projectFS = createFS(report.target);
+  const projectState = classifyProjectState(projectFS);
+  if (projectState.state === "v1.0" || projectState.state === "v0.9") {
+    return renderSetupRedirect(report, agentId, agentReport);
+  }
+
   const percentage = agentReport.score.percentage;
 
   if (percentage === 100) {

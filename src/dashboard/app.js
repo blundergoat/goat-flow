@@ -254,8 +254,9 @@ function app() {
       updateTitle();
       // Sync initial state (anti-FOUC script may have added 'dark' before Alpine)
       document.documentElement.classList.toggle("dark", this.darkMode);
-      this._loadSavedProjects();
-      if (this.projectsList.length > 0) this.scanAllProjects();
+      this._loadSavedProjects().then(() => {
+        if (this.projectsList.length > 0) this.scanAllProjects();
+      });
       if (location.protocol === "http:" || location.protocol === "https:") {
         this.runScan();
         this.checkTerminalAvailable();
@@ -450,11 +451,12 @@ function app() {
           `/api/projects/status?paths=${encodeURIComponent(this.newProjectPath)}`,
         );
         const data = await res.json();
-        if (data.projects?.[0]) {
+        const result = data.projects?.[0];
+        if (result) {
           const idx = this.projectsList.findIndex(
-            (p) => p.path === this.newProjectPath,
+            (p) => p.path === this.newProjectPath || p.path === result.path,
           );
-          if (idx >= 0) this.projectsList[idx] = data.projects[0];
+          if (idx >= 0) this.projectsList[idx] = result;
         }
       } catch {
         /* silent */
