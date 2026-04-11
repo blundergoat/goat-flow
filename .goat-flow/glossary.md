@@ -15,7 +15,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Doer-Verifier | The principle that the agent which wrote the code must not be the one that verifies it. | `workflow/skills/goat-test.md` | -- |
 | Enforcement Gradient | Three-layer enforcement stack: permissions deny (hardest) > hooks > CLAUDE.md rules (softest). | `workflow/hooks/README.md` | -- |
 | Evidence Standard | The requirement that every finding must include `file:line` references and be tagged OBSERVED or INFERRED. | `workflow/skills/reference/skill-preamble.md` | -- |
-| Execution Loop | The six-step agent workflow: READ, CLASSIFY, SCOPE, ACT, VERIFY, LOG. | `workflow/setup/reference/execution-loop.md` | Default loop |
+| Execution Loop | The four-step agent workflow: READ, SCOPE, ACT, VERIFY. | `workflow/setup/reference/execution-loop.md` | Default loop |
 | Footgun | A documented architectural trap with `file:line` evidence stored in category bucket files under `.goat-flow/footguns/`. | `workflow/setup/05-customise-to-project.md` | Architectural landmine |
 | Guide Mode | A scanner rendering mode that turns the CLI scanner into an interactive setup assistant. | `src/cli/render/guide.ts` | -- |
 | Handoff | Deprecated in v1.1.0. Replaced by milestone files with ticked checkboxes as the continuity mechanism. See Task Tracking in `.goat-flow/skill-preamble.md`. | `.goat-flow/skill-preamble.md` | -- |

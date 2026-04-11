@@ -94,7 +94,7 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - MUST tag evidence as OBSERVED or INFERRED
 - MUST include "What I Didn't Read" in every investigation report
 - MUST check recurrence against footguns + lessons
-- MUST NOT fabricate file paths or function names
+- Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
 
 ## Quick Output Format

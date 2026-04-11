@@ -85,7 +85,7 @@ Build the brief from whatever is available:
 When no skill fits because the request is straightforward implementation:
 1. Present gathered context that's relevant: Ask First boundaries, footgun matches, recent git
 2. State the scope: "Implementing [X]. Changing [files]. No skill needed."
-3. Proceed with READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
+3. Proceed with READ → SCOPE → ACT → VERIFY
 
 The gathered context becomes the SCOPE declaration for the execution loop.
 

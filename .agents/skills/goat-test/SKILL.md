@@ -8,7 +8,7 @@ goat-flow-skill-version: "1.1.0"
 ## Shared Conventions
 
 Read `.goat-flow/skill-preamble.md` for shared conventions.
-Also read `.goat-flow/skill-conventions.md`.
+On full-depth, also read `.goat-flow/skill-conventions.md`.
 If unavailable, use these essentials:
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - Evidence: every finding MUST include file or file:line, tag OBSERVED vs INFERRED
@@ -224,7 +224,7 @@ After a bug fix, identify what needs locking down.
 - MUST include time estimates for manual testing items
 - MUST include Verification Integrity section
 - MUST NOT generate test code — hand off to the coding agent
-- MUST NOT fabricate file paths or function names
+- Universal constraints from skill-preamble.md apply.
 - Audit mode: MUST include gap report with risk-of-gap ratings
 - Flow diagrams: MUST use action language not implementation language
 - Flow diagrams: MUST stay within 8-15 nodes, split if larger

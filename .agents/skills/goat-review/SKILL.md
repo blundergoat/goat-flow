@@ -82,9 +82,9 @@ For readability improvement. MUST NOT change behavior. Scan for: cryptic names, 
 
 - MUST review diff for issues, read full files for context
 - MUST NOT flag pre-existing issues as part of this change
-- MUST check each finding against `.goat-flow/footguns/` (MATCH/CLEAR)
+- MUST check each finding against `.goat-flow/footguns/` for matches. Omit footgun tags when no direct match is found.
 - MUST order findings by severity, not by file or discovery order
-- MUST NOT fabricate file paths or function names
+- Universal constraints from skill-preamble.md apply.
 - MUST NOT make file edits in review or audit mode unless user says "implement"
 - MUST attempt to disprove each finding (negative verification)
 - MUST group 3+ related findings as systemic patterns
@@ -99,7 +99,7 @@ TL;DR → findings by severity → what wasn't checked.
 ```markdown
 ## TL;DR  <!-- what was reviewed, found, matters most -->
 ## Findings
-### MUST Fix - **[title]** `file:line` [desc] | Footgun: MATCH/CLEAR | Evidence: OBSERVED/INFERRED
+### MUST Fix - **[title]** `file:line` [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED
 ### SHOULD Fix - **[title]** `file:line` [desc]
 ### MAY Fix - **[title]** `file:line` [desc]
 ## Pre-existing Issues | Breaking Changes | What's Good | What I Didn't Examine

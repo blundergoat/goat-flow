@@ -82,7 +82,7 @@ Compliance checks are opt-in. Only activate when the user explicitly mentions HI
 - MUST include attack scenario for Critical and High findings
 - MUST run dependency audit using project's package manager
 - MUST skip irrelevant categories based on threat model
-- MUST NOT fabricate file paths or function names
+- Universal constraints from skill-preamble.md apply.
 - MUST re-verify Critical and High findings before presenting
 - MUST classify every finding as CONFIRMED, PROBABLE, or THEORETICAL
 - MUST show data flow path for CONFIRMED findings

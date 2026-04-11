@@ -8,7 +8,7 @@ goat-flow-skill-version: "1.1.0"
 ## Shared Conventions
 
 Read `.goat-flow/skill-preamble.md` for shared conventions.
-Also read `.goat-flow/skill-conventions.md`.
+On full-depth, also read `.goat-flow/skill-conventions.md`.
 If unavailable, use these essentials:
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - Evidence: every finding MUST include file or file:line, tag OBSERVED vs INFERRED
@@ -218,7 +218,7 @@ Milestones are hypotheses, not commitments. When new information arrives:
 - MUST ensure each task is completable in a single coding session — split if not
 - MUST NOT create vague tasks ("set up backend", "make it work", "research options")
 - MUST NOT skip the testing gate between milestones
-- MUST NOT fabricate file paths or function names
+- Universal constraints from skill-preamble.md apply.
 - MUST NOT continue building on an invalidated assumption — update the plan first
 - Status tracking: update milestone file status field as work progresses
 

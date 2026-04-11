@@ -10,59 +10,25 @@ a) Project identity — 1-2 lines: project name, domain, core technology, primar
 
 b) Version header (v1.0 - YYYY-MM-DD)
 
-c) Default Execution Loop: READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG
-   When a goat-* skill is active, the skill's Step 0 satisfies READ/CLASSIFY/SCOPE. Resume the loop at ACT.
-   - READ: read relevant files first, never fabricate codebase facts
-     (include BAD/GOOD example)
-     Cross-doc: MUST read .goat-flow/footguns/ before modifying files
-     listed in the Ask First boundaries. Known traps prevent repeat mistakes.
-   - CLASSIFY: three signals before acting:
-     1. Intent: question (answer it) vs directive (act on it)
-     2. Complexity tiers: Hotfix (1-2 files) / Small Feature (compressed brief) /
-        Standard / System Change / Infrastructure.
-        No fixed read/turn caps. If reads exceed 3x your initial estimate,
-        re-classify before continuing.
-     3. Mode: Plan / Implement / Explain / Debug / Review
-   - SCOPE: declare before acting - files allowed to change, non-goals,
-     max blast radius. Expanding beyond scope = stop and re-scope
-   - ACT: behaviour per mode as a table. State declaration rule.
-     Mode-transition rule: "Switching to [NEW STATE] because [reason]."
-     Debug mode: "No fixes until human reviews diagnosis."
-     Anti-planning-loop rule. Anti-BDUF guard with BAD/GOOD example
-   - VERIFY: continuous test loop. Stop-the-line with two-level
-     escalation. Revert-and-rescope tactic.
-     Before presenting findings, re-read every `file:line` you plan to cite.
-     If you cannot re-read it, mark the claim UNVERIFIED.
-     **Rename sweep:** after any rename or move, grep for the old name across all files. Zero remaining = pass.
-     Plan tracking: if working from a plan/milestone file, tick each
-     checkbox (`- [x]`) as the task is completed - not at the end.
-     Recovery protocols: include 2-3 common failure patterns with fixes
-     (e.g., missing context → read X first, out-of-scope → name boundary
-     and redirect, conflicting instructions → flag and ask)
-   - LOG: MUST update when tripped (DoD gate #4). Use category bucket
-     files - do NOT append to a monolithic log and do NOT create one
-     file per incident forever.
-     Lessons: `.goat-flow/lessons/` category files.
-     Patterns: `.goat-flow/patterns.md`.
-     Footguns: `.goat-flow/footguns/` category files.
-     Decisions: `.goat-flow/decisions/`.
-     When-to-use table. Footgun propagation rule.
-     Context-based loading rules.
-     MECHANICAL TRIGGER (non-negotiable):
-     - VERIFY caught a failure in your code → `.goat-flow/lessons/` entry BEFORE DoD
-     - A reusable approach worked well → `.goat-flow/patterns.md` entry before closing
-     - Human corrected agent behaviour → `.goat-flow/lessons/` entry IMMEDIATELY
-     - Discovered architectural trap with file:line evidence → `.goat-flow/footguns/`
-     Skip = DoD gate #4 blocks completion. This is not optional.
-     Threshold for trigger #1: log when the failure has a non-obvious root
-     cause, the same mistake happened twice, or the impact crossed a boundary.
-     Don't log routine type errors, lint fixes, typos, or anything the
-     linter/compiler would have caught on the next run anyway.
-     Session logs: write a summary to `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md`
-     at the end of every significant session. Include: what happened, files changed,
-     decisions made, errors, learnings, next steps.
-     Dual-agent projects: learning loop files are shared. Read the
-     current file before appending to avoid duplicating entries.
+c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
+   When a goat-* skill is active, the skill's Step 0 satisfies READ/SCOPE. Resume at ACT.
+   - READ: gather evidence from relevant files before any claim. Never fabricate codebase facts.
+   - SCOPE: declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius.
+     This includes the old CLASSIFY signals (mode + complexity + intent) in a single step.
+   - ACT: behavior follows the chosen mode.
+     - Mode transitions must be explicit when they happen.
+     - Debug mode keeps the D2→D3 human-review gate.
+   - VERIFY: continuous test loop with escalation.
+     - Before presenting findings, re-read every `file:line` cited as evidence.
+     - If evidence cannot be re-read, mark it UNVERIFIED.
+     - **Rename sweep:** after any rename or move, grep old names across all files. Zero remaining references required.
+     - If a plan/milestone file is active, tick each `- [x]` task immediately as completed.
+     - DoD verification triggers are conditional, not a separate execution step:
+       - VERIFY caught a failure in your code → `.goat-flow/lessons/` entry
+       - Human corrected agent behaviour → `.goat-flow/lessons/` entry immediately
+       - Reusable approach worked (twice or crosses boundary) → `.goat-flow/patterns.md` entry
+       - Architectural trap with file:line evidence → `.goat-flow/footguns/` entry
+       Log only non-obvious root causes, repeated misses, or boundary-crossing impacts.
 
 d) Autonomy Tiers: Always / Ask First / Never
    - Never tier MUST include:

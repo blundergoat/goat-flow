@@ -25,8 +25,18 @@
 set -uo pipefail
 
 # --- JSON Input Parsing ------------------------------------------------------
-# The agent runtime pipes JSON on stdin with tool_name and tool_input fields.
-INPUT=$(cat)
+# Support direct argv for lightweight callers and stdin JSON payloads.
+INPUT=""
+SELF_TEST=0
+if [[ "${1:-}" == "--self-test" ]]; then
+  SELF_TEST=1
+  shift
+elif [[ -n "${1:-}" && "${1:-}" != "--self-test" ]]; then
+  INPUT="$1"
+else
+  # The agent runtime typically pipes JSON on stdin with `tool_name` and `tool_input`.
+  INPUT=$(cat)
+fi
 
 if command -v jq >/dev/null 2>&1; then
   COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "$INPUT")
@@ -35,6 +45,58 @@ else
   # Handle escaped quotes (\") inside the JSON string value
   COMMAND=$(echo "$INPUT" | sed -n 's/.*"command"\s*:\s*"\(.*\)".*/\1/p' | head -1 | sed 's/\\"/"/g')
   [[ -z "$COMMAND" ]] && COMMAND="$INPUT"
+fi
+
+# --- Self-test ---------------------------------------------------------------
+run_self_test() {
+  local failures=0
+
+  run_case() {
+    local name="$1"
+    local command="$2"
+    local expected="$3"
+    local status=0
+    local stdout_file
+    local stderr_file
+
+    stdout_file=$(mktemp)
+    stderr_file=$(mktemp)
+    "$0" "$command" >"$stdout_file" 2>"$stderr_file" || status=$?
+
+    if [[ "$status" -ne "$expected" ]]; then
+      failures=$((failures + 1))
+      echo "FAIL [${name}]: expected $expected, got $status"
+      if [[ -s "$stderr_file" ]]; then
+        sed -n '1,2p' "$stderr_file" >&2
+      fi
+    fi
+
+    rm -f "$stdout_file" "$stderr_file"
+  }
+
+  # Safe command should pass.
+  run_case "safe echo" "echo hello" 0
+  # Direct push branches should block (legacy + production/deploy).
+  run_case "direct push main" "git push origin main" 2
+  run_case "direct push master" "git push origin master" 2
+  run_case "direct push production" "git push origin production" 2
+  run_case "direct push deploy" "git push origin deploy" 2
+  # Unsafe rm command should still block.
+  run_case "rm unsafe" "rm -rf /" 2
+  # Safe-scoped rm command should pass.
+  run_case "rm scoped node_modules" "rm -rf ./node_modules" 0
+
+  if [[ "$failures" -ne 0 ]]; then
+    echo "FAIL: $failures self-test failures"
+    exit 1
+  fi
+
+  echo "PASS: deny-dangerous.sh self-test"
+  exit 0
+}
+
+if [[ "$SELF_TEST" -eq 1 ]]; then
+  run_self_test
 fi
 
 # --- Helper -------------------------------------------------------------------
@@ -74,7 +136,7 @@ check_segment() {
 
   # 3. Direct push to main/master (case-insensitive)
   local cmd_lower="${cmd,,}"
-  if [[ "$cmd_lower" =~ git[[:space:]]+push[[:space:]]+.*(main|master|production) ]]; then
+  if [[ "$cmd_lower" =~ git[[:space:]]+push[[:space:]]+.*(main|master|production|deploy) ]]; then
     block "Direct push to main/master/production. Push to a feature branch and open a PR."
   fi
 

@@ -8,7 +8,7 @@ goat-flow-skill-version: "1.1.0"
 ## Shared Conventions
 
 Read `.goat-flow/skill-preamble.md` for shared conventions.
-Also read `.goat-flow/skill-conventions.md`.
+On full-depth, also read `.goat-flow/skill-conventions.md`.
 If unavailable, use these essentials:
 - Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 - Evidence: every finding MUST include file or file:line, tag OBSERVED vs INFERRED
@@ -181,7 +181,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 - MUST tag low-confidence recommendations as Decision Debt with revisit triggers
 - MUST populate "What Wasn't Critiqued" with blind spot check — never leave empty
 - MUST preserve "what the artifact gets right" — this is not a negativity engine
-- MUST NOT fabricate file paths, function names, or artifact content
+- Universal constraints from skill-preamble.md apply.
 - MUST NOT auto-apply recommendations — human gate required
 - Sub-agent budget: max 5 tool calls per sub-agent in Phase 1, max 3 per cross-examination in Phase 3
 - Skill-chained: skip confirmation, still run footgun/lesson checks and rubric selection
