@@ -19,18 +19,35 @@ Read `01-system-overview.md` first if you haven't already.
 
 ---
 
+## Step 0 — Run the automated migration script
+
+Before doing anything manually, run the migration script. It handles most of the mechanical work:
+
+```bash
+# Dry-run first (safe, shows what would change):
+bash /path/to/goat-flow/scripts/migrate-to-1.1.sh /path/to/project
+
+# If the dry-run looks right, execute:
+bash /path/to/goat-flow/scripts/migrate-to-1.1.sh /path/to/project --execute
+```
+
+The script migrates docs/ surfaces to .goat-flow/, deletes stale skills, removes legacy task files, and backs up everything to `.goat-flow/_migrated-from-0.9/`. After running it, continue with Step 1 below to verify and finish the setup.
+
+---
+
 ## Step 1 — Confirm v0.9 state
 
 You're in the right place if the project has old skill names and no `.goat-flow/config.yaml`.
 
 - If `.goat-flow/config.yaml` exists with a version → use `upgrade-from-1.0.x.md` instead
 - If no goat-flow at all → use fresh setup (`agents/claude.md` etc.)
+- If you already ran the migration script (Step 0), verify the output and proceed to the fresh setup flow (`02-instruction-file.md`)
 
-**Verification:** List detected old skill directories. Confirm no config.yaml.
+**Verification:** List detected old skill directories. Confirm no config.yaml. If the migration script ran, check `.goat-flow/_migrated-from-0.9/` for backups.
 
 ---
 
-## Step 2 — Delete old skills
+## Step 2 — Delete old skills (skip if migration script already ran)
 
 Delete from ALL agent skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`):
 
