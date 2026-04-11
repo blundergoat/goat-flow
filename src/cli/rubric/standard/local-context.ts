@@ -98,13 +98,13 @@ export const localContextChecks: CheckDef[] = [
           name: "conventions.md exists",
           tier: "standard",
           category: "Local Instructions",
-          status: hasConventions ? "pass" : "fail",
+          status: hasConventions ? "pass" : "na",
           points: hasConventions ? 1 : 0,
-          maxPoints: 1,
+          maxPoints: hasConventions ? 1 : 0,
           confidence: "high",
           message: hasConventions
             ? "conventions.md found"
-            : "conventions.md not found - project needs a universal coding contract",
+            : "No conventions.md — acceptable if project has existing instruction files",
         };
       },
     },

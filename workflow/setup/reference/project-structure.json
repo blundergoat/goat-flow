@@ -9,8 +9,7 @@
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
-    ".goat-flow/patterns.md",
-    ".goat-flow/decisions/ADR-000-template.md"
+    ".goat-flow/patterns.md"
   ],
 
   "required_dirs": [
@@ -27,12 +26,7 @@
   },
 
   "optional_files": {
-    "_note": "Optional local instructions are a later optimisation pass, not base setup. Prefer existing project docs first; otherwise derive these files from observed codebase patterns rather than generic templates.",
-    ".goat-flow/coding-standards/conventions.md": "Optional universal project contract added after setup.",
-    ".goat-flow/coding-standards/backend.md": "Optional backend-specific conventions added after setup.",
-    ".goat-flow/coding-standards/frontend.md": "Optional frontend-specific conventions added after setup.",
-    ".goat-flow/coding-standards/security.md": "Optional project-local security rules added after setup.",
-    ".goat-flow/coding-standards/testing.md": "Optional project-local testing rules added after setup.",
+    "_note": "Optional files created when the project needs them, not during base setup.",
     ".copilotignore": "Excludes secret/sensitive paths from Copilot context.",
     ".cursorignore": "Excludes secret/sensitive paths from Cursor context.",
     ".geminiignore": "Excludes secret/sensitive paths from Gemini context."

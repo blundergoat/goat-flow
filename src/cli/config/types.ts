@@ -38,6 +38,10 @@ export interface GoatFlowConfig {
   userRole: "developer" | "investigator" | "tester";
   /** Opt-in skill usage telemetry (logs invocations to .goat-flow/logs/skill-usage.jsonl) */
   telemetry: boolean;
+  /** Declared gaps that persist across sessions (e.g., "zero Python tests"). Readable by skills during Step 0. */
+  knownGaps: string[];
+  /** Placeholder for per-project skill customisation (M18). */
+  skillOverrides: Record<string, unknown>;
 }
 
 /** A single validation warning or error found during config parsing. */

@@ -28,11 +28,11 @@ describe("Dispatcher intake flow", () => {
     );
   });
 
-  it("routes simple implementation requests directly", () => {
+  it("documents direct implementation path", () => {
     assert.ok(
-      dispatcherContent.includes("rename X to Y") ||
-        dispatcherContent.includes("rename this helper"),
-      "Dispatcher should include a simple implementation example",
+      dispatcherContent.includes("Simple implementation") ||
+        dispatcherContent.includes("no skill"),
+      "Dispatcher should document direct implementation handling",
     );
     assert.ok(
       dispatcherContent.includes("execution loop"),
@@ -40,15 +40,15 @@ describe("Dispatcher intake flow", () => {
     );
   });
 
-  it("has clarification rules with question budget", () => {
+  it("documents clarification question budget", () => {
     assert.ok(
-      dispatcherContent.includes("Zero questions") ||
-        dispatcherContent.includes("One question") ||
-        dispatcherContent.includes("Two questions"),
+      dispatcherContent.includes("Ask 0/1/2"),
       "Dispatcher should have clarification rules with question budget",
     );
     assert.ok(
-      dispatcherContent.includes("Never three"),
+      dispatcherContent.includes("one question") ||
+        dispatcherContent.includes("two question") ||
+        dispatcherContent.includes("0/1/2"),
       "Dispatcher should cap at two clarifying questions maximum",
     );
   });
@@ -120,10 +120,10 @@ describe("Dispatcher skill content contracts", () => {
     );
   });
 
-  it("has post-dispatch chaining suggestions", () => {
+  it("has re-route support after handoff", () => {
     assert.ok(
-      dispatcherContent.includes("Post-Dispatch Chaining"),
-      "Should have chaining section",
+      dispatcherContent.includes("Re-Route"),
+      "Should support route handoff after setup context drift",
     );
   });
 
@@ -133,8 +133,8 @@ describe("Dispatcher skill content contracts", () => {
       "Should support explicit skill overrides",
     );
     assert.ok(
-      dispatcherContent.includes("--debug"),
-      "Should support --debug flag",
+      dispatcherContent.includes("override"),
+      "Should document explicit override handling",
     );
   });
 

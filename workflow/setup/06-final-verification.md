@@ -36,16 +36,25 @@ For each backtick-wrapped path or hook path:
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
 - For auto-seeded footgun entries, spot-check that each cited `file:line` actually shows the described trap. If the line is unrelated (a closing brace, an import, a comment), fix the reference or remove the line number
 
-## Dual-homing check
+## Evidence verification
 
-Check for duplicate content surfaces — warn if both exist without one being a bridge to the other:
-- `docs/footguns.md` AND `.goat-flow/footguns/`
-- `docs/lessons.md` AND `.goat-flow/lessons/`
-- `docs/architecture.md` AND `.goat-flow/architecture.md`
-- `docs/code-map.md` AND `.goat-flow/code-map.md`
-- `docs/decisions/` AND `.goat-flow/decisions/`
+After generating footguns and the instruction file, re-verify the evidence:
 
-If dual-homing is found, the router table should point to one canonical location. Report which surface is canonical and which should be removed or converted to a bridge.
+1. **File:line citations:** For every `file:line` citation in generated footguns and in the instruction file's BAD/GOOD examples, re-read the cited line. If it doesn't show the described content, fix the citation or remove the line number. This catches auto-seeding errors where git history evidence doesn't match current code.
+
+2. **Ask First sync:** Compare the Ask First boundaries in the instruction file against the `ask_first:` entries in `.goat-flow/config.yaml`. They must list the same paths. If they differ, sync them.
+
+3. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
+
+## Duplicate surface check
+
+Fail if BOTH of these exist with independent content for the same artifact type:
+- `docs/footguns.md` AND `.goat-flow/footguns/` (with real entries, not a bridge)
+- `docs/lessons.md` AND `.goat-flow/lessons/` (with real entries)
+- `docs/architecture.md` AND `.goat-flow/architecture.md` (both with real content)
+- `docs/decisions/` AND `.goat-flow/decisions/` (both with real ADRs)
+
+If duplicates exist, pick the one with better content as canonical, set it in config.yaml, and remove or bridge the other. The router table must NOT point to BOTH old and new surfaces for the same artifact type.
 
 ## File manifest
 
@@ -72,12 +81,22 @@ Read the instruction file's Essential Commands section and verify the commands a
 
 Report any command you could not verify.
 
+## Gap report
+
+Before finalising, add a gap report to the setup session log:
+
+- **Areas not assessed:** [list any parts of the codebase that setup didn't read or analyse]
+- **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
+- **Things skipped:** [list anything setup chose not to do, with reason]
+
+For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun — do not create a footgun entry for missing tests. The gap report goes in the session log only.
+
 ## Shared setup session log
 
 Use one shared file: `.goat-flow/logs/sessions/YYYY-MM-DD-setup.md`
 
 - Earlier step markers stay in this file
-- Finalise it here with the scanner score, any fixes made, the file manifest summary, and remaining follow-ups
+- Finalise it here with the scanner score, any fixes made, the file manifest summary, the gap report, and remaining follow-ups
 - Record time and tokens using this format:
   - `**Time:** [elapsed] | **Tokens:** [count or unavailable]`
 

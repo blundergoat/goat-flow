@@ -40,17 +40,17 @@ Nice-to-haves, performance, docs, open source prep. Explicitly optional. Skip or
 - **Track assumptions, not just tasks.** Mark what's validated vs. what's assumed. These are not task checkboxes - they track whether your beliefs about the system are proven or still guesses.
 
 Good:
-- [x] NeMo VRAM stays under 14GB with both models loaded (benchmarked)
-- [ ] S3 presigned URLs work with our CORS setup (untested)
-- [x] sqlc generates correct types for JSONB columns (spike confirmed)
-- [ ] WebSocket reconnection logic handles mid-stream disconnects (assumed)
+- [x] External API supports pagination (verified in spike)
+- [ ] File upload endpoint handles multipart correctly (untested)
+- [x] Database migration runs without downtime (spike confirmed)
+- [ ] Rate limiting handles concurrent requests (assumed, not tested)
 
 Bad:
 - [x] Set up database (this is a task, not an assumption)
 
-- **Exit criteria must be testable.** Not "performance is acceptable" - instead "latency under 500ms at p95." Not "UI looks good" - instead "works on mobile viewport at 375px width."
+- **Exit criteria must be testable.** Not "performance is acceptable" — instead "latency under 500ms at p95." Not "UI looks good" — instead "works on mobile viewport at 375px width."
 
-- **Gotchas table per milestone.** List specific risks with concrete fallback plans. Not "something might go wrong with auth" - instead "OAuth token refresh fails silently after 1hr → add explicit refresh-on-401 with retry."
+- **Gotchas table per milestone.** List specific risks with concrete fallback plans. Not "something might go wrong" — instead "token refresh fails silently after 1hr → add explicit refresh-on-401 with retry."
 
 - **Each milestone must be independently demoable.** At the end of every milestone, you should be able to show someone what it does. If you can't demo it, it's not a milestone - it's a task inside a milestone.
 

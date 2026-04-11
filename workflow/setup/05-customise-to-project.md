@@ -4,11 +4,18 @@ Steps 02–04 created the structure. This step makes it useful. Stop following t
 
 This step should take the longest — it's doing real work, not copying templates.
 
-## Preserve existing docs/ surfaces
+## Preserve existing docs/ surfaces — bridge via config
 
-If the project already has `docs/architecture.md`, `docs/footguns.md`, `docs/lessons.md`, `docs/code-map.md`, or `docs/decisions/`, do NOT create duplicates in `.goat-flow/`. Instead: reference the existing surface from the router table and config.yaml. The existing content is likely higher quality than anything setup can generate.
+If existing documentation surfaces exist, use them as canonical and point config.yaml to them:
 
-If the user explicitly wants consolidation into `.goat-flow/`, migrate content (merge, don't overwrite), update all references including local CLAUDE.md files (e.g., `strands_agents/CLAUDE.md`), and delete the original. Check for inbound references (README, CI, external links) before deleting.
+- If `docs/footguns.md` exists → set `footguns: { path: "docs/footguns.md" }` in config.yaml. Do NOT create `.goat-flow/footguns/` with separate content.
+- If `docs/lessons.md` exists → set `lessons: { path: "docs/lessons.md" }` in config.yaml. Do NOT create `.goat-flow/lessons/` with separate content.
+- Same logic for: decisions, architecture, code-map
+- If the existing surface is a directory (e.g., `docs/decisions/`), set the path accordingly
+
+The instruction file's router table must point to the canonical path from config, not to BOTH old and new locations.
+
+If the user explicitly wants consolidation into `.goat-flow/`, migrate content (merge, don't overwrite), update all references, and delete the original. Check for inbound references (README, CI, external links) before deleting.
 
 ## Check compaction hooks for stale paths
 

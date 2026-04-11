@@ -38,23 +38,19 @@ If a code-review instruction file exists in the project's instruction surface (c
 
 ## Quick Review Path
 
-Read diff or named files. Present findings using severity ordering and footgun matching. Keep moving unless user interrupts.
-
-## Full Review Path
-
-**CHECKPOINT:** "I'll review [N] files about [area]. Focus on [concern]?"
+Read the diff quickly and present findings by severity; keep moving unless user interrupts.
 
 ### Severity-Ordered Scan
 
-Review the DIFF for issues. Read FULL FILES for context. Do not flag pre-existing issues.
+Read full files for context. Ignore pre-existing issues.
 
-1. **Security:** injection, auth bypass, secret exposure, permission escalation
-2. **Correctness:** logic errors, edge cases, null handling, race conditions
-3. **Integration:** API contract changes, cross-boundary effects, breaking changes
-4. **Performance:** O(n^2) in hot paths, unbounded queries, memory leaks
-5. **Style:** naming, formatting, convention violations (lowest priority)
+- Security: injection, auth bypass, secret exposure, permission escalation
+- Correctness: logic errors, edge cases, null/race errors
+- Integration: API contract changes, boundary effects, regressions
+- Performance: hot-path complexity and memory growth
+- Style: naming/formatting/conventions (lowest priority)
 
-**Cross-cutting:** footgun match each finding (`MATCH: [entry]` or `CLEAR`), check for pattern drift ("Intentional divergence?"), map downstream impact.
+**Cross-cutting:** check each finding against `.goat-flow/footguns/`; if a direct match exists, include it. Omit footgun tags when none match.
 
 **Negative verification:** For each finding, attempt to DISPROVE it. Re-read `file:line`, look for contradicting evidence. Remove false positives. Re-verify every `file:line` reference exists.
 
@@ -66,17 +62,9 @@ Review the DIFF for issues. Read FULL FILES for context. Do not flag pre-existin
 
 When target is a codebase area (not a diff). For >20 files, recommend splitting.
 
-Scan using severity ordering above. For each finding, run negative verification and fabrication self-check. Group 3+ findings sharing a root cause as systemic patterns. Report problems only -- do not propose fixes.
+Scan using severity ordering above. Run negative verification and group linked findings as systemic patterns. Propose findings only, no fixes.
 
-**BLOCKING GATE:** Present findings, then pause. If findings are contentious or severity ratings aren't confident, consider `/goat-sbao` to validate severity calibration.
-
-## Instruction Review Mode
-
-For reviewing instruction files (CLAUDE.md, project instruction surfaces, etc.). Gather signals from `git log`, `.goat-flow/lessons/`, `.goat-flow/footguns/`. Check for missing, misleading, stale, or outdated rules. Present proposals in a table for human approval. MUST NOT auto-edit instruction files.
-
-## Simplify Mode
-
-For readability improvement. MUST NOT change behavior. Scan for: cryptic names, code needing comments to explain intent, deep nesting (>3 levels), magic numbers, dead code. Present ordered by impact. If a rename crosses file boundaries or changes a public API, suggest reading the refactor planning template and following the blast radius analysis procedure before proceeding. Apply changes one file at a time only after human approval; grep for old names after each rename.
+**BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-sbao`.
 
 ## Constraints
 
@@ -89,10 +77,6 @@ For readability improvement. MUST NOT change behavior. Scan for: cryptic names, 
 - MUST attempt to disprove each finding (negative verification)
 - MUST group 3+ related findings as systemic patterns
 - Conversational: present findings, then let human drill in
-
-## Quick Output Format
-
-TL;DR → findings by severity → what wasn't checked.
 
 ## Output Format
 

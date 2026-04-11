@@ -84,19 +84,19 @@ Communication plan. Next steps. Approval & version history.
 
 
 
-## Mini Example - Bulk Report Export
+## Mini Example
 
-**Lean Hypothesis:** We believe that giving clinic admins a one-click bulk export will reduce manual data requests to the support team by ~60%.
+**Lean Hypothesis:** We believe that adding a webhook notification system will reduce manual status-check calls by ~60%.
 
-**Problem:** Admins manually request CSV exports via support tickets. Takes 2–3 days per request.
+**Problem:** Users manually poll for status updates. Wastes their time and adds unnecessary API load.
 
-**In scope:** CSV export, async job queue, email notification on completion.
+**In scope:** Webhook registration endpoint, event dispatch on status change, retry on delivery failure.
 
-**Anti-goals:** No Excel formatting, no scheduled/recurring exports, no per-row filtering UI.
+**Anti-goals:** No webhook management UI, no batched delivery, no custom payload transforms.
 
-**M1 Prove It Works:** Can we queue and process a 500-report export job under 30s without timing out?
+**M1 Prove It Works:** Can we dispatch a webhook on status change and get a 200 response from the target URL under 2s?
 
-**Acceptance is achieved when:** An admin can export 500 reports to CSV in under 30 seconds without a support ticket.
+**Acceptance is achieved when:** A registered webhook fires on every status change with retry on failure, no manual polling needed.
 
 ---
 

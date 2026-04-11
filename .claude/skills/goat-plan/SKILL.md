@@ -82,8 +82,8 @@ Structure the work into milestones using these archetypes. Adapt the count to th
 
 Good tasks:
 - `[ ] Add /api/export endpoint returning CSV for a single report`
-- `[ ] Spike: benchmark NeMo VRAM usage with both models loaded — target: under 14GB`
-- `[ ] Wire S3 presigned URL generation with 15-minute expiry`
+- `[ ] Spike: benchmark memory usage under load — target: under 2GB RSS`
+- `[ ] Add background task processor with 5-minute timeout and status tracking`
 
 Bad tasks:
 - `[ ] Set up the backend` — too vague, what specifically?
@@ -98,10 +98,10 @@ Assumptions are not tasks — they're beliefs about the system that affect the p
 
 ```markdown
 ## Assumptions
-- [x] NeMo VRAM stays under 14GB with both models loaded (benchmarked in M1)
-- [ ] S3 presigned URLs work with our CORS setup (untested)
-- [x] sqlc generates correct types for JSONB columns (spike confirmed in M1)
-- [ ] WebSocket reconnection handles mid-stream disconnects (assumed, not tested)
+- [x] Background job queue handles 500-item batches (benchmarked in M1)
+- [ ] File upload endpoint accepts multipart form data (untested)
+- [x] Database migration runs without downtime (spike confirmed in M1)
+- [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
 ```
 
 When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately — don't continue building on a false premise.
@@ -124,39 +124,38 @@ If the user prefers files or scope is Standard/System, write each milestone to `
 After approval, write each milestone to `.goat-flow/tasks/` as a separate file:
 
 **Filename format:** `M<NN>-<slug>.md`
-- `M01-prove-bulk-export.md`
+- `M01-prove-api-integration.md`
 - `M02-end-to-end-pipeline.md`
 - `M03-error-handling-and-security.md`
 
 **File format:**
 
 ```markdown
-# M01: Prove Bulk Export Works
+# M01: Prove API Integration Works
 
 **Status:** not-started | in-progress | testing-gate | complete | blocked | abandoned
-**Objective:** Validate that we can queue and process a 500-report export job under 30s.
+**Objective:** Validate that the external API returns the expected data format and meets latency targets.
 **Depends on:** none
-**Kill criteria:** If export processing exceeds 60s for 500 reports, abandon this approach.
+**Kill criteria:** If API response time exceeds 2s p95, abandon this integration approach.
 
 ## Assumptions
-- [ ] Background job queue can handle 500-item batches (untested)
-- [ ] CSV generation library handles unicode correctly (assumed)
+- [ ] External API supports pagination (untested)
+- [ ] Response schema matches our internal model (assumed from docs)
 
 ## Tasks
-- [ ] Add ExportJob model with status enum (queued/processing/complete/failed)
-- [ ] Spike: benchmark CSV generation for 500 reports — target: under 10s
-- [ ] Wire background job processor with 5-minute timeout
-- [ ] Add /api/exports endpoint (POST to queue, GET for status)
-- [ ] Add basic error handling (job failure → status:failed with reason)
+- [ ] Spike: call the API with real credentials and log response shape
+- [ ] Add integration client with retry logic and timeout
+- [ ] Add response validation against expected schema
+- [ ] Add error handling (API down → graceful fallback with cached data)
 
 ## Exit Criteria
-- [ ] 500-report export completes in under 30s in local dev
-- [ ] Failed jobs have a clear error message in the status response
-- [ ] Spike benchmark results documented
+- [ ] API call succeeds with real credentials in local dev
+- [ ] Response matches expected schema
+- [ ] Spike results documented
 
 ## Testing Gate
-**Automated:** `composer test -- --filter ExportJob`
-**Manual:** Trigger a 500-report export via API, verify CSV output, check job status endpoint
+**Automated:** Run integration tests filtered to the changed module
+**Manual:** Trigger the API call, verify response, check error handling path
 **Acceptance:** Developer self-check — demo to self before proceeding to M02
 ```
 

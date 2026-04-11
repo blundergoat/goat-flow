@@ -46,7 +46,7 @@ If `.claude/` and `CLAUDE.md` exist, leave them untouched. AGENTS.md MUST refere
 ### Adaptation notes
 
 - Ask First MUST use the explicit 5-item micro-checklist (Codex has weaker guardrails than Claude)
-- LOG MUST include dual-agent coordination if Claude files exist
+- Execution logs MUST include dual-agent coordination if CLAUDE.md exists
 
 ### Verification
 

@@ -11,8 +11,6 @@
 !patterns.md
 
 # Committed goat-flow directories
-!coding-standards/
-!coding-standards/**
 !decisions/
 !decisions/**
 !footguns/

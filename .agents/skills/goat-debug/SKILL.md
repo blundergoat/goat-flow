@@ -26,18 +26,12 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 
 ## Step 0 - Choose Depth
 
-> "Debugging [X] -- quick diagnosis, or full investigation with hypothesis table?"
+If depth is pre-decided, proceed. Otherwise confirm quick vs full, or auto-detect from available input.
+If vague, ask about: goal, symptom/error message, area involved.
 
-- If user says "quick" or "full", confirm and continue.
-- If arriving from the dispatcher with depth already chosen, skip the depth question.
-- If vague, ask one follow-up covering: goal, symptom/error, area involved.
-- If minimal info, auto-detect from error output, `git diff`, or named files and confirm.
-
-**Quick path:** Gather goal + symptom + area, diagnose, propose fix if wanted. No gates.
-**Full path:** Confirm goal + symptom + area + mode. Run complete workflow below.
+**Quick path:** diagnose and report; **full path:** run D1–D4.
 **Footgun check:** Read `.goat-flow/footguns/` and `.goat-flow/lessons/` for the target area. Surface matches.
 
----
 
 ## Diagnose Mode
 
@@ -58,10 +52,7 @@ Present: root cause + confidence (HIGH = reproduced, MEDIUM = traced, LOW = infe
 What changes (files + functions), blast radius, architecture check (`.goat-flow/architecture.md`), verification method. "Should I implement?" If yes --> implement, then D4.
 
 ### D4 - Post-Fix Verification
-
-Run the verification from D3. Check for regressions. Grep for old patterns after renames. **Two-corrections rule:** Corrected twice on same approach --> stop, rewind, ask for a different angle.
-
----
+Run D3 verification, check regressions, and grep for old patterns after renames.
 
 ## Investigate Mode
 
@@ -82,11 +73,8 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 **BLOCKING GATE:** Present report, pause. Human decides: go deeper, switch to diagnose, or close.
 
----
-
 ## Constraints
 
-<!-- FIXED: Do not adapt these -->
 - MUST write hypotheses AFTER initial read of the primary file
 - MUST include at least 2 hypothesis categories
 - MUST NOT propose fixes until human reviews diagnosis (D2 to D3 gate)
@@ -96,10 +84,6 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - MUST check recurrence against footguns + lessons
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
-
-## Quick Output Format
-
-TL;DR (root cause + confidence) → fix if approved.
 
 ## Output Format
 

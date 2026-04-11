@@ -1,15 +1,15 @@
-# Requirements: {Feature Name}
+# Requirements: [feature name]
 
 > For initial feature briefs before formal tracking, see `workflow/templates/feature-brief.md`.
 
-**Milestone:** {milestone reference}
-**Created:** {date}
-**Owner:** {who owns delivery of this feature}
+**Milestone:** [milestone reference]
+**Created:** [date]
+**Owner:** [owner]
 **Status:** draft | approved | implemented | verified
 
 ## Requirements
 
-### REQ-001: {Short title}
+### REQ-001: [short title]
 **Priority:** MUST | SHOULD | MAY
 **Description:** {What the system must do}
 **Acceptance Test:** {Binary pass/fail test - how to verify this requirement is met}

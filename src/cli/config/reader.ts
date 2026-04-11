@@ -56,6 +56,8 @@ export const CONFIG_DEFAULTS: GoatFlowConfig = {
   askFirst: [],
   userRole: "developer",
   telemetry: false,
+  knownGaps: [],
+  skillOverrides: {},
 };
 
 /** Clone the default config object so callers can mutate it safely. */
@@ -81,6 +83,8 @@ function cloneDefaults(): GoatFlowConfig {
     askFirst: CONFIG_DEFAULTS.askFirst.map((entry) => ({ ...entry })),
     userRole: CONFIG_DEFAULTS.userRole,
     telemetry: CONFIG_DEFAULTS.telemetry,
+    knownGaps: [...CONFIG_DEFAULTS.knownGaps],
+    skillOverrides: { ...CONFIG_DEFAULTS.skillOverrides },
   };
 }
 

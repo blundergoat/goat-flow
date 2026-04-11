@@ -27,6 +27,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 ## Step 0 - Choose Depth
 
 If depth is pre-decided, proceed. Otherwise confirm quick vs full, or auto-detect from available input.
+If vague, ask about: goal, symptom/error message, area involved.
 
 **Quick path:** diagnose and report; **full path:** run D1–D4.
 **Footgun check:** Read `.goat-flow/footguns/` and `.goat-flow/lessons/` for the target area. Surface matches.
