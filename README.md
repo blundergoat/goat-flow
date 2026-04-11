@@ -18,11 +18,9 @@ and pushes broken code. Next session, it makes the same mistake.
 
 ```
 READ    → Agent reads auth.ts, related tests, and known footguns
-CLASSIFY → Routes as "hotfix" — minimal ceremony
-SCOPE   → Declares: editing auth.ts only, running existing tests
+SCOPE   → Routes as "hotfix" — editing auth.ts only, running existing tests
 ACT     → Applies the fix in place
-VERIFY  → Runs linter + tests, catches a type error, fixes it
-LOG     → Records the footgun for future sessions
+VERIFY  → Runs linter + tests, catches a type error, fixes it, logs a footgun
 ```
 
 The agent follows the loop because it's built into the instruction file, enforced by hooks, and scored by the scanner.

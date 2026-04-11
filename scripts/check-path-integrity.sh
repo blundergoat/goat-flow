@@ -32,7 +32,7 @@ for agent_dir in ".claude/skills" ".agents/skills" ".github/skills"; do
     while IFS= read -r match; do
         file="${match%%:*}"
         err "${file}: contains framework-local workflow/ path (should use .goat-flow/ paths): ${match#*:}"
-    done < <(grep -rn 'workflow/' "${dir}"/goat-*/SKILL.md 2>/dev/null | grep -v '^\s*#' || true)
+    done < <(grep -rn 'workflow/' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | grep -v '^\s*#' || true)
 done
 
 # ── 2. .goat-flow/ paths in installed skills must resolve ───────────
@@ -45,7 +45,7 @@ for agent_dir in ".claude/skills" ".agents/skills" ".github/skills"; do
         if [[ "$clean" == .goat-flow/* ]] && [[ ! -e "${root}/${clean}" ]]; then
             err "Installed skill references missing path: ${clean}"
         fi
-    done < <(grep -rohE '\.goat-flow/[a-zA-Z0-9_./-]+' "${dir}"/goat-*/SKILL.md 2>/dev/null | sort -u || true)
+    done < <(grep -rohE '\.goat-flow/[a-zA-Z0-9_./-]+' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | sort -u || true)
 done
 
 # ── 3. Instruction file router table paths must exist ───────────────

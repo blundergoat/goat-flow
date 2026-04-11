@@ -357,10 +357,10 @@ export const foundationChecks: CheckDef[] = [
     detect: {
       type: "grep",
       path: "{instruction_file}",
-      pattern: "State:.*\\|.*Goal:|mode.*behaviour|Plan.*Implement.*Debug",
+      pattern: "\\*\\*ACT\\*\\*|State:.*\\|.*Goal:|mode.*behaviour|Plan.*Implement.*Debug|Execute the work",
     },
     recommendation:
-      "Without an ACT step, agents blur planning and implementation -- editing files while still exploring, or silently switching from debugging to refactoring. A state declaration (State/Goal/Exit) and mode table (Plan/Implement/Debug/Review) make the agent's current intent visible so you can catch mode drift before it causes damage.",
+      "Without an ACT step, agents blur planning and implementation -- editing files while still exploring, or silently switching from debugging to refactoring. The ACT step makes the agent's current intent visible.",
     recommendationKey: "add-act-step",
   },
   {

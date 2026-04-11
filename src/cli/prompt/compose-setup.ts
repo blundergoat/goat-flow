@@ -1216,7 +1216,7 @@ function renderSetupRedirect(
     "- **02-instruction-file.md** — Create or update the instruction file",
   );
   lines.push(
-    "- **03-install-skills.md** — Install the 6 verbatim skill templates",
+    "- **03-install-skills.md** — Install the 7 verbatim skill templates",
   );
   lines.push(
     "- **04-architecture-code-map.md** — Create architecture and code map docs",

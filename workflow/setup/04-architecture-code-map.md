@@ -49,7 +49,6 @@ Create these directories and files if they don't already exist:
 **Verification gate:**
 - [ ] `.goat-flow/architecture.md` exists with real content (not template fill)
 - [ ] `.goat-flow/code-map.md` exists
-- [ ] `.goat-flow/decisions/ADR-000-template.md` exists
 - [ ] `.goat-flow/decisions/`, `.goat-flow/tasks/`, `.goat-flow/logs/sessions/`, `.goat-flow/templates/` directories exist
 - [ ] `.goat-flow/templates/` contains copied template files
 - [ ] architecture.md mentions at least 2 real components by name

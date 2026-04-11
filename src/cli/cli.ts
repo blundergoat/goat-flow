@@ -87,7 +87,7 @@ const VALID_AGENTS: AgentId[] = ["claude", "codex", "gemini"];
 /** Banner text warning that multi-agent setup output must stay in sync */
 const MULTI_AGENT_SYNC_BANNER = [
   "**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop",
-  "(READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG), autonomy tiers, and Definition of Done",
+  "(READ → SCOPE → ACT → VERIFY), autonomy tiers, and Definition of Done",
   "MUST be identical across all instruction files. Write these sections for the first agent,",
   "then COPY THEM VERBATIM to the other instruction files. Do not rephrase.",
 ];
