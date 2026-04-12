@@ -1037,9 +1037,13 @@ label,
 .gf-loader-overlay {
   position: absolute;
   inset: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+.gf-hidden {
+  display: none !important;
 }
 .gf-prompt-hdr {
   display: flex !important;

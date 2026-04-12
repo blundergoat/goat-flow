@@ -184,9 +184,8 @@
 
           <!-- Generating state -->
           <div
-            x-show="critiqueLoading"
-            :style="critiqueLoading && 'display:flex'"
             class="gf-loader-overlay"
+            :class="!critiqueLoading && 'gf-hidden'"
           >
             <svg
               class="animate-spin"

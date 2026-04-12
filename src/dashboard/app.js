@@ -1001,6 +1001,7 @@ function app() {
     // -- Computed Properties --
     /** Selected audit scope for detail view */
     auditDetailScope: null,
+    auditDetailAgent: null,
     get currentScope() {
       if (!this.report?.scopes || !this.auditDetailScope) return null;
       return this.report.scopes[this.auditDetailScope] || null;

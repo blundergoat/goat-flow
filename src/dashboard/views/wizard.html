@@ -200,7 +200,7 @@
                   >
                     <span x-text="copied ? 'Copied' : 'Copy'"></span>
                   </button>
-                  <button @click="generateWizardSetup()" class="gf-btn-regen">
+                  <button @click="generateWizardSetup()" class="gf-btn gf-btn-md gf-btn-scan">
                     Regenerate
                   </button>
                 </div>
@@ -263,9 +263,8 @@
 
           <!-- Generating state -->
           <div
-            x-show="wizardGenerating"
-            :style="wizardGenerating && 'display:flex'"
             class="gf-loader-overlay"
+            :class="!wizardGenerating && 'gf-hidden'"
           >
             <svg
               class="animate-spin"

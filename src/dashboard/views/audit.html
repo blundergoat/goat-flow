@@ -70,118 +70,50 @@
       </button>
     </div>
 
-    <!-- Scope cards grid -->
-    <div
-      x-data="{ scopeNames: { setup: 'GOAT Flow Setup', harness: 'AI Harness Score' } }"
-      style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px"
+    <!-- GOAT Flow Setup card -->
+    <button
+      @click="auditDetailScope = (auditDetailScope === 'setup' ? null : 'setup'); auditDetailAgent = null"
+      class="gf-card"
+      style="
+        padding: 16px 24px;
+        cursor: pointer;
+        transition: border-color 0.1s;
+        width: 100%;
+        text-align: left;
+        margin-bottom: 12px;
+      "
+      :style="{ borderColor: auditDetailScope === 'setup' ? '#4ade80' : '' }"
     >
-      <template
-        x-for="scopeName in ['setup', 'harness']"
-        :key="scopeName"
-      >
-        <button
-          @click="auditDetailScope = (auditDetailScope === scopeName ? null : scopeName)"
-          class="gf-card"
-          style="
-            padding: 20px 24px;
-            cursor: pointer;
-            transition: border-color 0.1s;
-          "
-          :style="{ borderColor: auditDetailScope === scopeName ? '#4ade80' : '' }"
-        >
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              margin-bottom: 8px;
-            "
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <div>
+          <span class="gf-text-primary" style="font-size: 16px; font-weight: 600"
+            >GOAT Flow Setup</span
           >
-            <span
-              class="gf-text-primary"
-              style="font-size: 16px; font-weight: 600"
-              x-text="scopeNames[scopeName]"
-            ></span>
-            <!-- Setup: pass/fail badge -->
-            <span
-              x-show="scopeName === 'setup'"
-              style="
-                font-size: 13px;
-                font-weight: 600;
-                padding: 2px 8px;
-                border-radius: 4px;
-              "
-              :style="{
-                background: report?.scopes?.[scopeName]?.status === 'pass' ? '#14532d' : '#7f1d1d',
-                color: report?.scopes?.[scopeName]?.status === 'pass' ? '#4ade80' : '#f87171',
-              }"
-              x-text="report?.scopes?.[scopeName]?.status === 'pass' ? 'PASS' : 'FAIL'"
-            ></span>
-            <!-- Harness: percentage score -->
-            <span
-              x-show="scopeName === 'harness'"
-              style="font-size: 18px; font-weight: 700"
-              :style="{
-                color: (report?.scopes?.harness?.score ?? 0) >= 80 ? '#4ade80' :
-                       (report?.scopes?.harness?.score ?? 0) >= 60 ? '#fb923c' : '#f87171'
-              }"
-              x-text="`${report?.scopes?.harness?.score ?? 0}%`"
-            ></span>
-          </div>
-          <!-- Check count -->
-          <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
-            <span
-              class="gf-text-secondary"
-              x-text="`${(report?.scopes?.[scopeName]?.checks || []).filter(c => c.status === 'pass').length}/${(report?.scopes?.[scopeName]?.checks || []).length} checks passed`"
-            ></span>
-          </div>
-          <!-- Summary -->
-          <template
-            x-for="[key, value] in Object.entries(report?.scopes?.[scopeName]?.summary || {})"
-            :key="scopeName + '-' + key"
-          >
-            <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
-              <span style="text-transform: capitalize" x-text="key"></span>:
-              <span class="gf-text-secondary" x-text="value"></span>
-            </div>
-          </template>
-        </button>
-      </template>
-    </div>
-
-    <!-- Scope detail panel -->
-    <template x-if="auditDetailScope && report?.scopes?.[auditDetailScope]">
-      <div
-        style="
-          margin-top: 20px;
-          border-top: 0.5px solid #2a2a2e;
-          padding-top: 20px;
-        "
-      >
-        <!-- Scope header -->
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-          "
-        >
-          <div
-            class="gf-text-primary"
-            style="font-size: 18px; font-weight: 500"
-            x-text="{ setup: 'GOAT Flow Setup', harness: 'AI Harness Score' }[auditDetailScope] || auditDetailScope"
-          ></div>
-          <template x-if="lastAuditTime">
-            <span
-              class="gf-text-muted"
-              style="font-size: 12px"
-              x-text="'Last audited ' + formatTimeAgo(lastAuditTime)"
-            ></span>
-          </template>
+          <span
+            class="gf-text-secondary"
+            style="font-size: 12px; margin-left: 12px"
+            x-text="`${(report?.scopes?.setup?.checks || []).filter(c => c.status === 'pass').length}/${(report?.scopes?.setup?.checks || []).length} checks passed`"
+          ></span>
         </div>
+        <span
+          style="
+            font-size: 13px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+          "
+          :style="{
+            background: report?.scopes?.setup?.status === 'pass' ? '#14532d' : '#7f1d1d',
+            color: report?.scopes?.setup?.status === 'pass' ? '#4ade80' : '#f87171',
+          }"
+          x-text="report?.scopes?.setup?.status === 'pass' ? 'PASS' : 'FAIL'"
+        ></span>
+      </div>
+    </button>
 
-        <!-- Check results list -->
+    <!-- Setup detail panel -->
+    <template x-if="auditDetailScope === 'setup' && report?.scopes?.setup">
+      <div style="margin-bottom: 16px">
         <div
           class="gf-card"
           style="border-radius: 8px; padding: 16px 20px"
@@ -199,13 +131,13 @@
             <span
               class="gf-text-secondary"
               style="margin-left: 4px"
-              x-text="`(${(report.scopes[auditDetailScope].checks || []).filter(c => c.status === 'pass').length}/${(report.scopes[auditDetailScope].checks || []).length} passed)`"
+              x-text="`(${report.scopes.setup.checks.filter(c => c.status === 'pass').length}/${report.scopes.setup.checks.length} passed)`"
             ></span>
           </h3>
           <div style="display: flex; flex-direction: column; gap: 4px">
             <template
-              x-for="(check, idx) in (report.scopes[auditDetailScope].checks || [])"
-              :key="auditDetailScope + '-check-' + idx"
+              x-for="(check, idx) in report.scopes.setup.checks"
+              :key="'setup-check-' + idx"
             >
               <div
                 :style="{
@@ -214,60 +146,128 @@
                   marginBottom: check.failure ? '4px' : '0'
                 }"
               >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    font-size: 13px;
-                  "
-                >
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
                   <span
                     style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
                     :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
                     x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
                   ></span>
-                  <span
-                    class="gf-text-primary"
-                    style="font-weight: 500"
-                    x-text="check.name"
-                  ></span>
+                  <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
                 </div>
-                <!-- Failure details (inline) -->
                 <template x-if="check.failure">
                   <div style="margin-left: 22px">
-                    <p
-                      class="gf-text-muted"
-                      style="font-size: 12px; margin-top: 2px"
-                      x-text="check.failure.message"
-                    ></p>
+                    <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px" x-text="check.failure.message"></p>
                     <div
                       x-show="check.failure.howToFix"
                       class="gf-bg-elevated"
-                      style="
-                        margin-top: 8px;
-                        padding: 8px 12px;
-                        border-radius: 6px;
-                        font-size: 12px;
-                      "
+                      style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 12px"
                     >
-                      <div
-                        class="gf-text-muted"
-                        style="
-                          font-size: 10px;
-                          text-transform: uppercase;
-                          letter-spacing: 0.5px;
-                          margin-bottom: 4px;
-                          font-weight: 600;
-                        "
-                      >
-                        How to fix
-                      </div>
-                      <p
-                        class="gf-text-secondary"
-                        style="line-height: 1.5; margin: 0"
-                        x-text="check.failure.howToFix"
-                      ></p>
+                      <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">How to fix</div>
+                      <p class="gf-text-secondary" style="line-height: 1.5; margin: 0" x-text="check.failure.howToFix"></p>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Per-agent AI Harness Score cards -->
+    <div x-show="report?.agentScores?.length > 0" style="margin-bottom: 4px">
+      <div
+        class="gf-text-primary"
+        style="font-size: 16px; font-weight: 600; margin-bottom: 10px"
+      >
+        AI Harness Score
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px">
+        <template
+          x-for="agent in (report?.agentScores || [])"
+          :key="'audit-harness-' + agent.id"
+        >
+          <button
+            @click="auditDetailAgent = (auditDetailAgent === agent.id ? null : agent.id); auditDetailScope = null"
+            class="gf-card"
+            style="padding: 20px 24px; cursor: pointer; transition: border-color 0.1s"
+            :style="{ borderColor: auditDetailAgent === agent.id ? '#4ade80' : '' }"
+          >
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+              <span class="gf-text-primary" style="font-size: 16px; font-weight: 600" x-text="agent.name"></span>
+              <span
+                style="font-size: 18px; font-weight: 700"
+                :style="{
+                  color: (agent.harness.score ?? 0) >= 80 ? '#4ade80' :
+                         (agent.harness.score ?? 0) >= 60 ? '#fb923c' : '#f87171'
+                }"
+                x-text="`${agent.harness.score ?? 0}%`"
+              ></span>
+            </div>
+            <div class="gf-text-muted" style="font-size: 12px">
+              <span class="gf-text-secondary"
+                x-text="`${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"
+              ></span>
+            </div>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Agent harness detail panel -->
+    <template x-if="auditDetailAgent && report?.agentScores?.find(a => a.id === auditDetailAgent)">
+      <div
+        style="
+          margin-top: 16px;
+          border-top: 0.5px solid #2a2a2e;
+          padding-top: 16px;
+        "
+        x-data="{ get agent() { return report.agentScores.find(a => a.id === auditDetailAgent) } }"
+      >
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px">
+          <div class="gf-text-primary" style="font-size: 18px; font-weight: 500"
+            x-text="agent.name + ' - AI Harness'"></div>
+          <template x-if="lastAuditTime">
+            <span class="gf-text-muted" style="font-size: 12px"
+              x-text="'Last audited ' + formatTimeAgo(lastAuditTime)"></span>
+          </template>
+        </div>
+        <div class="gf-card" style="border-radius: 8px; padding: 16px 20px">
+          <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px">
+            Checks
+            <span class="gf-text-secondary" style="margin-left: 4px"
+              x-text="`(${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} passed)`"></span>
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <template
+              x-for="(check, idx) in agent.harness.checks"
+              :key="auditDetailAgent + '-check-' + idx"
+            >
+              <div
+                :style="{
+                  paddingBottom: check.failure ? '12px' : '4px',
+                  borderBottom: check.failure ? '0.5px solid #2a2a2e' : 'none',
+                  marginBottom: check.failure ? '4px' : '0'
+                }"
+              >
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+                  <span
+                    style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
+                    :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
+                    x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
+                  ></span>
+                  <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
+                </div>
+                <template x-if="check.failure">
+                  <div style="margin-left: 22px">
+                    <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px" x-text="check.failure.message"></p>
+                    <div
+                      x-show="check.failure.howToFix"
+                      class="gf-bg-elevated"
+                      style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 12px"
+                    >
+                      <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">How to fix</div>
+                      <p class="gf-text-secondary" style="line-height: 1.5; margin: 0" x-text="check.failure.howToFix"></p>
                     </div>
                   </div>
                 </template>
