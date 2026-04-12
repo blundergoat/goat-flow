@@ -68,6 +68,12 @@ export interface DashboardReport {
     string,
     {
       status: string;
+      checks: {
+        id: string;
+        name: string;
+        status: string;
+        failure?: { check: string; message: string; howToFix?: string };
+      }[];
       failures: { check: string; message: string; howToFix?: string }[];
       summary: Record<string, string>;
     }

@@ -17,6 +17,7 @@ import type {
   AuditReport,
   AuditScope,
   AuditScopeName,
+  CheckResult,
   ProjectStructure,
 } from "./types.js";
 
@@ -45,13 +46,17 @@ function parseProjectStructure(raw: Record<string, unknown>): ProjectStructure {
   };
 }
 
-/** Build a scope result from accumulated failures */
+/** Build a scope result from check results */
 function buildScope(
-  failures: AuditFailure[],
+  checks: CheckResult[],
   summary: Record<string, string>,
 ): AuditScope {
+  const failures = checks
+    .filter((c) => c.failure)
+    .map((c) => c.failure!);
   return {
     status: failures.length === 0 ? "pass" : "fail",
+    checks,
     failures,
     summary,
   };
@@ -188,22 +193,25 @@ export function runAudit(
   };
 
   // Run build checks grouped by scope
-  const scopeFailures: Record<AuditScopeName, AuditFailure[]> = {
+  const scopeChecks: Record<AuditScopeName, CheckResult[]> = {
     setup: [],
     project: [],
     integration: [],
   };
   for (const check of BUILD_CHECKS) {
     const failure = check.run(ctx);
-    if (failure) {
-      scopeFailures[check.scope].push(failure);
-    }
+    scopeChecks[check.scope].push({
+      id: check.id,
+      name: check.name,
+      status: failure ? "fail" : "pass",
+      failure: failure ?? undefined,
+    });
   }
 
   const scopes = {
-    setup: buildScope(scopeFailures.setup, setupSummary(ctx)),
-    project: buildScope(scopeFailures.project, projectSummary(ctx)),
-    integration: buildScope(scopeFailures.integration, integrationSummary(ctx)),
+    setup: buildScope(scopeChecks.setup, setupSummary(ctx)),
+    project: buildScope(scopeChecks.project, projectSummary(ctx)),
+    integration: buildScope(scopeChecks.integration, integrationSummary(ctx)),
   };
 
   const buildPassed =

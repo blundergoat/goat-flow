@@ -20,8 +20,16 @@ export interface AuditFailure {
   howToFix?: string;
 }
 
+export interface CheckResult {
+  id: string;
+  name: string;
+  status: "pass" | "fail";
+  failure?: AuditFailure;
+}
+
 export interface AuditScope {
   status: "pass" | "fail";
+  checks: CheckResult[];
   failures: AuditFailure[];
   summary: Record<string, string>;
 }
@@ -97,6 +105,7 @@ export type AuditScopeName = "setup" | "project" | "integration";
 /** A single build check that returns null on pass or a failure on fail */
 export interface BuildCheck {
   id: string;
+  name: string;
   scope: AuditScopeName;
   run: (ctx: AuditContext) => AuditFailure | null;
 }

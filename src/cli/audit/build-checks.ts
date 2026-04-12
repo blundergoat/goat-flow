@@ -12,6 +12,7 @@ import { RUBRIC_VERSION } from "../rubric/version.js";
 
 const requiredFilesExist: BuildCheck = {
   id: "required-files",
+  name: "Required files",
   scope: "setup",
   run: (ctx) => {
     const missing = ctx.structure.required_files.filter(
@@ -29,6 +30,7 @@ const requiredFilesExist: BuildCheck = {
 
 const requiredDirsExist: BuildCheck = {
   id: "required-dirs",
+  name: "Required directories",
   scope: "setup",
   run: (ctx) => {
     const missing = ctx.structure.required_dirs.filter((d) => {
@@ -47,6 +49,7 @@ const requiredDirsExist: BuildCheck = {
 
 const configExistsAndParses: BuildCheck = {
   id: "config-parses",
+  name: "Config file",
   scope: "setup",
   run: (ctx) => {
     if (!ctx.config.exists) {
@@ -70,6 +73,7 @@ const configExistsAndParses: BuildCheck = {
 
 const configVersionCurrent: BuildCheck = {
   id: "config-version",
+  name: "Config version",
   scope: "setup",
   run: (ctx) => {
     if (!ctx.config.exists) return null;
@@ -94,6 +98,7 @@ const configVersionCurrent: BuildCheck = {
 
 const agentsSupportedValues: BuildCheck = {
   id: "agents-supported",
+  name: "Configured agents",
   scope: "setup",
   run: (ctx) => {
     const configAgents = ctx.config.config.agents;
@@ -112,6 +117,7 @@ const agentsSupportedValues: BuildCheck = {
 
 const canonicalSkillsExist: BuildCheck = {
   id: "canonical-skills",
+  name: "Canonical skills",
   scope: "setup",
   run: (ctx) => {
     const canonical = ctx.structure.skills.canonical;
@@ -138,6 +144,7 @@ const canonicalSkillsExist: BuildCheck = {
 
 const skillVersionsPresent: BuildCheck = {
   id: "skill-versions",
+  name: "Skill versions",
   scope: "setup",
   run: (ctx) => {
     const noVersion: string[] = [];
@@ -161,6 +168,7 @@ const skillVersionsPresent: BuildCheck = {
 
 const instructionFilesExist: BuildCheck = {
   id: "instruction-files",
+  name: "Instruction files",
   scope: "setup",
   run: (ctx) => {
     const missing: string[] = [];
@@ -181,6 +189,7 @@ const instructionFilesExist: BuildCheck = {
 
 const noStaleSkillDirs: BuildCheck = {
   id: "stale-skill-dirs",
+  name: "No stale skill directories",
   scope: "setup",
   run: (ctx) => {
     const staleNames = new Set([
@@ -213,6 +222,7 @@ const noStaleSkillDirs: BuildCheck = {
 
 const noWorkflowPathLeaks: BuildCheck = {
   id: "workflow-path-leaks",
+  name: "Path integrity",
   scope: "setup",
   run: (ctx) => {
     const leaks: string[] = [];
@@ -241,6 +251,7 @@ const noWorkflowPathLeaks: BuildCheck = {
 
 const toolchainPresent: BuildCheck = {
   id: "toolchain-commands",
+  name: "Toolchain commands",
   scope: "project",
   run: (ctx) => {
     const tc = ctx.config.config.toolchain;
@@ -259,6 +270,7 @@ const toolchainPresent: BuildCheck = {
 
 const agentSettingsParse: BuildCheck = {
   id: "agent-settings-parse",
+  name: "Agent settings",
   scope: "project",
   run: (ctx) => {
     const invalid: string[] = [];
@@ -280,6 +292,7 @@ const agentSettingsParse: BuildCheck = {
 
 const hookFilesExist: BuildCheck = {
   id: "hook-files-exist",
+  name: "Hook files",
   scope: "integration",
   run: (ctx) => {
     const missing: string[] = [];
@@ -300,6 +313,7 @@ const hookFilesExist: BuildCheck = {
 
 const hookScriptsSyntaxValid: BuildCheck = {
   id: "hook-syntax",
+  name: "Hook syntax",
   scope: "integration",
   run: (ctx) => {
     const failures: string[] = [];
@@ -337,6 +351,7 @@ const hookScriptsSyntaxValid: BuildCheck = {
 
 const denyPatternsRegistered: BuildCheck = {
   id: "deny-patterns",
+  name: "Deny patterns",
   scope: "integration",
   run: (ctx) => {
     const noDeny: string[] = [];

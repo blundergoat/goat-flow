@@ -75,12 +75,6 @@ function app() {
     projectsSortAsc: true,
     newProjectPath: "",
 
-    // --- Rubrics state ---
-    rubricChecks: [],
-    antiPatterns: [],
-    rubricFilter: "all",
-    rubricSearch: "",
-
     // --- Critique state ---
     critiqueAgent: "claude",
     critiqueLoading: false,
@@ -593,22 +587,6 @@ function app() {
       });
     },
 
-    // -- Rubrics --
-    async loadRubrics() {
-      try {
-        const res = await fetch("/api/rubrics");
-        if (!res.ok) {
-          this.showToast(`Failed to load rubrics (${res.status})`, true);
-          return;
-        }
-        const data = await res.json();
-        this.rubricChecks = data.checks || [];
-        this.antiPatterns = data.antiPatterns || [];
-      } catch {
-        this.showToast("Failed to load rubrics", true);
-      }
-    },
-
     // -- Clipboard + Toast --
     copyText(text) {
       const el = document.createElement("textarea");
@@ -1065,31 +1043,6 @@ function app() {
       if (!this.report?.scopes || !this.auditDetailScope) return null;
       return this.report.scopes[this.auditDetailScope] || null;
     },
-    get filteredRubricChecks() {
-      return this.rubricChecks.filter((c) => {
-        if (this.rubricFilter !== "all" && c.tier !== this.rubricFilter)
-          return false;
-        if (
-          this.rubricSearch &&
-          !c.name.toLowerCase().includes(this.rubricSearch.toLowerCase()) &&
-          !c.id.includes(this.rubricSearch)
-        )
-          return false;
-        return true;
-      });
-    },
-    get filteredAntiPatterns() {
-      return this.antiPatterns.filter((ap) => {
-        if (
-          this.rubricSearch &&
-          !ap.name.toLowerCase().includes(this.rubricSearch.toLowerCase()) &&
-          !ap.id.includes(this.rubricSearch)
-        )
-          return false;
-        return true;
-      });
-    },
-
     // -- Helpers --
     gradeColor(grade) {
       return (

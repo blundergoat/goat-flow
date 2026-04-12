@@ -5,16 +5,16 @@
   style="height: calc(100vh - 5rem); overflow-y: auto"
 >
   <div style="max-width: 880px; margin: 0 auto; padding: 12px 28px 24px">
-    <!-- What to do next (issues found) - ABOVE banner -->
+    <!-- Action buttons (issues found) -->
     <div
-      x-show="report && !(report.agents.length > 0 && report.agents.every(a => a.score.grade === 'A'))"
+      x-show="report && report.status === 'fail'"
       x-cloak
       style="margin-bottom: 20px"
     >
       <div
         class="gf-text-primary"
         style="font-size: 20px; font-weight: 600; margin-bottom: 10px"
-        x-text="report?.agents?.length === 0 ? 'Welcome - get started with GOAT Flow' : (report?.agents?.[0]?.recommendations?.length || 0) + ' issues to fix'"
+        x-text="(() => { const fc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.failures?.length || 0), 0); return fc + ' issue' + (fc === 1 ? '' : 's') + ' to fix'; })()"
       ></div>
       <div
         style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px"
@@ -34,19 +34,8 @@
             class="gf-play-icon"
             style="color: #4ade80; border-color: #166534"
           >
-            <svg
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
-              />
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085" />
             </svg>
           </span>
           <div style="flex: 1; min-width: 0">
@@ -57,27 +46,11 @@
         <button
           @click="activeView = 'audit'"
           class="gf-action-btn"
-          style="
-            text-align: left;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          "
+          style="text-align: left; display: flex; align-items: center; gap: 10px"
         >
           <span class="gf-play-icon">
-            <svg
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-              />
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
             </svg>
           </span>
           <div style="flex: 1; min-width: 0">
@@ -88,27 +61,11 @@
         <button
           @click="activeView = 'workspace'"
           class="gf-action-btn"
-          style="
-            text-align: left;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          "
+          style="text-align: left; display: flex; align-items: center; gap: 10px"
         >
           <span class="gf-play-icon">
-            <svg
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </span>
           <div style="flex: 1; min-width: 0">
@@ -119,9 +76,9 @@
       </div>
     </div>
 
-    <!-- Suggested prompts (all passing) - ABOVE banner -->
+    <!-- Suggested prompts (all passing) -->
     <div
-      x-show="report && report.agents.length > 0 && report.agents.every(a => a.score.grade === 'A')"
+      x-show="report && report.status === 'pass'"
       x-cloak
       style="margin-bottom: 20px"
     >
@@ -141,23 +98,11 @@
           <button
             @click="launchPreset(p.prompt, activeRunner); workspacePanel = 'terminal'"
             class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
+            style="text-align: left; display: flex; align-items: center; gap: 10px"
           >
             <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
               </svg>
             </span>
             <div style="flex: 1; min-width: 0">
@@ -172,10 +117,8 @@
     <!-- Health banner -->
     <div
       x-show="report"
-      x-data="{ allPass: false }"
-      x-effect="allPass = report?.agents?.length > 0 && report?.agents?.every(a => a.score.grade === 'A')"
       class="gf-banner-row"
-      :class="allPass ? 'gf-banner-pass' : 'gf-banner-fail'"
+      :class="report?.status === 'pass' ? 'gf-banner-pass' : 'gf-banner-fail'"
     >
       <div
         class="gf-banner-icon"
@@ -189,28 +132,23 @@
           font-size: 14px;
           flex-shrink: 0;
         "
-        x-html="allPass ? '&#10003;' : '&#10005;'"
+        x-html="report?.status === 'pass' ? '&#10003;' : '&#10005;'"
       ></div>
       <div style="flex: 1; min-width: 0">
         <div
           class="gf-banner-title"
           style="font-size: 16px; font-weight: 600"
-          x-text="allPass ? 'All checks passing' : (report?.agents?.filter(a => a.score.grade !== 'A').length + ' agent(s) need attention')"
+          x-text="report?.status === 'pass' ? 'All checks passing' : 'Audit needs attention'"
         ></div>
         <div
           class="gf-banner-sub"
           style="font-size: 12px; margin-top: 1px"
-          x-text="(() => { const tc = (report?.agents || []).reduce((s, a) => s + a.checks.filter(c => !c.hidden && c.status !== 'na').length, 0); const ap = (report?.agents || []).reduce((s, a) => s + a.antiPatterns.filter(p => p.triggered).length, 0); return tc + ' checks across ' + (report?.agents?.length || 0) + ' agents - ' + ap + ' anti-patterns - ' + presets.length + ' presets installed'; })()"
+          x-text="(() => { const tc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.checks?.length || 0), 0); const fc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.failures?.length || 0), 0); return (tc - fc) + '/' + tc + ' checks passing across 3 scopes'; })()"
         ></div>
       </div>
       <div
         class="gf-banner-ts"
-        style="
-          font-size: 11px;
-          opacity: 0.7;
-          white-space: nowrap;
-          flex-shrink: 0;
-        "
+        style="font-size: 11px; opacity: 0.7; white-space: nowrap; flex-shrink: 0"
         x-text="lastAuditTime ? 'Audited ' + formatTimeAgo(lastAuditTime) : ''"
       ></div>
     </div>

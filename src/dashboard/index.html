@@ -92,18 +92,18 @@
               Home
             </button>
             <button
-              @click="activeView = 'audit'; auditDetailAgent = auditDetailAgent || report?.agents?.[0]?.agent || null; selectedAgent = auditDetailAgent"
+              @click="activeView = 'audit'"
               class="gf-nb"
               :class="activeView === 'audit' && 'gf-nb-active'"
             >
               Audit
             </button>
             <button
-              @click="activeView = 'rubrics'; loadRubrics()"
+              @click="activeView = 'critique'"
               class="gf-nb"
-              :class="activeView === 'rubrics' && 'gf-nb-active'"
+              :class="activeView === 'critique' && 'gf-nb-active'"
             >
-              Rubrics
+              Critique
             </button>
             <button
               @click="activeView = 'wizard'; detectStack()"
@@ -111,6 +111,13 @@
               :class="activeView === 'wizard' && 'gf-nb-active'"
             >
               Setup
+            </button>
+            <button
+              @click="activeView = 'projects'"
+              class="gf-nb"
+              :class="activeView === 'projects' && 'gf-nb-active'"
+            >
+              Projects
             </button>
             <button
               @click="activeView = 'workspace'"
@@ -131,20 +138,6 @@
                   background: #4ade80;
                 "
               ></span>
-            </button>
-            <button
-              @click="activeView = 'projects'"
-              class="gf-nb"
-              :class="activeView === 'projects' && 'gf-nb-active'"
-            >
-              Projects
-            </button>
-            <button
-              @click="activeView = 'critique'"
-              class="gf-nb"
-              :class="activeView === 'critique' && 'gf-nb-active'"
-            >
-              Critique
             </button>
           </div>
         </div>
@@ -273,7 +266,6 @@
         <!-- include: views/wizard.html -->
         <!-- include: views/home.html -->
         <!-- include: views/projects.html -->
-        <!-- include: views/rubrics.html -->
         <!-- include: views/help.html -->
       </main>
     </div>

@@ -840,38 +840,6 @@ export function serveDashboard(
       return true;
     }
 
-    /** Return all rubric checks and anti-pattern definitions. */
-    function handleRubricsRequest(url: URL, res: ServerResponse): boolean {
-      if (url.pathname !== "/api/rubrics") return false;
-
-      // Lazy import to avoid loading rubric definitions until needed
-      import("../rubric/registry.js")
-        .then(({ allChecks, allAntiPatterns }) => {
-          const checks = allChecks.map((c) => ({
-            id: c.id,
-            name: c.name,
-            tier: c.tier,
-            category: c.category,
-            pts: c.pts,
-            confidence: c.confidence,
-            recommendation: c.recommendation,
-          }));
-          const aps = allAntiPatterns.map((ap) => ({
-            id: ap.id,
-            name: ap.name,
-            deduction: ap.deduction,
-            recommendation: ap.recommendation,
-          }));
-          jsonResponse(res, 200, { checks, antiPatterns: aps });
-        })
-        .catch((err: unknown) => {
-          jsonResponse(res, 500, {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-      return true;
-    }
-
     /** Return terminal-backend health details for dashboard diagnostics. */
     async function handleHealthRequest(
       req: IncomingMessage,
@@ -1056,7 +1024,6 @@ export function serveDashboard(
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
         () => handleProjectsListRequest(req, url, res),
         () => Promise.resolve(handleProjectsStatusRequest(url, res)),
-        () => Promise.resolve(handleRubricsRequest(url, res)),
         () => handleTerminalCreateRequest(req, url, res),
         () => handleTerminalListRequest(req, url, res),
         () => handleTerminalSessionsRequest(req, url, res),

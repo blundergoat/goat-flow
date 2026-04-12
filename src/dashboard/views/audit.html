@@ -119,6 +119,13 @@
               x-text="report?.scopes?.[scopeName]?.status === 'pass' ? 'PASS' : 'FAIL'"
             ></span>
           </div>
+          <!-- Check count -->
+          <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
+            <span
+              class="gf-text-secondary"
+              x-text="`${(report?.scopes?.[scopeName]?.checks || []).filter(c => c.status === 'pass').length}/${(report?.scopes?.[scopeName]?.checks || []).length} checks passed`"
+            ></span>
+          </div>
           <!-- Summary -->
           <template
             x-for="[key, value] in Object.entries(report?.scopes?.[scopeName]?.summary || {})"
@@ -129,12 +136,6 @@
               <span class="gf-text-secondary" x-text="value"></span>
             </div>
           </template>
-          <!-- Failure count -->
-          <div
-            x-show="(report?.scopes?.[scopeName]?.failures || []).length > 0"
-            style="font-size: 12px; margin-top: 6px; color: #f87171"
-            x-text="`${(report?.scopes?.[scopeName]?.failures || []).length} failure${(report?.scopes?.[scopeName]?.failures || []).length === 1 ? '' : 's'}`"
-          ></div>
         </button>
       </template>
     </div>
@@ -175,11 +176,10 @@
           </template>
         </div>
 
-        <!-- Failures list -->
+        <!-- Check results list -->
         <div
-          x-show="(report.scopes[auditDetailScope].failures || []).length > 0"
           class="gf-card"
-          style="border-radius: 8px; padding: 16px 20px; margin-bottom: 16px"
+          style="border-radius: 8px; padding: 16px 20px"
         >
           <h3
             class="gf-text-muted"
@@ -190,45 +190,54 @@
               margin-bottom: 12px;
             "
           >
-            Failures
+            Checks
             <span
-              style="color: #f87171; margin-left: 4px"
-              x-text="`(${(report.scopes[auditDetailScope].failures || []).length})`"
+              class="gf-text-secondary"
+              style="margin-left: 4px"
+              x-text="`(${(report.scopes[auditDetailScope].checks || []).filter(c => c.status === 'pass').length}/${(report.scopes[auditDetailScope].checks || []).length} passed)`"
             ></span>
           </h3>
-          <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-direction: column; gap: 4px">
             <template
-              x-for="(failure, idx) in (report.scopes[auditDetailScope].failures || [])"
-              :key="auditDetailScope + '-fail-' + idx"
+              x-for="(check, idx) in (report.scopes[auditDetailScope].checks || [])"
+              :key="auditDetailScope + '-check-' + idx"
             >
               <div
-                style="padding-bottom: 10px; border-bottom: 0.5px solid #2a2a2e"
+                :style="{
+                  paddingBottom: check.failure ? '12px' : '4px',
+                  borderBottom: check.failure ? '0.5px solid #2a2a2e' : 'none',
+                  marginBottom: check.failure ? '4px' : '0'
+                }"
               >
                 <div
                   style="
                     display: flex;
-                    align-items: flex-start;
+                    align-items: center;
                     gap: 8px;
                     font-size: 13px;
                   "
                 >
-                  <span style="color: #f87171; flex-shrink: 0; font-weight: 600"
-                    >x</span
-                  >
-                  <div style="flex: 1; min-width: 0">
-                    <span
-                      class="gf-text-primary"
-                      style="font-weight: 500"
-                      x-text="failure.check"
-                    ></span>
+                  <span
+                    style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
+                    :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
+                    x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
+                  ></span>
+                  <span
+                    class="gf-text-primary"
+                    style="font-weight: 500"
+                    x-text="check.name"
+                  ></span>
+                </div>
+                <!-- Failure details (inline) -->
+                <template x-if="check.failure">
+                  <div style="margin-left: 22px">
                     <p
                       class="gf-text-muted"
                       style="font-size: 12px; margin-top: 2px"
-                      x-text="failure.message"
+                      x-text="check.failure.message"
                     ></p>
-                    <!-- How to fix -->
                     <div
-                      x-show="failure.howToFix"
+                      x-show="check.failure.howToFix"
                       class="gf-bg-elevated"
                       style="
                         margin-top: 8px;
@@ -252,48 +261,13 @@
                       <p
                         class="gf-text-secondary"
                         style="line-height: 1.5; margin: 0"
-                        x-text="failure.howToFix"
+                        x-text="check.failure.howToFix"
                       ></p>
                     </div>
                   </div>
-                </div>
+                </template>
               </div>
             </template>
-          </div>
-        </div>
-
-        <!-- All checks pass for this scope -->
-        <div
-          class="gf-card"
-          style="border-radius: 8px; padding: 16px 20px"
-          x-show="(report.scopes[auditDetailScope].failures || []).length === 0"
-        >
-          <div
-            style="
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 8px;
-              padding: 24px 0;
-            "
-          >
-            <div
-              class="gf-check-pass"
-              style="
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 16px;
-              "
-            >
-              &#10003;
-            </div>
-            <span style="font-size: 16px; font-weight: 600; color: #4ade80"
-              >All checks pass. Nothing to fix.</span
-            >
           </div>
         </div>
       </div>
