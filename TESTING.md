@@ -1,27 +1,36 @@
 # Testing
 
-The test suite was removed during the v1.1.0 restructure (scan → audit/critique command model). M23 rebuilds it for the new model.
-
-## Current state
-
-`npm test` runs but discovers 0 tests. Preflight warns on this. Once M23 ships, the test suite will cover:
-
-- Unit tests for config reader, classify-state, recommendations
-- Integration tests for `audit` (build + quality) and `critique`
-- Contract tests for cross-surface consistency (skill count, version, no-scan phrasing)
-- Smoke tests for CLI scripts and preflight
+The test suite uses Node's built-in test runner (`node:test` + `node:assert`). No external test framework.
 
 ## Running tests
 
 ```bash
-npm test                    # Run all tests (currently 0)
-npx tsc --noEmit            # Type-check without emitting
-npx eslint src/cli/         # Lint
-bash scripts/preflight-checks.sh  # Full preflight gate
+npm test                          # Run all tests
+npx tsc --noEmit                  # Type-check without emitting
+npx eslint src/cli/               # Lint
+bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the above)
 ```
 
-## Adding tests
+## Test structure
 
-Tests live in `test/` with subdirectories: `unit/`, `integration/`, `contract/`, `smoke/`, `fixtures/`.
+Tests live in `test/` with subdirectories:
 
-Use Node's built-in test runner (`node:test` + `node:assert`). No external test framework.
+- `unit/` — config reader, classify-state, CLI parsing, skill constants, rubric registry
+- `integration/` — audit (build + quality), audit on well-configured projects, critique with audit data
+- `contract/` — cross-surface consistency (skill count, version alignment, no-scan phrasing, JSON shape)
+- `fixtures/` — test data for isolated check evaluation
+
+## What the tests guard
+
+- Audit output has no scan references
+- Step 06 references audit (not scanner)
+- package.json version matches RUBRIC_VERSION
+- SKILL_NAMES matches project-structure.json canonical skills
+- Build check IDs are unique
+- Quality checks cover all 5 harness concerns
+- project-structure.json paths use .goat-flow/ prefix
+- Skill templates do not reference workflow/ in install sections
+- Build/quality checks produce correct results on healthy and broken projects
+- Config reader handles valid YAML, invalid YAML, and missing files
+- CLI parsing: audit is default, scan is rejected, removed flags rejected
+- Critique generates non-empty prompts with required sections

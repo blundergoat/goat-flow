@@ -2,7 +2,7 @@
 
 ## What It Is
 
-A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. The CLI scanner (`src/cli/`) validates implementations against the rubric.
+A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. The CLI auditor (`src/cli/`) validates implementations against the rubric.
 
 ## Major Components
 
@@ -16,8 +16,8 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Reference library | `workflow/reference/security/` | Security reference material used later for project-specific guidance |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI scanner | `src/cli/` | 79 scanner checks + 12 anti-patterns, fragment-based prompts, multi-agent scoring |
-| Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for home, scanner, settings, wizard, workspace |
+| CLI auditor | `src/cli/` | 79 rubric checks + 12 anti-patterns (internal scoring), 15 build + 15 quality checks (public audit), fragment-based prompts, multi-agent support |
+| Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for audit, critique, help, home, projects, rubrics, settings, wizard, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -42,18 +42,18 @@ src/cli/
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
-  scanner/            # Check evaluators (evaluate-check.ts, scan.ts, custom/)
-  rubric/             # Check definitions (foundation.ts, standard/, full.ts, anti-patterns.ts, registry.ts, version.ts)
+  scanner/            # Internal scoring engine (evaluate-check.ts, scan.ts)
+  rubric/             # Check definitions (foundation.ts, standard/, anti-patterns.ts, registry.ts, version.ts)
   scoring/            # Score computation (calculate.ts, recommendations.ts)
   prompt/             # Prompt generation (compose-setup.ts, template-filler.ts, registry.ts, fragments/)
   render/             # Output formatters (text.ts, html.ts, json.ts, markdown.ts, guide.ts, shared.ts)
   server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
-  telemetry/          # Scan logging (scan-logger.ts)
+  telemetry/          # Audit logging
 
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.js    # Preset configurations
-  views/              # Page views (home, scanner, settings, wizard, workspace)
+  views/              # Page views (audit, critique, help, home, projects, rubrics, settings, wizard, workspace)
 ```
 
 ## Key Constraints
@@ -69,4 +69,4 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- lo
 ## Deliberate Trade-offs
 
 - **Redundancy across docs** - The same concepts appear in multiple files (spec, layers, steps, rationale) for different audiences. This is intentional: each file serves a different reading path. The cost is maintenance burden on edits.
-- **CLI validates the methodology** - The scanner (`src/cli/`) scores projects against the rubric, confirming the workflow produces measurable results. The dashboard (`goat-flow dashboard .`) serves an HTML interface for scan results and guided setup.
+- **CLI validates the methodology** - The auditor (`src/cli/`) scores projects against the rubric, confirming the workflow produces measurable results. The dashboard (`goat-flow dashboard .`) serves an HTML interface for audit results and guided setup.

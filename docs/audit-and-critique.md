@@ -200,7 +200,7 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 ### When to use critique
 
 - After setup is complete and audit passes - "is this actually good?"
-- After significant changes - "did we break anything the scanner can't see?"
+- After significant changes - "did we break anything the auditor can't see?"
 - Periodically - "has the harness drifted?"
 - When onboarding - "does this make sense to a fresh agent?"
 

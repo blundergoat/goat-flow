@@ -1,5 +1,5 @@
 ---
-category: scanner
+category: auditor
 ---
 
 ## Footgun: Scanner reports enforcement features it didn't detect

@@ -13,7 +13,7 @@ Create or update `.goat-flow/footguns/` for this project.
 
 Use category bucket files, not one giant log and not one file per trap.
 Examples: `.goat-flow/footguns/hooks.md`, `.goat-flow/footguns/setup.md`,
-`.goat-flow/footguns/scanner.md`.
+`.goat-flow/footguns/auditor.md`.
 
 IF .goat-flow/footguns/ already exists:
   MERGE with it carefully. Keep existing confirmed entries unless newer

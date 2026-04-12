@@ -2,12 +2,12 @@
 
 ## Scope
 
-GOAT Flow is a documentation framework for AI coding agent workflows. It consists of Markdown docs, Bash scripts, and a local scanner CLI. There is no hosted service, no network calls, and no data collection.
+GOAT Flow is a documentation framework for AI coding agent workflows. It consists of Markdown docs, Bash scripts, and a local auditor CLI. There is no hosted service, no network calls, and no data collection.
 
 Security concerns here are primarily about:
 - Workflow recommendations that could lead to unsafe agent behaviour
 - Shell scripts that run locally on your machine
-- The scanner CLI, which runs locally -- no data leaves your machine
+- The auditor CLI, which runs locally -- no data leaves your machine
 
 ## Reporting a Vulnerability
 

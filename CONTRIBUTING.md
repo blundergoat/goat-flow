@@ -9,17 +9,17 @@ Requires Node.js 20+ and Bash.
 ```bash
 npm install          # install dependencies
 npm run build        # compile TypeScript (tsc)
-npm test             # run the full test suite (960+ tests, node:test)
+npm test             # run the test suite (node:test)
 npm run format       # auto-format with Prettier
 ```
 
-## Running the Scanner Locally
+## Running the Auditor Locally
 
-After building, scan the current project:
+After building, audit the current project:
 
 ```bash
-npm run scan                      # shorthand
-node dist/cli/cli.js scan .       # direct invocation (accepts any path)
+npm run audit                     # shorthand
+node dist/cli/cli.js audit .      # direct invocation (accepts any path)
 ```
 
 ## Running the Dashboard in Dev Mode
@@ -42,7 +42,7 @@ For shell scripts only: `shellcheck scripts/maintenance/*.sh`
 
 | Directory | What lives there |
 |-----------|-----------------|
-| `src/cli/` | CLI scanner, rubric checks (`rubric/`), stack detector (`detect/`), setup prompt generator |
+| `src/cli/` | CLI auditor, rubric checks (`rubric/`), stack detector (`detect/`), setup prompt generator |
 | `src/dashboard/` | Browser-based dashboard - HTML + Alpine.js + vanilla JS |
 | `workflow/` | Setup templates, skill templates, hooks, coding standards |
 | `.goat-flow/` | Project-specific config, architecture, decisions, footguns, lessons |
@@ -80,7 +80,7 @@ Stack detection lives in `src/cli/detect/project-stack.ts`. Add a new detection 
 
 - **Markdown** for documentation (target ~120-line files)
 - **Bash** for maintenance and validation scripts (`scripts/`)
-- **TypeScript** for the scanner CLI (`src/cli/`) and dashboard server
+- **TypeScript** for the CLI auditor (`src/cli/`) and dashboard server
 
 ## AI Assistance Disclosure
 

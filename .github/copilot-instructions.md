@@ -1,6 +1,6 @@
 # Copilot Instructions - GOAT Flow
 
-Documentation framework for AI coding agent workflows. Markdown docs + TypeScript CLI scanner.
+Documentation framework for AI coding agent workflows. Markdown docs + TypeScript CLI auditor.
 
 ## Essential Commands
 

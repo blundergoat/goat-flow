@@ -1,5 +1,5 @@
 ---
-category: scanner-and-rubric
+category: auditor-and-rubric
 ---
 
 ## Pattern: Scanner 100% does not mean the project is correct

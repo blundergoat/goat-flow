@@ -17,7 +17,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Evidence Standard | The requirement that every finding must include `file:line` references and be tagged OBSERVED or INFERRED. | `workflow/skills/reference/skill-preamble.md` | -- |
 | Execution Loop | The four-step agent workflow: READ, SCOPE, ACT, VERIFY. | `workflow/setup/reference/execution-loop.md` | Default loop |
 | Footgun | A documented architectural trap with `file:line` evidence stored in category bucket files under `.goat-flow/footguns/`. | `workflow/setup/05-customise-to-project.md` | Architectural landmine |
-| Guide Mode | A scanner rendering mode that turns the CLI scanner into an interactive setup assistant. | `src/cli/render/guide.ts` | -- |
+| Guide Mode | Deprecated. Was a rendering mode that turned the CLI into an interactive setup assistant. Replaced by the dashboard wizard. | `src/cli/render/guide.ts` (unused) | -- |
 | Handoff | Deprecated in v1.1.0. Replaced by milestone files with ticked checkboxes as the continuity mechanism. See Task Tracking in `.goat-flow/skill-preamble.md`. | `.goat-flow/skill-preamble.md` | -- |
 | Hot Path | Instruction content loaded every session (CLAUDE.md, local instruction files) with a strict line budget. | `workflow/setup/01-system-overview.md` | -- |
 | Instruction Budget | The practical limit (~100-150 instructions) an agent can follow reliably; exceeding it degrades all instructions uniformly. | `.goat-flow/decisions/ADR-029-instruction-budget-constraint.md` | Line budget |

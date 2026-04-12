@@ -149,17 +149,35 @@ const denyCoversSecrets: QualityCheck = {
   concern: "constraints",
   weight: 2,
   run: (ctx) => {
+    const covered: string[] = [];
+    const uncovered: string[] = [];
     for (const af of ctx.agents) {
       if (af.hooks.readDenyCoversSecrets) {
-        return pass([`${af.agent.id}: deny patterns cover secrets`]);
+        covered.push(af.agent.id);
+      } else {
+        uncovered.push(af.agent.id);
       }
     }
-    return partial(
-      30,
-      ["Deny patterns do not cover secret file reads"],
-      ["Add deny patterns for .env, credentials, and key files"],
-      ["Add deny patterns for .env, .credentials, *.key, and *.pem files in the agent's deny configuration."],
-    );
+    if (covered.length === 0) {
+      return partial(
+        30,
+        ["Deny patterns do not cover secret file reads"],
+        ["Add deny patterns for .env, credentials, and key files"],
+        ["Add deny patterns for .env, .credentials, *.key, and *.pem files in the agent's deny configuration."],
+      );
+    }
+    if (uncovered.length > 0) {
+      return partial(
+        60,
+        [
+          `${covered.join(", ")}: deny patterns cover secrets`,
+          `${uncovered.join(", ")}: deny patterns missing secret file coverage`,
+        ],
+        [`Add deny patterns for .env, credentials, and key files to ${uncovered.join(", ")}`],
+        [`Add deny patterns for .env, .credentials, *.key, and *.pem files to ${uncovered.join(", ")} agent configuration.`],
+      );
+    }
+    return pass([`${covered.join(", ")}: deny patterns cover secrets`]);
   },
 };
 
@@ -168,23 +186,32 @@ const denyBlocksDangerous: QualityCheck = {
   concern: "constraints",
   weight: 2,
   run: (ctx) => {
+    if (ctx.agents.length === 0) {
+      return fail(["No agents to check"], ["Configure at least one agent"]);
+    }
+    const findings: string[] = [];
+    const recs: string[] = [];
+    const fixes: string[] = [];
+    let allPass = true;
     for (const af of ctx.agents) {
       const { denyBlocksRmRf, denyBlocksForcePush, denyBlocksChmod } = af.hooks;
       if (denyBlocksRmRf && denyBlocksForcePush && denyBlocksChmod) {
-        return pass([`${af.agent.id}: deny blocks rm -rf, force-push, chmod`]);
+        findings.push(`${af.agent.id}: deny blocks rm -rf, force-push, chmod`);
+      } else {
+        allPass = false;
+        const missing: string[] = [];
+        if (!denyBlocksRmRf) missing.push("rm -rf");
+        if (!denyBlocksForcePush) missing.push("force-push");
+        if (!denyBlocksChmod) missing.push("chmod");
+        findings.push(`${af.agent.id}: deny missing coverage for ${missing.join(", ")}`);
+        recs.push(`Add deny patterns for ${missing.join(", ")} to ${af.agent.id}`);
+        fixes.push(`Add deny patterns for ${missing.join(", ")} in ${af.agent.id} agent configuration.`);
       }
-      const missing: string[] = [];
-      if (!denyBlocksRmRf) missing.push("rm -rf");
-      if (!denyBlocksForcePush) missing.push("force-push");
-      if (!denyBlocksChmod) missing.push("chmod");
-      return partial(
-        50,
-        [`${af.agent.id}: deny missing coverage for ${missing.join(", ")}`],
-        ["Expand deny patterns to cover all destructive commands"],
-        [`Add deny patterns for ${missing.join(", ")} in the agent's deny configuration.`],
-      );
     }
-    return fail(["No agents to check"], ["Configure at least one agent"]);
+    if (allPass) {
+      return pass(findings);
+    }
+    return partial(50, findings, recs, fixes);
   },
 };
 

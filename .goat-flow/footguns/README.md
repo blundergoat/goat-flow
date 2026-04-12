@@ -6,7 +6,7 @@ If the agent did something wrong → `.goat-flow/lessons/` instead.
 
 Every entry MUST include file path evidence. Line numbers are optional historical context - they rot and don't need updating.
 
-Prefer category bucket files such as `hooks.md`, `setup.md`, or `scanner.md` with file-level frontmatter:
+Prefer category bucket files such as `hooks.md`, `setup.md`, or `auditor.md` with file-level frontmatter:
 
 ```yaml
 ---

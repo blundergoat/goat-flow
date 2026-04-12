@@ -8,7 +8,7 @@
 
 Use **category bucket files** - one file per category with multiple entries inside.
 
-**Footguns:** `.goat-flow/footguns/<category>.md` (e.g., `hooks.md`, `scanner.md`, `setup.md`)
+**Footguns:** `.goat-flow/footguns/<category>.md` (e.g., `hooks.md`, `auditor.md`, `setup.md`)
 - Each entry: `## Footgun: <name>` with Status/Created/Evidence header line
 - New categories created only when no existing category fits
 - Split a bucket at ~200 lines or ~10 entries

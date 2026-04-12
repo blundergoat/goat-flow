@@ -3,7 +3,7 @@
 ## Project Identity
 
 Documentation framework for AI coding agent workflows. Two parts:
-- **TypeScript CLI** (`src/cli/`): scanner, scoring engine, prompt generator, eval parser
+- **TypeScript CLI** (`src/cli/`): auditor, scoring engine, prompt generator, eval parser
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
 - **Shell scripts** (`scripts/`): maintenance, preflight checks, deny policy
 
@@ -21,11 +21,10 @@ src/cli/
   config/             # Configuration (index.ts, reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
-  scanner/            # Check evaluators (evaluate-check.ts, scan.ts, custom/)
+  scanner/            # Check evaluators (evaluate-check.ts, scan.ts)
   rubric/             # Check definitions by tier:
     foundation.ts     #   Foundation tier checks
     standard/         #   Standard tier (skills.ts, hooks.ts, learning-loop.ts, router.ts, architecture.ts, local-context.ts, signals.ts, helpers, index.ts)
-    full.ts           #   Full tier checks
     anti-patterns.ts  #   Anti-pattern deductions
     registry.ts       #   Assembles all checks into canonical scan order
     version.ts        #   RUBRIC_VERSION and SCHEMA_VERSION
@@ -81,7 +80,7 @@ goat-flow critique . --agent claude      # Generate critique prompt
 - All types in `src/cli/types.ts`. Prompt-specific types in `src/cli/prompt/types.ts`.
 - RUBRIC_VERSION and SCHEMA_VERSION live in `src/cli/rubric/version.ts`. Package version reads from `package.json` at runtime.
 - RUBRIC_VERSION must be bumped when checks/points/detection logic change
-- `ReadonlyFS` interface for filesystem access -- scanner never writes to disk
+- `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
 - Zero runtime dependencies. Dev-only: typescript, tsx, @types/node
 
 ## DO
@@ -97,7 +96,7 @@ goat-flow critique . --agent claude      # Generate critique prompt
 
 ## DON'T
 
-- Don't add runtime dependencies (the scanner must stay zero-dep)
+- Don't add runtime dependencies (the auditor must stay zero-dep)
 - Don't use `console.log` outside `cli.ts` and `render/` (preflight warns)
 - Don't put types outside the two type files (types.ts, prompt/types.ts)
 - Don't hardcode version strings (import from version.ts)

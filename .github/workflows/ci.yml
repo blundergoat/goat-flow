@@ -29,9 +29,7 @@ jobs:
         run: npx tsc && cp -r src/dashboard dist/
 
       - name: Test
-        # NOTE: Test suite removed during v1.1.0 restructure. M23 rebuilds it.
-        # This glob currently matches 0 files — that's expected until M23 ships.
-        run: node --import tsx --test --test-reporter=spec test/*/*.test.ts || true
+        run: node --import tsx --test --test-reporter=spec test/*/*.test.ts
 
       - name: Lint
         run: npx eslint src/cli/

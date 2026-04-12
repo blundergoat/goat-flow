@@ -80,6 +80,6 @@ Template variables: `{{instructionFile}}`, `{{agentName}}`, `{{languages}}`, `{{
 ## File Organization
 
 - New check? Add `CheckDef` to the appropriate tier file in `rubric/`, add matching `Fragment` in `prompt/fragments/`
-- New detection type? Add to `DetectionType` union in `types.ts`, implement in `scanner/check-evaluator.ts`
+- New detection type? Add to `DetectionType` union in `types.ts`, implement in `scanner/evaluate-check.ts`
 - New fact? Add to `SharedFacts` or `AgentFacts` in `types.ts`, extract in `facts/shared.ts` or `facts/agent.ts`
 - New CLI command? Add to `Command` union and `COMMANDS` array in `cli.ts`

@@ -1,5 +1,5 @@
 # CLAUDE.md - v1.1.0 (2026-04-06)
-Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI scanner.
+Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 ## Essential Commands
 
 ```bash
@@ -49,7 +49,7 @@ GOOD: Inline format. Extract when second format needed
 
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD:
 - Lessons: `.goat-flow/lessons/` category bucket files (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content.
-- Footguns: `.goat-flow/footguns/` category bucket files (e.g. `hooks.md`, `scanner.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
+- Footguns: `.goat-flow/footguns/` category bucket files (e.g. `hooks.md`, `auditor.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with file:line evidence.
 
 | File | When to update |
 |------|---------------|
@@ -98,7 +98,7 @@ If working from a plan/milestone file, tick `- [x]` on each completed task immed
 | Resource | Path |
 |----------|------|
 | Architecture | `.goat-flow/architecture.md` |
-| CLI scanner/prompt code | `src/cli/` |
+| CLI auditor/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
 | Skills | `.claude/skills/` |
 | Templates | `.goat-flow/templates/` |
