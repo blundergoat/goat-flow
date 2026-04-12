@@ -625,6 +625,22 @@ label,
   background: var(--red-950);
   color: var(--red-400);
 }
+.gf-badge-pass {
+  background: var(--green-950);
+  color: var(--green-400);
+}
+.gf-badge-warn {
+  background: var(--amber-950);
+  color: var(--amber-400);
+}
+.gf-badge-info {
+  background: var(--indigo-950);
+  color: var(--indigo-400);
+}
+.gf-badge-muted {
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+}
 
 /* --- Progress bars --- */
 .gf-bar-track {
@@ -1141,6 +1157,22 @@ label,
 :root:not(.dark) .gf-badge-ap {
   background: var(--red-100);
   color: var(--red-700);
+}
+:root:not(.dark) .gf-badge-pass {
+  background: var(--green-100);
+  color: var(--green-700);
+}
+:root:not(.dark) .gf-badge-warn {
+  background: var(--amber-100);
+  color: var(--amber-700);
+}
+:root:not(.dark) .gf-badge-info {
+  background: var(--indigo-100);
+  color: var(--indigo-600);
+}
+:root:not(.dark) .gf-badge-muted {
+  background: var(--zinc-100);
+  color: var(--zinc-500);
 }
 
 /* Buttons */
