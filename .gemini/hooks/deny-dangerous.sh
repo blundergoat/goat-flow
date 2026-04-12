@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deny-dangerous.sh - PreToolUse hook: blocks dangerous commands before execution
+# deny-dangerous.sh - BeforeTool hook: blocks dangerous commands before execution
 # =============================================================================
-# Event:  PreToolUse (Claude), BeforeTool (Gemini)
+# Event:  BeforeTool (Gemini), PreToolUse (Claude)
 # Match:  Bash tool calls
 # Exit 0: allow the command
 # Exit 2: block the command (stderr message shown to the agent as the reason)
 #
-# Install (Claude): copy to .claude/hooks/deny-dangerous.sh
-# Register in .claude/settings.json:
-#   "PreToolUse": [{ "matcher": "Bash", "hooks": [{
+# Install (Gemini): copy to .gemini/hooks/deny-dangerous.sh
+# Register in .gemini/settings.json:
+#   "hooks": { "BeforeTool": [{ "matcher": "Bash", "hooks": [{
 #     "type": "command",
-#     "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh\""
-#   }]}]
+#     "command": "bash \"$(git rev-parse --show-toplevel)/.gemini/hooks/deny-dangerous.sh\""
+#   }]}]}
 #
 # Limitations:
 # - Best-effort pattern matching on literal shell commands
