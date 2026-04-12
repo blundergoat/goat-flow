@@ -32,6 +32,8 @@ export interface AuditScope {
   checks: CheckResult[];
   failures: AuditFailure[];
   summary: Record<string, string>;
+  /** Percentage score (0-100) for scored scopes like harness */
+  score?: number;
 }
 
 export interface AuditConcern {
@@ -55,8 +57,7 @@ export interface AuditReport {
   target: string;
   scopes: {
     setup: AuditScope;
-    project: AuditScope;
-    integration: AuditScope;
+    harness: AuditScope;
   };
   concerns: Record<AuditConcernKey, AuditConcern> | null;
   overall: {
@@ -100,7 +101,7 @@ export interface AuditContext {
   agentFilter: AgentId | null;
 }
 
-export type AuditScopeName = "setup" | "project" | "integration";
+export type AuditScopeName = "setup" | "harness";
 
 /** A single build check that returns null on pass or a failure on fail */
 export interface BuildCheck {

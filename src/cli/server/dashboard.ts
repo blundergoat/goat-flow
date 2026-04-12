@@ -213,9 +213,16 @@ export function serveDashboard(
      * The Home page needs per-agent scoring (scanner), the Audit detail
      * page needs scope-based results (auditor). This adapter produces
      * a single typed response covering both views. */
+    const AGENT_NAMES: Record<string, string> = {
+      claude: "Claude Code",
+      codex: "Codex",
+      gemini: "Gemini CLI",
+    };
+
     function buildDashboardReport(
       scanRpt: ScanReport,
       auditRpt: AuditReport,
+      perAgentAudits: { id: string; audit: AuditReport }[],
     ): DashboardReport {
       return {
         agents: scanRpt.agents.map((a) => ({
@@ -248,6 +255,11 @@ export function serveDashboard(
             message: r.message,
           })),
         })),
+        agentScores: perAgentAudits.map((pa) => ({
+          id: pa.id,
+          name: AGENT_NAMES[pa.id] || pa.id,
+          harness: pa.audit.scopes.harness,
+        })),
         status: auditRpt.status,
         scopes: auditRpt.scopes,
         overall: auditRpt.overall,
@@ -275,7 +287,29 @@ export function serveDashboard(
         const fs = createFS(projectPath);
         const scanRpt = scanProject(fs, projectPath, { agentFilter });
         const auditRpt = runAudit(fs, projectPath, { agentFilter, quality });
-        jsonResponse(res, 200, buildDashboardReport(scanRpt, auditRpt));
+
+        // Run per-agent audits for harness scores
+        const configAgents = auditRpt.scopes.setup.summary.skills
+          ? Array.from(VALID_AGENTS)
+          : [];
+        const perAgentAudits: { id: string; audit: AuditReport }[] = [];
+        for (const agentId of configAgents) {
+          try {
+            const agentAudit = runAudit(fs, projectPath, {
+              agentFilter: agentId as AgentId,
+              quality: false,
+            });
+            perAgentAudits.push({ id: agentId, audit: agentAudit });
+          } catch {
+            // Skip agents that fail to audit
+          }
+        }
+
+        jsonResponse(
+          res,
+          200,
+          buildDashboardReport(scanRpt, auditRpt, perAgentAudits),
+        );
       } catch (err) {
         jsonResponse(res, 500, {
           error: err instanceof Error ? err.message : String(err),

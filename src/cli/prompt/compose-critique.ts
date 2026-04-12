@@ -47,11 +47,15 @@ const AGENT_INSTRUCTION: Record<AgentId, string> = {
 
 function renderAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
-  const scopes = ["setup", "project", "integration"] as const;
-  for (const scope of scopes) {
+  const scopes = [
+    ["setup", "GOAT Flow Setup"],
+    ["harness", "AI Harness Score"],
+  ] as const;
+  for (const [scope, label] of scopes) {
     const s = report.scopes[scope];
     const status = s.status === "pass" ? "PASS" : "FAIL";
-    lines.push(`- **${scope}**: ${status}`);
+    const scoreStr = s.score != null ? ` (${s.score}%)` : "";
+    lines.push(`- **${label}**: ${status}${scoreStr}`);
     if (s.failures.length > 0) {
       for (const f of s.failures) {
         lines.push(`  - ${f.check}: ${f.message}`);

@@ -62,6 +62,23 @@ export interface DashboardAgentSummary {
 export interface DashboardReport {
   // Per-agent scoring — Home page agent cards, banner counts
   agents: DashboardAgentSummary[];
+  // Per-agent AI Harness Score — Home page agent cards
+  agentScores: {
+    id: string;
+    name: string;
+    harness: {
+      status: string;
+      checks: {
+        id: string;
+        name: string;
+        status: string;
+        failure?: { check: string; message: string; howToFix?: string };
+      }[];
+      failures: { check: string; message: string; howToFix?: string }[];
+      summary: Record<string, string>;
+      score?: number;
+    };
+  }[];
   // Scope-based audit — Audit detail view
   status: "pass" | "fail";
   scopes: Record<
@@ -76,6 +93,7 @@ export interface DashboardReport {
       }[];
       failures: { check: string; message: string; howToFix?: string }[];
       summary: Record<string, string>;
+      score?: number;
     }
   >;
   overall: {

@@ -20,7 +20,7 @@
       <button
         @click="runAudit()"
         :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-primary"
+        class="gf-btn gf-btn-md gf-btn-scan"
       >
         Audit
       </button>
@@ -64,7 +64,7 @@
       <button
         @click="runAudit()"
         :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-primary"
+        class="gf-btn gf-btn-md gf-btn-scan"
       >
         <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
       </button>
@@ -72,10 +72,11 @@
 
     <!-- Scope cards grid -->
     <div
-      style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px"
+      x-data="{ scopeNames: { setup: 'GOAT Flow Setup', harness: 'AI Harness Score' } }"
+      style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px"
     >
       <template
-        x-for="scopeName in ['setup', 'project', 'integration']"
+        x-for="scopeName in ['setup', 'harness']"
         :key="scopeName"
       >
         <button
@@ -98,14 +99,12 @@
           >
             <span
               class="gf-text-primary"
-              style="
-                font-size: 16px;
-                font-weight: 600;
-                text-transform: capitalize;
-              "
-              x-text="scopeName"
+              style="font-size: 16px; font-weight: 600"
+              x-text="scopeNames[scopeName]"
             ></span>
+            <!-- Setup: pass/fail badge -->
             <span
+              x-show="scopeName === 'setup'"
               style="
                 font-size: 13px;
                 font-weight: 600;
@@ -117,6 +116,16 @@
                 color: report?.scopes?.[scopeName]?.status === 'pass' ? '#4ade80' : '#f87171',
               }"
               x-text="report?.scopes?.[scopeName]?.status === 'pass' ? 'PASS' : 'FAIL'"
+            ></span>
+            <!-- Harness: percentage score -->
+            <span
+              x-show="scopeName === 'harness'"
+              style="font-size: 18px; font-weight: 700"
+              :style="{
+                color: (report?.scopes?.harness?.score ?? 0) >= 80 ? '#4ade80' :
+                       (report?.scopes?.harness?.score ?? 0) >= 60 ? '#fb923c' : '#f87171'
+              }"
+              x-text="`${report?.scopes?.harness?.score ?? 0}%`"
             ></span>
           </div>
           <!-- Check count -->
@@ -160,12 +169,8 @@
         >
           <div
             class="gf-text-primary"
-            style="
-              font-size: 18px;
-              font-weight: 500;
-              text-transform: capitalize;
-            "
-            x-text="auditDetailScope"
+            style="font-size: 18px; font-weight: 500"
+            x-text="{ setup: 'GOAT Flow Setup', harness: 'AI Harness Score' }[auditDetailScope] || auditDetailScope"
           ></div>
           <template x-if="lastAuditTime">
             <span

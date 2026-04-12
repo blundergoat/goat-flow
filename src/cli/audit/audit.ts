@@ -82,28 +82,24 @@ function setupSummary(ctx: AuditContext): Record<string, string> {
   };
 }
 
-/** Build summary details for the project scope */
-function projectSummary(ctx: AuditContext): Record<string, string> {
+/** Build summary details for the harness scope */
+function harnessSummary(ctx: AuditContext): Record<string, string> {
   const tc = ctx.config.config.toolchain;
   const parts: string[] = [];
   if (tc.test.length > 0) parts.push("test");
   if (tc.lint.length > 0) parts.push("lint");
   if (tc.build.length > 0) parts.push("build");
-  return {
-    toolchain:
-      parts.length > 0 ? parts.join(" + ") + " configured" : "none configured",
-  };
-}
 
-/** Build summary details for the integration scope */
-function integrationSummary(ctx: AuditContext): Record<string, string> {
   const hookInfo: string[] = [];
   for (const af of ctx.agents) {
     if (af.hooks.denyExists || af.hooks.denyIsConfigBased) {
       hookInfo.push(`${af.agent.id}:deny installed`);
     }
   }
+
   return {
+    toolchain:
+      parts.length > 0 ? parts.join(" + ") + " configured" : "none configured",
     hooks: hookInfo.length > 0 ? hookInfo.join(", ") : "none installed",
   };
 }
@@ -194,8 +190,7 @@ export function runAudit(
   // Run build checks grouped by scope
   const scopeChecks: Record<AuditScopeName, CheckResult[]> = {
     setup: [],
-    project: [],
-    integration: [],
+    harness: [],
   };
   for (const check of BUILD_CHECKS) {
     const failure = check.run(ctx);
@@ -207,16 +202,24 @@ export function runAudit(
     });
   }
 
-  const scopes = {
-    setup: buildScope(scopeChecks.setup, setupSummary(ctx)),
-    project: buildScope(scopeChecks.project, projectSummary(ctx)),
-    integration: buildScope(scopeChecks.integration, integrationSummary(ctx)),
-  };
+  const setupScope = buildScope(scopeChecks.setup, setupSummary(ctx));
+
+  const harnessScope = buildScope(
+    scopeChecks.harness,
+    harnessSummary(ctx),
+  );
+  // Compute percentage score for harness
+  const harnessTotal = harnessScope.checks.length;
+  const harnessPassed = harnessScope.checks.filter(
+    (c) => c.status === "pass",
+  ).length;
+  harnessScope.score =
+    harnessTotal > 0 ? Math.round((harnessPassed / harnessTotal) * 100) : 0;
+
+  const scopes = { setup: setupScope, harness: harnessScope };
 
   const buildPassed =
-    scopes.setup.status === "pass" &&
-    scopes.project.status === "pass" &&
-    scopes.integration.status === "pass";
+    scopes.setup.status === "pass" && scopes.harness.status === "pass";
 
   // Run quality checks only when requested
   let concerns: Record<AuditConcernKey, AuditConcern> | null = null;

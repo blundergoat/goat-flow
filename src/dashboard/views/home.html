@@ -143,7 +143,7 @@
         <div
           class="gf-banner-sub"
           style="font-size: 12px; margin-top: 1px"
-          x-text="(() => { const tc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.checks?.length || 0), 0); const fc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.failures?.length || 0), 0); return (tc - fc) + '/' + tc + ' checks passing across 3 scopes'; })()"
+          x-text="(() => { const tc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.checks?.length || 0), 0); const fc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.failures?.length || 0), 0); return (tc - fc) + '/' + tc + ' checks passing'; })()"
         ></div>
       </div>
       <div
@@ -170,13 +170,13 @@
       <button
         @click="runAudit()"
         :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-primary"
+        class="gf-btn gf-btn-md gf-btn-scan"
       >
         <span x-text="auditing ? 'Auditing...' : 'Run Audit'"></span>
       </button>
     </div>
 
-    <!-- Audit scope cards -->
+    <!-- Scope cards (matching Audit page layout) -->
     <div x-show="report" style="margin-bottom: 20px">
       <div
         style="
@@ -192,16 +192,17 @@
         <button
           @click="runAudit()"
           :disabled="auditing"
-          class="gf-btn gf-btn-md gf-btn-primary"
+          class="gf-btn gf-btn-md gf-btn-scan"
         >
           <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
         </button>
       </div>
       <div
-        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px"
+        x-data="{ scopeNames: { setup: 'GOAT Flow Setup', harness: 'AI Harness Score' } }"
+        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px"
       >
         <template
-          x-for="scopeName in ['setup', 'project', 'integration']"
+          x-for="scopeName in ['setup', 'harness']"
           :key="'home-' + scopeName"
         >
           <button
@@ -225,10 +226,12 @@
             >
               <span
                 class="gf-text-primary"
-                style="font-size: 16px; font-weight: 600; text-transform: capitalize"
-                x-text="scopeName"
+                style="font-size: 16px; font-weight: 600"
+                x-text="scopeNames[scopeName]"
               ></span>
+              <!-- Setup: pass/fail badge -->
               <span
+                x-show="scopeName === 'setup'"
                 style="
                   font-size: 13px;
                   font-weight: 600;
@@ -236,10 +239,20 @@
                   border-radius: 4px;
                 "
                 :style="{
-                  background: report?.scopes?.[scopeName]?.status === 'pass' ? '#14532d' : '#7f1d1d',
-                  color: report?.scopes?.[scopeName]?.status === 'pass' ? '#4ade80' : '#f87171',
+                  background: report?.scopes?.setup?.status === 'pass' ? '#14532d' : '#7f1d1d',
+                  color: report?.scopes?.setup?.status === 'pass' ? '#4ade80' : '#f87171',
                 }"
-                x-text="report?.scopes?.[scopeName]?.status === 'pass' ? 'PASS' : 'FAIL'"
+                x-text="report?.scopes?.setup?.status === 'pass' ? 'PASS' : 'FAIL'"
+              ></span>
+              <!-- Harness: percentage score -->
+              <span
+                x-show="scopeName === 'harness'"
+                style="font-size: 18px; font-weight: 700"
+                :style="{
+                  color: (report?.scopes?.harness?.score ?? 0) >= 80 ? '#4ade80' :
+                         (report?.scopes?.harness?.score ?? 0) >= 60 ? '#fb923c' : '#f87171'
+                }"
+                x-text="`${report?.scopes?.harness?.score ?? 0}%`"
               ></span>
             </div>
             <!-- Check count -->
@@ -327,7 +340,7 @@
                 <button
                   x-show="agent.installed && terminalAvailable"
                   @click="activeRunner = agent.id; launchInTerminal('', agent.id)"
-                  class="gf-btn gf-btn-sm gf-btn-primary"
+                  class="gf-btn gf-btn-sm gf-btn-scan"
                 >
                   Terminal
                 </button>

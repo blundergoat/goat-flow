@@ -247,12 +247,12 @@ const noWorkflowPathLeaks: BuildCheck = {
   },
 };
 
-// === Project scope checks ===
+// === Harness scope checks ===
 
 const toolchainPresent: BuildCheck = {
   id: "toolchain-commands",
   name: "Toolchain commands",
-  scope: "project",
+  scope: "harness",
   run: (ctx) => {
     const tc = ctx.config.config.toolchain;
     const missing: string[] = [];
@@ -271,7 +271,7 @@ const toolchainPresent: BuildCheck = {
 const agentSettingsParse: BuildCheck = {
   id: "agent-settings-parse",
   name: "Agent settings",
-  scope: "project",
+  scope: "harness",
   run: (ctx) => {
     const invalid: string[] = [];
     for (const af of ctx.agents) {
@@ -288,12 +288,10 @@ const agentSettingsParse: BuildCheck = {
   },
 };
 
-// === Integration scope checks ===
-
 const hookFilesExist: BuildCheck = {
   id: "hook-files-exist",
   name: "Hook files",
-  scope: "integration",
+  scope: "harness",
   run: (ctx) => {
     const missing: string[] = [];
     for (const af of ctx.agents) {
@@ -314,7 +312,7 @@ const hookFilesExist: BuildCheck = {
 const hookScriptsSyntaxValid: BuildCheck = {
   id: "hook-syntax",
   name: "Hook syntax",
-  scope: "integration",
+  scope: "harness",
   run: (ctx) => {
     const failures: string[] = [];
     for (const af of ctx.agents) {
@@ -352,7 +350,7 @@ const hookScriptsSyntaxValid: BuildCheck = {
 const denyPatternsRegistered: BuildCheck = {
   id: "deny-patterns",
   name: "Deny patterns",
-  scope: "integration",
+  scope: "harness",
   run: (ctx) => {
     const noDeny: string[] = [];
     for (const af of ctx.agents) {
@@ -383,10 +381,9 @@ export const BUILD_CHECKS: BuildCheck[] = [
   instructionFilesExist,
   noStaleSkillDirs,
   noWorkflowPathLeaks,
-  // project
+  // harness
   toolchainPresent,
   agentSettingsParse,
-  // integration
   hookFilesExist,
   hookScriptsSyntaxValid,
   denyPatternsRegistered,

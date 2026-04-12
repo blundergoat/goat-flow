@@ -463,7 +463,7 @@ describe("audit JSON contract", () => {
     assert.ok(["pass", "fail"].includes(report.status));
 
     // Scopes structure
-    for (const scope of ["setup", "project", "integration"] as const) {
+    for (const scope of ["setup", "harness"] as const) {
       const s = report.scopes[scope];
       assert.ok(
         ["pass", "fail"].includes(s.status),

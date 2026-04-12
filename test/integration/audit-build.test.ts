@@ -1,5 +1,5 @@
 /**
- * Integration tests for `goat-flow audit` build checks across all three scopes.
+ * Integration tests for `goat-flow audit` build checks across setup and harness scopes.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ import {
 } from "../fixtures/projects/index.js";
 
 // ---------------------------------------------------------------------------
-// All three scopes pass when project is well-configured
+// Both scopes pass when project is well-configured
 // ---------------------------------------------------------------------------
 describe("audit build: all scopes pass on healthy project", () => {
   it("no failures when all checks pass", () => {
@@ -58,9 +58,9 @@ describe("audit build: setup scope fails on missing instruction file", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Project scope: missing toolchain commands
+// Harness scope: missing toolchain commands
 // ---------------------------------------------------------------------------
-describe("audit build: project scope fails on missing toolchain", () => {
+describe("audit build: harness scope fails on missing toolchain", () => {
   it("toolchain-commands check fails when no commands configured", () => {
     const check = BUILD_CHECKS.find((c) => c.id === "toolchain-commands")!;
     const ctx = makeCtx({
@@ -70,7 +70,7 @@ describe("audit build: project scope fails on missing toolchain", () => {
     });
     const result = check.run(ctx);
     assert.notEqual(result, null, "Should fail when toolchain is empty");
-    assert.equal(check.scope, "project");
+    assert.equal(check.scope, "harness");
     assert.ok(
       result!.message.includes("test"),
       "Should mention missing test command",
@@ -80,9 +80,9 @@ describe("audit build: project scope fails on missing toolchain", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration scope: missing deny patterns
+// Harness scope: missing deny patterns
 // ---------------------------------------------------------------------------
-describe("audit build: integration scope fails on missing deny", () => {
+describe("audit build: harness scope fails on missing deny", () => {
   it("deny-patterns check fails when no deny configured", () => {
     const check = BUILD_CHECKS.find((c) => c.id === "deny-patterns")!;
     const ctx = makeCtx({
@@ -103,22 +103,18 @@ describe("audit build: integration scope fails on missing deny", () => {
     });
     const result = check.run(ctx);
     assert.notEqual(result, null, "Should fail when no deny patterns");
-    assert.equal(check.scope, "integration");
+    assert.equal(check.scope, "harness");
     assert.ok(result!.howToFix, "Should include howToFix");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Build checks cover all three scopes
+// Build checks cover both scopes
 // ---------------------------------------------------------------------------
 describe("audit build: scope coverage", () => {
-  it("build checks cover setup, project, and integration scopes", () => {
+  it("build checks cover setup and harness scopes", () => {
     const scopes = new Set(BUILD_CHECKS.map((c) => c.scope));
     assert.ok(scopes.has("setup"), "Should have setup scope checks");
-    assert.ok(scopes.has("project"), "Should have project scope checks");
-    assert.ok(
-      scopes.has("integration"),
-      "Should have integration scope checks",
-    );
+    assert.ok(scopes.has("harness"), "Should have harness scope checks");
   });
 });

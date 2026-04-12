@@ -78,14 +78,14 @@
           </div>
           <div style="display: flex; flex-direction: column; gap: 4px">
             <template
-              x-for="scopeName in ['setup', 'project', 'integration']"
+              x-for="scopeName in ['setup', 'harness']"
               :key="'critique-scope-' + scopeName"
             >
               <div class="gf-detect-row">
                 <span
                   class="gf-detect-label"
                   style="text-transform: capitalize"
-                  x-text="scopeName"
+                  x-text="{ setup: 'GOAT Flow Setup', harness: 'AI Harness Score' }[scopeName]"
                 ></span>
                 <span
                   style="font-size: 12px; font-weight: 600"
@@ -122,7 +122,7 @@
                   >
                     <span x-text="copied ? 'Copied' : 'Copy'"></span>
                   </button>
-                  <button @click="generateCritique()" class="gf-btn-regen">
+                  <button @click="generateCritique()" class="gf-btn gf-btn-md gf-btn-scan">
                     Regenerate
                   </button>
                 </div>

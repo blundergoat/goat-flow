@@ -57,11 +57,9 @@ export function renderAuditText(report: AuditReport): string {
   lines.push("");
 
   // Build scopes
-  lines.push(renderTextScope("setup", report.scopes.setup));
+  lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderTextScope("project", report.scopes.project));
-  lines.push("");
-  lines.push(renderTextScope("integration", report.scopes.integration));
+  lines.push(renderTextScope("AI Harness Score", report.scopes.harness));
   lines.push("");
 
   lines.push(`Result: ${statusBadge(report.status)}`);
@@ -138,11 +136,9 @@ export function renderAuditMarkdown(report: AuditReport): string {
   lines.push(`**Result: ${mdScopeStatus(report.status)}**`);
   lines.push("");
 
-  lines.push(renderMdScope("Setup", report.scopes.setup));
+  lines.push(renderMdScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderMdScope("Project", report.scopes.project));
-  lines.push("");
-  lines.push(renderMdScope("Integration", report.scopes.integration));
+  lines.push(renderMdScope("AI Harness Score", report.scopes.harness));
 
   if (report.concerns) {
     lines.push("");
