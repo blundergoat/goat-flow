@@ -91,9 +91,11 @@ The agent can only work with what it sees. Stale architecture docs, dead router 
 
 **What goat-flow checks:**
 - Instruction file line count vs configured target and hard limit (all configured agents)
+- Execution loop present — instruction file contains READ, SCOPE, ACT, VERIFY steps
 - Router table paths all resolve to real files
 - Footgun entries cite file:line evidence where cited files still exist
 - Architecture doc exists and has substantive content (10+ lines)
+- Architecture file paths resolve — backtick-quoted paths in architecture.md point to real files
 
 **Sources:**
 - Every source agrees context quality matters
@@ -111,6 +113,8 @@ Constraints are the cheapest, most reliable layer of the harness. They cost zero
 - Deny patterns cover secret file reads (per agent)
 - Deny patterns block rm -rf, force-push, chmod 777 (per agent)
 - Ask First boundaries configured (count > 0)
+- Linter registration — cross-references static analysis tools detected in package manifests against toolchain.lint config
+- Deny blocks pipe-to-shell — `curl | bash` pattern blocked (per agent)
 
 **Sources:**
 - OpenAI Codex team: custom linters with error messages that include remediation instructions
@@ -127,6 +131,9 @@ Verification loops are consistently reported as the single highest-impact harnes
 - Test command configured in config.yaml toolchain
 - Hook registrations and hook files are in sync (no orphans, no stale registrations)
 - Commit guidance exists in instruction file or project docs
+- Hook has validation — post-turn hook runs actual validation (lint, typecheck, shellcheck), not just `exit 0`
+- Hook honest failures — post-turn hook does not swallow failures with `|| true` (silent on success, loud on failure)
+- Lint command configured in config.yaml toolchain
 
 **Sources:**
 - Mitchell Hashimoto: "anytime you find an agent makes a mistake, you take the time to engineer a solution such that the agent never makes that mistake again"
@@ -143,6 +150,8 @@ Agents that run for minutes or hours need durable state. If the harness crashes 
 **What goat-flow checks:**
 - Milestone/task files exist in .goat-flow/tasks/ (count > 0)
 - Session logs exist in .goat-flow/logs/sessions/ (count > 0)
+- Compaction hook registered — re-injects current task context after window compression (per agent)
+- Milestone files have checkboxes — task files contain `- [ ]` / `- [x]` items for trackable progress
 
 **Sources:**
 - Anthropic: session durability and checkpoint-resume with external event log
@@ -159,6 +168,7 @@ A harness that never learns is a harness that keeps making the same mistakes. Th
 - Footgun entry count (3+ entries for full score)
 - Lesson entry count (3+ entries for full score)
 - Decision records exist (1+ files for full score)
+- Feedback recency — parses `**Created:**` dates from footgun/lesson entries, flags if none are within last 90 days
 
 **Sources:**
 - Mitchell Hashimoto: the core principle - "never make that mistake again"

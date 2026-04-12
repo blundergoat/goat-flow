@@ -312,7 +312,7 @@ function app() {
       this.toast = "";
       try {
         const res = await fetch(
-          `/api/audit?path=${encodeURIComponent(this.projectPath)}`,
+          `/api/audit?path=${encodeURIComponent(this.projectPath)}&quality=true`,
         );
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();

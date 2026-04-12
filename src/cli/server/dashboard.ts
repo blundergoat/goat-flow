@@ -259,6 +259,8 @@ export function serveDashboard(
           id: pa.id,
           name: AGENT_NAMES[pa.id] || pa.id,
           harness: pa.audit.scopes.harness,
+          concerns: pa.audit.concerns,
+          quality: pa.audit.overall,
         })),
         status: auditRpt.status,
         scopes: auditRpt.scopes,
@@ -297,7 +299,7 @@ export function serveDashboard(
           try {
             const agentAudit = runAudit(fs, projectPath, {
               agentFilter: agentId as AgentId,
-              quality: false,
+              quality,
             });
             perAgentAudits.push({ id: agentId, audit: agentAudit });
           } catch {

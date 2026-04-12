@@ -174,218 +174,221 @@
       </div>
     </template>
 
-    <!-- Per-agent AI Harness Score cards -->
-    <div x-show="report?.agentScores?.length > 0" style="margin-bottom: 4px">
+    <!-- Per-agent AI Harness cards -->
+    <div
+      x-show="report?.agentScores?.length > 0"
+      style="margin-bottom: 4px"
+      x-data="{
+        concernMeta: {
+          context:       { label: 'Context',       subtitle: 'Is the agent\'s map accurate and lean?' },
+          constraints:   { label: 'Constraints',   subtitle: 'Do deterministic rules catch failures before the LLM runs?' },
+          verification:  { label: 'Verification',  subtitle: 'Can the agent verify its own work honestly?' },
+          recovery:      { label: 'Recovery',      subtitle: 'Can the agent resume after crash or compaction?' },
+          feedback_loop: { label: 'Feedback Loop', subtitle: 'Is the harness getting smarter from failures?' }
+        },
+        concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
+        expandedConcern: null,
+        scoreColor(s) { return s >= 80 ? 'var(--green-400)' : s >= 60 ? 'var(--orange-400)' : 'var(--red-400)' },
+        barBg(s) { return s >= 80 ? 'var(--green-900)' : s >= 60 ? 'var(--amber-950)' : 'var(--red-950)' },
+        barFill(s) { return s >= 80 ? 'var(--green-600)' : s >= 60 ? 'var(--orange-700)' : 'var(--red-700)' },
+        gradeColor(g) { return g === 'A' ? 'var(--green-400)' : g === 'B' ? 'var(--green-500)' : g === 'C' ? 'var(--orange-400)' : g === 'D' ? 'var(--orange-400)' : 'var(--red-400)' },
+        hasIssues(concerns, key) { return concerns?.[key]?.recommendations?.length > 0 }
+      }"
+    >
       <div
         class="gf-text-primary"
         style="font-size: 16px; font-weight: 600; margin-bottom: 10px"
       >
-        AI Harness Score
+        AI Harness
       </div>
+
+      <!-- Agent cards with inline concern bars -->
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px">
         <template
           x-for="agent in (report?.agentScores || [])"
           :key="'audit-harness-' + agent.id"
         >
           <button
-            @click="auditDetailAgent = (auditDetailAgent === agent.id ? null : agent.id); auditDetailScope = null"
+            @click="auditDetailAgent = (auditDetailAgent === agent.id ? null : agent.id); auditDetailScope = null; expandedConcern = null"
             class="gf-card"
-            style="padding: 20px 24px; cursor: pointer; transition: border-color 0.1s"
-            :style="{ borderColor: auditDetailAgent === agent.id ? '#4ade80' : '' }"
+            style="padding: 16px 18px; cursor: pointer; transition: border-color 0.15s; text-align: left"
+            :style="{ borderColor: auditDetailAgent === agent.id ? 'var(--green-400)' : '' }"
           >
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
-              <span class="gf-text-primary" style="font-size: 16px; font-weight: 600" x-text="agent.name"></span>
-              <span
-                style="font-size: 18px; font-weight: 700"
-                :style="{
-                  color: (agent.harness.score ?? 0) >= 80 ? '#4ade80' :
-                         (agent.harness.score ?? 0) >= 60 ? '#fb923c' : '#f87171'
-                }"
-                x-text="`${agent.harness.score ?? 0}%`"
-              ></span>
+            <!-- Name + grade -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px">
+              <span class="gf-text-primary" style="font-size: 15px; font-weight: 600" x-text="agent.name"></span>
+              <div x-show="agent.quality?.grade" style="display: flex; align-items: baseline; gap: 4px">
+                <span style="font-size: 20px; font-weight: 700; letter-spacing: -1px"
+                  :style="{ color: gradeColor(agent.quality?.grade) }"
+                  x-text="agent.quality?.grade"></span>
+                <span class="gf-text-muted" style="font-size: 11px"
+                  x-text="`${agent.quality?.qualityScore}%`"></span>
+              </div>
             </div>
-            <div class="gf-text-muted" style="font-size: 12px">
-              <span class="gf-text-secondary"
-                x-text="`${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"
-              ></span>
-            </div>
-          </button>
-        </template>
-      </div>
-    </div>
-
-    <!-- Agent harness detail panel -->
-    <template x-if="auditDetailAgent && report?.agentScores?.find(a => a.id === auditDetailAgent)">
-      <div
-        style="
-          margin-top: 16px;
-          border-top: 0.5px solid #2a2a2e;
-          padding-top: 16px;
-        "
-        x-data="{ get agent() { return report.agentScores.find(a => a.id === auditDetailAgent) } }"
-      >
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px">
-          <div class="gf-text-primary" style="font-size: 18px; font-weight: 500"
-            x-text="agent.name + ' - AI Harness'"></div>
-          <template x-if="lastAuditTime">
-            <span class="gf-text-muted" style="font-size: 12px"
-              x-text="'Last audited ' + formatTimeAgo(lastAuditTime)"></span>
-          </template>
-        </div>
-        <div class="gf-card" style="border-radius: 8px; padding: 16px 20px">
-          <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px">
-            Checks
-            <span class="gf-text-secondary" style="margin-left: 4px"
-              x-text="`(${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} passed)`"></span>
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: 4px">
-            <template
-              x-for="(check, idx) in agent.harness.checks"
-              :key="auditDetailAgent + '-check-' + idx"
-            >
-              <div
-                :style="{
-                  paddingBottom: check.failure ? '12px' : '4px',
-                  borderBottom: check.failure ? '0.5px solid #2a2a2e' : 'none',
-                  marginBottom: check.failure ? '4px' : '0'
-                }"
-              >
-                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
-                  <span
-                    style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
-                    :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
-                    x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
-                  ></span>
-                  <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
-                </div>
-                <template x-if="check.failure">
-                  <div style="margin-left: 22px">
-                    <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px" x-text="check.failure.message"></p>
-                    <div
-                      x-show="check.failure.howToFix"
-                      class="gf-bg-elevated"
-                      style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 12px"
-                    >
-                      <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">How to fix</div>
-                      <p class="gf-text-secondary" style="line-height: 1.5; margin: 0" x-text="check.failure.howToFix"></p>
+            <!-- Check summary -->
+            <div class="gf-text-muted" style="font-size: 11px; margin-bottom: 10px"
+              x-text="agent.concerns
+                ? (() => { const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All 26 checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : '') + ' across 26 checks'; })()
+                : `${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"></div>
+            <!-- Concern mini-bars (click a row to expand that concern in the detail panel) -->
+            <template x-if="agent.concerns">
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <template x-for="ck in concernKeys" :key="agent.id + '-bar-' + ck">
+                  <div
+                    @click.stop="auditDetailAgent = agent.id; auditDetailScope = null; expandedConcern = (expandedConcern === agent.id + '-' + ck ? null : agent.id + '-' + ck)"
+                    style="display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; border-radius: 3px; transition: opacity 0.1s"
+                    :style="{ opacity: expandedConcern === agent.id + '-' + ck ? '1' : '0.8' }"
+                    @mouseenter="$el.style.opacity = '1'"
+                    @mouseleave="$el.style.opacity = expandedConcern === agent.id + '-' + ck ? '1' : '0.8'"
+                  >
+                    <span class="gf-text-muted" style="font-size: 10px; width: 62px; flex-shrink: 0; text-align: right"
+                      x-text="concernMeta[ck].label"></span>
+                    <div style="flex: 1; height: 4px; border-radius: 2px; overflow: hidden"
+                      :style="{ background: barBg(agent.concerns[ck].score) }">
+                      <div style="height: 100%; border-radius: 2px; transition: width 0.3s ease"
+                        :style="{
+                          width: agent.concerns[ck].score + '%',
+                          background: barFill(agent.concerns[ck].score)
+                        }"></div>
                     </div>
+                    <span style="font-size: 10px; font-weight: 600; width: 28px; text-align: right"
+                      :style="{ color: scoreColor(agent.concerns[ck].score) }"
+                      x-text="`${agent.concerns[ck].score}%`"></span>
                   </div>
                 </template>
               </div>
             </template>
-          </div>
-        </div>
+          </button>
+        </template>
       </div>
-    </template>
 
-    <!-- Quality concerns (shown when quality mode is used) -->
-    <template x-if="report?.concerns">
-      <div
-        style="
-          margin-top: 20px;
-          border-top: 0.5px solid #2a2a2e;
-          padding-top: 20px;
-        "
-      >
-        <h3
-          class="gf-text-primary"
-          style="font-size: 18px; font-weight: 500; margin-bottom: 16px"
-        >
-          Quality
-          <span
-            x-show="report.overall?.grade"
-            class="gf-text-secondary"
-            style="font-size: 14px; font-weight: 400; margin-left: 8px"
-            x-text="`${report.overall.grade} (${report.overall.qualityScore}%)`"
-          ></span>
-        </h3>
-
-        <div style="display: flex; flex-direction: column; gap: 12px">
-          <template
-            x-for="concernKey in ['context', 'constraints', 'verification', 'recovery', 'feedback_loop']"
-            :key="concernKey"
-          >
-            <div class="gf-card" style="border-radius: 8px; padding: 14px 18px">
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  justify-content: space-between;
-                  margin-bottom: 8px;
-                "
-              >
-                <span
-                  class="gf-text-primary"
-                  style="
-                    font-size: 14px;
-                    font-weight: 500;
-                    text-transform: capitalize;
-                  "
-                  x-text="concernKey.replace('_', ' ')"
-                ></span>
-                <span
-                  style="font-size: 13px; font-weight: 600"
-                  :style="{
-                    color: report.concerns[concernKey].score >= 80 ? '#4ade80' :
-                           report.concerns[concernKey].score >= 60 ? '#fb923c' : '#f87171'
-                  }"
-                  x-text="`${report.concerns[concernKey].score}%`"
-                ></span>
-              </div>
-              <!-- Findings -->
-              <template
-                x-for="(finding, fi) in report.concerns[concernKey].findings"
-                :key="concernKey + '-f-' + fi"
-              >
-                <div
-                  class="gf-text-muted"
-                  style="font-size: 12px; margin-bottom: 4px"
-                  x-text="finding"
-                ></div>
-              </template>
-              <!-- Recommendations with howToFix -->
-              <template
-                x-for="(rec, ri) in report.concerns[concernKey].recommendations"
-                :key="concernKey + '-r-' + ri"
-              >
-                <div style="margin-top: 6px">
-                  <div
-                    style="
-                      display: flex;
-                      align-items: flex-start;
-                      gap: 6px;
-                      font-size: 12px;
-                    "
-                  >
-                    <span style="color: #fb923c; flex-shrink: 0">-></span>
-                    <span class="gf-text-secondary" x-text="rec"></span>
-                  </div>
-                  <div
-                    x-show="report.concerns[concernKey].howToFix?.[ri]"
-                    class="gf-bg-elevated"
-                    style="
-                      margin-top: 4px;
-                      margin-left: 18px;
-                      padding: 6px 10px;
-                      border-radius: 4px;
-                      font-size: 11px;
-                    "
-                  >
-                    <span class="gf-text-muted" style="font-weight: 600"
-                      >Fix:
-                    </span>
-                    <span
-                      class="gf-text-secondary"
-                      x-text="report.concerns[concernKey].howToFix?.[ri]"
-                    ></span>
-                  </div>
-                </div>
+      <!-- Agent detail panel (expanded when clicked) -->
+      <template x-for="agent in (report?.agentScores || [])" :key="'detail-' + agent.id">
+        <template x-if="auditDetailAgent === agent.id">
+          <div style="margin-top: 16px; border-top: 0.5px solid var(--border-subtle); padding-top: 16px">
+            <!-- Agent header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px">
+              <div class="gf-text-primary" style="font-size: 18px; font-weight: 500"
+                x-text="agent.name"></div>
+              <template x-if="lastAuditTime">
+                <span class="gf-text-muted" style="font-size: 12px"
+                  x-text="'Last audited ' + formatTimeAgo(lastAuditTime)"></span>
               </template>
             </div>
-          </template>
-        </div>
-      </div>
-    </template>
+
+            <!-- Build checks -->
+            <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 16px">
+              <h3 class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px">
+                Build Checks
+                <span class="gf-text-secondary" style="margin-left: 4px"
+                  x-text="`(${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} passed)`"></span>
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <template
+                  x-for="(check, idx) in agent.harness.checks"
+                  :key="agent.id + '-check-' + idx"
+                >
+                  <div
+                    :style="{
+                      paddingBottom: check.failure ? '12px' : '4px',
+                      borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none',
+                      marginBottom: check.failure ? '4px' : '0'
+                    }"
+                  >
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+                      <span
+                        style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
+                        :style="{ color: check.status === 'pass' ? 'var(--green-400)' : 'var(--red-400)' }"
+                        x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
+                      ></span>
+                      <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
+                    </div>
+                    <template x-if="check.failure">
+                      <div style="margin-left: 22px">
+                        <p class="gf-text-muted" style="font-size: 12px; margin-top: 2px" x-text="check.failure.message"></p>
+                        <div
+                          x-show="check.failure.howToFix"
+                          class="gf-bg-elevated"
+                          style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 12px"
+                        >
+                          <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">How to fix</div>
+                          <p class="gf-text-secondary" style="line-height: 1.5; margin: 0" x-text="check.failure.howToFix"></p>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Expanded concern detail (click a concern bar in the agent card) -->
+            <template x-if="agent.concerns">
+              <div>
+                <template x-for="ck in concernKeys" :key="agent.id + '-det-' + ck">
+                  <template x-if="expandedConcern === agent.id + '-' + ck">
+                    <div class="gf-card" style="border-radius: 8px; padding: 16px 20px; margin-bottom: 10px">
+                      <div style="margin-bottom: 12px">
+                        <div style="display: flex; align-items: center; justify-content: space-between">
+                          <span class="gf-text-primary" style="font-size: 14px; font-weight: 600"
+                            x-text="concernMeta[ck].label"></span>
+                          <span style="font-size: 14px; font-weight: 700"
+                            :style="{ color: scoreColor(agent.concerns[ck].score) }"
+                            x-text="`${agent.concerns[ck].score}%`"></span>
+                        </div>
+                        <p class="gf-text-muted" style="font-size: 11px; margin-top: 2px"
+                          x-text="concernMeta[ck].subtitle"></p>
+                      </div>
+
+                      <!-- Findings -->
+                      <div x-show="agent.concerns[ck].findings.length > 0" style="margin-bottom: 10px">
+                        <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; font-weight: 600">Findings</div>
+                        <div style="display: flex; flex-direction: column; gap: 2px">
+                          <template x-for="(finding, fi) in agent.concerns[ck].findings" :key="agent.id + '-' + ck + '-f-' + fi">
+                            <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px">
+                              <span class="gf-text-muted" style="flex-shrink: 0; line-height: 1.5">&#8226;</span>
+                              <span class="gf-text-secondary" style="line-height: 1.5" x-text="finding"></span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+
+                      <!-- Recommendations -->
+                      <div x-show="agent.concerns[ck].recommendations.length > 0">
+                        <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; font-weight: 600">Recommendations</div>
+                        <div style="display: flex; flex-direction: column; gap: 6px">
+                          <template x-for="(rec, ri) in agent.concerns[ck].recommendations" :key="agent.id + '-' + ck + '-r-' + ri">
+                            <div>
+                              <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px">
+                                <span style="color: var(--orange-400); flex-shrink: 0; font-weight: 600">&#8594;</span>
+                                <span class="gf-text-primary" style="font-weight: 500" x-text="rec"></span>
+                              </div>
+                              <div
+                                x-show="agent.concerns[ck].howToFix?.[ri]"
+                                class="gf-bg-elevated"
+                                style="margin-top: 4px; margin-left: 18px; padding: 6px 10px; border-radius: 4px; font-size: 11px"
+                              >
+                                <span class="gf-text-muted" style="font-weight: 600">Fix: </span>
+                                <span class="gf-text-secondary" x-text="agent.concerns[ck].howToFix?.[ri]"></span>
+                              </div>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+
+                      <!-- All clear -->
+                      <div x-show="agent.concerns[ck].recommendations.length === 0"
+                        style="font-size: 12px; padding: 6px 0" class="gf-text-secondary">
+                        All checks passing for this concern.
+                      </div>
+                    </div>
+                  </template>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
+      </template>
+    </div>
 
     <!-- Footer -->
     <div
