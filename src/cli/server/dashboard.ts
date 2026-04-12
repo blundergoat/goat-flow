@@ -22,7 +22,7 @@ import { classifyProjectState } from "../classify-state.js";
 import { scanProject } from "../scanner/scan.js";
 import { runAudit } from "../audit/audit.js";
 import { getPackageVersion } from "../paths.js";
-import type { AgentId, ScanReport } from "../types.js";
+import type { AgentId } from "../types.js";
 import type { AuditReport } from "../audit/types.js";
 import type { DashboardReport, Runner } from "./types.js";
 import type { TerminalManager } from "./terminal.js";
@@ -220,41 +220,10 @@ export function serveDashboard(
     };
 
     function buildDashboardReport(
-      scanRpt: ScanReport,
       auditRpt: AuditReport,
       perAgentAudits: { id: string; audit: AuditReport }[],
     ): DashboardReport {
       return {
-        agents: scanRpt.agents.map((a) => ({
-          agent: a.agent,
-          agentName: a.agentName,
-          score: {
-            grade: a.score.grade,
-            percentage: a.score.percentage,
-            earned: a.score.earned,
-            available: a.score.available,
-            tiers: Object.fromEntries(
-              Object.entries(a.score.tiers).map(([k, t]) => [
-                k,
-                { percentage: t.percentage, available: t.available },
-              ]),
-            ),
-          },
-          checks: a.checks.map((c) => ({
-            id: c.id,
-            status: c.status,
-            ...(c.hidden ? { hidden: true } : {}),
-          })),
-          antiPatterns: a.antiPatterns.map((p) => ({
-            id: p.id,
-            triggered: p.triggered,
-            deduction: p.deduction,
-          })),
-          recommendations: a.recommendations.map((r) => ({
-            priority: r.priority,
-            message: r.message,
-          })),
-        })),
         agentScores: perAgentAudits.map((pa) => ({
           id: pa.id,
           name: AGENT_NAMES[pa.id] || pa.id,
@@ -266,10 +235,7 @@ export function serveDashboard(
         scopes: auditRpt.scopes,
         overall: auditRpt.overall,
         concerns: auditRpt.concerns,
-        rubricVersion: scanRpt.rubricVersion,
-        packageVersion: scanRpt.packageVersion,
-        target: scanRpt.target,
-        stack: scanRpt.stack,
+        target: auditRpt.target,
       };
     }
 
@@ -287,13 +253,17 @@ export function serveDashboard(
 
       try {
         const fs = createFS(projectPath);
-        const scanRpt = scanProject(fs, projectPath, { agentFilter });
         const auditRpt = runAudit(fs, projectPath, { agentFilter, quality });
 
-        // Run per-agent audits for harness scores
-        const configAgents = auditRpt.scopes.setup.summary.skills
-          ? Array.from(VALID_AGENTS)
-          : [];
+        // Run per-agent audits for harness scores (only detected agents)
+        const agentInstructionFiles: [string, string][] = [
+          ["claude", "CLAUDE.md"],
+          ["codex", "AGENTS.md"],
+          ["gemini", "GEMINI.md"],
+        ];
+        const configAgents = agentInstructionFiles
+          .filter(([, file]) => fs.exists(file))
+          .map(([id]) => id);
         const perAgentAudits: { id: string; audit: AuditReport }[] = [];
         for (const agentId of configAgents) {
           try {
@@ -307,11 +277,7 @@ export function serveDashboard(
           }
         }
 
-        jsonResponse(
-          res,
-          200,
-          buildDashboardReport(scanRpt, auditRpt, perAgentAudits),
-        );
+        jsonResponse(res, 200, buildDashboardReport(auditRpt, perAgentAudits));
       } catch (err) {
         jsonResponse(res, 500, {
           error: err instanceof Error ? err.message : String(err),

@@ -128,8 +128,11 @@ export function composeSetup(
   }
 
   const percentage = agentReport.score.percentage;
+  const allPass = agentReport.checks.every(
+    (c) => c.status === "pass" || c.status === "na",
+  );
 
-  if (percentage === 100) {
+  if (percentage === 100 && allPass) {
     return renderAllPass(agentId, agentReport, report);
   }
   if (percentage >= SHORT_FIX_THRESHOLD) {
@@ -185,7 +188,7 @@ function renderAllPass(
 
   lines.push("**Maintenance:**");
   lines.push(
-    "- After upgrading goat-flow, re-run `goat-flow setup` to check for new checks",
+    "- After upgrading goat-flow, re-run `goat-flow audit` to check for new checks",
   );
   lines.push("- Run `goat-flow audit` in CI to catch drift");
   lines.push(
@@ -607,7 +610,7 @@ function renderTargetedFix(
   lines.push("---");
   lines.push("");
   lines.push(
-    `After completing fixes, re-run \`${getCliCommand()} setup . --agent ${agentId}\` to check for remaining issues.`,
+    `After completing fixes, re-run \`${getCliCommand()} audit . --agent ${agentId}\` to check for remaining issues.`,
   );
 
   return lines.join("\n");
@@ -861,7 +864,7 @@ export function composeMultiAgentSetup(
   lines.push("---");
   lines.push("");
   lines.push(
-    `After completing all phases, run \`${getCliCommand()} setup .\` to check for remaining issues.`,
+    `After completing all phases, run \`${getCliCommand()} audit .\` to verify all checks pass.`,
   );
 
   return lines.join("\n");

@@ -279,6 +279,10 @@ if [[ -f tsconfig.json ]]; then
         else
             pass "ESLint (0 errors, $lint_warnings warnings)"
         fi
+        # Count ESLint warnings in the preflight total
+        if [[ "$lint_warnings" -gt 0 ]]; then
+            warnings=$((warnings + lint_warnings))
+        fi
     else
         skip "ESLint (not configured)"
     fi

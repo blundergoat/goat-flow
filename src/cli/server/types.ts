@@ -41,27 +41,8 @@ export interface CreateResponse {
 
 // === Dashboard audit response ===
 
-/** Per-agent scoring summary consumed by the Home page agent cards. */
-export interface DashboardAgentSummary {
-  agent: string;
-  agentName: string;
-  score: {
-    grade: string;
-    percentage: number;
-    earned: number;
-    available: number;
-    tiers: Record<string, { percentage: number; available: number }>;
-  };
-  checks: { id: string; status: string; hidden?: boolean }[];
-  antiPatterns: { id: string; triggered: boolean; deduction: number }[];
-  recommendations: { priority: string; message: string }[];
-}
-
-/** Combined response from /api/audit consumed by all dashboard views.
- * Merges per-agent scoring (Home page) with scope-based audit results (Audit detail). */
+/** Combined response from /api/audit consumed by all dashboard views. */
 export interface DashboardReport {
-  // Per-agent scoring — Home page agent cards, banner counts
-  agents: DashboardAgentSummary[];
   // Per-agent AI Harness Score — Audit view agent cards
   agentScores: {
     id: string;
@@ -125,11 +106,7 @@ export interface DashboardReport {
     }
   > | null;
   // Metadata
-  rubricVersion: string;
-  packageVersion: string;
   target: string;
-  // Stack detection — Wizard view
-  stack?: { languages?: string[] };
 }
 
 /** Response body from the GET /api/health endpoint. */

@@ -45,7 +45,8 @@ jobs:
       - name: Version consistency
         run: |
           pkg_version=$(node -e "console.log(require('./package.json').version)")
-          rubric_version=$(grep "RUBRIC_VERSION" src/cli/rubric/version.ts | grep -oE "'[^']+'" | tr -d "'")
+          # RUBRIC_VERSION derives from package.json since v1.1.0
+          rubric_version="$pkg_version"
 
           echo "package.json: $pkg_version"
           echo "RUBRIC_VERSION: $rubric_version"
@@ -78,11 +79,8 @@ jobs:
 
       - name: Skill template versions
         run: |
-          skill_version=$(grep -o "RUBRIC_VERSION = '[^']*'" src/cli/rubric/version.ts | grep -o "'[^']*'" | tr -d "'")
-          if [ -z "$skill_version" ]; then
-            echo "::error::Could not extract RUBRIC_VERSION from version.ts"
-            exit 1
-          fi
+          # RUBRIC_VERSION derives from package.json since v1.1.0
+          skill_version=$(node -e "console.log(require('./package.json').version)")
           echo "Expected skill version: $skill_version"
 
           fail=0

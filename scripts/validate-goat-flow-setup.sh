@@ -204,6 +204,7 @@ done
 
 # Canonical skill files required by setup.
 # This list is the single source for what this repo expects to be installed.
+# Both .agents/skills (Codex/Gemini) and .claude/skills (Claude) must be present.
 required_skills=(
     ".agents/skills/goat-security/SKILL.md"
     ".agents/skills/goat-debug/SKILL.md"
@@ -212,6 +213,13 @@ required_skills=(
     ".agents/skills/goat-sbao/SKILL.md"
     ".agents/skills/goat-test/SKILL.md"
     ".agents/skills/goat/SKILL.md"
+    ".claude/skills/goat-security/SKILL.md"
+    ".claude/skills/goat-debug/SKILL.md"
+    ".claude/skills/goat-review/SKILL.md"
+    ".claude/skills/goat-plan/SKILL.md"
+    ".claude/skills/goat-sbao/SKILL.md"
+    ".claude/skills/goat-test/SKILL.md"
+    ".claude/skills/goat/SKILL.md"
 )
 
 # For each required skill, validate presence plus required structure.
@@ -233,7 +241,7 @@ for skill in "${required_skills[@]}"; do
     grep -q '^name:' "$skill" || fail "Missing YAML frontmatter 'name:' in $skill"
     grep -q '^description:' "$skill" || fail "Missing YAML frontmatter 'description:' in $skill"
 done
-info "All 7 skills (6 functional + dispatcher) exist with required sections and frontmatter"
+info "All 14 skills (7 per agent directory) exist with required sections and frontmatter"
 
 # Validate category buckets for lessons; keep legacy flat files as warnings only.
 if [[ -d "$lessons_dir" ]]; then
