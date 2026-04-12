@@ -358,32 +358,18 @@ for pattern in "${removed_patterns[@]}"; do
 done
 $adr_clean && pass "No removed patterns found"
 
-# ── GOAT Flow Scan ────────────────────────────────────────────────────
+# ── GOAT Flow Audit ────────────────────────────────────────────────────
 if [[ -f dist/cli/cli.js ]]; then
-    section "GOAT Flow Scan"
-    scan_output=$(node dist/cli/cli.js scan . --format text 2>&1) && scan_exit=0 || scan_exit=$?
-    if [[ "$scan_exit" -eq 0 ]]; then
-        # Extract per-agent grades and check for any below A
-        grades=$(echo "$scan_output" | grep -oE 'Grade: [A-F] \([0-9]+%\)' | sed 's/Grade: //')
-        all_a=true
-        while IFS= read -r grade; do
-            [[ -z "$grade" ]] && continue
-            pct=$(echo "$grade" | grep -oE '[0-9]+')
-            if [[ "$pct" -lt 100 ]]; then
-                all_a=false
-                note "Scan: $grade (target: 100%)"
-            fi
-        done <<< "$grades"
-        if $all_a; then
-            pass "All agents at 100%"
-        else
-            fail "Not all agents at 100% - run: node dist/cli/cli.js scan . --format text"
-        fi
+    section "GOAT Flow Audit"
+    audit_output=$(node dist/cli/cli.js audit . --format text 2>&1) && audit_exit=0 || audit_exit=$?
+    if [[ "$audit_exit" -eq 0 ]]; then
+        pass "Audit passes"
     else
-        fail "goat-flow scan failed (exit $scan_exit)"
+        fail "goat-flow audit failed (exit $audit_exit)"
+        echo "$audit_output" | head -5 | sed 's/^/    /'
     fi
 else
-    skip "GOAT Flow Scan (dist/cli/cli.js not built)"
+    skip "GOAT Flow Audit (dist/cli/cli.js not built)"
 fi
 
 # ── Workflow References ──────────────────────────────────────────────

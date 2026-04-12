@@ -2,13 +2,13 @@
 
 /**
  * Command-line entry point for goat-flow.
- * Handles argv parsing, command dispatch, exit codes, and on-disk output for scan, setup, dashboard, and migration workflows.
+ * Handles argv parsing, command dispatch, exit codes, and on-disk output for audit, critique, setup, dashboard, and info workflows.
  */
 
 import { parseArgs } from "node:util";
 import { resolve, dirname, join } from "node:path";
 import { writeFileSync, mkdirSync } from "node:fs";
-import type { CLIOptions, Grade, AgentId, ScanReport, Tier } from "./types.js";
+import type { CLIOptions, AgentId, ScanReport, Tier } from "./types.js";
 
 import { getPackageVersion } from "./paths.js";
 
@@ -28,14 +28,14 @@ class CLIError extends Error {
 /** Print usage instructions and available commands to stdout */
 function printHelp(): void {
   console.log(`
-goat-flow - GOAT Flow CLI Auditor + Scoring Engine
+goat-flow - GOAT Flow CLI Auditor
 
 Usage:
   goat-flow [command] [project-path] [flags]
 
 Commands:
   audit             Validate setup correctness (default)
-  scan              Score a project against the full rubric
+  critique          Generate agent critique prompt (requires --agent)
   setup             Generate setup prompt (adapts to project state)
   status            Show project state (bare/partial/v0.9/v1.0/v1.1)
   info rubrics      List all rubric checks (filter: --tier foundation|standard)
@@ -48,25 +48,21 @@ Flags:
   --format <type>   Output format: json, text, markdown (default: auto)
   --agent <id>      Filter to one agent: claude, codex, gemini
   --quality         Audit: add advisory quality scoring by harness concern
-  --verbose         Show per-check details in text mode
-  --min-score <n>   CI gate: exit 1 if score below threshold (0-100)
-  --min-grade <g>   CI gate: exit 1 if grade below threshold (A, B, C, D)
+  --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
-  --guide           Show prioritized setup guidance instead of scores
   --dev             Dashboard: live reload on file changes
   --help, -h        Show this help
   --version, -v     Show version
 
 Examples:
-  goat-flow .                        Audit current directory
-  goat-flow audit . --quality        Audit with advisory quality grades
-  goat-flow audit . --agent claude   Audit scoped to Claude
-  goat-flow scan --format json       Full rubric scan as JSON
-  goat-flow scan --guide             Prioritized setup guidance
-  goat-flow setup --agent claude     Setup prompt for Claude
-  goat-flow --min-score 75           CI gate: fail if below 75%
-  goat-flow --format markdown        PR-comment friendly output
-  goat-flow --output report.json     Write results to file
+  goat-flow .                          Audit current directory
+  goat-flow audit . --quality          Audit with advisory quality grades
+  goat-flow audit . --agent claude     Audit scoped to Claude
+  goat-flow audit . --format json      JSON output for CI
+  goat-flow setup --agent claude       Setup prompt for Claude
+  goat-flow critique . --agent claude  Critique prompt for Claude
+  goat-flow --format markdown          PR-comment friendly output
+  goat-flow --output report.json       Write results to file
 `);
 }
 
@@ -76,12 +72,16 @@ function printVersion(): void {
 }
 
 /** Supported CLI subcommand names */
-type Command = "scan" | "setup" | "dashboard" | "info" | "status" | "audit";
+type Command = "setup" | "dashboard" | "info" | "status" | "audit" | "critique";
 
 /** List of recognized CLI subcommands */
-const COMMANDS: Command[] = ["scan", "setup", "dashboard", "info", "status", "audit"];
-/** Previously valid commands that now produce a helpful deprecation error */
-const REMOVED_COMMANDS = ["fix", "eval"];
+const COMMANDS: Command[] = ["setup", "dashboard", "info", "status", "audit", "critique"];
+/** Previously valid commands that now produce a helpful removal error */
+const REMOVED_COMMANDS: Record<string, string> = {
+  fix: '"fix" was removed. Use "setup" instead - it adapts to your project\'s state.',
+  eval: '"eval" was removed. Use "setup" instead - it adapts to your project\'s state.',
+  scan: '"scan" was removed. Use "audit" for setup validation or "critique --agent <id>" for agent review.',
+};
 /** Accepted values for the --format flag */
 const VALID_FORMATS = ["json", "text", "html", "markdown"] as const;
 /** Accepted values for the --agent flag */
@@ -101,18 +101,15 @@ export interface ParsedCLI extends CLIOptions {
   quality: boolean;
 }
 
-/** Parse the positional subcommand from raw CLI args, defaulting to `scan`. */
+/** Parse the positional subcommand from raw CLI args, defaulting to `audit`. */
 function parseCommand(argv: string[]): {
   command: Command;
   filteredArgs: string[];
 } {
   const filteredArgs = [...argv];
   const first = filteredArgs[0];
-  if (first !== undefined && REMOVED_COMMANDS.includes(first)) {
-    throw new CLIError(
-      `"${first}" was removed. Use "setup" instead - it adapts to your project's state.`,
-      2,
-    );
+  if (first !== undefined && Object.hasOwn(REMOVED_COMMANDS, first)) {
+    throw new CLIError(REMOVED_COMMANDS[first]!, 2);
   }
   if (
     filteredArgs.length > 0 &&
@@ -156,16 +153,6 @@ function parseAgentArg(value: string | undefined): AgentId | null {
   return value as AgentId;
 }
 
-/** Parse the `--min-score` threshold and keep it within the 0-100 range. */
-function parseMinScoreArg(value: string | undefined): number | null {
-  if (!value) return null;
-  const minScore = parseInt(value, 10);
-  if (isNaN(minScore) || minScore < 0 || minScore > 100) {
-    throw new CLIError(`Invalid min-score: ${value}. Use: 0-100`, 2);
-  }
-  return minScore;
-}
-
 /** Accepted values for the --tier flag */
 const VALID_TIERS: Tier[] = ["foundation", "standard"];
 
@@ -176,17 +163,6 @@ function parseTierArg(value: string | undefined): Tier | null {
     throw new CLIError(`Invalid tier: ${value}. Use: foundation, standard`, 2);
   }
   return value as Tier;
-}
-
-/** Parse the `--min-grade` threshold using the supported letter grades. */
-function parseMinGradeArg(value: string | undefined): Grade | null {
-  if (!value) return null;
-  const normalized = value.toUpperCase();
-  const valid: Grade[] = ["A", "B", "C", "D"];
-  if (!valid.includes(normalized as Grade)) {
-    throw new CLIError(`Invalid min-grade: ${value}. Use: A, B, C, D`, 2);
-  }
-  return normalized as Grade;
 }
 
 /** Resolve `--output`, defaulting bare file names into `.goat-flow/` under the target repo. */
@@ -214,10 +190,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       format: { type: "string" },
       agent: { type: "string" },
       verbose: { type: "boolean", default: false },
-      "min-score": { type: "string" },
-      "min-grade": { type: "string" },
       output: { type: "string", short: "o" },
-      guide: { type: "boolean", default: false },
       quality: { type: "boolean", default: false },
       tier: { type: "string" },
       dev: { type: "boolean", default: false },
@@ -234,10 +207,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     format: parseFormatArg(values.format),
     agent: parseAgentArg(values.agent),
     verbose: values.verbose === true,
-    minScore: parseMinScoreArg(values["min-score"]),
-    minGrade: parseMinGradeArg(values["min-grade"]),
     output: resolveOutputPath(values.output, positionals),
-    guide: values.guide === true,
     quality: values.quality === true,
     tier: parseTierArg(values.tier),
     dev: values.dev === true,
@@ -350,75 +320,8 @@ async function handleSetupCommand(
   }
 }
 
-/** Check CI gate thresholds and throw if any agent fails to meet them */
-function handleCIGate(options: ParsedCLI, report: ScanReport): void {
-  if (options.minScore === null && options.minGrade === null) return;
-
-  /** Numeric ordering of grades for comparison (higher is better) */
-  const gradeOrder: Record<string, number> = {
-    A: 5,
-    B: 4,
-    C: 3,
-    D: 2,
-    F: 1,
-    "insufficient-data": 0,
-  };
-
-  // Iterate over each agent report to check against CI gate thresholds
-  for (const agent of report.agents) {
-    if (
-      options.minScore !== null &&
-      agent.score.percentage < options.minScore
-    ) {
-      throw new CLIError(
-        `CI gate failed: ${agent.agent} score ${agent.score.percentage}% below threshold ${options.minScore}%`,
-        1,
-      );
-    }
-    if (options.minGrade !== null) {
-      /** Numeric value of the agent's grade for threshold comparison */
-      const agentGradeValue = gradeOrder[agent.score.grade] ?? 0;
-      /** Numeric value of the minimum required grade */
-      const minGradeValue = gradeOrder[options.minGrade] ?? 0;
-      if (agentGradeValue < minGradeValue) {
-        throw new CLIError(
-          `CI gate failed: ${agent.agent} grade ${agent.score.grade} below threshold ${options.minGrade}`,
-          1,
-        );
-      }
-    }
-  }
-}
-
-/** Render scan output. */
-async function renderScanOutput(
-  options: ParsedCLI,
-  report: ScanReport,
-): Promise<string> {
-  const { renderJson } = await import("./render/json.js");
-  const { renderText } = await import("./render/text.js");
-
-  if (options.guide) {
-    const { renderGuide } = await import("./render/guide.js");
-    return renderGuide(report);
-  }
-
-  if (options.format === "html") {
-    const { renderHtml } = await import("./render/html.js");
-    return renderHtml(report);
-  }
-  if (options.format === "markdown") {
-    const { renderMarkdown } = await import("./render/markdown.js");
-    return renderMarkdown(report);
-  }
-  if (options.format === "text") {
-    return renderText(report, options.verbose);
-  }
-  return renderJson(report);
-}
-
-/** Write scan output. */
-function writeScanOutput(options: ParsedCLI, rendered: string): void {
+/** Write rendered output to file or stdout. */
+function writeOutput(options: ParsedCLI, rendered: string): void {
   if (options.output) {
     mkdirSync(dirname(options.output), { recursive: true });
     writeFileSync(options.output, rendered + "\n", "utf-8");
@@ -427,18 +330,6 @@ function writeScanOutput(options: ParsedCLI, rendered: string): void {
   }
 
   process.stdout.write(rendered + "\n");
-}
-
-/** Run the main scan flow, render the report, and append scan history. */
-async function handleScanCommand(
-  options: ParsedCLI,
-  report: ScanReport,
-): Promise<void> {
-  const rendered = await renderScanOutput(options, report);
-  writeScanOutput(options, rendered);
-
-  const { appendScanHistory } = await import("./telemetry/scan-logger.js");
-  appendScanHistory(report, options.projectPath);
 }
 
 /** Handle the info command: list rubric checks or anti-pattern deductions */
@@ -504,10 +395,49 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     rendered = renderAuditText(report);
   }
 
-  writeScanOutput(options, rendered);
+  writeOutput(options, rendered);
 
   if (report.status === "fail") {
     process.exitCode = 1;
+  }
+}
+
+/** Handle the critique command: generate a structured critique prompt for a selected agent. */
+async function handleCritiqueCommand(options: ParsedCLI): Promise<void> {
+  if (!options.agent) {
+    throw new CLIError(
+      "critique requires --agent. Usage: goat-flow critique . --agent claude",
+      2,
+    );
+  }
+
+  const { createFS } = await import("./facts/fs.js");
+  const { runAudit } = await import("./audit/audit.js");
+  const { composeCritique } = await import("./prompt/compose-critique.js");
+
+  const fs = createFS(options.projectPath);
+
+  // Run audit but don't fail if it errors - critique works even when audit is failing
+  let auditReport: import("./audit/types.js").AuditReport | null = null;
+  try {
+    auditReport = runAudit(fs, options.projectPath, {
+      agentFilter: options.agent,
+      quality: true,
+    });
+  } catch {
+    // Audit failure is fine - critique generates with degraded context
+  }
+
+  const result = composeCritique({
+    agent: options.agent,
+    projectPath: options.projectPath,
+    auditReport,
+  });
+
+  if (options.format === "json") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(result.prompt + "\n");
   }
 }
 
@@ -534,6 +464,10 @@ async function main(): Promise<void> {
     await handleAuditCommand(options);
     return;
   }
+  if (options.command === "critique") {
+    await handleCritiqueCommand(options);
+    return;
+  }
   if (options.command === "status") {
     await handleStatusCommand(options);
     return;
@@ -551,6 +485,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Remaining command: setup (uses scanner internally to gather project facts)
   const { createFS } = await import("./facts/fs.js");
   const { scanProject } = await import("./scanner/scan.js");
   const fs = createFS(options.projectPath);
@@ -558,13 +493,7 @@ async function main(): Promise<void> {
     agentFilter: options.agent ?? null,
   });
 
-  if (options.command === "scan") {
-    await handleScanCommand(options, report);
-  } else {
-    await handleSetupCommand(options, report);
-  }
-
-  handleCIGate(options, report);
+  await handleSetupCommand(options, report);
 }
 
 main().catch((err: unknown) => {

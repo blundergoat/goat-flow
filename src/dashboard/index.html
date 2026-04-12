@@ -93,11 +93,11 @@
               Home
             </button>
             <button
-              @click="activeView = 'scan'; scanDetailAgent = scanDetailAgent || report?.agents?.[0]?.agent || null; selectedAgent = scanDetailAgent"
+              @click="activeView = 'audit'; auditDetailAgent = auditDetailAgent || report?.agents?.[0]?.agent || null; selectedAgent = auditDetailAgent"
               class="gf-nb"
-              :class="activeView === 'scan' && 'gf-nb-active'"
+              :class="activeView === 'audit' && 'gf-nb-active'"
             >
-              Scanner
+              Audit
             </button>
             <button
               @click="activeView = 'workspace'"
@@ -150,6 +150,13 @@
               :class="activeView === 'wizard' && 'gf-nb-active'"
             >
               Setup
+            </button>
+            <button
+              @click="activeView = 'critique'"
+              class="gf-nb"
+              :class="activeView === 'critique' && 'gf-nb-active'"
+            >
+              Critique
             </button>
           </div>
         </div>
@@ -243,7 +250,7 @@
       <main class="flex-1 overflow-hidden">
         <!-- Loading Spinner -->
         <div
-          x-show="scanning"
+          x-show="auditing"
           x-cloak
           class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/20 dark:bg-black/40"
         >
@@ -269,14 +276,15 @@
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
               />
             </svg>
-            <span class="text-sm font-medium">Scanning...</span>
+            <span class="text-sm font-medium">Auditing...</span>
           </div>
         </div>
 
         <!-- View fragments (assembled server-side) -->
-        <!-- include: views/scanner.html -->
+        <!-- include: views/audit.html -->
         <!-- include: views/workspace.html -->
 
+        <!-- include: views/critique.html -->
         <!-- include: views/wizard.html -->
         <!-- include: views/home.html -->
         <!-- include: views/projects.html -->

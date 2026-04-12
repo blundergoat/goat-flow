@@ -1,6 +1,5 @@
 /**
- * M20a stability tests - lock in the audit command's core behavior.
- * Small set per milestone spec; M23 handles full coverage.
+ * Audit command tests - build checks, quality concerns, JSON contract.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

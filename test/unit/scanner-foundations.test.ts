@@ -1,6 +1,5 @@
 /**
- * M19b stability tests - lock in key changes from the coherence cleanup.
- * These prevent regressions on the biggest M19b changes.
+ * Scanner foundation tests - skill constants, rubric registry, project state classification, tier validation.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

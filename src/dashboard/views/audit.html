@@ -1,28 +1,28 @@
-<!-- ═══ Scanner View ═══ -->
+<!-- ═══ Audit View ═══ -->
 <div
-  x-show="activeView === 'scan'"
+  x-show="activeView === 'audit'"
   style="height: calc(100vh - 3.5rem); overflow-y: auto"
 >
   <!-- No data empty state -->
   <div
-    x-show="!report && !scanning"
+    x-show="!report && !auditing"
     class="flex items-center justify-center"
     style="min-height: 60vh"
   >
     <div class="text-center space-y-4 max-w-md">
       <p class="text-4xl">&#128016;</p>
       <h2 class="text-xl font-semibold gf-text-secondary">
-        Scan a project to get started
+        Audit a project to get started
       </h2>
       <p class="text-sm gf-text-muted">
-        Set your project path in Config, then click Scan.
+        Set your project path, then click Audit.
       </p>
       <button
-        @click="runScan()"
-        :disabled="scanning"
-        class="gf-btn gf-btn-md gf-btn-scan"
+        @click="runAudit()"
+        :disabled="auditing"
+        class="gf-btn gf-btn-md gf-btn-primary"
       >
-        Scan
+        Audit
       </button>
     </div>
   </div>
@@ -42,14 +42,14 @@
       "
     >
       <span class="gf-text-primary" style="font-size: 20px; font-weight: 500"
-        >Scanner</span
+        >Audit</span
       >
       <button
-        @click="runScan()"
-        :disabled="scanning"
-        class="gf-btn gf-btn-md gf-btn-scan"
+        @click="runAudit()"
+        :disabled="auditing"
+        class="gf-btn gf-btn-md gf-btn-primary"
       >
-        <span x-text="scanning ? 'Scanning...' : 'Re-scan'"></span>
+        <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
       </button>
     </div>
 
@@ -59,14 +59,14 @@
     >
       <template x-for="agent in (report?.agents || [])" :key="agent.agent">
         <button
-          @click="scanDetailAgent = (scanDetailAgent === agent.agent ? null : agent.agent); selectedAgent = agent.agent"
+          @click="auditDetailAgent = (auditDetailAgent === agent.agent ? null : agent.agent); selectedAgent = agent.agent"
           class="gf-card"
           style="
             padding: 20px 24px;
             cursor: pointer;
             transition: border-color 0.1s;
           "
-          :style="{ borderColor: scanDetailAgent === agent.agent ? '#4ade80' : '' }"
+          :style="{ borderColor: auditDetailAgent === agent.agent ? '#4ade80' : '' }"
         >
           <div
             style="
@@ -162,7 +162,7 @@
     </div>
 
     <!-- Inline detail panel (appears below grid when an agent is selected) -->
-    <template x-if="scanDetailAgent && currentAgent">
+    <template x-if="auditDetailAgent && currentAgent">
       <div
         style="
           margin-top: 20px;
@@ -193,9 +193,9 @@
               <span
                 x-text="`${currentAgent.antiPatterns.filter(a => a.triggered).length} anti-patterns`"
               ></span>
-              <template x-if="lastScanTime">
+              <template x-if="lastAuditTime">
                 <span
-                  x-text="' - Last scanned ' + formatTimeAgo(lastScanTime)"
+                  x-text="' - Last audited ' + formatTimeAgo(lastAuditTime)"
                 ></span>
               </template>
             </div>
@@ -534,4 +534,4 @@
     </div>
   </div>
 </div>
-<!-- /scan view -->
+<!-- /audit view -->

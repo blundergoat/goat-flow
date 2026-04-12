@@ -250,7 +250,7 @@ if $EXECUTE; then
   echo "  1. Run setup to install v1.1.0 skills and update CLAUDE.md"
   echo "  2. Review .goat-flow/footguns/migrated.md and split into category buckets"
   echo "  3. Update AGENTS.md/GEMINI.md to reference .goat-flow/ paths"
-  echo "  4. Run: goat-flow scan . --agent claude"
+  echo "  4. Run: goat-flow audit . --agent claude"
 else
   echo "DRY-RUN: $CHANGES changes would be made"
   echo "Run with --execute to apply: $0 $PROJECT --execute"

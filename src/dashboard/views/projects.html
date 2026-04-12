@@ -18,15 +18,15 @@
       >
       <div style="display: flex; gap: 8px">
         <button
-          @click="scanAllProjects()"
-          :disabled="projectsScanning"
-          class="gf-btn gf-btn-md gf-btn-scan"
+          @click="auditAllProjects()"
+          :disabled="projectsAuditing"
+          class="gf-btn gf-btn-md gf-btn-primary"
         >
-          <span x-text="projectsScanning ? 'Scanning...' : 'Scan All'"></span>
+          <span x-text="projectsAuditing ? 'Auditing...' : 'Audit All'"></span>
         </button>
         <button
           @click="showAddProject = true; $nextTick(() => $refs.addProjectInput?.focus())"
-          class="gf-btn gf-btn-md gf-btn-scan"
+          class="gf-btn gf-btn-md gf-btn-primary"
         >
           Add Project
         </button>
@@ -64,7 +64,7 @@
           placeholder="/path/to/project"
           @keydown.enter="addProject()"
         />
-        <button @click="addProject()" class="gf-btn gf-btn-md gf-btn-scan">
+        <button @click="addProject()" class="gf-btn gf-btn-md gf-btn-primary">
           Add
         </button>
         <button
@@ -150,11 +150,11 @@
               </td>
               <td class="gf-td" style="text-align: right; white-space: nowrap">
                 <button
-                  @click="projectPath = project.path; activeView = 'scan'; runScan()"
-                  class="gf-btn gf-btn-sm gf-btn-scan"
+                  @click="projectPath = project.path; activeView = 'audit'; runAudit()"
+                  class="gf-btn gf-btn-sm gf-btn-primary"
                   style="margin-right: 4px"
                 >
-                  Scan
+                  Audit
                 </button>
                 <button
                   @click="projectPath = project.path; activeView = 'workspace'"

@@ -1,6 +1,6 @@
 /**
  * HTTP server for the local goat-flow dashboard.
- * It serves the frontend shell, exposes scan and terminal endpoints.
+ * It serves the frontend shell, exposes audit, critique, setup, and terminal endpoints.
  */
 import {
   createServer,
@@ -20,7 +20,6 @@ import { execFileSync } from "node:child_process";
 import { createFS } from "../facts/fs.js";
 import { classifyProjectState } from "../classify-state.js";
 import { scanProject } from "../scanner/scan.js";
-import { renderJson } from "../render/json.js";
 import { runAudit } from "../audit/audit.js";
 import { getPackageVersion } from "../paths.js";
 import type { AgentId } from "../types.js";
@@ -118,7 +117,7 @@ interface DashboardServer {
 
 /**
  * Start a local dashboard server. Serves the HTML dashboard and
- * exposes /api/audit, /api/scan, /api/setup, /api/terminal/*, /api/health, and other endpoints.
+ * exposes /api/audit, /api/critique, /api/setup, /api/terminal/*, /api/health, and other endpoints.
  * Returns a handle for testing; callers that don't need it can ignore the return value.
  */
 export function serveDashboard(
@@ -209,23 +208,6 @@ export function serveDashboard(
       return true;
     }
 
-    /** Run a full scan for the requested path and return the JSON report. */
-    function handleScanRequest(url: URL, res: ServerResponse): boolean {
-      if (url.pathname !== "/api/scan") return false;
-
-      const projectPath = safeResolvePath(url.searchParams.get("path"));
-      try {
-        const fs = createFS(projectPath);
-        const report = scanProject(fs, projectPath, { agentFilter: null });
-        jsonResponse(res, 200, JSON.parse(renderJson(report)));
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
-    }
-
     /** Run an audit for the requested path and return the JSON report. */
     function handleAuditRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== "/api/audit") return false;
@@ -274,6 +256,48 @@ export function serveDashboard(
         jsonResponse(res, 200, {
           output: output ?? "No setup output generated.",
         });
+      } catch (err) {
+        jsonResponse(res, 500, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return true;
+    }
+
+    /** Generate a critique prompt for a selected agent and return it to the dashboard. */
+    async function handleCritiqueRequest(
+      url: URL,
+      res: ServerResponse,
+    ): Promise<boolean> {
+      if (url.pathname !== "/api/critique") return false;
+
+      const agentParam = url.searchParams.get("agent");
+      if (!agentParam || !VALID_AGENTS.has(agentParam)) {
+        jsonResponse(res, 400, {
+          error: `critique requires --agent. Valid: claude, codex, gemini`,
+        });
+        return true;
+      }
+
+      const projectPath = safeResolvePath(url.searchParams.get("path"));
+      const agent = agentParam as AgentId;
+
+      try {
+        const { composeCritique } = await import("../prompt/compose-critique.js");
+
+        let auditReport: import("../audit/types.js").AuditReport | null = null;
+        try {
+          const fs = createFS(projectPath);
+          auditReport = runAudit(fs, projectPath, {
+            agentFilter: agent,
+            quality: true,
+          });
+        } catch {
+          // Audit failure is fine - critique generates with degraded context
+        }
+
+        const result = composeCritique({ agent, projectPath, auditReport });
+        jsonResponse(res, 200, result);
       } catch (err) {
         jsonResponse(res, 500, {
           error: err instanceof Error ? err.message : String(err),
@@ -969,10 +993,10 @@ export function serveDashboard(
       const routeHandlers = [
         () => Promise.resolve(handleHtmlRequest(url, res)),
         () => Promise.resolve(handleAssetRequest(url, res)),
-        () => Promise.resolve(handleScanRequest(url, res)),
         () => Promise.resolve(handleAuditRequest(url, res)),
         () => Promise.resolve(handleSetupDetectRequest(url, res)),
         () => handleSetupRequest(url, res),
+        () => handleCritiqueRequest(url, res),
 
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),

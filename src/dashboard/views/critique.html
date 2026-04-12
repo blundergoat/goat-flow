@@ -1,0 +1,112 @@
+<!-- Critique View -->
+<div x-show="activeView === 'critique'" x-cloak class="h-full overflow-y-auto p-6">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <div>
+      <h2 class="text-xl font-bold mb-1" :style="darkMode ? 'color:#e4e4e7' : 'color:#18181b'">Critique</h2>
+      <p class="text-sm" :style="darkMode ? 'color:#a1a1aa' : 'color:#71717a'">
+        Generate a structured critique prompt for a selected agent to evaluate goat-flow quality and usefulness on this project.
+        This is opinion-gathering, not machine validation.
+      </p>
+    </div>
+
+    <!-- Agent Picker + Generate -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <label class="text-sm font-medium" :style="darkMode ? 'color:#d4d4d8' : 'color:#3f3f46'">Agent:</label>
+      <div class="gf-asel">
+        <template x-for="a in ['claude', 'codex', 'gemini']" :key="a">
+          <button
+            @click="critiqueAgent = a"
+            class="gf-ab"
+            :class="critiqueAgent === a && 'gf-ab-active'"
+            x-text="a"
+          ></button>
+        </template>
+      </div>
+      <button
+        @click="generateCritique()"
+        :disabled="critiqueLoading"
+        class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+        :style="darkMode
+          ? 'background:#3b82f6;color:#fff;'
+          : 'background:#2563eb;color:#fff;'"
+        :class="critiqueLoading && 'opacity-50 cursor-not-allowed'"
+      >
+        <span x-show="!critiqueLoading">Generate</span>
+        <span x-show="critiqueLoading" x-cloak>Generating...</span>
+      </button>
+      <button
+        x-show="critiqueResult"
+        x-cloak
+        @click="generateCritique()"
+        :disabled="critiqueLoading"
+        class="px-3 py-1.5 rounded-lg text-sm transition-colors"
+        :style="darkMode
+          ? 'background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;'
+          : 'background:#f4f4f5;color:#71717a;border:1px solid #e4e4e7;'"
+      >
+        Regenerate
+      </button>
+    </div>
+
+    <!-- Audit Summary Badge -->
+    <div x-show="critiqueResult" x-cloak>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="font-medium" :style="darkMode ? 'color:#d4d4d8' : 'color:#3f3f46'">Audit:</span>
+        <span
+          class="px-2 py-0.5 rounded text-xs font-mono"
+          :class="{
+            'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400': critiqueResult?.auditStatus === 'pass',
+            'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': critiqueResult?.auditStatus === 'fail',
+            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400': critiqueResult?.auditStatus === 'unavailable',
+          }"
+          x-text="critiqueResult?.auditStatus?.toUpperCase()"
+        ></span>
+      </div>
+    </div>
+
+    <!-- Prompt Output -->
+    <div x-show="critiqueResult" x-cloak>
+      <!-- Action Bar -->
+      <div class="flex items-center gap-2 mb-2">
+        <button
+          @click="copyCritique()"
+          class="px-3 py-1 rounded text-sm transition-colors"
+          :style="darkMode
+            ? 'background:#27272a;color:#d4d4d8;border:1px solid #3f3f46;'
+            : 'background:#f4f4f5;color:#3f3f46;border:1px solid #e4e4e7;'"
+        >
+          <span x-text="critiqueCopyLabel"></span>
+        </button>
+        <button
+          @click="runCritiqueInTerminal()"
+          class="px-3 py-1 rounded text-sm transition-colors"
+          :style="darkMode
+            ? 'background:#27272a;color:#d4d4d8;border:1px solid #3f3f46;'
+            : 'background:#f4f4f5;color:#3f3f46;border:1px solid #e4e4e7;'"
+        >
+          Run in Terminal
+        </button>
+      </div>
+
+      <!-- Prompt Text -->
+      <pre
+        class="text-xs leading-relaxed p-4 rounded-lg overflow-x-auto whitespace-pre-wrap"
+        :style="darkMode
+          ? 'background:#0a0a0a;color:#d4d4d8;border:1px solid #27272a;'
+          : 'background:#fafafa;color:#3f3f46;border:1px solid #e4e4e7;'"
+        style="max-height: 70vh; overflow-y: auto"
+        x-text="critiqueResult?.prompt"
+      ></pre>
+    </div>
+
+    <!-- Empty state -->
+    <div
+      x-show="!critiqueResult && !critiqueLoading"
+      class="text-center py-16"
+      :style="darkMode ? 'color:#52525b' : 'color:#a1a1aa'"
+    >
+      <p class="text-lg mb-2">Select an agent and click Generate</p>
+      <p class="text-sm">The critique prompt asks the agent to test each skill on real code and report findings with evidence.</p>
+    </div>
+  </div>
+</div>

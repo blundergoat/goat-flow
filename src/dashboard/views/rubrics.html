@@ -44,25 +44,25 @@
       return this.antiPatterns.reduce((sum, ap) => sum + ap.deduction, 0);
     },
 
-    /** Get scan result for a specific check ID (if scan data available) */
-    scanResult(checkId) {
+    /** Get audit result for a specific check ID (if audit data available) */
+    auditResult(checkId) {
       if (!this.currentAgent) return null;
       return this.currentAgent.checks.find(c => c.id === checkId) || null;
     },
 
-    /** Get scan result for a specific anti-pattern ID */
-    scanAP(apId) {
+    /** Get audit result for a specific anti-pattern ID */
+    auditAP(apId) {
       if (!this.currentAgent) return null;
       return this.currentAgent.antiPatterns.find(ap => ap.id === apId) || null;
     },
 
-    /** Count passed checks in a category (from scan data) */
+    /** Count passed checks in a category (from audit data) */
     categoryPassCount(checks) {
       if (!this.currentAgent) return null;
       let passed = 0;
       let total = 0;
       for (const c of checks) {
-        const sr = this.scanResult(c.id);
+        const sr = this.auditResult(c.id);
         if (sr && sr.status !== 'na') {
           total++;
           if (sr.status === 'pass' || sr.status === 'partial') passed++;
@@ -298,7 +298,7 @@
       />
     </div>
 
-    <!-- Scan data notice -->
+    <!-- Audit data notice -->
     <div
       x-show="currentAgent"
       style="
@@ -314,7 +314,7 @@
     >
       <span style="color: #4ade80">&#9679;</span>
       <span class="gf-text-secondary">
-        Showing scan results for
+        Showing audit results for
         <strong
           class="gf-text-primary"
           x-text="currentAgent?.agentName"
@@ -411,7 +411,7 @@
                   ></span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px">
-                  <!-- Pass/fail count from scan data -->
+                  <!-- Pass/fail count from audit data -->
                   <template x-if="categoryPassCount(catChecks)">
                     <span
                       style="font-size: 11px; font-weight: 500"
@@ -445,25 +445,25 @@
                       "
                       class="gf-tr-clickable"
                     >
-                      <!-- Pass/fail indicator from scan -->
+                      <!-- Pass/fail indicator from audit -->
                       <div
                         style="width: 18px; flex-shrink: 0; text-align: center"
                       >
                         <template
-                          x-if="scanResult(check.id) && scanResult(check.id).status !== 'na'"
+                          x-if="auditResult(check.id) && auditResult(check.id).status !== 'na'"
                         >
                           <span
                             style="font-size: 13px; font-weight: 600"
                             :style="{
-                              color: scanResult(check.id).status === 'pass' ? '#4ade80' :
-                                     scanResult(check.id).status === 'partial' ? '#facc15' : '#f87171'
+                              color: auditResult(check.id).status === 'pass' ? '#4ade80' :
+                                     auditResult(check.id).status === 'partial' ? '#facc15' : '#f87171'
                             }"
-                            x-text="scanResult(check.id).status === 'pass' ? '&#10003;' :
-                                    scanResult(check.id).status === 'partial' ? '~' : '&#10007;'"
+                            x-text="auditResult(check.id).status === 'pass' ? '&#10003;' :
+                                    auditResult(check.id).status === 'partial' ? '~' : '&#10007;'"
                           ></span>
                         </template>
                         <template
-                          x-if="!scanResult(check.id) || scanResult(check.id).status === 'na'"
+                          x-if="!auditResult(check.id) || auditResult(check.id).status === 'na'"
                         >
                           <span class="gf-text-disabled" style="font-size: 11px"
                             >--</span
@@ -534,9 +534,9 @@
                           gap: 10px;
                         "
                       >
-                        <!-- Scan evidence if available -->
+                        <!-- Audit evidence if available -->
                         <template
-                          x-if="scanResult(check.id) && scanResult(check.id).message"
+                          x-if="auditResult(check.id) && auditResult(check.id).message"
                         >
                           <div>
                             <div
@@ -548,7 +548,7 @@
                                 margin-bottom: 4px;
                               "
                             >
-                              Scan result
+                              Audit result
                             </div>
                             <p
                               style="
@@ -557,10 +557,10 @@
                                 margin: 0;
                               "
                               :style="{
-                                color: scanResult(check.id).status === 'pass' ? '#4ade80' :
-                                       scanResult(check.id).status === 'partial' ? '#facc15' : '#f87171'
+                                color: auditResult(check.id).status === 'pass' ? '#4ade80' :
+                                       auditResult(check.id).status === 'partial' ? '#facc15' : '#f87171'
                               }"
-                              x-text="scanResult(check.id).message"
+                              x-text="auditResult(check.id).message"
                             ></p>
                           </div>
                         </template>
@@ -679,18 +679,18 @@
                 "
                 class="gf-tr-clickable"
               >
-                <!-- Triggered indicator from scan -->
+                <!-- Triggered indicator from audit -->
                 <div style="width: 18px; flex-shrink: 0; text-align: center">
-                  <template x-if="scanAP(ap.id)">
+                  <template x-if="auditAP(ap.id)">
                     <span
                       style="font-size: 13px; font-weight: 600"
                       :style="{
-                        color: scanAP(ap.id).triggered ? '#f87171' : '#4ade80'
+                        color: auditAP(ap.id).triggered ? '#f87171' : '#4ade80'
                       }"
-                      x-text="scanAP(ap.id).triggered ? '&#10007;' : '&#10003;'"
+                      x-text="auditAP(ap.id).triggered ? '&#10007;' : '&#10003;'"
                     ></span>
                   </template>
-                  <template x-if="!scanAP(ap.id)">
+                  <template x-if="!auditAP(ap.id)">
                     <span class="gf-text-disabled" style="font-size: 11px"
                       >--</span
                     >
@@ -771,8 +771,8 @@
                     style="font-size: 12px; line-height: 1.5; margin: 0"
                     x-text="ap.recommendation"
                   ></p>
-                  <!-- Scan evidence if available -->
-                  <template x-if="scanAP(ap.id) && scanAP(ap.id).triggered">
+                  <!-- Audit evidence if available -->
+                  <template x-if="auditAP(ap.id) && auditAP(ap.id).triggered">
                     <div
                       style="
                         margin-top: 8px;
@@ -798,7 +798,7 @@
                           margin: 0;
                           color: #f87171;
                         "
-                        x-text="scanAP(ap.id).message"
+                        x-text="auditAP(ap.id).message"
                       ></p>
                     </div>
                   </template>
@@ -859,7 +859,7 @@
           ></div>
         </div>
 
-        <!-- Current score (if scanned) -->
+        <!-- Current score (if audited) -->
         <div
           class="gf-bg-elevated"
           style="border-radius: 8px; padding: 12px 16px; text-align: center"
@@ -884,7 +884,7 @@
               class="gf-text-disabled"
               style="font-size: 14px; margin-top: 4px"
             >
-              Not scanned
+              Not audited
             </div>
           </template>
         </div>

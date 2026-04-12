@@ -55,7 +55,7 @@
           </div>
         </button>
         <button
-          @click="activeView = 'scan'; scanDetailAgent = report.agents[0]?.agent"
+          @click="activeView = 'audit'"
           class="gf-action-btn"
           style="
             text-align: left;
@@ -82,7 +82,7 @@
           </span>
           <div style="flex: 1; min-width: 0">
             <div class="gf-action-title">View details</div>
-            <div class="gf-action-desc">Scanner breakdown</div>
+            <div class="gf-action-desc">Audit breakdown</div>
           </div>
         </button>
         <button
@@ -211,11 +211,11 @@
           white-space: nowrap;
           flex-shrink: 0;
         "
-        x-text="lastScanTime ? 'Scanned ' + formatTimeAgo(lastScanTime) : ''"
+        x-text="lastAuditTime ? 'Audited ' + formatTimeAgo(lastAuditTime) : ''"
       ></div>
     </div>
 
-    <!-- No scan data -->
+    <!-- No audit data -->
     <div
       x-show="!report"
       class="gf-surface"
@@ -227,14 +227,14 @@
       "
     >
       <p class="gf-text-muted" style="font-size: 13px; margin-bottom: 12px">
-        No scan results yet
+        No audit results yet
       </p>
       <button
-        @click="runScan()"
-        :disabled="scanning"
+        @click="runAudit()"
+        :disabled="auditing"
         class="gf-btn gf-btn-md gf-btn-primary"
       >
-        <span x-text="scanning ? 'Scanning...' : 'Run Scan'"></span>
+        <span x-text="auditing ? 'Auditing...' : 'Run Audit'"></span>
       </button>
     </div>
 
@@ -249,14 +249,14 @@
         "
       >
         <span class="gf-text-primary" style="font-size: 20px; font-weight: 600"
-          >Scanner</span
+          >Audit</span
         >
         <button
-          @click="runScan()"
-          :disabled="scanning"
-          class="gf-btn gf-btn-md gf-btn-scan"
+          @click="runAudit()"
+          :disabled="auditing"
+          class="gf-btn gf-btn-md gf-btn-primary"
         >
-          <span x-text="scanning ? 'Scanning...' : 'Re-scan'"></span>
+          <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
         </button>
       </div>
       <div
@@ -264,7 +264,7 @@
       >
         <template x-for="agent in (report?.agents || [])" :key="agent.agent">
           <button
-            @click="activeView = 'scan'; scanDetailAgent = agent.agent; selectedAgent = agent.agent"
+            @click="activeView = 'audit'; auditDetailAgent = agent.agent; selectedAgent = agent.agent"
             class="gf-card"
             style="
               padding: 20px 24px;
@@ -369,7 +369,7 @@
             <div
               class="gf-text-disabled"
               style="font-size: 11px; font-style: italic"
-              x-text="agent.version || 'not scanned'"
+              x-text="agent.version || 'not audited'"
             ></div>
           </div>
         </template>
@@ -439,7 +439,7 @@
                 <button
                   x-show="agent.installed && terminalAvailable"
                   @click="activeRunner = agent.id; launchInTerminal('', agent.id)"
-                  class="gf-btn gf-btn-sm gf-btn-scan"
+                  class="gf-btn gf-btn-sm gf-btn-primary"
                 >
                   Terminal
                 </button>

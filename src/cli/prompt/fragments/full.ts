@@ -29,7 +29,7 @@ Add to \`.gitignore\`:
 .goat-flow/
 \`\`\`
 
-This enables the skill session logging protocol (Shared Conventions closing step) and telemetry from \`goat-flow scan\`.`,
+This enables the skill session logging protocol (Shared Conventions closing step) and telemetry from \`goat-flow audit\`.`,
   },
   {
     key: "add-rfc2119",

@@ -5,7 +5,7 @@
 #
 # GOAT-Flow setup validation entrypoint.
 # Verifies repository governance and onboarding invariants used by the
-# goat-flow scanner, including:
+# goat-flow auditor, including:
 #   - Router wiring in instruction files
 #   - Required skill files and facts used by the CLI
 #   - Learning-loop surfaces (lessons / footguns / decisions)

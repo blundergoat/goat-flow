@@ -492,21 +492,15 @@ export interface ReadonlyFS {
 
 // === CLI Options ===
 
-/** Parsed command-line arguments for the goat-flow scan command */
+/** Parsed command-line arguments for the goat-flow CLI */
 export interface CLIOptions {
   projectPath: string;
   format: "json" | "text" | "html" | "markdown";
   // Null means scan all detected agents
   agent: AgentId | null;
   verbose: boolean;
-  // Fail the process if score is below this threshold
-  minScore: number | null;
-  // Fail the process if grade is below this threshold
-  minGrade: Grade | null;
   // Write output to a file instead of stdout
   output: string | null;
-  // Show prioritized setup guidance instead of scores
-  guide: boolean;
   // Enable live reload for dashboard development
   dev: boolean;
   help: boolean;

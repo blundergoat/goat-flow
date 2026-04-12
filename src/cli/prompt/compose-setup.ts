@@ -187,7 +187,7 @@ function renderAllPass(
   lines.push(
     "- After upgrading goat-flow, re-run `goat-flow setup` to check for new checks",
   );
-  lines.push("- Run `goat-flow scan --min-score 90` in CI to catch drift");
+  lines.push("- Run `goat-flow audit` in CI to catch drift");
   lines.push(
     "- Review `.goat-flow/footguns/` and `.goat-flow/lessons/` after incidents",
   );
@@ -342,8 +342,8 @@ function renderShortFix(
   renderTriggeredAntiPatternFixes(lines, triggered, agentId, vars);
 
   lines.push("");
-  lines.push(`**Target: 100% with zero anti-pattern deductions.**`);
-  lines.push(`Re-run: \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push(`**Target: audit passes with zero failures.**`);
+  lines.push(`Re-run: \`${getCliCommand()} audit . --agent ${agentId}\``);
   lines.push(
     `If not 100%, run \`${getCliCommand()} setup . --agent ${agentId}\` for fix instructions. Repeat until 100% (max 3 cycles).`,
   );
@@ -542,7 +542,7 @@ function renderPhaseGate(
   agentId: AgentId,
 ): void {
   if (phase === "anti-pattern") return;
-  lines.push(`**GATE:** Run \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push(`**GATE:** Run \`${getCliCommand()} audit . --agent ${agentId}\``);
   lines.push("");
 }
 
@@ -906,7 +906,7 @@ function renderSetupRedirect(
       lines.push("## This project is already on the current goat-flow version");
       lines.push("");
       lines.push(
-        `Run \`${getCliCommand()} scan . --agent ${agentId}\` and fix any failing checks.`,
+        `Run \`${getCliCommand()} audit . --agent ${agentId}\` and fix any failing checks.`,
       );
       lines.push("No setup changes needed - the project is up to date.");
       lines.push("");
@@ -918,7 +918,7 @@ function renderSetupRedirect(
     lines.push(projectState.details);
     lines.push("");
     lines.push(
-      `Repair the missing pieces, then run \`${getCliCommand()} scan . --agent ${agentId}\` to confirm the project is healthy.`,
+      `Repair the missing pieces, then run \`${getCliCommand()} audit . --agent ${agentId}\` to confirm the project is healthy.`,
     );
     lines.push("");
   }
@@ -1264,9 +1264,9 @@ function renderSetupRedirect(
   lines.push("");
 
   // Scan + iterate
-  lines.push(`**Scan:** Run \`${getCliCommand()} scan . --agent ${agentId}\``);
+  lines.push(`**Audit:** Run \`${getCliCommand()} audit . --agent ${agentId}\``);
   lines.push("");
-  lines.push("**Target: 100% with zero anti-pattern deductions.**");
+  lines.push("**Target: audit passes with zero failures.**");
   lines.push(
     `If not 100%, run \`${getCliCommand()} setup . --agent ${agentId}\` for remaining fix instructions. Repeat until 100% (max 3 cycles).`,
   );

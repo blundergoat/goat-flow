@@ -1,7 +1,7 @@
 {
   "name": "@blundergoat/goat-flow",
   "version": "1.1.0",
-  "description": "CLI scanner, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
+  "description": "CLI auditor, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
   "author": {
     "name": "Matthew Hansen",
     "url": "https://www.blundergoat.com"
@@ -43,9 +43,9 @@
     "test": "node --import tsx --test test/*/*.test.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/warn-node-pty.mjs",
-    "scan": "node dist/cli/cli.js scan .",
-    "scan:verbose": "node dist/cli/cli.js scan . --verbose",
-    "scan:json": "node dist/cli/cli.js scan . --format json",
+    "audit": "node dist/cli/cli.js audit .",
+    "audit:quality": "node dist/cli/cli.js audit . --quality",
+    "audit:json": "node dist/cli/cli.js audit . --format json",
     "setup": "node dist/cli/cli.js setup . --agent claude",
     "dev": "tsc && node dist/cli/cli.js dashboard . --dev",
     "dashboard": "node dist/cli/cli.js dashboard .",
@@ -68,7 +68,7 @@
     "dashboard",
     "gemini",
     "llm",
-    "scanner",
+    "auditor",
     "workflow"
   ],
   "dependencies": {

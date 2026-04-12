@@ -65,10 +65,10 @@ if [[ -x scripts/preflight-checks.sh ]]; then
     bash scripts/preflight-checks.sh || warn "Preflight checks had issues"
 fi
 
-# 6. Self-scan
-if [[ -f package.json ]] && grep -q '"self-scan"' package.json 2>/dev/null; then
-    info "Running self-scan..."
-    npm run self-scan -- --format text 2>/dev/null || warn "Self-scan not available yet"
+# 6. Self-audit
+if [[ -f package.json ]] && grep -q '"audit"' package.json 2>/dev/null; then
+    info "Running self-audit..."
+    npm run audit 2>/dev/null || warn "Self-audit not available yet"
 fi
 
 echo ""
@@ -77,4 +77,4 @@ info "Commands:"
 info "  npm run build       - Compile TypeScript"
 info "  npm test            - Run tests"
 info "  npm run typecheck   - Type-check without emitting"
-info "  npm run self-scan   - Scan this repo with goat-flow"
+info "  npm run audit       - Audit this repo with goat-flow"

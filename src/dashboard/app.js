@@ -9,7 +9,7 @@ function app() {
       localStorage.getItem("gf-dark") === "true" ||
       (!localStorage.getItem("gf-dark") &&
         window.matchMedia("(prefers-color-scheme: dark)").matches),
-    scanning: false,
+    auditing: false,
     toast: "",
     toastError: false,
     copyLabel: "Copy",
@@ -21,7 +21,7 @@ function app() {
     userRole: "",
     workspacePanel: "prompts",
     sidebarCollapsed: false,
-    scanDetailAgent: null,
+    auditDetailAgent: null,
     get projectName() {
       return (
         this.projectPath.split("/").filter(Boolean).pop() || this.projectPath
@@ -40,9 +40,9 @@ function app() {
     browserParent: "",
     browserDirs: [],
 
-    lastScanTime: null,
+    lastAuditTime: null,
 
-    // --- Scanner state ---
+    // --- Audit detail state ---
     selectedFixes: [],
     fixCopyLabel: "Copy fixes",
 
@@ -69,7 +69,7 @@ function app() {
 
     // --- Projects state ---
     projectsList: [],
-    projectsScanning: false,
+    projectsAuditing: false,
     showAddProject: false,
     projectsSortKey: null,
     projectsSortAsc: true,
@@ -80,6 +80,12 @@ function app() {
     antiPatterns: [],
     rubricFilter: "all",
     rubricSearch: "",
+
+    // --- Critique state ---
+    critiqueAgent: "claude",
+    critiqueLoading: false,
+    critiqueResult: null, // { command, agent, auditStatus, auditSummary, prompt }
+    critiqueCopyLabel: "Copy",
 
     // --- Wizard state ---
     wizardDetecting: false,
@@ -255,10 +261,10 @@ function app() {
       // Sync initial state (anti-FOUC script may have added 'dark' before Alpine)
       document.documentElement.classList.toggle("dark", this.darkMode);
       this._loadSavedProjects().then(() => {
-        if (this.projectsList.length > 0) this.scanAllProjects();
+        if (this.projectsList.length > 0) this.auditAllProjects();
       });
       if (location.protocol === "http:" || location.protocol === "https:") {
-        this.runScan();
+        this.runAudit();
         this.checkTerminalAvailable();
         // Detect installed agents
         fetch("/api/agents/installed")
@@ -309,21 +315,21 @@ function app() {
     },
 
     // -- API Calls --
-    async runScan() {
-      this.scanning = true;
+    async runAudit() {
+      this.auditing = true;
       this.toast = "";
       try {
         const res = await fetch(
-          `/api/scan?path=${encodeURIComponent(this.projectPath)}`,
+          `/api/audit?path=${encodeURIComponent(this.projectPath)}`,
         );
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         this.report = data;
         this.selectedAgent = data.agents?.[0]?.agent || null;
-        this.lastScanTime = new Date();
-        if (!this.scanDetailAgent) {
-          this.scanDetailAgent = data.agents?.[0]?.agent || null;
+        this.lastAuditTime = new Date();
+        if (!this.auditDetailAgent) {
+          this.auditDetailAgent = data.agents?.[0]?.agent || null;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -334,7 +340,7 @@ function app() {
           true,
         );
       }
-      this.scanning = false;
+      this.auditing = false;
     },
     // -- Folder Browser --
     async openBrowser() {
@@ -360,7 +366,7 @@ function app() {
       if (dir.isProject) {
         this.projectPath = dir.path;
         this.showBrowser = false;
-        this.runScan();
+        this.runAudit();
       } else this.browseTo(dir.path);
     },
 
@@ -429,6 +435,38 @@ function app() {
       this.wizardGenerating = false;
     },
 
+    // -- Critique --
+    async generateCritique() {
+      this.critiqueLoading = true;
+      this.critiqueResult = null;
+      this.critiqueCopyLabel = "Copy";
+      try {
+        const res = await fetch(
+          `/api/critique?path=${encodeURIComponent(this.projectPath)}&agent=${encodeURIComponent(this.critiqueAgent)}`,
+        );
+        const data = await res.json();
+        if (data.error) {
+          this.showToast(data.error, true);
+        } else {
+          this.critiqueResult = data;
+        }
+      } catch (err) {
+        this.showToast(err.message || "Critique generation failed", true);
+      }
+      this.critiqueLoading = false;
+    },
+    copyCritique() {
+      if (!this.critiqueResult?.prompt) return;
+      this.copyText(this.critiqueResult.prompt);
+      this.critiqueCopyLabel = "Copied!";
+      setTimeout(() => (this.critiqueCopyLabel = "Copy"), 2000);
+    },
+    runCritiqueInTerminal() {
+      if (!this.critiqueResult?.prompt) return;
+      this.sendToTerminal(this.critiqueResult.prompt);
+      this.activeView = "workspace";
+    },
+
     // -- Preferences --
     // -- Projects --
     async addProject() {
@@ -443,7 +481,7 @@ function app() {
         path: this.newProjectPath,
         state: "...",
         action: "...",
-        details: "Scanning...",
+        details: "Auditing...",
       });
       this.showAddProject = false;
       try {
@@ -492,8 +530,8 @@ function app() {
         return av.localeCompare(bv) * dir;
       });
     },
-    async scanAllProjects() {
-      this.projectsScanning = true;
+    async auditAllProjects() {
+      this.projectsAuditing = true;
       try {
         const paths = this.projectsList.map((p) => p.path).join(",");
         const res = await fetch(
@@ -504,7 +542,7 @@ function app() {
       } catch {
         /* silent */
       }
-      this.projectsScanning = false;
+      this.projectsAuditing = false;
     },
     async _loadSavedProjects() {
       let saved = [];
@@ -537,7 +575,7 @@ function app() {
           path,
           state: "...",
           action: "...",
-          details: "Not scanned",
+          details: "Not audited",
         }));
         this._saveProjectsList();
       }
@@ -588,7 +626,7 @@ function app() {
 
     // -- Fix prompts --
     buildFixPrompt(rec) {
-      return `Fix ${rec.checkId} (${rec.category}): ${rec.action}\n\nVerify: goat-flow scan ${this.projectPath} --agent ${this.selectedAgent}`;
+      return `Fix ${rec.checkId} (${rec.category}): ${rec.action}\n\nVerify: goat-flow audit ${this.projectPath} --agent ${this.selectedAgent}`;
     },
     copyFixPrompt(rec) {
       this.copyText(this.buildFixPrompt(rec));
@@ -997,7 +1035,7 @@ function app() {
     get currentAgent() {
       return (
         this.report?.agents?.find(
-          (a) => a.agent === (this.scanDetailAgent || this.selectedAgent),
+          (a) => a.agent === (this.auditDetailAgent || this.selectedAgent),
         ) || null
       );
     },

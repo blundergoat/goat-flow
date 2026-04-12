@@ -65,10 +65,10 @@ bash scripts/preflight-checks.sh         # Full preflight gate
 bash scripts/context-validate.sh         # Validate GOAT Flow structure
 
 # CLI commands (after build)
-goat-flow scan .                         # Score a project
+goat-flow audit .                        # Validate setup correctness
+goat-flow audit . --quality              # Advisory quality scores
 goat-flow setup --agent claude           # Generate setup prompt
-goat-flow setup --agent codex            # Generate setup prompt
-goat-flow --min-score 75                 # CI gate
+goat-flow critique . --agent claude      # Generate critique prompt
 ```
 
 ## Conventions

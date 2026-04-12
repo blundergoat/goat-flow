@@ -1,9 +1,6 @@
 /**
  * Programmatic entry point for goat-flow as a library.
- * Re-exports the stable scan, prompt, config, and telemetry APIs used by tests and external consumers.
- *
- * Library entry point for programmatic consumers (M2, M3).
- * Re-exports the scan engine, types, and utilities.
+ * Re-exports the stable audit, prompt, config, and utility APIs used by tests and external consumers.
  */
 
 export type {
@@ -31,9 +28,6 @@ export type {
   CLIOptions,
 } from "./types.js";
 
-export { scanProject } from "./scanner/scan.js";
-export type { ScanOptions } from "./scanner/scan.js";
-
 export { createFS } from "./facts/fs.js";
 
 export {
@@ -45,5 +39,3 @@ export {
 export { getFragmentsByPhase } from "./prompt/registry.js";
 
 export { mapSignalsToTemplates } from "./prompt/template-refs.js";
-export { appendScanHistory } from "./telemetry/scan-logger.js";
-export type { ScanHistoryEntry } from "./telemetry/scan-logger.js";
