@@ -1,16 +1,18 @@
 # Step 06 - Final Verification
 
-This is the only setup gate. The goal is simple: `goat-flow audit . --agent {agent}` passes and the created file set matches `workflow/setup/reference/project-structure.json`.
+The setup gate is: `goat-flow audit . --agent {agent}` passes. The remaining checks below are agent-driven verification steps that improve quality but are not enforced by the auditor.
 
-## Audit
+## Audit (required gate)
 
 Run `goat-flow audit . --agent {agent}` and fix all failures until it passes.
 
 The `--agent` flag scopes the audit to one agent's surfaces: it checks that agent's instruction file, skills directory, hooks, and settings. It does NOT check other agents' files. For multi-agent projects, run the audit once per agent.
 
-No build/test/lint requirement. No separate human checklist. Fix audit failures until `goat-flow audit .` passes.
+The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, Ask First sync, duplicate surfaces). The checks below cover those content concerns.
 
 `goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --quality` is also optional - it provides advisory quality scores but does not affect the pass/fail result.
+
+## Manual verification (recommended, not gated by audit)
 
 **If a check cannot be fixed** (binary not installed locally, CI tool unavailable, platform constraint), document it as a known exception in the setup session log:
 > `Known exception: check [ID] - [reason it can't be fixed]. Follow-up: [action to resolve later, or "accepted as permanent exception"].`

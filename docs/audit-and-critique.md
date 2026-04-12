@@ -25,7 +25,7 @@ Validates that the project's agent harness is structurally correct and optionall
 
 ### Build mode (default)
 
-Binary pass/fail. This is the setup gate - Step 06, preflight, and CI all use `audit`.
+Binary pass/fail. This is the setup gate - Step 06 and preflight use `audit`.
 
 Build checks are grouped by **scope**:
 
@@ -45,7 +45,7 @@ Build checks are grouped by **scope**:
 - Hook scripts pass syntax check (`bash -n`)
 - Deny patterns registered in agent settings
 
-**Agent detection:** `audit` determines which agents are configured from `.goat-flow/config.yaml`'s `agents` list. If no config exists, it detects agents from the presence of instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) and skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`).
+**Agent detection:** `audit` detects which agents are configured from the presence of instruction files (CLAUDE.md, AGENTS.md, GEMINI.md). Use `--agent claude|codex|gemini` to scope checks to a single agent.
 
 ### Quality mode (`--quality`)
 

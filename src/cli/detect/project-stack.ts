@@ -699,20 +699,77 @@ function detectStaticAnalysis(
   fs: ReadonlyFS,
 ): Array<{ tool: string; level: string | null }> {
   const staticAnalysis: Array<{ tool: string; level: string | null }> = [];
+
+  // PHP: PHPStan
   const phpstanConfig =
     fs.readFile("phpstan.neon") ?? fs.readFile("phpstan.neon.dist");
-  const mypyConfig = fs.readFile("mypy.ini") ?? fs.readFile("setup.cfg");
-
   if (phpstanConfig) {
     const levelMatch = phpstanConfig.match(/level:\s*(\d+|max)/);
     staticAnalysis.push({ tool: "phpstan", level: levelMatch?.[1] ?? null });
   }
+
+  // Python: mypy
+  const mypyConfig = fs.readFile("mypy.ini") ?? fs.readFile("setup.cfg");
   if (mypyConfig && /\[mypy\]/i.test(mypyConfig)) {
     const strictMatch = mypyConfig.match(/strict\s*=\s*(true|false)/i);
     staticAnalysis.push({
       tool: "mypy",
       level: strictMatch?.[1] === "true" ? "strict" : null,
     });
+  }
+
+  // Python: ruff
+  if (
+    fs.exists("ruff.toml") ||
+    fs.exists(".ruff.toml") ||
+    fs.readFile("pyproject.toml")?.includes("[tool.ruff")
+  ) {
+    staticAnalysis.push({ tool: "ruff", level: null });
+  }
+
+  // JS/TS: eslint (config files or package.json devDependencies)
+  const hasEslintConfig =
+    fs.exists("eslint.config.js") ||
+    fs.exists("eslint.config.mjs") ||
+    fs.exists("eslint.config.cjs") ||
+    fs.exists("eslint.config.ts") ||
+    fs.exists(".eslintrc.json") ||
+    fs.exists(".eslintrc.js") ||
+    fs.exists(".eslintrc.yml") ||
+    fs.exists(".eslintrc");
+  if (!hasEslintConfig) {
+    const pkg = fs.readJson("package.json") as Record<string, unknown> | null;
+    const devDeps = (pkg?.devDependencies ?? {}) as Record<string, unknown>;
+    if (devDeps["eslint"]) {
+      staticAnalysis.push({ tool: "eslint", level: null });
+    }
+  } else {
+    staticAnalysis.push({ tool: "eslint", level: null });
+  }
+
+  // JS/TS: biome
+  if (fs.exists("biome.json") || fs.exists("biome.jsonc")) {
+    staticAnalysis.push({ tool: "biome", level: null });
+  }
+
+  // Go: golangci-lint
+  if (fs.exists(".golangci.yml") || fs.exists(".golangci.yaml") || fs.exists(".golangci.toml")) {
+    staticAnalysis.push({ tool: "golangci-lint", level: null });
+  }
+
+  // Rust: clippy (detected via Cargo.toml presence — clippy ships with rustup)
+  if (fs.exists("Cargo.toml")) {
+    staticAnalysis.push({ tool: "clippy", level: null });
+  }
+
+  // Ruby: rubocop
+  if (fs.exists(".rubocop.yml") || fs.exists(".rubocop.yaml")) {
+    staticAnalysis.push({ tool: "rubocop", level: null });
+  }
+
+  // Python: pylint
+  if (fs.exists(".pylintrc") || fs.exists("pylintrc")) {
+    staticAnalysis.push({ tool: "pylint", level: null });
   }
 
   return staticAnalysis;

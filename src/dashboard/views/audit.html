@@ -305,7 +305,7 @@
               class="gf-text-muted"
               style="font-size: 11px; margin-bottom: 10px"
               x-text="agent.concerns
-                ? (() => { const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All 26 checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : '') + ' across 26 checks'; })()
+                ? (() => { const total = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0) + (agent.concerns[k]?.findings?.length || 0), 0); const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); const checkCount = agent.harness.checks.length + concernKeys.reduce((n, k) => n + (agent.concerns[k]?.findings?.length || 0) + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All quality checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : ''); })()
                 : `${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"
             ></div>
             <!-- Concern mini-bars (click a row to expand that concern in the detail panel) -->

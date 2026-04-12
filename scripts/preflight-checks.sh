@@ -220,13 +220,13 @@ else
     skip "Version check (missing package.json or version.ts)"
 fi
 
-# ── Dual-Agent Loop Consistency ──────────────────────────────────────
+# ── Cross-Agent Loop Consistency ─────────────────────────────────────
 agent_files=()
 for af in CLAUDE.md AGENTS.md GEMINI.md; do
     [[ -f "$af" ]] && agent_files+=("$af")
 done
 if [[ ${#agent_files[@]} -ge 2 ]]; then
-    section "Dual-Agent Consistency"
+    section "Cross-Agent Consistency"
     # Extract execution loop (READ→Autonomy) from each file, normalize, compare word sets
     extract_loop() {
         sed -n '/\*\*READ\*\*\|^##.*READ/,/^## \(Autonomy\|Router\|Hard Rules\|Working Memory\|Definition of Done\)/p' "$1" \

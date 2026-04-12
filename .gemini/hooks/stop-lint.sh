@@ -4,7 +4,7 @@
 # Enforce mode: exits non-zero on errors (set GOAT_LINT_ENFORCE=1).
 # Default stays advisory to prevent infinite fix loops.
 
-# Infinite loop guard
+# Infinite loop guard (convention from enforcement.md)
 if [ "${STOP_HOOK_ACTIVE:-}" = "1" ]; then
   exit 0
 fi
@@ -22,6 +22,7 @@ ERROR_COUNT=0
 
 # Check which file types were modified
 CHANGED_SH=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.sh$') || CHANGED_SH=""
+CHANGED_TS=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.ts$') || CHANGED_TS=""
 
 # Shell scripts: syntax check + shellcheck
 if [ -n "$CHANGED_SH" ]; then
@@ -46,7 +47,6 @@ if [ -n "$CHANGED_SH" ]; then
 fi
 
 # TypeScript: type check (if tsc available and tsconfig exists)
-CHANGED_TS=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep '\.ts$') || CHANGED_TS=""
 if [ -n "$CHANGED_TS" ] && [ -f "tsconfig.json" ]; then
   if command -v npx >/dev/null 2>&1; then
     if ! TSC_OUT=$(npx tsc --noEmit 2>&1); then

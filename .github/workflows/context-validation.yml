@@ -80,7 +80,7 @@ jobs:
           find . -name 'CLAUDE.md' -not -path './CLAUDE.md' -not -path './.git/*' | while read -r f; do
             LINES=$(wc -l < "$f")
             if [ "$LINES" -gt 20 ]; then
-              echo "::warning::Local instruction file $f exceeds 20 lines ($LINES). Anti-pattern AP7."
+              echo "::warning::Local instruction file $f exceeds 20 lines ($LINES)."
             fi
           done
 

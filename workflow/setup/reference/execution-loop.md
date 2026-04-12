@@ -76,13 +76,13 @@ f) Router table: MUST include at minimum:
 
 g) Essential commands
 
-h) Complexity and read policy (from CLAUDE.md):
+h) (Optional) Complexity and read policy:
    - Hotfix, Small Feature, Standard, System, Infrastructure.
    - If reads exceed 3x your initial estimate, re-classify.
 
-i) Session continuity:
+i) (Optional) Session continuity:
    - Write session context to `.goat-flow/logs/sessions/` when work spans multiple turns.
 
 If you must weaken a MUST to meet the line target, the target is
 wrong - raise it, don't weaken the rule.
-Do NOT skip sections (f)-(g) - they are small but required.
+Do NOT skip sections (a)-(g) - they are required. Sections (h)-(i) are optional but recommended.

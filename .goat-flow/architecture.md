@@ -16,7 +16,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Reference library | `workflow/reference/security/` | Security reference material used later for project-specific guidance |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 79 rubric checks + 12 anti-patterns (internal scoring), 15 build + 15 quality checks (public audit, 2 scopes: setup + harness), fragment-based prompts, multi-agent support |
+| CLI auditor | `src/cli/` | 79 rubric checks + 12 anti-patterns (internal scoring), 15 build + 25 quality checks (public audit, 2 scopes: setup + harness), fragment-based prompts, multi-agent support |
 | Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for audit, critique, help, home, projects, wizard, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -52,7 +52,7 @@ src/cli/
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.js    # Preset configurations
-  views/              # Page views (audit, critique, help, home, projects, rubrics, settings, wizard, workspace)
+  views/              # Page views (audit, critique, help, home, projects, wizard, workspace)
 ```
 
 ## Key Constraints
@@ -63,7 +63,7 @@ src/dashboard/
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. Optional local instruction files (`.github/instructions/`) are cold path -- loaded later on demand when a project chooses to add them.
+Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. Skills, templates, and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
 
 ## Deliberate Trade-offs
 

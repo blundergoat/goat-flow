@@ -72,12 +72,39 @@ export function extractSettingsFacts(
   let hasDenyPatterns = false;
   if (agent.settingsFile) {
     if (agent.settingsFile.endsWith(".toml")) {
-      // TOML (Codex config.toml) -- read as text, not JSON
-      /** Raw TOML content read as plain text */
+      // TOML (Codex config.toml) -- parse key=value pairs into an object
       const tomlContent = fs.readFile(agent.settingsFile);
-      const hasKeyValue = /^\s*\w+\s*=/m.test(tomlContent ?? "");
-      valid = hasKeyValue;
-      // settingsParsed stays null -- TOML is inspected via text regex, not parsed object
+      if (tomlContent) {
+        const tomlObj: Record<string, unknown> = {};
+        let currentSection = "";
+        for (const line of tomlContent.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("#") || trimmed === "") continue;
+          const sectionMatch = trimmed.match(/^\[(.+)\]$/);
+          if (sectionMatch?.[1]) {
+            currentSection = sectionMatch[1];
+            continue;
+          }
+          const kvMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+          if (kvMatch?.[1] && kvMatch[2]) {
+            const key = currentSection
+              ? `${currentSection}.${kvMatch[1]}`
+              : kvMatch[1];
+            let val: unknown = kvMatch[2].trim();
+            if (val === "true") val = true;
+            else if (val === "false") val = false;
+            else if (
+              typeof val === "string" &&
+              val.startsWith('"') &&
+              val.endsWith('"')
+            )
+              val = val.slice(1, -1);
+            tomlObj[key] = val;
+          }
+        }
+        valid = Object.keys(tomlObj).length > 0;
+        parsed = tomlObj;
+      }
     } else {
       parsed = fs.readJson(agent.settingsFile);
       valid = parsed !== null;

@@ -67,4 +67,48 @@ def check(command):
         if cloud_cmd in cmd:
             return "forbidden"
 
+    # Lockfile modifications (use package manager, not direct writes)
+    for lockfile in ["package-lock.json", "yarn.lock", "composer.lock", "gemfile.lock", "pnpm-lock.yaml", "go.sum", "cargo.lock"]:
+        if lockfile in cmd and any(op in cmd for op in [">", ">>", "tee ", "sed -i", "echo "]):
+            return "prompt"
+
+    # Destructive database commands
+    for db_cmd in ["drop table", "drop database", "truncate table"]:
+        if db_cmd in cmd:
+            return "forbidden"
+
+    # File truncation
+    if "truncate " in cmd:
+        return "forbidden"
+    # > file (redirect that clobbers)
+    parts = cmd.split()
+    for i, part in enumerate(parts):
+        if part == ">" and i + 1 < len(parts):
+            return "forbidden"
+
+    # git clean
+    if "git clean" in cmd and ("-f" in cmd or "-fd" in cmd):
+        return "forbidden"
+
+    # eval / bash -c (arbitrary code execution)
+    if cmd.startswith("eval ") or " eval " in cmd:
+        return "prompt"
+    if "bash -c" in cmd:
+        return "prompt"
+
+    # Force push shorthand (-f flag)
+    if "git push" in cmd and " -f" in cmd:
+        return "forbidden"
+    if "git push" in cmd and "--force-with-lease" in cmd:
+        return "forbidden"
+
+    # Branch deletion
+    if "git branch" in cmd and (" -D" in cmd or " -d" in cmd):
+        return "prompt"
+
+    # Secrets access (read or write sensitive credential files)
+    for secret in [".pem", ".key", ".ssh/", ".aws/credentials", ".gnupg/"]:
+        if secret in cmd:
+            return "forbidden"
+
     return "allow"
