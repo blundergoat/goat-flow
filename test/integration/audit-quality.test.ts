@@ -1,10 +1,10 @@
 /**
- * Integration tests for `goat-flow audit --quality` concern scoring.
+ * Integration tests for `goat-flow audit --harness` concern scoring.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { QUALITY_CHECKS } from "../../src/cli/audit/quality-checks.js";
+import { QUALITY_CHECKS } from "../../src/cli/audit/harness-checks.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import type { AuditConcernKey } from "../../src/cli/audit/types.js";

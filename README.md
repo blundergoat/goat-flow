@@ -70,7 +70,7 @@ This prints a setup prompt. Paste it into Claude Code and let the agent configur
 goat-flow audit .
 ```
 
-Your project passes the structural setup checks. Add `--quality` to see advisory scoring across the 5 harness concerns. Note: audit validates setup correctness (files, config, skills, hooks), not code quality — run your project's lint and test commands separately.
+Your project passes the structural setup checks. Add `--harness` to see advisory scoring across the 5 harness concerns. Note: audit validates setup correctness (files, config, skills, hooks), not code quality — run your project's lint and test commands separately.
 
 ### 6. Try a skill
 
@@ -96,7 +96,7 @@ Skills are structured workflows the agent follows. `/goat` auto-routes to the ri
 
 ## The Five Harness Concerns
 
-GOAT Flow's quality audit (`goat-flow audit . --quality`) evaluates your project's agent harness against 5 concerns - the things every major harness engineering source agrees matter for agent effectiveness.
+GOAT Flow's quality audit (`goat-flow audit . --harness`) evaluates your project's agent harness against 5 concerns - the things every major harness engineering source agrees matter for agent effectiveness.
 
 | Concern | Question | What GOAT Flow checks |
 |---------|----------|----------------------|
@@ -112,7 +112,7 @@ These aren't a proprietary model - they're a synthesis of consensus across the h
 
 ```bash
 goat-flow audit .                          # Validate setup correctness (pass/fail)
-goat-flow audit . --quality                # Build + advisory quality scoring
+goat-flow audit . --harness                # Build + advisory quality scoring
 goat-flow critique . --agent claude        # Generate agent critique prompt
 goat-flow setup . --agent claude           # Generate setup prompt for Claude Code
 goat-flow status .                         # Show project state (bare/partial/v0.9/v1.0/v1.1)

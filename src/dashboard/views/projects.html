@@ -195,10 +195,10 @@
         <tbody>
           <template x-for="project in filteredProjects" :key="project.path">
             <tr class="gf-tr">
-              <!-- Project name (clickable → audit view) -->
+              <!-- Project name (clickable → home view) -->
               <td class="gf-td">
                 <button
-                  @click="projectPath = project.path; activeView = 'audit'; runAudit()"
+                  @click="projectPath = project.path; activeView = 'home'; runAudit()"
                   style="
                     background: none;
                     border: none;

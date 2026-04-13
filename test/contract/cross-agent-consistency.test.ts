@@ -8,8 +8,8 @@ import { resolve } from "node:path";
 import { SKILL_NAMES } from "../../src/cli/constants.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { getProjectStructure } from "../../src/cli/paths.js";
-import { BUILD_CHECKS } from "../../src/cli/audit/build-checks.js";
-import { QUALITY_CHECKS } from "../../src/cli/audit/quality-checks.js";
+import { BUILD_CHECKS } from "../../src/cli/audit/agent-setup-checks.js";
+import { QUALITY_CHECKS } from "../../src/cli/audit/harness-checks.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 

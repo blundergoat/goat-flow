@@ -60,10 +60,10 @@ export function renderAuditText(report: AuditReport): string {
   // Build scopes
   lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderTextScope("AI Harness Score", report.scopes.harness));
+  lines.push(renderTextScope("Agent Setup Checks", report.scopes.harness));
   if (report.scopes.harness.status === "pass") {
     lines.push(
-      `${YELLOW}⚠  Hooks run in advisory mode by default (exit 0). Use --quality to verify enforcement.${RESET}`,
+      `${YELLOW}⚠  Hooks run in advisory mode by default (exit 0). Use --harness to verify enforcement.${RESET}`,
     );
   }
   lines.push("");
@@ -105,7 +105,7 @@ export function renderAuditText(report: AuditReport): string {
     }
   } else {
     lines.push(
-      `${DIM}Tip: Run with --quality for advisory quality scoring across 5 harness concerns.${RESET}`,
+      `${DIM}Tip: Run with --harness for advisory quality scoring across 5 harness concerns.${RESET}`,
     );
   }
 
@@ -149,16 +149,16 @@ export function renderAuditMarkdown(report: AuditReport): string {
 
   lines.push(renderMdScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderMdScope("AI Harness Score", report.scopes.harness));
+  lines.push(renderMdScope("Agent Setup Checks", report.scopes.harness));
   if (report.scopes.harness.status === "pass") {
     lines.push(
-      "> ⚠ Hooks run in advisory mode by default (exit 0). Use --quality to verify enforcement.",
+      "> ⚠ Hooks run in advisory mode by default (exit 0). Use --harness to verify enforcement.",
     );
   }
 
   if (!report.concerns) {
     lines.push(
-      "> Tip: Run with --quality for advisory quality scoring across 5 harness concerns.",
+      "> Tip: Run with --harness for advisory quality scoring across 5 harness concerns.",
     );
     lines.push("");
   }

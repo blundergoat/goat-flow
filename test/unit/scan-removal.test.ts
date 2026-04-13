@@ -92,7 +92,7 @@ describe("backwards compatibility", () => {
     const parsed = parseCLIArgs([
       "audit",
       ".",
-      "--quality",
+      "--harness",
       "--agent",
       "claude",
       "--format",

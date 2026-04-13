@@ -2,7 +2,7 @@
 
 The harness engineering field is roughly 5 months old. There is no adopted industry-standard framework yet. But across 7 major sources - from Mitchell Hashimoto's original coining to Anthropic's managed agents architecture - there is consensus on 5 concerns that every effective agent harness must address.
 
-goat-flow's quality audit (`goat-flow audit . --quality`) evaluates each concern and scores it independently.
+goat-flow's quality audit (`goat-flow audit . --harness`) evaluates each concern and scores it independently.
 
 ---
 

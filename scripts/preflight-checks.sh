@@ -335,12 +335,12 @@ else
 fi
 
 # ── Doc/Code Drift ───────────────────────────────────────────────────
-if [[ -f dist/cli/audit/build-checks.js ]]; then
+if [[ -f dist/cli/audit/agent-setup-checks.js ]]; then
     section "Doc/Code Drift"
 
     # B.8a: Architecture count validation
-    build_count=$(node --input-type=module -e "const b=await import('./dist/cli/audit/build-checks.js');console.log(b.BUILD_CHECKS.length)" 2>/dev/null || echo "")
-    quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/quality-checks.js');console.log(q.QUALITY_CHECKS.length)" 2>/dev/null || echo "")
+    build_count=$(node --input-type=module -e "const b=await import('./dist/cli/audit/agent-setup-checks.js');console.log(b.BUILD_CHECKS.length)" 2>/dev/null || echo "")
+    quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/harness-checks.js');console.log(q.QUALITY_CHECKS.length)" 2>/dev/null || echo "")
 
     if [[ -f .goat-flow/architecture.md ]] && [[ -n "$build_count" ]] && [[ -n "$quality_count" ]]; then
         if grep -q "${build_count} build" .goat-flow/architecture.md && grep -q "${quality_count} quality" .goat-flow/architecture.md; then
@@ -354,7 +354,7 @@ if [[ -f dist/cli/audit/build-checks.js ]]; then
 
     # B.8b: Setup doc check ID validation
     if [[ -n "$build_count" ]]; then
-        check_ids=$(node --input-type=module -e "const b=await import('./dist/cli/audit/build-checks.js');b.BUILD_CHECKS.forEach(c=>console.log(c.id))" 2>/dev/null || echo "")
+        check_ids=$(node --input-type=module -e "const b=await import('./dist/cli/audit/agent-setup-checks.js');b.BUILD_CHECKS.forEach(c=>console.log(c.id))" 2>/dev/null || echo "")
         b8b_ok=true
         while IFS= read -r ref; do
             id=$(echo "$ref" | grep -oP '[\w.-]+' | tail -1)
@@ -397,9 +397,9 @@ if [[ -f src/cli/prompt/template-refs.ts ]]; then
 fi
 
 # B.8d: Dashboard concern key sync
-if [[ -f dist/cli/audit/quality-checks.js ]] && [[ -f src/dashboard/views/audit.html ]]; then
+if [[ -f dist/cli/audit/harness-checks.js ]] && [[ -f src/dashboard/views/audit.html ]]; then
     code_keys=$(node --input-type=module -e "
-      const q=await import('./dist/cli/audit/quality-checks.js');
+      const q=await import('./dist/cli/audit/harness-checks.js');
       const keys=[...new Set(q.QUALITY_CHECKS.map(c=>c.concern))].sort();
       console.log(keys.join(','))
     " 2>/dev/null || echo "")
@@ -407,7 +407,7 @@ if [[ -f dist/cli/audit/quality-checks.js ]] && [[ -f src/dashboard/views/audit.
         | head -1 | grep -oP "'[^']+'" | tr -d "'" | sort | paste -sd, 2>/dev/null || echo "")
     if [[ -n "$code_keys" ]] && [[ -n "$html_keys" ]]; then
         if [[ "$code_keys" == "$html_keys" ]]; then
-            pass "Dashboard concern keys match quality-checks.ts"
+            pass "Dashboard concern keys match harness-checks.ts"
         else
             fail "Dashboard concern keys mismatch: code=[$code_keys] html=[$html_keys]"
         fi

@@ -35,7 +35,7 @@ runs:
 
         QUALITY_FLAG=""
         if [[ "$QUALITY" == "true" ]]; then
-          QUALITY_FLAG="--quality"
+          QUALITY_FLAG="--harness"
         fi
 
         # Capture JSON on stdout only; stderr (deprecations, etc.) must not corrupt json.load

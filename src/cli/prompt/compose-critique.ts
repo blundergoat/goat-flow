@@ -50,7 +50,7 @@ function renderAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
   const scopes = [
     ["setup", "GOAT Flow Setup"],
-    ["harness", "AI Harness Score"],
+    ["harness", "Agent Setup Checks"],
   ] as const;
   for (const [scope, label] of scopes) {
     const s = report.scopes[scope];

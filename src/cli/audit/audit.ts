@@ -7,8 +7,8 @@ import type { AgentId, ReadonlyFS } from "../types.js";
 import { loadConfig } from "../config/index.js";
 import { extractProjectFacts } from "../facts/orchestrator.js";
 import { getProjectStructure } from "../paths.js";
-import { BUILD_CHECKS } from "./build-checks.js";
-import { QUALITY_CHECKS } from "./quality-checks.js";
+import { BUILD_CHECKS } from "./agent-setup-checks.js";
+import { QUALITY_CHECKS } from "./harness-checks.js";
 import type {
   AuditContext,
   AuditConcern,

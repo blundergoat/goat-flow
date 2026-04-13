@@ -6,7 +6,7 @@ goat-flow has two evaluation commands. `audit` is deterministic - it runs checks
 
 ```bash
 goat-flow audit .                              # Build correctness (pass/fail)
-goat-flow audit . --quality                    # Build + advisory quality scoring
+goat-flow audit . --harness                    # Build + advisory quality scoring
 goat-flow audit . --agent claude               # Scope to one agent
 goat-flow critique . --agent claude            # Generate critique prompt for Claude
 ```
@@ -14,7 +14,7 @@ goat-flow critique . --agent claude            # Generate critique prompt for Cl
 | Command | Output | Deterministic? | Gates CI? | Requires --agent? |
 |---------|--------|---------------|-----------|-------------------|
 | `audit` | Pass/fail per scope | Yes | Yes - exit 1 on failure | No (checks all configured agents) |
-| `audit --quality` | Grade per concern + recommendations | Yes | Never | No |
+| `audit --harness` | Grade per concern + recommendations | Yes | Never | No |
 | `critique` | Prompt for an agent | No - generates a prompt | Never | Yes |
 
 ---
@@ -47,11 +47,11 @@ Build checks are grouped by **scope**:
 - Hook scripts pass syntax check (`bash -n`)
 - Deny patterns registered in agent settings
 
-**What 100% harness score means:** hooks are correctly installed and syntactically valid. It does not mean hooks are actively enforcing - hooks ship in advisory mode by default (always exit 0, never block the agent). Use `goat-flow audit . --quality` to see the verification concern score, which checks whether enforcement mode is enabled.
+**What 100% harness score means:** hooks are correctly installed and syntactically valid. It does not mean hooks are actively enforcing - hooks ship in advisory mode by default (always exit 0, never block the agent). Use `goat-flow audit . --harness` to see the verification concern score, which checks whether enforcement mode is enabled.
 
 **Agent detection:** `audit` detects which agents are configured from the presence of instruction files (CLAUDE.md, AGENTS.md, GEMINI.md). Use `--agent claude|codex|gemini` to scope checks to a single agent.
 
-### Quality mode (`--quality`)
+### Quality mode (`--harness`)
 
 Advisory scoring on top of build checks. Never blocks CI. Never affects the exit code.
 
@@ -131,7 +131,7 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 
 - As a setup gate (use `audit`)
 - As a CI check (use `audit`)
-- As a replacement for `audit --quality` (critique is subjective; quality scoring is deterministic)
+- As a replacement for `audit --harness` (critique is subjective; quality scoring is deterministic)
 
 ---
 
@@ -139,13 +139,13 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 
 ```
 goat-flow audit .              →  "Is it installed correctly?"        →  Fix structural issues
-goat-flow audit . --quality    →  "Is the harness effective?"         →  Improve weak concerns
+goat-flow audit . --harness    →  "Is the harness effective?"         →  Improve weak concerns
 goat-flow critique . --agent X →  "What does an agent actually think?" →  Get fresh perspective
 ```
 
 Typical workflow after setup:
 1. Run `audit` - fix any build failures
-2. Run `audit --quality` - review the 5-concern scorecard, address top recommendations
+2. Run `audit --harness` - review the 5-concern scorecard, address top recommendations
 3. Run `critique` - paste into an agent session, get a subjective review
 4. Feed findings back into the harness (footguns, lessons, constraints) - the feedback loop
 

@@ -1,7 +1,7 @@
 /**
  * Types for the `goat-flow audit` command.
  * Audit validates setup correctness (build checks) and optionally scores
- * project quality (--quality) grouped by harness concerns.
+ * project quality (--harness) grouped by harness concerns.
  */
 import type {
   AgentFacts,

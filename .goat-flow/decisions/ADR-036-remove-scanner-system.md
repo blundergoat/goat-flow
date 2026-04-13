@@ -42,7 +42,7 @@ setup --agent claude
 
 **Key architectural insight:** `extractProjectFacts()` (`src/cli/facts/orchestrator.ts`) is shared infrastructure used by both systems. Stack detection (`detectStack()`), agent enumeration, hook/skill/config facts all come from facts, not from the scanner. Setup can call facts directly for context without `scanProject()`.
 
-**What replaces the scanner's repair guidance:** Each audit build check has a `howToFix` field (defined in `src/cli/audit/build-checks.ts`). When a check fails, setup renders the check name + howToFix instruction + reference to the numbered setup step that addresses it. This replaces the scanner's 100+ fragment lookup system with direct, per-check guidance.
+**What replaces the scanner's repair guidance:** Each audit build check has a `howToFix` field (defined in `src/cli/audit/agent-setup-checks.ts`). When a check fails, setup renders the check name + howToFix instruction + reference to the numbered setup step that addresses it. This replaces the scanner's 100+ fragment lookup system with direct, per-check guidance.
 
 ## Dependency Analysis
 
@@ -50,7 +50,7 @@ setup --agent claude
 - `src/cli/cli.ts:496` - setup command
 - `src/cli/server/dashboard.ts:315` - `/api/setup` endpoint
 
-**RUBRIC_VERSION dependency:** `src/cli/audit/build-checks.ts:9` imports `RUBRIC_VERSION` from `rubric/version.ts`. This is the only audit→rubric dependency. Fix: derive version from `package.json` (already done at runtime) or move constant to `src/cli/constants.ts`.
+**RUBRIC_VERSION dependency:** `src/cli/audit/agent-setup-checks.ts:9` imports `RUBRIC_VERSION` from `rubric/version.ts`. This is the only audit→rubric dependency. Fix: derive version from `package.json` (already done at runtime) or move constant to `src/cli/constants.ts`.
 
 **Audit system independence:** `src/cli/audit/` has zero imports from rubric/, scanner/, or scoring/ except the RUBRIC_VERSION constant above. The audit system is ready to be the sole evaluation engine.
 
@@ -111,7 +111,7 @@ setup --agent claude
 
 ## What Stays Unchanged
 
-- `src/cli/audit/` - build-checks.ts, quality-checks.ts, audit.ts, render.ts, types.ts
+- `src/cli/audit/` - agent-setup-checks.ts, harness-checks.ts, audit.ts, render.ts, types.ts
 - `src/cli/facts/` - orchestrator.ts, fs.ts, agent/, shared/ (shared infrastructure)
 - `src/cli/detect/` - agents.ts, project-stack.ts (shared infrastructure)
 - `src/cli/config/` - reader.ts, types.ts

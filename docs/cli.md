@@ -9,14 +9,14 @@ Validate setup correctness across two scopes: GOAT Flow Setup (pass/fail) and AI
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one agent: claude, codex, gemini |
-| `--quality` | Add advisory quality scoring by harness concern |
+| `--harness` | Add advisory quality scoring by harness concern |
 | `--format <type>` | Output: json, text, markdown (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |
 
 ```bash
 goat-flow audit .                          # Audit current directory
-goat-flow audit . --quality                # Build + advisory quality grades
+goat-flow audit . --harness                # Build + advisory quality grades
 goat-flow audit . --agent claude           # Audit scoped to Claude
 goat-flow audit . --format json            # JSON output for CI
 goat-flow audit . --output report.json     # Write to file
@@ -64,7 +64,7 @@ Common tasks and the commands to run:
 | I want to... | Command |
 |--------------|---------|
 | Check if my project is ready | `goat-flow audit .` |
-| See advisory quality scores | `goat-flow audit . --quality` |
+| See advisory quality scores | `goat-flow audit . --harness` |
 | Get a critique prompt | `goat-flow critique . --agent claude` |
 | Set up a new project | `goat-flow setup . --agent claude` |
 | Use this in CI | `goat-flow audit . --format json` |

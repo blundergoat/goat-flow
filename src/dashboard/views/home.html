@@ -12,43 +12,66 @@
       x-data="{
         hasSetupFail() { return report?.scopes?.setup?.status === 'fail'; },
         hasHarnessFail() { return (report?.agentScores || []).some(a => a.harness?.status === 'fail'); },
+        hasQualityGaps() {
+          const agents = report?.agentScores || [];
+          if (agents.length === 0) return false;
+          return agents.some(a => a.quality?.qualityScore !== null && a.quality?.qualityScore < 100);
+        },
         qualityScore() { return report?.overall?.qualityScore ?? null; },
         priority() {
           if (this.hasSetupFail()) return 'setup';
           if (this.hasHarnessFail()) return 'harness';
-          const qs = this.qualityScore();
-          if (qs !== null && qs < 60) return 'poor';
-          if (qs !== null && qs < 80) return 'fair';
+          if (this.hasQualityGaps()) return 'quality';
           return 'healthy';
         },
         heading() {
-          const h = { setup: 'Setup needs attention', harness: 'Agent harness needs fixing', poor: 'Improve AI harness quality', fair: 'Recommended next steps', healthy: 'Recommended actions' };
+          const h = { setup: 'Setup needs attention', harness: 'Agent harness needs fixing', quality: 'AI harness score needs improvement', healthy: 'Recommended actions' };
           return h[this.priority()] || 'Recommended actions';
         },
         subtext() {
           const s = {
             setup: 'Setup checks are failing - fix these before running quality prompts.',
-            harness: 'Agent harness issues detected - resolve these to unblock quality scoring.',
-            poor: 'Quality score below 60 - a targeted review will surface the biggest gaps.',
-            fair: 'Good baseline - a review and test run will push toward an A grade.',
-            healthy: 'All checks passing - these are your highest-leverage next actions.'
+            harness: 'Agent harness checks are failing - resolve these to unblock quality scoring.',
+            quality: 'AI harness quality is below 100% - fix the recommendations to reach full score.',
+            healthy: 'All checks passing at 100% - these are your highest-leverage next actions.'
           };
           return s[this.priority()] || '';
         },
         setupFixPrompt() {
           const failures = report?.scopes?.setup?.failures || [];
           if (failures.length === 0) return '/goat fix setup issues';
-          const lines = failures.map(f => `- ${f.check}: ${f.howToFix || f.message}`).join('\n');
-          return '/goat fix these setup issues:\n' + lines;
+          let num = 1;
+          const lines = failures.map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See setup step for this check.'}`).join('\n');
+          return `Fix these ${failures.length} setup failures:\n\n` + lines + '\n\nTarget: all setup checks passing.';
         },
         harnessFixPrompt() {
-          const lines = [];
+          const sections = [];
           for (const a of (report?.agentScores || [])) {
             if (a.harness?.status !== 'fail') continue;
-            const fails = (a.harness.failures || []).map(f => `  - ${f.check}: ${f.howToFix || f.message}`).join('\n');
-            lines.push(a.id + ':\n' + fails);
+            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
+            let num = 1;
+            const fails = (a.harness.failures || []).map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See harness documentation for this check.'}`).join('\n');
+            sections.push(`**${label}:**\n${fails}`);
           }
-          return '/goat fix these agent harness issues:\n' + lines.join('\n');
+          return `Fix these agent harness failures:\n\n` + sections.join('\n\n') + '\n\nTarget: all 5 harness checks passing for each agent.';
+        },
+        qualityFixPrompt() {
+          const concernLabels = { context: 'Context', constraints: 'Constraints', verification: 'Verification', recovery: 'Recovery', feedback_loop: 'Feedback Loop' };
+          const sections = [];
+          for (const a of (report?.agentScores || [])) {
+            if (!a.concerns || a.quality?.qualityScore === 100) continue;
+            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
+            const items = [];
+            for (const [ck, cl] of Object.entries(concernLabels)) {
+              const c = a.concerns[ck];
+              if (!c || c.score >= 100) continue;
+              const fixes = (c.howToFix || []).map(h => `   - ${h}`).join('\n');
+              const recs = (c.recommendations || []).map(r => `   - ${r}`).join('\n');
+              items.push(`  **${cl}** (${c.score}%):\n${fixes || recs}`);
+            }
+            if (items.length > 0) sections.push(`**${label}** (${a.quality?.qualityScore}%):\n${items.join('\n')}`);
+          }
+          return `Fix these AI harness quality gaps to reach 100%:\n\n` + sections.join('\n\n') + '\n\nTarget: all agents at 100% AI harness score.';
         }
       }"
       style="margin-bottom: 20px"
@@ -141,7 +164,7 @@
         </div>
       </div>
 
-      <!-- harness priority: dynamic fix button + audit link -->
+      <!-- harness priority: wizard button + agent-fix button -->
       <div x-show="priority() === 'harness'" x-cloak>
         <div
           style="
@@ -151,7 +174,7 @@
           "
         >
           <button
-            @click="launchPreset(harnessFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            @click="activeView = 'wizard'; detectStack()"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -168,6 +191,39 @@
               <svg
                 width="12"
                 height="12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
+                />
+              </svg>
+            </span>
+            <div style="flex: 1; min-width: 0">
+              <div class="gf-action-title" style="color: #4ade80">
+                Fix harness in wizard
+              </div>
+              <div class="gf-action-desc">Open Setup Wizard</div>
+            </div>
+          </button>
+          <button
+            @click="launchPreset(harnessFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            class="gf-action-btn"
+            style="
+              text-align: left;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            "
+          >
+            <span class="gf-play-icon">
+              <svg
+                width="12"
+                height="12"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -177,14 +233,61 @@
               </svg>
             </span>
             <div style="flex: 1; min-width: 0">
+              <div class="gf-action-title">Fix harness with agent</div>
+              <div class="gf-action-desc">Send fix prompt to terminal</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- quality gaps: wizard + agent fix buttons -->
+      <div x-show="priority() === 'quality'" x-cloak>
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+          "
+        >
+          <button
+            @click="activeView = 'wizard'; detectStack()"
+            class="gf-action-btn"
+            style="
+              text-align: left;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              border-color: #166534;
+            "
+          >
+            <span
+              class="gf-play-icon"
+              style="color: #4ade80; border-color: #166534"
+            >
+              <svg
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
+                />
+              </svg>
+            </span>
+            <div style="flex: 1; min-width: 0">
               <div class="gf-action-title" style="color: #4ade80">
-                Fix harness issues
+                Fix harness in wizard
               </div>
-              <div class="gf-action-desc">Send agent-specific fix prompt</div>
+              <div class="gf-action-desc">Open Setup Wizard</div>
             </div>
           </button>
           <button
-            @click="activeView = 'audit'"
+            @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -197,146 +300,23 @@
               <svg
                 width="12"
                 height="12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
+                fill="currentColor"
+                viewBox="0 0 20 20"
               >
                 <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
                 />
               </svg>
             </span>
             <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title">View in Audit</div>
-              <div class="gf-action-desc">See per-agent details</div>
+              <div class="gf-action-title">Fix harness with agent</div>
+              <div class="gf-action-desc">Send fix prompt to terminal</div>
             </div>
           </button>
         </div>
       </div>
 
-      <!-- poor quality: targeted review preset + audit link -->
-      <div x-show="priority() === 'poor'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-          "
-        >
-          <template
-            x-for="p in presets.filter(p => p.id === 'review')"
-            :key="p.id"
-          >
-            <button
-              @click="launchPreset(p.prompt, activeRunner); workspacePanel = 'terminal'"
-              class="gf-action-btn"
-              style="
-                text-align: left;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-              "
-            >
-              <span class="gf-play-icon">
-                <svg
-                  width="12"
-                  height="12"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                  />
-                </svg>
-              </span>
-              <div style="flex: 1; min-width: 0">
-                <div class="gf-action-title" x-text="p.name"></div>
-                <div class="gf-action-desc" x-text="p.desc"></div>
-              </div>
-            </button>
-          </template>
-          <button
-            @click="activeView = 'audit'"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
-          >
-            <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title">View quality scores</div>
-              <div class="gf-action-desc">See per-agent details</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- fair quality: review + test presets -->
-      <div x-show="priority() === 'fair'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-          "
-        >
-          <template
-            x-for="p in presets.filter(p => ['review', 'test'].includes(p.id))"
-            :key="p.id"
-          >
-            <button
-              @click="launchPreset(p.prompt, activeRunner); workspacePanel = 'terminal'"
-              class="gf-action-btn"
-              style="
-                text-align: left;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-              "
-            >
-              <span class="gf-play-icon">
-                <svg
-                  width="12"
-                  height="12"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                  />
-                </svg>
-              </span>
-              <div style="flex: 1; min-width: 0">
-                <div class="gf-action-title" x-text="p.name"></div>
-                <div class="gf-action-desc" x-text="p.desc"></div>
-              </div>
-            </button>
-          </template>
-        </div>
-      </div>
-
-      <!-- healthy / no quality data: review + test + security presets (matches old pass-state) -->
+      <!-- healthy (100% quality): review + test + security presets -->
       <div x-show="priority() === 'healthy'" x-cloak>
         <div
           style="
@@ -829,7 +809,7 @@
                   margin-bottom: 12px;
                 "
               >
-                AI Harness Checks
+                Agent Setup Checks
                 <span
                   class="gf-text-secondary"
                   style="margin-left: 4px"

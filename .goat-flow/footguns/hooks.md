@@ -26,15 +26,15 @@ goat-review (`.claude/skills/goat-review/SKILL.md:42`) and goat-test (`.claude/s
 
 **Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Users complete all 6 setup steps correctly. They run `audit --quality` and immediately see verification at 85% with recommendation "Set claude post-turn hook to exit non-zero on validation failure, or set GOAT_LINT_ENFORCE=1." They were never told about `GOAT_LINT_ENFORCE` during setup. The framework audits its own shipped default as a deficiency with no setup-path resolution.
+**Symptoms:** Users complete all 6 setup steps correctly. They run `audit --harness` and immediately see verification at 85% with recommendation "Set claude post-turn hook to exit non-zero on validation failure, or set GOAT_LINT_ENFORCE=1." They were never told about `GOAT_LINT_ENFORCE` during setup. The framework audits its own shipped default as a deficiency with no setup-path resolution.
 
-**Why it happens:** Hook scripts ship in advisory mode (exit 0 always via `|| true` patterns). The quality auditor correctly detects this. But `GOAT_LINT_ENFORCE` appears in `stop-lint.sh` and `quality-checks.ts` only - it's never mentioned in setup steps 01-06, hook configuration docs, or the setup prompt generator.
+**Why it happens:** Hook scripts ship in advisory mode (exit 0 always via `|| true` patterns). The quality auditor correctly detects this. But `GOAT_LINT_ENFORCE` appears in `stop-lint.sh` and `harness-checks.ts` only - it's never mentioned in setup steps 01-06, hook configuration docs, or the setup prompt generator.
 
 **Evidence:**
 - `.claude/hooks/stop-lint.sh` - exits 0 regardless of validation results
-- `src/cli/audit/quality-checks.ts` - flags advisory mode, recommends GOAT_LINT_ENFORCE=1
+- `src/cli/audit/harness-checks.ts` - flags advisory mode, recommends GOAT_LINT_ENFORCE=1
 - `grep GOAT_LINT_ENFORCE workflow/setup/` - 0 matches
-- `audit --quality --agent claude` output: verification 85%, overall 97 (A)
+- `audit --harness --agent claude` output: verification 85%, overall 97 (A)
 
 **Fix:** Either ship hooks in enforce mode with an opt-out, or add an explicit Step 04/06 note about `GOAT_LINT_ENFORCE=1` so users know how to reach 100% verification.
 

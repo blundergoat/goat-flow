@@ -83,7 +83,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("**Next step (recommended):**");
   lines.push(
-    `- Run \`goat-flow audit . --quality\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI - surfaces improvements only.`,
+    `- Run \`goat-flow audit . --harness\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI - surfaces improvements only.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");

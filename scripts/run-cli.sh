@@ -136,7 +136,7 @@ if [[ -z "$cmd" ]]; then
     echo ""
     printf "  \033[2mAudit\033[0m\n"
     printf "  \033[36m1\033[0m  audit .                         Audit current directory\n"
-    printf "  \033[36m2\033[0m  audit . --quality               Advisory quality grades\n"
+    printf "  \033[36m2\033[0m  audit . --harness               Advisory quality grades\n"
     printf "  \033[36m3\033[0m  audit . --agent claude           Audit one agent only\n"
     echo ""
     printf "  \033[2mGenerate\033[0m\n"
@@ -150,7 +150,7 @@ if [[ -z "$cmd" ]]; then
     read -r choice
     case "$choice" in
         1) cli audit . ;;
-        2) cli audit . --quality ;;
+        2) cli audit . --harness ;;
         3) cli audit . --agent claude ;;
         4)
             echo ""
@@ -210,7 +210,7 @@ case "$cmd" in
             printf "\033[1m  GOAT Flow CLI - Full Output\033[0m\n"
 
             show "1. JSON output" 9999 cli audit . --format json --agent claude
-            show "2. Quality audit" 9999 cli audit . --quality --agent claude
+            show "2. Quality audit" 9999 cli audit . --harness --agent claude
             show "3. Setup prompt" 9999 cli setup . --agent claude
             echo ""
         else
@@ -228,7 +228,7 @@ case "$cmd" in
                 cli audit . --format json
 
             check 2 "Quality audit renders" 8 \
-                cli audit . --quality
+                cli audit . --harness
 
             tmp=$(mktemp -d)
             echo '{"name":"empty"}' > "$tmp/package.json"

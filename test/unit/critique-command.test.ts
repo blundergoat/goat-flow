@@ -143,8 +143,8 @@ describe("critique with audit data", () => {
     );
     assert.ok(result.prompt.includes("Setup"), "Should mention setup scope");
     assert.ok(
-      result.prompt.includes("Harness"),
-      "Should mention harness scope",
+      result.prompt.includes("Agent Setup Checks"),
+      "Should mention agent setup checks scope",
     );
   });
 

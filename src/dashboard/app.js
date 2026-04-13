@@ -69,7 +69,7 @@ function app() {
     projectsList: [],
     projectsAuditing: false,
     showAddProject: false,
-    projectsSortKey: null,
+    projectsSortKey: "name",
     projectsSortAsc: true,
     newProjectPath: "",
 

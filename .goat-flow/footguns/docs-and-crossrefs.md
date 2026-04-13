@@ -183,4 +183,4 @@ scripts/preflight-checks.sh:148 now gates only on package.json (not rubric/versi
 
 **Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 52) now correctly describes both systems: build checks in `src/cli/audit/build-checks.ts` (17 checks, CI gate) and quality checks in `src/cli/audit/quality-checks.ts` (27 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.
+CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 52) now correctly describes both systems: build checks in `src/cli/audit/agent-setup-checks.ts` (17 checks, CI gate) and quality checks in `src/cli/audit/harness-checks.ts` (27 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.

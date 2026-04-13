@@ -6,11 +6,11 @@
 
 ## Context
 
-`scripts/validate-goat-flow-setup.sh:205–243` validates real skill structure (required sections, frontmatter, content). `src/cli/facts/agent/skills.ts:49–299` extracts comparable facts. But `src/cli/audit/build-checks.ts` only checks skill-file existence and version tags — the richer structure data is extracted but unused by public checks.
+`scripts/validate-goat-flow-setup.sh:205–243` validates real skill structure (required sections, frontmatter, content). `src/cli/facts/agent/skills.ts:49–299` extracts comparable facts. But `src/cli/audit/agent-setup-checks.ts` only checks skill-file existence and version tags — the richer structure data is extracted but unused by public checks.
 
 ## Proposed Check
 
-Add a build check in `build-checks.ts` (setup scope) that reads each installed SKILL.md and verifies:
+Add a build check in `agent-setup-checks.ts` (setup scope) that reads each installed SKILL.md and verifies:
 1. Frontmatter has `name:` field
 2. Frontmatter has `goat-flow-skill-version:` field
 3. Required section `## Shared Conventions` is present
@@ -37,4 +37,4 @@ When re-approaching:
 1. Add a `readFile` stub mechanism to `makeCtx` / `stubFS` that can be pre-seeded with file content
 2. Create a test fixture with a minimal valid SKILL.md (frontmatter + `## Shared Conventions` section)
 3. Add the build check using existing `ctx.fs.readFile()` — no new imports needed
-4. The check fits naturally after `skillVersionsPresent` in `build-checks.ts`
+4. The check fits naturally after `skillVersionsPresent` in `agent-setup-checks.ts`

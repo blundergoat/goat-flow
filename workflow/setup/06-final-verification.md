@@ -10,7 +10,7 @@ The `--agent` flag scopes the audit to one agent's surfaces: it checks that agen
 
 The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, Ask First sync, duplicate surfaces). The checks below cover those content concerns.
 
-`goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --quality` is also optional - it provides advisory quality scores but does not affect the pass/fail result.
+`goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --harness` is also optional - it provides advisory quality scores but does not affect the pass/fail result.
 
 ## Manual verification (recommended, not gated by audit)
 
@@ -56,7 +56,7 @@ Compare:
 1. Ask First boundaries in instruction file vs `ask_first:` in config.yaml - must list same paths
 2. Essential Commands in instruction file vs `toolchain:` in config.yaml - must list same commands
 
-If they differ: update the instruction file to match config.yaml (config is canonical for structured data). Verify sync with `goat-flow audit . --quality` — the constraints concern flags unsynced ask_first paths.
+If they differ: update the instruction file to match config.yaml (config is canonical for structured data). Verify sync with `goat-flow audit . --harness` — the constraints concern flags unsynced ask_first paths.
 
 ## Hook enforcement mode
 

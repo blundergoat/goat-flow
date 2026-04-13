@@ -5,8 +5,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { runAudit } from "../../src/cli/audit/audit.js";
-import { BUILD_CHECKS } from "../../src/cli/audit/build-checks.js";
-import { QUALITY_CHECKS } from "../../src/cli/audit/quality-checks.js";
+import { BUILD_CHECKS } from "../../src/cli/audit/agent-setup-checks.js";
+import { QUALITY_CHECKS } from "../../src/cli/audit/harness-checks.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import type {
   AuditContext,
@@ -431,9 +431,9 @@ describe("audit fails on workflow path leak", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 5: audit --quality produces concerns without affecting exit code
+// Test 5: audit --harness produces concerns without affecting exit code
 // ---------------------------------------------------------------------------
-describe("audit --quality", () => {
+describe("audit --harness", () => {
   it("produces concerns output without affecting exit code", () => {
     const projectPath = resolve(import.meta.dirname, "..", "..");
     const fs = createFS(projectPath);
@@ -453,7 +453,7 @@ describe("audit --quality", () => {
     assert.notEqual(
       report.concerns,
       null,
-      "concerns should be populated with --quality",
+      "concerns should be populated with --harness",
     );
     assert.ok(
       report.concerns!.context !== undefined,
@@ -525,7 +525,7 @@ describe("audit JSON contract", () => {
     assert.equal(
       report.concerns,
       null,
-      "concerns should be null without --quality",
+      "concerns should be null without --harness",
     );
 
     // Overall
@@ -533,12 +533,12 @@ describe("audit JSON contract", () => {
     assert.equal(
       report.overall.grade,
       null,
-      "grade should be null without --quality",
+      "grade should be null without --harness",
     );
     assert.equal(
       report.overall.qualityScore,
       null,
-      "qualityScore should be null without --quality",
+      "qualityScore should be null without --harness",
     );
   });
 

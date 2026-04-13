@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { BUILD_CHECKS } from "../../src/cli/audit/build-checks.js";
+import { BUILD_CHECKS } from "../../src/cli/audit/agent-setup-checks.js";
 import {
   makeCtx,
   stubAgentFacts,

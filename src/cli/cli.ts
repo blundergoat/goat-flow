@@ -46,7 +46,7 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: claude, codex, gemini
-  --quality         Audit: add advisory quality scoring by harness concern
+  --harness         Audit: add advisory quality scoring by harness concern
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes
@@ -55,7 +55,7 @@ Flags:
 
 Examples:
   goat-flow .                          Audit current directory
-  goat-flow audit . --quality          Audit with advisory quality grades
+  goat-flow audit . --harness          Audit with advisory harness grades
   goat-flow audit . --agent claude     Audit scoped to Claude
   goat-flow audit . --format json      JSON output for CI
   goat-flow setup --agent claude       Setup prompt for Claude
@@ -184,7 +184,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       agent: { type: "string" },
       verbose: { type: "boolean", default: false },
       output: { type: "string", short: "o" },
-      quality: { type: "boolean", default: false },
+      harness: { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -200,7 +200,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     agent: parseAgentArg(values.agent),
     verbose: values.verbose === true,
     output: resolveOutputPath(values.output, positionals),
-    quality: values.quality === true,
+    quality: values.harness === true,
     dev: values.dev === true,
     help: values.help === true,
     version: values.version === true,
@@ -303,7 +303,7 @@ function handleInfoCommand(options: ParsedCLI): void {
 
   if (sub === "rubrics" || sub === "anti-patterns") {
     throw new CLIError(
-      `"info ${sub}" was removed. Use "audit" for setup validation or "audit --quality" for advisory scoring.`,
+      `"info ${sub}" was removed. Use "audit" for setup validation or "audit --harness" for advisory scoring.`,
       2,
     );
   }

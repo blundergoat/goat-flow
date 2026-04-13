@@ -25,19 +25,19 @@ category: auditor
 
 **Symptoms:** `audit --agent codex` returns PASS on a project where AGENTS.md doesn't exist. Aggregate `audit .` also passes. The configured agent is invisible to all checks. Dashboard only builds per-agent cards for detected agents, so the missing agent disappears from the UI too.
 
-**Why it happens:** `src/cli/detect/agents.ts:62` only adds agents whose instruction files exist on disk. `orchestrator.ts:29` filters detected agents by `agentFilter` - filtering for a missing agent produces an empty list. `build-checks.ts:229` (`instructionFilesExist`) iterates `ctx.agents` - empty list = vacuous pass. The audit uses instruction-file presence as the source of truth for which agents to check, creating a circular dependency where missing files can't be detected.
+**Why it happens:** `src/cli/detect/agents.ts:62` only adds agents whose instruction files exist on disk. `orchestrator.ts:29` filters detected agents by `agentFilter` - filtering for a missing agent produces an empty list. `agent-setup-checks.ts:229` (`instructionFilesExist`) iterates `ctx.agents` - empty list = vacuous pass. The audit uses instruction-file presence as the source of truth for which agents to check, creating a circular dependency where missing files can't be detected.
 
 **Evidence:**
 - `src/cli/detect/agents.ts:62` - existence gate: `if (fs.exists(profile.instructionFile))`
 - `src/cli/facts/orchestrator.ts:29` - filter on detected: `agents = agents.filter(a => a.id === options.agentFilter)`
-- `src/cli/audit/build-checks.ts:229` - `instructionFilesExist` iterates ctx.agents, never sees the missing agent
-- `src/cli/audit/build-checks.ts:99` - agents-supported only validates names against known set, doesn't cross-reference with detected agents
+- `src/cli/audit/agent-setup-checks.ts:229` - `instructionFilesExist` iterates ctx.agents, never sees the missing agent
+- `src/cli/audit/agent-setup-checks.ts:99` - agents-supported only validates names against known set, doesn't cross-reference with detected agents
 - Reproduced by external critique on temp copy with AGENTS.md deleted: both aggregate and `--agent codex` returned PASS
 
 **Fix:** Cross-reference `config.yaml` configured agents list with detected agents. If a configured agent's instruction file is missing, inject the agent profile anyway so the instruction-files check can report the failure. Design intent: setup should CREATE the instruction file if missing, or EDIT it to add goat-flow sections if it exists.
 
 **Updated:** 2026-04-13
-build-checks.ts:173–226 adds configured-agent-present (closes --agent filter vacuous-pass) and agent-artifacts-consistent (closes aggregate vacuous-pass). Repro confirmed failing on both paths 2026-04-13.
+agent-setup-checks.ts:173–226 adds configured-agent-present (closes --agent filter vacuous-pass) and agent-artifacts-consistent (closes aggregate vacuous-pass). Repro confirmed failing on both paths 2026-04-13.
 
 ---
 
@@ -64,9 +64,9 @@ The audit checks that hook files exist and pass `bash -n` syntax check, but neve
 
 **Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `audit . --quality --agent claude` reports "2 ask_first paths not in instruction file: workflow/setup/\*\*, workflow/skills/\*\*" on this repo's own CLAUDE.md. Both paths ARE in CLAUDE.md - formatted as `workflow/setup/` and `workflow/skills/` (without trailing `/**`). The framework fails its own quality check on its own instruction file.
+**Symptoms:** `audit . --harness --agent claude` reports "2 ask_first paths not in instruction file: workflow/setup/\*\*, workflow/skills/\*\*" on this repo's own CLAUDE.md. Both paths ARE in CLAUDE.md - formatted as `workflow/setup/` and `workflow/skills/` (without trailing `/**`). The framework fails its own quality check on its own instruction file.
 
-**Why it happens:** `quality-checks.ts:497-499` uses exact-string `includes()` to check whether instruction file content contains each config path:
+**Why it happens:** `harness-checks.ts:497-499` uses exact-string `includes()` to check whether instruction file content contains each config path:
 ```typescript
 const notMentioned = configPaths.filter(
   (p) => !lower.includes(p.toLowerCase()),
@@ -75,12 +75,12 @@ const notMentioned = configPaths.filter(
 `configPaths` comes from `boundaries.map((b) => b.path)` - the raw config.yaml values including `/**` glob syntax. CLAUDE.md writes boundaries as `workflow/setup/` (no glob). `lower.includes("workflow/setup/**")` is false; `lower.includes("workflow/setup/")` would be true. The comparison is glob-unaware, so any project that writes boundaries without `/**` gets a false advisory.
 
 **Evidence:**
-- `src/cli/audit/quality-checks.ts:484,497-499` - `configPaths = boundaries.map((b) => b.path)` then `includes(p.toLowerCase())`
+- `src/cli/audit/harness-checks.ts:484,497-499` - `configPaths = boundaries.map((b) => b.path)` then `includes(p.toLowerCase())`
 - `.goat-flow/config.yaml:57-60` - paths stored as `workflow/setup/**`, `workflow/skills/**`
 - `CLAUDE.md` Ask First section - paths written as `workflow/setup/`, `workflow/skills/`
-- Observed: `audit . --quality --agent claude` reports false positive on own repo (confirmed 2026-04-13)
+- Observed: `audit . --harness --agent claude` reports false positive on own repo (confirmed 2026-04-13)
 
-**Fix:** `normalizePath()` added at `src/cli/audit/quality-checks.ts:489-504` normalises glob-suffixed paths before comparison. Confirmed: constraints score 100%.
+**Fix:** `normalizePath()` added at `src/cli/audit/harness-checks.ts:489-504` normalises glob-suffixed paths before comparison. Confirmed: constraints score 100%.
 
 ---
 

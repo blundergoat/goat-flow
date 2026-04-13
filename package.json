@@ -44,7 +44,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/warn-node-pty.mjs",
     "audit": "node dist/cli/cli.js audit .",
-    "audit:quality": "node dist/cli/cli.js audit . --quality",
+    "audit:harness": "node dist/cli/cli.js audit . --harness",
     "audit:json": "node dist/cli/cli.js audit . --format json",
     "setup": "node dist/cli/cli.js setup . --agent claude",
     "dev": "tsc && node dist/cli/cli.js dashboard . --dev",
