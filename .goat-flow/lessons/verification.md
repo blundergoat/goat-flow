@@ -200,6 +200,23 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 
 ---
 
+## Lesson: Multi-agent critique finds findings single reviewers miss — but synthesis is the expensive part
+
+**Created:** 2026-04-13
+
+**What happened:** 9 independent agent reviews of goat-flow v1.1.0 found 25 confirmed defects. No single reviewer found all 25. The Codex compaction hook false positive (M1) was found by 1 of 9 reviewers. The ask_first glob-unaware false positive (M8) was found by 1 of 9 reviewers. Both are MAJOR audit honesty issues. The first review established ~60-70% of findings; each additional review added diminishing but non-zero value, including MAJOR findings in reviews 6 and 9.
+
+**What this means for critique practice:**
+1. Multi-agent critique is worth doing for large surfaces. A single thorough review will miss things, and the things it misses can be important.
+2. Model diversity matters more than count. Codex scored 93/100 (most generous) because it systemically missed documentation surfaces. One Codex + one Gemini + one Claude covers more ground than three Claudes.
+3. The synthesis + verification layer is where the value is captured. ~15-20% of claims across 9 reviews were wrong or needed active verification. Unverified multi-agent output is noisier, not more reliable.
+4. Sweet spot: 4-5 reviews from different models for a framework/architecture audit. 3 for a feature or module.
+5. Score convergence across reviewers is the signal that coverage is adequate — not review count. High score variance (74 vs 93 on the same codebase) means some reviewer missed a major category.
+
+**Prevention:** When commissioning multi-agent critique, plan for synthesis work. Budget time to: (a) verify disputed claims against source code, (b) track first-discovery of each finding, (c) dispute false claims with evidence. The critique is an input that requires judgment, not a spec that gets executed.
+
+---
+
 ## Lesson: Blindly applying review feedback without verifying findings
 
 **Created:** 2026-04-11

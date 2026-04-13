@@ -128,3 +128,55 @@ category: docs-and-crossrefs
 - R9 critiques: 6/7 projects flagged broken template references as a top finding
 
 **Prevention:** After ANY content extraction to `workflow/templates/`, grep all skill files for `workflow/templates/` and replace with `.goat-flow/templates/`. The rule: skill files must only reference paths that exist on the PROJECT, not paths that exist in the goat-flow REPO.
+
+---
+
+## Footgun: Refactor cleanup doesn't reach bash script conditional guards
+
+**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** `preflight-checks.sh` shows `⊘ Version check (missing package.json or version.ts) (skipped)` on every run. 74 lines of validation — config.yaml version, CHANGELOG version, instruction file header version, rubric change detection — never execute. No error is thrown. The preflight passes and reports "18 checks" while silently skipping an entire section.
+
+**Why it happens:** `preflight-checks.sh:148` gates the entire version-consistency section on `[[ -f src/cli/rubric/version.ts ]]`. That file was deleted in the M27 scanner removal. The bash `if ... else skip; fi` pattern silently converts a deleted-file guard into a permanent skip. TypeScript refactors are caught by the compiler; bash conditional guards referencing deleted files are not caught by anything.
+
+**Evidence:**
+- `scripts/preflight-checks.sh:148` — `if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then`
+- `scripts/preflight-checks.sh:148-221` — 74 lines inside the dead block: config version check, CHANGELOG version, instruction file headers, rubric change detection
+- `scripts/preflight-checks.sh:220` — skip message: "missing package.json or version.ts" (implies `version.ts` is the problem, but `package.json` obviously exists)
+- `scripts/preflight-checks.sh:159, .github/workflows/ci.yml:62` — both have stale error message "RUBRIC_VERSION not found in version.ts"
+
+**Pattern:** Refactor cleanup has three predictable failure surfaces that get missed:
+1. **Bash conditional guards** — `if [[ -f deleted-file ]]; then ... else skip; fi` silently become permanent skips
+2. **Developer documentation** — `docs/coding-standards/`, CONTRIBUTING.md sections describing deleted architecture
+3. **Error message strings** — CI `echo "::error::..."` and bash `fail "..."` messages that name deleted files
+
+**Prevention:** After any file deletion as part of a refactor:
+1. `grep -rn "deleted-filename" scripts/ .github/` — finds bash guards and CI error messages
+2. `grep -rn "deleted-filename" docs/ CONTRIBUTING.md` — finds developer doc references  
+3. For bash scripts specifically: look for `[[ -f path ]]` guards where `path` is the deleted file — these become silent skips, not errors
+
+---
+
+## Footgun: Partial feature removal leaves type and detection artifacts
+
+**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Copilot was removed as a supported agent but artifacts remain in five places. The `.github/skills` detection path in classify-state.ts and dashboard.ts is the dangerous one: a project with `.github/skills/goat-debug/SKILL.md` gets partial-state credit for a skill "installed" for an agent that doesn't exist in the audit system. State detection reports "partial" based on a path no supported agent ever populates.
+
+**Why it happens:** Feature removal typically targets the primary implementation surface (audit checks, VALID_RUNNERS, agent profiles). Downstream artifacts — type unions, UI name mappers, terminal runner maps, skill-root arrays — are secondary surfaces that don't break at runtime and are easy to miss in a removal PR.
+
+**Evidence:**
+- `src/cli/server/types.ts:21` — `Runner = "claude" | "codex" | "gemini" | "copilot"` (type drift)
+- `src/dashboard/views/home.html:396` — `copilot: 'Copilot'` in agent name mapper (UI dead branch)
+- `src/cli/server/terminal.ts:39` — `copilot: "copilot"` in runner spawn map
+- `src/cli/classify-state.ts:38` — `.github/skills` in SKILL_ROOTS (correctness bug: inflates skill detection)
+- `src/cli/server/dashboard.ts:614` — `.github/skills` in per-agent skill root check (same bug, second location)
+- All five confirmed by grep 2026-04-13; no supported agent profile uses `.github/skills`
+
+**Prevention:** When removing a feature/agent from the audit system, grep for the feature name across all file types: `grep -rn "copilot\|github/skills" src/ --include="*.ts" --include="*.html"`. Type unions, UI name mappers, and skill-root arrays are specifically easy to miss. Checklist for agent removal:
+- [ ] Remove from `Runner` type
+- [ ] Remove from `VALID_RUNNERS`
+- [ ] Remove from terminal runner map
+- [ ] Remove from SKILL_ROOTS in classify-state.ts
+- [ ] Remove from skill root arrays in dashboard.ts
+- [ ] Remove from UI name mappers

@@ -106,3 +106,27 @@ The scanner checks that hook files exist, contain the right patterns (jq parsing
 1. Add a setup completion smoke test: pipe a known-blocked command through the deny hook and verify exit code 2
 2. Scanner should verify hook registration matches hook files (file exists → must be registered, registered → file must exist)
 3. Consider a `goat-flow verify` command that does runtime checks vs the current `goat-flow scan` which does static checks
+
+---
+
+## Footgun: ask_first structural sync check generates false positives via glob-unaware comparison
+
+**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** `audit . --quality --agent claude` reports "2 ask_first paths not in instruction file: workflow/setup/\*\*, workflow/skills/\*\*" on this repo's own CLAUDE.md. Both paths ARE in CLAUDE.md — formatted as `workflow/setup/` and `workflow/skills/` (without trailing `/**`). The framework fails its own quality check on its own instruction file.
+
+**Why it happens:** `quality-checks.ts:497-499` uses exact-string `includes()` to check whether instruction file content contains each config path:
+```typescript
+const notMentioned = configPaths.filter(
+  (p) => !lower.includes(p.toLowerCase()),
+);
+```
+`configPaths` comes from `boundaries.map((b) => b.path)` — the raw config.yaml values including `/**` glob syntax. CLAUDE.md writes boundaries as `workflow/setup/` (no glob). `lower.includes("workflow/setup/**")` is false; `lower.includes("workflow/setup/")` would be true. The comparison is glob-unaware, so any project that writes boundaries without `/**` gets a false advisory.
+
+**Evidence:**
+- `src/cli/audit/quality-checks.ts:484,497-499` — `configPaths = boundaries.map((b) => b.path)` then `includes(p.toLowerCase())`
+- `.goat-flow/config.yaml:57-60` — paths stored as `workflow/setup/**`, `workflow/skills/**`
+- `CLAUDE.md` Ask First section — paths written as `workflow/setup/`, `workflow/skills/`
+- Observed: `audit . --quality --agent claude` reports false positive on own repo (confirmed 2026-04-13)
+
+**Fix:** Normalize both sides before comparison. Strip `/**`, `/`, and `*` suffixes from config paths before `includes()` check. Alternatively, check whether the instruction file contains the path as a path prefix (not exact match). The check should pass if any reasonable formatting of the path appears in the instruction file.

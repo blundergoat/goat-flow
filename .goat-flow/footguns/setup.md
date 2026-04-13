@@ -89,15 +89,15 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 **Symptoms:** Step 06 marks Ask First sync between config.yaml and instruction files as "blocking" with config as canonical. The repo's own instruction files diverge from config.yaml and no validator catches it. Users who correctly follow setup don't know their instruction files don't match config.
 
-**Why it happens:** The quality check `ask-first-boundaries` only validates that `ask_first` has entries (`count > 0`). It never compares the entries against the instruction file's Ask First section. Step 06 says "If different: update instruction file to match config.yaml" but the audit system can't detect the mismatch.
+**Why it happens:** `ask-first-boundaries` validates count > 0 only. `ask-first-structural-sync` does compare config paths against instruction file content, but uses glob-unaware exact `includes()` — so `workflow/setup/**` (config) doesn't match `workflow/setup/` (instruction file). The comparison check exists but generates false positives on any project that writes boundaries without `/**` glob syntax. Step 06 calls sync "blocking" but quality checks are advisory and never affect exit code.
 
 **Evidence:**
-- `config.yaml:52-64` — 6 entries (architecture.md, CLAUDE.md, workflow/setup/\*\*, workflow/skills/\*\*, .github/workflows/\*\*, .claude/\*\*)
-- CLAUDE.md Ask First — different boundaries ("adding/removing/renaming any file", "changes spanning 3+ docs files") not in config
-- `src/cli/audit/quality-checks.ts` — ask-first check validates count > 0 only
-- `workflow/setup/06-final-verification.md` — calls sync "blocking", says config is canonical
+- `config.yaml:52-64` — 6 entries with `/**` glob syntax (workflow/setup/\*\*, etc.)
+- CLAUDE.md Ask First — paths written without glob (`workflow/setup/`, `workflow/skills/`)
+- `src/cli/audit/quality-checks.ts:497-499` — `includes(p.toLowerCase())` with raw config path including `/**`
+- `workflow/setup/06-final-verification.md` — calls sync "blocking", says config is canonical; audit never blocks on this
 
-**Fix:** Either add a structural sync check to audit/validate that compares config.yaml ask_first entries against instruction file boundaries, or update all instruction files to match config.yaml (and keep them in sync going forward).
+**Fix:** Fix `ask-first-structural-sync` to normalize glob patterns before comparison (strip `/**` suffix). Separately, downgrade the Step 06 "blocking" language to match reality — the audit system doesn't gate on ask_first sync. See also: auditor.md footgun "ask_first structural sync check generates false positives via glob-unaware comparison".
 
 ---
 
