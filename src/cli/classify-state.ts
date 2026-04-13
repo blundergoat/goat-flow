@@ -147,7 +147,7 @@ export function classifyProjectState(
           state: "v1.1",
           action: "audit",
           details:
-            "Current version - run `goat-flow audit` for full validation",
+            "Current version - run `goat-flow audit . --agent <agent>` for per-agent validation",
         };
       }
 

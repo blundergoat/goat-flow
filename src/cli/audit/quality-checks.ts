@@ -911,26 +911,37 @@ const compactionHookPresent: QualityCheck = {
     if (uncovered.length === 0) {
       return pass([`${covered.join(", ")}: compaction hook registered`]);
     }
-    if (covered.length === 0) {
+    const nonCodexUncovered = uncovered.filter((id) => id !== "codex");
+    const codexUncovered = uncovered.filter((id) => id === "codex");
+    if (covered.length === 0 && nonCodexUncovered.length === 0) {
+      // All uncovered agents are Codex
       return partial(
         30,
         ["No compaction hooks registered"],
         [
-          "Add a compaction hook that re-injects current task context after window compression",
-        ],
-        [
-          "Create a compaction hook that outputs the current milestone file and key constraints after context compaction.",
+          "codex: context compaction not supported — this recommendation does not apply",
         ],
       );
     }
-    return partial(
-      60,
-      [`${uncovered.join(", ")}: no compaction hook registered`],
-      [`Add compaction hook for ${uncovered.join(", ")}`],
-      [
-        `Register a compaction hook for ${uncovered.join(", ")} that re-injects task state after context compression.`,
-      ],
-    );
+    const findings: string[] = [];
+    const recs: string[] = [];
+    const howToFix: string[] = [];
+    if (nonCodexUncovered.length > 0) {
+      findings.push(
+        `${nonCodexUncovered.join(", ")}: no compaction hook registered`,
+      );
+      recs.push(`Add compaction hook for ${nonCodexUncovered.join(", ")}`);
+      howToFix.push(
+        `Register a compaction hook for ${nonCodexUncovered.join(", ")} that re-injects task state after context compression.`,
+      );
+    }
+    if (codexUncovered.length > 0) {
+      findings.push(`codex: no compaction hook registered`);
+      recs.push(
+        "codex: context compaction not supported — this recommendation does not apply",
+      );
+    }
+    return partial(60, findings, recs, howToFix);
   },
 };
 

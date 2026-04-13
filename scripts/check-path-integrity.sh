@@ -32,7 +32,7 @@ for agent_dir in ".claude/skills" ".agents/skills"; do
     while IFS= read -r match; do
         file="${match%%:*}"
         err "${file}: contains framework-local workflow/ path (should use .goat-flow/ paths): ${match#*:}"
-    done < <(grep -rn 'workflow/' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | grep -v '^\s*#' || true)
+    done < <(grep -rn 'workflow/' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | grep -Ev ':[0-9]+:[[:space:]]*#' || true)
 done
 
 # ── 2. .goat-flow/ paths in installed skills must resolve ───────────

@@ -35,7 +35,7 @@ jobs:
         run: npx eslint src/cli/
 
       - name: Format check
-        run: npx prettier --check 'src/**/*.ts' 'src/**/*.html' 'src/**/*.js' 'src/**/*.css'
+        run: npm run format:check
 
       - name: GOAT Flow Audit
         run: node dist/cli/cli.js audit .

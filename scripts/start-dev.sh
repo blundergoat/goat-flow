@@ -66,7 +66,7 @@ if [[ -x scripts/preflight-checks.sh ]]; then
 fi
 
 # 6. Self-audit
-if [[ -f package.json ]] && grep -q '"audit"' package.json 2>/dev/null; then
+if [[ -f package.json ]] && [[ "$(npm pkg get scripts.audit 2>/dev/null)" != "null" ]]; then
     info "Running self-audit..."
     npm run audit 2>/dev/null || warn "Self-audit not available yet"
 fi

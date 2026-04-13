@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars -- consumed by app.js via global scope (classic script tag)
 const PRESETS = [
   // === Debug ===
   {

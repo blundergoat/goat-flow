@@ -75,21 +75,14 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 5. Rollback command: [exact command]
 
 Boundaries:
-- `.goat-flow/architecture.md` or `CLAUDE.md`
+- `.goat-flow/architecture.md` or primary instruction file changes (this file — `AGENTS.md`)
 - `workflow/setup/` or `workflow/skills/` template changes affecting generated output
 - `.github/workflows/` changes
 - Adding, removing, or renaming files
 - Changes spanning 3+ docs/scripts
-- Edits to `.claude/` or other Claude-specific runtime files
 **Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`).
 ## Definition of Done
-MUST confirm all 6 gates:
-1. `bash scripts/preflight-checks.sh` passes
-2. `bash scripts/validate-goat-flow-setup.sh` passes
-3. No unapproved boundary changes
-4. Logs updated if tripped
-5. Current state recorded before stopping incomplete work
-6. Grep old pattern/path after rename, move, or terminology change
+MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
 ## Working Memory
 If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. If context drifts or two approaches fail, restate scope and start fresh.
 Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.

@@ -58,33 +58,44 @@ runs:
 
         summary=$(printf '%s\n' "$output" | python3 -c "
         import json, sys
-        data = json.load(sys.stdin)
+        try:
+            data = json.load(sys.stdin)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f'goat-flow audit output could not be parsed: {e}', file=sys.stderr)
+            data = {'status': 'error', 'message': 'Audit output was not valid JSON — see workflow logs'}
         lines = []
         status = data.get('status', 'unknown')
         emoji = ':white_check_mark:' if status == 'pass' else ':x:'
         lines.append(f'**Overall: {emoji} {status.upper()}**')
-        lines.append('')
-        scopes = data.get('scopes', {})
-        for scope_name, scope_data in scopes.items():
-            s = scope_data.get('status', 'unknown')
-            se = ':white_check_mark:' if s == 'pass' else ':x:'
-            summary = scope_data.get('summary', {})
-            detail = ', '.join(f'{k}: {v}' for k, v in summary.items()) if summary else ''
-            lines.append(f'| {se} {scope_name} | {s} | {detail} |')
-            for f in scope_data.get('failures', []):
-                lines.append(f'|  | :x: | {f.get(\"check\", \"\")} — {f.get(\"message\", \"\")} |')
-        concerns = data.get('concerns')
-        if concerns:
-            grade = data.get('overall', {}).get('grade', '?')
-            score = data.get('overall', {}).get('qualityScore', '?')
-            lines.append(f'')
-            lines.append(f'**Quality: {grade} ({score}%)**')
+        if status == 'error':
+            lines.append(data.get('message', ''))
+        else:
+            lines.append('')
+            scopes = data.get('scopes', {})
+            for scope_name, scope_data in scopes.items():
+                s = scope_data.get('status', 'unknown')
+                se = ':white_check_mark:' if s == 'pass' else ':x:'
+                summary = scope_data.get('summary', {})
+                detail = ', '.join(f'{k}: {v}' for k, v in summary.items()) if summary else ''
+                lines.append(f'| {se} {scope_name} | {s} | {detail} |')
+                for f in scope_data.get('failures', []):
+                    lines.append(f'|  | :x: | {f.get(\"check\", \"\")} — {f.get(\"message\", \"\")} |')
+            concerns = data.get('concerns')
+            if concerns:
+                grade = data.get('overall', {}).get('grade', '?')
+                score = data.get('overall', {}).get('qualityScore', '?')
+                lines.append(f'')
+                lines.append(f'**Quality: {grade} ({score}%)**')
         print('\n'.join(lines))
         ")
 
         audit_pass=$(printf '%s\n' "$output" | python3 -c "
         import json, sys
-        data = json.load(sys.stdin)
+        try:
+            data = json.load(sys.stdin)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f'goat-flow audit output could not be parsed: {e}', file=sys.stderr)
+            data = {'status': 'error', 'message': 'Audit output was not valid JSON — see workflow logs'}
         print('true' if data.get('status') == 'pass' else 'false')
         ")
 

@@ -31,9 +31,11 @@ category: docs-and-crossrefs
 **Evidence:**
 - `docs/getting-started.md` → referenced stale paths to old workflow directory (file retired in v1.1.0, see `workflow/setup/`)
 - `docs/five-layers.md` → referenced `FIVE_LAYER_SYSTEM.md` (old filename) (file retired in v1.1.0, see `workflow/setup/01-system-overview.md`)
-- `.goat-flow/glossary.md:19` → still pointed at removed `workflow/setup/09-customise-to-project.md` after the M13 Phase 3 setup-step renumber
-- `.goat-flow/decisions/ADR-009-evidence-lifecycle-convention.md:18` → still pointed at removed `workflow/setup/09-customise-to-project.md` after the same renumber
-- `.goat-flow/decisions/ADR-033-sbao-mob-core-features.md:18` → still referenced removed `05-install-skills.md` after the setup flow moved the install step to `workflow/setup/03-install-skills.md`
+
+~~**Evidence (historical — resolved):**~~
+- ~~`.goat-flow/glossary.md:19` → still pointed at removed `workflow/setup/09-customise-to-project.md` after the M13 Phase 3 setup-step renumber~~ (resolved: now points to `workflow/setup/05-customise-to-project.md`)
+- ~~`.goat-flow/decisions/ADR-009-evidence-lifecycle-convention.md:18` → still pointed at removed `workflow/setup/09-customise-to-project.md` after the same renumber~~ (resolved: now points to `workflow/setup/05-customise-to-project.md`)
+- ~~`.goat-flow/decisions/ADR-033-sbao-mob-core-features.md:18` → still referenced removed `05-install-skills.md` after the setup flow moved the install step to `workflow/setup/03-install-skills.md`~~ (resolved: now points to `workflow/setup/03-install-skills.md`)
 
 **Prevention:** After any file rename or move, grep the entire repo for the old path. Use `grep -r "old-filename" --include="*.md"` before declaring done. This is DoD gate #6.
 
@@ -53,12 +55,6 @@ category: docs-and-crossrefs
 **Prevention:** After any project-level rename, run `grep -r "old-name" --include="*.md" --include="*.json"` across the entire repo.
 
 ---
-
-## Footgun: Line target inconsistency for project shapes (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
-
-**Prevention:** Line target is 120 for all shapes, stated in `.goat-flow/decisions/ADR-029-instruction-budget-constraint.md` (`docs/system-spec.md` retired in v1.1.0). If this number appears differently in any other file, the ADR is canonical.
 
 ## Footgun: Product surface count drift across code, docs, config, and tests
 
@@ -95,14 +91,6 @@ category: docs-and-crossrefs
 
 ---
 
-## Footgun: CONTRIBUTING.md directs contributors to the wrong subsystem (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 52) now correctly describes both systems: build checks in `src/cli/audit/build-checks.ts` (17 checks, CI gate) and quality checks in `src/cli/audit/quality-checks.ts` (27 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.
-
----
-
 ## Footgun: Skill template paths use framework-local paths instead of project-local paths
 
 **Status:** resolved | **Created:** 2026-04-11 | **Resolved:** 2026-04-12 | **Evidence:** ACTUAL_MEASURED
@@ -127,13 +115,13 @@ CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 
 
 **Symptoms:** `preflight-checks.sh` shows `⊘ Version check (missing package.json or version.ts) (skipped)` on every run. 74 lines of validation - config.yaml version, CHANGELOG version, instruction file header version, rubric change detection - never execute. No error is thrown. The preflight passes and reports "18 checks" while silently skipping an entire section.
 
-**Why it happens:** `preflight-checks.sh:148` gates the entire version-consistency section on `[[ -f src/cli/rubric/version.ts ]]`. That file was deleted in the M27 scanner removal. The bash `if ... else skip; fi` pattern silently converts a deleted-file guard into a permanent skip. TypeScript refactors are caught by the compiler; bash conditional guards referencing deleted files are not caught by anything.
+**Why it happens:** `scripts/preflight-checks.sh:148` gates the entire version-consistency section on `[[ -f src/cli/rubric/version.ts ]]`. That file was deleted in the M27 scanner removal. The bash `if ... else skip; fi` pattern silently converts a deleted-file guard into a permanent skip. TypeScript refactors are caught by the compiler; bash conditional guards referencing deleted files are not caught by anything.
 
 **Evidence:**
 - `scripts/preflight-checks.sh:148` - `if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then`
 - `scripts/preflight-checks.sh:148-221` - 74 lines inside the dead block: config version check, CHANGELOG version, instruction file headers, rubric change detection
 - `scripts/preflight-checks.sh:220` - skip message: "missing package.json or version.ts" (implies `version.ts` is the problem, but `package.json` obviously exists)
-- `scripts/preflight-checks.sh:159, .github/workflows/ci.yml:62` - both have stale error message "RUBRIC_VERSION not found in version.ts"
+- `scripts/preflight-checks.sh:159` and `.github/workflows/ci.yml:62` - both had stale error message "RUBRIC_VERSION not found in version.ts" (resolved in M29)
 
 **Pattern:** Refactor cleanup has three predictable failure surfaces that get missed:
 1. **Bash conditional guards** - `if [[ -f deleted-file ]]; then ... else skip; fi` silently become permanent skips
@@ -174,3 +162,25 @@ scripts/preflight-checks.sh:148 now gates only on package.json (not rubric/versi
 - [x] Remove from UI name mappers
 
 **All five items fixed in codebase by 2026-04-13.** Confirmed: `grep -rn "copilot" src/ --include="*.ts" --include="*.html"` returns only copilotignore detection lines.
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+---
+
+## Footgun: Line target inconsistency for project shapes (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** Line target is 120 for all shapes, stated in `.goat-flow/decisions/ADR-029-instruction-budget-constraint.md` (`docs/system-spec.md` retired in v1.1.0). If this number appears differently in any other file, the ADR is canonical.
+
+---
+
+## Footgun: CONTRIBUTING.md directs contributors to the wrong subsystem (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 52) now correctly describes both systems: build checks in `src/cli/audit/build-checks.ts` (17 checks, CI gate) and quality checks in `src/cli/audit/quality-checks.ts` (27 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.

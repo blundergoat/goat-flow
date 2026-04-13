@@ -50,6 +50,6 @@ Project post-turn hook scripts with `|| true` after lint/type-check commands nev
 
 **Related:** `deny-dangerous.sh` parses `.command // .input` but template says `.tool_input.command` per `workflow/hooks/deny-dangerous.sh` (originally enforcement.md:69). (format-file.sh was removed from goat-flow core in v1.1.0 as a project-specific preference.)
 
-**Impact:** The entire hook enforcement layer is dishonest. Projects pass the scanner's enforcement check while hooks never actually block anything.
+**Impact:** The entire hook enforcement layer is dishonest. Projects pass the audit's verification concern while hooks never actually block anything.
 
 **Fix:** M19 in `.goat-flow/tasks/0.10.0/M19-setup-reliability.md`. Remove `|| true`, fix JSON key mismatches, add smoke-test to setup completion.

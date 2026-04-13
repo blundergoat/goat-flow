@@ -38,6 +38,10 @@ bash scripts/preflight-checks.sh
 
 For shell scripts only: `shellcheck scripts/maintenance/*.sh`
 
+ESLint is scoped to `src/cli/` — the dashboard JS files (`src/dashboard/app.js`, `src/dashboard/preset-prompts.js`) are plain JavaScript outside the TypeScript project service and will produce parse errors if included in the ESLint scope.
+
+Do not run `npm run build` and `preflight-checks.sh` concurrently — the build's `rm -rf dist/` will cause preflight to skip the audit check.
+
 ## Project Structure
 
 | Directory | What lives there |

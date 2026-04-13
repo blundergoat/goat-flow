@@ -2,14 +2,6 @@
 category: auditor
 ---
 
-## Footgun: Scanner reports enforcement features it didn't detect (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-03-31 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-The scanner-era hardcoding was removed with the scanner. Current `src/cli/facts/agent/hooks.ts` reads Codex execpolicy via `enrichDenyFromExecpolicy()` from actual file content - no hardcoded assumptions. `denyUsesJq` and `denyHandlesChaining` derive from `analysis.usesJq` / `analysis.handlesChaining` (false by default). The scanner that produced false quality scores was removed in v1.1.0.
-
----
-
 ## Footgun: Scanner AP2 penalizes project-specific skills
 
 **Status:** resolved | **Created:** 2026-04-01 | **Evidence:** ACTUAL_MEASURED
@@ -27,21 +19,13 @@ The scanner-era hardcoding was removed with the scanner. Current `src/cli/facts/
 
 ---
 
-## Footgun: Scanner gives 100% while generated files are broken (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-03 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-The scanner/rubric engine was removed in v1.1.0. The new audit system uses structural build checks (17) plus advisory quality checks (27) - no rubric scoring. The referenced `src/cli/rubric/standard/hooks.ts` no longer exists. The equivalent concern (harness checks passing despite advisory-only hooks) is tracked as a known limitation in docs/audit-and-critique.md.
-
----
-
 ## Footgun: Audit passes when configured agent's instruction file is missing
 
 **Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** `audit --agent codex` returns PASS on a project where AGENTS.md doesn't exist. Aggregate `audit .` also passes. The configured agent is invisible to all checks. Dashboard only builds per-agent cards for detected agents, so the missing agent disappears from the UI too.
 
-**Why it happens:** `detect/agents.ts:62` only adds agents whose instruction files exist on disk. `orchestrator.ts:29` filters detected agents by `agentFilter` - filtering for a missing agent produces an empty list. `build-checks.ts:229` (`instructionFilesExist`) iterates `ctx.agents` - empty list = vacuous pass. The audit uses instruction-file presence as the source of truth for which agents to check, creating a circular dependency where missing files can't be detected.
+**Why it happens:** `src/cli/detect/agents.ts:62` only adds agents whose instruction files exist on disk. `orchestrator.ts:29` filters detected agents by `agentFilter` - filtering for a missing agent produces an empty list. `build-checks.ts:229` (`instructionFilesExist`) iterates `ctx.agents` - empty list = vacuous pass. The audit uses instruction-file presence as the source of truth for which agents to check, creating a circular dependency where missing files can't be detected.
 
 **Evidence:**
 - `src/cli/detect/agents.ts:62` - existence gate: `if (fs.exists(profile.instructionFile))`
@@ -54,14 +38,6 @@ The scanner/rubric engine was removed in v1.1.0. The new audit system uses struc
 
 **Updated:** 2026-04-13
 build-checks.ts:173–226 adds configured-agent-present (closes --agent filter vacuous-pass) and agent-artifacts-consistent (closes aggregate vacuous-pass). Repro confirmed failing on both paths 2026-04-13.
-
----
-
-## Footgun: Setup reports scanner metrics as audit results (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-The scanner was removed in v1.1.0. `cli.ts` now calls `runAudit()` for setup. `compose-setup.ts` routes by `classifyProjectState()` output, reports actual hook file counts, and uses audit vocabulary throughout. The `scanProject()` function no longer exists. Verified: setup output on clean install shows "7/7 skills", "3 hook scripts", "Audit: all build checks passing" - not scanner counts.
 
 ---
 
@@ -86,7 +62,7 @@ The audit checks that hook files exist and pass `bash -n` syntax check, but neve
 
 ## Footgun: ask_first structural sync check generates false positives via glob-unaware comparison
 
-**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** `audit . --quality --agent claude` reports "2 ask_first paths not in instruction file: workflow/setup/\*\*, workflow/skills/\*\*" on this repo's own CLAUDE.md. Both paths ARE in CLAUDE.md - formatted as `workflow/setup/` and `workflow/skills/` (without trailing `/**`). The framework fails its own quality check on its own instruction file.
 
@@ -104,4 +80,34 @@ const notMentioned = configPaths.filter(
 - `CLAUDE.md` Ask First section - paths written as `workflow/setup/`, `workflow/skills/`
 - Observed: `audit . --quality --agent claude` reports false positive on own repo (confirmed 2026-04-13)
 
-**Fix:** Normalize both sides before comparison. Strip `/**`, `/`, and `*` suffixes from config paths before `includes()` check. Alternatively, check whether the instruction file contains the path as a path prefix (not exact match). The check should pass if any reasonable formatting of the path appears in the instruction file.
+**Fix:** `normalizePath()` added at `src/cli/audit/quality-checks.ts:489-504` normalises glob-suffixed paths before comparison. Confirmed: constraints score 100%.
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+---
+
+## Footgun: Scanner reports enforcement features it didn't detect (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-03-31 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+The scanner-era hardcoding was removed with the scanner. Current `src/cli/facts/agent/hooks.ts` reads Codex execpolicy via `enrichDenyFromExecpolicy()` from actual file content - no hardcoded assumptions. `denyUsesJq` and `denyHandlesChaining` derive from `analysis.usesJq` / `analysis.handlesChaining` (false by default). The scanner that produced false quality scores was removed in v1.1.0.
+
+---
+
+## Footgun: Scanner gives 100% while generated files are broken (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-04-03 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+The scanner/rubric engine was removed in v1.1.0. The new audit system uses structural build checks (17) plus advisory quality checks (27) - no rubric scoring. The referenced `src/cli/rubric/standard/hooks.ts` no longer exists. The equivalent concern (harness checks passing despite advisory-only hooks) is tracked as a known limitation in docs/audit-and-critique.md.
+
+---
+
+## Footgun: Setup reports scanner metrics as audit results (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+The scanner was removed in v1.1.0. `cli.ts` now calls `runAudit()` for setup. `compose-setup.ts` routes by `classifyProjectState()` output, reports actual hook file counts, and uses audit vocabulary throughout. The `scanProject()` function no longer exists. Verified: setup output on clean install shows "7/7 skills", "3 hook scripts", "Audit: all build checks passing" - not scanner counts.

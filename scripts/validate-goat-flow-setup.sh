@@ -51,8 +51,14 @@ backtick_ref_pattern='`[^`]+`'
 # shellcheck disable=SC2016
 evidence_ref_pattern='`[^`]+\.[a-zA-Z]+`'
 
-# Foundation validation: AGENTS.md must exist before deeper checks.
-[[ -f AGENTS.md ]] || fail "Missing AGENTS.md"
+# Foundation validation: at least one primary instruction file must exist.
+# Agent-agnostic: pass if any primary instruction file is present
+found_instrfile=""
+for f in AGENTS.md CLAUDE.md GEMINI.md; do
+    [[ -f "$f" ]] && { found_instrfile="$f"; break; }
+done
+[[ -n "$found_instrfile" ]] || fail "No primary instruction file found (AGENTS.md, CLAUDE.md, or GEMINI.md)"
+info "Primary instruction file: $found_instrfile"
 
 # Enforce line limits for instruction files (target: 120, hard limit: 150).
 for instrfile in AGENTS.md CLAUDE.md GEMINI.md; do
@@ -127,43 +133,45 @@ allowed_missing_paths=(
     "$logs_dir"
 )
 
-# Validate AGENTS.md Router Table references:
+# Validate AGENTS.md Router Table references (only if AGENTS.md exists):
 # - parse each path between router headings
 # - ignore empty lines and wildcards
 # - allow known create-on-first-use buckets
 # - hard-fail on any other missing path
-router_errors=0
-while IFS= read -r ref; do
-    [[ -z "$ref" ]] && continue
-    [[ "$ref" == *"*"* ]] && continue
+if [[ -f AGENTS.md ]]; then
+    router_errors=0
+    while IFS= read -r ref; do
+        [[ -z "$ref" ]] && continue
+        [[ "$ref" == *"*"* ]] && continue
 
-    if [[ -e "$ref" ]]; then
-        continue
-    fi
-
-    allowed=0
-    for allowed_ref in "${allowed_missing_paths[@]}"; do
-        if [[ "$ref" == "$allowed_ref" ]]; then
-            warn "Create-on-first-use path routed but not materialised yet: $ref"
-            allowed=1
-            break
+        if [[ -e "$ref" ]]; then
+            continue
         fi
-    done
 
-    if (( allowed == 0 )); then
-        warn "Missing router path: $ref"
-        router_errors=1
-    fi
-done < <(
-    awk '
-        /^## Router Table/ { in_router=1; next }
-        /^## / && in_router { in_router=0 }
-        in_router { print }
-    ' AGENTS.md | grep -oE "$backtick_ref_pattern" | tr -d '`'
-)
+        allowed=0
+        for allowed_ref in "${allowed_missing_paths[@]}"; do
+            if [[ "$ref" == "$allowed_ref" ]]; then
+                warn "Create-on-first-use path routed but not materialised yet: $ref"
+                allowed=1
+                break
+            fi
+        done
 
-(( router_errors == 0 )) || fail "AGENTS.md router table contains missing required paths"
-info "AGENTS.md router table references resolve"
+        if (( allowed == 0 )); then
+            warn "Missing router path: $ref"
+            router_errors=1
+        fi
+    done < <(
+        awk '
+            /^## Router Table/ { in_router=1; next }
+            /^## / && in_router { in_router=0 }
+            in_router { print }
+        ' AGENTS.md | grep -oE "$backtick_ref_pattern" | tr -d '`'
+    )
+
+    (( router_errors == 0 )) || fail "AGENTS.md router table contains missing required paths"
+    info "AGENTS.md router table references resolve"
+fi
 
 # Validate CLAUDE.md and GEMINI.md router tables if present.
 for extra_instrfile in CLAUDE.md GEMINI.md; do

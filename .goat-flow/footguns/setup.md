@@ -40,14 +40,6 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 ---
 
-## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-03-25 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-`--agent all` and `composeMultiAgentSetup()` were both removed. `compose-setup.ts` no longer has a multi-agent path; setup now requires an explicit `--agent` flag and routes per-agent only. Verified: `grep composeMultiAgentSetup src/cli/prompt/compose-setup.ts` returns no results.
-
----
-
 ## Footgun: Setup adds skills but never removes them
 
 **Status:** active | **Created:** 2026-03-31 | **Evidence:** ACTUAL_MEASURED
@@ -85,19 +77,19 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 ## Footgun: Ask First config/instruction sync is documented as blocking but not validated
 
-**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** Step 06 marks Ask First sync between config.yaml and instruction files as "blocking" with config as canonical. The repo's own instruction files diverge from config.yaml and no validator catches it. Users who correctly follow setup don't know their instruction files don't match config.
 
 **Why it happens:** `ask-first-boundaries` validates count > 0 only. `ask-first-structural-sync` does compare config paths against instruction file content, but uses glob-unaware exact `includes()` - so `workflow/setup/**` (config) doesn't match `workflow/setup/` (instruction file). The comparison check exists but generates false positives on any project that writes boundaries without `/**` glob syntax. Step 06 calls sync "blocking" but quality checks are advisory and never affect exit code.
 
 **Evidence:**
-- `config.yaml:52-64` - 6 entries with `/**` glob syntax (workflow/setup/\*\*, etc.)
+- `.goat-flow/config.yaml:52-64` - 6 entries with `/**` glob syntax (workflow/setup/\*\*, etc.)
 - CLAUDE.md Ask First - paths written without glob (`workflow/setup/`, `workflow/skills/`)
 - `src/cli/audit/quality-checks.ts:497-499` - `includes(p.toLowerCase())` with raw config path including `/**`
 - `workflow/setup/06-final-verification.md` - calls sync "blocking", says config is canonical; audit never blocks on this
 
-**Fix:** Fix `ask-first-structural-sync` to normalize glob patterns before comparison (strip `/**` suffix). Separately, downgrade the Step 06 "blocking" language to match reality - the audit system doesn't gate on ask_first sync. See also: auditor.md footgun "ask_first structural sync check generates false positives via glob-unaware comparison".
+**Fix:** `normalizePath()` added at `src/cli/audit/quality-checks.ts:489-504` normalises glob-suffixed paths before comparison. Step 06 "BLOCKING" language downgraded to advisory (M30 A6). Confirmed: constraints score 100%.
 
 ---
 
@@ -117,3 +109,17 @@ When a project already has learning-loop artifacts, setup creates NEW parallel s
 **Impact:** Agents receive contradictory instructions about where to write lessons and footguns. The same information ends up in multiple places and drifts. Users can't tell which is canonical.
 
 **Fix:** M19 in `.goat-flow/tasks/0.10.0/M19-setup-reliability.md`. Setup must detect existing artifact locations and use them, not create parallel ones.
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+---
+
+## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules (RESOLVED)
+
+**Status:** resolved | **Created:** 2026-03-25 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+
+`--agent all` and `composeMultiAgentSetup()` were both removed. `compose-setup.ts` no longer has a multi-agent path; setup now requires an explicit `--agent` flag and routes per-agent only. Verified: `grep composeMultiAgentSetup src/cli/prompt/compose-setup.ts` returns no results.

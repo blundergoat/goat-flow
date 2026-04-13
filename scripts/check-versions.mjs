@@ -13,6 +13,7 @@ const templates = [
   'workflow/skills/goat-debug.md',
   'workflow/skills/goat-plan.md',
   'workflow/skills/goat-review.md',
+  'workflow/skills/goat-sbao.md',
   'workflow/skills/goat-security.md',
   'workflow/skills/goat-test.md',
   'workflow/skills/goat.md',

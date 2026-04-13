@@ -84,7 +84,8 @@ function renderSignals(lines: string[], signals: ProjectSignals): void {
 /** Maps audit check IDs to the setup step that fixes them. */
 const CHECK_TO_STEP: Record<string, string> = {
   "required-files": "Step 02 (instruction file) or Step 04 (architecture)",
-  "required-dirs": "Step 04 (project scaffolding)",
+  "required-dirs":
+    "Step 04 (architecture and code map — creates .goat-flow/ directories)",
   "config-parses": "Step 02 or Step 05 (config.yaml)",
   "config-version": "Step 05 (config version field)",
   "agents-supported": "Step 05 (config.yaml agents list)",
@@ -98,10 +99,10 @@ const CHECK_TO_STEP: Record<string, string> = {
   "workflow-path-leaks":
     "Step 03 (skill files must reference .goat-flow/ not workflow/)",
   "toolchain-commands": "Step 05 (config.yaml toolchain)",
-  "agent-settings-parse": "Step 04 (hooks/settings)",
-  "hook-files-exist": "Step 04 (configure hooks)",
-  "hook-syntax": "Step 04 (hook scripts)",
-  "deny-patterns": "Step 04 (deny mechanism)",
+  "agent-settings-parse": "Step 05 (customise — hooks and settings)",
+  "hook-files-exist": "Step 05 (customise — install hook scripts)",
+  "hook-syntax": "Step 05 (customise — hook script syntax)",
+  "deny-patterns": "Step 05 (customise — deny mechanism)",
 };
 
 /** Lookup from agent ID to its agent-specific setup guide. */
@@ -148,7 +149,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("**Next step (recommended):**");
   lines.push(
-    `- Run \`${getCliCommand()} audit . --quality\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI - surfaces improvements only.`,
+    `- Run \`goat-flow audit . --quality\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI - surfaces improvements only.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");

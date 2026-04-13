@@ -38,7 +38,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 - Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). If found, note them so the user knows about existing planning artifacts.
 
 **If starting fresh:**
-1. What are we building? (Accept: a brief from the dispatcher, a requirements doc, a conversation summary, or just a description — for formal requirements tracking use `.goat-flow/templates/requirements-template.md`)
+1. What are we building? (Accept: a brief from the dispatcher, a requirements doc, a conversation summary, or just a description - for formal requirements tracking use `.goat-flow/templates/requirements-template.md`)
 2. What's the riskiest part? (This determines which milestone comes first)
 3. What would make us abandon this entirely? (Kill criteria)
 4. Read `.goat-flow/footguns/` for the target area

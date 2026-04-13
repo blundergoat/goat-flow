@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import { BUILD_CHECKS } from "../../src/cli/audit/build-checks.js";
 import {
   makeCtx,
-  stubFS,
   stubAgentFacts,
   stubConfig,
 } from "../fixtures/projects/index.js";

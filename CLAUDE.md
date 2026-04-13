@@ -104,7 +104,6 @@ MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross
 If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. `/compact` after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Router Table
-
 | Resource | Path |
 |----------|------|
 | Architecture | `.goat-flow/architecture.md` |

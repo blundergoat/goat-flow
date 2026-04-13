@@ -24,7 +24,7 @@ interface CritiquePayload {
 
 const AGENT_LABELS: Record<AgentId, string> = {
   claude: "Claude Code",
-  codex: "Codex CLI",
+  codex: "Codex",
   gemini: "Gemini CLI",
 };
 
@@ -210,9 +210,9 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push(`- Agent settings: \`${settingsFile}\``);
   lines.push("- All hook scripts in your agent's hooks directory");
   lines.push(
-    "- `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` (scan what exists)",
+    "- `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` (list and review what exists)",
   );
-  lines.push("- `.goat-flow/templates/` (scan what exists)");
+  lines.push("- `.goat-flow/templates/` (list and review what exists)");
   lines.push("");
 
   // Part 1: Pre-check

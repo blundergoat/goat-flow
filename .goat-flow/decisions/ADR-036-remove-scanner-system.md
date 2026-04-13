@@ -6,21 +6,21 @@
 
 ## Context
 
-goat-flow has two separate evaluation engines:
+At the time of this decision, goat-flow had two separate evaluation engines:
 
-1. **Scanner/rubric** (`src/cli/rubric/`, `src/cli/scanner/`, `src/cli/scoring/`) - 79 rubric checks (28 foundation + 51 standard) + 12 anti-patterns. Point-based scoring with tiers, categories, and deductions. Originally the only evaluation system. The `scan` command was removed in v1.1.0 but the engine remains, called by `setup` (`cli.ts:496` → `scanProject()`), `info rubrics`, `info anti-patterns`, and the dashboard `/api/setup` endpoint.
+1. **Scanner/rubric** (`src/cli/rubric/`, `src/cli/scanner/`, `src/cli/scoring/`, now removed) — 79 rubric checks (28 foundation + 51 standard) + 12 anti-patterns. Point-based scoring with tiers, categories, and deductions. Originally the only evaluation system. The `scan` command was removed first, but the engine continued to be called by `setup`, `info rubrics`, `info anti-patterns`, and the dashboard `/api/setup` endpoint.
 
-2. **Audit** (`src/cli/audit/`) - 15 build checks (10 setup + 5 harness, pass/fail) + 25 quality checks (advisory percentage). Deterministic. User-facing via `goat-flow audit`. Powers CI gates, dashboard `/api/audit`, and critique prompt generation.
+2. **Audit** (`src/cli/audit/`) — 17 build checks (12 setup + 5 harness, pass/fail) + 27 quality checks (advisory percentage). Deterministic. User-facing via `goat-flow audit`. Powers CI gates, dashboard `/api/audit`, and critique prompt generation.
 
 Seven-agent critique exposed the consequences of running both:
-- Setup says "All audit checks pass" while running scanner checks (`compose-setup.ts:153` vs `cli.ts:496`)
-- Setup reports "14 hooks" by counting scanner rubric category hits, not actual hook files (`compose-setup.ts:172`)
-- On broken repos, setup drops into scanner vocabulary ("5 checks need attention out of 79 total", "Anti-Pattern Fixes") - different from the audit model users see everywhere else
-- CONTRIBUTING.md sends contributors to `src/cli/rubric/` when they want `src/cli/audit/`
-- `info rubrics` outputs 79 checks while `audit` shows 15+25 - no doc bridges these
-- architecture.md claims "~165 rubric checks" (stale count) alongside "15 build + 25 quality checks" (correct) on the same line
+- Setup reported "All audit checks pass" while actually running scanner checks
+- Setup reported hook counts by counting scanner rubric category hits, not actual hook files
+- On broken repos, setup dropped into scanner vocabulary ("5 checks need attention out of 79 total", "Anti-Pattern Fixes") — different from the audit model users saw everywhere else
+- CONTRIBUTING.md sent contributors to `src/cli/rubric/` when they wanted `src/cli/audit/`
+- `info rubrics` output 79 checks while `audit` showed 15+25 — no doc bridged these
+- architecture.md claimed "~165 rubric checks" (stale count) alongside the audit check counts on the same line
 
-The scanner served its purpose as the original evaluation engine. The audit system replaced it for all public-facing use. The scanner is now dead weight that creates confusion.
+The scanner served its purpose as the original evaluation engine. The audit system replaced it for all public-facing use. The scanner had become dead weight creating confusion.
 
 ## Decision
 

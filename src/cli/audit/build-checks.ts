@@ -3,7 +3,7 @@
  * Each check returns null on pass or an AuditFailure on fail.
  * Checks are grouped by scope: setup, harness.
  */
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import type { BuildCheck } from "./types.js";
 import type { ReadonlyFS } from "../types.js";
@@ -388,7 +388,7 @@ const hookScriptsSyntaxValid: BuildCheck = {
         if (!file.endsWith(".sh")) continue;
         const fullPath = join(ctx.projectPath, hooksDir, file);
         try {
-          execSync(`bash -n "${fullPath}"`, {
+          execFileSync("bash", ["-n", fullPath], {
             stdio: "pipe",
             timeout: 5000,
           });

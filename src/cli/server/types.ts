@@ -31,7 +31,7 @@ export interface SessionInfo {
   lastInputAt: number;
 }
 
-/** Response body from the POST /api/sessions endpoint. */
+/** Response body from the POST /api/terminal/create endpoint. */
 export interface CreateResponse {
   id: string;
   status: SessionStatus;

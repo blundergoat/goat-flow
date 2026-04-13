@@ -61,6 +61,11 @@ export function renderAuditText(report: AuditReport): string {
   lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
   lines.push(renderTextScope("AI Harness Score", report.scopes.harness));
+  if (report.scopes.harness.status === "pass") {
+    lines.push(
+      `${YELLOW}⚠  Hooks run in advisory mode by default (exit 0). Use --quality to verify enforcement.${RESET}`,
+    );
+  }
   lines.push("");
 
   lines.push(`Result: ${statusBadge(report.status)}`);
@@ -141,6 +146,11 @@ export function renderAuditMarkdown(report: AuditReport): string {
   lines.push(renderMdScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
   lines.push(renderMdScope("AI Harness Score", report.scopes.harness));
+  if (report.scopes.harness.status === "pass") {
+    lines.push(
+      "> ⚠ Hooks run in advisory mode by default (exit 0). Use --quality to verify enforcement.",
+    );
+  }
 
   if (report.concerns) {
     lines.push("");

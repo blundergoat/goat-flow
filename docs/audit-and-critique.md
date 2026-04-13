@@ -38,7 +38,7 @@ Build checks are grouped by **scope**:
 - No `workflow/` paths leaked into installed skill files
 - Agent filter resolves to a present instruction file (`configured-agent-present` - closes vacuous-pass on `--agent` filter)
 - Agent artifacts (hooks/settings) are consistent with instruction file presence (`agent-artifacts-consistent` - closes aggregate vacuous-pass)
-- Preamble and conventions files installed
+- Preamble and conventions files present (enforced via `required-files` check)
 
 **harness scope** (AI Harness Score) - project integration surfaces:
 - Toolchain commands configured (test, lint, build)

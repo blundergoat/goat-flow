@@ -98,7 +98,7 @@ while IFS= read -r -d '' file; do
 done < <(find "$SCRIPTS_DIR" -name "*.sh" -type f -print0 2>/dev/null || true)
 
 if [[ ${#SCRIPT_FILES[@]} -eq 0 ]]; then
-    info "No .sh or .py scripts found"
+    info "No .sh scripts found"
     exit 0
 fi
 
