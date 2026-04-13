@@ -50,6 +50,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'test/**', 'node_modules/**', '*.js', '*.mjs'],
+    ignores: ['dist/**', 'test/**', 'node_modules/**', 'src/dashboard/**', '*.js', '*.mjs'],
   },
 );

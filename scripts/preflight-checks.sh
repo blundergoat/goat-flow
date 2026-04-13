@@ -396,6 +396,26 @@ if [[ -f src/cli/prompt/template-refs.ts ]]; then
     fi
 fi
 
+# B.8d: Dashboard concern key sync
+if [[ -f dist/cli/audit/quality-checks.js ]] && [[ -f src/dashboard/views/audit.html ]]; then
+    code_keys=$(node --input-type=module -e "
+      const q=await import('./dist/cli/audit/quality-checks.js');
+      const keys=[...new Set(q.QUALITY_CHECKS.map(c=>c.concern))].sort();
+      console.log(keys.join(','))
+    " 2>/dev/null || echo "")
+    html_keys=$(grep -oP "concernKeys:\s*\[([^\]]+)\]" src/dashboard/views/audit.html \
+        | head -1 | grep -oP "'[^']+'" | tr -d "'" | sort | paste -sd, 2>/dev/null || echo "")
+    if [[ -n "$code_keys" ]] && [[ -n "$html_keys" ]]; then
+        if [[ "$code_keys" == "$html_keys" ]]; then
+            pass "Dashboard concern keys match quality-checks.ts"
+        else
+            fail "Dashboard concern keys mismatch: code=[$code_keys] html=[$html_keys]"
+        fi
+    else
+        skip "Dashboard concern key sync (could not extract keys)"
+    fi
+fi
+
 # ── Path Integrity ───────────────────────────────────────────────────
 section "Path Integrity"
 if bash scripts/check-path-integrity.sh . >/dev/null 2>&1; then

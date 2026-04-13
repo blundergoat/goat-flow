@@ -103,6 +103,10 @@ export function renderAuditText(report: AuditReport): string {
         `Overall Quality: ${color}${report.overall.grade} (${report.overall.qualityScore}%)${RESET}`,
       );
     }
+  } else {
+    lines.push(
+      `${DIM}Tip: Run with --quality for advisory quality scoring across 5 harness concerns.${RESET}`,
+    );
   }
 
   return lines.join("\n");
@@ -150,6 +154,13 @@ export function renderAuditMarkdown(report: AuditReport): string {
     lines.push(
       "> ⚠ Hooks run in advisory mode by default (exit 0). Use --quality to verify enforcement.",
     );
+  }
+
+  if (!report.concerns) {
+    lines.push(
+      "> Tip: Run with --quality for advisory quality scoring across 5 harness concerns.",
+    );
+    lines.push("");
   }
 
   if (report.concerns) {
