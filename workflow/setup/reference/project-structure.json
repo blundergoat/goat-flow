@@ -9,7 +9,12 @@
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
-    ".goat-flow/patterns.md"
+    ".goat-flow/patterns.md",
+    ".goat-flow/templates/mob-elaboration.md",
+    ".goat-flow/templates/feature-brief.md",
+    ".goat-flow/templates/compliance-checklist.md",
+    ".goat-flow/templates/flow-diagram-guide.md",
+    ".goat-flow/templates/requirements-template.md"
   ],
 
   "required_dirs": [

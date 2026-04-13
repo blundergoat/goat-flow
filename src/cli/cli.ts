@@ -44,7 +44,7 @@ Arguments:
   project-path    Target project directory (default: .)
 
 Flags:
-  --format <type>   Output format: json, text, markdown (default: auto)
+  --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: claude, codex, gemini
   --quality         Audit: add advisory quality scoring by harness concern
   --verbose         Show per-check details

@@ -3,7 +3,7 @@
 ## Project Identity
 
 Documentation framework for AI coding agent workflows. Two parts:
-- **TypeScript CLI** (`src/cli/`): auditor, scoring engine, prompt generator, eval parser
+- **TypeScript CLI** (`src/cli/`): auditor, setup prompt generator, dashboard server
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
 - **Shell scripts** (`scripts/`): maintenance, preflight checks, deny policy
 

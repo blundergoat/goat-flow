@@ -6,6 +6,7 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { BuildCheck } from "./types.js";
+import type { ReadonlyFS } from "../types.js";
 import { AUDIT_VERSION } from "../constants.js";
 
 // === Setup scope checks ===
@@ -184,6 +185,43 @@ const requestedAgentPresent: BuildCheck = {
       check: "Requested agent configured",
       message: `Missing: ${ctx.agentFilter} (${instructionFile})`,
       howToFix: `Create ${instructionFile} by running \`goat-flow setup --agent ${ctx.agentFilter}\`.`,
+    };
+  },
+};
+
+/** Returns true if agent-specific artifacts (hooks dir or settings file) exist. */
+function agentArtifactsExist(
+  fs: ReadonlyFS,
+  profile: { hooks_dir?: string; settings?: string },
+): boolean {
+  const hooksDir = profile.hooks_dir?.replace(/\/$/, "");
+  if (hooksDir !== undefined && fs.exists(hooksDir)) return true;
+  return profile.settings !== undefined && fs.exists(profile.settings);
+}
+
+/** Fails in aggregate audit when an agent's hooks or settings exist but its instruction file
+ *  is missing. Closes the vacuous-pass gap: detectAgents() skips agents without instruction
+ *  files, so all per-agent harness checks silently pass on incomplete installs. */
+const agentArtifactsWithoutInstructionFile: BuildCheck = {
+  id: "agent-artifacts-consistent",
+  name: "Agent artifacts consistent",
+  scope: "setup",
+  run: (ctx) => {
+    if (ctx.agentFilter) return null; // requestedAgentPresent handles --agent case
+    if (!ctx.config.exists) return null; // not initialized, nothing to check
+    const missing: string[] = [];
+    for (const [agentId, profile] of Object.entries(ctx.structure.agents)) {
+      if (ctx.fs.exists(profile.instruction_file)) continue;
+      if (agentArtifactsExist(ctx.fs, profile)) {
+        missing.push(`${agentId} (${profile.instruction_file})`);
+      }
+    }
+    if (missing.length === 0) return null;
+    const noun = missing.length === 1 ? "file is" : "files are";
+    return {
+      check: "Agent artifacts consistent",
+      message: `Agent artifacts exist but instruction ${noun} missing: ${missing.join(", ")}`,
+      howToFix: `Run \`goat-flow setup --agent <id>\` for each listed agent to recreate the instruction file, or remove the stale agent directories.`,
     };
   },
 };
@@ -401,6 +439,7 @@ export const BUILD_CHECKS: BuildCheck[] = [
   canonicalSkillsExist,
   skillVersionsPresent,
   requestedAgentPresent,
+  agentArtifactsWithoutInstructionFile,
   instructionFilesExist,
   noStaleSkillDirs,
   noWorkflowPathLeaks,

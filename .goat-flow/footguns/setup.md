@@ -40,12 +40,11 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 ---
 
-## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules
+## Footgun: Deduplicated multi-agent setup drifts from per-agent setup rules (RESOLVED)
 
-**Status:** active | **Created:** 2026-03-25 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-03-25 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `--agent all` was removed, but `composeMultiAgentSetup()` still exists at `src/cli/prompt/compose-setup.ts:825` and is called by `src/cli/cli.ts:314` when auto-detection finds multiple instruction files (e.g., both CLAUDE.md and AGENTS.md). The multi-agent prompt may contain stale skill section requirements that don't match the dispatcher template.
-**Prevention:** Either remove `composeMultiAgentSetup()` entirely, or align its skill section requirements with the current templates.
+`--agent all` and `composeMultiAgentSetup()` were both removed. `compose-setup.ts` no longer has a multi-agent path; setup now requires an explicit `--agent` flag and routes per-agent only. Verified: `grep composeMultiAgentSetup src/cli/prompt/compose-setup.ts` returns no results.
 
 ---
 
@@ -53,16 +52,17 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 **Status:** active | **Created:** 2026-03-31 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** After upgrading goat-flow (e.g., 0.9.0 → 0.9.3), projects end up with 13 skill directories instead of 6. The scanner scores 100% because it only checks the 6 canonical skills - the 7 stale ones are invisible. The dispatcher routes to old skill names. The router table references skills that should have been merged as modes.
+**Symptoms:** After upgrading goat-flow (0.9.x → 1.1.0), projects end up with stale skill directories alongside the 7 canonical ones. Old skill names are invisible to the audit if left in place.
 
-**Why it happens:** The setup prompt (AP15 fragment) says "update outdated skills" but never says "delete skills that no longer exist in the canonical set." The scanner has no check for non-canonical skill directories. The agent does exactly what it's told - updates 6 skills, leaves 7 untouched.
+**Why it happens:** Setup instructions tell agents to install the 7 canonical skills, but don't always say to delete old ones. Agents do what they're told — install 7, leave stale ones untouched.
 
 **Evidence:**
-- `src/cli/prompt/fragments/anti-patterns.ts` → AP15 fragment only instructs "update," not "remove"
+- `src/cli/classify-state.ts:36-47` — `OLD_SKILLS` list: goat-audit, goat-investigate, goat-refactor, goat-simplify, goat-context, goat-onboard, goat-reflect, goat-resume, goat-preflight, goat-research
+- `src/cli/audit/build-checks.ts` — `stale-skill-dirs` check catches this in audit
 - devgoat-bash-scripts: 13 skills after upgrade (7 stale at v0.9.0)
 - blundergoat-platform: 13 skills after upgrade (same pattern)
 
-**Prevention:** Setup must explicitly list old goat-flow skill names to delete during upgrade: goat-investigate, goat-simplify, goat-refactor, goat-audit, goat-onboard, goat-reflect, goat-resume, goat-context. The scanner should warn about non-canonical goat-* directories.
+**Prevention:** Upgrade docs (`workflow/setup/upgrade-from-0.9.x.md`) include explicit skill deletion. The migration script handles this automatically. The `stale-skill-dirs` build check will catch remaining stale directories and fail audit.
 
 ---
 
@@ -70,16 +70,16 @@ Hook script comments also carried over Claude-specific language ("runs after eve
 
 **Status:** active | **Created:** 2026-03-31 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Consumer projects running `npx goat-flow setup` get templates at v0.9.2 while the package is v0.9.3. The setup agent writes "0.9.2" from the template, the scanner flags it as outdated, and the agent has to do a second pass to fix every skill to "0.9.3."
+**Symptoms:** Consumer projects running `npx goat-flow setup` get templates at an old version while the package has advanced. The setup agent writes the old version, the audit flags it as outdated, and a second pass is needed to fix every skill.
 
-**Why it happens:** The `workflow/skills/*.md` templates are the source of truth for consumer projects. When goat-flow's own installed skills (`.claude/skills/`) get updated, the templates don't automatically follow. The npm publish script doesn't verify template versions match `RUBRIC_VERSION`.
+**Why it happens:** The `workflow/skills/*.md` templates are the source of truth for consumer projects. When goat-flow's own installed skills (`.claude/skills/`) get updated, the templates don't automatically follow. The npm publish script doesn't verify template versions match `AUDIT_VERSION`.
 
 **Evidence:**
 - `workflow/skills/goat-debug.md` → frontmatter version lagging behind `.claude/skills/goat-debug/SKILL.md`
 - devgoat-bash-scripts review: "templates ship with 0.9.2 but scanner expects 0.9.3"
 - halaxy-cypress review: "skill version mismatch between templates and installed package"
 
-**Prevention:** npm publish script or preflight must verify all `workflow/skills/*.md` files have `goat-flow-skill-version` matching `RUBRIC_VERSION`. Fail the publish if they don't match.
+**Prevention:** `scripts/preflight-checks.sh` verifies all `workflow/skills/*.md` files have `goat-flow-skill-version` matching `AUDIT_VERSION`. Fail the publish if they don't match (`prepublishOnly` runs preflight).
 
 ---
 

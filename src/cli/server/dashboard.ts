@@ -136,8 +136,7 @@ export function serveDashboard(
     }
     const absDefault = resolve(options.projectPath);
 
-    /** Resolve and validate a user-supplied path. Rejects paths outside the project root. */
-    /** Resolve a user-supplied path to an absolute path. Host header check prevents remote exploitation. */
+    /** Resolve a user-supplied path to an absolute path. */
     function safeResolvePath(raw: string | null): string {
       return resolve(raw || absDefault);
     }

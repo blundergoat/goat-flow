@@ -92,6 +92,13 @@
               Home
             </button>
             <button
+              @click="activeView = 'audit'"
+              class="gf-nb"
+              :class="activeView === 'audit' && 'gf-nb-active'"
+            >
+              Audit
+            </button>
+            <button
               @click="activeView = 'critique'"
               class="gf-nb"
               :class="activeView === 'critique' && 'gf-nb-active'"

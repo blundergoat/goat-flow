@@ -45,6 +45,8 @@ Build checks are grouped by **scope**:
 - Hook scripts pass syntax check (`bash -n`)
 - Deny patterns registered in agent settings
 
+**What 100% harness score means:** hooks are correctly installed and syntactically valid. It does not mean hooks are actively enforcing — hooks ship in advisory mode by default (always exit 0, never block the agent). Use `goat-flow audit . --quality` to see the verification concern score, which checks whether enforcement mode is enabled.
+
 **Agent detection:** `audit` detects which agents are configured from the presence of instruction files (CLAUDE.md, AGENTS.md, GEMINI.md). Use `--agent claude|codex|gemini` to scope checks to a single agent.
 
 ### Quality mode (`--quality`)

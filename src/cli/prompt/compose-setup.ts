@@ -144,7 +144,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
     lines.push("");
   }
 
-  lines.push("**Next step (optional):**");
+  lines.push("**Next step (recommended):**");
   lines.push(
     `- Run \`${getCliCommand()} audit . --quality\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI — surfaces improvements only.`,
   );
@@ -482,7 +482,7 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
     );
   }
   lines.push(
-    "   See `workflow/hooks/README.md` for hook configuration details.",
+    `   See \`${getTemplatePath("workflow/hooks/README.md")}\` for hook configuration details.`,
   );
   lines.push("");
 

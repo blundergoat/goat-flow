@@ -100,7 +100,7 @@
       <!-- Right: Prompt card -->
       <div
         style="flex: 1; min-width: 0; display: flex; flex-direction: column"
-        x-effect="if (activeView === 'critique' && critiqueAgent && !critiqueLoading) { if (!critiqueResult || critiqueResult._agent !== critiqueAgent) { critiqueResult = null; generateCritique(); } }"
+        x-effect="if (activeView === 'critique' && critiqueAgent && !critiqueLoading) { if (!critiqueResult || critiqueResult.agent !== critiqueAgent) { critiqueResult = null; generateCritique(); } }"
       >
         <div class="gf-prompt-card">
           <!-- Header -->

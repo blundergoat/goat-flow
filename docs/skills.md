@@ -285,7 +285,7 @@ Every skill shares:
 - **Learning loop** — log lessons and footguns after completion
 - **Ceremony scaling** — hotfixes skip ceremony, system changes get full treatment
 
-See `workflow/skills/reference/skill-preamble.md` for the canonical shared conventions.
+See `.goat-flow/skill-preamble.md` (installed) or `workflow/skills/reference/skill-preamble.md` (source template) for the canonical shared conventions.
 
 ## Where Skills Live
 

@@ -194,7 +194,7 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
     loop_ok=true
     for af in "${agent_files[@]:1}"; do
         other_loop=$(extract_loop "$af")
-        # Simple word-count divergence check (mirrors scanner Jaccard logic)
+        # Simple word-count divergence check (structural drift detection)
         ref_words=$(echo "$ref_loop" | wc -w)
         other_words=$(echo "$other_loop" | wc -w)
         if [[ "$ref_words" -eq 0 ]] || [[ "$other_words" -eq 0 ]]; then
@@ -277,7 +277,7 @@ if [[ -f tsconfig.json ]]; then
     any_hits=$(grep -rn ': any\b' src/cli/ --include='*.ts' || true)
     [[ -n "$any_hits" ]] && note "Explicit 'any' types ($(echo "$any_hits" | wc -l) hits)"
 
-    # TODO/FIXME check removed - all hits are string literals in scanner code that detect TODOs in target projects
+    # TODO/FIXME check removed (false-positive rate too high in string literals)
 fi
 
 # ── Tests ────────────────────────────────────────────────────────────
@@ -341,26 +341,12 @@ if [[ -f dist/cli/audit/build-checks.js ]]; then
     # B.8a: Architecture count validation
     build_count=$(node --input-type=module -e "const b=await import('./dist/cli/audit/build-checks.js');console.log(b.BUILD_CHECKS.length)" 2>/dev/null || echo "")
     quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/quality-checks.js');console.log(q.QUALITY_CHECKS.length)" 2>/dev/null || echo "")
-    rubric_count=$(node --input-type=module -e "const f=await import('./dist/cli/rubric/foundation.js');const s=await import('./dist/cli/rubric/standard/index.js');console.log(f.foundationChecks.length+s.standardChecks.length)" 2>/dev/null || echo "")
-    ap_count=$(node --input-type=module -e "const a=await import('./dist/cli/rubric/anti-patterns.js');console.log(a.antiPatterns.length)" 2>/dev/null || echo "")
 
-    arch_counts_ok=true
     if [[ -f .goat-flow/architecture.md ]] && [[ -n "$build_count" ]] && [[ -n "$quality_count" ]]; then
-        arch_line=$(grep "rubric checks" .goat-flow/architecture.md || true)
-        if [[ -n "$arch_line" ]]; then
-            echo "$arch_line" | grep -q "${build_count} build" || { fail "architecture.md build check count (${build_count} actual) doesn't match"; arch_counts_ok=false; }
-            echo "$arch_line" | grep -q "${quality_count} quality" || { fail "architecture.md quality check count (${quality_count} actual) doesn't match"; arch_counts_ok=false; }
-            if [[ -n "$rubric_count" ]]; then
-                echo "$arch_line" | grep -q "${rubric_count} rubric checks" || { fail "architecture.md rubric count (${rubric_count} actual) doesn't match"; arch_counts_ok=false; }
-            fi
-            if [[ -n "$ap_count" ]]; then
-                echo "$arch_line" | grep -q "${ap_count} anti-patterns" || { fail "architecture.md anti-pattern count (${ap_count} actual) doesn't match"; arch_counts_ok=false; }
-            fi
-            if $arch_counts_ok; then
-                pass "Architecture doc counts match code (build: ${build_count}, quality: ${quality_count})"
-            fi
+        if grep -q "${build_count} build" .goat-flow/architecture.md && grep -q "${quality_count} quality" .goat-flow/architecture.md; then
+            pass "Architecture doc counts match code (build: ${build_count}, quality: ${quality_count})"
         else
-            skip "Architecture count validation (no 'rubric checks' line in architecture.md)"
+            fail "Architecture doc check counts mismatch — expected ${build_count} build + ${quality_count} quality in .goat-flow/architecture.md"
         fi
     else
         skip "Architecture count validation (dist/ not fully built or architecture.md missing)"

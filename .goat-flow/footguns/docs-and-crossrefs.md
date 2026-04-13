@@ -95,21 +95,11 @@ category: docs-and-crossrefs
 
 ---
 
-## Footgun: CONTRIBUTING.md directs contributors to the wrong subsystem
+## Footgun: CONTRIBUTING.md directs contributors to the wrong subsystem (RESOLVED)
 
-**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A contributor reads "How to Add a New Rubric Check" in CONTRIBUTING.md and adds their check to `src/cli/rubric/`. The check has no effect on `goat-flow audit` output. The contributor doesn't understand why.
-
-**Why it happens:** `CONTRIBUTING.md:54` says "Rubric checks live in `src/cli/rubric/`." This is the internal scoring system used by setup. The user-facing audit checks live in `src/cli/audit/build-checks.ts` (15 build checks, public gate) and `src/cli/audit/quality-checks.ts` (25 quality checks, advisory). The two systems are architecturally separate with no bridge documented.
-
-**Evidence:**
-- `CONTRIBUTING.md:54` — "Rubric checks live in `src/cli/rubric/`"
-- `src/cli/audit/build-checks.ts` — 15 checks that power `goat-flow audit`
-- `src/cli/audit/quality-checks.ts` — 25 checks that power `goat-flow audit --quality`
-- `src/cli/rubric/` — internal scoring used by `scanProject()` for setup prompts only
-
-**Fix:** Rewrite the contributor section to distinguish: (a) build checks in `src/cli/audit/build-checks.ts` (public gate), (b) quality checks in `src/cli/audit/quality-checks.ts` (advisory scoring), (c) rubric checks in `src/cli/rubric/` (internal scoring for setup prompt generation only).
+CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section (line 52) now correctly describes both systems: build checks in `src/cli/audit/build-checks.ts` (16 checks, CI gate) and quality checks in `src/cli/audit/quality-checks.ts` (27 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.
 
 ---
 

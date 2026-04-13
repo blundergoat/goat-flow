@@ -10,7 +10,7 @@ Overview landing page. Shows "What to do next" action cards based on your latest
 
 ### Audit
 
-Audit results in a single scrollable page. Each scope (GOAT Flow Setup, AI Harness Score) shows pass/fail status and can be expanded inline for details. Per-agent harness cards show individual agent scores. Failures include actionable fix instructions. Run a new audit or re-audit after changes without leaving the page.
+Audit results in a single scrollable page. Each scope (GOAT Flow Setup, AI Harness Score) shows pass/fail status and can be expanded inline for details. Per-agent harness cards show individual agent scores. Failures include actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. Also accessible from action cards on the Home view.
 
 ### Critique
 
@@ -27,6 +27,10 @@ Multi-project browser. Lists all registered project paths with their latest audi
 ### Workspace
 
 Split-pane layout. The left panel is a prompt library with category filters and search -- select a prompt to preview it or send it straight to the terminal. The right panel is a live terminal session (xterm.js over WebSocket) where you run agent commands. On mobile the panels collapse into a tab toggle.
+
+### Settings
+
+Configuration view. Manage registered project paths, dashboard preferences, and agent runtime settings.
 
 ### Help
 

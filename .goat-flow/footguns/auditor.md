@@ -2,19 +2,11 @@
 category: auditor
 ---
 
-## Footgun: Scanner reports enforcement features it didn't detect
+## Footgun: Scanner reports enforcement features it didn't detect (RESOLVED)
 
-**Status:** active | **Created:** 2026-03-31 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-03-31 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Scanner gives Codex full marks for deny hook quality (jq parsing, chaining detection, compaction hook) when the Codex enforcement is actually a Starlark execpolicy file - a completely different format that doesn't use jq or split on &&/||/;.
-
-**Why it happens:** `src/cli/facts/agent/hooks.ts` hardcodes `denyUsesJq = true` and `denyHandlesChaining = true` for execpolicy agents, and treats `session_start` hooks as compaction hooks. These are assumptions, not detections. The auditor reports them as facts.
-
-**Evidence:**
-- `src/cli/facts/agent/hooks.ts` → hardcoded assumptions for Codex enforcement quality
-- goat-flow Codex self-review (66/100): "the auditor fakes Codex compaction and deny-hook properties"
-
-**Prevention:** Only report what's actually detected from file content. If a Starlark file exists, report it exists - don't assume it has properties that only apply to bash hooks.
+The scanner-era hardcoding was removed with the scanner. Current `src/cli/facts/agent/hooks.ts` reads Codex execpolicy via `enrichDenyFromExecpolicy()` from actual file content — no hardcoded assumptions. `denyUsesJq` and `denyHandlesChaining` derive from `analysis.usesJq` / `analysis.handlesChaining` (false by default). The scanner that produced false quality scores was removed in v1.1.0.
 
 ---
 
@@ -35,20 +27,11 @@ category: auditor
 
 ---
 
-## Footgun: Scanner gives 100% while generated files are broken
+## Footgun: Scanner gives 100% while generated files are broken (RESOLVED)
 
-**Status:** open | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-03 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-The scanner awards 100% (A grade) to projects that have:
-- `settings.json` missing hook registration that the rubric claims exists (`src/cli/facts/agent/hooks.ts:479`, `src/cli/rubric/standard/hooks.ts:55` check file existence only)
-- Skill files that pass structural checks but have stale internal references or missing playbook dependencies
-- CI workflow containing literal scanner-bait comments (`.github/workflows/context-validation.yml:40`)
-
-**Evidence:** Found by Codex on blundergoat-platform (100% score, broken goat-plan SKILL.md + unregistered hook), strands-php-client (100% score with structural issues).
-
-**Impact:** The scanner rewards formatting compliance, not functional correctness. Users trust A/100 as "setup is good" when it means "setup matches regex patterns."
-
-**Fix:** Add semantic validation: verify hook registration, validate skill file content.
+The scanner/rubric engine was removed in v1.1.0. The new audit system uses structural build checks (16) plus advisory quality checks (27) — no rubric scoring. The referenced `src/cli/rubric/standard/hooks.ts` no longer exists. The equivalent concern (harness checks passing despite advisory-only hooks) is tracked as a known limitation in docs/audit-and-critique.md.
 
 ---
 
@@ -71,41 +54,30 @@ The scanner awards 100% (A grade) to projects that have:
 
 ---
 
-## Footgun: Setup reports scanner metrics as audit results
+## Footgun: Setup reports scanner metrics as audit results (RESOLVED)
 
-**Status:** active | **Created:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `setup --agent claude` says "All audit checks pass" and "14 hooks (deny, post-turn, format)" on a repo with 2 hook files and 3 hook events. The numbers don't match any real count. On broken repos, setup drops into scanner vocabulary ("5 checks need attention out of 79 total", "Critical: Anti-Pattern Fixes") — a completely different model from the documented 10 setup + 5 harness checks.
-
-**Why it happens:** `cli.ts:494` calls `scanProject()` (not `runAudit()`) for the setup command. `compose-setup.ts:172-174` counts passing scanner rubric checks in the "Hooks" category, not actual hook files. The success branch at `compose-setup.ts:153` says "All audit checks pass" but is evaluating scanner results.
-
-**Evidence:**
-- `src/cli/cli.ts:494` — setup calls `scanProject()`
-- `src/cli/prompt/compose-setup.ts:153` — renderAllPass says "All audit checks pass"
-- `src/cli/prompt/compose-setup.ts:172-174` — `checks.filter(c => c.category === "Hooks" && c.status === "pass").length` = 14 (rubric hits, not files)
-- Observed setup output: "14 hooks" vs `ls .claude/hooks/` showing 2 files
-- On broken repo (config.yaml removed): setup emits "5 checks need attention out of 79 total" — scanner vocabulary, not audit vocabulary
-
-**Fix:** Either migrate setup to use `runAudit()` for its pass/fail decisions, or explicitly label the output as scanner-based. Replace hook count with actual file/event count from facts extraction.
+The scanner was removed in v1.1.0. `cli.ts` now calls `runAudit()` for setup. `compose-setup.ts` routes by `classifyProjectState()` output, reports actual hook file counts, and uses audit vocabulary throughout. The `scanProject()` function no longer exists. Verified: setup output on clean install shows "7/7 skills", "3 hook scripts", "Audit: all build checks passing" — not scanner counts.
 
 ---
 
-## Footgun: Scanner validates hook file content but not hook runtime behavior
+## Footgun: Audit validates hook file content but not hook runtime behavior
 
 **Status:** open | **Created:** 2026-04-05 | **Evidence:** ACTUAL_MEASURED
 
-The scanner checks that hook files exist, contain the right patterns (jq parsing, chaining detection, pipe-to-shell blocking), and are registered in settings.json. But it never verifies the hooks actually execute. A hook with correct content but wrong permissions, missing dependencies (jq not installed), or broken JSON field paths passes the scanner at 100% while providing zero enforcement at runtime.
+The audit checks that hook files exist and pass `bash -n` syntax check, but never verifies hooks actually execute. A hook with correct syntax but wrong permissions, missing dependencies (jq not installed), or broken JSON field paths passes the audit at 100% while providing zero enforcement at runtime.
 
 **Evidence:**
-- 4+ sessions across 112 (Claude Insights data) derailed by sub-agent permission failures hitting hooks that the scanner had already validated
-- `deny-dangerous.sh` sed fallback truncates commands with escaped quotes - scanner checks for sed fallback existence, not correctness
+- 4+ sessions across 112 (Claude Insights data) derailed by sub-agent permission failures hitting hooks that the audit had already validated
+- `deny-dangerous.sh` sed fallback truncates commands with escaped quotes — audit checks syntax, not correctness
 
-**Impact:** Users trust 100% scanner score as "setup is working" when it means "setup files look right." The gap between file validation and runtime behavior is invisible.
+**Impact:** Users trust 100% harness score as "hooks are working" when it means "hooks exist and have valid bash syntax." The gap between file validation and runtime behavior is invisible.
 
 **Prevention:**
 1. Add a setup completion smoke test: pipe a known-blocked command through the deny hook and verify exit code 2
-2. Scanner should verify hook registration matches hook files (file exists → must be registered, registered → file must exist)
-3. Consider a `goat-flow verify` command that does runtime checks vs the current `goat-flow scan` which does static checks
+2. Audit should verify hook registration matches hook files (file exists → must be registered, registered → file must exist)
+3. Consider a `goat-flow verify` command that does runtime checks vs the current `goat-flow audit` which does static checks
 
 ---
 
