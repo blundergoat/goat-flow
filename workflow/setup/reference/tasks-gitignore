@@ -1,5 +1,3 @@
 # v1.1 tracks committed task docs and ignores scratch continuity files.
 *
 !.gitignore
-!*.md
-!**/*.md
