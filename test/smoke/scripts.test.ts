@@ -30,10 +30,10 @@ describe("preflight-checks.sh", () => {
 });
 
 // ---------------------------------------------------------------------------
-// validate-goat-flow-setup.sh is valid bash
+// workflow/validate-goat-flow-setup.sh is valid bash
 // ---------------------------------------------------------------------------
 describe("validate-goat-flow-setup.sh", () => {
   it("passes bash -n syntax check", () => {
-    bashCheck("scripts/validate-goat-flow-setup.sh");
+    bashCheck("workflow/validate-goat-flow-setup.sh");
   });
 });

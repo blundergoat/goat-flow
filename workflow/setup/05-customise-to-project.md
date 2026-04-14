@@ -20,15 +20,6 @@ If existing `settings.json` notification hooks reference `tasks/todo.md`, `tasks
 - Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns.md` already exist
 - Merge with what's there - do not replace existing project memory
 
-## Config sync - populate structured context
-
-Update `.goat-flow/config.yaml` with real project data:
-
-- `toolchain:` - populate `test`, `lint`, `build`, `package`, and `format` arrays from the commands you detected in Step 02 or from the actual manifests/scripts
-- `ask_first:` - copy the instruction file's real Ask First boundaries into structured `{ path, reason }` entries
-
-Use empty arrays only when the project truly has no command for that slot. Do not invent tool commands.
-
 ## Footguns - find real traps in the code
 
 **Quality standard:** Every footgun entry MUST include:
@@ -98,13 +89,11 @@ Examples:
 - Review the Ask First section. Are the boundaries specific to this project's real risk areas?
 - Are there directories with complex ownership, migration scripts, config that shouldn't be touched?
 - Update with real paths and real reasons
-- Keep `.goat-flow/config.yaml` `ask_first:` in sync with the final instruction file wording
 - If existing instruction files exist in `.github/instructions/`, reference them from the router table. Keep them as the canonical local-instructions surface.
 
 ---
 
 **Verification gate:**
-- [ ] `.goat-flow/config.yaml` has real `toolchain:` and `ask_first:` entries
 - [ ] Every footgun entry references a real file path in this project
 - [ ] Every lesson references a real git commit or incident
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`

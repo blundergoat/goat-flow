@@ -119,10 +119,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
 }
 
 function checkDeprecatedSkills(ctx: AuditContext): AuditFailure | null {
-  const staleNames = new Set([
-    ...ctx.structure.skills.stale_names,
-    ...ctx.structure.skills.stale_generic,
-  ]);
+  const staleNames = new Set(ctx.structure.skills.stale_names);
   const found: string[] = [];
   for (const af of ctx.agents) {
     for (const dir of af.skills.installedDirs) {
@@ -183,14 +180,14 @@ const agentSettings: BuildCheck = {
   },
 };
 
-// === 4. Agent Deny Hook ===
+// === 4. Agent Deny Mechanism ===
 
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
     if (!af.hooks.denyExists && !af.hooks.denyIsConfigBased) {
       return {
-        check: "Agent deny hook",
-        message: `Missing deny hook for ${af.agent.id}`,
+        check: "Agent deny mechanism",
+        message: `Missing deny mechanism for ${af.agent.id}`,
         howToFix:
           "Create a deny hook file or add deny patterns to the agent's settings file.",
       };
@@ -225,7 +222,7 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   }
   if (failures.length === 0) return null;
   return {
-    check: "Agent deny hook",
+    check: "Agent deny mechanism",
     message: `bash -n failed: ${failures.join(", ")}`,
     evidence: failures[0],
     howToFix: `Fix the bash syntax errors in ${failures.join(", ")}. Run \`bash -n <file>\` to see details.`,
@@ -236,7 +233,7 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
     if (!af.settings.hasDenyPatterns && !af.hooks.denyExists) {
       return {
-        check: "Agent deny hook",
+        check: "Agent deny mechanism",
         message: `No deny patterns registered for ${af.agent.id}`,
         howToFix:
           "Register deny patterns in the agent's settings file or create a deny hook script in the agent's hooks directory.",
@@ -246,9 +243,9 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
-const agentDenyHook: BuildCheck = {
-  id: "agent-deny-hook",
-  name: "Agent deny hook",
+const agentDenyMechanism: BuildCheck = {
+  id: "agent-deny-dangerous",
+  name: "Agent deny mechanism",
   scope: "harness",
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
@@ -265,5 +262,5 @@ export const AGENT_CHECKS: BuildCheck[] = [
   agentInstruction,
   agentSkills,
   agentSettings,
-  agentDenyHook,
+  agentDenyMechanism,
 ];

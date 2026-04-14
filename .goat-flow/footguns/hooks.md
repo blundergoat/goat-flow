@@ -47,3 +47,19 @@ Consumer project post-turn hook scripts with `|| true` after lint/type-check com
 **Related:** `deny-dangerous.sh` parses `.command // .input` but template says `.tool_input.command` per `workflow/hooks/deny-dangerous.sh`. (format-file.sh was removed from goat-flow core in v1.1.0 as a project-specific preference.)
 
 **Prevention:** Setup templates now ship enforce-by-default hooks. Existing consumer projects should update their `stop-lint.sh` to default `GOAT_LINT_ENFORCE` to 1.
+
+---
+
+## Footgun: Codex hooks registered in config.toml instead of hooks.json
+
+**Status:** resolved | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+
+Codex hook registrations (`[hooks.stop]`, `[hooks.session_start]`, `[hooks.after_tool_use]`) were in `.codex/config.toml`. The official Codex docs (`developers.openai.com/codex/hooks`, `developers.openai.com/codex/config-reference`) specify hooks go in `.codex/hooks.json` — a separate file with a JSON structure matching Claude's settings.json hook format. config.toml only has `[features] codex_hooks = true` to enable the hooks engine.
+
+**Evidence:** `workflow/hooks/agent-config/codex.toml` (pre-fix) had `[hooks.session_start] command = "bash .codex/hooks/session-start.sh"`. The official config reference says hooks.json is the only hook definition surface. The TOML hook sections were silently ignored by Codex — hooks never actually fired.
+
+**Impact:** All Codex hooks (stop-lint, session-start, after-tool-use) were dead code. The audit's hook fact extraction parsed TOML and reported hooks as registered, masking the issue.
+
+**Fix:** Moved hook definitions to `.codex/hooks.json`. Updated fact extraction (`src/cli/facts/agent/hooks.ts`) to read hooks.json for Codex using the same `readHooksObject` + `normalizeEventConfig` functions Claude/Gemini use. Removed TOML hook parsing functions. Updated template, install script, and setup guide.
+
+**Prevention:** When adding agent-specific features, verify against the agent's official documentation — not assumptions from other agents' patterns. The fact that Claude uses settings.json for hooks doesn't mean Codex uses config.toml for hooks.

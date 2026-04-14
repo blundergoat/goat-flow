@@ -76,7 +76,6 @@ export interface ProjectStructure {
   skills: {
     canonical: string[];
     stale_names: string[];
-    stale_generic: string[];
   };
   agents: Record<
     string,

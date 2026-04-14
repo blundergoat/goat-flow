@@ -33,6 +33,7 @@ Rules:
 Create these directories and files if they don't already exist:
 
 - `.goat-flow/decisions/` - for architecture decision records when needed. Do not pre-fill with a blank template.
+- `.goat-flow/scratchpad/` - for ephemeral working notes and temporary coordination artifacts
 - `.goat-flow/tasks/` - for milestone and task tracking files
 - `.goat-flow/logs/sessions/` - for session logs (if not already created by step 01)
 - `.goat-flow/templates/` - copy from `workflow/templates/` verbatim. **Verify source exists before copying** - if `workflow/templates/` is missing from the goat-flow release, fail fast and report the missing source rather than silently skipping.
@@ -62,7 +63,7 @@ Use results for step 05:
 **Verification gate:**
 - [ ] `.goat-flow/architecture.md` exists with real content (not template fill)
 - [ ] `.goat-flow/code-map.md` exists
-- [ ] `.goat-flow/decisions/`, `.goat-flow/tasks/`, `.goat-flow/logs/sessions/`, `.goat-flow/templates/` directories exist
+- [ ] `.goat-flow/decisions/`, `.goat-flow/scratchpad/`, `.goat-flow/tasks/`, `.goat-flow/logs/sessions/`, `.goat-flow/templates/` directories exist
 - [ ] `.goat-flow/templates/` contains copied template files
 - [ ] architecture.md mentions at least 2 real components by name
 - [ ] Every path mentioned in code-map.md actually exists

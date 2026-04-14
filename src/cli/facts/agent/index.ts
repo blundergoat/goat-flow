@@ -53,9 +53,7 @@ export function extractAgentFacts(
     skills,
     hooks: {
       ...hookFacts,
-      // Settings-based (Claude/Gemini Read() deny patterns) OR execpolicy-based (Codex .star rules)
-      readDenyCoversSecrets:
-        settings.readDenyCoversSecrets || hookFacts.execpolicyCoversSecrets,
+      readDenyCoversSecrets: settings.readDenyCoversSecrets,
     },
     deny,
     router,

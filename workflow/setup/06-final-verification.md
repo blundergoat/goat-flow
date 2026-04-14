@@ -8,7 +8,7 @@ Run `goat-flow audit . --agent {agent}` and fix all failures until it passes.
 
 The `--agent` flag scopes the audit to one agent's surfaces: it checks that agent's instruction file, skills directory, hooks, and settings. It does NOT check other agents' files. For multi-agent projects, run the audit once per agent.
 
-The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, Ask First sync, duplicate surfaces). The checks below cover those content concerns.
+The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, instruction-file specificity, duplicate surfaces). The checks below cover those content concerns.
 
 `goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --harness` is also optional - it provides advisory quality scores but does not affect the pass/fail result.
 
@@ -46,17 +46,7 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 1. **File:line citations:** For every `file:line` citation in generated footguns and in the instruction file's BAD/GOOD examples, re-read the cited line. If it doesn't show the described content, fix the citation or remove the line number. This catches auto-seeding errors where git history evidence doesn't match current code.
 
-2. **Ask First sync:** Compare the Ask First boundaries in the instruction file against the `ask_first:` entries in `.goat-flow/config.yaml`. They must list the same paths. If they differ, sync them.
-
-3. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
-
-## Config ↔ instruction file sync
-
-Compare:
-1. Ask First boundaries in instruction file vs `ask_first:` in config.yaml - must list same paths
-2. Essential Commands in instruction file vs `toolchain:` in config.yaml - must list same commands
-
-If they differ: update the instruction file to match config.yaml (config is canonical for structured data). Verify sync with `goat-flow audit . --harness` - the constraints concern flags unsynced ask_first paths.
+2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
 ## Hook enforcement mode
 

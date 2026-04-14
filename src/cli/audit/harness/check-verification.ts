@@ -1,48 +1,22 @@
 /**
  * Verification concern: Can the agent verify its own work honestly?
- * Consolidated from 6 → 4 checks.
- * - test-command + lint-command → toolchain-configured
- * - hook-has-validation + hook-honest-failures → post-turn-hook-quality
+ * 4 checks: test-runner-configured, hooks-registered, commit-guidance, post-turn-hook-quality.
  */
 import type { QualityCheck } from "../types.js";
-import { pass, partial, fail } from "./helpers.js";
+import { pass, partial } from "./helpers.js";
 
-const toolchainConfigured: QualityCheck = {
-  id: "toolchain-configured",
+const testRunnerConfigured: QualityCheck = {
+  id: "test-runner-configured",
   concern: "verification",
   weight: 3,
   run: (ctx) => {
     const tc = ctx.config.config.toolchain;
-    const missing: string[] = [];
-    if (tc.test.length === 0) missing.push("test");
-    if (tc.lint.length === 0) missing.push("lint");
-
-    if (missing.length === 0) {
-      return pass([
-        `Test command configured: ${tc.test[0]}`,
-        `Lint command configured: ${tc.lint[0]}`,
-      ]);
+    if (tc.test.length > 0) {
+      return pass([`Test command configured: ${tc.test[0]}`]);
     }
-    if (missing.length === 2) {
-      return fail(
-        ["No test or lint commands configured"],
-        ["Add toolchain.test and toolchain.lint to config.yaml"],
-        [
-          "Add `test:` and `lint:` to the toolchain section of .goat-flow/config.yaml with your test runner and linter commands.",
-        ],
-      );
-    }
-    const configured = missing.includes("test")
-      ? `Lint command configured: ${tc.lint[0]}`
-      : `Test command configured: ${tc.test[0]}`;
-    return partial(
-      50,
-      [configured, `No ${missing[0]} command configured`],
-      [`Add toolchain.${missing[0]} to config.yaml`],
-      [
-        `Add \`${missing[0]}:\` to the toolchain section of .goat-flow/config.yaml.`,
-      ],
-    );
+    return pass([
+      "No structured toolchain.test configured; treat project-local commands or instruction-file commands as the source of truth",
+    ]);
   },
 };
 
@@ -164,7 +138,7 @@ const postTurnHookQuality: QualityCheck = {
 };
 
 export const VERIFICATION_CHECKS: QualityCheck[] = [
-  toolchainConfigured,
+  testRunnerConfigured,
   hooksRegistered,
   commitGuidance,
   postTurnHookQuality,

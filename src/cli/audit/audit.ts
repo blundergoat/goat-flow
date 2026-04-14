@@ -38,9 +38,6 @@ function parseProjectStructure(raw: Record<string, unknown>): ProjectStructure {
       stale_names:
         ((raw.skills as Record<string, unknown> | undefined)
           ?.stale_names as string[]) ?? [],
-      stale_generic:
-        ((raw.skills as Record<string, unknown> | undefined)
-          ?.stale_generic as string[]) ?? [],
     },
     agents: (raw.agents as ProjectStructure["agents"] | undefined) ?? {},
   };
@@ -98,7 +95,9 @@ function harnessSummary(ctx: AuditContext): Record<string, string> {
 
   return {
     toolchain:
-      parts.length > 0 ? parts.join(" + ") + " configured" : "none configured",
+      parts.length > 0
+        ? parts.join(" + ") + " configured"
+        : "not configured (optional)",
     hooks: hookInfo.length > 0 ? hookInfo.join(", ") : "none installed",
   };
 }

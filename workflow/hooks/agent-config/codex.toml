@@ -2,32 +2,10 @@
 #
 # Key differences from Claude Code:
 # - No PreToolUse equivalent for non-shell tools (file writes can't be pre-blocked)
-# - Shell command blocking uses Starlark execpolicy rules (.codex/rules/*.star)
-# - Hook events: SessionStart, Stop, AfterToolUse, AfterAgent, UserPromptSubmit
-#
-# For command blocking (rm -rf, git push main, etc.), create Starlark rules:
-#   .codex/rules/deny-dangerous.star
-# Each rule returns: allow, prompt, or forbidden.
-# See Codex docs for the Starlark rule API.
+# - This file only enables the hooks engine
+# - Hook registrations live in .codex/hooks.json
+# - The shipped codex-hooks.json template registers the PreToolUse deny hook
+# - Stop hooks are project-specific; add them in hooks.json only when needed
 
-# --- SessionStart Hook --------------------------------------------------------
-# Fires once when a session opens. Use for environment verification,
-# loading context, or checking prerequisites.
-[hooks.session_start]
-command = "bash .codex/hooks/session-start.sh"
-
-# --- Notes --------------------------------------------------------------------
-# Codex does not support:
-# - Read-deny patterns (no equivalent to Claude's Read(**/.env*) deny)
-# - Pre-blocking Write/Edit tools (only shell commands via execpolicy)
-#
-# To block dangerous shell commands, create .codex/rules/deny-dangerous.star:
-#
-#   def check(command):
-#       if "rm -rf" in command and not command.strip().startswith("rm -rf ./"):
-#           return "forbidden"
-#       if "git push" in command and ("main" in command or "master" in command):
-#           return "forbidden"
-#       if "--no-verify" in command:
-#           return "forbidden"
-#       return "allow"
+[features]
+codex_hooks = true

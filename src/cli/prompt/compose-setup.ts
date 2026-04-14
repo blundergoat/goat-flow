@@ -17,15 +17,22 @@ import { createFS } from "../facts/fs.js";
 
 /** Maps audit check IDs to the setup step that fixes them. */
 const CHECK_TO_STEP: Record<string, string> = {
-  "required-files": "Step 02 (instruction file) or Step 04 (architecture)",
-  "required-dirs":
-    "Step 04 (architecture and code map - creates .goat-flow/ directories)",
+  lessons: "Step 04 (architecture and knowledge base)",
+  footguns: "Step 04 (architecture and knowledge base)",
+  architecture: "Step 04 (architecture and knowledge base)",
+  "code-map": "Step 04 (architecture and knowledge base)",
+  glossary: "Step 04 (architecture and knowledge base)",
+  patterns: "Step 04 (architecture and knowledge base)",
+  decisions: "Step 04 (architecture and knowledge base)",
+  "session-logs": "Step 04 (architecture and knowledge base)",
+  tasks: "Step 04 (architecture and knowledge base)",
+  "other-files": "Step 02 (instruction file) or Step 04 (architecture)",
   "config-parses": "Step 02 or Step 05 (config.yaml)",
   "config-version": "Step 05 (config version field)",
   "agent-instruction": "Step 02 (instruction file for agent)",
   "agent-skills": "Step 03 (install skills)",
   "agent-settings": "Step 05 (customise - settings file)",
-  "agent-deny-hook": "Step 05 (customise - deny hook)",
+  "agent-deny-dangerous": "Step 05 (customise - deny mechanism)",
 };
 
 /** Lookup from agent ID to its agent-specific setup guide. */
@@ -276,7 +283,7 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
     "- **04-architecture-code-map.md** - Create architecture and code map docs",
   );
   lines.push(
-    "- **05-customise-to-project.md** - Deep codebase read, real footguns/lessons, auto-seeded git signals, and `toolchain` / `ask_first` config sync",
+    "- **05-customise-to-project.md** - Deep codebase read, real footguns/lessons, auto-seeded git signals, and project-specific instruction refinement",
   );
   lines.push(
     "- **06-final-verification.md** - Audit passes, stale-ref check, file manifest, command smoke test",

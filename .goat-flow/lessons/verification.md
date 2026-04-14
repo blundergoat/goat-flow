@@ -265,3 +265,15 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 1. Before changing any numeric claim in a canonical doc, run the verification command yourself — never trust a critique's count.
 2. The preflight should validate sub-breakdowns, not just totals.
 3. Treat external critique findings as hypotheses, not facts. Verify each one independently before applying.
+
+---
+
+## Lesson: Ignored `.goat-flow` paths need `rg -uu` during rename verification
+
+**Created:** 2026-04-15
+
+**What happened:** While renaming the scratch workspace directory to `scratchpad`, the first reference scan used `rg --hidden` and incorrectly appeared clean. A follow-up scan with `rg -uu` found the real remaining self-reference in `commit.md:12`.
+
+**Root cause:** `--hidden` includes hidden files but still respects ignore rules. For `.goat-flow` verification work, that can hide the exact content being checked.
+
+**Prevention:** For path-renames or cross-reference checks that target ignored workspace state, use `rg -uu` from the start and grep both the old and new patterns before declaring the rename verified.

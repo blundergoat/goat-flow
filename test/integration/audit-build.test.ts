@@ -35,8 +35,8 @@ describe("audit build: all scopes pass on healthy project", () => {
 // Harness scope: missing deny patterns
 // ---------------------------------------------------------------------------
 describe("audit build: harness scope fails on missing deny", () => {
-  it("agent-deny-hook check fails when no deny configured", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "agent-deny-hook")!;
+  it("agent-deny-dangerous check fails when no deny configured", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-deny-dangerous")!;
     const ctx = makeCtx({
       agentFilter: "claude",
       agents: [

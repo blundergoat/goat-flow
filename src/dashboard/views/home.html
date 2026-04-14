@@ -616,8 +616,8 @@
         gradeColor(g) { return g === 'A' ? 'var(--green-400)' : g === 'B' ? 'var(--green-500)' : g === 'C' ? 'var(--orange-400)' : g === 'D' ? 'var(--orange-400)' : 'var(--red-400)' },
         checkDescriptions: {
           'toolchain-commands': 'test, lint, and build commands are defined in config.yaml - agents call these to verify their own changes',
-          'agent-settings-parse': 'settings file is valid JSON - invalid JSON silently disables hook configuration and permissions',
-          'hook-files-exist': 'a deny hook script or deny list is present to intercept and block dangerous tool calls',
+          'agent-settings-parse': 'settings/config file parses when present (JSON for Claude/Gemini, TOML for Codex) - parse errors silently disable hook configuration and permissions',
+          'hook-files-exist': 'a deny mechanism exists (hook script or settings deny list) to block dangerous tool calls',
           'hook-syntax': 'hook shell scripts pass bash -n - syntax errors cause hooks to silently exit 0, bypassing all guards',
           'deny-patterns': 'at least one tool-call deny pattern is registered - an empty deny list permits every tool call'
         }

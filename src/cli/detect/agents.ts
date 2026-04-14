@@ -29,10 +29,10 @@ export const PROFILES: Record<AgentId, AgentProfile> = {
     hooksDir: ".codex/hooks",
     denyMechanism: {
       type: "deny-script",
-      path: ".codex/rules/deny-dangerous.star",
+      path: ".codex/hooks/deny-dangerous.sh",
     },
     localPattern: ".github/instructions/*.md",
-    hookEvents: { preTool: "", postTurn: "stop" },
+    hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
   },
   gemini: {
     id: "gemini",

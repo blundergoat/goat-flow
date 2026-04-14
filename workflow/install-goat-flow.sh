@@ -102,7 +102,7 @@ cd "$PROJECT"
 # 1. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions .goat-flow/tasks .goat-flow/logs/sessions; do
+for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions; do
   if [[ ! -d "$dir" ]]; then
     mkdir -p "$dir"
     echo "  ✓ $dir/"
@@ -152,6 +152,11 @@ echo ""
 echo "Hooks → $HOOKS_DIR/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh"
 chmod +x "$HOOKS_DIR/deny-dangerous.sh"
+# Codex: also install hooks.json (registers the PreToolUse deny hook in Codex format)
+if [[ "$AGENT" == "codex" ]]; then
+  echo "Hooks config:"
+  copy_if_missing "$GOAT_FLOW_ROOT/workflow/hooks/agent-config/codex-hooks.json" ".codex/hooks.json"
+fi
 echo ""
 
 # ==========================================================================
@@ -180,15 +185,6 @@ agents:
 
 skills:
   install: all
-
-toolchain:
-  test: []
-  lint: []
-  build: []
-  package: []
-  format: []
-
-ask_first: []
 YAML
   COPIED=$((COPIED + 1))
   echo "  ✓ $CONFIG_PATH (scaffolded)"

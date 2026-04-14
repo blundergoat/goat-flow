@@ -145,12 +145,30 @@ export function stubAgentFacts(
 }
 
 export const STUB_STRUCTURE: ProjectStructure = {
-  required_files: [".goat-flow/config.yaml", ".goat-flow/architecture.md"],
-  required_dirs: [".goat-flow/footguns/", ".goat-flow/lessons/"],
+  required_files: [
+    ".goat-flow/.gitignore",
+    ".goat-flow/config.yaml",
+    ".goat-flow/tasks/.gitignore",
+    ".goat-flow/lessons/README.md",
+    ".goat-flow/footguns/README.md",
+    ".goat-flow/skill-preamble.md",
+    ".goat-flow/skill-conventions.md",
+    ".goat-flow/architecture.md",
+    ".goat-flow/code-map.md",
+    ".goat-flow/glossary.md",
+    ".goat-flow/patterns.md",
+  ],
+  required_dirs: [
+    ".goat-flow/decisions/",
+    ".goat-flow/footguns/",
+    ".goat-flow/lessons/",
+    ".goat-flow/logs/sessions/",
+    ".goat-flow/scratchpad/",
+    ".goat-flow/tasks/",
+  ],
   skills: {
     canonical: [...SKILL_NAMES],
     stale_names: ["goat-audit", "goat-investigate"],
-    stale_generic: ["audit", "review"],
   },
   agents: {},
 };

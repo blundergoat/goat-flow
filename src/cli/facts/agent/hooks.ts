@@ -191,45 +191,6 @@ function enrichDenyFromSettings(
   applySettingsDenyOverrides(denyStr, hook);
 }
 
-/** Apply Codex execpolicy Starlark rules to deny hook facts.
- * Returns true if the star file covers the required secret file patterns. */
-function enrichDenyFromExecpolicy(
-  fs: ReadonlyFS,
-  hook: {
-    denyExists: boolean;
-    denyHasBlocks: boolean;
-    denyIsConfigBased: boolean;
-    denyUsesJq: boolean;
-    denyHandlesChaining: boolean;
-    denyBlocksRmRf: boolean;
-    denyBlocksForcePush: boolean;
-    denyBlocksChmod: boolean;
-    denyBlocksPipeToShell: boolean;
-  },
-): boolean {
-  /** Path to the Codex execpolicy Starlark rule file */
-  const execpolicyPath = ".codex/rules/deny-dangerous.star";
-  if (!fs.exists(execpolicyPath)) return false;
-  /** Raw content of the Starlark rule file */
-  const ruleContent = fs.readFile(execpolicyPath);
-  if (!ruleContent) return false;
-  hook.denyExists = true;
-  hook.denyHasBlocks =
-    /forbidden|prompt/i.test(ruleContent) && ruleContent.split("\n").length > 5;
-  hook.denyBlocksRmRf = /rm.*-.*rf|rm.*-.*fr/i.test(ruleContent);
-  hook.denyBlocksForcePush = /force.*push|--force/i.test(ruleContent);
-  hook.denyBlocksChmod = /chmod.*777/.test(ruleContent);
-  hook.denyBlocksPipeToShell =
-    /curl.*\|\s*(ba)?sh|wget.*\|\s*(ba)?sh|pipe-to-shell/i.test(ruleContent);
-  // Execpolicy is config-based - jq/chaining checks are not applicable
-  hook.denyIsConfigBased = true;
-  // Detect secret-file coverage from Starlark rules
-  const hasEnv = /\.env/.test(ruleContent);
-  const hasSsh = /\.ssh/.test(ruleContent);
-  const hasAws = /\.aws|credentials/.test(ruleContent);
-  const hasKeys = /\.pem|\.key|\.pfx/.test(ruleContent);
-  return hasEnv && hasSsh && hasAws && hasKeys;
-}
 
 /** Subset of hook facts describing deny-hook blocking behavior. */
 type HookDenyFacts = Pick<
@@ -368,72 +329,29 @@ function normalizeEventConfig(
   return { registered: path !== null, path };
 }
 
-/** Extract one `[hooks.<section>]` block from the Codex TOML config. */
-function extractTomlSection(config: string, section: string): string | null {
-  const header = `[hooks.${section}]`;
-  const start = config.indexOf(header);
-  if (start < 0) return null;
-
-  const sectionTail = config.slice(start + header.length);
-  const nextHeader = sectionTail.indexOf("\n[");
-  return (
-    nextHeader < 0 ? sectionTail : sectionTail.slice(0, nextHeader)
-  ).trim();
-}
-
-/** Extract command strings from a Codex TOML hook section. */
-function extractTomlCommandValues(section: string): string[] {
-  const commandMatch = section.match(/command\s*=\s*\[(.*?)\]/s);
-  if (commandMatch?.[1]) {
-    return Array.from(commandMatch[1].matchAll(/"([^"\\]*)"|'([^'\\]*)'/g))
-      .map((m) => m[1] ?? m[2])
-      .filter(
-        (value): value is string =>
-          typeof value === "string" && value.length > 0,
-      );
-  }
-
-  const inlineMatch = section.match(/command\s*=\s*["']([^"']+)["']/);
-  return inlineMatch?.[1] ? [inlineMatch[1]] : [];
-}
-
-/** Normalize Codex TOML hook config into a simple registered/path pair. */
-function normalizeCodexHookRegistration(
-  config: string,
-  section: string,
-): HookRegistrationMatch {
-  const sectionText = extractTomlSection(config, section);
-  if (sectionText === null) return { registered: false, path: null };
-
-  const commands = extractTomlCommandValues(sectionText);
-  const path = firstHookPathFromCommands(commands);
-  return { registered: path !== null, path };
-}
-
 /** Collect registered post-turn hook paths for the current agent. */
 function buildHookRegistration(
   agent: AgentProfile,
   settingsParsed: unknown,
-  configText: string | null,
+  codexHooksJson: unknown,
 ): {
   postTurnRegistered: boolean;
   postTurnRegisteredPath: string | null;
 } {
+  // Codex: hooks live in .codex/hooks.json (same JSON structure as Claude/Gemini settings)
   if (agent.id === "codex") {
-    if (configText == null) {
-      return {
-        postTurnRegistered: false,
-        postTurnRegisteredPath: null,
-      };
+    const hooks = readHooksObject(codexHooksJson);
+    if (!hooks) {
+      return { postTurnRegistered: false, postTurnRegisteredPath: null };
     }
-
-    const stop = normalizeCodexHookRegistration(configText, "stop");
+    const stop = normalizeEventConfig(hooks, "Stop");
     return {
       postTurnRegistered: stop.registered,
       postTurnRegisteredPath: stop.path,
     };
   }
 
+  // Claude/Gemini: hooks live in settings.json
   const hooks = readHooksObject(settingsParsed);
   if (!hooks) {
     return {
@@ -563,28 +481,24 @@ export function extractHookFacts(
   settingsParsed: unknown,
   hasDenyPatterns: boolean,
   settingsValid: boolean,
-): Omit<AgentFacts["hooks"], "readDenyCoversSecrets"> & {
-  execpolicyCoversSecrets: boolean;
-} {
+): Omit<AgentFacts["hooks"], "readDenyCoversSecrets"> {
   const compactionHookExists = detectCompactionHookExists(
     agent,
     settingsParsed,
     settingsValid,
   );
-  const configText =
-    agent.id === "codex" ? fs.readFile(".codex/config.toml") : null;
-  const registration = buildHookRegistration(agent, settingsParsed, configText);
+  const codexHooksJson =
+    agent.id === "codex" ? fs.readJson(".codex/hooks.json") : null;
+  const registration = buildHookRegistration(
+    agent,
+    settingsParsed,
+    codexHooksJson,
+  );
   const hook = analyzeDenyHookPath(fs, resolveDenyHookPath(fs, agent));
   const absolutePathHooks = findAbsolutePathHooks(fs, agent.hooksDir);
 
   // Second: also check settings.json Bash deny patterns
   enrichDenyFromSettings(settingsParsed, hasDenyPatterns, hook);
-
-  // For Codex: also check execpolicy rules; capture secret coverage result
-  let execpolicyCoversSecrets = false;
-  if (agent.id === "codex") {
-    execpolicyCoversSecrets = enrichDenyFromExecpolicy(fs, hook);
-  }
 
   const postTurn = extractPostTurnFacts(fs, agent, registration);
 
@@ -593,7 +507,6 @@ export function extractHookFacts(
     ...postTurn,
     compactionHookExists,
     absolutePathHooks,
-    execpolicyCoversSecrets,
   };
 }
 

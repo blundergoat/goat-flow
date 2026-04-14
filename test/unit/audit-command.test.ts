@@ -174,7 +174,6 @@ const STUB_STRUCTURE: ProjectStructure = {
       "goat-test",
     ],
     stale_names: ["goat-audit", "goat-investigate"],
-    stale_generic: ["audit", "review"],
   },
   agents: {},
 };
@@ -310,19 +309,20 @@ describe("audit on well-configured project", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: audit fails when a required .goat-flow/ directory is missing
+// Test 2: audit fails when a named structure check is missing
 // ---------------------------------------------------------------------------
-describe("audit fails on missing required directory", () => {
-  it("fails required-dirs check when a directory is missing", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "required-dirs")!;
+describe("audit fails on missing footguns directory", () => {
+  it("fails footguns check when directory is missing", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "footguns")!;
     const ctx = makeCtx({
       fs: stubFS({
-        exists: (path: string) => path !== ".goat-flow/footguns",
-        listDir: (path: string) => (path.includes("footguns") ? [] : ["file"]),
+        exists: (path: string) =>
+          path !== ".goat-flow/footguns" &&
+          path !== ".goat-flow/footguns/README.md",
       }),
     });
     const result = check.run(ctx);
-    assert.notEqual(result, null, "Should fail when required dir is missing");
+    assert.notEqual(result, null, "Should fail when footguns dir is missing");
     assert.ok(
       result!.message.includes("footguns"),
       `Failure should mention missing dir: ${result!.message}`,
@@ -345,7 +345,7 @@ describe("config.agents filtering", () => {
       hooksDir: ".codex/hooks",
       denyMechanism: {
         type: "deny-script",
-        path: ".codex/rules/deny-dangerous.star",
+        path: ".codex/hooks/deny-dangerous.sh",
       },
       localPattern: ".github/instructions/*.md",
       hookEvents: { preTool: "", postTurn: "stop" },
@@ -567,19 +567,20 @@ describe("audit JSON contract", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 7: build failure howToFix - required-dirs check includes actionable fix
+// Test 7: build failure howToFix - footguns check includes actionable fix
 // ---------------------------------------------------------------------------
 describe("build failure howToFix", () => {
-  it("required-dirs failure includes howToFix with mkdir instruction", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "required-dirs")!;
+  it("footguns failure includes howToFix with mkdir instruction", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "footguns")!;
     const ctx = makeCtx({
       fs: stubFS({
-        exists: (path: string) => path !== ".goat-flow/footguns",
-        listDir: (path: string) => (path.includes("footguns") ? [] : ["file"]),
+        exists: (path: string) =>
+          path !== ".goat-flow/footguns" &&
+          path !== ".goat-flow/footguns/README.md",
       }),
     });
     const result = check.run(ctx);
-    assert.notEqual(result, null, "Should fail when required dir is missing");
+    assert.notEqual(result, null, "Should fail when footguns dir is missing");
     assert.ok(result!.howToFix, "Failure should include howToFix");
     assert.ok(
       result!.howToFix!.includes("mkdir"),
@@ -589,7 +590,70 @@ describe("build failure howToFix", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 8: quality recommendation howToFix includes actionable path
+// Test 8: canonical install paths can stay outside the 12-check setup gate
+// ---------------------------------------------------------------------------
+describe("other-files setup gate", () => {
+  it("does not fail on scratchpad because it is outside the 12-check contract", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "other-files")!;
+    const ctx = makeCtx({
+      structure: {
+        ...STUB_STRUCTURE,
+        required_dirs: [...STUB_STRUCTURE.required_dirs, ".goat-flow/scratchpad/"],
+      },
+      fs: stubFS({
+        exists: (path: string) => path !== ".goat-flow/scratchpad",
+      }),
+    });
+    const result = check.run(ctx);
+    assert.equal(
+      result,
+      null,
+      "scratchpad should not be enforced by the other-files setup gate",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 9: optional config calibration fields do not lower harness scores
+// ---------------------------------------------------------------------------
+describe("optional config calibration", () => {
+  it("does not penalize missing ask_first entries", () => {
+    const check = QUALITY_CHECKS.find((c) => c.id === "ask-first")!;
+    const result = check.run(makeCtx());
+    assert.equal(result.score, 100);
+    assert.ok(
+      result.findings.some((f) => f.includes("instruction files as the source of truth")),
+      `Findings should explain optional ask_first semantics: ${result.findings.join(", ")}`,
+    );
+  });
+
+  it("does not penalize missing toolchain.test entries", () => {
+    const check = QUALITY_CHECKS.find(
+      (c) => c.id === "test-runner-configured",
+    )!;
+    const result = check.run(
+      makeCtx({
+        config: stubConfig({
+          toolchain: {
+            test: [],
+            lint: [],
+            build: [],
+            package: [],
+            format: [],
+          },
+        }),
+      }),
+    );
+    assert.equal(result.score, 100);
+    assert.ok(
+      result.findings.some((f) => f.includes("toolchain.test")),
+      `Findings should explain optional toolchain semantics: ${result.findings.join(", ")}`,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 10: quality recommendation howToFix includes actionable path
 // ---------------------------------------------------------------------------
 describe("quality recommendation howToFix", () => {
   it("doc-paths-resolve findings mention architecture.md when missing", () => {

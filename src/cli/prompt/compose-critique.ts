@@ -249,7 +249,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     `ls ${skillsDir}/                                  # expect 7 goat-* directories`,
   );
   lines.push(
-    "cat .goat-flow/config.yaml                        # should have version, agents, toolchain",
+    "cat .goat-flow/config.yaml                        # should have version, agents, skills, line-limits",
   );
   lines.push("```");
   lines.push("");
@@ -360,10 +360,10 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push("");
   lines.push("**Config reality:**");
   lines.push(
-    "- Does `.goat-flow/config.yaml` have real toolchain commands (test, lint, build)? Run the **project's own commands** first (from config.yaml or package.json scripts). If you also run the tool at broader scope (e.g., `npx eslint .` vs the project's scoped command), note whether the project intentionally scopes narrower — that's a design choice, not a finding, unless it hides real problems. Beware that `.claude/worktrees/`, `node_modules/`, and `dist/` can pollute unscoped tool runs.",
+    "- Does `.goat-flow/config.yaml` stay lean and accurate for this project? If it includes optional project-calibration fields like `toolchain`, verify the commands are real before treating them as authoritative. If you also run the tool at broader scope (e.g., `npx eslint .` vs a project's scoped command), note whether the project intentionally scopes narrower — that's a design choice, not a finding, unless it hides real problems. Beware that `.claude/worktrees/`, `node_modules/`, and `dist/` can pollute unscoped tool runs.",
   );
   lines.push(
-    "- Does `config.yaml` have `ask_first` entries? Do they match the Ask First boundaries in the instruction file?",
+    "- If `config.yaml` includes optional `ask_first` entries, do they match the Ask First boundaries in the instruction file? If the field is absent, treat the instruction file as the source of truth.",
   );
   lines.push(
     `- Were hook scripts installed and registered in \`${settingsFile}\`?`,

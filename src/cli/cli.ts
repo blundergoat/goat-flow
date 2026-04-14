@@ -36,7 +36,7 @@ Usage:
 
 Commands:
   audit             Validate setup correctness (default)
-  critique          Generate agent critique prompt (requires --agent)
+  critique          Quality assessment prompt (requires --agent)
   setup             Generate setup prompt (adapts to project state)
   status            Show project state (bare/partial/v0.9/v1.0/v1.1)
   dashboard         Launch browser dashboard with audit, setup, and terminal
@@ -46,7 +46,7 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: claude, codex, gemini
-  --harness         Audit: add advisory quality scoring by harness concern
+  --harness         Audit: add advisory AI harness checks
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes
@@ -390,8 +390,10 @@ async function main(): Promise<void> {
     throw err;
   });
 
-  /** Parsed CLI options derived from process.argv */
-  const options = parseCLIArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+
+  // Preserve the documented CLI contract: empty argv defaults to `audit`.
+  const options = parseCLIArgs(rawArgs);
 
   if (options.help) {
     printHelp();

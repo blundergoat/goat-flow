@@ -1,8 +1,8 @@
 /**
  * Constraints concern: Do deterministic rules catch failures before the LLM runs?
- * Consolidated from 6 → 5 checks (ask-first-boundaries + ask-first-structural-sync → ask-first).
+ * 4 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell, ask-first.
  */
-import type { AuditContext, QualityCheck } from "../types.js";
+import type { QualityCheck } from "../types.js";
 import { pass, partial, fail } from "./helpers.js";
 
 const denyCoversSecrets: QualityCheck = {
@@ -136,14 +136,9 @@ const askFirst: QualityCheck = {
 
     // No boundaries at all
     if (boundaries.length === 0) {
-      return partial(
-        40,
-        ["No ask_first boundaries configured"],
-        ["Add ask_first entries in config.yaml for high-risk paths"],
-        [
-          "Add ask_first entries in .goat-flow/config.yaml for high-risk paths like deployment configs and security files.",
-        ],
-      );
+      return pass([
+        "No structured ask_first boundaries configured; treat instruction files as the source of truth",
+      ]);
     }
 
     // Check structural sync with instruction files
@@ -192,88 +187,9 @@ const askFirst: QualityCheck = {
   },
 };
 
-/** Resolve lint commands to a searchable string, expanding wrapper scripts. */
-function resolveLintCommands(
-  ctx: AuditContext,
-  lintCommands: string[],
-): string {
-  const joined = lintCommands.join(" ").toLowerCase();
-  let resolved = joined;
-  for (const cmd of lintCommands) {
-    const scriptMatch = cmd.match(
-      /bash\s+(\S+\.sh)|sh\s+(\S+\.sh)|\.\/(\S+\.sh)/,
-    );
-    const scriptPath = scriptMatch?.[1] ?? scriptMatch?.[2] ?? scriptMatch?.[3];
-    if (scriptPath) {
-      const content = ctx.fs.readFile(`${ctx.projectPath}/${scriptPath}`);
-      if (content) resolved += " " + content.toLowerCase();
-    }
-  }
-  return resolved;
-}
-
-const linterRegistered: QualityCheck = {
-  id: "linter-registered",
-  concern: "constraints",
-  weight: 2,
-  run: (ctx) => {
-    const detected = ctx.facts.stack.signals.staticAnalysis;
-    const lintCommands = ctx.config.config.toolchain.lint;
-
-    if (detected.length === 0) {
-      return partial(
-        50,
-        ["No static analysis tools detected in project manifests"],
-        [
-          "Install a linter (eslint, phpstan, ruff, etc.) and register it in config.yaml toolchain.lint",
-        ],
-        [
-          "Install a linter for your project and add it to toolchain.lint in .goat-flow/config.yaml.",
-        ],
-      );
-    }
-    if (lintCommands.length === 0) {
-      return fail(
-        [
-          `${detected.map((t) => t.tool).join(", ")} detected but no lint command configured`,
-        ],
-        ["Register detected linters in config.yaml toolchain.lint"],
-        [
-          `Add toolchain.lint entries to .goat-flow/config.yaml for: ${detected.map((t) => t.tool).join(", ")}.`,
-        ],
-      );
-    }
-    const resolvedJoined = resolveLintCommands(ctx, lintCommands);
-    const registered: string[] = [];
-    const unregistered: string[] = [];
-    for (const tool of detected) {
-      if (resolvedJoined.includes(tool.tool.toLowerCase())) {
-        registered.push(tool.tool);
-      } else {
-        unregistered.push(tool.tool);
-      }
-    }
-    if (unregistered.length === 0) {
-      return pass([
-        `${registered.join(", ")} detected and registered in toolchain.lint`,
-      ]);
-    }
-    const score = Math.round((registered.length / detected.length) * 100);
-    return partial(
-      Math.max(score, 30),
-      [`${unregistered.join(", ")} installed but not in toolchain.lint`],
-      [`Add ${unregistered.join(", ")} to toolchain.lint in config.yaml`],
-      [
-        `Add lint commands for ${unregistered.join(", ")} to the toolchain.lint array in .goat-flow/config.yaml.`,
-      ],
-    );
-  },
-};
-
 export const CONSTRAINTS_CHECKS: QualityCheck[] = [
   denyCoversSecrets,
   denyBlocksDangerous,
   denyBlocksPipeToShell,
   askFirst,
-  linterRegistered,
 ];

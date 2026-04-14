@@ -31,37 +31,3 @@ telemetry: false
 line-limits:
   target: 120
   limit: 150
-
-# ── Toolchain ─────────────────────────────────
-toolchain:
-  test:
-    - npm test
-  lint:
-    - bash scripts/preflight-checks.sh
-    - bash scripts/validate-goat-flow-setup.sh
-    - shellcheck workflow/hooks/*.sh scripts/*.sh .claude/hooks/*.sh .gemini/hooks/*.sh .codex/hooks/*.sh
-  build:
-    - npm run build
-    - npx tsc --noEmit
-  package:
-    - npm pack
-  format:
-    - npm run format
-
-# ── Ask First Boundaries ──────────────────────
-ask_first:
-  - path: .goat-flow/architecture.md
-    reason: Canonical architecture source; changes can alter repo-wide guidance.
-  - path: CLAUDE.md
-    reason: Shared Claude runtime instructions affect every Claude session.
-  - path: workflow/setup/**
-    reason: Setup templates change generated output across consumer projects.
-  - path: workflow/skills/**
-    reason: Skill templates are source of truth for installed copies.
-  - path: .github/workflows/**
-    reason: CI workflow changes can alter validation and release behavior.
-  - path: .claude/**
-    reason: Claude-specific runtime files are user-facing and should only change intentionally.
-
-# Canonical paths (.goat-flow/footguns/, .goat-flow/lessons/, etc.) are always used.
-# Path overrides were removed in v1.1.0 - no indirection needed.

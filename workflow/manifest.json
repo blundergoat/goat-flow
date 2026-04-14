@@ -21,10 +21,12 @@
     ".goat-flow/footguns/",
     ".goat-flow/lessons/",
     ".goat-flow/logs/sessions/",
+    ".goat-flow/scratchpad/",
     ".goat-flow/tasks/"
   ],
 
   "directory_purposes": {
+    ".goat-flow/scratchpad/": "Ephemeral working notes and temporary coordination artifacts.",
     ".goat-flow/tasks/": "Milestone files, plans, and workspace-local task artifacts. Do not recreate the legacy todo or handoff scratch files."
   },
 
@@ -38,8 +40,7 @@
 
   "skills": {
     "canonical": ["goat", "goat-debug", "goat-plan", "goat-review", "goat-sbao", "goat-security", "goat-test"],
-    "stale_names": ["goat-audit", "goat-investigate", "goat-onboard", "goat-reflect", "goat-resume", "goat-context", "goat-simplify", "goat-refactor", "goat-preflight", "goat-research"],
-    "stale_generic": ["audit", "review", "preflight", "debug", "plan", "test", "security"]
+    "stale_names": ["goat-audit", "goat-investigate", "goat-onboard", "goat-reflect", "goat-resume", "goat-context", "goat-simplify", "goat-refactor", "goat-preflight", "goat-research"]
   },
 
   "agents": {
@@ -54,13 +55,15 @@
       "instruction_file": "AGENTS.md",
       "skills_dir": ".agents/skills/",
       "hooks_dir": ".codex/hooks/",
-      "settings": ".codex/config.toml"
+      "settings": ".codex/config.toml",
+      "hooks": ["deny-dangerous.sh"]
     },
     "gemini": {
       "instruction_file": "GEMINI.md",
       "skills_dir": ".agents/skills/",
       "hooks_dir": ".gemini/hooks/",
-      "settings": ".gemini/settings.json"
+      "settings": ".gemini/settings.json",
+      "hooks": ["deny-dangerous.sh"]
     }
   },
 
@@ -75,20 +78,6 @@
       "Router Table"
     ],
     "version_header_pattern": "# {FILE} - v{VERSION} ({DATE})"
-  },
-
-  "config_schema": {
-    "toolchain": {
-      "description": "Detected project commands grouped by purpose. Each field is an array of shell commands.",
-      "fields": ["build", "test", "lint", "format", "package"]
-    },
-    "ask_first": {
-      "description": "Structured high-risk boundaries for dispatcher and setup context.",
-      "entry_shape": {
-        "path": "repo path or glob",
-        "reason": "why human confirmation is required"
-      }
-    }
   },
 
   "legacy_surfaces": {
