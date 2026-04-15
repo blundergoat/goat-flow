@@ -59,7 +59,7 @@ bash workflow/validate-goat-flow-setup.sh # Validate GOAT Flow setup scope
 
 # CLI commands (after build)
 goat-flow audit .                        # Validate setup correctness
-goat-flow audit . --harness              # Advisory quality scores
+goat-flow audit . --harness              # AI harness completeness checks
 goat-flow setup --agent claude           # Generate setup prompt
 goat-flow critique . --agent claude      # Generate critique prompt
 ```
@@ -84,7 +84,7 @@ goat-flow critique . --agent claude      # Generate critique prompt
 - Run `npm test` after touching `src/cli/` or `test/`
 - Run `bash scripts/preflight-checks.sh` before considering work complete
 - Write build checks as `BuildCheck` objects (id, name, scope, run) in `audit/check-goat-flow.ts` or `audit/check-agent-setup.ts`
-- Write quality checks as `QualityCheck` objects (id, concern, weight, run) in `audit/harness/`
+- Write harness checks as `HarnessCheck` objects (id, name, concern, run) in `audit/harness/`
 - Import AUDIT_VERSION from `constants.ts`, never hardcode
 
 ## DON'T

@@ -2,6 +2,25 @@
 category: skills
 ---
 
+## Footgun: Workflow template source and installed copy can silently diverge
+
+**Status:** active | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Agents on consumer projects follow a different rule than agents on the goat-flow repo, because the workflow template (install source) says one thing and the installed copy says another. The divergence is invisible — both files exist, both parse correctly, and no automated check compares their content.
+
+**Why it happens:** `workflow/skills/reference/skill-preamble.md` is the template that gets copied to `.goat-flow/skill-preamble.md` during setup. When the installed copy is edited directly (e.g., fixing a bug found by critique), the workflow template doesn't automatically follow. The preflight validates skill template versions but not preamble/conventions content.
+
+**Evidence:**
+- `workflow/skills/reference/skill-preamble.md:10` said "Step 0 satisfies SCOPE" while `.goat-flow/skill-preamble.md:10` said "Step 0 satisfies READ/SCOPE" — discovered 2026-04-15 by multi-agent critique. Only 1 of 3 critiques caught it.
+- The divergence affected the most important sentence in the preamble: which execution loop phases a skill's Step 0 satisfies. Fresh consumer installs would get the wrong version.
+
+**Prevention:**
+1. After editing any installed `.goat-flow/skill-preamble.md` or `.goat-flow/skill-conventions.md`, immediately diff against the workflow template source and sync.
+2. Add a preflight check: `diff workflow/skills/reference/skill-preamble.md .goat-flow/skill-preamble.md` and `diff workflow/skills/reference/skill-conventions.md .goat-flow/skill-conventions.md` — fail if they differ.
+3. Treat the workflow template as the source of truth. Edit there first, then copy to the installed location.
+
+---
+
 ## Footgun: Agent rewrites shared docs with agent-specific vocabulary
 
 **Status:** active | **Created:** 2026-03-21 | **Evidence:** ACTUAL_MEASURED
@@ -43,38 +62,6 @@ category: skills
 
 ---
 
-## Footgun: Dispatcher intent mapping has no coverage for analysis/evaluation verbs
-
-**Status:** resolved | **Created:** 2026-03-30 | **Resolved:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** User asks `/goat analyse this plan` or `/goat evaluate the setup`. Dispatcher auto-routes to goat-review without disambiguating. User expected goat-plan (or wanted to choose). The wrong skill loads and the entire interaction is wasted.
-
-**Why it happens:** The dispatcher's intent mapping table has rows mapping keywords to skills. "Analyse", "evaluate", "critique", "assess", and "deeply review" appear in none of them. When no keyword matches, the agent falls through to the closest semantic match instead of triggering the disambiguation path.
-
-**Evidence:**
-- `.claude/skills/goat/SKILL.md` → intent mapping table has no row for analyse/evaluate/critique
-- `.claude/skills/goat/SKILL.md` → disambiguation table lacks "analyse a plan" ambiguity
-- `workflow/skills/goat.md` → same gap in the template version
-- Real incident: `/goat deeply analyse this plan: tasks/roadmaps/0.9.3/tasks.md` routed to goat-review without asking (2026-03-30)
-
-**Prevention:** Add analysis/evaluation verbs to the disambiguation table (NOT the intent mapping table - they are inherently ambiguous). When the target is a planning artifact (path contains `roadmap`, `plan`, `todo`, `milestone`), always present goat-review vs goat-plan as options. The dispatcher's job is to route clearly and ask when unclear - not to guess.
-
----
-
-## Footgun: CI template derives skill names by prefixing instead of listing them (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-01 | **Resolved:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Consumer project CI workflow checks for `goat-investigate`, `goat-refactor`, `goat-simplify` (all stale) and misses the `goat` dispatcher entirely. When an agent adapts the pattern to include the dispatcher, it prefixes `goat-` to the name `goat`, producing `goat-goat`. The CI check permanently fails for the dispatcher.
-
-**Why it happens:** `src/cli/prompt/fragments/full.ts` CI template had `for skill in security debug investigate review plan test refactor simplify; do` and constructed `goat-$skill`. This design assumes all skill names follow the `goat-{suffix}` pattern, but the dispatcher is just `goat`. The suffix list was also never updated after the 9→6 consolidation - 3 stale suffixes remained.
-
-**Resolution:** The entire `src/cli/prompt/fragments/` directory was removed in the v1.1.0 scanner/rubric removal. CI template generation no longer exists in the codebase. Consumer projects that already have the broken pattern need manual cleanup.
-
-**Prevention:** Always iterate canonical skill names directly (`goat goat-debug goat-plan goat-review goat-security goat-test`), never derive them by prefixing. Import from `SKILL_NAMES` in code, or list literal names in templates.
-
----
-
 ## Footgun: Skills have phase gates but no time/call budget for context gathering
 
 **Status:** active | **Created:** 2026-04-05 | **Evidence:** ACTUAL_MEASURED
@@ -90,3 +77,12 @@ Skills enforce phase gates (Step 0 must complete before Phase 1, gates pause for
 **Prevention:**
 1. Add a Step 0 call budget to the shared preamble: "If Step 0 exceeds 5 file reads without producing output or asking a question, stop and present what you know so far"
 2. Skills should checkpoint mid-Step-0 for complex projects: "I've read X files. Here's what I understand so far. Should I continue gathering context or start with what I have?"
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+- **Dispatcher intent mapping has no coverage for analysis/evaluation verbs** (resolved 2026-04-14) — Added analysis/evaluation verbs to the dispatcher disambiguation table so ambiguous requests prompt skill selection instead of auto-routing.
+- **CI template derives skill names by prefixing instead of listing them** (resolved 2026-04-14) — Removed `src/cli/prompt/fragments/` directory in v1.1.0; CI template generation no longer exists.

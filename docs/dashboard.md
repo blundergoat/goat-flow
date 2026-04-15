@@ -10,7 +10,7 @@ Overview landing page. Shows "What to do next" action cards based on your latest
 
 ### Audit
 
-Audit results in a single scrollable page. Each scope (GOAT Flow Setup, AI Harness Score) shows pass/fail status and can be expanded inline for details. Per-agent harness cards show individual agent scores. Failures include actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. Also accessible from action cards on the Home view.
+Audit results in a single scrollable page. Each scope (GOAT Flow Setup, Agent Setup, AI Harness Completeness) shows pass/fail status and can be expanded inline for details. Per-agent cards show individual pass/fail results. Failures include actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. Also accessible from action cards on the Home view.
 
 ### Critique
 

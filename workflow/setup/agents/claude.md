@@ -15,7 +15,7 @@ CLAUDE.md, `.claude/`, and shared `.goat-flow/`.
 
 ## Hands off
 
-AGENTS.md, GEMINI.md, `.agents/`, `.gemini/`, `.codex/`, `.github/copilot-instructions.md`.
+AGENTS.md, GEMINI.md, `.agents/`, `.gemini/`, `.codex/`.
 
 ## Agent-specific setup
 

@@ -69,7 +69,7 @@ The dispatcher classifies intent conversationally - not by keyword lookup. It as
 | Test gaps, coverage, verify | /goat-test |
 | Critique a plan/assessment | /goat-sbao |
 
-**Planning Route:** For planning requests, the dispatcher checks `.goat-flow/tasks/` for existing plans first, then routes based on complexity: Hotfix → direct execution; Small Feature → compressed brief → `/goat-plan`; Standard → feature brief → mob (optional) → `/goat-plan`; System/Infrastructure → feature brief → mob (recommended) → `/goat-plan` → suggest `/goat-sbao`.
+**Planning Route:** For planning requests, the dispatcher checks `.goat-flow/tasks/` for existing plans first, then routes based on complexity: Hotfix → direct execution; Small Feature → compressed brief → `/goat-plan`; Standard → feature brief → `/goat-plan`; System/Infrastructure → feature brief → `/goat-plan` → suggest `/goat-sbao`.
 
 ---
 

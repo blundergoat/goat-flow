@@ -75,7 +75,7 @@ function app() {
         id: "audit-harness",
         label: "Audit Harness",
         command: "npx goat-flow audit . --harness",
-        description: "Run the advisory harness quality checks.",
+        description: "Run AI harness completeness checks.",
       },
     ],
 

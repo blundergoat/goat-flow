@@ -28,7 +28,7 @@ const NAMED_PATHS = new Set([
 ]);
 
 // Canonical install paths intentionally excluded from the base 12-check setup gate.
-const EXCLUDED_MANIFEST_PATHS = new Set([".goat-flow/scratchpad/"]);
+const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
 // === Named structure checks (9) ===
 
@@ -38,7 +38,8 @@ const lessons: BuildCheck = {
   scope: "setup",
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/lessons")) missing.push(".goat-flow/lessons/");
+    if (!ctx.fs.exists(".goat-flow/lessons"))
+      missing.push(".goat-flow/lessons/");
     if (!ctx.fs.exists(".goat-flow/lessons/README.md"))
       missing.push(".goat-flow/lessons/README.md");
     if (missing.length === 0) return null;

@@ -13,7 +13,6 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | Purpose | Claude Code | Gemini CLI | Codex CLI |
 |---------|-------------|------------|-----------|
 | Block before tool runs | PreToolUse | BeforeTool | PreToolUse in `.codex/hooks.json` (shell only) |
-| Check after each turn | Stop | AfterAgent | Stop in `.codex/hooks.json` |
 | Permission deny list | `.claude/settings.json` deny patterns | `.gemini/settings.json` deny patterns | Hook logic in `.codex/hooks.json` (no separate file deny surface) |
 | Config format | JSON | JSON | TOML + JSON |
 
@@ -24,10 +23,10 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Gemini: `agent-config/gemini.json` -> `.gemini/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
-3. Project-specific post-turn validation hooks are optional. goat-flow core ships the deny hook template; add Stop/AfterAgent registrations only if your project wants them.
+3. goat-flow core ships only the deny hook. Post-turn validation hooks are a project-specific concern — see the note below.
 
 All hook paths use `$(git rev-parse --show-toplevel)` so they work regardless of the agent's working directory.
 
-## Post-Turn Linting (project-specific)
+## Post-Turn Linting (project-specific, not shipped)
 
-goat-flow does not ship a lint hook - every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop/AfterAgent event.
+goat-flow does not ship a post-turn lint hook. Every project has different linters, configs, and performance constraints. If you want post-turn validation, write a project-specific script for the Stop (Claude/Codex) or AfterAgent (Gemini) event and register it in the agent's settings file.

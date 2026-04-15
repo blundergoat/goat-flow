@@ -18,10 +18,10 @@ npm test                                          # Run test suite
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
-**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept. Check `.goat-flow/footguns/` for the target area.
 ```
 BAD:  "The CLI has 20 audit checks" (guessed without reading)
-GOOD: Read src/cli/audit/check-goat-flow.ts → 16 build checks (12 setup + 4 agent)
+GOOD: Read src/cli/audit/check-goat-flow.ts → 12 setup checks, check-agent-setup.ts → 4 agent checks (16 total)
 ```
 
 **SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
@@ -77,7 +77,8 @@ Boundaries:
 - `workflow/skills/` template changes (affects user skill creation)
 - `.goat-flow/architecture.md` (core architecture doc)
 - `.github/workflows/**` (CI changes alter validation and release behavior)
-- `.claude/**` (Claude runtime files are user-facing; only change intentionally)
+- `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**` (agent runtime files)
+- Other instruction files (`AGENTS.md`, `GEMINI.md`)
 - Adding, removing, or renaming any file (breaks cross-references)
 - Changes spanning 3+ documentation files
 
@@ -104,6 +105,7 @@ If working from a plan/milestone file, tick `- [x]` on each completed task immed
 | Architecture | `.goat-flow/architecture.md` |
 | CLI auditor/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
+| Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.claude/skills/` (goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test) |
 | Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
@@ -111,3 +113,4 @@ If working from a plan/milestone file, tick `- [x]` on each completed task immed
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
+| Peer instructions | `AGENTS.md`, `GEMINI.md` |

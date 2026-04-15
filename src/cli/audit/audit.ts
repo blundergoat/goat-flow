@@ -1,6 +1,7 @@
 /**
  * Audit orchestrator for `goat-flow audit`.
- * Loads config, extracts facts, runs build checks (pass/fail) and optional quality checks (advisory).
+ * Loads config, extracts facts, runs build checks (pass/fail) and optional
+ * harness completeness checks (--harness, deterministic pass/fail per concern).
  * Returns an AuditReport consumed by renderers and the dashboard.
  */
 import type { AgentId, ReadonlyFS } from "../types.js";
@@ -9,7 +10,7 @@ import { extractProjectFacts } from "../facts/orchestrator.js";
 import { getProjectStructure } from "../paths.js";
 import { SETUP_CHECKS } from "./check-goat-flow.js";
 import { AGENT_CHECKS } from "./check-agent-setup.js";
-import { QUALITY_CHECKS } from "./harness/index.js";
+import { HARNESS_CHECKS } from "./harness/index.js";
 import type {
   AuditContext,
   AuditConcern,
@@ -23,7 +24,7 @@ import type {
 
 interface AuditOptions {
   agentFilter: AgentId | null;
-  quality: boolean;
+  harness: boolean;
 }
 
 /** Parse the raw manifest.json into the typed subset audit needs. */
@@ -78,8 +79,8 @@ function setupSummary(ctx: AuditContext): Record<string, string> {
   };
 }
 
-/** Build summary details for the harness scope */
-function harnessSummary(ctx: AuditContext): Record<string, string> {
+/** Build summary details for the agent scope */
+function agentSummary(ctx: AuditContext): Record<string, string> {
   const tc = ctx.config.config.toolchain;
   const parts: string[] = [];
   if (tc.test.length > 0) parts.push("test");
@@ -102,16 +103,43 @@ function harnessSummary(ctx: AuditContext): Record<string, string> {
   };
 }
 
-/** Compute quality concerns from quality checks */
-function computeConcerns(
-  ctx: AuditContext,
-): Record<AuditConcernKey, AuditConcern> {
+/** Run harness completeness checks and return scope + concerns. */
+function computeHarness(ctx: AuditContext): {
+  scope: AuditScope;
+  concerns: Record<AuditConcernKey, AuditConcern>;
+} {
+  const checks: CheckResult[] = [];
   const concerns: Record<AuditConcernKey, AuditConcern> = {
-    context: { score: 0, findings: [], recommendations: [], howToFix: [] },
-    constraints: { score: 0, findings: [], recommendations: [], howToFix: [] },
-    verification: { score: 0, findings: [], recommendations: [], howToFix: [] },
-    recovery: { score: 0, findings: [], recommendations: [], howToFix: [] },
+    context: {
+      status: "pass",
+      score: 0,
+      findings: [],
+      recommendations: [],
+      howToFix: [],
+    },
+    constraints: {
+      status: "pass",
+      score: 0,
+      findings: [],
+      recommendations: [],
+      howToFix: [],
+    },
+    verification: {
+      status: "pass",
+      score: 0,
+      findings: [],
+      recommendations: [],
+      howToFix: [],
+    },
+    recovery: {
+      status: "pass",
+      score: 0,
+      findings: [],
+      recommendations: [],
+      howToFix: [],
+    },
     feedback_loop: {
+      status: "pass",
       score: 0,
       findings: [],
       recommendations: [],
@@ -119,46 +147,72 @@ function computeConcerns(
     },
   };
 
-  const weights: Record<AuditConcernKey, number> = {
-    context: 0,
-    constraints: 0,
-    verification: 0,
-    recovery: 0,
-    feedback_loop: 0,
-  };
-  const weighted: Record<AuditConcernKey, number> = {
-    context: 0,
-    constraints: 0,
-    verification: 0,
-    recovery: 0,
-    feedback_loop: 0,
+  const counts: Record<AuditConcernKey, { total: number; passing: number }> = {
+    context: { total: 0, passing: 0 },
+    constraints: { total: 0, passing: 0 },
+    verification: { total: 0, passing: 0 },
+    recovery: { total: 0, passing: 0 },
+    feedback_loop: { total: 0, passing: 0 },
   };
 
-  for (const check of QUALITY_CHECKS) {
+  for (const check of HARNESS_CHECKS) {
     const result = check.run(ctx);
+    checks.push({
+      id: check.id,
+      name: check.name,
+      status: result.status,
+      failure:
+        result.status === "fail"
+          ? {
+              check: check.name,
+              message:
+                result.recommendations[0] ??
+                result.findings[0] ??
+                "Check failed",
+              howToFix: result.howToFix?.[0],
+            }
+          : undefined,
+    });
     const concern = concerns[check.concern];
     concern.findings.push(...result.findings);
     concern.recommendations.push(...result.recommendations);
     if (result.howToFix) concern.howToFix.push(...result.howToFix);
-    weights[check.concern] += check.weight;
-    weighted[check.concern] += result.score * check.weight;
+    if (result.status === "fail") concern.status = "fail";
+    counts[check.concern].total++;
+    if (result.status === "pass") counts[check.concern].passing++;
   }
 
   for (const key of Object.keys(concerns) as AuditConcernKey[]) {
-    concerns[key].score =
-      weights[key] > 0 ? Math.round(weighted[key] / weights[key]) : 0;
+    const { total, passing } = counts[key];
+    concerns[key].score = total > 0 ? Math.round((passing / total) * 100) : 0;
   }
 
-  return concerns;
+  return { scope: buildScope(checks, {}), concerns };
 }
 
-/** Compute overall grade from quality score */
-function scoreToGrade(score: number): string {
-  if (score >= 90) return "A";
-  if (score >= 80) return "B";
-  if (score >= 70) return "C";
-  if (score >= 60) return "D";
-  return "F";
+/** Run build checks and return per-scope results. */
+function runBuildChecks(ctx: AuditContext): {
+  setup: AuditScope;
+  agent: AuditScope;
+} {
+  const scopeChecks: Record<AuditScopeName, CheckResult[]> = {
+    setup: [],
+    agent: [],
+  };
+  const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
+  for (const check of BUILD_CHECKS) {
+    const failure = check.run(ctx);
+    scopeChecks[check.scope].push({
+      id: check.id,
+      name: check.name,
+      status: failure ? "fail" : "pass",
+      failure: failure ?? undefined,
+    });
+  }
+  return {
+    setup: buildScope(scopeChecks.setup, setupSummary(ctx)),
+    agent: buildScope(scopeChecks.agent, agentSummary(ctx)),
+  };
 }
 
 /** Run the audit against a project and return the full report. */
@@ -185,63 +239,25 @@ export function runAudit(
     agentFilter: options.agentFilter,
   };
 
-  // Run build checks grouped by scope
-  const scopeChecks: Record<AuditScopeName, CheckResult[]> = {
-    setup: [],
-    harness: [],
-  };
-  const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
-  for (const check of BUILD_CHECKS) {
-    const failure = check.run(ctx);
-    scopeChecks[check.scope].push({
-      id: check.id,
-      name: check.name,
-      status: failure ? "fail" : "pass",
-      failure: failure ?? undefined,
-    });
-  }
-
-  const setupScope = buildScope(scopeChecks.setup, setupSummary(ctx));
-
-  const harnessScope = buildScope(scopeChecks.harness, harnessSummary(ctx));
-  // Compute percentage score for harness
-  const harnessTotal = harnessScope.checks.length;
-  const harnessPassed = harnessScope.checks.filter(
-    (c) => c.status === "pass",
-  ).length;
-  harnessScope.score =
-    harnessTotal > 0 ? Math.round((harnessPassed / harnessTotal) * 100) : 0;
-
-  const scopes = { setup: setupScope, harness: harnessScope };
+  const { setup: setupScope, agent: agentScope } = runBuildChecks(ctx);
+  const harness = options.harness ? computeHarness(ctx) : null;
 
   const buildPassed =
-    scopes.setup.status === "pass" && scopes.harness.status === "pass";
-
-  // Run quality checks only when requested
-  let concerns: Record<AuditConcernKey, AuditConcern> | null = null;
-  let grade: string | null = null;
-  let qualityScore: number | null = null;
-
-  if (options.quality) {
-    concerns = computeConcerns(ctx);
-    const scores = Object.values(concerns).map((c) => c.score);
-    qualityScore = Math.round(
-      scores.reduce((a, b) => a + b, 0) / scores.length,
-    );
-    grade = scoreToGrade(qualityScore);
-  }
+    setupScope.status === "pass" && agentScope.status === "pass";
+  const harnessPassed = !harness || harness.scope.status === "pass";
+  const status = buildPassed && harnessPassed ? "pass" : "fail";
 
   return {
     command: "audit",
-    quality: options.quality,
-    status: buildPassed ? "pass" : "fail",
+    harness: options.harness,
+    status,
     target: projectPath,
-    scopes,
-    concerns,
-    overall: {
-      status: buildPassed ? "pass" : "fail",
-      grade,
-      qualityScore,
+    scopes: {
+      setup: setupScope,
+      agent: agentScope,
+      harness: harness?.scope ?? null,
     },
+    concerns: harness?.concerns ?? null,
+    overall: { status },
   };
 }

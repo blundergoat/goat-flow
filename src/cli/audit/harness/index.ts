@@ -1,15 +1,15 @@
 /**
- * Harness quality checks index.
- * Re-exports all 5 concern check arrays as a single QUALITY_CHECKS array.
+ * Harness completeness checks index.
+ * Re-exports all 5 concern check arrays as a single HARNESS_CHECKS array.
  */
-import type { QualityCheck } from "../types.js";
+import type { HarnessCheck } from "../types.js";
 import { CONTEXT_CHECKS } from "./check-context.js";
 import { CONSTRAINTS_CHECKS } from "./check-constraints.js";
 import { VERIFICATION_CHECKS } from "./check-verification.js";
 import { RECOVERY_CHECKS } from "./check-recovery.js";
 import { FEEDBACK_LOOP_CHECKS } from "./check-feedback-loop.js";
 
-export const QUALITY_CHECKS: QualityCheck[] = [
+export const HARNESS_CHECKS: HarnessCheck[] = [
   ...CONTEXT_CHECKS,
   ...CONSTRAINTS_CHECKS,
   ...VERIFICATION_CHECKS,

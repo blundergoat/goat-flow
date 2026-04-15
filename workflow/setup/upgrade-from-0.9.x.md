@@ -5,7 +5,7 @@ Read `01-system-overview.md` first if you haven't already.
 ## Before and after
 
 **Before (v0.9.x):**
-- Old skill names: goat-audit, goat-investigate, goat-onboard, goat-reflect, goat-resume, goat-context, goat-simplify, goat-refactor
+- Old skill names: goat-audit, goat-investigate, goat-onboard, goat-reflect, goat-resume, goat-context, goat-simplify, goat-refactor, goat-preflight, goat-research
 - No `.goat-flow/config.yaml`
 - Learning loop in `docs/footguns.md` and `docs/lessons.md` (flat files, not directories)
 - No `.goat-flow/skill-preamble.md`
@@ -49,11 +49,9 @@ You're in the right place if the project has old skill names and no `.goat-flow/
 
 ## Step 2 - Delete old skills (skip if migration script already ran)
 
-Delete from ALL agent skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`):
+Delete from ALL agent skill directories (`.claude/skills/`, `.agents/skills/`):
 
-**Delete these:** goat-audit, goat-investigate, goat-onboard, goat-reflect, goat-resume, goat-context, goat-simplify, goat-refactor
-
-Also delete these older goat-prefixed skills if present: `goat-audit/`, `goat-preflight/`
+**Delete these:** goat-audit, goat-investigate, goat-onboard, goat-reflect, goat-resume, goat-context, goat-simplify, goat-refactor, goat-preflight, goat-research
 
 **Verification:** No old skill directories remain. `ls {skills-dir}` shows no goat-audit etc.
 
@@ -101,7 +99,7 @@ These files contain real project memory. Migrate the content, don't discard it.
 
 ## Step 5 - Install current skills
 
-Install the 7 current skills from `workflow/skills/goat-*.md` templates into the agent's skills directory. Each skill must have `goat-flow-skill-version:` in frontmatter matching the current goat-flow version (run `goat-flow --version` to check).
+Install the 7 current skills from `workflow/skills/` templates into the agent's skills directory. Each skill must have `goat-flow-skill-version:` in frontmatter matching the current goat-flow version (run `goat-flow --version` to check).
 
 Check expected version: `workflow/skills/goat-debug.md` line 4.
 

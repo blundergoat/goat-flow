@@ -1,7 +1,9 @@
 /**
  * Types for the `goat-flow audit` command.
- * Audit validates setup correctness (build checks) and optionally scores
- * project quality (--harness) grouped by harness concerns.
+ * Audit validates setup correctness (build checks) and optionally checks
+ * AI harness completeness (--harness) grouped by harness concerns.
+ *
+ * Wording: audit = deterministic integrity/completeness. Never "quality" or "score".
  */
 import type {
   AgentFacts,
@@ -32,11 +34,11 @@ export interface AuditScope {
   checks: CheckResult[];
   failures: AuditFailure[];
   summary: Record<string, string>;
-  /** Percentage score (0-100) for scored scopes like harness */
-  score?: number;
 }
 
 export interface AuditConcern {
+  status: "pass" | "fail";
+  /** Percentage of passing checks for this concern (0-100). */
   score: number;
   findings: string[];
   recommendations: string[];
@@ -52,18 +54,17 @@ export type AuditConcernKey =
 
 export interface AuditReport {
   command: "audit";
-  quality: boolean;
+  harness: boolean;
   status: "pass" | "fail";
   target: string;
   scopes: {
     setup: AuditScope;
-    harness: AuditScope;
+    agent: AuditScope;
+    harness: AuditScope | null;
   };
   concerns: Record<AuditConcernKey, AuditConcern> | null;
   overall: {
     status: "pass" | "fail";
-    grade: string | null;
-    qualityScore: number | null;
   };
 }
 
@@ -89,7 +90,7 @@ export interface ProjectStructure {
   >;
 }
 
-/** Context passed to build and quality check functions */
+/** Context passed to build and harness check functions */
 export interface AuditContext {
   projectPath: string;
   facts: ProjectFacts;
@@ -100,7 +101,7 @@ export interface AuditContext {
   agentFilter: AgentId | null;
 }
 
-export type AuditScopeName = "setup" | "harness";
+export type AuditScopeName = "setup" | "agent";
 
 /** A single build check that returns null on pass or a failure on fail */
 export interface BuildCheck {
@@ -110,16 +111,16 @@ export interface BuildCheck {
   run: (ctx: AuditContext) => AuditFailure | null;
 }
 
-/** A single quality check that contributes to a concern score */
-export interface QualityCheck {
+/** A single harness completeness check (deterministic pass/fail) */
+export interface HarnessCheck {
   id: string;
+  name: string;
   concern: AuditConcernKey;
-  weight: number;
-  run: (ctx: AuditContext) => QualityCheckResult;
+  run: (ctx: AuditContext) => HarnessCheckResult;
 }
 
-export interface QualityCheckResult {
-  score: number;
+export interface HarnessCheckResult {
+  status: "pass" | "fail";
   findings: string[];
   recommendations: string[];
   howToFix?: string[];

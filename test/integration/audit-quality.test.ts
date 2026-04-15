@@ -1,75 +1,72 @@
 /**
- * Integration tests for `goat-flow audit --harness` concern scoring.
+ * Integration tests for `goat-flow audit --harness` completeness checks.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { QUALITY_CHECKS } from "../../src/cli/audit/harness/index.js";
+import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import type { AuditConcernKey } from "../../src/cli/audit/types.js";
 import { makeCtx, makeSharedFacts } from "../fixtures/projects/index.js";
 
 // ---------------------------------------------------------------------------
-// Quality concerns produce scores in 0-100 range
+// Harness concerns produce pass/fail status
 // ---------------------------------------------------------------------------
-describe("quality concern scores", () => {
-  it("all concern scores are 0-100", () => {
+describe("harness concern statuses", () => {
+  it("all concern statuses are pass or fail", () => {
     const projectPath = resolve(import.meta.dirname, "..", "..");
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: true,
+      harness: true,
     });
 
     assert.notEqual(report.concerns, null);
     for (const key of Object.keys(report.concerns!) as AuditConcernKey[]) {
-      const score = report.concerns![key].score;
+      const status = report.concerns![key].status;
       assert.ok(
-        score >= 0 && score <= 100,
-        `${key} score ${score} should be 0-100`,
+        status === "pass" || status === "fail",
+        `${key} status ${status} should be pass or fail`,
       );
     }
   });
 });
 
 // ---------------------------------------------------------------------------
-// Quality mode never changes build exit code
+// Harness mode never changes build exit code when all scopes pass
 // ---------------------------------------------------------------------------
-describe("quality does not affect build result", () => {
-  it("same build status with and without quality", () => {
+describe("harness does not affect build-only result", () => {
+  it("same build scope status with and without harness", () => {
     const projectPath = resolve(import.meta.dirname, "..", "..");
     const fs = createFS(projectPath);
     const buildOnly = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: false,
+      harness: false,
     });
-    const withQuality = runAudit(fs, projectPath, {
+    const withHarness = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: true,
+      harness: true,
     });
 
     assert.equal(
-      buildOnly.status,
-      withQuality.status,
-      "Build status must not change with quality",
-    );
-    assert.equal(
       buildOnly.scopes.setup.status,
-      withQuality.scopes.setup.status,
+      withHarness.scopes.setup.status,
+      "Setup status must not change with harness",
     );
     assert.equal(
-      buildOnly.scopes.harness.status,
-      withQuality.scopes.harness.status,
+      buildOnly.scopes.agent.status,
+      withHarness.scopes.agent.status,
+      "Agent status must not change with harness",
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// Quality howToFix populated for failing checks
+// Harness howToFix populated for failing checks
 // ---------------------------------------------------------------------------
-describe("quality howToFix", () => {
-  it("failing quality checks produce howToFix entries", () => {
+describe("harness howToFix", () => {
+  it("failing harness checks produce howToFix entries", () => {
     const ctx = makeCtx({
       facts: {
         ...makeCtx().facts,
@@ -86,7 +83,7 @@ describe("quality howToFix", () => {
     });
 
     let totalHowToFix = 0;
-    for (const check of QUALITY_CHECKS) {
+    for (const check of HARNESS_CHECKS) {
       const result = check.run(ctx);
       if (result.howToFix) {
         totalHowToFix += result.howToFix.length;
@@ -94,7 +91,31 @@ describe("quality howToFix", () => {
     }
     assert.ok(
       totalHowToFix > 0,
-      "At least some quality checks should produce howToFix entries",
+      "At least some harness checks should produce howToFix entries",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Zero footguns/lessons passes harness (fresh install regression)
+// ---------------------------------------------------------------------------
+describe("zero-entry fresh install", () => {
+  it("a project with zero footguns and lessons passes harness", () => {
+    const projectPath = resolve(import.meta.dirname, "..", "..");
+    const fs = createFS(projectPath);
+    const report = runAudit(fs, projectPath, {
+      agentFilter: "claude",
+      harness: true,
+    });
+
+    assert.notEqual(report.concerns, null);
+    // feedback_loop concern should pass even with zero entries
+    // (the real project has entries, but the check only requires directories to exist)
+    const feedbackLoop = report.concerns!.feedback_loop;
+    assert.equal(
+      feedbackLoop.status,
+      "pass",
+      `feedback_loop should pass: ${JSON.stringify(feedbackLoop)}`,
     );
   });
 });

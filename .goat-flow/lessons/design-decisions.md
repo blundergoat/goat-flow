@@ -34,28 +34,6 @@ Risks of blindly implementing critique feedback:
 
 ---
 
-## Pattern: Dispatcher is a first-class skill, not a helper
-
-**Created:** 2026-04-08
-
-**Status:** RESOLVED in v0.9.3. Dispatcher added to SKILL_NAMES. All counts updated to 6 (5 + dispatcher).
-
-The goat dispatcher was treated as secondary to the "real" skills - excluded from CANONICAL_SKILLS and consistently under-counted. This led to inconsistencies across 15+ files.
-
-**Prevention:** Count the dispatcher in every enumeration of canonical skills.
-
----
-
-## Pattern: Dispatcher keeps getting excluded from patterns and glob matches
-
-**Created:** 2026-04-01
-
-**What happened:** Three separate incidents where the dispatcher was missed by glob/iteration patterns: (1) `scripts/preflight-checks.sh` used `find -name 'goat-*.md'` which skipped `goat.md`, (2) CI template `for skill in ...; do goat-$skill` couldn't represent the dispatcher, producing `goat-goat`, (3) v0.9.3 consolidation missed counting the dispatcher in multiple files. All stem from the same root: the dispatcher's name (`goat`) breaks the `goat-{suffix}` pattern that all other skills follow.
-
-**Prevention:** Always use `goat*` (no dash) for glob patterns. Always iterate literal canonical names, never derive by prefixing. Test the dispatcher first in any skill enumeration - if your pattern works for `goat`, it works for `goat-debug` too, but not vice versa.
-
----
-
 ## Lesson: Milestone planning needs cold-start detail and natural scope boundaries
 
 **Created:** 2026-04-13
@@ -81,12 +59,3 @@ Five specific patterns emerged:
 - Write footgun entries during the milestone that introduces the trap, not during the critique that discovers it.
 - Test milestone files by asking "could I hand this to a different agent with no prior context?"
 
----
-
-## Pattern: Verification prompts must not assume goat skills are the only skills
-
-**Created:** 2026-04-01
-
-**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills (deploy/, preflight/, audit/). The instruction would cause a verifier to report project-specific skills as violations. Same blind spot as AP2 - assuming goat-flow owns the entire skills directory.
-
-**Prevention:** Verification prompts and scanner checks must scope to goat-flow's domain: "List all goat-* directories..." not "List all directories..." Project-specific skills are not goat-flow's business.

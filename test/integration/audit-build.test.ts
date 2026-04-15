@@ -56,7 +56,7 @@ describe("audit build: harness scope fails on missing deny", () => {
     });
     const result = check.run(ctx);
     assert.notEqual(result, null, "Should fail when no deny patterns");
-    assert.equal(check.scope, "harness");
+    assert.equal(check.scope, "agent");
     assert.ok(result!.howToFix, "Should include howToFix");
   });
 });
@@ -65,9 +65,9 @@ describe("audit build: harness scope fails on missing deny", () => {
 // Build checks cover both scopes
 // ---------------------------------------------------------------------------
 describe("audit build: scope coverage", () => {
-  it("build checks cover setup and harness scopes", () => {
+  it("build checks cover setup and agent scopes", () => {
     const scopes = new Set(BUILD_CHECKS.map((c) => c.scope));
     assert.ok(scopes.has("setup"), "Should have setup scope checks");
-    assert.ok(scopes.has("harness"), "Should have harness scope checks");
+    assert.ok(scopes.has("agent"), "Should have agent scope checks");
   });
 });

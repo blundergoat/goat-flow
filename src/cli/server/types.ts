@@ -43,10 +43,21 @@ export interface CreateResponse {
 
 /** Combined response from /api/audit consumed by all dashboard views. */
 export interface DashboardReport {
-  // Per-agent AI Harness Score - Audit view agent cards
+  // Per-agent AI Harness Completeness - Audit view agent cards
   agentScores: {
     id: string;
     name: string;
+    agent: {
+      status: string;
+      checks: {
+        id: string;
+        name: string;
+        status: string;
+        failure?: { check: string; message: string; howToFix?: string };
+      }[];
+      failures: { check: string; message: string; howToFix?: string }[];
+      summary: Record<string, string>;
+    };
     harness: {
       status: string;
       checks: {
@@ -57,22 +68,17 @@ export interface DashboardReport {
       }[];
       failures: { check: string; message: string; howToFix?: string }[];
       summary: Record<string, string>;
-      score?: number;
-    };
+    } | null;
     concerns: Record<
       string,
       {
+        status: "pass" | "fail";
         score: number;
         findings: string[];
         recommendations: string[];
         howToFix?: string[];
       }
     > | null;
-    quality: {
-      status: string;
-      grade: string | null;
-      qualityScore: number | null;
-    };
   }[];
   // Scope-based audit - Audit detail view
   status: "pass" | "fail";
@@ -88,13 +94,10 @@ export interface DashboardReport {
       }[];
       failures: { check: string; message: string; howToFix?: string }[];
       summary: Record<string, string>;
-      score?: number;
     }
   >;
   overall: {
     status: string;
-    grade: string | null;
-    qualityScore: number | null;
   };
   // Metadata
   target: string;

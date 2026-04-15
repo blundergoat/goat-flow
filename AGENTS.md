@@ -18,10 +18,10 @@ npm test                                    # Run test suite
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
-**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept. Check `.goat-flow/footguns/` for the target area.
 ```
-BAD:  "The spec says 100 lines for apps" (guessed without reading)
-GOOD: Read workflow/setup/reference/execution-loop.md:3 → "Target: under 120 lines. Hard limit: 150."
+BAD:  "The CLI has 20 audit checks" (guessed without reading)
+GOOD: Read src/cli/audit/check-goat-flow.ts → 12 setup checks, check-agent-setup.ts → 4 agent checks (16 total)
 ```
 
 **SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
@@ -60,42 +60,51 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 | `.goat-flow/footguns/` | Cross-doc architectural trap (with file:line evidence) |
 | `.goat-flow/decisions/` | Significant technical decision with context/rationale |
 | `.goat-flow/logs/sessions/` | End of every significant session - `YYYY-MM-DD-slug.md` summary |
+
 ## Autonomy Tiers
+
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts, update shared learning-loop files with evidence.
-**Ask First**
-1. Boundary touched: [name]
-2. Related code read: [yes/no]
-3. Footgun entry checked: [relevant entry, or "none"]
-4. Local instruction checked: [.github/instructions/ / AGENTS.md / none]
-5. Rollback command: [exact command]
+
+**Ask First** (MUST complete before proceeding):
+- [ ] Boundary touched: [name]
+- [ ] Related code read: [yes/no]
+- [ ] Footgun entry checked: [relevant entry, or "none"]
+- [ ] Local instruction checked: [.github/instructions/ / AGENTS.md / none]
+- [ ] Rollback command: [exact command]
 
 Boundaries:
 - `.goat-flow/architecture.md` or primary instruction file changes (this file — `AGENTS.md`)
 - `workflow/setup/` or `workflow/skills/` template changes affecting generated output
-- `.github/workflows/` changes
+- `.github/workflows/**` (CI changes alter validation and release behavior)
+- `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**` (agent runtime files)
+- Other instruction files (`CLAUDE.md`, `GEMINI.md`)
 - Adding, removing, or renaming files
 - Changes spanning 3+ docs/scripts
+
 **Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit or push unless asked, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`).
+
 ## Definition of Done
 MUST confirm ALL: (1) shellcheck passes on changed .sh files (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames
+
 ## Working Memory
 If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. If context drifts or two approaches fail, restate scope and start fresh.
 Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
+
 ## Router Table
 | Resource | Path |
 |----------|------|
 | Architecture | `.goat-flow/architecture.md` |
-| Claude instructions | `CLAUDE.md` |
 | CLI auditor/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
+| Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.agents/skills/` (goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test) |
 | Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
 | Config | `.goat-flow/config.yaml` |
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
-| Session logs | `.goat-flow/logs/sessions/` |
-| Local workspace | `.goat-flow/tasks/`, `.goat-flow/logs/` |
+| Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
+| Peer instructions | `CLAUDE.md`, `GEMINI.md` |
 
 ## Hard Rules
 - If file exists, modify in-place. NEVER create `_modified`, `_new`, `_backup`, `_v2` variants.

@@ -140,6 +140,24 @@ for hookdir in .claude/hooks .gemini/hooks; do
     fi
 done
 
+# Runtime smoke test: pipe a known-blocked command through installed deny hooks
+for hookdir in .claude/hooks .codex/hooks .gemini/hooks; do
+    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
+        # Simulate a Bash tool call with a dangerous command
+        test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
+        if echo "$test_payload" | bash "$hookdir/deny-dangerous.sh" >/dev/null 2>&1; then
+            fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
+        else
+            exit_code=$?
+            if [[ $exit_code -eq 2 ]]; then
+                pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
+            else
+                warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
+            fi
+        fi
+    fi
+done
+
 # ── Skill Template Versions ──────────────────────────────────────────
 section "Skill Template Versions"
 skill_version=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || true)
@@ -376,10 +394,10 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/harness/index.js');console.log(q.QUALITY_CHECKS.length)" 2>/dev/null || echo "")
 
     if [[ -f .goat-flow/architecture.md ]] && [[ -n "$build_count" ]] && [[ -n "$quality_count" ]]; then
-        if grep -q "${build_count} build" .goat-flow/architecture.md && grep -q "${quality_count} quality" .goat-flow/architecture.md; then
-            pass "Architecture doc counts match code (build: ${build_count}, quality: ${quality_count})"
+        if grep -q "${build_count} build" .goat-flow/architecture.md && grep -q "${quality_count} AI harness" .goat-flow/architecture.md; then
+            pass "Architecture doc counts match code (build: ${build_count}, AI harness: ${quality_count})"
         else
-            fail "Architecture doc check counts mismatch - expected ${build_count} build + ${quality_count} quality in .goat-flow/architecture.md"
+            fail "Architecture doc check counts mismatch - expected ${build_count} build + ${quality_count} AI harness in .goat-flow/architecture.md"
         fi
     else
         skip "Architecture count validation (dist/ not fully built or architecture.md missing)"
@@ -402,16 +420,20 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     fi
 
     # B.8c: Template inventory validation
-    b8c_ok=true
-    while IFS= read -r tmpl; do
-        [[ -z "$tmpl" ]] && continue
-        if ! grep -rql "$tmpl" workflow/skills/ workflow/setup/ 2>/dev/null; then
-            warn "Template $tmpl.md exists but is not referenced in any skill or setup doc"
-            b8c_ok=false
+    if [[ -d workflow/templates ]]; then
+        b8c_ok=true
+        while IFS= read -r tmpl; do
+            [[ -z "$tmpl" ]] && continue
+            if ! grep -rql "$tmpl" workflow/skills/ workflow/setup/ 2>/dev/null; then
+                warn "Template $tmpl.md exists but is not referenced in any skill or setup doc"
+                b8c_ok=false
+            fi
+        done < <(find workflow/templates -maxdepth 1 -name '*.md' -exec basename {} .md \; 2>/dev/null | sort)
+        if $b8c_ok; then
+            pass "All workflow templates referenced in skills or setup docs"
         fi
-    done < <(find workflow/templates -maxdepth 1 -name '*.md' -exec basename {} .md \; 2>/dev/null | sort)
-    if $b8c_ok; then
-        pass "All workflow templates referenced in skills or setup docs"
+    else
+        skip "Template inventory (workflow/templates/ not present)"
     fi
 fi
 
@@ -447,6 +469,27 @@ if [[ -f dist/cli/audit/harness/index.js ]] && [[ -f src/dashboard/views/audit.h
     else
         skip "Dashboard concern key sync (could not extract keys)"
     fi
+fi
+
+# ── Preamble/Conventions Sync ────────────────────────────────────────
+section "Preamble/Conventions Sync"
+if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skill-preamble.md ]]; then
+    if diff -q workflow/skills/reference/skill-preamble.md .goat-flow/skill-preamble.md >/dev/null 2>&1; then
+        pass "skill-preamble.md: template and installed copy match"
+    else
+        fail "skill-preamble.md: template (workflow/skills/reference/) and installed (.goat-flow/) differ"
+    fi
+else
+    skip "skill-preamble.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/skill-conventions.md ]]; then
+    if diff -q workflow/skills/reference/skill-conventions.md .goat-flow/skill-conventions.md >/dev/null 2>&1; then
+        pass "skill-conventions.md: template and installed copy match"
+    else
+        fail "skill-conventions.md: template (workflow/skills/reference/) and installed (.goat-flow/) differ"
+    fi
+else
+    skip "skill-conventions.md sync (one or both files missing)"
 fi
 
 # ── Path Integrity ───────────────────────────────────────────────────

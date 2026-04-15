@@ -41,9 +41,8 @@ You're in the right place if the project has `.goat-flow/config.yaml` with versi
 ## Step 3 - Update skills
 
 - Update all 7 skill templates to current version (check `goat-flow-skill-version` tag)
-- Install skills verbatim from the current `workflow/skills/goat-*.md` templates
+- Install all 7 skills verbatim from the current `workflow/skills/` templates
 - Install `.goat-flow/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md`
-- Install or update the `/goat` dispatcher from `workflow/skills/goat.md`
 
 **Verification:** All 7 skills have `goat-flow-skill-version:` matching the current goat-flow version.
 
@@ -69,7 +68,7 @@ Use the reorganise approach (not copy-and-replace):
 5. Add missing goat-flow sections (see `02-instruction-file.md`)
 6. Update version header to v1.1.0
 7. Update Router Table: all paths should reference current goat-flow surfaces
-8. Update examples to reference current goat-flow surfaces (e.g., `.goat-flow/architecture.md`, `.goat-flow/templates/`)
+8. Update examples to reference current goat-flow surfaces (e.g., `.goat-flow/architecture.md`, `.goat-flow/footguns/`)
 
 **Verification:** Instruction file under 120 lines. Domain content preserved in `.goat-flow/`.
 

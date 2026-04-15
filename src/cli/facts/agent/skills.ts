@@ -243,13 +243,12 @@ function countUnadaptedSkills(
   for (const skill of found) {
     const skillPath = `${agent.skillsDir}/${skill}/SKILL.md`;
     const installed = fs.readFile(skillPath);
-    const templateName = skill.replace(/^goat-/, "");
     // Templates live in the goat-flow package root, not the project being audited.
     // Use getTemplatePath + readFileSync so this works in user projects too.
     let template: string | null = null;
     try {
       template = readFileSync(
-        getTemplatePath(`workflow/skills/goat-${templateName}.md`),
+        getTemplatePath(`workflow/skills/${skill}.md`),
         "utf-8",
       );
     } catch {

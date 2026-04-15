@@ -54,61 +54,29 @@
     x-show="report"
     style="max-width: 880px; margin: 0 auto; padding: 12px 28px 24px"
   >
-    <!-- Header -->
+    <!-- Title -->
     <div
-      style="
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-      "
+      class="gf-text-primary"
+      style="font-size: 20px; font-weight: 600; margin-bottom: 4px"
     >
-      <div>
-        <span class="gf-text-primary" style="font-size: 20px; font-weight: 500"
-          >Audit</span
-        >
-        <span
-          x-show="report?.status"
-          style="
-            margin-left: 12px;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 2px 10px;
-            border-radius: 4px;
-          "
-          :style="{
-            background: report?.status === 'pass' ? '#14532d' : '#7f1d1d',
-            color: report?.status === 'pass' ? '#4ade80' : '#f87171',
-          }"
-          x-text="report?.status === 'pass' ? 'PASS' : 'FAIL'"
-        ></span>
-      </div>
-      <button
-        @click="runAudit()"
-        :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-audit"
-      >
-        <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
-      </button>
+      Audit
     </div>
+
+    <!-- Terminal commands -->
     <div
       x-show="terminalAvailable"
-      style="
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-bottom: 16px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: var(--surface-elevated);
-      "
+      style="margin-bottom: 16px"
     >
-      <div class="gf-text-muted" style="font-size: 12px">
+      <div class="gf-text-muted" style="font-size: 12px; margin-bottom: 8px">
         Send common audit commands to the workspace terminal.
       </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        "
+      >
         <template
           x-for="action in terminalAuditActions"
           :key="'report-' + action.id"
@@ -116,11 +84,50 @@
           <button
             @click="runTerminalAuditCommand(action)"
             :title="action.description"
-            class="gf-btn gf-btn-md gf-btn-audit"
-            x-text="action.command"
-          ></button>
+            class="gf-action-btn"
+            style="
+              text-align: left;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            "
+          >
+            <span class="gf-play-icon">
+              <svg
+                width="12"
+                height="12"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
+                />
+              </svg>
+            </span>
+            <div style="flex: 1; min-width: 0">
+              <div class="gf-action-title" x-text="action.command"></div>
+              <div class="gf-action-desc" x-text="action.description"></div>
+            </div>
+          </button>
         </template>
       </div>
+    </div>
+    <!-- Header -->
+    <div
+      style="
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        margin-bottom: 16px;
+      "
+    >
+      <button
+        @click="runAudit()"
+        :disabled="auditing"
+        class="gf-btn gf-btn-md gf-btn-audit"
+      >
+        <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
+      </button>
     </div>
 
     <!-- GOAT Flow Setup card -->
@@ -286,10 +293,11 @@
         },
         concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
         expandedConcern: null,
-        scoreColor(s) { return s >= 80 ? 'var(--green-400)' : s >= 60 ? 'var(--orange-400)' : 'var(--red-400)' },
-        barBg(s) { return s >= 80 ? 'var(--green-900)' : s >= 60 ? 'var(--amber-950)' : 'var(--red-950)' },
-        barFill(s) { return s >= 80 ? 'var(--green-600)' : s >= 60 ? 'var(--orange-700)' : 'var(--red-700)' },
-        gradeColor(g) { return g === 'A' ? 'var(--green-400)' : g === 'B' ? 'var(--green-500)' : g === 'C' ? 'var(--orange-400)' : g === 'D' ? 'var(--orange-400)' : 'var(--red-400)' },
+        statusColor(s) { return s === 'pass' ? 'var(--green-400)' : 'var(--red-400)' },
+        scoreColor(score) { return score >= 80 ? 'var(--green-400)' : score >= 70 ? 'var(--yellow-400, #facc15)' : score >= 60 ? 'var(--orange-400, #fb923c)' : 'var(--red-400)' },
+        scoreBg(score) { return score >= 80 ? 'var(--green-900, #14532d)' : score >= 70 ? 'var(--yellow-900, #713f12)' : score >= 60 ? 'var(--orange-900, #7c2d12)' : 'var(--red-900, #7f1d1d)' },
+        agentScore(agent) { if (!agent.harness) return null; const t = agent.harness.checks.length; return t ? Math.round(agent.harness.checks.filter(c => c.status === 'pass').length / t * 100) : null; },
+        toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
         hasIssues(concerns, key) { return concerns?.[key]?.recommendations?.length > 0 }
       }"
     >
@@ -319,7 +327,7 @@
             "
             :style="{ borderColor: auditDetailAgent === agent.id ? 'var(--green-400)' : '' }"
           >
-            <!-- Name + grade -->
+            <!-- Name + score -->
             <div
               style="
                 display: flex;
@@ -334,22 +342,18 @@
                 x-text="agent.name"
               ></span>
               <div
-                x-show="agent.quality?.grade"
+                x-show="agentScore(agent) !== null"
                 style="display: flex; align-items: baseline; gap: 4px"
               >
                 <span
-                  style="
-                    font-size: 20px;
-                    font-weight: 700;
-                    letter-spacing: -1px;
-                  "
-                  :style="{ color: gradeColor(agent.quality?.grade) }"
-                  x-text="agent.quality?.grade"
+                  style="font-size: 20px; font-weight: 700"
+                  :style="{ color: scoreColor(agentScore(agent)) }"
+                  x-text="toGrade(agentScore(agent))"
                 ></span>
                 <span
-                  class="gf-text-muted"
-                  style="font-size: 11px"
-                  x-text="`${agent.quality?.qualityScore}%`"
+                  style="font-size: 12px; font-weight: 600"
+                  :style="{ color: scoreColor(agentScore(agent)) }"
+                  x-text="agentScore(agent) + '%'"
                 ></span>
               </div>
             </div>
@@ -358,8 +362,8 @@
               class="gf-text-muted"
               style="font-size: 11px; margin-bottom: 10px"
               x-text="agent.concerns
-                ? (() => { const total = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0) + (agent.concerns[k]?.findings?.length || 0), 0); const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); const checkCount = agent.harness.checks.length + concernKeys.reduce((n, k) => n + (agent.concerns[k]?.findings?.length || 0) + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All quality checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : ''); })()
-                : `${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"
+                ? (() => { const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : ''); })()
+                : `${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} checks`"
             ></div>
             <!-- Concern mini-bars (click a row to expand that concern in the detail panel) -->
             <template x-if="agent.concerns">
@@ -397,32 +401,26 @@
                       style="
                         flex: 1;
                         height: 4px;
+                        background: var(--surface-elevated, #27272a);
                         border-radius: 2px;
                         overflow: hidden;
                       "
-                      :style="{ background: barBg(agent.concerns[ck].score) }"
                     >
                       <div
-                        style="
-                          height: 100%;
-                          border-radius: 2px;
-                          transition: width 0.3s ease;
-                        "
-                        :style="{
-                          width: agent.concerns[ck].score + '%',
-                          background: barFill(agent.concerns[ck].score)
-                        }"
+                        style="height: 100%; border-radius: 2px; transition: width 0.3s"
+                        :style="{ width: agent.concerns[ck].score + '%', background: scoreColor(agent.concerns[ck].score) }"
                       ></div>
                     </div>
                     <span
                       style="
                         font-size: 10px;
                         font-weight: 600;
-                        width: 28px;
+                        width: 32px;
+                        flex-shrink: 0;
                         text-align: right;
                       "
                       :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                      x-text="`${agent.concerns[ck].score}%`"
+                      x-text="agent.concerns[ck].score + '%'"
                     ></span>
                   </div>
                 </template>
@@ -490,12 +488,12 @@
                 <span
                   class="gf-text-secondary"
                   style="margin-left: 4px"
-                  x-text="`(${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} passed)`"
+                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} passed)`"
                 ></span>
               </h3>
               <div style="display: flex; flex-direction: column; gap: 4px">
                 <template
-                  x-for="(check, idx) in agent.harness.checks"
+                  x-for="(check, idx) in agent.agent.checks"
                   :key="agent.id + '-check-' + idx"
                 >
                   <div
@@ -601,9 +599,17 @@
                             x-text="concernMeta[ck].label"
                           ></span>
                           <span
-                            style="font-size: 14px; font-weight: 700"
-                            :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                            x-text="`${agent.concerns[ck].score}%`"
+                            style="
+                              font-size: 12px;
+                              font-weight: 700;
+                              padding: 1px 8px;
+                              border-radius: 4px;
+                            "
+                            :style="{
+                              background: scoreBg(agent.concerns[ck].score),
+                              color: scoreColor(agent.concerns[ck].score),
+                            }"
+                            x-text="agent.concerns[ck].score + '%'"
                           ></span>
                         </div>
                         <p

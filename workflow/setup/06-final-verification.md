@@ -48,14 +48,6 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-## Hook enforcement mode
-
-Hooks ship in advisory mode by default (they exit 0 even on failures so they never block the agent). This is intentional - mandatory failures during early setup can be disruptive.
-
-After confirming the hooks work correctly, **enable enforcement** by setting `GOAT_LINT_ENFORCE=1` in the hook script (or as an environment variable). With `GOAT_LINT_ENFORCE=1`, the post-turn hook exits non-zero when linting fails, which causes the agent to see the failure.
-
-The audit quality check will flag hooks in advisory mode. This is expected if you have not yet enabled enforcement. Add a note to the session log if you're intentionally leaving them in advisory mode.
-
 ## Duplicate surface check
 
 Fail if BOTH of these exist with independent content for the same artifact type:

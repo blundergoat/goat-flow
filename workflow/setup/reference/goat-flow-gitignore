@@ -12,8 +12,6 @@
 !patterns.md
 
 # Committed goat-flow directories
-!templates/
-!templates/**
 !decisions/
 !decisions/**
 !footguns/

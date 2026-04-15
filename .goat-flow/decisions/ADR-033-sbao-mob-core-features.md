@@ -1,6 +1,6 @@
 # ADR-033: SBAO and Mob Elaboration are core features, not optional ceremony
 
-**Status:** Accepted
+**Status:** Amended (2026-04-15) — Mob Elaboration removed; SBAO remains core. The concept was incoherent across 5+ surfaces (glossary said "replaced by SBAO," ADR said "core feature," dispatcher never defined it). SBAO subsumes the multi-perspective critique that Mob Elaboration was supposed to provide. The Planning Route handles brief intake without a separate elaboration phase.
 **Date:** 2026-04-10
 
 ## Context

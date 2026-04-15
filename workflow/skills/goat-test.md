@@ -32,8 +32,10 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 **Mode detection - confirm, don't silently decide:**
 
 - Changed files + no specific ask → offer standard or audit
-- "audit"/"coverage"/"gaps" → Audit mode
-- "test this"/"verify"/"what's risky" or scoped files → Standard mode
+- "audit"/"coverage"/"gaps" → Audit mode (full depth)
+- "test this"/"verify"/"what's risky" or scoped files → Standard mode (quick depth)
+
+**Depth mapping:** Standard mode = quick (analyse changed files). Audit mode = full (analyse a codebase area). If arriving from the dispatcher with depth pre-selected: quick → Standard, full → Audit.
 
 Confirm: "Running [mode] on [scope]. Correct?"
 

@@ -12,38 +12,6 @@ category: verification
 
 ---
 
-## Pattern: Verification scope must match change scope
-
-**Created:** 2026-04-08
-
-When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. The verification scope must match the blast radius of the change. When building on existing files, audit them first - errors in source files propagate to everything built on top.
-
----
-
-## Pattern: Agent skipped the AI testing gate and offered to continue to the next milestone
-
-**Created:** 2026-03-31
-
-**What happened:** After executing M1 (Fixes & Hygiene), the agent reported results and offered to "continue with P9/P17/P4" - moving to the next work item without running the AI Testing Gate that was literally in the same milestone file it had been working from. The gate was designed by the agent itself, written into the milestone file, and explicitly says "Run this prompt after all M1 tasks are complete." The agent wrote it, completed the tasks, and skipped it entirely.
-
-**Why this matters:** The AI Testing Gate is the verification step that catches implementation errors before they propagate. Skipping it means the doer is also the judge - the exact anti-pattern the gate was designed to prevent. The agent's eagerness to move forward ("Want me to continue?") overrode the verification step that stood between finishing and done.
-
-**This is the same root cause as the commit offer and the checkbox skip:** After completing implementation work, the agent's default is to report results and suggest the next action. Verification steps that happen AFTER the primary output get skipped because the agent treats "code works, tests pass" as the finish line.
-
-**Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate - not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
-
----
-
-## Pattern: Agent didn't tick checkbox tasks during execution
-
-**Created:** 2026-03-31
-
-**What happened:** CLAUDE.md VERIFY section says "If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end." While executing M1 (17 tasks across 10 priority groups), the agent completed all tasks but ticked zero checkboxes. Only noticed when the user pointed it out. Same root cause as the commit offer - instructions read but not followed when a strong default behavior (finish the code, report results) took over.
-
-**Prevention:** Before starting work from a milestone file, read the checkbox tasks. After each task completes, tick it immediately - before moving to the next task. "Not at the end" means not at the end.
-
----
-
 ## Lesson: RECURRENCE - Agent didn't tick checkboxes during M29 execution (same failure as M1)
 
 **Created:** 2026-04-04
@@ -72,34 +40,6 @@ When the change is code-only, running tests is sufficient. When the change touch
 **Why previous prevention failed:** The "stronger prevention" from M29 says "FIRST action must be editing the milestone file." But the user sent follow-up messages while I was working, and I context-switched to answering them instead of ticking checkboxes first. The forcing function ("before doing anything else") lost to "the user is waiting for a response."
 
 **What needs to change:** This pattern has survived 3 rounds of "just do it harder" prevention rules. Documentation-level enforcement does not work. This needs mechanical enforcement - either a hook that checks for unticked items after tool calls, or a habit of ticking DURING the edit (in the same Edit call that makes the fix), not as a separate step after.
-
----
-
-## Pattern: "AI gate passed" does not mean the work is done
-
-**Created:** 2026-04-01
-
-**What happened:** M1 AI gate said 14/14 checks passed. Real-world test on halaxy-agents-lab (2026-04-01) found: 12 goat skill dirs instead of 6 (stale skills not cleaned), router table with 12 entries instead of 6, missing Edit/Write .env deny (only Read installed), CI workflow checking for "goat-goat" instead of "goat", version headers still at 0.9.2, format hook referencing uninstalled formatters. The AI gate checked whether code EXISTS in the goat-flow repo, not whether it WORKS on real consumer projects.
-
-**Root cause:** The AI verifier read goat-flow source code and confirmed features were implemented. It never ran setup on a real project to verify the output. The verifier tested the tool, not the tool's output. Same pattern as "Scanner 100% does not mean the project is correct."
-
-**Prevention:** AI testing gates must include at least one end-to-end test: run the tool against a real project and verify the result. Checking source code is necessary but not sufficient.
-
----
-
-## Pattern: End-of-task rules get skipped
-
-**Created:** 2026-04-08
-
-Rules that fire after the agent has delivered its primary output have near-zero compliance. The agent's attention is on the deliverable, not the closing checklist. Session logging, learning loop updates, and handoff notes all suffer from this. Prevention must be structural: either make the closing step part of the output format (so it happens DURING delivery, not after), or enforce it via hooks/DoD gates that block completion.
-
----
-
-## Pattern: Blocked ≠ impossible
-
-**Created:** 2026-04-08
-
-Deny hooks block dangerous patterns, not all operations. When a command is blocked, spend 2 seconds thinking about the safe alternative before asking the user or giving up.
 
 ---
 
@@ -255,11 +195,11 @@ Deny hooks block dangerous patterns, not all operations. When a command is block
 
 **Created:** 2026-04-14
 
-**What happened:** A critique agent claimed `.goat-flow/architecture.md:18` had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The claim was accepted at face value and the doc was changed from "7 project setup + 9 per-agent" to "12 setup scope + 4 harness scope." A subsequent self-critique ran `BUILD_CHECKS` and confirmed the actual breakdown is **7 setup + 9 harness** — the original numbers were correct and the "fix" made the doc more wrong. The preflight's "Architecture doc counts match code" check only validates the total (16), not the sub-breakdown, so the error passed all automated gates.
+**What happened:** A critique agent claimed `.goat-flow/architecture.md:18` had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The claim was accepted at face value and the doc was changed. A subsequent refactor restructured the checks into `SETUP_CHECKS` (12 checks) and `AGENT_CHECKS` (4 checks), making the actual breakdown **12 setup + 4 agent** (16 total). The preflight's "Architecture doc counts match code" check only validates the total (16), not the sub-breakdown, so incorrect breakdowns pass all automated gates.
 
 **Root cause:** The first critique agent likely miscounted or read a stale build of the code. The claim was plausible (it got the total right), which made it easy to accept without running the verification command. The same session also changed `code-map.md` correctly for a different issue, creating a false sense that all claims were verified.
 
-**Evidence:** `node --input-type=module -e "const a=await import('./dist/cli/audit/check-goat-flow.js'); const b=await import('./dist/cli/audit/check-agent-setup.js'); [...a.BUILD_CHECKS,...b.BUILD_CHECKS].forEach(c => console.log(c.scope, c.id))"` — outputs 4 setup + 4 agent (8 total after refactor; original pre-refactor count was 7 setup + 9 harness = 16).
+**Evidence:** `node --input-type=module -e "const a=await import('./dist/cli/audit/check-goat-flow.js'); const b=await import('./dist/cli/audit/check-agent-setup.js'); console.log('setup:', a.SETUP_CHECKS.length, 'agent:', b.AGENT_CHECKS.length)"` — outputs 12 setup + 4 agent (16 total).
 
 **Prevention:**
 1. Before changing any numeric claim in a canonical doc, run the verification command yourself — never trust a critique's count.

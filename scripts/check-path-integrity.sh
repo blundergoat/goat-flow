@@ -61,9 +61,9 @@ for ifile in CLAUDE.md AGENTS.md GEMINI.md; do
             break
         fi
         if [[ "$in_router" -eq 1 ]]; then
-            # Extract backtick-quoted paths from table rows
+            # Extract backtick-quoted paths from table rows (all paths, not just dot-prefixed)
             # shellcheck disable=SC2016
-            ref_paths=$(echo "$line" | grep -oE '[`][^`]+[`]' | tr -d '`' | grep -E '^\.' || true)
+            ref_paths=$(echo "$line" | grep -oE '[`][^`]+[`]' | tr -d '`' | grep -vE '^\(|^goat' || true)
             for ref_path in $ref_paths; do
                 if [[ ! -e "${root}/${ref_path}" ]]; then
                     err "${ifile} router table: path does not exist: ${ref_path}"
@@ -95,8 +95,8 @@ if [[ -f "$config" ]]; then
     done < <(sed -n '/^toolchain:/,/^[a-z]/p' "$config" | grep '^\s*-' || true)
 fi
 
-# ── 6. Hook files in settings.json must exist and be executable ─────
-for settings in ".claude/settings.json" ".gemini/settings.json"; do
+# ── 6. Hook files in settings/config must exist and be executable ───
+for settings in ".claude/settings.json" ".gemini/settings.json" ".codex/hooks.json"; do
     sfile="${root}/${settings}"
     [[ -f "$sfile" ]] || continue
     while IFS= read -r hook_path; do
@@ -110,7 +110,7 @@ for settings in ".claude/settings.json" ".gemini/settings.json"; do
 done
 
 # ── 7. No stale skill names ─────────────────────────────────────────
-stale_skills="goat-preflight goat-research goat-audit goat-investigate goat-onboard goat-reflect goat-resume"
+stale_skills="goat-preflight goat-research goat-audit goat-investigate goat-onboard goat-reflect goat-resume goat-context goat-simplify goat-refactor"
 for agent_dir in ".claude/skills" ".agents/skills"; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue

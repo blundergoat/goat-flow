@@ -49,18 +49,19 @@
         class="gf-text-primary"
         style="font-size: 15px; font-weight: 500; margin-bottom: 8px"
       >
-        How Scoring Works
+        How the Audit Works
       </div>
       <p
         class="gf-text-secondary"
         style="font-size: 13px; line-height: 1.6; margin: 0 0 12px 0"
       >
-        The auditor evaluates your agent setup across two scopes:
+        The auditor evaluates your agent setup across three scopes, all
+        pass/fail:
       </p>
       <div
         style="
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 10px;
           margin-bottom: 12px;
         "
@@ -73,8 +74,8 @@
             GOAT Flow Setup
           </div>
           <div class="gf-text-muted" style="font-size: 12px; line-height: 1.5">
-            Pass/fail. Required files, config, skills, instruction files,
-            preamble, and conventions.
+            Required files, config, skills, instruction files, preamble, and
+            conventions.
           </div>
         </div>
         <div class="gf-surface" style="border-radius: 6px; padding: 12px 14px">
@@ -82,73 +83,34 @@
             class="gf-text-primary"
             style="font-size: 13px; font-weight: 500; margin-bottom: 4px"
           >
-            AI Harness Score
+            Agent Setup
           </div>
           <div class="gf-text-muted" style="font-size: 12px; line-height: 1.5">
-            Per-agent percentage. Toolchain commands, agent settings, hooks,
-            syntax checks, deny patterns.
+            Per-agent checks: instruction file, skills, settings, deny
+            mechanism.
+          </div>
+        </div>
+        <div class="gf-surface" style="border-radius: 6px; padding: 12px 14px">
+          <div
+            class="gf-text-primary"
+            style="font-size: 13px; font-weight: 500; margin-bottom: 4px"
+          >
+            AI Harness Completeness
+          </div>
+          <div class="gf-text-muted" style="font-size: 12px; line-height: 1.5">
+            With <code>--harness</code>: deterministic integrity checks across 5
+            concerns (context, constraints, verification, recovery, feedback
+            loop).
           </div>
         </div>
       </div>
       <p
         class="gf-text-secondary"
-        style="font-size: 13px; line-height: 1.6; margin: 0 0 8px 0"
+        style="font-size: 13px; line-height: 1.6; margin: 0"
       >
-        Quality mode (<code>--harness</code>) adds advisory scoring across five
-        harness concerns. Grade thresholds:
+        All checks are deterministic pass/fail. Use <code>critique</code> for
+        agent-driven quality assessment.
       </p>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap">
-        <span
-          style="
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: 500;
-          "
-          class="gf-grade-a"
-          >A - 90%+ quality score</span
-        >
-        <span
-          style="
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: 500;
-          "
-          class="gf-grade-b"
-          >B - 80-89% quality score</span
-        >
-        <span
-          style="
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: 500;
-          "
-          class="gf-grade-c"
-          >C - 70-79% quality score</span
-        >
-        <span
-          style="
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: 500;
-          "
-          class="gf-grade-d"
-          >D - 60-69% quality score</span
-        >
-        <span
-          style="
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-weight: 500;
-          "
-          class="gf-grade-d"
-          >F - Below 60%</span
-        >
-      </div>
     </div>
 
     <!-- ── What are skills? ── -->

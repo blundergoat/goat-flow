@@ -8,7 +8,7 @@ If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/), IGNORE th
 
 ## Skills to install
 
-Read the detailed templates in `workflow/skills/goat-*.md` before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
+Read the detailed templates in `workflow/skills/` (goat.md, goat-debug.md, goat-plan.md, goat-review.md, goat-sbao.md, goat-security.md, goat-test.md) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
 
 1. **goat-debug/SKILL.md** - Diagnosis-first debugging. Hypothesis tracking, recurrence checks. Includes investigate mode for code exploration.
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
@@ -16,7 +16,7 @@ Read the detailed templates in `workflow/skills/goat-*.md` before creating. Crea
 4. **goat-plan/SKILL.md** - Milestone task file generator and manager. Creates structured milestone files with testing gates and assumption tracking.
 5. **goat-sbao/SKILL.md** - Multi-perspective critique using sub-agent orchestration. 3 agents (risk, alternatives, fresh eyes), 5 phases, cross-examination, and synthesis.
 6. **goat-test/SKILL.md** - Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
-7. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: canonical-skills).
+7. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
 
 ## Requirements for each skill
 
@@ -36,7 +36,7 @@ Install both convention files from `workflow/skills/reference/`:
 
 ## Clean stale cross-agent skills
 
-After installing canonical skills for the current agent, check OTHER agent skill directories (`.agents/skills/`, `.claude/skills/`, `.github/skills/`) for stale goat-flow skill names:
+After installing canonical skills for the current agent, check OTHER agent skill directories (`.agents/skills/`, `.claude/skills/`) for stale goat-flow skill names:
 
 `goat-audit`, `goat-investigate`, `goat-onboard`, `goat-reflect`, `goat-resume`, `goat-preflight`, `goat-research`, `goat-simplify`, `goat-refactor`, `goat-context`
 
@@ -46,7 +46,7 @@ Do NOT delete non-goat-prefixed skills (e.g., `audit/`, `review/`, `migration-de
 
 ## Version check
 
-After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version` key. Compare against the version in any `workflow/skills/goat-*.md` template frontmatter. Mismatched versions will cause the auditor to flag them.
+After installing, verify each SKILL.md frontmatter has the correct `goat-flow-skill-version` key. Compare against the version in any `workflow/skills/` template frontmatter. Mismatched versions will cause the auditor to flag them.
 
 ---
 

@@ -10,7 +10,7 @@ import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { getProjectStructure } from "../../src/cli/paths.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
-import { QUALITY_CHECKS } from "../../src/cli/audit/harness/index.js";
+import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
 
@@ -66,9 +66,9 @@ describe("build check IDs", () => {
 // ---------------------------------------------------------------------------
 // Quality checks cover all 5 concerns
 // ---------------------------------------------------------------------------
-describe("quality check concern coverage", () => {
-  it("quality checks cover all 5 harness concerns", () => {
-    const concerns = new Set(QUALITY_CHECKS.map((c) => c.concern));
+describe("harness check concern coverage", () => {
+  it("harness checks cover all 5 concerns", () => {
+    const concerns = new Set(HARNESS_CHECKS.map((c) => c.concern));
     assert.ok(concerns.has("context"), "Should have context checks");
     assert.ok(concerns.has("constraints"), "Should have constraints checks");
     assert.ok(concerns.has("verification"), "Should have verification checks");

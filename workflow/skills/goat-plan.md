@@ -23,7 +23,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 
 **NOT this skill:**
 - Writing a feature brief → dispatcher Planning Route
-- Sharpening requirements → dispatcher Planning Route (mob elaboration)
+- Sharpening requirements → dispatcher Planning Route
 - Critiquing a plan → /goat-sbao
 - Finding testing gaps → /goat-test
 - Diagnosing a bug → /goat-debug
@@ -42,6 +42,13 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 2. What's the riskiest part? (This determines which milestone comes first)
 3. What would make us abandon this entirely? (Kill criteria)
 4. Read `.goat-flow/footguns/` for the target area
+
+**Detect read-only intent:**
+If the user's phrasing suggests analysis rather than implementation, offer read-only mode:
+- Analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "how would you approach", "sketch the milestones", "walk me through the plan"
+- Implementation signals: "create milestones", "set up the plan", "write the milestone files", "start planning"
+- If analysis signals detected: "This sounds like a planning analysis. I can present milestones inline without writing files (read-only mode), or write them to `.goat-flow/tasks/`. Which do you prefer?"
+- If ambiguous, default to asking.
 
 **Minimum viable input:** A clear description of what to build. Everything else can be inferred or asked during milestone creation.
 
@@ -116,6 +123,23 @@ Use this prompt:
 If the user says proceed inline, present milestone tasks in the chat and continue from there.
 If the user prefers files or scope is Standard/System, write each milestone to `.goat-flow/tasks/` as separate files and continue in standard format.
 
+### Read-Only / Analysis Mode
+
+For planning analysis, critiques, brainstorming, or discussions where no files should be written. Available at any complexity level, including Standard and above.
+
+**When to use:** The user wants to see what the milestones would look like, explore approaches, or get a structured breakdown without committing to files. Detected in Step 0 via analysis-intent signals, or explicitly requested.
+
+**Behaviour:**
+- Run Phase 1 (Milestone Breakdown) in full - same archetypes, same task quality rules, same assumption tracking
+- Present all milestones inline in the response using the same structure as file-based milestones (objective, tasks, assumptions, exit criteria, testing gates, kill criteria, dependencies)
+- Skip the "Write Milestone Files" step entirely - no files created, no `.goat-flow/tasks/` changes
+- Skip Phase 3 (Between Milestones) - there are no files to update between milestones
+- Still include the summary format from Output Format at the end
+
+**Transition to file mode:** If the user later says "write these to files", "let's go ahead", or "create the milestones", write the already-approved milestones to `.goat-flow/tasks/` without re-running the breakdown. Treat the inline milestones as the approved output of Phase 1.
+
+**CHECKPOINT:** "Here are the milestones for [feature] (read-only - no files written). Say 'write to files' to persist them, or adjust first."
+
 After approval, write each milestone to `.goat-flow/tasks/` as a separate file:
 
 **Filename format:** `M<NN>-<slug>.md`
@@ -167,7 +191,7 @@ If updates are needed mid-flight, follow the detailed milestone retrospective pr
 
 ## Constraints
 
-- MUST write milestone files to `.goat-flow/tasks/` for Standard complexity and above. Hotfix and Small Feature may use inline milestones.
+- MUST write milestone files to `.goat-flow/tasks/` for Standard complexity and above, **unless the user requests read-only/analysis mode**. Hotfix and Small Feature may use inline milestones.
 - MUST check for existing milestone files before creating new ones
 - MUST include a testing gate on every milestone - no milestone ships without verification
 - MUST re-read and potentially update the next milestone after completing each one
@@ -184,7 +208,7 @@ If updates are needed mid-flight, follow the detailed milestone retrospective pr
 
 ## Output Format
 
-The output IS the milestone files. No separate report needed.
+The output IS the milestone files. No separate report needed. In read-only/analysis mode, the output is the inline milestone breakdown in the response.
 
 Summary format for presentation:
 

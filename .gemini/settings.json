@@ -60,17 +60,6 @@
         ]
       }
     ],
-    "AfterAgent": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/.gemini/hooks/stop-lint.sh\""
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "matcher": "compact",

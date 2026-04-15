@@ -191,7 +191,6 @@ function enrichDenyFromSettings(
   applySettingsDenyOverrides(denyStr, hook);
 }
 
-
 /** Subset of hook facts describing deny-hook blocking behavior. */
 type HookDenyFacts = Pick<
   AgentFacts["hooks"],

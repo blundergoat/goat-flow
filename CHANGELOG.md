@@ -4,7 +4,7 @@
 
 ## v1.1.0 - 2026-04-14
 
-**Critique Fixes (2026-04-14)** - Dual-critique synthesis resolved 10 findings. Fixed architecture.md build check count (17→16). Fixed stop-lint.sh header comments to match enforce-by-default behavior. Resolved 3 stale footgun entries (advisory hooks, swallows failures, dispatcher verb gap). Removed dead goat-review "code-review instruction file" reference. Reworded goat-test "multi-model" to actionable "cross-agent verification". Added analyse/evaluate/critique verbs to dispatcher disambiguation table. Improved critique prompt with 7 refinements: no-mutation warning, audit PASS caveat, severity definitions, scoped tool guidance, footgun currency checks, numeric claim verification, skill testing clarification.
+**Critique Fixes (2026-04-14)** - Dual-critique synthesis resolved 10 findings. Fixed architecture.md build check count (17→16). Removed stop-lint.sh from core (project-specific concern, will revisit in a later version). Resolved 3 stale footgun entries (advisory hooks, swallows failures, dispatcher verb gap). Removed dead goat-review "code-review instruction file" reference. Reworded goat-test "multi-model" to actionable "cross-agent verification". Added analyse/evaluate/critique verbs to dispatcher disambiguation table. Improved critique prompt with 7 refinements: no-mutation warning, audit PASS caveat, severity definitions, scoped tool guidance, footgun currency checks, numeric claim verification, skill testing clarification.
 
 Scanner/rubric system removed. Replaced by deterministic audit with 16 build checks (7 project setup + 9 per-agent) and 27 advisory quality checks across 5 harness concerns. Deterministic install script. Dashboard overhaul with dynamic recommended actions. 528 files changed.
 
@@ -18,8 +18,8 @@ Scanner/rubric system removed. Replaced by deterministic audit with 16 build che
 **Security** - `execSync` → `execFileSync` in hook syntax validator (shell injection fix). Host header validation on all dashboard API routes.
 **Skills** - 7 canonical skills (goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test). Quick/full depth modes. Conversational structure with Step 0 adaptive gate. Skills installed verbatim from templates — project-specific context comes from instruction file and `.goat-flow/` docs.
 **Setup Flow** - 6 numbered steps (system overview → instruction file → install skills → architecture/code-map → customise → verification). Agent-specific configs in `workflow/setup/agents/`. Upgrade paths for v0.9 and v1.0 projects.
-**Hooks** - `deny-dangerous.sh` supports stdin and argv input, `--self-test` flag, blocks `rm -rf`, force push, `--no-verify`, `chmod 777`, pipe-to-interpreter patterns. `stop-lint.sh` defaults to enforce mode (exit non-zero on errors); set `GOAT_LINT_ENFORCE=0` for advisory.
-**Templates** - 5 project templates: feature-brief, mob-elaboration, compliance-checklist, flow-diagram-guide, requirements-template. Installed to `.goat-flow/templates/`.
+**Hooks** - `deny-dangerous.sh` supports stdin and argv input, `--self-test` flag, blocks `rm -rf`, force push, `--no-verify`, `chmod 777`, pipe-to-interpreter patterns. Post-turn lint hook removed from core — project-specific concern (see `workflow/hooks/README.md`).
+**Templates** - 5 project templates (feature-brief, mob-elaboration, compliance-checklist, flow-diagram-guide, requirements-template) remain in `workflow/templates/` as reference material. Removed from core install (no longer copied to `.goat-flow/templates/`).
 **Tests** - 51 tests across unit, integration, and contract suites. Config filtering, scope coverage, quality concern coverage, cross-agent consistency.
 
 

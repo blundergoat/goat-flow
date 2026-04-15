@@ -1,19 +1,21 @@
 /**
- * Context concern: Is the agent's map accurate and lean?
- * Consolidated from 7 → 4 checks.
+ * Context concern: Is the agent's map accurate and structurally complete?
+ * 3 deterministic integrity checks (instruction size, execution loop, doc paths).
+ * Content-quality judgments (e.g. footgun evidence currency) live in critique,
+ * not here.
  */
-import type { AuditContext, QualityCheck } from "../types.js";
-import { pass, partial, extractBacktickPaths } from "./helpers.js";
+import type { AuditContext, HarnessCheck } from "../types.js";
+import { pass, fail, extractBacktickPaths } from "./helpers.js";
 
-const instructionLineCount: QualityCheck = {
+const instructionLineCount: HarnessCheck = {
   id: "instruction-line-count",
+  name: "Instruction file size",
   concern: "context",
-  weight: 2,
   run: (ctx) => {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
-    let worstScore = 100;
+    let anyFail = false;
     for (const af of ctx.agents) {
       if (!af.instruction.exists) {
         findings.push(`${af.agent.id}: no instruction file`);
@@ -21,11 +23,10 @@ const instructionLineCount: QualityCheck = {
         fixes.push(
           `Create ${af.agent.instructionFile} by running \`goat-flow setup\`.`,
         );
-        worstScore = 0;
+        anyFail = true;
         continue;
       }
       const lines = af.instruction.lineCount;
-      const target = ctx.config.config.lineLimits.target;
       const limit = ctx.config.config.lineLimits.limit;
       if (lines > limit) {
         findings.push(
@@ -35,37 +36,30 @@ const instructionLineCount: QualityCheck = {
         fixes.push(
           `Reduce ${af.agent.instructionFile} to under ${limit} lines by moving verbose sections to .goat-flow/ docs.`,
         );
-        worstScore = Math.min(worstScore, 30);
-      } else if (lines > target) {
-        findings.push(
-          `${af.agent.id}: ${lines} lines (over target ${target}, under limit ${limit})`,
-        );
-        worstScore = Math.min(worstScore, 70);
+        anyFail = true;
       } else {
-        findings.push(
-          `${af.agent.id}: ${lines} lines (under target ${target})`,
-        );
+        findings.push(`${af.agent.id}: ${lines} lines (within limit ${limit})`);
       }
     }
-    if (worstScore === 100) return pass(findings);
-    return partial(worstScore, findings, recs, fixes);
+    if (anyFail) return fail(findings, recs, fixes);
+    return pass(findings);
   },
 };
 
-const executionLoopPresent: QualityCheck = {
+const executionLoopPresent: HarnessCheck = {
   id: "execution-loop-present",
+  name: "Execution loop present",
   concern: "context",
-  weight: 2,
   run: (ctx) => {
     const steps = ["read", "scope", "act", "verify"];
     const findings: string[] = [];
     const recs: string[] = [];
-    let worstScore = 100;
+    let anyFail = false;
 
     for (const af of ctx.agents) {
       if (!af.instruction.exists || !af.instruction.content) {
         findings.push(`${af.agent.id}: no instruction file to check`);
-        worstScore = 0;
+        anyFail = true;
         continue;
       }
       const lower = af.instruction.content.toLowerCase();
@@ -76,21 +70,21 @@ const executionLoopPresent: QualityCheck = {
         findings.push(`${af.agent.id}: execution loop has all 4 steps`);
       } else if (found.length >= 2) {
         findings.push(
-          `${af.agent.id}: execution loop missing ${missing.join(", ")}`,
+          `${af.agent.id}: execution loop found ${found.length}/4 steps (missing ${missing.join(", ")})`,
         );
-        worstScore = Math.min(worstScore, 50);
       } else {
         findings.push(`${af.agent.id}: no execution loop detected`);
         recs.push(
           `Add a READ → SCOPE → ACT → VERIFY execution loop to ${af.agent.instructionFile}`,
         );
-        worstScore = 0;
+        anyFail = true;
       }
     }
-    if (worstScore === 100) return pass(findings);
-    return partial(worstScore, findings, recs, [
-      "Add an execution loop section with READ, SCOPE, ACT, VERIFY steps to the instruction file.",
-    ]);
+    if (anyFail)
+      return fail(findings, recs, [
+        "Add an execution loop section with READ, SCOPE, ACT, VERIFY steps to the instruction file.",
+      ]);
+    return pass(findings);
   },
 };
 
@@ -153,37 +147,25 @@ function checkAllDocPaths(ctx: AuditContext) {
   return { totalPaths, resolvedCount, findings };
 }
 
-const docPathsResolve: QualityCheck = {
+const docPathsResolve: HarnessCheck = {
   id: "doc-paths-resolve",
+  name: "Documentation paths resolve",
   concern: "context",
-  weight: 2,
   run: (ctx) => {
     const { totalPaths, resolvedCount, findings } = checkAllDocPaths(ctx);
 
     if (totalPaths === 0) {
       if (findings.length > 0) {
-        return partial(30, findings, [
+        return fail(findings, [
           "Fix missing docs and add backtick-quoted file paths for drift detection",
         ]);
       }
-      return partial(
-        50,
-        ["No file path references found in docs to validate"],
-        [
-          "Add backtick-quoted file paths to docs so the audit can detect drift",
-        ],
-      );
+      return pass(["No file path references found in docs to validate"]);
     }
     if (resolvedCount === totalPaths) {
-      return pass(
-        [...findings, `All ${totalPaths} doc file paths resolve`].filter(
-          (f) => !f.includes("stale"),
-        ),
-      );
+      return pass([`All ${totalPaths} doc file paths resolve`]);
     }
-    const score = Math.round((resolvedCount / totalPaths) * 100);
-    return partial(
-      score,
+    return fail(
       findings,
       ["Update stale paths in docs to match current file locations"],
       [
@@ -193,39 +175,8 @@ const docPathsResolve: QualityCheck = {
   },
 };
 
-const footgunEvidence: QualityCheck = {
-  id: "footgun-evidence",
-  concern: "context",
-  weight: 1,
-  run: (ctx) => {
-    const { footguns } = ctx.facts.shared;
-    if (!footguns.exists || footguns.entryCount === 0) {
-      return partial(
-        50,
-        ["No footgun entries"],
-        ["Log footguns as they are discovered"],
-        [
-          "Add entries to .goat-flow/footguns/ bucket files as architectural traps are discovered.",
-        ],
-      );
-    }
-    if (footguns.staleRefs.length > 0) {
-      return partial(
-        60,
-        [`${footguns.staleRefs.length} stale file:line references in footguns`],
-        ["Update stale footgun references to current file:line locations"],
-        [
-          "Update stale file:line references in .goat-flow/footguns/ to match current source locations.",
-        ],
-      );
-    }
-    return pass([`${footguns.entryCount} footgun entries with valid evidence`]);
-  },
-};
-
-export const CONTEXT_CHECKS: QualityCheck[] = [
+export const CONTEXT_CHECKS: HarnessCheck[] = [
   instructionLineCount,
   executionLoopPresent,
   docPathsResolve,
-  footgunEvidence,
 ];

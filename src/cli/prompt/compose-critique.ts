@@ -48,15 +48,15 @@ const AGENT_INSTRUCTION: Record<AgentId, string> = {
 
 function renderAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
-  const scopes = [
+  const scopes: [string, string][] = [
     ["setup", "GOAT Flow Setup"],
-    ["harness", "Agent Setup Checks"],
-  ] as const;
+    ["agent", "Agent Setup"],
+  ];
   for (const [scope, label] of scopes) {
-    const s = report.scopes[scope];
+    const s = report.scopes[scope as keyof typeof report.scopes];
+    if (!s) continue;
     const status = s.status === "pass" ? "PASS" : "FAIL";
-    const scoreStr = s.score != null ? ` (${s.score}%)` : "";
-    lines.push(`- **${label}**: ${status}${scoreStr}`);
+    lines.push(`- **${label}**: ${status}`);
     if (s.failures.length > 0) {
       for (const f of s.failures) {
         lines.push(`  - ${f.check}: ${f.message}`);
@@ -73,13 +73,12 @@ function renderAuditSummary(report: AuditReport): string {
       "feedback_loop",
     ];
     lines.push("");
-    lines.push("Quality scores:");
+    lines.push(
+      "Harness completeness (structural integrity, not quality assessment):",
+    );
     for (const key of keys) {
-      lines.push(`- ${key}: ${report.concerns[key].score}%`);
-    }
-    if (report.overall.grade && report.overall.qualityScore !== null) {
       lines.push(
-        `- Overall: ${report.overall.grade} (${report.overall.qualityScore}%)`,
+        `- ${key}: ${report.concerns[key].status === "pass" ? "PASS" : "FAIL"}`,
       );
     }
   }
@@ -184,7 +183,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   );
   lines.push("3. **Hook scripts** - deny-dangerous.sh for safety guardrails.");
   lines.push(
-    "4. **Learning loop** (`.goat-flow/`) - config, architecture doc, footguns, lessons, decisions, session logs, templates.",
+    "4. **Learning loop** (`.goat-flow/`) - config, architecture doc, footguns, lessons, decisions, session logs.",
   );
   lines.push(
     "5. **Shared conventions** - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth).",
@@ -207,7 +206,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     lines.push(auditSummaryText);
     lines.push("");
     lines.push(
-      "> **Note:** Audit checks structure, not content. PASS means files exist and parse correctly. It does NOT mean documentation is accurate, footguns are current, or numeric claims match code. Your critique must go deeper than the audit.",
+      "> **Note:** The audit checks structural completeness only (pass/fail per concern). PASS means files exist, paths resolve, and patterns are registered. It does NOT mean documentation is accurate, footguns are current, or content is appropriate for this project. Your critique must assess quality — what the audit cannot.",
     );
     if (auditReport.status === "fail") {
       lines.push(
@@ -230,9 +229,11 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   );
   lines.push("");
   lines.push("```bash");
-  lines.push("# 1. Run the essential commands from the instruction file");
   lines.push(
-    `#    Copy the commands from the "Essential Commands" section of \`${instructionFile}\` and run each one.`,
+    "# 1. Run read-only validation commands (do NOT run preflight-checks.sh — it writes to dist/)",
+  );
+  lines.push(
+    `#    Run shellcheck and bash -n on shell scripts listed in ${instructionFile}.`,
   );
   lines.push("#    Record: which pass, which fail, which don't exist.");
   lines.push("");
@@ -246,7 +247,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     `wc -l ${instructionFile}                          # target: under 120 lines`,
   );
   lines.push(
-    `ls ${skillsDir}/                                  # expect 7 goat-* directories`,
+    `ls ${skillsDir}/                                  # expect 7 goat-flow skill directories`,
   );
   lines.push(
     "cat .goat-flow/config.yaml                        # should have version, agents, skills, line-limits",
@@ -269,15 +270,13 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push(
     "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/patterns.md` (if they exist)",
   );
-  lines.push(
-    `- All installed skills - every \`goat-*/SKILL.md\` in \`${skillsDir}\``,
-  );
+  lines.push(`- All installed skills - every \`SKILL.md\` in \`${skillsDir}\``);
   lines.push(`- Agent settings: \`${settingsFile}\``);
   lines.push("- All hook scripts in your agent's hooks directory");
   lines.push(
     "- `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` (list and scan what exists)",
   );
-  lines.push("- `.goat-flow/templates/` (list and scan what exists)");
+
   lines.push("");
 
   // Part 1: Pre-check (reorganized into subsections, router table moved here)
@@ -297,9 +296,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push("- `.goat-flow/skill-preamble.md` exists?");
   lines.push("- `.goat-flow/skill-conventions.md` exists?");
   lines.push("- `.goat-flow/config.yaml` exists and parseable?");
-  lines.push(
-    "- `.goat-flow/templates/` exists? (no `playbooks/` - that's legacy)",
-  );
+  lines.push("- No `playbooks/` directory (that's legacy)?");
   lines.push(
     "- No `todo.md`, `handoff.md`, or `handoff-template.md` in project root or `.goat-flow/`?",
   );
@@ -315,9 +312,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push(
     "- For EVERY path in the router table, verify the file/directory exists. List any that don't resolve.",
   );
-  lines.push(
-    "- Does it include `.goat-flow/templates/` and `.goat-flow/footguns/`?",
-  );
+  lines.push("- Does it include `.goat-flow/footguns/`?");
   lines.push("");
 
   // Part 2: Setup quality (was Part 3, with config/hook checks merged from old Part 6)
@@ -356,14 +351,11 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push(
     "- Did setup create duplicate surfaces (e.g., both `docs/footguns.md` and `.goat-flow/footguns/`)?",
   );
-  lines.push("- Does `.goat-flow/templates/` exist?");
+  lines.push("- Was `.goat-flow/scratchpad/` created?");
   lines.push("");
   lines.push("**Config reality:**");
   lines.push(
     "- Does `.goat-flow/config.yaml` stay lean and accurate for this project? If it includes optional project-calibration fields like `toolchain`, verify the commands are real before treating them as authoritative. If you also run the tool at broader scope (e.g., `npx eslint .` vs a project's scoped command), note whether the project intentionally scopes narrower — that's a design choice, not a finding, unless it hides real problems. Beware that `.claude/worktrees/`, `node_modules/`, and `dist/` can pollute unscoped tool runs.",
-  );
-  lines.push(
-    "- If `config.yaml` includes optional `ask_first` entries, do they match the Ask First boundaries in the instruction file? If the field is absent, treat the instruction file as the source of truth.",
   );
   lines.push(
     `- Were hook scripts installed and registered in \`${settingsFile}\`?`,
@@ -442,7 +434,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     "- Does the dispatcher (`/goat`) add value or just add a routing step?",
   );
   lines.push(
-    "- Does the Planning Route (feature briefs, mob elaboration) work in practice?",
+    "- Does the Planning Route (feature briefs → /goat-plan) work in practice?",
   );
   lines.push("- Is the Definition of Done practical or checkbox theater?");
   lines.push(
@@ -480,7 +472,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     "- Any path in the instruction file or skills that references a file that doesn't exist",
   );
   lines.push(
-    "- Any skill that references `.goat-flow/templates/` files that weren't installed",
+    "- Any skill that references `.goat-flow/templates/` (removed from core)",
   );
   lines.push(
     "- Any skill that references `workflow/` paths - those are framework-internal and don't exist in target projects",
@@ -496,12 +488,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   );
   lines.push("");
   lines.push(
-    "**Cross-agent consistency** (if multiple agent configs exist - check for CLAUDE.md, AGENTS.md, GEMINI.md):",
-  );
-  lines.push("- Are deny patterns equivalent across agents?");
-  lines.push("- Are skills identical across agent skill directories?");
-  lines.push(
-    "- Are instruction files structurally consistent (same execution loop, same sections)?",
+    `**Note:** Cross-agent consistency checks (deny patterns, skill parity, instruction structure) belong in the deterministic audit, not this per-agent critique. Focus on ${agentLabel}'s surfaces only.`,
   );
   lines.push("");
 

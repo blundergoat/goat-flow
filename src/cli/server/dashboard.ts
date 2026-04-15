@@ -207,7 +207,7 @@ export function serveDashboard(
     }
 
     /** Build a DashboardReport from per-agent audit results.
-     * The Home page uses per-agent harness scores, the Audit detail
+     * The Home page uses per-agent harness completeness, the Audit detail
      * page uses scope-based check results. This adapter produces
      * a single typed response covering both views. */
     const AGENT_NAMES: Record<string, string> = {
@@ -224,12 +224,18 @@ export function serveDashboard(
         agentScores: perAgentAudits.map((pa) => ({
           id: pa.id,
           name: AGENT_NAMES[pa.id] || pa.id,
+          agent: pa.audit.scopes.agent,
           harness: pa.audit.scopes.harness,
           concerns: pa.audit.concerns,
-          quality: pa.audit.overall,
         })),
         status: auditRpt.status,
-        scopes: auditRpt.scopes,
+        scopes: {
+          setup: auditRpt.scopes.setup,
+          agent: auditRpt.scopes.agent,
+          ...(auditRpt.scopes.harness
+            ? { harness: auditRpt.scopes.harness }
+            : {}),
+        },
         overall: auditRpt.overall,
         target: auditRpt.target,
       };
@@ -240,7 +246,7 @@ export function serveDashboard(
       if (url.pathname !== "/api/audit") return false;
 
       const projectPath = safeResolvePath(url.searchParams.get("path"));
-      const quality = url.searchParams.get("quality") === "true";
+      const harness = url.searchParams.get("quality") === "true";
       const agentParam = url.searchParams.get("agent");
       const agentFilter =
         agentParam && VALID_AGENTS.has(agentParam)
@@ -249,9 +255,9 @@ export function serveDashboard(
 
       try {
         const fs = createFS(projectPath);
-        const auditRpt = runAudit(fs, projectPath, { agentFilter, quality });
+        const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
 
-        // Run per-agent audits for harness scores (all detected agents)
+        // Run per-agent audits for harness completeness (all detected agents)
         const agentInstructionFiles: [string, string][] = [
           ["claude", "CLAUDE.md"],
           ["codex", "AGENTS.md"],
@@ -265,7 +271,7 @@ export function serveDashboard(
           try {
             const agentAudit = runAudit(fs, projectPath, {
               agentFilter: agentId as AgentId,
-              quality,
+              harness,
             });
             perAgentAudits.push({ id: agentId, audit: agentAudit });
           } catch {
@@ -319,7 +325,7 @@ export function serveDashboard(
         });
         const auditReport = runAudit(fs, projectPath, {
           agentFilter: agent,
-          quality: false,
+          harness: false,
         });
         const { composeSetup } = await import("../prompt/compose-setup.js");
         const output = composeSetup(auditReport, facts, agent);
@@ -361,7 +367,7 @@ export function serveDashboard(
           const fs = createFS(projectPath);
           auditReport = runAudit(fs, projectPath, {
             agentFilter: agent,
-            quality: true,
+            harness: true,
           });
         } catch {
           // Audit failure is fine - critique generates with degraded context

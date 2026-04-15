@@ -99,7 +99,7 @@ describe("backwards compatibility", () => {
       "json",
     ]);
     assert.equal(parsed.command, "audit");
-    assert.equal(parsed.quality, true);
+    assert.equal(parsed.harness, true);
     assert.equal(parsed.agent, "claude");
     assert.equal(parsed.format, "json");
   });

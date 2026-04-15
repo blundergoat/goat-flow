@@ -5,7 +5,7 @@ import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import { extractInstructionFacts } from "./instruction.js";
 import { extractSettingsFacts, checkDenyPatterns } from "./settings.js";
 import { extractSkillFacts } from "./skills.js";
-import { extractRouterFacts, extractAskFirstFacts } from "./routing.js";
+import { extractRouterFacts } from "./routing.js";
 import { extractHookFacts } from "./hooks.js";
 
 /** Collect all facts for a single agent by delegating to sub-extractors. */
@@ -25,7 +25,6 @@ export function extractAgentFacts(
   );
   const deny = checkDenyPatterns(fs, agent);
   const router = extractRouterFacts(fs, instruction.content);
-  const askFirst = extractAskFirstFacts(fs, instruction.content);
 
   /** All files matching the agent's local instruction pattern */
   const localFiles = agent.localPattern.includes("*")
@@ -57,7 +56,6 @@ export function extractAgentFacts(
     },
     deny,
     router,
-    askFirst,
     localContext: { files: filteredLocal, warranted, missing },
   };
 }

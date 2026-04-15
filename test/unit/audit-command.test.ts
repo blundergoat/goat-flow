@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
-import { QUALITY_CHECKS } from "../../src/cli/audit/harness/index.js";
+import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
 import { createFS } from "../../src/cli/facts/fs.js";
@@ -64,7 +64,6 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
         package: [],
         format: [],
       },
-      askFirst: [],
       userRole: "developer",
       telemetry: false,
       knownGaps: [],
@@ -154,7 +153,6 @@ function stubAgentFacts(overrides: Partial<AgentFacts> = {}): AgentFacts {
     },
     deny: { gitCommitBlocked: false, gitPushBlocked: false },
     router: { exists: true, paths: [], resolved: 0, unresolved: [] },
-    askFirst: { exists: false, paths: [], resolved: 0, unresolved: [] },
     localContext: { files: [], warranted: [], missing: [] },
     ...overrides,
   };
@@ -292,7 +290,7 @@ describe("audit on well-configured project", () => {
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: false,
+      harness: false,
     });
     assert.equal(report.command, "audit");
     assert.equal(
@@ -419,59 +417,62 @@ describe("audit fails on stale skill directory", () => {
 // Test 5: audit --harness produces concerns without affecting exit code
 // ---------------------------------------------------------------------------
 describe("audit --harness", () => {
-  it("produces concerns output without affecting exit code", () => {
+  it("produces concerns with pass/fail status", () => {
     const projectPath = resolve(import.meta.dirname, "..", "..");
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: true,
+      harness: true,
     });
 
-    // Build result should still pass (same checks, quality doesn't affect it)
+    // Build scopes should still pass
     assert.equal(
-      report.status,
+      report.scopes.setup.status,
       "pass",
-      `Build should pass: ${JSON.stringify(report.scopes)}`,
+      `Setup should pass: ${JSON.stringify(report.scopes.setup.failures)}`,
+    );
+    assert.equal(
+      report.scopes.agent.status,
+      "pass",
+      `Agent should pass: ${JSON.stringify(report.scopes.agent.failures)}`,
     );
 
-    // Quality concerns should be populated
+    // Harness scope should be populated
+    assert.notEqual(
+      report.scopes.harness,
+      null,
+      "harness scope should be populated with --harness",
+    );
+
+    // Concerns should be populated with pass/fail statuses
     assert.notEqual(
       report.concerns,
       null,
       "concerns should be populated with --harness",
     );
-    assert.ok(
-      report.concerns!.context !== undefined,
-      "context concern should exist",
-    );
-    assert.ok(
-      report.concerns!.constraints !== undefined,
-      "constraints concern should exist",
-    );
-    assert.ok(
-      report.concerns!.verification !== undefined,
-      "verification concern should exist",
-    );
-    assert.ok(
-      report.concerns!.recovery !== undefined,
-      "recovery concern should exist",
-    );
-    assert.ok(
-      report.concerns!.feedback_loop !== undefined,
-      "feedback_loop concern should exist",
-    );
+    for (const key of [
+      "context",
+      "constraints",
+      "verification",
+      "recovery",
+      "feedback_loop",
+    ] as const) {
+      assert.ok(
+        report.concerns![key] !== undefined,
+        `${key} concern should exist`,
+      );
+      assert.ok(
+        report.concerns![key].status === "pass" ||
+          report.concerns![key].status === "fail",
+        `${key} concern should have pass/fail status`,
+      );
+    }
 
-    // Grade and score should be present
-    assert.ok(report.overall.grade !== null, "grade should be present");
+    // No grade or qualityScore in new contract
+    assert.ok(!("grade" in report.overall), "overall should not have grade");
     assert.ok(
-      report.overall.qualityScore !== null,
-      "qualityScore should be present",
-    );
-    assert.ok(
-      typeof report.overall.qualityScore === "number" &&
-        report.overall.qualityScore >= 0 &&
-        report.overall.qualityScore <= 100,
-      "qualityScore should be 0-100",
+      !("qualityScore" in report.overall),
+      "overall should not have qualityScore",
     );
   });
 });
@@ -485,16 +486,16 @@ describe("audit JSON contract", () => {
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: false,
+      harness: false,
     });
 
     // Top-level keys
     assert.equal(report.command, "audit");
-    assert.equal(report.quality, false);
+    assert.equal(report.harness, false);
     assert.ok(["pass", "fail"].includes(report.status));
 
     // Scopes structure
-    for (const scope of ["setup", "harness"] as const) {
+    for (const scope of ["setup", "agent"] as const) {
       const s = report.scopes[scope];
       assert.ok(
         ["pass", "fail"].includes(s.status),
@@ -506,6 +507,13 @@ describe("audit JSON contract", () => {
       );
     }
 
+    // Harness scope null in build-only mode
+    assert.equal(
+      report.scopes.harness,
+      null,
+      "harness scope should be null without --harness",
+    );
+
     // Concerns null in build-only mode
     assert.equal(
       report.concerns,
@@ -515,27 +523,18 @@ describe("audit JSON contract", () => {
 
     // Overall
     assert.ok(["pass", "fail"].includes(report.overall.status));
-    assert.equal(
-      report.overall.grade,
-      null,
-      "grade should be null without --harness",
-    );
-    assert.equal(
-      report.overall.qualityScore,
-      null,
-      "qualityScore should be null without --harness",
-    );
   });
 
-  it("has correct shape for quality mode", () => {
+  it("has correct shape for harness mode", () => {
     const projectPath = resolve(import.meta.dirname, "..", "..");
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: true,
+      harness: true,
     });
 
-    assert.equal(report.quality, true);
+    assert.equal(report.harness, true);
+    assert.notEqual(report.scopes.harness, null);
     assert.notEqual(report.concerns, null);
 
     for (const key of [
@@ -546,7 +545,10 @@ describe("audit JSON contract", () => {
       "feedback_loop",
     ] as const) {
       const c = report.concerns![key];
-      assert.ok(typeof c.score === "number", `${key}.score should be a number`);
+      assert.ok(
+        c.status === "pass" || c.status === "fail",
+        `${key}.status should be pass or fail`,
+      );
       assert.ok(
         Array.isArray(c.findings),
         `${key}.findings should be an array`,
@@ -561,8 +563,7 @@ describe("audit JSON contract", () => {
       );
     }
 
-    assert.ok(report.overall.grade !== null);
-    assert.ok(typeof report.overall.qualityScore === "number");
+    assert.ok(["pass", "fail"].includes(report.overall.status));
   });
 });
 
@@ -590,25 +591,28 @@ describe("build failure howToFix", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 8: canonical install paths can stay outside the 12-check setup gate
+// Test 8: scratchpad is enforced by the other-files setup gate
 // ---------------------------------------------------------------------------
 describe("other-files setup gate", () => {
-  it("does not fail on scratchpad because it is outside the 12-check contract", () => {
+  it("fails on missing scratchpad because it is part of the setup contract", () => {
     const check = BUILD_CHECKS.find((c) => c.id === "other-files")!;
     const ctx = makeCtx({
       structure: {
         ...STUB_STRUCTURE,
-        required_dirs: [...STUB_STRUCTURE.required_dirs, ".goat-flow/scratchpad/"],
+        required_dirs: [
+          ...STUB_STRUCTURE.required_dirs,
+          ".goat-flow/scratchpad/",
+        ],
       },
       fs: stubFS({
         exists: (path: string) => path !== ".goat-flow/scratchpad",
       }),
     });
     const result = check.run(ctx);
-    assert.equal(
+    assert.notEqual(
       result,
       null,
-      "scratchpad should not be enforced by the other-files setup gate",
+      "scratchpad should be enforced by the other-files setup gate",
     );
   });
 });
@@ -617,18 +621,8 @@ describe("other-files setup gate", () => {
 // Test 9: optional config calibration fields do not lower harness scores
 // ---------------------------------------------------------------------------
 describe("optional config calibration", () => {
-  it("does not penalize missing ask_first entries", () => {
-    const check = QUALITY_CHECKS.find((c) => c.id === "ask-first")!;
-    const result = check.run(makeCtx());
-    assert.equal(result.score, 100);
-    assert.ok(
-      result.findings.some((f) => f.includes("instruction files as the source of truth")),
-      `Findings should explain optional ask_first semantics: ${result.findings.join(", ")}`,
-    );
-  });
-
   it("does not penalize missing toolchain.test entries", () => {
-    const check = QUALITY_CHECKS.find(
+    const check = HARNESS_CHECKS.find(
       (c) => c.id === "test-runner-configured",
     )!;
     const result = check.run(
@@ -644,7 +638,7 @@ describe("optional config calibration", () => {
         }),
       }),
     );
-    assert.equal(result.score, 100);
+    assert.equal(result.status, "pass");
     assert.ok(
       result.findings.some((f) => f.includes("toolchain.test")),
       `Findings should explain optional toolchain semantics: ${result.findings.join(", ")}`,
@@ -655,9 +649,9 @@ describe("optional config calibration", () => {
 // ---------------------------------------------------------------------------
 // Test 10: quality recommendation howToFix includes actionable path
 // ---------------------------------------------------------------------------
-describe("quality recommendation howToFix", () => {
+describe("harness check howToFix", () => {
   it("doc-paths-resolve findings mention architecture.md when missing", () => {
-    const check = QUALITY_CHECKS.find((c) => c.id === "doc-paths-resolve")!;
+    const check = HARNESS_CHECKS.find((c) => c.id === "doc-paths-resolve")!;
     const ctx = makeCtx({
       facts: {
         ...makeCtx().facts,

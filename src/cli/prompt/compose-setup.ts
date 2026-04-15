@@ -17,15 +17,15 @@ import { createFS } from "../facts/fs.js";
 
 /** Maps audit check IDs to the setup step that fixes them. */
 const CHECK_TO_STEP: Record<string, string> = {
-  lessons: "Step 04 (architecture and knowledge base)",
-  footguns: "Step 04 (architecture and knowledge base)",
-  architecture: "Step 04 (architecture and knowledge base)",
-  "code-map": "Step 04 (architecture and knowledge base)",
-  glossary: "Step 04 (architecture and knowledge base)",
-  patterns: "Step 04 (architecture and knowledge base)",
-  decisions: "Step 04 (architecture and knowledge base)",
-  "session-logs": "Step 04 (architecture and knowledge base)",
-  tasks: "Step 04 (architecture and knowledge base)",
+  lessons: "Step 05 (customise to project)",
+  footguns: "Step 05 (customise to project)",
+  architecture: "Step 04 (architecture and code map)",
+  "code-map": "Step 04 (architecture and code map)",
+  glossary: "Step 05 (customise to project)",
+  patterns: "Step 05 (customise to project)",
+  decisions: "Step 04 (architecture and code map)",
+  "session-logs": "Step 04 (architecture and code map)",
+  tasks: "Step 04 (architecture and code map)",
   "other-files": "Step 02 (instruction file) or Step 04 (architecture)",
   "config-parses": "Step 02 or Step 05 (config.yaml)",
   "config-version": "Step 05 (config version field)",
@@ -79,7 +79,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("**Next step (recommended):**");
   lines.push(
-    `- Run \`goat-flow audit . --harness\` for advisory quality scores across 5 harness concerns (context, constraints, verification, recovery, feedback loop). Never blocks CI - surfaces improvements only.`,
+    `- Run \`goat-flow audit . --harness\` for AI harness completeness checks across 5 concerns (context, constraints, verification, recovery, feedback loop). Pass/fail integrity gate — CI-safe.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");
@@ -108,7 +108,7 @@ function renderAuditFail(
 
   const failedChecks = [
     ...auditReport.scopes.setup.checks.filter((c) => c.status === "fail"),
-    ...auditReport.scopes.harness.checks.filter((c) => c.status === "fail"),
+    ...auditReport.scopes.agent.checks.filter((c) => c.status === "fail"),
   ];
 
   lines.push(`# GOAT Flow Setup - ${profile.name}`);
@@ -169,7 +169,7 @@ function renderUpgradeRedirect(
     );
     lines.push("");
     lines.push(
-      "This refreshes skills, hooks, settings, templates, and reference files to the current version.",
+      "This refreshes skills, hooks, settings, and reference files to the current version.",
     );
     lines.push("");
 
@@ -202,7 +202,7 @@ function renderUpgradeRedirect(
     );
     lines.push("");
     lines.push(
-      "This installs the 7 canonical skills, hooks, settings, templates, and reference files.",
+      "This installs the 7 canonical skills, hooks, settings, and reference files.",
     );
     lines.push("");
 
@@ -263,7 +263,7 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
   );
   lines.push("");
   lines.push(
-    "This installs skills, hooks, settings, templates, and reference files. Verify it completes with zero errors.",
+    "This installs skills, hooks, settings, and reference files. Verify it completes with zero errors.",
   );
   lines.push("");
 

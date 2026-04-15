@@ -60,8 +60,8 @@
               ></div>
               <div
                 style="font-size: 11px; margin-top: 2px"
-                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agentId); return s ? (s.harness.status === 'pass' ? 'Passing' : 'Failing') : 'Not audited'; })()"
-                :style="{ color: (() => { const s = report?.agentScores?.find(a => a.id === agentId); return s ? (s.harness.status === 'pass' ? '#4ade80' : '#f87171') : '#52525b'; })() }"
+                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agentId); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round(s.harness.checks.filter(c => c.status === 'pass').length / t * 100) : 0; return pct + '%'; })()"
+                :style="{ color: (() => { const s = report?.agentScores?.find(a => a.id === agentId); if (!s?.harness) return '#52525b'; const t = s.harness.checks.length; const pct = t ? Math.round(s.harness.checks.filter(c => c.status === 'pass').length / t * 100) : 0; return pct >= 80 ? '#4ade80' : pct >= 70 ? '#facc15' : pct >= 60 ? '#fb923c' : '#f87171'; })() }"
               ></div>
             </div>
           </template>
@@ -79,21 +79,22 @@
               feedback_loop: { label: 'Feedback Loop' }
             },
             concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
-            scoreColor(s) { return s >= 80 ? 'var(--green-400)' : s >= 60 ? 'var(--orange-400)' : 'var(--red-400)' },
-            barBg(s) { return s >= 80 ? 'var(--green-900)' : s >= 60 ? 'var(--amber-950)' : 'var(--red-950)' },
-            barFill(s) { return s >= 80 ? 'var(--green-600)' : s >= 60 ? 'var(--orange-700)' : 'var(--red-700)' },
-            gradeColor(g) { return g === 'A' ? 'var(--green-400)' : g === 'B' ? 'var(--green-500)' : g === 'C' ? 'var(--orange-400)' : g === 'D' ? 'var(--orange-400)' : 'var(--red-400)' },
+            statusColor(s) { return s === 'pass' ? 'var(--green-400)' : 'var(--red-400)' },
+            scoreColor(score) { return score >= 80 ? 'var(--green-400)' : score >= 70 ? 'var(--yellow-400, #facc15)' : score >= 60 ? 'var(--orange-400, #fb923c)' : 'var(--red-400)' },
+            scoreBg(score) { return score >= 80 ? 'var(--green-900, #14532d)' : score >= 70 ? 'var(--yellow-900, #713f12)' : score >= 60 ? 'var(--orange-900, #7c2d12)' : 'var(--red-900, #7f1d1d)' },
+            agentScore(agent) { if (!agent?.harness) return null; const t = agent.harness.checks.length; return t ? Math.round(agent.harness.checks.filter(c => c.status === 'pass').length / t * 100) : null; },
+            toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
             get selectedAgent() {
               return report?.agentScores?.find(a => a.id === critiqueAgent) || null;
             },
             recommendationSummary(agent) {
               if (!agent) return 'Not audited';
               if (!agent.concerns) {
-                const passed = agent.harness.checks.filter(c => c.status === 'pass').length;
-                return `${passed}/${agent.harness.checks.length} checks passed`;
+                const passed = agent.agent.checks.filter(c => c.status === 'pass').length;
+                return `${passed}/${agent.agent.checks.length} checks passed`;
               }
               const recs = this.concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0);
-              return recs === 0 ? 'All quality checks passing' : `${recs} recommendation${recs !== 1 ? 's' : ''}`;
+              return recs === 0 ? 'All checks passing' : `${recs} recommendation${recs !== 1 ? 's' : ''}`;
             }
           }"
         >
@@ -118,7 +119,7 @@
                 <div
                   class="gf-text-secondary"
                   style="font-size: 12px; font-weight: 500; margin-bottom: 8px"
-                  x-text="`${selectedAgent.name} Harness Score`"
+                  x-text="`${selectedAgent.name} Harness Completeness`"
                 ></div>
                 <div
                   class="gf-card"
@@ -138,22 +139,18 @@
                       x-text="selectedAgent.name"
                     ></span>
                     <div
-                      x-show="selectedAgent.quality?.grade"
+                      x-show="agentScore(selectedAgent) !== null"
                       style="display: flex; align-items: baseline; gap: 4px"
                     >
                       <span
-                        style="
-                          font-size: 20px;
-                          font-weight: 700;
-                          letter-spacing: -1px;
-                        "
-                        :style="{ color: gradeColor(selectedAgent.quality?.grade) }"
-                        x-text="selectedAgent.quality?.grade"
+                        style="font-size: 20px; font-weight: 700"
+                        :style="{ color: scoreColor(agentScore(selectedAgent)) }"
+                        x-text="toGrade(agentScore(selectedAgent))"
                       ></span>
                       <span
-                        class="gf-text-muted"
-                        style="font-size: 11px"
-                        x-text="`${selectedAgent.quality?.qualityScore}%`"
+                        style="font-size: 12px; font-weight: 600"
+                        :style="{ color: scoreColor(agentScore(selectedAgent)) }"
+                        x-text="agentScore(selectedAgent) + '%'"
                       ></span>
                     </div>
                   </div>
@@ -165,7 +162,7 @@
                   <div
                     class="gf-text-muted"
                     style="font-size: 11px; margin-bottom: 10px"
-                    x-text="`${selectedAgent.harness.checks.filter(c => c.status === 'pass').length}/${selectedAgent.harness.checks.length} agent setup checks passed`"
+                    x-text="`${selectedAgent.agent.checks.filter(c => c.status === 'pass').length}/${selectedAgent.agent.checks.length} agent setup checks passed`"
                   ></div>
                   <template x-if="selectedAgent.concerns">
                     <div
@@ -197,32 +194,26 @@
                             style="
                               flex: 1;
                               height: 4px;
+                              background: var(--surface-elevated, #27272a);
                               border-radius: 2px;
                               overflow: hidden;
                             "
-                            :style="{ background: barBg(selectedAgent.concerns[ck].score) }"
                           >
                             <div
-                              style="
-                                height: 100%;
-                                border-radius: 2px;
-                                transition: width 0.3s ease;
-                              "
-                              :style="{
-                                width: selectedAgent.concerns[ck].score + '%',
-                                background: barFill(selectedAgent.concerns[ck].score)
-                              }"
+                              style="height: 100%; border-radius: 2px; transition: width 0.3s"
+                              :style="{ width: selectedAgent.concerns[ck].score + '%', background: scoreColor(selectedAgent.concerns[ck].score) }"
                             ></div>
                           </div>
                           <span
                             style="
                               font-size: 10px;
                               font-weight: 600;
-                              width: 28px;
+                              width: 32px;
+                              flex-shrink: 0;
                               text-align: right;
                             "
                             :style="{ color: scoreColor(selectedAgent.concerns[ck].score) }"
-                            x-text="`${selectedAgent.concerns[ck].score}%`"
+                            x-text="selectedAgent.concerns[ck].score + '%'"
                           ></span>
                         </div>
                       </template>

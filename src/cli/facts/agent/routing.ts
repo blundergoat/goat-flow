@@ -1,5 +1,5 @@
 /**
- * Router and Ask First fact extraction - collects referenced paths from instruction file sections.
+ * Router fact extraction - collects referenced paths from instruction file sections.
  */
 import type { AgentFacts, ReadonlyFS } from "../../types.js";
 import { extractSection } from "./instruction.js";
@@ -46,16 +46,6 @@ function isRouterLinkPath(path: string): boolean {
   return !hasGlobChars(path) && !path.startsWith("http") && looksLikePath(path);
 }
 
-/** Treat Ask First bullet items as boundary paths only when they look like local files. */
-function isAskFirstPath(path: string): boolean {
-  if (hasGlobChars(path)) return false;
-  if (path.startsWith("http")) return false;
-  if (!looksLikePath(path)) return false;
-  if (path.includes("|") || path.startsWith("-") || path.startsWith("$"))
-    return false;
-  return true;
-}
-
 /** Extract all file/directory paths referenced in the Router Table section. */
 function extractRouterPaths(content: string): string[] {
   /** Accumulated list of discovered router paths */
@@ -66,32 +56,6 @@ function extractRouterPaths(content: string): string[] {
 
   collectMatchedPaths(routerSection, /`([^`]+)`/g, isRouterBacktickPath, paths);
   collectMatchedPaths(routerSection, /\]\(([^)]+)\)/g, isRouterLinkPath, paths);
-
-  return paths;
-}
-
-/** Extract the Ask First section whether it is written as a heading or bold block. */
-function extractAskFirstSection(content: string): string | null {
-  const headingMatch = content.match(/##\s+ask\s+first[\s\S]*?(?=\n##\s|$)/i);
-  if (headingMatch) {
-    return headingMatch[0];
-  }
-
-  const boldMatch = content.match(
-    /\*\*Ask First:?\*\*[\s\S]*?(?=\n\*\*Never:?\*\*|\n##\s|$)/i,
-  );
-  return boldMatch?.[0] ?? null;
-}
-
-/** Extract file paths listed in the Ask First boundaries section. */
-function extractAskFirstPaths(content: string): string[] {
-  /** Accumulated list of discovered ask-first boundary paths */
-  const paths: string[] = [];
-
-  const section = extractAskFirstSection(content);
-  if (section == null) return paths;
-
-  collectMatchedPaths(section, /`([^`]+)`/g, isAskFirstPath, paths);
 
   return paths;
 }
@@ -134,21 +98,7 @@ export function extractRouterFacts(
   };
 }
 
-/** Extract ask-first boundary facts: paths listed and their resolution status. */
-export function extractAskFirstFacts(
-  fs: ReadonlyFS,
-  content: string | null,
-): AgentFacts["askFirst"] {
-  const paths = content !== null ? extractAskFirstPaths(content) : [];
-  const resolution = resolveReferencedPaths(fs, paths);
-  return {
-    exists: paths.length > 0,
-    paths,
-    resolved: resolution.resolved,
-    unresolved: resolution.unresolved,
-  };
-}
-
 // settingsLocal extraction removed - personal preference file, not a project quality signal.
+// askFirst extraction removed - ask_first config field removed from CLI (ADR-039).
 
 // ─── Composer ────────────────────────────────────────────────────────

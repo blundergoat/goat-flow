@@ -6,7 +6,6 @@ Quick orientation for agents working on the goat-flow codebase.
 
 ```
 cli.ts                     # Entry point: command parser (audit, setup, dashboard, critique)
-menu.ts                    # Interactive menu shown when no args + TTY (agent detection, command selection)
 classify-state.ts          # Project adoption classifier (bare/partial/v0.9/v1.0/v1.1/error)
 constants.ts               # SKILL_NAMES, AUDIT_VERSION
 types.ts                   # Shared types: AgentId, ReadonlyFS, CLIOptions, core interfaces
@@ -22,10 +21,10 @@ facts/                     # Fact extractors -- gather project state for audit c
   shared/                  # Shared facts (CI, learning loop, local instructions)
 
 audit/
-  audit.ts                 # Public audit command: build checks + optional quality scoring
+  audit.ts                 # Public audit command: build checks + optional harness completeness (--harness)
   check-goat-flow.ts       # 12 setup build checks (gate CI pass/fail)
   check-agent-setup.ts     # 4 agent build checks (gate CI pass/fail)
-  harness/                 # 18 advisory quality checks grouped by concern (5 files + helpers + index)
+  harness/                 # 15 pass/fail completeness checks grouped by concern (5 files + helpers + index)
   render.ts                # Output formatters (text, json, markdown)
   types.ts                 # Audit-specific types (AuditReport, CheckResult, AuditFailure)
 
@@ -62,9 +61,7 @@ skills/
   reference/               # skill-preamble.md, skill-conventions.md
 
 hooks/                     # Hook templates (deny-dangerous.sh, etc.)
-templates/                 # Standalone prompt templates used by skills
 evaluation/                # Critique prompt templates
-reference/security/        # Security reference docs (api-auth.md, web-common.md)
 ```
 
 ## scripts/ -- Shell scripts

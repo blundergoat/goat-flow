@@ -1,41 +1,58 @@
 /**
  * Constraints concern: Do deterministic rules catch failures before the LLM runs?
- * 4 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell, ask-first.
+ * 3 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell.
  */
-import type { QualityCheck } from "../types.js";
-import { pass, partial, fail } from "./helpers.js";
+import type { HarnessCheck, AuditContext } from "../types.js";
+import { pass, fail } from "./helpers.js";
 
-const denyCoversSecrets: QualityCheck = {
-  id: "deny-covers-secrets",
-  concern: "constraints",
-  weight: 3,
-  run: (ctx) => {
-    const covered: string[] = [];
-    const uncovered: string[] = [];
-    for (const af of ctx.agents) {
-      if (af.hooks.readDenyCoversSecrets) {
-        covered.push(af.agent.id);
-      } else {
-        uncovered.push(af.agent.id);
-      }
+function classifySecretDeny(ctx: Pick<AuditContext, "agents">) {
+  const covered: string[] = [];
+  const uncovered: string[] = [];
+  const scriptOnly: string[] = [];
+  for (const af of ctx.agents) {
+    if (af.hooks.readDenyCoversSecrets) {
+      covered.push(af.agent.id);
+    } else if (af.agent.denyMechanism.type === "deny-script") {
+      scriptOnly.push(af.agent.id);
+    } else {
+      uncovered.push(af.agent.id);
     }
-    if (covered.length === 0) {
-      return partial(
-        30,
-        ["Deny patterns do not cover secret file reads"],
-        ["Add deny patterns for .env, credentials, and key files"],
-        [
-          "Add deny patterns for .env, .credentials, *.key, and *.pem files in the agent's deny configuration.",
-        ],
+  }
+  return { covered, uncovered, scriptOnly };
+}
+
+const denyCoversSecrets: HarnessCheck = {
+  id: "deny-covers-secrets",
+  name: "Deny covers secret files",
+  concern: "constraints",
+  run: (ctx) => {
+    const { covered, uncovered, scriptOnly } = classifySecretDeny(ctx);
+
+    if (covered.length === 0 && uncovered.length === 0) {
+      // All agents are script-only — platform limitation, not a failure
+      return pass([
+        "No agents support settings-based deny patterns",
+        ...scriptOnly.map(
+          (id) =>
+            `${id}: script-based deny only — file-read deny not available`,
+        ),
+      ]);
+    }
+    const findings: string[] = [];
+    if (covered.length > 0) {
+      findings.push(`${covered.join(", ")}: deny patterns cover secrets`);
+    }
+    if (scriptOnly.length > 0) {
+      findings.push(
+        `${scriptOnly.join(", ")}: script-based deny only — file-read deny not available`,
       );
     }
     if (uncovered.length > 0) {
-      return partial(
-        60,
-        [
-          `${covered.join(", ")}: deny patterns cover secrets`,
-          `${uncovered.join(", ")}: deny patterns missing secret file coverage`,
-        ],
+      findings.push(
+        `${uncovered.join(", ")}: deny patterns missing secret file coverage`,
+      );
+      return fail(
+        findings,
         [
           `Add deny patterns for .env, credentials, and key files to ${uncovered.join(", ")}`,
         ],
@@ -44,14 +61,14 @@ const denyCoversSecrets: QualityCheck = {
         ],
       );
     }
-    return pass([`${covered.join(", ")}: deny patterns cover secrets`]);
+    return pass(findings);
   },
 };
 
-const denyBlocksDangerous: QualityCheck = {
+const denyBlocksDangerous: HarnessCheck = {
   id: "deny-blocks-dangerous",
+  name: "Deny blocks dangerous commands",
   concern: "constraints",
-  weight: 3,
   run: (ctx) => {
     if (ctx.agents.length === 0) {
       return fail(["No agents to check"], ["Configure at least one agent"]);
@@ -59,13 +76,13 @@ const denyBlocksDangerous: QualityCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
-    let allPass = true;
+    let anyFail = false;
     for (const af of ctx.agents) {
       const { denyBlocksRmRf, denyBlocksForcePush, denyBlocksChmod } = af.hooks;
       if (denyBlocksRmRf && denyBlocksForcePush && denyBlocksChmod) {
         findings.push(`${af.agent.id}: deny blocks rm -rf, force-push, chmod`);
       } else {
-        allPass = false;
+        anyFail = true;
         const missing: string[] = [];
         if (!denyBlocksRmRf) missing.push("rm -rf");
         if (!denyBlocksForcePush) missing.push("force-push");
@@ -81,15 +98,15 @@ const denyBlocksDangerous: QualityCheck = {
         );
       }
     }
-    if (allPass) return pass(findings);
-    return partial(50, findings, recs, fixes);
+    if (anyFail) return fail(findings, recs, fixes);
+    return pass(findings);
   },
 };
 
-const denyBlocksPipeToShell: QualityCheck = {
+const denyBlocksPipeToShell: HarnessCheck = {
   id: "deny-blocks-pipe-to-shell",
+  name: "Deny blocks pipe-to-shell",
   concern: "constraints",
-  weight: 2,
   run: (ctx) => {
     const covered: string[] = [];
     const uncovered: string[] = [];
@@ -106,8 +123,7 @@ const denyBlocksPipeToShell: QualityCheck = {
       ]);
     }
     if (covered.length === 0) {
-      return partial(
-        30,
+      return fail(
         ["No agents block pipe-to-shell pattern (curl | bash)"],
         ["Add deny pattern for pipe-to-shell commands"],
         [
@@ -115,8 +131,7 @@ const denyBlocksPipeToShell: QualityCheck = {
         ],
       );
     }
-    return partial(
-      60,
+    return fail(
       [`${uncovered.join(", ")}: pipe-to-shell not blocked`],
       [`Add pipe-to-shell deny pattern to ${uncovered.join(", ")}`],
       [
@@ -126,70 +141,8 @@ const denyBlocksPipeToShell: QualityCheck = {
   },
 };
 
-/** Consolidated: ask-first-boundaries + ask-first-structural-sync */
-const askFirst: QualityCheck = {
-  id: "ask-first",
-  concern: "constraints",
-  weight: 2,
-  run: (ctx) => {
-    const boundaries = ctx.config.config.askFirst;
-
-    // No boundaries at all
-    if (boundaries.length === 0) {
-      return pass([
-        "No structured ask_first boundaries configured; treat instruction files as the source of truth",
-      ]);
-    }
-
-    // Check structural sync with instruction files
-    const configPaths = boundaries.map((b) => b.path);
-    const normalizePath = (p: string) =>
-      p.replace(/\/\*\*$/, "").replace(/\/$/, "");
-
-    const findings: string[] = [];
-    const recs: string[] = [];
-    let allSynced = true;
-
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists || !af.instruction.content) {
-        findings.push(`${af.agent.id}: no instruction file to check`);
-        allSynced = false;
-        continue;
-      }
-      const lower = af.instruction.content.toLowerCase();
-      const notMentioned = configPaths.filter(
-        (p) => !lower.includes(normalizePath(p).toLowerCase()),
-      );
-      if (notMentioned.length === 0) {
-        findings.push(
-          `${af.agent.id}: all ${configPaths.length} ask_first paths mentioned`,
-        );
-      } else {
-        findings.push(
-          `${af.agent.id}: ${notMentioned.length} ask_first paths not in instruction file`,
-        );
-        recs.push(
-          `Sync ask_first boundaries in ${af.agent.instructionFile} to match config.yaml`,
-        );
-        allSynced = false;
-      }
-    }
-
-    if (allSynced) {
-      return pass([
-        `${boundaries.length} ask_first boundaries configured`,
-        ...findings,
-      ]);
-    }
-    return partial(40, findings, recs, [
-      "Add missing ask_first paths from config.yaml to the Ask First / Autonomy Tiers section of the instruction file.",
-    ]);
-  },
-};
-
-export const CONSTRAINTS_CHECKS: QualityCheck[] = [
+export const CONSTRAINTS_CHECKS: HarnessCheck[] = [
   denyCoversSecrets,
   denyBlocksDangerous,
   denyBlocksPipeToShell,
-  askFirst,
 ];

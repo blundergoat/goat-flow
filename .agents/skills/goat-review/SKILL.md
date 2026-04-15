@@ -20,7 +20,7 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 ## Step 0 - Choose Depth
 
-> "Reviewing [X] -- quick review, or full review with audit depth and DoD cross-checks?"
+> "Reviewing [X] -- diff review (quick), or area audit with DoD cross-checks (full)?"
 
 - If user already says "quick" or "full", confirm and continue.
 - If arriving from the dispatcher with depth already chosen, skip the depth question.
@@ -29,9 +29,9 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Footgun check:** Read `.goat-flow/footguns/` for entries mentioning the target area. Present matches.
 
-## Quick Review Path
+## Diff Review (Quick)
 
-Read the diff quickly and present findings by severity; keep moving unless user interrupts.
+Read the diff and present findings by severity; keep moving unless user interrupts.
 
 ### Severity-Ordered Scan
 
@@ -51,7 +51,7 @@ Read full files for context. Ignore pre-existing issues.
 
 **DoD gate:** (1) tests/lint pass (2) no broken cross-references (3) no unapproved boundary changes (4) grep old pattern after renames.
 
-## Audit Mode
+## Area Audit (Full)
 
 When target is a codebase area (not a diff). For >20 files, recommend splitting.
 

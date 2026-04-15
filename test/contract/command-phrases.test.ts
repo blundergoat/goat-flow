@@ -16,7 +16,7 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 function makePassingReport(): AuditReport {
   return {
     command: "audit",
-    quality: false,
+    harness: false,
     status: "pass",
     target: "/tmp/test",
     scopes: {
@@ -26,7 +26,7 @@ function makePassingReport(): AuditReport {
         failures: [],
         summary: { skills: "7/7 installed" },
       },
-      harness: {
+      agent: {
         status: "pass",
         checks: [],
         failures: [],
@@ -34,11 +34,11 @@ function makePassingReport(): AuditReport {
           toolchain: "test + lint configured",
           hooks: "claude:deny installed",
         },
-        score: 100,
       },
+      harness: null,
     },
     concerns: null,
-    overall: { status: "pass", grade: null, qualityScore: null },
+    overall: { status: "pass" },
   };
 }
 

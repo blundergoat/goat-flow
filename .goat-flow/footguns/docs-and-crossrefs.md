@@ -2,20 +2,6 @@
 category: docs-and-crossrefs
 ---
 
-## Footgun: Concept duplication across core docs (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-03-18 | **Resolved:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A user reads conflicting descriptions of the same concept in different files. An agent follows a rule from one file that contradicts another.
-
-**Why it happens:** The execution loop, autonomy tiers, anti-pattern table, and other core concepts were historically described in `docs/system-spec.md`, `docs/five-layers.md`, `docs/getting-started.md`, and `docs/design-rationale.md` (all retired in v1.1.0). Updating one without updating the others created drift.
-
-**Resolution:** All four conflicting files retired in v1.1.0. `workflow/setup/reference/execution-loop.md` is now the single authoritative source for the execution loop; `workflow/setup/01-system-overview.md` for design intent. The risk of duplication in the replacement structure remains in principle, but the specific multi-file drift described here is eliminated.
-
-**Prevention:** When editing a core concept, grep for the concept name across all docs and update every occurrence.
-
----
-
 ## Footgun: Cross-reference fragility across docs
 
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
@@ -37,127 +23,9 @@ category: docs-and-crossrefs
 
 ---
 
-## Footgun: Stale references from old project structure
+## Resolved Entries (additional)
 
-**Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Settings, paths, or documentation reference `ai-workflow-framework` (the old project name) instead of `goat-flow`.
-
-**Why it happens:** The project was renamed from `ai-workflow-framework` to `goat-flow`. Not all references were updated.
-
-**Evidence:**
-- `.claude/settings.local.json` → contained absolute paths referencing the old project name (file is gitignored, not tracked)
-
-**Prevention:** After any project-level rename, run `grep -r "old-name" --include="*.md" --include="*.json"` across the entire repo.
-
----
-
-## Footgun: Product surface count drift across code, docs, config, and tests
-
-**Status:** resolved | **Created:** 2026-04-11 | **Resolved:** 2026-04-14 | **Evidence:** OBSERVED
-
-**Symptoms:** The repo describes different skill counts in different places. Code says 7, config says 6, README says "Six", docs say "Five+dispatcher", tests say 5 or 6. External critics independently flagged this as a trust problem - the system sells coherence but can't maintain it internally.
-
-**Why it happens:** When a new skill is added (goat-sbao was extracted from goat-plan), the skill template file and constants.ts get updated, but secondary surfaces don't. These secondary surfaces have no automated check linking them to the canonical SKILL_NAMES constant.
-
-**Evidence (14 bugs found 2026-04-11, status updated 2026-04-12):**
-- ~~`src/cli/prompt/template-refs.ts:108` - SKILL_TEMPLATES has 6 entries, missing goat-sbao~~ FIXED: now has 7
-- ~~`src/cli/prompt/fragments/foundation.ts:23,60,237` - hardcodes `v1.0` in a v1.1.0 release~~ FIXED
-- ~~`.goat-flow/config.yaml:12` - skills.install lists 6 skills, goat-sbao absent~~ FIXED: now lists 7
-- ~~`.goat-flow/config.yaml:40` - references `scripts/context-validate.sh`~~ FIXED: config no longer references this
-- ~~`src/cli/config/reader.ts:20-35` - KNOWN_TOP_LEVEL_KEYS missing `known-gaps` and `skill-overrides`~~ FIXED
-- ~~`README.md:89` - "Six structured workflows"~~ FIXED: now says "Seven"
-- ~~`README.md:91` - overclaims post-turn hooks; `workflow/hooks/README.md:29` contradicts~~ FIXED: README now accurately describes deny-dangerous.sh only
-- ~~`docs/skills.md.md:1` - "Five focused capabilities", diagram omits goat-sbao~~ FIXED: now says "Seven"
-- ~~`workflow/setup/04-architecture-code-map.md:38` - "Skills do NOT read templates at runtime"~~ FIXED
-- ~~`src/cli/prompt/fragments/standard.ts:617` - still creates `.goat-flow/coding-standards/`~~ FIXED: line 617 is now learning-loop code, not coding-standards creation
-- `src/cli/classify-state.ts:133-145` - marks "healthy" from config version + skills + instruction + preamble - DESIGN CHOICE (shallow but intentional)
-- ~~rubric/full.ts:129 - check named "Skill conventions" but checks skill-preamble.md~~ FIXED: file restructured to standard/promoted.ts
-- ~~`workflow/skills/goat-plan.md:115,175` - inline mode contradicts "MUST write" constraint~~ FIXED: inline is for Hotfix/Small Feature only; Standard+ requires files. No contradiction.
-- ~~`src/cli/facts/shared/learning-loop.ts:112` - `listMarkdownEntries()` only handles directories, not flat files~~ FIXED
-- ~~`test/unit/evaluate-check.test.ts` - skill count updated to 7~~ FIXED
-- ~~`.goat-flow/architecture.md:27,55` - stale paths~~ FIXED: paths now current
-
-**Root cause:** No automated check validates that the canonical SKILL_NAMES is reflected consistently across README, docs, config, template-refs, test fixtures, and setup fragments. Each surface drifts silently.
-
-**Prevention:**
-1. Add a contract test: SKILL_NAMES.length must match README, docs/skills.md, SKILL_TEMPLATES, and config.yaml skills.install
-2. After adding/removing any skill, grep for the old count: `grep -rn "Six\|six\|5 focused\|6 skills\|All 6" --include="*.md" --include="*.ts"`
-3. `scripts/preflight-checks.sh` should verify SKILL_NAMES count across all surfaces
-
----
-
-## Footgun: Skill template paths use framework-local paths instead of project-local paths
-
-**Status:** resolved | **Created:** 2026-04-11 | **Resolved:** 2026-04-12 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Installed skills reference `workflow/templates/*.md` which only exists in the goat-flow repo, not in projects where skills are installed. The dispatcher's Planning Route hits dead ends. Security and test skills can't find their extracted mode templates.
-
-**Why it happens:** When content is extracted from skills to `workflow/templates/` in the goat-flow repo, the skill file references use the framework-local path (`workflow/templates/`) instead of the project-local path (`.goat-flow/templates/`). Skills are installed verbatim, so the framework path ships to every project.
-
-**Evidence:**
-- ~~`workflow/skills/goat.md:25,26` - referenced `workflow/templates/`~~ FIXED: now uses `.goat-flow/templates/`
-- ~~`workflow/skills/goat-security.md:71` - referenced `workflow/templates/compliance-checklist.md`~~ FIXED: now uses `.goat-flow/templates/`
-- ~~`workflow/skills/goat-test.md:108,145` - referenced `workflow/templates/flow-diagram-guide.md`~~ FIXED: now uses `.goat-flow/templates/`
-- R9 critiques: 6/7 projects flagged broken template references as a top finding
-
-**Prevention:** After ANY content extraction to `workflow/templates/`, grep all skill files for `workflow/templates/` and replace with `.goat-flow/templates/`. The rule: skill files must only reference paths that exist on the PROJECT, not paths that exist in the goat-flow REPO.
-
----
-
-## Footgun: Refactor cleanup doesn't reach bash script conditional guards
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** `preflight-checks.sh` shows `⊘ Version check (missing package.json or version.ts) (skipped)` on every run. 74 lines of validation - config.yaml version, CHANGELOG version, instruction file header version, rubric change detection - never execute. No error is thrown. The preflight passes and reports "18 checks" while silently skipping an entire section.
-
-**Why it happens:** `scripts/preflight-checks.sh:148` gates the entire version-consistency section on `[[ -f src/cli/rubric/version.ts ]]`. That file was deleted in the M27 scanner removal. The bash `if ... else skip; fi` pattern silently converts a deleted-file guard into a permanent skip. TypeScript refactors are caught by the compiler; bash conditional guards referencing deleted files are not caught by anything.
-
-**Evidence:**
-- `scripts/preflight-checks.sh:148` - `if [[ -f package.json ]] && [[ -f src/cli/rubric/version.ts ]]; then`
-- `scripts/preflight-checks.sh:148-221` - 74 lines inside the dead block: config version check, CHANGELOG version, instruction file headers, rubric change detection
-- `scripts/preflight-checks.sh:220` - skip message: "missing package.json or version.ts" (implies `version.ts` is the problem, but `package.json` obviously exists)
-- `scripts/preflight-checks.sh:159` and `.github/workflows/ci.yml:62` - both had stale error message "RUBRIC_VERSION not found in version.ts" (resolved in M29)
-
-**Pattern:** Refactor cleanup has three predictable failure surfaces that get missed:
-1. **Bash conditional guards** - `if [[ -f deleted-file ]]; then ... else skip; fi` silently become permanent skips
-2. **Developer documentation** - `docs/coding-standards/`, CONTRIBUTING.md sections describing deleted architecture
-3. **Error message strings** - CI `echo "::error::..."` and bash `fail "..."` messages that name deleted files
-
-**Prevention:** After any file deletion as part of a refactor:
-1. `grep -rn "deleted-filename" scripts/ .github/` - finds bash guards and CI error messages
-2. `grep -rn "deleted-filename" docs/ CONTRIBUTING.md` - finds developer doc references  
-3. For bash scripts specifically: look for `[[ -f path ]]` guards where `path` is the deleted file - these become silent skips, not errors
-
-scripts/preflight-checks.sh:148 now gates only on package.json (not rubric/version.ts); version consistency runs unconditionally. Preflight passes ✓ Version Consistency (2026-04-13).
-
----
-
-## Footgun: Partial feature removal leaves type and detection artifacts (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Copilot was removed as a supported agent but artifacts remain in five places. The `.github/skills` detection path in classify-state.ts and dashboard.ts is the dangerous one: a project with `.github/skills/goat-debug/SKILL.md` gets partial-state credit for a skill "installed" for an agent that doesn't exist in the audit system. State detection reports "partial" based on a path no supported agent ever populates.
-
-**Why it happens:** Feature removal typically targets the primary implementation surface (audit checks, VALID_RUNNERS, agent profiles). Downstream artifacts - type unions, UI name mappers, terminal runner maps, skill-root arrays - are secondary surfaces that don't break at runtime and are easy to miss in a removal PR.
-
-**Evidence:**
-- `src/cli/server/types.ts:21` - `Runner = "claude" | "codex" | "gemini" | "copilot"` (type drift)
-- `src/dashboard/views/home.html:396` - `copilot: 'Copilot'` in agent name mapper (UI dead branch)
-- `src/cli/server/terminal.ts:39` - `copilot: "copilot"` in runner spawn map
-- `src/cli/classify-state.ts:38` - `.github/skills` in SKILL_ROOTS (correctness bug: inflates skill detection)
-- `src/cli/server/dashboard.ts:614` - `.github/skills` in per-agent skill root check (same bug, second location)
-- All five confirmed by grep 2026-04-13; no supported agent profile uses `.github/skills`
-
-**Prevention:** When removing a feature/agent from the audit system, grep for the feature name across all file types: `grep -rn "copilot\|github/skills" src/ --include="*.ts" --include="*.html"`. Type unions, UI name mappers, and skill-root arrays are specifically easy to miss. Checklist for agent removal:
-- [x] Remove from `Runner` type
-- [x] Remove from `VALID_RUNNERS`
-- [x] Remove from terminal runner map
-- [x] Remove from SKILL_ROOTS in classify-state.ts
-- [x] Remove from skill root arrays in dashboard.ts
-- [x] Remove from UI name mappers
-
-**All five items fixed in codebase by 2026-04-13.** Confirmed: `grep -rn "copilot" src/ --include="*.ts" --include="*.html"` returns only copilotignore detection lines.
+- **Stale references from old project structure** (resolved 2026-04-15) — `ai-workflow-framework` no longer appears anywhere in the repo (verified by `rg "ai-workflow-framework"`). Original evidence was in `.claude/settings.local.json` (gitignored, not tracked).
 
 ---
 
@@ -165,15 +33,15 @@ scripts/preflight-checks.sh:148 now gates only on package.json (not rubric/versi
 
 **Status:** active | **Created:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A doc claim like "16 build checks (12 setup + 4 harness)" passes the preflight because the total (16) is correct, even though the breakdown (12+4) is wrong (actual: 7+9). The sub-breakdown can be changed to any pair that sums to 16 and no automated check catches it.
+**Symptoms:** A doc claim like "16 build checks (12 setup + 4 harness)" passes the preflight because the total (16) is correct, even though the breakdown (12+4) could be wrong. The sub-breakdown can be changed to any pair that sums to 16 and no automated check catches it.
 
 **Why it happens:** `scripts/preflight-checks.sh` Doc/Code Drift section greps for `${build_count} build` in `.goat-flow/architecture.md` — a total-only check. There is no extraction or validation of the `(N scope + M scope)` parenthetical. This means the most useful part of the claim (the breakdown) is the least validated.
 
 **Evidence:**
 - `scripts/preflight-checks.sh:346` — `grep -q "${build_count} build" .goat-flow/architecture.md` validates total only
-- `.goat-flow/architecture.md:18` — was changed from "7+9" (correct) to "12+4" (wrong) on 2026-04-14. Preflight passed. Self-critique caught it.
+- `.goat-flow/architecture.md:18` — was changed from "7+9" to "12+4" on 2026-04-14. Preflight passed because the total (16) was still correct. Current verified breakdown is 12 setup + 4 agent (via `SETUP_CHECKS.length` and `AGENT_CHECKS.length`).
 
-**Prevention:** Add sub-breakdown validation: extract the `(N setup scope + M harness scope)` claim and validate N and M against `BUILD_CHECKS.filter(c => c.scope === 'setup').length` and `BUILD_CHECKS.filter(c => c.scope === 'harness').length`.
+**Prevention:** Add sub-breakdown validation: extract the `(N setup + M agent)` claim and validate N and M against `SETUP_CHECKS.length` and `AGENT_CHECKS.length`.
 
 ---
 
@@ -181,18 +49,10 @@ scripts/preflight-checks.sh:148 now gates only on package.json (not rubric/versi
 
 > Historical record. These entries are no longer active traps.
 
----
-
-## Footgun: Line target inconsistency for project shapes (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
-
-**Prevention:** Line target is 120 for all shapes, stated in `.goat-flow/decisions/ADR-029-instruction-budget-constraint.md` (`docs/system-spec.md` retired in v1.1.0). If this number appears differently in any other file, the ADR is canonical.
-
----
-
-## Footgun: CONTRIBUTING.md directs contributors to the wrong subsystem (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-13 | **Evidence:** ACTUAL_MEASURED
-
-CONTRIBUTING.md was rewritten. The "How to Add a New Audit Check" section now correctly describes both systems: build checks in `src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts` (8 checks, CI gate) and quality checks in `src/cli/audit/harness/` (18 checks, advisory). No reference to `src/cli/rubric/` remains. `src/cli/rubric/` was removed in v1.1.0.
+- **Concept duplication across core docs** (resolved 2026-04-14) — Retired 4 conflicting doc files in v1.1.0; `workflow/setup/reference/execution-loop.md` is now the single authoritative source.
+- **Product surface count drift across code, docs, config, and tests** (resolved 2026-04-14) — Fixed 14 inconsistencies where skill counts diverged across README, docs, config, templates, and tests after goat-sbao extraction.
+- **Skill template paths use framework-local paths instead of project-local paths** (resolved 2026-04-12) — Changed skill template references from `workflow/templates/` to `.goat-flow/templates/` so paths resolve on consumer projects.
+- **Refactor cleanup doesn't reach bash script conditional guards** (resolved 2026-04-13) — Removed dead `[[ -f src/cli/rubric/version.ts ]]` guard that silently skipped 74 lines of version-consistency checks.
+- **Partial feature removal leaves type and detection artifacts** (resolved 2026-04-14) — Removed Copilot from type unions, UI name mappers, terminal runner maps, and SKILL_ROOTS after agent removal.
+- **Line target inconsistency for project shapes** (resolved 2026-03-18) — Line target canonicalized to 120 for all shapes in ADR-029.
+- **CONTRIBUTING.md directs contributors to the wrong subsystem** (resolved 2026-04-13) — Rewritten to describe build checks in `check-goat-flow.ts` + `check-agent-setup.ts` and quality checks in `src/cli/audit/harness/`.

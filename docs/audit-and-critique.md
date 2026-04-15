@@ -6,7 +6,7 @@ goat-flow has two evaluation commands. `audit` is deterministic - it runs checks
 
 ```bash
 goat-flow audit .                              # Build correctness (pass/fail)
-goat-flow audit . --harness                    # Build + advisory quality scoring
+goat-flow audit . --harness                    # Include AI harness completeness checks
 goat-flow audit . --agent claude               # Scope to one agent
 goat-flow critique . --agent claude            # Generate critique prompt for Claude
 ```
@@ -14,20 +14,20 @@ goat-flow critique . --agent claude            # Generate critique prompt for Cl
 | Command | Output | Deterministic? | Gates CI? | Requires --agent? |
 |---------|--------|---------------|-----------|-------------------|
 | `audit` | Pass/fail per scope | Yes | Yes - exit 1 on failure | No (checks all configured agents) |
-| `audit --harness` | Grade per concern + recommendations | Yes | Never | No |
+| `audit --harness` | Pass/fail per harness concern | Yes | Yes - exit 1 on failure | No |
 | `critique` | Prompt for an agent | No - generates a prompt | Never | Yes |
 
 ---
 
 ## `goat-flow audit`
 
-Validates that the project's agent harness is structurally correct and optionally scores its quality.
+Validates that the project's agent harness is structurally correct and complete. All checks are pass/fail.
 
 ### Build mode (default)
 
 Binary pass/fail. This is the structural setup gate - it validates that files, config, skills, and hooks are correctly installed. It does not execute configured toolchain commands (lint, test, build). Step 06 uses `audit` as the minimum gate; preflight runs `audit` plus additional checks including ESLint, Prettier, and version consistency.
 
-Build checks are grouped by **scope**:
+Checks are grouped by **scope**:
 
 **setup scope** (GOAT Flow Setup) - goat-flow-owned surfaces:
 - Required files and directories from the project manifest exist
@@ -40,62 +40,47 @@ Build checks are grouped by **scope**:
 - Agent artifacts (hooks/settings) are consistent with instruction file presence (`agent-artifacts-consistent` - closes aggregate vacuous-pass)
 - Preamble and conventions files present (enforced via `required-files` check)
 
-**harness scope** (AI Harness Score) - project integration surfaces:
-- Toolchain commands configured (test, lint, build)
+**agent scope** (Agent Setup) - per-agent integration surfaces:
+- Agent instruction file exists
+- Agent skills installed with correct versions
 - Agent settings/config files parse
-- Hook files exist for configured agents
-- Hook scripts pass syntax check (`bash -n`)
 - Deny patterns registered in agent settings
-
-**What 100% harness score means:** hooks are correctly installed and syntactically valid. It does not mean hooks are actively enforcing - hooks ship in advisory mode by default (always exit 0, never block the agent). Use `goat-flow audit . --harness` to see the verification concern score, which checks whether enforcement mode is enabled.
 
 **Agent detection:** `audit` detects which agents are configured from the presence of instruction files (CLAUDE.md, AGENTS.md, GEMINI.md). Use `--agent claude|codex|gemini` to scope checks to a single agent.
 
-### Quality mode (`--harness`)
+### Harness mode (`--harness`)
 
-Advisory scoring on top of build checks. Never blocks CI. Never affects the exit code.
+Adds 15 pass/fail checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Like all audit checks, they are deterministic and affect the exit code.
 
-Quality findings are grouped by **concern** - the five things every major harness engineering source agrees matter for agent effectiveness. See [harness-concerns.md](harness-concerns.md) for what each concern means and what goat-flow checks.
+Harness checks are grouped by **concern** -- the five things every major harness engineering source agrees matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
-Sample quality output:
+**harness scope** (AI Harness Completeness) - 15 checks across 5 concerns:
+- **Context** (3) - instruction file within line limit, execution loop present, doc paths resolve
+- **Constraints** (3) - deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell
+- **Verification** (4) - test runner configured, hooks in sync, commit guidance, post-turn hook integrity
+- **Recovery** (3) - milestone tracking, session logs, compaction hook
+- **Feedback Loop** (2) - feedback loop directories exist, decisions tracked
+
+Sample harness output:
 
 ```
-GOAT Flow Setup:     PASS
-  Skills:            7/7 installed
-  Config:            valid, version 1.1.0
-  InstructionFile:   118 lines
+GOAT Flow Setup:          PASS
+  Skills:                 7/7 installed
+  Config:                 valid, version 1.1.0
+  InstructionFile:        118 lines
 
-AI Harness Score:    PASS (100%)
-  Toolchain:         test + lint + build configured
-  Hooks:             claude:deny installed, codex:deny installed, gemini:deny installed
+Agent Setup:              PASS
+  Toolchain:              test + lint + build configured
+  Hooks:                  claude:deny installed, codex:deny installed, gemini:deny installed
 
-Result: PASS
+AI Harness Completeness:  PASS
+  Context:                PASS (3/3)
+  Constraints:            FAIL (2/3) - pipe-to-shell not blocked for codex
+  Verification:           PASS (4/4)
+  Recovery:               PASS (3/3)
+  Feedback Loop:          PASS (2/2)
 
-Quality by harness concern:
-
-  Context (75%)
-    architecture.md exists but was last updated 3 months ago
-    2 dead router table paths detected
-    -> Update stale file:line references in .goat-flow/footguns/
-
-  Constraints (30%)
-    PHPStan detected but not registered in toolchain.lint
-    -> Register PHPStan as a constraint in config.yaml
-
-  Verification (60%)
-    Test command configured: npm test
-    No testing gates found in .goat-flow/tasks/ milestone files
-    -> Add testing gates to active milestone files
-
-  Recovery (80%)
-    Milestone files active, session logs current
-
-  Feedback Loop (40%)
-    2 footguns added in 4 months
-    No lessons since Feb
-    -> Add retrospective entries to .goat-flow/lessons/ after incidents
-
-Overall Quality: C (57%)
+Result: FAIL (Constraints)
 ```
 
 ---
@@ -131,7 +116,7 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 
 - As a setup gate (use `audit`)
 - As a CI check (use `audit`)
-- As a replacement for `audit --harness` (critique is subjective; quality scoring is deterministic)
+- As a replacement for `audit --harness` (critique is subjective; harness completeness checks are deterministic)
 
 ---
 
@@ -139,13 +124,13 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 
 ```
 goat-flow audit .              →  "Is it installed correctly?"        →  Fix structural issues
-goat-flow audit . --harness    →  "Is the harness effective?"         →  Improve weak concerns
+goat-flow audit . --harness    →  "Is the harness complete?"          →  Fix failing concerns
 goat-flow critique . --agent X →  "What does an agent actually think?" →  Get fresh perspective
 ```
 
 Typical workflow after setup:
 1. Run `audit` - fix any build failures
-2. Run `audit --harness` - review the 5-concern scorecard, address top recommendations
+2. Run `audit --harness` - fix any failing harness completeness checks
 3. Run `critique` - paste into an agent session, get a subjective review
 4. Feed findings back into the harness (footguns, lessons, constraints) - the feedback loop
 
@@ -153,4 +138,4 @@ Typical workflow after setup:
 
 ## Further reading
 
-- [The five harness concerns](harness-concerns.md) - what each concern means, what goat-flow checks for it, and the sources behind the model
+- [Harness engineering](harness-engineering.md) - what each concern means and the sources behind the model

@@ -23,7 +23,6 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   "skills",
   "line-limits",
   "toolchain",
-  "ask_first",
   "userRole",
   "telemetry",
   "known-gaps",
@@ -48,7 +47,6 @@ const CONFIG_DEFAULTS: GoatFlowConfig = {
     package: [],
     format: [],
   },
-  askFirst: [],
   userRole: "developer",
   telemetry: false,
   knownGaps: [],
@@ -74,7 +72,6 @@ function cloneDefaults(): GoatFlowConfig {
       package: [...CONFIG_DEFAULTS.toolchain.package],
       format: [...CONFIG_DEFAULTS.toolchain.format],
     },
-    askFirst: CONFIG_DEFAULTS.askFirst.map((entry) => ({ ...entry })),
     userRole: CONFIG_DEFAULTS.userRole,
     telemetry: CONFIG_DEFAULTS.telemetry,
     knownGaps: [...CONFIG_DEFAULTS.knownGaps],
@@ -141,20 +138,6 @@ function mergeToolchain(value: unknown, merged: GoatFlowConfig): void {
   merged.toolchain.format = normalizeCommandList(value.format);
 }
 
-/** Apply ask_first path/reason entries from the raw config. */
-function mergeAskFirst(value: unknown, merged: GoatFlowConfig): void {
-  if (!Array.isArray(value)) return;
-  merged.askFirst = value
-    .filter(isRecord)
-    .map((entry) => ({
-      path: typeof entry.path === "string" ? entry.path : "",
-      reason: typeof entry.reason === "string" ? entry.reason : "",
-    }))
-    .filter(
-      (entry) => entry.path.trim().length > 0 && entry.reason.trim().length > 0,
-    );
-}
-
 /** Valid userRole values accepted in the config file. */
 const KNOWN_USER_ROLES = new Set(["developer", "investigator", "tester"]);
 
@@ -188,7 +171,6 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   // YAML key is `line-limits` (kebab-case), TypeScript field is `lineLimits` (camelCase)
   mergeLineLimits(raw["line-limits"], merged);
   mergeToolchain(raw.toolchain, merged);
-  mergeAskFirst(raw.ask_first, merged);
   mergeUserRole(raw.userRole, merged);
   if (typeof raw.telemetry === "boolean") merged.telemetry = raw.telemetry;
 
@@ -226,17 +208,6 @@ function pushWarning(
   message: string,
 ): void {
   warnings.push({ level: "warning", path, message });
-}
-
-/** Require a non-empty string wherever the schema expects a path value. */
-function validateStringPath(
-  value: unknown,
-  path: string,
-  errors: ValidationIssue[],
-): void {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    pushError(errors, path, "must be a non-empty string");
-  }
 }
 
 /** Shorthand for a loosely-typed parsed YAML config object. */
@@ -356,44 +327,6 @@ function validateToolchainField(
   });
 }
 
-/** Validate the structured ask_first boundaries. */
-function validateAskFirstField(
-  raw: RawConfig,
-  _warnings: ValidationIssue[],
-  errors: ValidationIssue[],
-): void {
-  if (!("ask_first" in raw)) return;
-  const value = raw.ask_first;
-  if (!Array.isArray(value)) {
-    pushError(errors, "ask_first", "must be an array");
-    return;
-  }
-  for (const [index, entry] of value.entries()) {
-    if (!isRecord(entry)) {
-      pushError(errors, `ask_first[${index}]`, "must be an object");
-      continue;
-    }
-    if (!("path" in entry)) {
-      pushError(
-        errors,
-        `ask_first[${index}].path`,
-        "must be a non-empty string",
-      );
-    } else {
-      validateStringPath(entry.path, `ask_first[${index}].path`, errors);
-    }
-    if (!("reason" in entry)) {
-      pushError(
-        errors,
-        `ask_first[${index}].reason`,
-        "must be a non-empty string",
-      );
-    } else {
-      validateStringPath(entry.reason, `ask_first[${index}].reason`, errors);
-    }
-  }
-}
-
 /** Validate an explicit list of enabled agents. */
 function validateAgentList(
   agents: unknown[],
@@ -497,7 +430,6 @@ const CONFIG_VALIDATORS: ConfigValidator[] = [
   validateAgentsField,
   validateSkillsField,
   validateToolchainField,
-  validateAskFirstField,
   validateUserRoleField,
 ];
 

@@ -2,36 +2,6 @@
 category: hooks
 ---
 
-## Footgun: git diff --stat is unreliable for scope detection
-
-**Status:** resolved | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
-
-Skill templates rewritten in M17; this pattern no longer applies.
-
-goat-review (`.claude/skills/goat-review/SKILL.md:42`) and goat-test (`.claude/skills/goat-test/SKILL.md:45`) use `git diff --stat` to auto-detect what changed. In real local work this fails because:
-
-1. It shows unrelated changes (package.json, lockfiles) alongside the target
-2. It misses untracked files entirely
-3. On a dirty worktree with 20+ changed files, it gives no useful signal about what the user actually wants reviewed
-
-**Evidence:** Found by Codex on healthkit project. `git diff --stat` pointed at unrelated package.json changes instead of the goat-flow files or the code area the agent was asked about.
-
-**Impact:** Auto mode selection (Standard vs Audit) makes the wrong choice. Skills scope to the wrong files. The user has to manually override or accept wrong-scope output.
-
-**Fix:** M14 in `.goat-flow/tasks/0.10.0/M14-auto-mode-selection.md`. Priority order: (1) explicit user input, (2) staged changes, (3) unstaged changes to target area, (4) full git diff. If worktree is very dirty, ask user to specify scope.
-
----
-
-## Footgun: Advisory hooks create unfixable quality warning after setup (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-13 | **Resolved:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Users complete all 6 setup steps correctly. They run `audit --harness` and immediately see verification at 85% with recommendation "Set claude post-turn hook to exit non-zero on validation failure, or set GOAT_LINT_ENFORCE=1."
-
-**Resolution:** Hook scripts now ship in enforce mode by default (`GOAT_LINT_ENFORCE` defaults to 1). Users can opt out with `GOAT_LINT_ENFORCE=0`. The quality auditor correctly detects enforce vs advisory mode.
-
----
-
 ## Footgun: post-turn hook swallows failures with || true
 
 **Status:** resolved (goat-flow) / active (consumer projects) | **Created:** 2026-04-03 | **Updated:** 2026-04-14 | **Evidence:** ACTUAL_MEASURED
@@ -40,9 +10,9 @@ Consumer project post-turn hook scripts with `|| true` after lint/type-check com
 
 **Evidence (cross-project — not goat-flow's own hooks):** Found independently by Codex critiques on the-summit-chatroom (`.claude/hooks/stop-lint.sh:22`, `:29`, `:37` all swallow failure) and blundergoat-platform. Note: these line numbers are from those projects' hooks, not goat-flow's.
 
-**goat-flow status:** Resolved. goat-flow's own `stop-lint.sh` defaults to enforce mode (`GOAT_LINT_ENFORCE` defaults to 1) since v1.1.0.
+**goat-flow status:** Resolved. goat-flow removed `stop-lint.sh` from core in v1.1.0 (ADR-040). Post-turn lint hooks are project-specific, not shipped by goat-flow.
 
-**Consumer project status:** Still active for projects set up before the enforce-by-default change.
+**Consumer project status:** Still active for projects set up before v1.1.0 that have their own `stop-lint.sh` with `|| true` swallowing failures.
 
 **Related:** `deny-dangerous.sh` parses `.command // .input` but template says `.tool_input.command` per `workflow/hooks/deny-dangerous.sh`. (format-file.sh was removed from goat-flow core in v1.1.0 as a project-specific preference.)
 
@@ -50,50 +20,12 @@ Consumer project post-turn hook scripts with `|| true` after lint/type-check com
 
 ---
 
-## Footgun: Codex hooks registered in config.toml instead of hooks.json
+## Resolved Entries
 
-**Status:** resolved | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+> Historical record. These entries are no longer active traps.
 
-Codex hook registrations (`[hooks.stop]`, `[hooks.session_start]`, `[hooks.after_tool_use]`) were in `.codex/config.toml`. The official Codex docs (`developers.openai.com/codex/hooks`, `developers.openai.com/codex/config-reference`) specify hooks go in `.codex/hooks.json` — a separate file with a JSON structure matching Claude's settings.json hook format. config.toml only has `[features] codex_hooks = true` to enable the hooks engine.
-
-**Evidence:** `workflow/hooks/agent-config/codex.toml` (pre-fix) had `[hooks.session_start] command = "bash .codex/hooks/session-start.sh"`. The official config reference says hooks.json is the only hook definition surface. The TOML hook sections were silently ignored by Codex — hooks never actually fired.
-
-**Impact:** All Codex hooks (stop-lint, session-start, after-tool-use) were dead code. The audit's hook fact extraction parsed TOML and reported hooks as registered, masking the issue.
-
-**Fix:** Moved hook definitions to `.codex/hooks.json`. Updated fact extraction (`src/cli/facts/agent/hooks.ts`) to read hooks.json for Codex using the same `readHooksObject` + `normalizeEventConfig` functions Claude/Gemini use. Removed TOML hook parsing functions. Updated template, install script, and setup guide.
-
-**Prevention:** When adding agent-specific features, verify against the agent's official documentation — not assumptions from other agents' patterns. The fact that Claude uses settings.json for hooks doesn't mean Codex uses config.toml for hooks.
-
----
-
-## Footgun: Codex hook migrations drift across live files, templates, installer, and docs (RESOLVED)
-
-**Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Codex appears fully migrated to `hooks.json`, but one surface is still stale. The live repo can ship a `.codex/hooks.json` registration pointing at `.codex/hooks/deny-dangerous.sh` while the file is missing, or the installer/docs can describe a different set of hooks than the shipped template actually registers.
-
-**Why it happens:** Codex hook support spans four independently edited surfaces:
-
-1. live repo files under `.codex/`
-2. shipped templates under `workflow/hooks/agent-config/`
-3. installer copy logic in `workflow/install-goat-flow.sh`
-4. shared docs/setup guides
-
-Changing only some of those surfaces creates hybrid state: runtime registrations point at one file, templates describe another, and docs still carry the old mental model.
-
-**Evidence:**
-- `.codex/hooks.json:3-25` is the live Codex hook surface and registers both `PreToolUse` and `Stop`
-- `workflow/hooks/agent-config/codex-hooks.json:1-15` ships only the `PreToolUse` deny hook, so template and live repo are expected to differ once a project adds a Stop hook
-- `workflow/setup/agents/codex.md:37-39,52-55` and `docs/deny-dangerous.md:19,43` both require `.codex/hooks/deny-dangerous.sh` to exist as live runtime state
-- Observed on 2026-04-15 before repair: `.codex/hooks.json` referenced `.codex/hooks/deny-dangerous.sh`, but `.codex/hooks/` only contained `stop-lint.sh`
-
-**Impact:** The migration can look complete in config and docs while Codex command blocking is dead at runtime. Static checks and surface-level review miss it unless someone verifies the registered target file exists and smoke-tests the actual hook.
-
-**Resolution:** Restored `.codex/hooks/deny-dangerous.sh` from `workflow/hooks/deny-dangerous.sh`, corrected shared docs to describe Codex as `config.toml` + `hooks.json`, and fixed the installer/template comments so goat-flow core clearly ships the PreToolUse deny hook while Stop hooks remain project-specific.
-
-**Prevention:** After any Codex hook migration, verify all four surfaces together and run a runtime smoke test:
-
-1. confirm `.codex/hooks.json` target paths exist
-2. confirm templates describe the same installation model
-3. confirm installer comments and copy logic match the shipped templates
-4. pipe a known-blocked command payload into the installed hook and verify exit code `2`
+- **git diff --stat is unreliable for scope detection** (resolved 2026-04-03) — Skill templates rewritten in M17; auto-detect now uses staged changes first, then falls back to unstaged and full diff.
+- **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) — Hook scripts now ship in enforce mode by default (`GOAT_LINT_ENFORCE` defaults to 1).
+- **Codex hooks registered in config.toml instead of hooks.json** (resolved 2026-04-15) — Moved hook definitions to `.codex/hooks.json` per official Codex docs; TOML hook sections were silently ignored.
+- **Codex hook migrations drift across live files, templates, installer, and docs** (resolved 2026-04-15) — Restored missing `.codex/hooks/deny-dangerous.sh` and aligned all four Codex hook surfaces (live files, templates, installer, docs).
+- **Codex has no compaction notification hook** (active, platform limitation, 2026-04-15) — Codex `hooks.json` only supports `PreToolUse`. Claude and Gemini have `Notification` hooks on `compact` that help with context recovery. Codex agents lose this signal after compaction. Not fixable until Codex adds Notification hook support.

@@ -12,10 +12,9 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
 | Hook scripts | `workflow/hooks/` | Copyable hook scripts (deny-dangerous.sh) + per-agent config templates |
-| Templates | `workflow/templates/` | Standalone prompt templates for planning (feature brief, milestones, SBAO) and refactoring |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 16 build checks (12 setup scope + 4 harness scope) + 17 AI harness checks (advisory), interactive menu, audit-driven setup prompts, multi-agent support |
+| CLI auditor | `src/cli/` | 16 build checks (12 setup scope + 4 agent scope) + 15 AI harness checks (advisory), audit-driven setup prompts, multi-agent support |
 | Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for audit, critique, help, home, projects, settings, wizard, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -59,7 +58,7 @@ src/dashboard/
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. Skills, templates, and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
 
 ## Deliberate Trade-offs
 

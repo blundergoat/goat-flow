@@ -35,8 +35,8 @@ Usage:
   goat-flow [command] [project-path] [flags]
 
 Commands:
-  audit             Validate setup correctness (default)
-  critique          Quality assessment prompt (requires --agent)
+  audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
+  critique          Agent-driven quality assessment prompt (requires --agent)
   setup             Generate setup prompt (adapts to project state)
   status            Show project state (bare/partial/v0.9/v1.0/v1.1)
   dashboard         Launch browser dashboard with audit, setup, and terminal
@@ -46,7 +46,7 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: claude, codex, gemini
-  --harness         Audit: add advisory AI harness checks
+  --harness         Audit: add AI Harness Completeness scope (15 pass/fail checks across 5 concerns)
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes
@@ -55,7 +55,7 @@ Flags:
 
 Examples:
   goat-flow .                          Audit current directory
-  goat-flow audit . --harness          Audit with advisory harness grades
+  goat-flow audit . --harness          Audit with AI harness completeness checks
   goat-flow audit . --agent claude     Audit scoped to Claude
   goat-flow audit . --format json      JSON output for CI
   goat-flow setup --agent claude       Setup prompt for Claude
@@ -103,7 +103,7 @@ const MULTI_AGENT_SYNC_BANNER = [
 /** Fully resolved CLI options including the dispatched command */
 export interface ParsedCLI extends CLIOptions {
   command: Command;
-  quality: boolean;
+  harness: boolean;
 }
 
 /** Parse the positional subcommand from raw CLI args, defaulting to `audit`. */
@@ -200,7 +200,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     agent: parseAgentArg(values.agent),
     verbose: values.verbose === true,
     output: resolveOutputPath(values.output, positionals),
-    quality: values.harness === true,
+    harness: values.harness === true,
     dev: values.dev === true,
     help: values.help === true,
     version: values.version === true,
@@ -314,7 +314,7 @@ function handleInfoCommand(options: ParsedCLI): void {
   );
 }
 
-/** Run the audit command: validate setup correctness and optionally score quality. */
+/** Run the audit command: validate setup correctness and optionally check harness completeness. */
 async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   const { createFS } = await import("./facts/fs.js");
   const { runAudit } = await import("./audit/audit.js");
@@ -324,7 +324,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   const fs = createFS(options.projectPath);
   const report = runAudit(fs, options.projectPath, {
     agentFilter: options.agent ?? null,
-    quality: options.quality,
+    harness: options.harness,
   });
 
   let rendered: string;
@@ -363,7 +363,7 @@ async function handleCritiqueCommand(options: ParsedCLI): Promise<void> {
   try {
     auditReport = runAudit(fs, options.projectPath, {
       agentFilter: options.agent,
-      quality: true,
+      harness: true,
     });
   } catch {
     // Audit failure is fine - critique generates with degraded context
@@ -442,7 +442,7 @@ async function main(): Promise<void> {
   });
   const auditReport = runAudit(fs, options.projectPath, {
     agentFilter: options.agent ?? null,
-    quality: false,
+    harness: false,
   });
 
   await handleSetupCommand(options, auditReport, facts);

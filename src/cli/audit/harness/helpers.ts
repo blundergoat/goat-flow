@@ -1,39 +1,18 @@
 /**
- * Shared helpers for harness quality checks.
+ * Shared helpers for harness completeness checks (deterministic pass/fail).
  */
-import type { QualityCheckResult } from "../types.js";
+import type { HarnessCheckResult } from "../types.js";
 
-export function pass(findings: string[]): QualityCheckResult {
-  return { score: 100, findings, recommendations: [] };
-}
-
-export function partial(
-  score: number,
-  findings: string[],
-  recommendations: string[],
-  howToFix?: string[],
-): QualityCheckResult {
-  return { score, findings, recommendations, howToFix };
+export function pass(findings: string[]): HarnessCheckResult {
+  return { status: "pass", findings, recommendations: [] };
 }
 
 export function fail(
   findings: string[],
   recommendations: string[],
   howToFix?: string[],
-): QualityCheckResult {
-  return { score: 0, findings, recommendations, howToFix };
-}
-
-/** Extract YYYY-MM-DD dates from **Created:** lines in markdown content. */
-export function parseCreatedDates(content: string): Date[] {
-  const pattern = /\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2})/g;
-  const dates: Date[] = [];
-  let m;
-  while ((m = pattern.exec(content))) {
-    const d = new Date(m[1]! + "T00:00:00");
-    if (!isNaN(d.getTime())) dates.push(d);
-  }
-  return dates;
+): HarnessCheckResult {
+  return { status: "fail", findings, recommendations, howToFix };
 }
 
 /** Extract backtick-quoted file paths from markdown content. */

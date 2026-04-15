@@ -55,7 +55,7 @@ function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
 const agentInstruction: BuildCheck = {
   id: "agent-instruction",
   name: "Agent instruction file",
-  scope: "harness",
+  scope: "agent",
   run: (ctx) => {
     if (ctx.agentFilter) return checkInstructionPresent(ctx);
     return checkOrphanedArtifacts(ctx);
@@ -146,7 +146,7 @@ function checkDeprecatedSkills(ctx: AuditContext): AuditFailure | null {
 const agentSkills: BuildCheck = {
   id: "agent-skills",
   name: "Agent skills",
-  scope: "harness",
+  scope: "agent",
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
     return (
@@ -162,7 +162,7 @@ const agentSkills: BuildCheck = {
 const agentSettings: BuildCheck = {
   id: "agent-settings",
   name: "Agent settings",
-  scope: "harness",
+  scope: "agent",
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
     const invalid: string[] = [];
@@ -246,7 +246,7 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
 const agentDenyMechanism: BuildCheck = {
   id: "agent-deny-dangerous",
   name: "Agent deny mechanism",
-  scope: "harness",
+  scope: "agent",
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
     return (

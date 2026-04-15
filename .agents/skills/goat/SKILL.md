@@ -27,8 +27,8 @@ For planning requests, check `.goat-flow/tasks/` for existing plans first.
 |------------|----------|
 | Hotfix | Route to direct execution, no planning needed |
 | Small Feature | Compressed brief → `/goat-plan` for 1-2 milestones |
-| Standard | Feature brief → mob (optional) → `/goat-plan` |
-| System / Infrastructure | Feature brief → mob (recommended) → `/goat-plan` → suggest `/goat-sbao` |
+| Standard | Feature brief → `/goat-plan` (suggest `/goat-sbao` if approach uncertain) |
+| System / Infrastructure | Feature brief → `/goat-plan` → `/goat-sbao` (recommended) |
 
 ## Handoff
 

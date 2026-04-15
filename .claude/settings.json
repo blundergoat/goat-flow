@@ -60,17 +60,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/stop-lint.sh\""
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "matcher": "compact",

@@ -4,19 +4,19 @@
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness across two scopes: GOAT Flow Setup (pass/fail) and AI Harness Score (per-agent percentage). Default command when run without arguments.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (15 checks across 5 concerns). Default command when run without arguments.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one agent: claude, codex, gemini |
-| `--harness` | Add advisory quality scoring by harness concern |
+| `--harness` | Add AI Harness Completeness scope (third deterministic scope, pass/fail per concern) |
 | `--format <type>` | Output: json, text, markdown (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |
 
 ```bash
 npx goat-flow audit .                      # Audit current directory
-npx goat-flow audit . --harness            # Build + advisory quality grades
+npx goat-flow audit . --harness            # Include AI harness completeness checks
 npx goat-flow audit . --agent claude       # Audit scoped to Claude
 npx goat-flow audit . --format json        # JSON output for CI
 npx goat-flow audit . --output report.json # Write to file
@@ -64,7 +64,7 @@ Common tasks and the commands to run:
 | I want to... | Command |
 |--------------|---------|
 | Check if my project is ready | `npx goat-flow audit .` |
-| See advisory quality scores | `npx goat-flow audit . --harness` |
+| Check harness completeness | `npx goat-flow audit . --harness` |
 | Get a critique prompt | `goat-flow critique . --agent claude` |
 | Set up a new project | `goat-flow setup . --agent claude` |
 | Use this in CI | `npx goat-flow audit . --format json` |

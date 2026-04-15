@@ -1,136 +1,75 @@
 /**
- * Feedback Loop concern: Is the harness getting smarter from failures?
- * Consolidated from 4 → 2 checks (footgun-activity + lesson-activity + feedback-recency → feedback-loop-active).
+ * Feedback Loop concern: Are feedback loop directories in place?
+ * 2 checks: feedback-loop-active (directory existence), decisions-tracked.
+ * A fresh install with zero entries is a valid PASS.
  */
-import type { QualityCheck } from "../types.js";
-import { pass, partial } from "./helpers.js";
-import { parseCreatedDates } from "./helpers.js";
+import type { HarnessCheck } from "../types.js";
+import { pass, fail } from "./helpers.js";
 
-/** Consolidated: footgun-activity + lesson-activity + feedback-recency */
-const feedbackLoopActive: QualityCheck = {
+const feedbackLoopActive: HarnessCheck = {
   id: "feedback-loop-active",
+  name: "Feedback loop directories exist",
   concern: "feedback_loop",
-  weight: 3,
   run: (ctx) => {
-    const footgunCount = ctx.facts.shared.footguns.entryCount;
-    const lessonCount = ctx.facts.shared.lessons.entryCount;
-    const totalEntries = footgunCount + lessonCount;
-
-    // No entries at all
-    if (totalEntries === 0) {
-      return partial(
-        20,
-        ["No footgun or lesson entries logged"],
-        [
-          "Start logging footguns (architectural traps) and lessons (behavioral mistakes)",
-        ],
-        [
-          "Add entries to .goat-flow/footguns/ and .goat-flow/lessons/ as issues are discovered.",
-        ],
-      );
-    }
-
-    // Check recency
-    const allDates: Date[] = [];
-    const collectDates = (dirPath: string) => {
-      try {
-        for (const f of ctx.fs.listDir(dirPath)) {
-          if (!f.endsWith(".md")) continue;
-          const content = ctx.fs.readFile(`${dirPath}/${f}`);
-          if (content) allDates.push(...parseCreatedDates(content));
-        }
-      } catch {
-        // Directory doesn't exist
-      }
-    };
-    collectDates(ctx.config.config.footguns.path);
-    collectDates(ctx.config.config.lessons.path);
-
     const findings: string[] = [];
-    findings.push(`${footgunCount} footgun entries`);
-    findings.push(`${lessonCount} lesson entries`);
+    const missing: string[] = [];
 
-    if (allDates.length > 0) {
-      const now = new Date();
-      const ninetyDaysAgo = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 90,
-      );
-      const recentCount = allDates.filter((d) => d >= ninetyDaysAgo).length;
+    const footgunsDir = ctx.config.config.footguns.path;
+    const lessonsDir = ctx.config.config.lessons.path;
 
-      if (recentCount === 0) {
-        const newest = allDates.sort((a, b) => b.getTime() - a.getTime())[0]!;
-        const daysAgo = Math.round(
-          (now.getTime() - newest.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        findings.push(
-          `No entries in last 90 days (newest: ${daysAgo} days ago)`,
-        );
-        return partial(
-          40,
-          findings,
-          [
-            "Capture recent footguns and lessons to keep the feedback loop active",
-          ],
-          [
-            "Add new footgun or lesson entries from recent work to .goat-flow/footguns/ and .goat-flow/lessons/.",
-          ],
-        );
-      }
+    if (ctx.facts.shared.footguns.exists) {
       findings.push(
-        `${recentCount}/${allDates.length} feedback entries are from the last 90 days`,
+        `Footguns directory exists (${ctx.facts.shared.footguns.entryCount} entries)`,
       );
+    } else {
+      findings.push("Footguns directory missing");
+      missing.push(footgunsDir);
     }
 
-    if (totalEntries < 3) {
-      return partial(
-        60,
+    if (ctx.facts.shared.lessons.exists) {
+      findings.push(
+        `Lessons directory exists (${ctx.facts.shared.lessons.entryCount} entries)`,
+      );
+    } else {
+      findings.push("Lessons directory missing");
+      missing.push(lessonsDir);
+    }
+
+    if (missing.length > 0) {
+      return fail(
         findings,
-        ["Continue logging to build institutional memory"],
-        [
-          "Add more entries to .goat-flow/footguns/ and .goat-flow/lessons/ to build institutional memory.",
-        ],
+        [`Create missing directories: ${missing.join(", ")}`],
+        [`Create ${missing.join(" and ")} to enable the feedback loop.`],
       );
     }
-
     return pass(findings);
   },
 };
 
-const decisionsTracked: QualityCheck = {
+const decisionsTracked: HarnessCheck = {
   id: "decisions-tracked",
+  name: "Decisions directory exists",
   concern: "feedback_loop",
-  weight: 1,
   run: (ctx) => {
     const { decisions } = ctx.facts.shared;
     if (!decisions.dirExists) {
-      return partial(
-        30,
+      return fail(
         ["No decisions directory"],
         [
-          "Create .goat-flow/decisions/ and log significant technical decisions",
+          "Create .goat-flow/decisions/ for tracking significant technical decisions",
         ],
         [
           "Create .goat-flow/decisions/ and log significant technical decisions with context and rationale.",
         ],
       );
     }
-    if (decisions.fileCount === 0) {
-      return partial(
-        40,
-        ["Decisions directory empty"],
-        ["Log architectural decisions with context and rationale"],
-        [
-          "Add decision records to .goat-flow/decisions/ with rationale and alternatives considered.",
-        ],
-      );
-    }
-    return pass([`${decisions.fileCount} decision records`]);
+    return pass([
+      `Decisions directory exists (${decisions.fileCount} records)`,
+    ]);
   },
 };
 
-export const FEEDBACK_LOOP_CHECKS: QualityCheck[] = [
+export const FEEDBACK_LOOP_CHECKS: HarnessCheck[] = [
   feedbackLoopActive,
   decisionsTracked,
 ];

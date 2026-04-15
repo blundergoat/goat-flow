@@ -18,10 +18,10 @@ npm test                                          # Run test suite
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
-**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept. Check `.goat-flow/footguns/` for the target area.
 ```
-BAD:  "The spec says 100 lines for apps" (guessed without reading)
-GOOD: Read workflow/setup/reference/execution-loop.md:3 → "Target: under 120 lines. Hard limit: 150."
+BAD:  "The CLI has 20 audit checks" (guessed without reading)
+GOOD: Read src/cli/audit/check-goat-flow.ts → 12 setup checks, check-agent-setup.ts → 4 agent checks (16 total)
 ```
 
 **SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
@@ -72,7 +72,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - [ ] Local instruction checked: [local GEMINI.md / .github/instructions/ / none]
 - [ ] Rollback command: [exact command]
 
-Boundaries: `.goat-flow/architecture.md`, `CLAUDE.md`, `GEMINI.md`, `workflow/setup/**`, `workflow/skills/**`, `.github/workflows/**`, `.claude/**`, `.gemini/**`, `.agents/skills/`, renaming/moving files, 3+ doc file changes.
+Boundaries: `.goat-flow/architecture.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `workflow/setup/**`, `workflow/skills/**`, `.github/workflows/**`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/skills/`, renaming/moving files, 3+ doc file changes.
 
 **Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
 
@@ -101,6 +101,7 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 | Architecture | `.goat-flow/architecture.md` |
 | CLI auditor/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
+| Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.agents/skills/` (goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test) |
 | Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
@@ -108,3 +109,4 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
+| Peer instructions | `CLAUDE.md`, `AGENTS.md` |

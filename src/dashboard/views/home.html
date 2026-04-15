@@ -11,29 +11,28 @@
       x-cloak
       x-data="{
         hasSetupFail() { return report?.scopes?.setup?.status === 'fail'; },
-        hasHarnessFail() { return (report?.agentScores || []).some(a => a.harness?.status === 'fail'); },
+        hasHarnessFail() { return (report?.agentScores || []).some(a => a.agent?.status === 'fail'); },
         hasQualityGaps() {
           const agents = report?.agentScores || [];
           if (agents.length === 0) return false;
-          return agents.some(a => a.quality?.qualityScore !== null && a.quality?.qualityScore < 100);
+          return agents.some(a => a.concerns && Object.values(a.concerns).some(c => c.status === 'fail'));
         },
-        qualityScore() { return report?.overall?.qualityScore ?? null; },
         priority() {
           if (this.hasSetupFail()) return 'setup';
           if (this.hasHarnessFail()) return 'harness';
-          if (this.hasQualityGaps()) return 'quality';
+          if (this.hasQualityGaps()) return 'completeness';
           return 'healthy';
         },
         heading() {
-          const h = { setup: 'Setup needs attention', harness: 'Agent harness needs fixing', quality: 'AI harness score needs improvement', healthy: 'Recommended actions' };
+          const h = { setup: 'Setup needs attention', harness: 'Agent harness needs fixing', completeness: 'AI harness has failing concerns', healthy: 'Recommended actions' };
           return h[this.priority()] || 'Recommended actions';
         },
         subtext() {
           const s = {
             setup: 'Setup checks are failing - fix these before running quality prompts.',
-            harness: 'Agent harness checks are failing - resolve these to unblock quality scoring.',
-            quality: 'AI harness quality is below 100% - fix the recommendations to reach full score.',
-            healthy: 'All checks passing at 100% - these are your highest-leverage next actions.'
+            harness: 'Agent harness checks are failing - resolve these to unblock concern checks.',
+            completeness: 'Some AI harness concerns are failing - fix the recommendations to reach all-pass.',
+            healthy: 'All checks passing - these are your highest-leverage next actions.'
           };
           return s[this.priority()] || '';
         },
@@ -47,31 +46,32 @@
         harnessFixPrompt() {
           const sections = [];
           for (const a of (report?.agentScores || [])) {
-            if (a.harness?.status !== 'fail') continue;
+            if (a.agent?.status !== 'fail') continue;
             const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
             let num = 1;
-            const fails = (a.harness.failures || []).map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See harness documentation for this check.'}`).join('\n');
+            const fails = (a.agent.failures || []).map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See harness documentation for this check.'}`).join('\n');
             sections.push(`**${label}:**\n${fails}`);
           }
-          return `Fix these agent setup check failures:\n\n` + sections.join('\n\n') + '\n\nTarget: all 10 agent setup checks passing for each agent.';
+          const totalChecks = (report?.agentScores || []).reduce((n, a) => Math.max(n, a.agent?.checks?.length || 0), 0);
+          return `Fix these agent setup check failures:\n\n` + sections.join('\n\n') + `\n\nTarget: all ${totalChecks} agent setup checks passing for each agent.`;
         },
         qualityFixPrompt() {
           const concernLabels = { context: 'Context', constraints: 'Constraints', verification: 'Verification', recovery: 'Recovery', feedback_loop: 'Feedback Loop' };
           const sections = [];
           for (const a of (report?.agentScores || [])) {
-            if (!a.concerns || a.quality?.qualityScore === 100) continue;
+            if (!a.concerns) continue;
             const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
             const items = [];
             for (const [ck, cl] of Object.entries(concernLabels)) {
               const c = a.concerns[ck];
-              if (!c || c.score >= 100) continue;
+              if (!c || c.status === 'pass') continue;
               const fixes = (c.howToFix || []).map(h => `   - ${h}`).join('\n');
               const recs = (c.recommendations || []).map(r => `   - ${r}`).join('\n');
-              items.push(`  **${cl}** (${c.score}%):\n${fixes || recs}`);
+              items.push(`  **${cl}** (FAIL):\n${fixes || recs}`);
             }
-            if (items.length > 0) sections.push(`**${label}** (${a.quality?.qualityScore}%):\n${items.join('\n')}`);
+            if (items.length > 0) sections.push(`**${label}:**\n${items.join('\n')}`);
           }
-          return `Fix these AI harness quality gaps to reach 100%:\n\n` + sections.join('\n\n') + '\n\nTarget: all agents at 100% AI harness score.';
+          return `Fix these failing AI harness concerns:\n\n` + sections.join('\n\n') + '\n\nTarget: all concerns passing for each agent.';
         }
       }"
       style="margin-bottom: 20px"
@@ -240,8 +240,8 @@
         </div>
       </div>
 
-      <!-- quality gaps: wizard + agent fix buttons -->
-      <div x-show="priority() === 'quality'" x-cloak>
+      <!-- completeness gaps: wizard + agent fix buttons -->
+      <div x-show="priority() === 'completeness'" x-cloak>
         <div
           style="
             display: grid;
@@ -316,7 +316,7 @@
         </div>
       </div>
 
-      <!-- healthy (100% quality): review + test + security presets -->
+      <!-- healthy (all passing): review + test + security presets -->
       <div x-show="priority() === 'healthy'" x-cloak>
         <div
           style="
@@ -362,48 +362,6 @@
     </div>
 
     <!-- Health banner -->
-    <div
-      x-show="report"
-      class="gf-banner-row"
-      :class="report?.status === 'pass' ? 'gf-banner-pass' : 'gf-banner-fail'"
-    >
-      <div
-        class="gf-banner-icon"
-        style="
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 14px;
-          flex-shrink: 0;
-        "
-        x-html="report?.status === 'pass' ? '&#10003;' : '&#10005;'"
-      ></div>
-      <div style="flex: 1; min-width: 0">
-        <div
-          class="gf-banner-title"
-          style="font-size: 16px; font-weight: 600"
-          x-text="report?.status === 'pass' ? 'All checks passing' : 'Audit needs attention'"
-        ></div>
-        <div
-          class="gf-banner-sub"
-          style="font-size: 12px; margin-top: 1px"
-          x-text="(() => { const tc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.checks?.length || 0), 0); const fc = Object.values(report?.scopes || {}).reduce((s, sc) => s + (sc.failures?.length || 0), 0); return (tc - fc) + '/' + tc + ' checks passing'; })()"
-        ></div>
-      </div>
-      <div
-        class="gf-banner-ts"
-        style="
-          font-size: 11px;
-          opacity: 0.7;
-          white-space: nowrap;
-          flex-shrink: 0;
-        "
-        x-text="lastAuditTime ? 'Audited ' + formatTimeAgo(lastAuditTime) : ''"
-      ></div>
-    </div>
 
     <!-- No audit data -->
     <div
@@ -438,13 +396,11 @@
           margin-bottom: 10px;
         "
       >
-        <span class="gf-text-primary" style="font-size: 20px; font-weight: 600"
-          >Audit</span
-        >
         <button
           @click="runAudit()"
           :disabled="auditing"
           class="gf-btn gf-btn-md gf-btn-audit"
+          style="margin-left: auto"
         >
           <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
         </button>
@@ -597,7 +553,7 @@
       </div>
     </template>
 
-    <!-- AI Harness Score (rich cards with grades + concern mini-bars) -->
+    <!-- AI Harness Completeness (pass/fail cards with concern status) -->
     <div
       x-show="report?.agentScores?.length > 0"
       style="margin-bottom: 4px"
@@ -610,10 +566,11 @@
           feedback_loop: { label: 'Feedback Loop', subtitle: 'Is the harness getting smarter from failures?' }
         },
         concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
-        scoreColor(s) { return s >= 80 ? 'var(--green-400)' : s >= 60 ? 'var(--orange-400)' : 'var(--red-400)' },
-        barBg(s)      { return s >= 80 ? 'var(--green-900)' : s >= 60 ? 'var(--amber-950)' : 'var(--red-950)' },
-        barFill(s)    { return s >= 80 ? 'var(--green-600)' : s >= 60 ? 'var(--orange-700)' : 'var(--red-700)' },
-        gradeColor(g) { return g === 'A' ? 'var(--green-400)' : g === 'B' ? 'var(--green-500)' : g === 'C' ? 'var(--orange-400)' : g === 'D' ? 'var(--orange-400)' : 'var(--red-400)' },
+        statusColor(s) { return s === 'pass' ? 'var(--green-400)' : 'var(--red-400)' },
+        scoreColor(score) { return score >= 80 ? 'var(--green-400)' : score >= 70 ? 'var(--yellow-400, #facc15)' : score >= 60 ? 'var(--orange-400, #fb923c)' : 'var(--red-400)' },
+        scoreBg(score) { return score >= 80 ? 'var(--green-900, #14532d)' : score >= 70 ? 'var(--yellow-900, #713f12)' : score >= 60 ? 'var(--orange-900, #7c2d12)' : 'var(--red-900, #7f1d1d)' },
+        agentScore(agent) { if (!agent.harness) return null; const t = agent.harness.checks.length; return t ? Math.round(agent.harness.checks.filter(c => c.status === 'pass').length / t * 100) : null; },
+        toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
         checkDescriptions: {
           'toolchain-commands': 'test, lint, and build commands are defined in config.yaml - agents call these to verify their own changes',
           'agent-settings-parse': 'settings/config file parses when present (JSON for Claude/Gemini, TOML for Codex) - parse errors silently disable hook configuration and permissions',
@@ -627,7 +584,7 @@
         class="gf-text-primary"
         style="font-size: 20px; font-weight: 600; margin-bottom: 10px"
       >
-        AI Harness Score
+        AI Harness
       </div>
 
       <!-- Agent cards (entire card is clickable, mini-bars are purely visual) -->
@@ -649,7 +606,7 @@
             "
             :style="{ borderColor: auditDetailAgent === agent.id ? 'var(--green-400)' : '' }"
           >
-            <!-- Name + grade -->
+            <!-- Name + status -->
             <div
               style="
                 display: flex;
@@ -664,39 +621,35 @@
                 x-text="agent.name"
               ></span>
               <div
-                x-show="agent.quality?.grade"
+                x-show="agentScore(agent) !== null"
                 style="display: flex; align-items: baseline; gap: 4px"
               >
                 <span
-                  style="
-                    font-size: 20px;
-                    font-weight: 700;
-                    letter-spacing: -1px;
-                  "
-                  :style="{ color: gradeColor(agent.quality?.grade) }"
-                  x-text="agent.quality?.grade"
+                  style="font-size: 20px; font-weight: 700"
+                  :style="{ color: scoreColor(agentScore(agent)) }"
+                  x-text="toGrade(agentScore(agent))"
                 ></span>
                 <span
-                  class="gf-text-muted"
-                  style="font-size: 11px"
-                  x-text="`${agent.quality?.qualityScore}%`"
+                  style="font-size: 12px; font-weight: 600"
+                  :style="{ color: scoreColor(agentScore(agent)) }"
+                  x-text="agentScore(agent) + '%'"
                 ></span>
               </div>
             </div>
-            <!-- Recommendation summary -->
+            <!-- Check summary -->
             <div
               class="gf-text-muted"
               style="font-size: 11px; margin-bottom: 10px"
               x-text="agent.concerns
-                ? (() => { const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All quality checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : ''); })()
-                : `${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} checks`"
+                ? (() => { const recs = concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0); return recs === 0 ? 'All checks passing' : recs + ' recommendation' + (recs !== 1 ? 's' : ''); })()
+                : `${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} checks`"
             ></div>
-            <!-- Concern mini-bars (purely visual - no individual click handlers) -->
+            <!-- Concern pass/fail indicators -->
             <template x-if="agent.concerns">
               <div style="display: flex; flex-direction: column; gap: 4px">
                 <template
                   x-for="ck in concernKeys"
-                  :key="agent.id + '-bar-' + ck"
+                  :key="agent.id + '-status-' + ck"
                 >
                   <div
                     style="
@@ -720,32 +673,26 @@
                       style="
                         flex: 1;
                         height: 4px;
+                        background: var(--surface-elevated, #27272a);
                         border-radius: 2px;
                         overflow: hidden;
                       "
-                      :style="{ background: barBg(agent.concerns[ck].score) }"
                     >
                       <div
-                        style="
-                          height: 100%;
-                          border-radius: 2px;
-                          transition: width 0.3s ease;
-                        "
-                        :style="{
-                          width: agent.concerns[ck].score + '%',
-                          background: barFill(agent.concerns[ck].score)
-                        }"
+                        style="height: 100%; border-radius: 2px; transition: width 0.3s"
+                        :style="{ width: agent.concerns[ck].score + '%', background: scoreColor(agent.concerns[ck].score) }"
                       ></div>
                     </div>
                     <span
                       style="
                         font-size: 10px;
                         font-weight: 600;
-                        width: 28px;
+                        width: 32px;
+                        flex-shrink: 0;
                         text-align: right;
                       "
                       :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                      x-text="`${agent.concerns[ck].score}%`"
+                      x-text="agent.concerns[ck].score + '%'"
                     ></span>
                   </div>
                 </template>
@@ -813,12 +760,12 @@
                 <span
                   class="gf-text-secondary"
                   style="margin-left: 4px"
-                  x-text="`(${agent.harness.checks.filter(c => c.status === 'pass').length}/${agent.harness.checks.length} passed)`"
+                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} passed)`"
                 ></span>
               </h3>
               <div style="display: flex; flex-direction: column; gap: 4px">
                 <template
-                  x-for="(check, idx) in agent.harness.checks"
+                  x-for="(check, idx) in agent.agent.checks"
                   :key="agent.id + '-home-check-' + idx"
                 >
                   <div
@@ -933,9 +880,17 @@
                           x-text="concernMeta[ck].label"
                         ></span>
                         <span
-                          style="font-size: 14px; font-weight: 700"
-                          :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                          x-text="`${agent.concerns[ck].score}%`"
+                          style="
+                            font-size: 13px;
+                            font-weight: 600;
+                            padding: 2px 8px;
+                            border-radius: 4px;
+                          "
+                          :style="{
+                            background: scoreBg(agent.concerns[ck].score),
+                            color: scoreColor(agent.concerns[ck].score)
+                          }"
+                          x-text="agent.concerns[ck].score + '%'"
                         ></span>
                       </div>
                       <p

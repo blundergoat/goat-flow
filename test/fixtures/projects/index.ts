@@ -54,7 +54,6 @@ export function stubConfig(
         package: [],
         format: [],
       },
-      askFirst: [],
       userRole: "developer",
       telemetry: false,
       knownGaps: [],
@@ -138,7 +137,6 @@ export function stubAgentFacts(
     },
     deny: { gitCommitBlocked: false, gitPushBlocked: false },
     router: { exists: true, paths: [], resolved: 0, unresolved: [] },
-    askFirst: { exists: false, paths: [], resolved: 0, unresolved: [] },
     localContext: { files: [], warranted: [], missing: [] },
     ...overrides,
   };

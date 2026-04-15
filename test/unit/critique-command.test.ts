@@ -160,7 +160,7 @@ describe("critique with audit data", () => {
     const fs = createFS(projectPath);
     const auditReport = runAudit(fs, projectPath, {
       agentFilter: "claude",
-      quality: true,
+      harness: true,
     });
 
     const result = composeCritique({
@@ -176,8 +176,8 @@ describe("critique with audit data", () => {
     );
     assert.ok(result.prompt.includes("Setup"), "Should mention setup scope");
     assert.ok(
-      result.prompt.includes("Agent Setup Checks"),
-      "Should mention agent setup checks scope",
+      result.prompt.includes("Agent Setup"),
+      "Should mention agent setup scope",
     );
   });
 

@@ -19,14 +19,13 @@ function statusBadge(status: "pass" | "fail"): string {
 
 function renderTextScope(name: string, scope: AuditScope): string {
   const lines: string[] = [];
-  const scoreSuffix = scope.score != null ? ` (${scope.score}%)` : "";
   lines.push(
-    `${name}:${" ".repeat(Math.max(1, 20 - name.length))}${statusBadge(scope.status)}${scoreSuffix}`,
+    `${name}:${" ".repeat(Math.max(1, 24 - name.length))}${statusBadge(scope.status)}`,
   );
   for (const [key, value] of Object.entries(scope.summary)) {
     const label = key.charAt(0).toUpperCase() + key.slice(1);
     lines.push(
-      `  ${label}:${" ".repeat(Math.max(1, 18 - label.length))}${value}`,
+      `  ${label}:${" ".repeat(Math.max(1, 22 - label.length))}${value}`,
     );
   }
   for (const f of scope.failures) {
@@ -46,12 +45,6 @@ const CONCERN_LABELS: Record<AuditConcernKey, string> = {
   feedback_loop: "Feedback Loop",
 };
 
-function scoreColor(score: number): string {
-  if (score >= 80) return GREEN;
-  if (score >= 60) return YELLOW;
-  return RED;
-}
-
 export function renderAuditText(report: AuditReport): string {
   const lines: string[] = [];
   lines.push(`${BOLD}GOAT Flow Audit: ${report.target}${RESET}`);
@@ -60,29 +53,24 @@ export function renderAuditText(report: AuditReport): string {
   // Build scopes
   lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderTextScope("Agent Setup Checks", report.scopes.harness));
-  if (report.scopes.harness.status === "pass") {
-    lines.push(
-      `${YELLOW}⚠  Hooks run in advisory mode by default (exit 0). Use --harness to verify enforcement.${RESET}`,
-    );
-  }
+  lines.push(renderTextScope("Agent Setup", report.scopes.agent));
   lines.push("");
 
   lines.push(`Result: ${statusBadge(report.status)}`);
 
-  // Quality concerns
-  if (report.concerns) {
+  // Harness completeness concerns
+  if (report.concerns && report.scopes.harness) {
     lines.push("");
-    lines.push(`${BOLD}Quality by harness concern:${RESET}`);
+    lines.push(
+      `${BOLD}AI Harness Completeness:${RESET}  ${statusBadge(report.scopes.harness.status)}`,
+    );
     lines.push("");
 
     for (const key of Object.keys(report.concerns) as AuditConcernKey[]) {
       const concern = report.concerns[key];
       const label = CONCERN_LABELS[key];
-      const color = scoreColor(concern.score);
-      lines.push(
-        `  ${CYAN}${label}${RESET} (${color}${concern.score}%${RESET})`,
-      );
+      const badge = statusBadge(concern.status);
+      lines.push(`  ${CYAN}${label}${RESET}  ${badge}`);
       for (const finding of concern.findings) {
         lines.push(`    ${DIM}${finding}${RESET}`);
       }
@@ -96,16 +84,9 @@ export function renderAuditText(report: AuditReport): string {
       }
       lines.push("");
     }
-
-    if (report.overall.grade && report.overall.qualityScore !== null) {
-      const color = scoreColor(report.overall.qualityScore);
-      lines.push(
-        `Overall Quality: ${color}${report.overall.grade} (${report.overall.qualityScore}%)${RESET}`,
-      );
-    }
   } else {
     lines.push(
-      `${DIM}Tip: Run with --harness for advisory quality scoring across 5 harness concerns.${RESET}`,
+      `${DIM}Tip: Run with --harness for AI harness completeness checks across 5 concerns.${RESET}`,
     );
   }
 
@@ -126,8 +107,7 @@ function mdScopeStatus(status: "pass" | "fail"): string {
 
 function renderMdScope(name: string, scope: AuditScope): string {
   const lines: string[] = [];
-  const scoreSuffix = scope.score != null ? ` (${scope.score}%)` : "";
-  lines.push(`### ${name}: ${mdScopeStatus(scope.status)}${scoreSuffix}`);
+  lines.push(`### ${name}: ${mdScopeStatus(scope.status)}`);
   for (const [key, value] of Object.entries(scope.summary)) {
     lines.push(`- **${key}**: ${value}`);
   }
@@ -149,29 +129,26 @@ export function renderAuditMarkdown(report: AuditReport): string {
 
   lines.push(renderMdScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
-  lines.push(renderMdScope("Agent Setup Checks", report.scopes.harness));
-  if (report.scopes.harness.status === "pass") {
-    lines.push(
-      "> ⚠ Hooks run in advisory mode by default (exit 0). Use --harness to verify enforcement.",
-    );
-  }
+  lines.push(renderMdScope("Agent Setup", report.scopes.agent));
 
   if (!report.concerns) {
     lines.push(
-      "> Tip: Run with --harness for advisory quality scoring across 5 harness concerns.",
+      "> Tip: Run with --harness for AI harness completeness checks across 5 concerns.",
     );
     lines.push("");
   }
 
-  if (report.concerns) {
+  if (report.concerns && report.scopes.harness) {
     lines.push("");
-    lines.push("## Quality by harness concern");
+    lines.push(
+      `## AI Harness Completeness: ${mdScopeStatus(report.scopes.harness.status)}`,
+    );
     lines.push("");
 
     for (const key of Object.keys(report.concerns) as AuditConcernKey[]) {
       const concern = report.concerns[key];
       const label = CONCERN_LABELS[key];
-      lines.push(`### ${label} (${concern.score}%)`);
+      lines.push(`### ${label}: ${mdScopeStatus(concern.status)}`);
       for (const finding of concern.findings) {
         lines.push(`- ${finding}`);
       }
@@ -182,12 +159,6 @@ export function renderAuditMarkdown(report: AuditReport): string {
         }
       }
       lines.push("");
-    }
-
-    if (report.overall.grade && report.overall.qualityScore !== null) {
-      lines.push(
-        `**Overall Quality: ${report.overall.grade} (${report.overall.qualityScore}%)**`,
-      );
     }
   }
 

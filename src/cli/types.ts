@@ -245,12 +245,6 @@ export interface AgentFacts {
     resolved: number;
     unresolved: string[];
   };
-  askFirst: {
-    exists: boolean;
-    paths: string[];
-    resolved: number;
-    unresolved: string[];
-  };
   localContext: {
     files: string[];
     // Files that should exist based on project stack

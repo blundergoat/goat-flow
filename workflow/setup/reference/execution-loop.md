@@ -64,11 +64,11 @@ e) Definition of Done: 6 gates
    (6) After any rename or move, grep for the old name across ALL files (including .md, .json, .yaml, config). Zero remaining references = pass. This is the most common failure mode - stale cross-references after renames cause more bugs than any other single pattern.
 
 f) Router table: MUST include at minimum:
-     - Skill directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`)
+     - Skill directories (`.claude/skills/`, `.agents/skills/`)
      - Learning loop directories (`.goat-flow/footguns/`, `.goat-flow/lessons/`)
      - Architecture doc (`.goat-flow/architecture.md`)
      - Config (`.goat-flow/config.yaml`)
-     - Templates (`.goat-flow/templates/`) and any domain docs relevant to project
+     - Any domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's
      instruction file (AGENTS.md or CLAUDE.md).
      (Unrouted files are invisible to the agent - 160x usage uplift

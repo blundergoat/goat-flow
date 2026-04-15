@@ -40,7 +40,7 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks.
 ## Depth Choice
 
 - **Quick:** compressed workflow, minimal ceremony, direct output
-- **Full:** all phases, SBAO/Mob if planning, full output format
+- **Full:** all phases, SBAO if planning, full output format
 - If arriving from the dispatcher with depth already chosen, skip the depth question
 
 ## Routing
@@ -72,7 +72,11 @@ When invoked via /goat or when intent is ambiguous:
 ## No-Skill Fast Path
 
 For Hotfix complexity (1-2 files, obvious change), skip skills entirely.
-Use direct execution: READ → SCOPE → ACT → VERIFY.
+Use direct execution: READ → SCOPE → ACT → VERIFY. Still check `.goat-flow/footguns/` for the target area before acting.
+
+## Step 0 Budget
+
+If Step 0 exceeds 5 file reads without producing output or asking a question, stop and present what you know so far. Checkpoint mid-Step-0 for complex projects rather than silently reading indefinitely.
 
 ## Footgun Fast-Path
 

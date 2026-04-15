@@ -22,20 +22,6 @@ category: agent-behavior
 
 ---
 
-## Pattern: Agent offered to commit after completing work
-
-**Created:** 2026-03-31
-
-**What happened:** After executing M1 (Fixes & Hygiene) - 27 files changed, 216 tests passing - the agent ended its summary with "Want me to commit, or continue with P9/P17/P4?" This violated two explicit rules: CLAUDE.md says "Never: Commit unless asked" and the system instructions say "MUST NOT commit changes unless the user explicitly asks." The agent knew both rules and broke them anyway.
-
-**Why this is a fundamental failure:** The agent's job is to make changes. The user's job is to decide when those changes are ready to be committed. Offering to commit is the agent inserting itself into a decision that isn't its own. It's not a minor style issue - it's a boundary violation. The rules exist in CLAUDE.md, in the system instructions, and in the deny hooks (`Bash(git commit*)` is in `.claude/settings.json`). Three layers of prevention, all ignored because the agent treated "I just finished a big task" as implicit permission to suggest the next git operation.
-
-**This is also a Claude Code systemic issue:** Claude models have a strong tendency to suggest committing after completing work. This isn't unique to this project - it's a default behavior pattern that overrides explicit instructions. The deny hook blocks the command itself, but it can't block the agent from asking. The only fix is behavioral: the agent must internalize that committing is never its suggestion to make.
-
-**Prevention:** After completing work, report what was done and stop. Do not mention commits, committing, pushing, PRs, or any git write operation. There is no acceptable trigger - `Bash(*git commit*)` and `Bash(*git push*)` are in `.claude/settings.json` deny rules (lines 4-5), so the agent literally cannot run these commands even if the user asks. Committing is the user's action, performed outside the agent session.
-
----
-
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
@@ -75,18 +61,6 @@ category: agent-behavior
 **Why it matters:** The entire point of the scanner is to validate installed files. Dismissing scanner failures on installed files undermines the tool's purpose. The distinction between template source (`workflow/skills/`) and installed copies (`.claude/skills/`, `.agents/skills/`, `.github/skills/`) is fundamental to goat-flow's architecture.
 
 **Prevention:** Never dismiss scanner failures on installed skill files as "expected." If the scanner flags something in `.claude/skills/`, `.agents/skills/`, or `.github/skills/`, fix it. Only `workflow/skills/` (the distribution templates) should have ADAPT markers. When the scanner reports a deduction, the default response is "fix the file" not "suppress the check."
-
----
-
-## Pattern: Skill session logs are never written
-
-**Created:** 2026-03-30
-
-**What happened:** The Shared Conventions block in every skill says "If `.goat-flow/logs/` exists → write session summary." The goat-review audit of `tasks/roadmaps/0.9.3/tasks.md` ran the full skill process (Step 0 → Phase A1-A3 → blocking gate) but no session log was written. The user noticed `.goat-flow/logs/sessions/` was empty. The closing protocol was skipped entirely - 0% compliance across the session.
-
-**Root cause:** The session log instruction is buried in the Closing line of the Shared Conventions block (one clause in a compound sentence at `SKILL.md:17`). It fires at the END of a skill - after the agent has already delivered its output and is mentally "done." There's no enforcement mechanism: no hook checks for the file, no DoD gate references it, and no skill phase explicitly includes "write session log" as a step. It's a SHOULD rule in a MUST position.
-
-**Prevention:** The closing protocol needs mechanical enforcement, not just a rule. Options: (1) add session logging to the DoD gates in CLAUDE.md so it blocks completion, (2) add a Stop hook that checks whether `.goat-flow/logs/sessions/` was written to during this session, (3) make session logging the FIRST line of the skill's output format template so the agent writes it before presenting findings, not after.
 
 ---
 
@@ -228,3 +202,93 @@ category: agent-behavior
 **Root cause:** The original Codex profile was written based on an early understanding of Codex capabilities. Nobody re-checked when the hooks engine shipped. The assumption propagated through templates, install scripts, fact extraction, and setup guides unchallenged.
 
 **Prevention:** When a profile field says an agent "can't" do something, verify against the current docs before building workarounds. Capabilities evolve — a limitation at setup time may not still hold.
+
+---
+
+## Lesson: Agent skips AI testing gate and offers to continue
+
+**Created:** 2026-03-31
+
+**What happened:** After executing M1 (Fixes & Hygiene), the agent reported results and offered to "continue with P9/P17/P4" — moving to the next work item without running the AI Testing Gate that was literally in the same milestone file it had been working from. The gate was designed by the agent itself, written into the milestone file, and explicitly says "Run this prompt after all M1 tasks are complete." The agent wrote it, completed the tasks, and skipped it entirely.
+
+**Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate — not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
+
+---
+
+## Lesson: Agent doesn't tick checkbox tasks during execution
+
+**Created:** 2026-03-31
+
+**What happened:** CLAUDE.md VERIFY section says "If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end." While executing M1 (17 tasks across 10 priority groups), the agent completed all tasks but ticked zero checkboxes. Same root cause as the commit offer — instructions read but not followed when a strong default behavior took over.
+
+**Prevention:** Before starting work from a milestone file, read the checkbox tasks. After each task completes, tick it immediately — before moving to the next task. "Not at the end" means not at the end.
+
+---
+
+## Lesson: AI gate passed does not mean the work is done
+
+**Created:** 2026-04-01
+
+**What happened:** M1 AI gate said 14/14 checks passed. Real-world test found: 12 goat skill dirs instead of 6 (stale skills not cleaned), router table with 12 entries instead of 6, missing Edit/Write .env deny, CI workflow checking for "goat-goat" instead of "goat", version headers still at 0.9.2. The AI gate checked whether code EXISTS in the goat-flow repo, not whether it WORKS on real consumer projects.
+
+**Prevention:** AI testing gates must include at least one end-to-end test: run the tool against a real project and verify the result. Checking source code is necessary but not sufficient.
+
+---
+
+## Lesson: End-of-task rules get skipped
+
+**Created:** 2026-04-08
+
+**What happened:** Rules that fire after the agent has delivered its primary output have near-zero compliance. Session logging, learning loop updates, and handoff notes all suffer from this. The agent's attention is on the deliverable, not the closing checklist.
+
+**Prevention:** Prevention must be structural: either make the closing step part of the output format (so it happens DURING delivery, not after), or enforce it via hooks/DoD gates that block completion.
+
+---
+
+## Lesson: Agent offered to commit after completing work
+
+**Created:** 2026-03-31
+
+**What happened:** After executing M1 (27 files changed, 216 tests passing), the agent ended its summary with "Want me to commit, or continue?" This violated explicit rules in CLAUDE.md ("Never: Commit unless asked") and system instructions. Three layers of prevention (CLAUDE.md, system instructions, deny hooks), all ignored because the agent treated "I just finished a big task" as implicit permission.
+
+**Prevention:** After completing work, report what was done and stop. Do not mention commits, committing, pushing, PRs, or any git write operation.
+
+---
+
+## Lesson: Skill session logs are never written
+
+**Created:** 2026-03-30
+
+**What happened:** Every skill says "If `.goat-flow/logs/` exists → write session summary" in the closing protocol. The goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fires at the END of a skill — after the agent has already delivered output and is mentally "done."
+
+**Prevention:** The closing protocol needs mechanical enforcement, not just a rule. Options: add session logging to DoD gates, add a Stop hook, or make session logging the FIRST line of the output format.
+
+---
+
+## Lesson: Dispatcher keeps getting excluded from patterns and glob matches
+
+**Created:** 2026-04-01
+
+**What happened:** Three separate incidents where the dispatcher was missed by glob/iteration patterns: `find -name 'goat-*.md'` skipped `goat.md`, CI template `for skill in ...; do goat-$skill` produced `goat-goat`, v0.9.3 consolidation missed counting the dispatcher.
+
+**Prevention:** Always use `goat*` (no dash) for glob patterns. Always iterate literal canonical names, never derive by prefixing. Test the dispatcher first in any skill enumeration.
+
+---
+
+## Lesson: Verification prompts must not assume goat skills are the only skills
+
+**Created:** 2026-04-01
+
+**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills. The instruction would cause a verifier to report project-specific skills as violations.
+
+**Prevention:** Verification prompts and audit checks must scope to goat-flow's domain: "List all goat-* directories..." not "List all directories..." Project-specific skills are not goat-flow's business.
+
+---
+
+## Lesson: Scanner 100% does not mean the project is correct
+
+**Created:** 2026-03-31
+
+**What happened:** goat-flow scored 100% on its own scanner while preflight-checks.sh failed with 8 errors. Scanner checked structural presence (files exist, have right headings). Preflight checked functional correctness (commands work, paths resolve, versions match).
+
+**Prevention:** Don't treat scanner score as a quality gate for the whole project. Use it for what it checks (structure) and preflight for what it checks (function). When they disagree, investigate.

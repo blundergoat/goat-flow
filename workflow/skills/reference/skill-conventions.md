@@ -23,7 +23,7 @@ category: verification
 ## Lesson: [Title]
 **Created:** YYYY-MM-DD
 **What happened:** [description]
-**Evidence:** `file:line` - [what was found]
+**Evidence:** `file:line` - [what was found] (required for code-specific lessons; omit for behavioral lessons where file:line evidence doesn't apply)
 **Prevention:** [rule to prevent recurrence]
 ```
 
@@ -59,7 +59,6 @@ The `hallucination-risk` field is optional. Use it when an area is easy to misre
 Before Step 0:
 
 - If `.goat-flow/config.yaml` defines `toolchain`, prefer those commands over guessed defaults
-- If `.goat-flow/config.yaml` defines `ask_first`, use it as structured boundary context alongside the instruction file
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` when the task overlaps recent work
 - If a recent session log already covers the same area, prefer building on that context instead of re-deriving it
 
