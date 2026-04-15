@@ -29,7 +29,11 @@ Use when assessing security posture: before deployment, after adding auth/input 
 
 ## Quick Scan Path
 
-Identify framework, scan threats, and report the top risks first.
+1. Identify the framework and its built-in mitigations.
+2. Scan by severity: auth/secrets first, then injection, then config/exposure.
+3. For each finding, check if the framework already mitigates it — remove false positives.
+4. Present findings ordered by severity with `file:line` evidence.
+5. Note what wasn't checked.
 
 ## Full Assessment Path
 

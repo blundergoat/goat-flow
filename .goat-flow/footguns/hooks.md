@@ -14,7 +14,7 @@ Consumer project post-turn hook scripts with `|| true` after lint/type-check com
 
 **Consumer project status:** Still active for projects set up before v1.1.0 that have their own `stop-lint.sh` with `|| true` swallowing failures.
 
-**Related:** `deny-dangerous.sh` parses `.command // .input` but template says `.tool_input.command` per `workflow/hooks/deny-dangerous.sh`. (format-file.sh was removed from goat-flow core in v1.1.0 as a project-specific preference.)
+**Related (resolved):** `deny-dangerous.sh` field-path mismatch (`.command // .input` vs `.tool_input.command`) was fixed — both installed and template copies now use `.tool_input.command // empty`. (format-file.sh was removed from goat-flow core in v1.1.0 as a project-specific preference.)
 
 **Prevention:** Setup templates now ship enforce-by-default hooks. Existing consumer projects should update their `stop-lint.sh` to default `GOAT_LINT_ENFORCE` to 1.
 

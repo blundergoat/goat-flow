@@ -139,10 +139,3 @@ Before proposing actions that change files, check the instruction file's Ask Fir
 boundaries. If the proposed change crosses an Ask First boundary, flag it:
 "This change touches [boundary]. Proceeding requires approval per Ask First rules."
 
-## Closing Protocol
-
-When the skill completes:
-1. Verify all checkboxes in any active milestone/plan file are current
-2. Check the Learning Loop (above) for anything worth logging
-3. Write session log to `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` (what happened, files changed, decisions, learnings)
-4. Suggest the most relevant next skill if applicable

@@ -77,7 +77,7 @@ Each sub-agent MUST return:
 - Overall assessment: STRONG / ADEQUATE / WEAK / FLAWED
 - One thing the artifact gets RIGHT that should be preserved
 
-MUST use Agent tool calls, not inline role-play. Sub-agents run in isolated context. If isolated sub-agent tools are unavailable, simulate isolation by processing each perspective sequentially with explicit context boundaries - do not let findings from one perspective leak into another's analysis.
+MUST use Agent tool calls, not inline role-play. Sub-agents run in isolated context.
 
 ## Phase 2 - Rank and Compare
 
@@ -172,6 +172,10 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 
 ## Output Format
 
+**Quick mode** — omit Cross-Examination Results, Verified Unique Findings, Retracted Findings, and Clarification Responses (these require Phase 3/4 which quick mode skips). List unique findings without cross-examination verification.
+
+**Full mode** — all sections.
+
 ```markdown
 ## TL;DR
 ## Critique Rubric  <!-- which rubric and why -->
@@ -179,10 +183,10 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 ## Sub-Agent Rankings  <!-- grounding, specificity, actionability, coverage, calibration -->
 ## Control Group Delta  <!-- Agent C unique findings: context drift / readability gap / context-limited -->
 ## Consensus Findings  <!-- highest confidence -->
-## Cross-Examination Results  <!-- split findings with resolution -->
-## Verified Unique Findings  <!-- survived cross-examination -->
-## Retracted Findings  <!-- considered and dismissed -->
-## Clarification Responses  <!-- human decisions on disputes and trade-offs -->
+## Cross-Examination Results  <!-- full mode only -->
+## Verified Unique Findings  <!-- full mode only; quick mode: list unique findings unverified -->
+## Retracted Findings  <!-- full mode only -->
+## Clarification Responses  <!-- full mode only -->
 ## Strengths  <!-- what to preserve -->
 ## Recommended Changes  <!-- ordered by severity, each with concrete action -->
 ## Decision Debt  <!-- decisions with incomplete evidence, confidence, revisit trigger -->

@@ -4,20 +4,16 @@ category: skills
 
 ## Footgun: Workflow template source and installed copy can silently diverge
 
-**Status:** active | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** Agents on consumer projects follow a different rule than agents on the goat-flow repo, because the workflow template (install source) says one thing and the installed copy says another. The divergence is invisible — both files exist, both parse correctly, and no automated check compares their content.
 
-**Why it happens:** `workflow/skills/reference/skill-preamble.md` is the template that gets copied to `.goat-flow/skill-preamble.md` during setup. When the installed copy is edited directly (e.g., fixing a bug found by critique), the workflow template doesn't automatically follow. The preflight validates skill template versions but not preamble/conventions content.
+**Resolution:** All three preventions implemented:
+1. Divergence fixed — both files now match (verified by diff).
+2. Preflight check added at `scripts/preflight-checks.sh:477-486` — diffs preamble and conventions against workflow templates, fails if they differ.
+3. Integration tests added at `test/integration/preamble-sync.test.ts` — verifies template/install parity.
 
-**Evidence:**
-- `workflow/skills/reference/skill-preamble.md:10` said "Step 0 satisfies SCOPE" while `.goat-flow/skill-preamble.md:10` said "Step 0 satisfies READ/SCOPE" — discovered 2026-04-15 by multi-agent critique. Only 1 of 3 critiques caught it.
-- The divergence affected the most important sentence in the preamble: which execution loop phases a skill's Step 0 satisfies. Fresh consumer installs would get the wrong version.
-
-**Prevention:**
-1. After editing any installed `.goat-flow/skill-preamble.md` or `.goat-flow/skill-conventions.md`, immediately diff against the workflow template source and sync.
-2. Add a preflight check: `diff workflow/skills/reference/skill-preamble.md .goat-flow/skill-preamble.md` and `diff workflow/skills/reference/skill-conventions.md .goat-flow/skill-conventions.md` — fail if they differ.
-3. Treat the workflow template as the source of truth. Edit there first, then copy to the installed location.
+**Original evidence (historical):** `skill-preamble.md:10` diverged between template and installed copy, discovered 2026-04-15 by multi-agent critique.
 
 ---
 
@@ -64,19 +60,15 @@ category: skills
 
 ## Footgun: Skills have phase gates but no time/call budget for context gathering
 
-**Status:** active | **Created:** 2026-04-05 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-05 | **Resolved:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
 
 Skills enforce phase gates (Step 0 must complete before Phase 1, gates pause for human approval) but have no budget for how long Step 0 can take. Claude can spend an entire session reading templates, exploring the codebase, and gathering context without ever producing output or asking a question.
 
-**Evidence:**
-- Claude Insights (112 sessions): "Claude spent so long reading templates that the user had to pull the plug before it wrote a single file" - during a healthkit GOAT Flow setup
-- Pattern appears across review and setup sessions where Claude reads 20+ files in Step 0 without checkpointing
+**Resolution:** Both preventions implemented in `.goat-flow/skill-preamble.md:77-79`:
+1. Step 0 budget: "If Step 0 exceeds 5 file reads without producing output or asking a question, stop and present what you know so far."
+2. Mid-Step-0 checkpointing: "Checkpoint mid-Step-0 for complex projects rather than silently reading indefinitely."
 
-**Impact:** The user has no signal that the skill is stuck. The session appears active (tool calls are happening) but no output is produced. The only recovery is interrupting and restarting, wasting the entire session's context.
-
-**Prevention:**
-1. Add a Step 0 call budget to the shared preamble: "If Step 0 exceeds 5 file reads without producing output or asking a question, stop and present what you know so far"
-2. Skills should checkpoint mid-Step-0 for complex projects: "I've read X files. Here's what I understand so far. Should I continue gathering context or start with what I have?"
+**Original evidence (historical):** Claude Insights (112 sessions) showed agents reading 20+ files in Step 0 without checkpointing, requiring user intervention to interrupt.
 
 ---
 

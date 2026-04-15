@@ -12,34 +12,17 @@ category: verification
 
 ---
 
-## Lesson: RECURRENCE - Agent didn't tick checkboxes during M29 execution (same failure as M1)
+## Lesson: Agent doesn't tick milestone checkboxes (recurrence x4, unresolved)
 
-**Created:** 2026-04-04
+**Created:** 2026-03-31 | **Recurrences:** M1 (2026-03-31), M29 (2026-04-04), M32 (2026-04-05), M08 (2026-04-07)
 
-**What happened:** While executing M29 (Workflow Review Fixes - 6 workstreams, ~25 sub-tasks, ~100 checkboxes), the agent completed every task, ran full verification, marked the milestone "Done", wrote a session log - and ticked zero checkboxes. The user discovered it during review and escalated. This is a direct recurrence of the pattern documented on 2026-03-31 (M1 execution, same root cause).
+**What happens:** The agent completes milestone tasks but ticks zero checkboxes. The user discovers it during review. CLAUDE.md VERIFY says "MUST tick `- [x]` on each task as it's completed - not at the end." The instruction exists in three places and is ignored every time.
 
-**Why this is worse than the first time:**
-1. The lesson was already documented 4 days ago in this exact file
-2. CLAUDE.md VERIFY explicitly says "MUST tick `- [x]` on each task as it's completed - not at the end"
-3. The agent had just EXPANDED the shared conventions block to include closing protocol instructions about checkpoint discipline
-4. The agent was executing a plan about fixing verification and consistency failures - and committed the same verification failure in the process
+**Root cause:** When parallelizing work or context-switching to user messages, the "tick as you go" step competes with "do the next thing" and loses. The agent tracks completion mentally but never writes it to the file.
 
-**Root cause (unchanged):** When parallelizing work across multiple agents, the orchestrating agent tracks completion mentally but never writes it to the file. The "tick as you go" rule is read, understood, and ignored because the strong default is: launch agent → read result → launch next agent. The file update step has no forcing function.
+**Why stronger rules haven't worked:** Each recurrence added a stronger prevention rule. M1: "tick immediately." M29: "FIRST action must be editing the milestone file." M32: "before doing anything else." All failed because documentation-level enforcement does not work for this pattern — the forcing function competes with whatever the agent wants to do next, and loses.
 
-**Previous prevention (insufficient):** "After each task completes, tick it immediately." This didn't work because "immediately" competes with "launch the next parallel agent" and loses.
-
-**Stronger prevention:** After receiving results from EACH agent or completing EACH sub-task, the FIRST action must be editing the milestone file to tick the checkbox - BEFORE reading the next task, launching the next agent, or doing anything else. If parallelizing, tick all completed checkboxes in a batch BEFORE starting the next phase. Treat unticked checkboxes as uncommitted work - if the session dies, the progress is invisible.
-
----
-
-## Lesson: RECURRENCE #3 - Agent didn't tick M32 checkboxes after completing M32a tasks
-**Created:** 2026-04-05
-
-**What happened:** Completed all 5 M32a merge-blocker tasks (reset endpoint, userRole fallback, path traversal, DNS rebinding, telemetry key). Verified with tsc + tests + preflight. Then moved on to answering the user's other questions without ticking any checkboxes in `M32-dashboard-polish.md`. User caught it. Third occurrence of the same pattern (M1 → M29 → M32).
-
-**Why previous prevention failed:** The "stronger prevention" from M29 says "FIRST action must be editing the milestone file." But the user sent follow-up messages while I was working, and I context-switched to answering them instead of ticking checkboxes first. The forcing function ("before doing anything else") lost to "the user is waiting for a response."
-
-**What needs to change:** This pattern has survived 3 rounds of "just do it harder" prevention rules. Documentation-level enforcement does not work. This needs mechanical enforcement - either a hook that checks for unticked items after tool calls, or a habit of ticking DURING the edit (in the same Edit call that makes the fix), not as a separate step after.
+**Status:** Unresolved. Needs mechanical enforcement (hook or gate), not more rules.
 
 ---
 

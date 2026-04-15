@@ -391,7 +391,7 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
 
     # B.8a: Architecture count validation
     build_count=$(node --input-type=module -e "const s=await import('./dist/cli/audit/check-goat-flow.js');const a=await import('./dist/cli/audit/check-agent-setup.js');console.log(s.SETUP_CHECKS.length+a.AGENT_CHECKS.length)" 2>/dev/null || echo "")
-    quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/harness/index.js');console.log(q.QUALITY_CHECKS.length)" 2>/dev/null || echo "")
+    quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/harness/index.js');console.log(q.HARNESS_CHECKS.length)" 2>/dev/null || echo "")
 
     if [[ -f .goat-flow/architecture.md ]] && [[ -n "$build_count" ]] && [[ -n "$quality_count" ]]; then
         if grep -q "${build_count} build" .goat-flow/architecture.md && grep -q "${quality_count} AI harness" .goat-flow/architecture.md; then
@@ -455,7 +455,7 @@ fi
 if [[ -f dist/cli/audit/harness/index.js ]] && [[ -f src/dashboard/views/audit.html ]]; then
     code_keys=$(node --input-type=module -e "
       const q=await import('./dist/cli/audit/harness/index.js');
-      const keys=[...new Set(q.QUALITY_CHECKS.map(c=>c.concern))].sort();
+      const keys=[...new Set(q.HARNESS_CHECKS.map(c=>c.concern))].sort();
       console.log(keys.join(','))
     " 2>/dev/null || echo "")
     html_keys=$(grep -oP "concernKeys:\s*\[([^\]]+)\]" src/dashboard/views/audit.html \

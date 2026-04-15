@@ -111,16 +111,6 @@ category: agent-behavior
 
 ---
 
-## Lesson: Tick milestone checkboxes immediately when tasks complete, not at the end
-
-**Created:** 2026-04-07
-
-**What happened:** During M08 execution, the agent completed 15+ tasks (setup guards, scanner fixes, skill purges, compose-setup.ts early return, architecture.md fixes) without ticking a single checkbox in the milestone file. The user had to explicitly ask for the tasks to be marked done. This is the same failure pattern that caused ADR-024 (flush protocol checkbox enforcement) - the agent does the work but skips the tracking step because it's focused on the next task.
-
-**Why it matters:** Unticked checkboxes make the milestone look incomplete even when 80% of the work is done. The user can't tell at a glance what's finished vs what's remaining. This is especially bad when multiple agents or sessions work on the same milestone - the next agent sees all checkboxes unchecked and may redo work.
-
-**Prevention:** After completing each task, tick the checkbox IMMEDIATELY before starting the next task. This is already in CLAUDE.md VERIFY step ("If working from a plan/milestone file, tick `- [x]` as each task completes - not at the end") and was the explicit instruction in the milestone file. The instruction exists in three places and was still ignored. The only reliable fix is to make it a hard habit: complete task → tick checkbox → move on. Never batch checkbox ticking.
-
 ---
 
 ## Lesson: Automated code review bots produce predictable false positive patterns
@@ -214,14 +204,6 @@ category: agent-behavior
 **Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate — not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
 
 ---
-
-## Lesson: Agent doesn't tick checkbox tasks during execution
-
-**Created:** 2026-03-31
-
-**What happened:** CLAUDE.md VERIFY section says "If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end." While executing M1 (17 tasks across 10 priority groups), the agent completed all tasks but ticked zero checkboxes. Same root cause as the commit offer — instructions read but not followed when a strong default behavior took over.
-
-**Prevention:** Before starting work from a milestone file, read the checkbox tasks. After each task completes, tick it immediately — before moving to the next task. "Not at the end" means not at the end.
 
 ---
 
