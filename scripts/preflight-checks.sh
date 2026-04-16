@@ -276,6 +276,15 @@ if [[ -f tsconfig.json ]]; then
         fail "Typecheck/build - run npx tsc for details"
     fi
 
+    # Dashboard TypeScript (excluded from main tsconfig.json)
+    if [[ -f tsconfig.dashboard.json ]]; then
+        if npx tsc -p tsconfig.dashboard.json --noEmit 2>/dev/null; then
+            pass "Dashboard typecheck (tsconfig.dashboard.json)"
+        else
+            fail "Dashboard typecheck failed - run npx tsc -p tsconfig.dashboard.json --noEmit for details"
+        fi
+    fi
+
     # ESLint (type-checked rules)
     if command -v npx >/dev/null 2>&1 && [[ -f eslint.config.mjs ]]; then
         lint_output=$(npx eslint src/cli/ 2>&1) && lint_exit=0 || lint_exit=$?
@@ -399,6 +408,16 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
         else
             fail "Architecture doc check counts mismatch - expected ${build_count} build + ${quality_count} AI harness in .goat-flow/architecture.md"
         fi
+        # B.8a2: Sub-breakdown validation (setup + agent)
+        setup_count=$(node --input-type=module -e "const s=await import('./dist/cli/audit/check-goat-flow.js');console.log(s.SETUP_CHECKS.length)" 2>/dev/null || echo "")
+        agent_count=$(node --input-type=module -e "const a=await import('./dist/cli/audit/check-agent-setup.js');console.log(a.AGENT_CHECKS.length)" 2>/dev/null || echo "")
+        if [[ -n "$setup_count" ]] && [[ -n "$agent_count" ]]; then
+            if grep -q "${setup_count} setup" .goat-flow/architecture.md && grep -q "${agent_count} agent" .goat-flow/architecture.md; then
+                pass "Architecture doc sub-breakdown matches code (setup: ${setup_count}, agent: ${agent_count})"
+            else
+                fail "Architecture doc sub-breakdown mismatch - expected ${setup_count} setup + ${agent_count} agent in .goat-flow/architecture.md"
+            fi
+        fi
     else
         skip "Architecture count validation (dist/ not fully built or architecture.md missing)"
     fi
@@ -490,6 +509,27 @@ if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/s
     fi
 else
     skip "skill-conventions.md sync (one or both files missing)"
+fi
+
+# ── Skill SKILL.md Parity ────────────────────────────────────────────
+section "Skill SKILL.md Parity"
+skill_parity_ok=true
+for skill_dir in workflow/skills/goat*/; do
+    skill_name=$(basename "$skill_dir")
+    template="workflow/skills/${skill_name}/SKILL.md"
+    [[ -f "$template" ]] || continue
+    for agent_dir in .claude/skills .agents/skills; do
+        installed="${agent_dir}/${skill_name}/SKILL.md"
+        if [[ -f "$installed" ]]; then
+            if ! diff -q "$template" "$installed" >/dev/null 2>&1; then
+                fail "SKILL.md diverged: ${template} vs ${installed}"
+                skill_parity_ok=false
+            fi
+        fi
+    done
+done
+if [[ "$skill_parity_ok" == true ]]; then
+    pass "All installed SKILL.md files match workflow templates"
 fi
 
 # ── Path Integrity ───────────────────────────────────────────────────

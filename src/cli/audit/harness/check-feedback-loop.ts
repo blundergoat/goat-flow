@@ -42,6 +42,16 @@ const feedbackLoopActive: HarnessCheck = {
         [`Create ${missing.join(" and ")} to enable the feedback loop.`],
       );
     }
+
+    // Report stale references (informational, not a failure)
+    const footgunStale = ctx.facts.shared.footguns.staleRefs ?? [];
+    const lessonStale = ctx.facts.shared.lessons.staleRefs ?? [];
+    const totalStale = footgunStale.length + lessonStale.length;
+    if (totalStale > 0) {
+      findings.push(
+        `${totalStale} stale file reference(s) in learning loop entries`,
+      );
+    }
     return pass(findings);
   },
 };

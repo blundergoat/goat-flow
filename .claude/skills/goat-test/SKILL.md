@@ -134,7 +134,6 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 - MUST compare changes against existing testing coverage (manual plan, automated tests, or neither)
 - MUST find gaps in BOTH directions: undertested risks AND misaligned test effort
 - MUST produce "must test / should test / safe to skip" tiers with rationale for skips
-- MUST include time estimates for manual testing items
 - MUST include Verification Integrity section
 - MUST NOT generate test code - hand off to the coding agent
 - Universal constraints from skill-preamble.md apply.
@@ -161,8 +160,6 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 ### Must test before shipping  <!-- CRITICAL gaps with manual steps, failure symptoms, time -->
 ### Should test if time allows  <!-- HIGH/MEDIUM gaps -->
 ### Safe to skip  <!-- with rationale -->
-
-## Time Budget  <!-- total estimated minutes for "must test" items -->
 
 ## Verification Integrity
 

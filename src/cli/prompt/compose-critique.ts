@@ -241,7 +241,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push("## Step 0 - Ground yourself");
   lines.push("");
   lines.push(
-    "Audit results are included above in the Audit Summary section. Before reading any file, run these additional commands. Save the output. All findings must be grounded in what commands actually produce.",
+    "Audit results are included above in the Audit Summary section. Run these additional read-only commands to ground your critique. Save the output. All findings must be grounded in what commands actually produce.",
   );
   lines.push("");
   lines.push("```bash");

@@ -246,18 +246,10 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
 function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
     if (!af.agent.hooksDir) continue;
-    const denyPath = join(
-      ctx.projectPath,
-      af.agent.hooksDir,
-      "deny-dangerous.sh",
-    );
-    try {
-      ctx.fs.readFile(
-        join(af.agent.hooksDir, "deny-dangerous.sh"),
-      );
-    } catch {
-      continue; // no deny hook to self-test
-    }
+    const denyRelPath = join(af.agent.hooksDir, "deny-dangerous.sh");
+    const content = ctx.fs.readFile(denyRelPath);
+    if (content === null) continue; // no deny hook file to self-test
+    const denyPath = join(ctx.projectPath, denyRelPath);
     try {
       execFileSync("bash", [denyPath, "--self-test"], {
         stdio: "pipe",

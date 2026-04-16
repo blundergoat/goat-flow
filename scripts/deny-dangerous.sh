@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# deny-dangerous.sh
+# deny-dangerous.sh — Simplified distribution template
+#
+# The full implementation with JSON parsing, self-test suite, read-only tool
+# whitelist, and 17 pattern checks is installed at .claude/hooks/deny-dangerous.sh
+# by the setup flow. This file is a standalone validation tool for use outside
+# the agent hook system.
 #
 # Purpose:
 #   Implements a local denylist check for dangerous or policy-blocked commands.

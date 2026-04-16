@@ -246,7 +246,7 @@ category: verification
 
 **Root cause:** Two compounding failures. First, the install script was never updated to copy RULES.md when the audit check was added - the check and the installer were authored independently. Second, the resulting test failures were dismissed as background noise instead of investigated. Every test run showed "62 pass / 2 fail" and the response was "same 2 pre-existing failures, not from my change" - a correct but useless observation that prevented anyone from reading the actual failure messages.
 
-**Fix:** Created a rules template for the goat skill (now part of `workflow/skills/goat/SKILL.md`). Updated install script to copy it for the goat skill. Copied to `.claude/skills/goat/` in the repo. (Path updated from retired flat-file `goat-rules.md` to current directory structure.)
+**Fix:** Created a rules template for the goat skill. Updated install script to copy it. (RULES.md was later deleted entirely per ADR-042; its 2 unique lines were moved to `skill-preamble.md`.)
 
 **Prevention:**
 1. Never dismiss test failures as "pre-existing" without reading what they actually assert. If 2 tests fail, read the 2 failure messages.

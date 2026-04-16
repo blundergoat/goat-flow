@@ -21,8 +21,17 @@ const milestoneTracking: HarnessCheck = {
         ],
       );
     }
-    const mdFiles = collectMarkdownFiles(ctx.fs, tasksDir);
-    if (mdFiles.length === 0) {
+    const allMdFiles = collectMarkdownFiles(ctx.fs, tasksDir);
+    // Filter to milestone-shaped files (M01-*, M1-*, milestone-*, or files with checkpoint content)
+    const milestonePattern = /^M\d+-|^milestone-/i;
+    const mdFiles = allMdFiles.filter((f) => {
+      const name = f.split("/").pop() ?? "";
+      if (milestonePattern.test(name)) return true;
+      // Also include files that contain milestone structure (checkboxes + exit criteria)
+      const content = ctx.fs.readFile(f);
+      return content ? /- \[[ x]\]/.test(content) && /exit criter|testing gate/i.test(content) : false;
+    });
+    if (allMdFiles.length === 0) {
       return pass(["Tasks directory exists (empty - valid for new projects)"]);
     }
     const checkboxPattern = /- \[[ x]\]/;
@@ -33,8 +42,10 @@ const milestoneTracking: HarnessCheck = {
         withCheckboxes++;
       }
     }
+    const extra = allMdFiles.length - mdFiles.length;
+    const extraNote = extra > 0 ? ` (${extra} non-milestone .md files ignored)` : "";
     return pass([
-      `${withCheckboxes}/${mdFiles.length} milestone files have trackable checkbox items`,
+      `${withCheckboxes}/${mdFiles.length} milestone files have trackable checkbox items${extraNote}`,
     ]);
   },
 };

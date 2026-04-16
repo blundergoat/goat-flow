@@ -62,6 +62,7 @@ skills/
 
 hooks/                     # Hook templates (deny-dangerous.sh, etc.)
 evaluation/                # Critique prompt templates
+validate-goat-flow-setup.sh  # Validates .goat-flow/ structure (lives here, not in scripts/)
 ```
 
 ## scripts/ -- Shell scripts
@@ -73,10 +74,6 @@ deny-dangerous.sh          # Hook: blocks destructive commands
 maintenance/               # Git cleanup, secret scanning, formatting
 ```
 
-## workflow/validate-goat-flow-setup.sh
+## docs/ -- Documentation
 
-Note: lives here, not in `scripts/`.
 
-```
-validate-goat-flow-setup.sh  # Validates .goat-flow/ structure
-```

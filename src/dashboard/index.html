@@ -75,13 +75,48 @@
       </button>
     </div>
 
+    <!-- ═══ Project Browser Overlay ═══ -->
+    <div
+      x-show="showBrowser"
+      x-cloak
+      @click.self="showBrowser = false"
+      class="fixed inset-0 z-50 flex items-start justify-center"
+      style="background: rgba(0,0,0,0.5); padding-top: 80px"
+    >
+      <div class="gf-card" style="width: 420px; max-height: 60vh; overflow-y: auto; padding: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+          <span class="gf-text-primary" style="font-size: 14px; font-weight: 600" x-text="browserCurrent"></span>
+          <button @click="showBrowser = false" class="gf-text-muted" style="font-size: 18px; cursor: pointer; background: none; border: none">&times;</button>
+        </div>
+        <button
+          x-show="browserParent"
+          @click="browseTo(browserParent)"
+          class="gf-text-muted"
+          style="font-size: 12px; margin-bottom: 8px; cursor: pointer; background: none; border: none; padding: 4px 0"
+        >&#8592; ..</button>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <template x-for="dir in browserDirs" :key="dir.path">
+            <button
+              @click="selectDir(dir)"
+              class="gf-text-primary"
+              style="text-align: left; padding: 6px 8px; border-radius: 4px; font-size: 13px; cursor: pointer; background: none; border: none"
+              :style="dir.isProject ? 'font-weight: 600' : ''"
+            >
+              <span x-text="dir.name"></span>
+              <span x-show="dir.isProject" class="gf-text-muted" style="font-size: 10px; margin-left: 4px">(project)</span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
     <div class="flex flex-col min-h-screen">
       <!-- ═══ Header ═══ -->
       <header class="no-print gf-header shrink-0 z-30">
         <button @click="activeView = 'home'" class="gf-logo">
           🐐 GOAT Flow
         </button>
-        <span class="gf-header-proj" x-text="projectName"></span>
+        <span class="gf-header-proj" @click="openBrowser()" x-text="projectName" style="cursor:pointer" title="Switch project"></span>
         <div class="gf-nav-wrap">
           <div class="gf-nav">
             <button

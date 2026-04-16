@@ -4,12 +4,12 @@
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (15 checks across 5 concerns). Default command when run without arguments.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (16 checks across 5 concerns — verifies structural installation of each concern). Harness results contribute to the overall audit status. Default command when run without arguments.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one agent: claude, codex, gemini |
-| `--harness` | Add AI Harness Completeness scope (third deterministic scope, pass/fail per concern) |
+| `--harness` | Add AI Harness Completeness scope (16 checks, installed/not-installed per concern) |
 | `--format <type>` | Output: json, text, markdown (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |

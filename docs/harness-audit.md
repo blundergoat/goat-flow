@@ -1,11 +1,11 @@
 # AI Harness Audit
 
-`goat-flow audit . --harness` adds 16 pass/fail checks to the standard build audit. Each check answers a structural question - does the file exist, is the registration in sync, is the deny pattern present. Deterministic, no LLM involvement.
+`goat-flow audit . --harness` adds 16 structural installation checks to the standard build audit. Each check answers an installation question — is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex lacks compaction hooks), but install as much as possible.
 
 | Mode | Command | Question |
 |------|---------|----------|
 | Build | `goat-flow audit .` | Is it installed correctly? |
-| **Harness** | **`goat-flow audit . --harness`** | **Is the harness structurally complete?** |
+| **Harness** | **`goat-flow audit . --harness`** | **Is each concern structurally installed?** |
 | Critique | `goat-flow critique . --agent X` | Does this make sense to a fresh agent? |
 
 Harness checks are grouped by the 5 concerns that every major source in the field agrees matter for agent effectiveness. The audit checks whether the structural wiring for each concern is in place. It does not judge content quality - that's what [critique](harness-critique-quality.md) is for. See [harness-engineering.md](harness-engineering.md) for the sources behind the model.
@@ -20,7 +20,7 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 **Checks (3):**
 
-- `instruction-line-count` - each configured agent's instruction file is within the configured hard limit (`lineLimits.limit` in `config.yaml`)
+- `instruction-line-count` - each configured agent's instruction file is within the configured hard limit (`line-limits.limit` in `config.yaml`)
 - `execution-loop-present` - instruction file contains at least 2 of the 4 READ / SCOPE / ACT / VERIFY keywords
 - `doc-paths-resolve` - router-table paths, architecture.md backtick paths, and backtick paths in a small set of doc files (`CONTRIBUTING.md`, `.goat-flow/code-map.md`, `docs/cli.md`, `docs/audit-and-critique.md`) all resolve to real files on disk
 

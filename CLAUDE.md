@@ -35,7 +35,7 @@ GOOD: Read src/cli/audit/check-goat-flow.ts → 12 setup checks, check-agent-set
 | System Change | 6 reads | 20 turns |
 | Infrastructure | 8 reads | 25 turns |
 
-Over budget = re-classify before continuing.
+Over budget = re-classify before continuing. Complexity-class read budgets take precedence over per-mode read counts.
 
 **ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 
