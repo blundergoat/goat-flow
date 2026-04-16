@@ -177,14 +177,28 @@ export class TerminalManager {
     const nodePty = await this.loadNodePty();
 
     const id = randomUUID();
-    const args = prompt ? [prompt] : [];
+
+    // Wrap the runner in a login-ish shell so the PTY remains interactive after
+    // the CLI exits - user can keep typing shell commands. Runner path and prompt
+    // are passed via env vars (not interpolated into the command string) to avoid
+    // shell-injection from user-controlled prompt text.
+    const shell = process.env.SHELL || "/bin/bash";
+    const shellCmd = prompt
+      ? `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
+      : `"$GOAT_RUNNER"; exec "$SHELL" -i`;
 
     console.log(`[terminal] Starting ${runner} session in ${validatedPath}`);
-    const pty = nodePty.spawn(cliPath, args, {
+    const pty = nodePty.spawn(shell, ["-c", shellCmd], {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
       cwd: validatedPath,
+      env: {
+        ...process.env,
+        GOAT_RUNNER: cliPath,
+        GOAT_PROMPT: prompt ?? "",
+        SHELL: shell,
+      },
     });
 
     const session: TerminalSession = {

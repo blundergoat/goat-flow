@@ -136,13 +136,17 @@ echo ""
 echo "Skills → $SKILLS_DIR/:"
 SKILL_NAMES="goat goat-debug goat-plan goat-review goat-sbao goat-security goat-test"
 for skill in $SKILL_NAMES; do
-  src="$GOAT_FLOW_ROOT/workflow/skills/$skill.md"
-  dst="$SKILLS_DIR/$skill/SKILL.md"
-  if [[ ! -f "$src" ]]; then
-    echo "  ✗ $skill (template not found: $src)"
+  skill_dir="$GOAT_FLOW_ROOT/workflow/skills/$skill"
+  if [[ ! -d "$skill_dir" ]]; then
+    echo "  ✗ $skill (template dir not found: $skill_dir)"
     continue
   fi
-  copy_file "$src" "$dst"
+  # Copy every .md file in the template directory (SKILL.md, etc.)
+  for src_file in "$skill_dir"/*.md; do
+    [[ -f "$src_file" ]] || continue
+    filename="$(basename "$src_file")"
+    copy_file "$src_file" "$SKILLS_DIR/$skill/$filename"
+  done
 done
 echo ""
 

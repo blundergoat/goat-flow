@@ -44,7 +44,7 @@
     }
   }"
 >
-  <div style="max-width: 880px; margin: 0 auto; padding: 12px 28px 24px">
+  <div style="max-width: 1080px; margin: 0 auto; padding: 12px 28px 24px">
     <!-- Header -->
     <div
       style="
@@ -348,6 +348,116 @@
       </div>
     </div>
 
+    <!-- Running Terminals -->
+    <div
+      x-show="terminalAvailable && serverSessions.length > 0"
+      style="margin-bottom: 20px"
+    >
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        "
+      >
+        <span class="gf-text-primary" style="font-size: 14px; font-weight: 500"
+          >Running Terminals</span
+        >
+        <span
+          class="gf-text-muted"
+          style="font-size: 11px; font-weight: 600"
+          :style="{ color: serverSessions.length >= 3 ? 'var(--red-400)' : 'var(--text-muted)' }"
+          x-text="`${serverSessions.length}/3`"
+        ></span>
+      </div>
+      <div class="gf-card" style="border-radius: 8px; overflow: hidden">
+        <template x-for="s in serverSessions" :key="s.id">
+          <div
+            class="gf-tr"
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 10px 16px;
+              gap: 12px;
+              border-bottom: 1px solid var(--border);
+            "
+          >
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                min-width: 0;
+                flex: 1;
+              "
+            >
+              <span
+                style="
+                  width: 7px;
+                  height: 7px;
+                  border-radius: 50%;
+                  flex-shrink: 0;
+                "
+                :style="{ background: s.status === 'active' ? '#4ade80' : '#9ca3af' }"
+              ></span>
+              <span
+                class="gf-text-secondary"
+                style="font-size: 12px; font-weight: 600; flex-shrink: 0"
+                x-text="s.runner"
+              ></span>
+              <span
+                class="gf-text-muted"
+                style="
+                  font-size: 11px;
+                  font-family: var(--font-mono);
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+                x-text="s.projectName"
+                :title="s.projectPath"
+              ></span>
+              <span
+                class="gf-text-muted"
+                style="font-size: 11px; flex-shrink: 0"
+                x-text="(() => {
+                  const m = Math.floor((s.age || 0) / 60);
+                  const h = Math.floor(m / 60);
+                  return h > 0 ? h + 'h ' + (m % 60) + 'm' : m + 'm';
+                })()"
+              ></span>
+            </div>
+            <div style="display: flex; gap: 6px; flex-shrink: 0">
+              <button
+                @click="openServerSession(s)"
+                class="gf-btn gf-btn-sm gf-btn-ghost"
+                style="font-size: 11px"
+              >
+                Open
+              </button>
+              <button
+                @click="endServerSession(s.id)"
+                class="gf-btn gf-btn-sm"
+                style="
+                  background: none;
+                  border: none;
+                  color: var(--text-muted);
+                  font-size: 11px;
+                  padding: 2px 6px;
+                "
+                @mouseenter="$el.style.color = 'var(--red-400)'"
+                @mouseleave="$el.style.color = 'var(--text-muted)'"
+              >
+                End
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Empty state -->
     <div
       x-show="projectsList.length === 0"
@@ -362,6 +472,72 @@
       <p class="gf-text-muted" style="font-size: 13px">
         No projects added. Click "Add Project" to monitor a project directory.
       </p>
+    </div>
+
+    <!-- Max sessions modal -->
+    <div
+      x-show="showMaxSessionsModal"
+      x-cloak
+      @click.self="showMaxSessionsModal = false"
+      @keydown.escape.window="showMaxSessionsModal = false"
+      style="
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(2px);
+      "
+    >
+      <div
+        class="gf-card"
+        style="
+          padding: 24px 28px;
+          max-width: 380px;
+          text-align: center;
+          border-radius: 12px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        "
+      >
+        <div style="font-size: 28px; margin-bottom: 12px">&#9888;</div>
+        <h3
+          class="gf-text-primary"
+          style="font-size: 16px; font-weight: 600; margin: 0 0 6px"
+        >
+          Session Limit Reached
+        </h3>
+        <p
+          class="gf-text-muted"
+          style="font-size: 13px; line-height: 1.5; margin: 0 0 16px"
+        >
+          Maximum of 3 terminal sessions. End an existing session from the
+          <button
+            @click="showMaxSessionsModal = false; activeView = 'projects'"
+            style="
+              background: none;
+              border: none;
+              padding: 0;
+              color: var(--accent);
+              cursor: pointer;
+              font-weight: 500;
+              text-decoration: underline;
+              font-size: inherit;
+            "
+          >
+            Projects
+          </button>
+          page to start a new one.
+        </p>
+        <button
+          @click="showMaxSessionsModal = false"
+          class="gf-btn gf-btn-md gf-btn-primary"
+          style="min-width: 100px"
+        >
+          OK
+        </button>
+      </div>
     </div>
 
     <!-- Footer -->

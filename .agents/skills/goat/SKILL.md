@@ -5,9 +5,10 @@ goat-flow-skill-version: "1.1.0"
 ---
 # /goat
 
-## Core Mandates
+## Shared Conventions
 
-Read `RULES.md` in this directory immediately upon activating this skill. These mandates take absolute precedence over all other defaults.
+Read `.goat-flow/skill-preamble.md` for shared conventions.
+On full-depth, also read `.goat-flow/skill-conventions.md`.
 
 ## Usage
 
@@ -25,7 +26,7 @@ Use this skill when you need to perform a structured engineering task. Choose th
 ## Progressive Disclosure
 
 1. **Activate:** Call `activate_skill(name="goat")`.
-2. **Context:** Read `RULES.md` in the `goat/` directory.
+2. **Context:** Read `.goat-flow/skill-preamble.md` for shared conventions.
 3. **Dispatch:** Identify your mode from the table above and read the corresponding `.md` file.
 
 ## Planning Route (Dispatcher)
@@ -41,7 +42,7 @@ For planning requests, always check `.goat-flow/tasks/` for existing milestone f
 
 ## Constraints
 
-- MUST read `RULES.md` before proceeding to any specific mode.
+- MUST read `skill-preamble.md` before proceeding to any specific mode.
 - MUST choose exactly one mode for the current task.
 - MUST include a one-sentence rationale for the chosen mode in your response.
 - MUST NOT load more than one mode's logic unless the task specifically requires a transition (e.g., debug → plan).

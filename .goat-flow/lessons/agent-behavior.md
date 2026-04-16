@@ -116,13 +116,13 @@ category: agent-behavior
 ## Lesson: Automated code review bots produce predictable false positive patterns
 **Created:** 2026-04-05
 
-**What happened:** PR #12 (v0.10.0, 463 files) received ~15 automated review comments from Copilot and github-code-quality. About half were valid and led to real fixes (CRLF frontmatter, setup-initial dirs, CI build copy, ADR-020 superseded status). The other half were false positives that follow recurring patterns:
+**What happened:** PR #12 (v0.10.0, 463 files) received ~15 automated review comments from Copilot and github-code-quality. About half were valid and led to real fixes (CRLF frontmatter, setup-initial dirs, CI build copy, the category-bucket ADR superseded status). The other half were false positives that follow recurring patterns:
 
 1. **Cross-file references invisible to single-file analysis.** `app()` in `app.js` flagged as "unused function" - it's called via `x-data="app()"` in `index.html`. Alpine.js, htmx, and any HTML-attribute-driven framework will trigger this.
 2. **Control flow misread without runtime context.** `section()` timing gated on `checks > 0` flagged as "could suppress timing" - in the actual call sequence, every section runs at least one check before the next section starts. The bot analyzed the function in isolation.
 3. **Absurd suggested replacements.** `postinstall` script suggestion replaced a clean 1-line script with a 150-char inline `node -e` one-liner containing 5 conditionals. The "fix" is worse than the "problem."
 4. **"Second source of truth" without checking for synchronization.** `getPackageVersion()` flagged as competing with `version.ts` - but CI already has a version-consistency check that fails if they diverge. The bot didn't read the CI workflow.
-5. **By-design partial support treated as bug.** TOML branch always reporting `hasDenyPatterns=false` flagged as a mistake - it's intentional because Codex TOML support is partial (documented in ADR-025).
+5. **By-design partial support treated as bug.** TOML branch always reporting `hasDenyPatterns=false` flagged as a mistake - it's intentional because Codex TOML support is only partially implemented in that branch.
 6. **Process nits disguised as code issues.** ESLint complexity threshold change flagged as "should be a separate PR" - a style preference about PR organization, not a code defect.
 
 **Why it matters:** Blindly applying bot suggestions wastes time and can introduce regressions. But dismissing all bot feedback means missing the valid catches (the CRLF fix alone would have caused Windows platform failures).
@@ -153,13 +153,13 @@ category: agent-behavior
 
 ---
 
-## Lesson: Don't overcomplicate clear requests — a spec is not ambiguous
+## Lesson: Don't overcomplicate clear requests - a spec is not ambiguous
 
 **Created:** 2026-04-14
 
 **What happened:** User asked to list all audit checks in config.yaml. Simple task. Instead of writing it once correctly, the agent: (1) added preflight checks the user never asked for, (2) used wrong section names that didn't match the dashboard, (3) put it in config.yaml as comments, (4) tried to move it into an existing doc instead of the requested new file, (5) entered plan mode for a follow-up dashboard task where the user had already given the exact spec, (6) wrote a memory file while still in plan mode. A task that should have been one turn took 5-10 turns and multiple corrections.
 
-**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" — the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup — the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said.
+**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" - the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup - the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said.
 
 **Prevention:**
 1. When the user gives a clear spec, implement it literally. Don't add scope. Don't reinterpret.
@@ -173,11 +173,11 @@ category: agent-behavior
 
 **Created:** 2026-04-14
 
-**What happened:** User said preflight-checks.sh shouldn't validate goat-flow audit checks. Agent agreed and suggested moving them to the CLI audit. User said they don't belong in the CLI either. Agent immediately reversed and agreed they belong in preflight after all — contradicting what it said 1 message earlier. The agent had no position; it just agreed with whatever the user last said.
+**What happened:** User said preflight-checks.sh shouldn't validate goat-flow audit checks. Agent agreed and suggested moving them to the CLI audit. User said they don't belong in the CLI either. Agent immediately reversed and agreed they belong in preflight after all - contradicting what it said 1 message earlier. The agent had no position; it just agreed with whatever the user last said.
 
-**Why this matters:** The user was making a specific point: preflight is a repo-level dev script (shellcheck, TypeScript, tests, formatting). The goat-flow-specific checks in preflight (doc/code drift, dashboard concern sync, architecture counts, skill version matching) are internal consistency checks for the goat-flow repo — they validate that the framework's own docs match its own code. That IS a preflight concern because preflight gates commits to this repo. The CLI audit validates consumer project installs — completely different scope. Both statements were correct but the agent couldn't hold both in its head.
+**Why this matters:** The user was making a specific point: preflight is a repo-level dev script (shellcheck, TypeScript, tests, formatting). The goat-flow-specific checks in preflight (doc/code drift, dashboard concern sync, architecture counts, skill version matching) are internal consistency checks for the goat-flow repo - they validate that the framework's own docs match its own code. That IS a preflight concern because preflight gates commits to this repo. The CLI audit validates consumer project installs - completely different scope. Both statements were correct but the agent couldn't hold both in its head.
 
-**The correct answer was:** Preflight is the right place for goat-flow repo internal consistency checks. The CLI audit is the right place for consumer project validation. These are different scopes serving different users. The user's point was that the CLI shouldn't contain repo-internal checks — not that preflight was wrong to have them.
+**The correct answer was:** Preflight is the right place for goat-flow repo internal consistency checks. The CLI audit is the right place for consumer project validation. These are different scopes serving different users. The user's point was that the CLI shouldn't contain repo-internal checks - not that preflight was wrong to have them.
 
 **Prevention:** When the user corrects you, understand what they're actually saying before reversing. If you already had the right answer, don't abandon it just because the user pushed back on a different claim. Ask for clarification instead of reflexively agreeing.
 
@@ -191,7 +191,7 @@ category: agent-behavior
 
 **Root cause:** The original Codex profile was written based on an early understanding of Codex capabilities. Nobody re-checked when the hooks engine shipped. The assumption propagated through templates, install scripts, fact extraction, and setup guides unchallenged.
 
-**Prevention:** When a profile field says an agent "can't" do something, verify against the current docs before building workarounds. Capabilities evolve — a limitation at setup time may not still hold.
+**Prevention:** When a profile field says an agent "can't" do something, verify against the current docs before building workarounds. Capabilities evolve - a limitation at setup time may not still hold.
 
 ---
 
@@ -199,9 +199,9 @@ category: agent-behavior
 
 **Created:** 2026-03-31
 
-**What happened:** After executing M1 (Fixes & Hygiene), the agent reported results and offered to "continue with P9/P17/P4" — moving to the next work item without running the AI Testing Gate that was literally in the same milestone file it had been working from. The gate was designed by the agent itself, written into the milestone file, and explicitly says "Run this prompt after all M1 tasks are complete." The agent wrote it, completed the tasks, and skipped it entirely.
+**What happened:** After executing M1 (Fixes & Hygiene), the agent reported results and offered to "continue with P9/P17/P4" - moving to the next work item without running the AI Testing Gate that was literally in the same milestone file it had been working from. The gate was designed by the agent itself, written into the milestone file, and explicitly says "Run this prompt after all M1 tasks are complete." The agent wrote it, completed the tasks, and skipped it entirely.
 
-**Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate — not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
+**Prevention:** After completing all tasks in a milestone, the NEXT action is ALWAYS the AI Testing Gate - not reporting results, not suggesting next steps. The gate must run before any summary or status update. Treat the testing gate as the last task in the milestone, not a post-milestone activity.
 
 ---
 
@@ -241,7 +241,7 @@ category: agent-behavior
 
 **Created:** 2026-03-30
 
-**What happened:** Every skill says "If `.goat-flow/logs/` exists → write session summary" in the closing protocol. The goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fires at the END of a skill — after the agent has already delivered output and is mentally "done."
+**What happened:** Every skill says "If `.goat-flow/logs/` exists → write session summary" in the closing protocol. The goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fires at the END of a skill - after the agent has already delivered output and is mentally "done."
 
 **Prevention:** The closing protocol needs mechanical enforcement, not just a rule. Options: add session logging to DoD gates, add a Stop hook, or make session logging the FIRST line of the output format.
 

@@ -1,6 +1,6 @@
 ---
 name: goat-plan
-description: "Milestone task file generator and manager. Creates structured milestone files in .goat-flow/tasks/ that track progress, enforce testing gates, and provide shared state between human and coding agent."
+description: "Milestone task file generator and manager. Creates structured milestone files in .goat-flow/tasks/ that track progress, enforce testing gates, and provide local working state for the current session."
 goat-flow-skill-version: "1.1.0"
 ---
 # /goat-plan
@@ -12,7 +12,7 @@ On full-depth, also read `.goat-flow/skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in `.goat-flow/tasks/` — local working state for the current session. These files are gitignored and not committed; they exist to coordinate between the human and coding agent during a work session, not as permanent project artifacts.
+Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in `.goat-flow/tasks/` - local working state for the current session. These files are gitignored and not committed; they exist to coordinate between the human and coding agent during a work session, not as permanent project artifacts.
 
 **Invoke when:**
 - A feature, project, or significant change needs structured milestones before implementation
@@ -34,7 +34,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 **Check for existing milestones first:**
 - Read `.goat-flow/tasks/` for any existing milestone files
 - If found: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
-- If found but stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them — check file modification dates instead
+- If found but stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead
 - Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). If found, note them so the user knows about existing planning artifacts.
 
 **If starting fresh:**

@@ -4,10 +4,10 @@
 
 If the agent did something wrong → `.goat-flow/lessons/` instead.
 
-Every entry MUST include file path evidence with a **grep-friendly semantic anchor** — a function name, unique string, section heading, or search pattern that survives refactors. Line numbers go stale on every edit; semantic anchors don't.
+Every entry MUST include file path evidence with a **grep-friendly semantic anchor** - a function name, unique string, section heading, or search pattern that survives refactors. Line numbers go stale on every edit; semantic anchors don't.
 
-**Good:** `check-agent-setup.ts` (search: `howToFix.*deprecated`) — emits blocked commands
-**Bad:** `check-agent-setup.ts:142` — stale tomorrow
+**Good:** `check-agent-setup.ts` (search: `howToFix.*deprecated`) - emits blocked commands
+**Bad:** `check-agent-setup.ts:142` - stale tomorrow
 
 Line numbers are optional convenience. If included, treat as approximate snapshot, not verification target. Each file ref must be in its own backtick span.
 

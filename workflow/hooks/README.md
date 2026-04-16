@@ -23,7 +23,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Gemini: `agent-config/gemini.json` -> `.gemini/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
-3. goat-flow core ships only the deny hook. Post-turn validation hooks are a project-specific concern — see the note below.
+3. goat-flow core ships only the deny hook. Post-turn validation hooks are a project-specific concern - see the note below.
 
 All hook paths use `$(git rev-parse --show-toplevel)` so they work regardless of the agent's working directory.
 

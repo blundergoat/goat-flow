@@ -59,7 +59,7 @@ jobs:
 
           # AUDIT_VERSION should be valid
           if [ -z "$audit_version" ]; then
-            echo "::error::AUDIT_VERSION not found — check package.json version field"
+            echo "::error::AUDIT_VERSION not found - check package.json version field"
             exit 1
           fi
 
@@ -91,7 +91,7 @@ jobs:
           echo "Expected skill version: $skill_version"
 
           fail=0
-          for f in workflow/skills/goat*.md; do
+          for f in workflow/skills/*/SKILL.md; do
             ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
             if [ "$ver" != "$skill_version" ]; then
               echo "::error::$f has version '$ver', expected '$skill_version'"

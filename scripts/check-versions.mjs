@@ -10,13 +10,13 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const version = pkg.version;
 
 const templates = [
-  "workflow/skills/goat-debug.md",
-  "workflow/skills/goat-plan.md",
-  "workflow/skills/goat-review.md",
-  "workflow/skills/goat-sbao.md",
-  "workflow/skills/goat-security.md",
-  "workflow/skills/goat-test.md",
-  "workflow/skills/goat.md",
+  "workflow/skills/goat/SKILL.md",
+  "workflow/skills/goat-debug/SKILL.md",
+  "workflow/skills/goat-plan/SKILL.md",
+  "workflow/skills/goat-review/SKILL.md",
+  "workflow/skills/goat-sbao/SKILL.md",
+  "workflow/skills/goat-security/SKILL.md",
+  "workflow/skills/goat-test/SKILL.md",
 ];
 
 let ok = true;

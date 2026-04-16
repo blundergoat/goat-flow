@@ -248,7 +248,7 @@ function countUnadaptedSkills(
     let template: string | null = null;
     try {
       template = readFileSync(
-        getTemplatePath(`workflow/skills/${skill}.md`),
+        getTemplatePath(`workflow/skills/${skill}/SKILL.md`),
         "utf-8",
       );
     } catch {

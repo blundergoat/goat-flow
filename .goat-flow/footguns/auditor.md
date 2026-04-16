@@ -23,38 +23,21 @@ The audit checks that hook files exist and pass `bash -n` syntax check, but neve
 
 ## Footgun: Audit howToFix emits commands the deny hook blocks
 
-**Status:** active | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Running `goat-flow audit` and following its fix suggestions triggers deny-hook blocks. The framework's repair guidance contradicts its own safety layer.
+**Resolution:** `check-agent-setup.ts` (search: `howToFix.*deprecated`) now emits text guidance ("Delete the SKILL.md inside each, then remove the empty directory") instead of shell commands. No longer triggers deny hook blocks.
 
-**Why it happens:** `check-agent-setup.ts` (search: `howToFix.*deprecated`) generates howToFix text containing `` `rm -rf ${path}` `` for deprecated skill directories. The deny hook (search: `rm[[:space:]]+-` in `deny-dangerous.sh`) blocks `rm -rf` unless the target is scoped (e.g. `./node_modules`). The howToFix emits paths like `.claude/skills/goat-audit` which don't match the scoping allowlist.
-
-**Evidence:**
-- `src/cli/audit/check-agent-setup.ts` (search: `howToFix.*deprecated`) — emits `rm -rf ${path}` in fix guidance
-- Live block confirmed: attempting the suggested fix was blocked by the deny hook with "BLOCKED: rm -rf without safe scoping"
-
-**Prevention:**
-1. Emit hook-compatible commands in howToFix: `rm dir/SKILL.md && rmdir dir/` instead of `rm -rf dir/`
-2. Or emit non-command guidance: "Delete the directory manually" instead of shell commands
-3. Add a test that every howToFix suggestion is not blocked by the project's own deny hook
+**Original symptoms:** Running `goat-flow audit` and following its fix suggestions triggered deny-hook blocks because howToFix emitted `rm -rf ${path}` for deprecated skill directories.
 
 ---
 
 ## Footgun: Harness verifies post-turn hooks but not PreToolUse deny registration
 
-**Status:** active | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A project can pass the harness audit at 100% without the deny hook being wired to PreToolUse. The actual safety layer for dangerous shell commands is not verified.
+**Resolution:** `check-constraints.ts` (search: `deny-hook-registered`) now verifies PreToolUse/pre-tool deny hook registration via `af.hooks.denyIsRegistered`. Added in commit 708b1af. The `check-verification.ts` hooks-registered check correctly remains scoped to post-turn hooks only.
 
-**Why it happens:** `check-verification.ts` (search: `hooksRegistered` in `src/cli/audit/harness/`) only examines `postTurnRegistered` and `postTurnExists`. It does not check whether the deny hook is registered in the agent's PreToolUse hook configuration. The build checks in `check-agent-setup.ts` verify deny file/pattern presence but not the PreToolUse registration wiring.
-
-**Evidence:**
-- `src/cli/audit/harness/check-verification.ts` (search: `postTurnRegistered`) — only checks post-turn hook sync, not PreToolUse
-- This repo happens to be correctly wired (`.claude/settings.json`, search: `PreToolUse`) but the framework does not prove that
-
-**Prevention:**
-1. Add a harness check that verifies PreToolUse registration for deny hooks, not just deny file existence
-2. Consider adding a runtime smoke test: pipe a known-blocked command through the deny hook and verify it returns exit code 2
+**Original symptoms:** A project could pass the harness audit without the deny hook being wired to PreToolUse.
 
 ---
 
@@ -62,9 +45,9 @@ The audit checks that hook files exist and pass `bash -n` syntax check, but neve
 
 > Historical record. These entries are no longer active traps.
 
-- **Scanner AP2 penalizes project-specific skills** (resolved 2026-04-01) — Removed AP2 check and `ap-fix-skill-names` fragment; scanner now only validates goat-flow's own skills.
-- **Audit passes when configured agent's instruction file is missing** (resolved 2026-04-13) — Added `configured-agent-present` and `agent-artifacts-consistent` checks to cross-reference config.yaml against detected agents.
-- **ask_first structural sync check generates false positives via glob-unaware comparison** (resolved 2026-04-13) — Added `normalizePath()` to strip glob suffixes before comparing config paths against instruction file content.
-- **Scanner reports enforcement features it didn't detect** (resolved 2026-04-13) — Scanner removed in v1.1.0; hook facts now read from actual file content via `enrichDenyFromExecpolicy()`.
-- **Scanner gives 100% while generated files are broken** (resolved 2026-04-13) — Scanner/rubric engine removed in v1.1.0; replaced with structural build checks plus pass/fail harness completeness checks.
-- **Setup reports scanner metrics as audit results** (resolved 2026-04-13) — Scanner removed; `cli.ts` now calls `runAudit()` and reports actual hook file counts.
+- **Scanner AP2 penalizes project-specific skills** (resolved 2026-04-01) - Removed AP2 check and `ap-fix-skill-names` fragment; scanner now only validates goat-flow's own skills.
+- **Audit passes when configured agent's instruction file is missing** (resolved 2026-04-13) - Added `configured-agent-present` and `agent-artifacts-consistent` checks to cross-reference config.yaml against detected agents.
+- **ask_first structural sync check generates false positives via glob-unaware comparison** (resolved 2026-04-13) - Added `normalizePath()` to strip glob suffixes before comparing config paths against instruction file content.
+- **Scanner reports enforcement features it didn't detect** (resolved 2026-04-13) - Scanner removed in v1.1.0; hook facts now read from actual file content via `enrichDenyFromExecpolicy()`.
+- **Scanner gives 100% while generated files are broken** (resolved 2026-04-13) - Scanner/rubric engine removed in v1.1.0; replaced with structural build checks plus pass/fail harness completeness checks.
+- **Setup reports scanner metrics as audit results** (resolved 2026-04-13) - Scanner removed; `cli.ts` now calls `runAudit()` and reports actual hook file counts.

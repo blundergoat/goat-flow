@@ -15,6 +15,11 @@ SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 
 Order findings by severity, not by file or discovery order.
 
+## Engineering Standards
+
+- NEVER suppress linter warnings or bypass type systems (e.g., casts) unless explicitly instructed
+- Analyze surrounding files to ensure surgical, idiomatic updates that match existing conventions
+
 ## Evidence Standard
 
 - Every finding MUST include file evidence - either `file:line` when the specific line demonstrates the issue, or `file` when the trap is file-level. Path-only evidence is valid when a line number would be fabricated.

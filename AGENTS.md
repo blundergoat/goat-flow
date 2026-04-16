@@ -73,7 +73,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - [ ] Rollback command: [exact command]
 
 Boundaries:
-- `.goat-flow/architecture.md` or primary instruction file changes (this file — `AGENTS.md`)
+- `.goat-flow/architecture.md` or primary instruction file changes (this file - `AGENTS.md`)
 - `workflow/setup/` or `workflow/skills/` template changes affecting generated output
 - `.github/workflows/**` (CI changes alter validation and release behavior)
 - `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**` (agent runtime files)

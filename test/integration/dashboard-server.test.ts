@@ -1,0 +1,478 @@
+/**
+ * Integration tests for the dashboard HTTP server.
+ * Starts a real server, hits public endpoints, and validates response contracts.
+ */
+import { after, before, describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const PROJECT_PATH = resolve(import.meta.dirname, "..", "..");
+const PROJECTS_LIST_PATH = resolve(
+  PROJECT_PATH,
+  ".goat-flow",
+  "dashboard-projects.json",
+);
+const MISSING_PATH = resolve(PROJECT_PATH, "definitely-missing-dashboard-path");
+
+let server: { port: number; close: () => Promise<void> } | undefined;
+let baseUrl = "";
+let originalProjectsList: string | null = null;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      );
+    }),
+  ]);
+}
+
+function expectRecord(
+  value: unknown,
+  context: string,
+): Record<string, unknown> {
+  assert.equal(typeof value, "object", `${context} should be an object`);
+  assert.notEqual(value, null, `${context} should not be null`);
+  assert.ok(!Array.isArray(value), `${context} should not be an array`);
+  return value as Record<string, unknown>;
+}
+
+function assertJsonResponse(res: Response, context: string): void {
+  assert.match(
+    res.headers.get("content-type") ?? "",
+    /application\/json/i,
+    `${context} should return JSON`,
+  );
+}
+
+function assertAuditScope(value: unknown, context: string): void {
+  const scope = expectRecord(value, context);
+  assert.match(
+    String(scope.status),
+    /^(pass|fail)$/,
+    `${context}.status should be pass/fail`,
+  );
+  assert.ok(
+    Array.isArray(scope.checks),
+    `${context}.checks should be an array`,
+  );
+  assert.ok(
+    Array.isArray(scope.failures),
+    `${context}.failures should be an array`,
+  );
+  const summary = expectRecord(scope.summary, `${context}.summary`);
+  for (const [key, entry] of Object.entries(summary)) {
+    assert.equal(typeof key, "string");
+    assert.equal(typeof entry, "string");
+  }
+}
+
+function assertDashboardReport(value: unknown): Record<string, unknown> {
+  const report = expectRecord(value, "Dashboard report");
+  assert.match(
+    String(report.status),
+    /^(pass|fail)$/,
+    "Dashboard report status should be pass/fail",
+  );
+  assert.equal(typeof report.target, "string");
+  assert.ok(
+    Array.isArray(report.agentScores),
+    "Dashboard report agentScores should be an array",
+  );
+  const scopes = expectRecord(report.scopes, "Dashboard report scopes");
+  assertAuditScope(scopes.setup, "Dashboard report scopes.setup");
+  assertAuditScope(scopes.agent, "Dashboard report scopes.agent");
+  if (scopes.harness !== undefined) {
+    assertAuditScope(scopes.harness, "Dashboard report scopes.harness");
+  }
+  const overall = expectRecord(report.overall, "Dashboard report overall");
+  assert.match(
+    String(overall.status),
+    /^(pass|fail)$/,
+    "Dashboard report overall.status should be pass/fail",
+  );
+  return report;
+}
+
+async function fetchJson(
+  path: string,
+  init?: RequestInit,
+): Promise<{ res: Response; body: unknown }> {
+  const res = await fetch(`${baseUrl}${path}`, init);
+  assertJsonResponse(res, path);
+  return { res, body: await res.json() };
+}
+
+before(async () => {
+  try {
+    originalProjectsList = await readFile(PROJECTS_LIST_PATH, "utf-8");
+  } catch {
+    originalProjectsList = null;
+  }
+
+  const { serveDashboard } = await import("../../src/cli/server/dashboard.js");
+  server = await serveDashboard({ projectPath: PROJECT_PATH });
+  baseUrl = `http://127.0.0.1:${server.port}`;
+});
+
+after(async () => {
+  try {
+    if (server) {
+      await withTimeout(server.close(), 5000, "dashboard server shutdown");
+    }
+  } finally {
+    if (originalProjectsList === null) {
+      await rm(PROJECTS_LIST_PATH, { force: true });
+    } else {
+      await writeFile(PROJECTS_LIST_PATH, originalProjectsList);
+    }
+  }
+});
+
+describe("dashboard HTML", () => {
+  it("GET / returns HTML shell with the expected scripts", async () => {
+    const res = await fetch(baseUrl);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/html/i);
+
+    const html = await res.text();
+    assert.match(html, /__GOAT_FLOW_DEFAULT_PATH__/);
+    assert.match(html, /__GOAT_FLOW_VERSION__/);
+    assert.match(html, /alpinejs@3/i);
+    assert.match(html, /\/assets\/preset-prompts\.js/);
+    assert.match(html, /\/assets\/app\.js/);
+  });
+});
+
+describe("dashboard assets", () => {
+  it("GET /assets/app.js returns JavaScript", async () => {
+    const res = await fetch(`${baseUrl}/assets/app.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+
+    const body = await res.text();
+    assert.match(body, /function app\(/);
+  });
+
+  it("GET /assets/styles.css returns CSS", async () => {
+    const res = await fetch(`${baseUrl}/assets/styles.css`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/css/i);
+  });
+
+  it("GET /assets/preset-prompts.js returns preset data", async () => {
+    const res = await fetch(`${baseUrl}/assets/preset-prompts.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+
+    const body = await res.text();
+    assert.match(body, /PRESETS/);
+  });
+
+  it("rejects path traversal asset requests", async () => {
+    const res = await fetch(`${baseUrl}/assets/..%2F..%2Fetc%2Fpasswd`);
+    assert.equal(res.status, 404);
+  });
+});
+
+describe("dashboard /api/audit", () => {
+  it("returns a full dashboard report shape", async () => {
+    const { res, body } = await fetchJson(
+      `/api/audit?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 200);
+
+    const report = assertDashboardReport(body);
+    const agentScores = report.agentScores as unknown[];
+    assert.ok(agentScores.length > 0, "Dashboard report should include agents");
+
+    for (const score of agentScores) {
+      const entry = expectRecord(score, "Dashboard report agent score");
+      assert.match(String(entry.id), /^(claude|codex|gemini)$/);
+      assert.equal(typeof entry.name, "string");
+      assertAuditScope(entry.agent, "Dashboard report agentScores[].agent");
+      if (entry.harness !== null) {
+        assertAuditScope(
+          entry.harness,
+          "Dashboard report agentScores[].harness",
+        );
+      }
+    }
+  });
+
+  it("with quality=true includes harness concerns", async () => {
+    const { res, body } = await fetchJson(
+      `/api/audit?path=${encodeURIComponent(PROJECT_PATH)}&quality=true`,
+    );
+    assert.equal(res.status, 200);
+
+    const report = assertDashboardReport(body);
+    const agentScores = report.agentScores as unknown[];
+    const claude = agentScores
+      .map((score) => expectRecord(score, "Dashboard report agent score"))
+      .find((score) => score.id === "claude");
+
+    assert.ok(claude, "Dashboard report should include Claude");
+    assert.notEqual(
+      claude.concerns,
+      null,
+      "Harness concerns should be present",
+    );
+
+    const concerns = expectRecord(
+      claude.concerns,
+      "Dashboard report agentScores[].concerns",
+    );
+    for (const concern of Object.values(concerns)) {
+      const entry = expectRecord(concern, "Harness concern");
+      assert.match(String(entry.status), /^(pass|fail)$/);
+      assert.equal(typeof entry.score, "number");
+      assert.ok(Array.isArray(entry.findings));
+      assert.ok(Array.isArray(entry.recommendations));
+      assert.ok(Array.isArray(entry.howToFix));
+    }
+  });
+
+  it("returns 500 with JSON for a nonexistent project path", async () => {
+    const { res, body } = await fetchJson(
+      `/api/audit?path=${encodeURIComponent(MISSING_PATH)}`,
+    );
+    assert.equal(res.status, 500);
+
+    const error = expectRecord(body, "Audit error");
+    assert.equal(typeof error.error, "string");
+  });
+});
+
+describe("dashboard /api/health", () => {
+  it("returns health response shape", async () => {
+    const { res, body } = await fetchJson("/api/health");
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Health response");
+    assert.equal(typeof data.uptime, "number");
+    assert.equal(typeof data.activeSessions, "number");
+    assert.equal(typeof data.nodePtyAvailable, "boolean");
+    assert.ok(Array.isArray(data.availableRunners));
+  });
+});
+
+describe("dashboard /api/browse", () => {
+  it("returns a directory listing", async () => {
+    const { res, body } = await fetchJson(
+      `/api/browse?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Browse response");
+    assert.equal(data.current, PROJECT_PATH);
+    assert.equal(typeof data.parent, "string");
+    assert.ok(Array.isArray(data.dirs), "Browse response should include dirs");
+    const dirs = data.dirs as Array<Record<string, unknown>>;
+    const names = dirs.map((dir) => String(dir.name));
+    assert.ok(names.includes("src"), "Browse response should include src/");
+  });
+
+  it("returns 500 with JSON for an unreadable path", async () => {
+    const { res, body } = await fetchJson(
+      `/api/browse?path=${encodeURIComponent(MISSING_PATH)}`,
+    );
+    assert.equal(res.status, 500);
+
+    const data = expectRecord(body, "Browse error");
+    assert.equal(typeof data.error, "string");
+  });
+});
+
+describe("dashboard /api/agents/installed", () => {
+  it("returns the supported agent list", async () => {
+    const { res, body } = await fetchJson("/api/agents/installed");
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Agent detection response");
+    assert.ok(Array.isArray(data.agents));
+    assert.equal((data.agents as unknown[]).length, 3);
+    const ids = (data.agents as Array<Record<string, unknown>>).map((agent) =>
+      String(agent.id),
+    );
+    assert.deepEqual(ids.sort(), ["claude", "codex", "gemini"]);
+  });
+});
+
+describe("dashboard /api/setup/detect", () => {
+  it("detects the project stack", async () => {
+    const { res, body } = await fetchJson(
+      `/api/setup/detect?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Setup detect response");
+    assert.ok(Array.isArray(data.languages));
+    assert.ok((data.languages as unknown[]).includes("TypeScript"));
+    assert.ok(Array.isArray(data.frameworks));
+    expectRecord(data.commands, "Setup detect commands");
+    expectRecord(data.agents, "Setup detect agents");
+    expectRecord(data.existing, "Setup detect existing");
+  });
+});
+
+describe("dashboard /api/setup", () => {
+  it("returns 400 without agent parameter", async () => {
+    const { res, body } = await fetchJson(
+      `/api/setup?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 400);
+
+    const data = expectRecord(body, "Setup error");
+    assert.match(String(data.error), /agent/i);
+  });
+
+  it("returns 400 for an invalid agent", async () => {
+    const { res, body } = await fetchJson(
+      `/api/setup?path=${encodeURIComponent(PROJECT_PATH)}&agent=invalid`,
+    );
+    assert.equal(res.status, 400);
+
+    const data = expectRecord(body, "Setup error");
+    assert.match(String(data.error), /invalid/i);
+  });
+
+  for (const agent of ["claude", "codex", "gemini"] as const) {
+    it(`generates setup output for ${agent}`, async () => {
+      const { res, body } = await fetchJson(
+        `/api/setup?path=${encodeURIComponent(PROJECT_PATH)}&agent=${agent}`,
+      );
+      assert.equal(res.status, 200);
+
+      const data = expectRecord(body, "Setup response");
+      assert.equal(typeof data.output, "string");
+      assert.ok(String(data.output).length > 100);
+    });
+  }
+});
+
+describe("dashboard /api/critique", () => {
+  it("returns 400 without agent", async () => {
+    const { res } = await fetchJson(
+      `/api/critique?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 400);
+  });
+
+  for (const agent of ["claude", "codex", "gemini"] as const) {
+    it(`generates critique output for ${agent}`, async () => {
+      const { res, body } = await fetchJson(
+        `/api/critique?path=${encodeURIComponent(PROJECT_PATH)}&agent=${agent}`,
+      );
+      assert.equal(res.status, 200);
+
+      const data = expectRecord(body, "Critique response");
+      assert.equal(data.command, "critique");
+      assert.equal(data.agent, agent);
+      assert.match(String(data.auditStatus), /^(pass|fail|unavailable)$/);
+      assert.equal(typeof data.auditSummary, "string");
+      assert.equal(typeof data.prompt, "string");
+      assert.ok(String(data.prompt).length > 100);
+    });
+  }
+});
+
+describe("dashboard /api/projects", () => {
+  it("persists the projects list roundtrip", async () => {
+    const nextPaths = [PROJECT_PATH, resolve(PROJECT_PATH, "src")];
+    const post = await fetchJson("/api/projects/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: nextPaths }),
+    });
+    assert.equal(post.res.status, 200);
+    assert.deepEqual(post.body, { ok: true });
+
+    const get = await fetchJson("/api/projects/list");
+    assert.equal(get.res.status, 200);
+    assert.deepEqual(get.body, { paths: nextPaths });
+  });
+
+  it("returns 400 for invalid project list JSON", async () => {
+    const { res, body } = await fetchJson("/api/projects/list", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    assert.equal(res.status, 400);
+
+    const data = expectRecord(body, "Projects list error");
+    assert.equal(typeof data.error, "string");
+  });
+
+  it("returns 405 for unsupported project list methods", async () => {
+    const { res, body } = await fetchJson("/api/projects/list", {
+      method: "DELETE",
+    });
+    assert.equal(res.status, 405);
+    assert.deepEqual(body, { error: "Method not allowed" });
+  });
+
+  it("classifies project state for a valid path", async () => {
+    const { res, body } = await fetchJson(
+      `/api/projects/status?paths=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Projects status response");
+    assert.ok(Array.isArray(data.projects));
+    assert.equal((data.projects as unknown[]).length, 1);
+    const project = expectRecord(
+      (data.projects as unknown[])[0],
+      "Projects status item",
+    );
+    assert.equal(project.path, PROJECT_PATH);
+    assert.equal(typeof project.state, "string");
+    assert.equal(typeof project.action, "string");
+    assert.equal(typeof project.details, "string");
+  });
+
+  it("returns 400 without paths", async () => {
+    const { res } = await fetchJson("/api/projects/status");
+    assert.equal(res.status, 400);
+  });
+});
+
+describe("dashboard terminal endpoints", () => {
+  it("GET /api/terminal/list returns an empty list when no sessions are running", async () => {
+    const { res, body } = await fetchJson("/api/terminal/list");
+    assert.equal(res.status, 200);
+    assert.deepEqual(body, []);
+  });
+
+  it("GET /api/terminal/sessions returns the empty-state shape", async () => {
+    const { res, body } = await fetchJson("/api/terminal/sessions");
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Terminal sessions response");
+    assert.ok(Array.isArray(data.sessions));
+    assert.deepEqual(data.sessions, []);
+    assert.equal(data.maxSessions, 3);
+    assert.equal(data.activeCount, 0);
+  });
+});
+
+describe("dashboard error handling", () => {
+  it("returns 404 for unknown routes", async () => {
+    const res = await fetch(`${baseUrl}/nonexistent`);
+    assert.equal(res.status, 404);
+  });
+
+  it("returns 404 for unknown asset files", async () => {
+    const res = await fetch(`${baseUrl}/assets/nonexistent.js`);
+    assert.equal(res.status, 404);
+  });
+});

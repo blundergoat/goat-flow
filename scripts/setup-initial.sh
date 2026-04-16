@@ -81,7 +81,7 @@ if ! command -v shellcheck >/dev/null 2>&1; then
         info "Installing shellcheck via brew..."
         brew install shellcheck
     else
-        warn "shellcheck not found — install manually: https://github.com/koalaman/shellcheck#installing"
+        warn "shellcheck not found - install manually: https://github.com/koalaman/shellcheck#installing"
     fi
 fi
 if command -v shellcheck >/dev/null 2>&1; then

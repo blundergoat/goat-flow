@@ -70,7 +70,7 @@ This prints a setup prompt. Paste it into Claude Code and let the agent configur
 npx goat-flow audit .
 ```
 
-Your project passes the structural setup checks. Add `--harness` to see advisory scoring across the 5 harness concerns. Note: audit validates setup correctness (files, config, skills, hooks), not code quality — run your project's lint and test commands separately.
+Your project passes the structural setup checks. Add `--harness` to see advisory scoring across the 5 harness concerns. Note: audit validates setup correctness (files, config, skills, hooks), not code quality - run your project's lint and test commands separately.
 
 ### 6. Try a skill
 

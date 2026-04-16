@@ -91,7 +91,7 @@
               if (!agent) return 'Not audited';
               if (!agent.concerns) {
                 const passed = agent.agent.checks.filter(c => c.status === 'pass').length;
-                return `${passed}/${agent.agent.checks.length} checks passed`;
+                return `${passed}/${agent.agent.checks.length} installed`;
               }
               const recs = this.concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0);
               return recs === 0 ? 'All checks passing' : `${recs} recommendation${recs !== 1 ? 's' : ''}`;
@@ -110,7 +110,7 @@
               <span
                 style="font-size: 12px; font-weight: 600"
                 :style="{ color: report?.scopes?.setup?.status === 'pass' ? '#4ade80' : '#f87171' }"
-                x-text="(() => { const sc = report?.scopes?.setup; if (!sc?.checks) return ''; const p = sc.checks.filter(c => c.status === 'pass').length; return p + '/' + sc.checks.length + ' passed'; })()"
+                x-text="(() => { const sc = report?.scopes?.setup; if (!sc?.checks) return ''; const p = sc.checks.filter(c => c.status === 'pass').length; return p + '/' + sc.checks.length + ' installed'; })()"
               ></span>
             </div>
 
@@ -162,7 +162,7 @@
                   <div
                     class="gf-text-muted"
                     style="font-size: 11px; margin-bottom: 10px"
-                    x-text="`${selectedAgent.agent.checks.filter(c => c.status === 'pass').length}/${selectedAgent.agent.checks.length} agent setup checks passed`"
+                    x-text="`${selectedAgent.agent.checks.filter(c => c.status === 'pass').length}/${selectedAgent.agent.checks.length} agent setup checks installed`"
                   ></div>
                   <template x-if="selectedAgent.concerns">
                     <div
@@ -291,8 +291,8 @@
                 "
               >
                 <button
-                  @click="launchPreset(critiqueResult.prompt, activeRunner); activeView = 'workspace'"
-                  :disabled="launching || (terminalSessionId && !terminalEnded)"
+                  @click="(terminalSessionId && !terminalEnded) ? (sendToTerminal(critiqueResult.prompt), activeView = 'workspace') : (launchPreset(critiqueResult.prompt, activeRunner), activeView = 'workspace')"
+                  :disabled="launching"
                   class="gf-btn-terminal-cta"
                 >
                   <svg
@@ -308,22 +308,41 @@
                       d="M8 5l8 7-8 7"
                     />
                   </svg>
-                  Run Critique in Terminal
+                  <span
+                    x-text="(terminalSessionId && !terminalEnded) ? 'Send Critique to Running Terminal' : 'Run Critique in Terminal'"
+                  ></span>
                 </button>
               </div>
               <div
                 class="gf-text-muted"
                 style="font-size: 12px; line-height: 1.4"
               >
-                Launches
-                <span
-                  x-text="activeRunner"
-                  class="gf-text-secondary"
-                  style="font-weight: 500"
-                ></span>
-                in read-only critique mode to inspect the goat-flow setup on
-                this project, probe critique-safe skill behavior on real code,
-                and report findings with evidence. Do not edit files.
+                <template x-if="!(terminalSessionId && !terminalEnded)">
+                  <span>
+                    Launches
+                    <span
+                      x-text="activeRunner"
+                      class="gf-text-secondary"
+                      style="font-weight: 500"
+                    ></span>
+                    in read-only critique mode to inspect the goat-flow setup on
+                    this project, probe critique-safe skill behavior on real
+                    code, and report findings with evidence. Do not edit files.
+                  </span>
+                </template>
+                <template x-if="terminalSessionId && !terminalEnded">
+                  <span>
+                    Pastes the critique prompt into the running
+                    <span
+                      x-text="lastRunAgent || activeRunner"
+                      class="gf-text-secondary"
+                      style="font-weight: 500"
+                    ></span>
+                    session and switches to the Workspace view. The prompt is
+                    sent as a single paste, so the agent will start work on it
+                    immediately.
+                  </span>
+                </template>
               </div>
             </div>
           </template>

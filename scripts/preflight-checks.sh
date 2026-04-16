@@ -118,7 +118,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         fi
     done
 else
-    warn "Shellcheck not installed — run: bash scripts/setup-initial.sh"
+    warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────

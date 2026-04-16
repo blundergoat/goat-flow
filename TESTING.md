@@ -15,10 +15,10 @@ bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the abo
 
 Tests live in `test/` with subdirectories:
 
-- `unit/` — config reader, classify-state, CLI parsing, skill constants, rubric registry
-- `integration/` — audit (build + quality), audit on well-configured projects, critique with audit data
-- `contract/` — cross-surface consistency (skill count, version alignment, no-scan phrasing, JSON shape)
-- `fixtures/` — test data for isolated check evaluation
+- `unit/` - config reader, classify-state, CLI parsing, skill constants, rubric registry
+- `integration/` - audit (build + quality), audit on well-configured projects, critique with audit data
+- `contract/` - cross-surface consistency (skill count, version alignment, no-scan phrasing, JSON shape)
+- `fixtures/` - test data for isolated check evaluation
 
 ## What the tests guard
 

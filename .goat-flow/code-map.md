@@ -24,7 +24,7 @@ audit/
   audit.ts                 # Public audit command: build checks + optional harness completeness (--harness)
   check-goat-flow.ts       # 12 setup build checks (gate CI pass/fail)
   check-agent-setup.ts     # 4 agent build checks (gate CI pass/fail)
-  harness/                 # 15 pass/fail completeness checks grouped by concern (5 files + helpers + index)
+  harness/                 # 16 pass/fail completeness checks grouped by concern (5 files + helpers + index)
   render.ts                # Output formatters (text, json, markdown)
   types.ts                 # Audit-specific types (AuditReport, CheckResult, AuditFailure)
 
@@ -51,13 +51,13 @@ setup/
   reference/               # execution-loop.md, coding guidelines, security refs
 
 skills/
-  goat.md                  # Dispatcher skill template
-  goat-debug.md            # Debug + investigate skill template
-  goat-plan.md             # Milestone planning skill template
-  goat-review.md           # Code review + audit skill template
-  goat-sbao.md             # Multi-perspective critique skill template
-  goat-security.md         # Security assessment skill template
-  goat-test.md             # Testing gap analysis skill template
+  goat/SKILL.md            # Dispatcher skill template
+  goat-debug/SKILL.md      # Debug + investigate skill template
+  goat-plan/SKILL.md       # Milestone planning skill template
+  goat-review/SKILL.md     # Code review + audit skill template
+  goat-sbao/SKILL.md       # Multi-perspective critique skill template
+  goat-security/SKILL.md   # Security assessment skill template
+  goat-test/SKILL.md       # Testing gap analysis skill template
   reference/               # skill-preamble.md, skill-conventions.md
 
 hooks/                     # Hook templates (deny-dangerous.sh, etc.)

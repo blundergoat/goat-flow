@@ -7,7 +7,7 @@
 
 Target projects maintain identical skill files in three agent directories: `.claude/skills/`, `.agents/`, and `.github/instructions/`. This 3-way copy model guarantees that each agent runtime (Claude Code, Codex, Copilot) can find its skills in the expected location.
 
-Drift between copies is a proven problem. The 10-to-8 skill consolidation (ADR-007) took 3 hours to reconcile across 3 directories in each project. Alternatives considered: symlinks (unreliable across platforms, especially Windows/WSL), a generation command (`goat-flow install-skills`, adds CLI dependency and complexity), or a single canonical directory (breaks agent runtime expectations).
+Drift between copies is a proven problem. The initial skill-consolidation pass took 3 hours to reconcile across 3 directories in each project. Alternatives considered: symlinks (unreliable across platforms, especially Windows/WSL), a generation command (`goat-flow install-skills`, adds CLI dependency and complexity), or a single canonical directory (breaks agent runtime expectations).
 
 ## Decision
 

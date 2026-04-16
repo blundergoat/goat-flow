@@ -335,8 +335,9 @@
     </div>
 
     <!-- Active session -->
-    <template x-if="terminalAvailable && terminalSessionId">
+    <template x-if="terminalAvailable && sessions.length > 0">
       <div class="flex flex-col flex-1 overflow-hidden">
+        <!-- Header: active-session status, age, End Session button. -->
         <div
           class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0"
         >
@@ -389,8 +390,16 @@
             </button>
           </div>
         </div>
+        <!-- Per-session xterm containers stacked; only the active one is visible. -->
         <div class="flex-1 relative">
-          <div x-ref="terminalContainer" class="terminal-container"></div>
+          <template x-for="session in sessions" :key="session.id">
+            <div
+              :id="`gf-terminal-${session.id}`"
+              class="terminal-container"
+              x-show="session.id === activeSessionId"
+              style="position: absolute; inset: 0"
+            ></div>
+          </template>
           <div x-show="terminalEnded" class="terminal-overlay">
             <div class="text-center space-y-3">
               <p

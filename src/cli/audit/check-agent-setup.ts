@@ -73,13 +73,6 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
       if (!ctx.fs.exists(skillPath)) {
         missing.push(`${af.agent.id}:${skill}`);
       }
-      // Mono-skill internal check: RULES.md must exist in goat/
-      if (skill === "goat") {
-        const rulesPath = `${af.agent.skillsDir}/${skill}/RULES.md`;
-        if (!ctx.fs.exists(rulesPath)) {
-          missing.push(`${af.agent.id}:${skill}/RULES.md`);
-        }
-      }
     }
   }
   if (missing.length === 0) return null;

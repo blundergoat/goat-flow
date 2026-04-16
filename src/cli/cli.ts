@@ -46,7 +46,7 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: claude, codex, gemini
-  --harness         Audit: add AI Harness Completeness scope (15 pass/fail checks across 5 concerns)
+  --harness         Audit: add AI Harness Completeness scope (16 pass/fail checks across 5 concerns)
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes

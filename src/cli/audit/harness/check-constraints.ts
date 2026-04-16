@@ -29,12 +29,12 @@ const denyCoversSecrets: HarnessCheck = {
     const { covered, uncovered, scriptOnly } = classifySecretDeny(ctx);
 
     if (covered.length === 0 && uncovered.length === 0) {
-      // All agents are script-only — platform limitation, not a failure
+      // All agents are script-only - platform limitation, not a failure
       return pass([
         "No agents support settings-based deny patterns",
         ...scriptOnly.map(
           (id) =>
-            `${id}: script-based deny only — file-read deny not available`,
+            `${id}: script-based deny only - file-read deny not available`,
         ),
       ]);
     }
@@ -44,7 +44,7 @@ const denyCoversSecrets: HarnessCheck = {
     }
     if (scriptOnly.length > 0) {
       findings.push(
-        `${scriptOnly.join(", ")}: script-based deny only — file-read deny not available`,
+        `${scriptOnly.join(", ")}: script-based deny only - file-read deny not available`,
       );
     }
     if (uncovered.length > 0) {

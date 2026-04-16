@@ -27,7 +27,7 @@ CLAUDE.md, GEMINI.md, `.claude/`, `.gemini/`.
 - AGENTS.md is the root instruction file (not CLAUDE.md)
 - Hook events: `PreToolUse`, `Stop`, `UserPromptSubmit`, `SessionStart`, `AfterToolUse`, `AfterAgent`
 - Hooks configured in `.codex/hooks.json` (not config.toml)
-- PreToolUse is WIP — "doesn't intercept all shell calls yet" per Codex docs
+- PreToolUse is WIP - "doesn't intercept all shell calls yet" per Codex docs
 - `apply_patch` for edits (not Edit/Write tool)
 - No `/compact`, no `/clear` - context is per-task
 

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-15
-**Context:** Eight independent critiques (3 Claude Code, 5 Codex) reviewed the goat-flow v1.1.0 setup on its own repo. All 8 confirmed structural integrity (tests pass, skills match, paths resolve). Five of 8 found systematic content-accuracy failures in cold-path surfaces that no automated check caught. Setup scores ranged from 58/100 to 90/100 — the range itself demonstrates the gap between structural soundness and content truth.
+**Context:** Eight independent critiques (3 Claude Code, 5 Codex) reviewed the goat-flow v1.1.0 setup on its own repo. All 8 confirmed structural integrity (tests pass, skills match, paths resolve). Five of 8 found systematic content-accuracy failures in cold-path surfaces that no automated check caught. Setup scores ranged from 58/100 to 90/100 - the range itself demonstrates the gap between structural soundness and content truth.
 
 ## Problem
 
@@ -25,7 +25,7 @@ Verified drift found by the critiques:
 
 Accept that cold-path content requires automated truth-checking, not just manual maintenance. Implement in three tiers:
 
-### Tier 1 — Immediate fixes (do now)
+### Tier 1 - Immediate fixes (do now)
 - Fix all verified stale evidence in footguns and lessons
 - Delete `scripts/stop-lint.sh` (contradicts ADR-040)
 - Fix `.goat-flow/tasks/.gitignore` to track milestone files
@@ -33,14 +33,14 @@ Accept that cold-path content requires automated truth-checking, not just manual
 - Fix `check-agent-setup.ts` howToFix to not emit deny-hook-blocked commands
 - Move active items above `## Resolved Entries` in all footgun files
 
-### Tier 2 — Automated checks (next release)
+### Tier 2 - Automated checks (next release)
 - Add preflight check: footgun/lesson `file:line` references resolve and cited lines haven't moved beyond threshold
 - Add preflight check: doc check descriptions match exported check names from code
 - Add preflight check: convention claims (runtime deps, file existence) match reality
 - Extend path-integrity to cover code-map, glossary canonical-file paths, and fenced code blocks
 - Consider auto-generating `docs/audit-and-critique.md` from check code
 
-### Tier 3 — Process changes
+### Tier 3 - Process changes
 - Change Step 01 early-stop rule to require content-drift checks, not just structural audit pass
 - Add cold-path truth verification step to release checklist
 - Add `last_verified` or equivalent to active footgun entries (complementing automated staleness checks)
@@ -50,7 +50,7 @@ Accept that cold-path content requires automated truth-checking, not just manual
 - Manual maintenance of cold-path docs has provably failed: 8 independent reviewers found 20+ content-accuracy issues that had accumulated since the v1.1.0 work
 - The existing preflight validates some doc/code counts (build check totals) but not descriptions, claims, or cross-file consistency
 - The Step 01 early-stop rule (`workflow/setup/01-system-overview.md:12`) currently allows agents to stop when structural audit passes, hardening stale content into "done"
-- The framework's credibility depends on the cold-path surfaces (footguns, lessons, docs) being trustworthy — if agents are told to consult footguns before acting, those footguns must be accurate
+- The framework's credibility depends on the cold-path surfaces (footguns, lessons, docs) being trustworthy - if agents are told to consult footguns before acting, those footguns must be accurate
 
 ## Risks
 

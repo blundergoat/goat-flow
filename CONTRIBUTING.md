@@ -38,9 +38,9 @@ bash scripts/preflight-checks.sh
 
 For shell scripts only: `shellcheck scripts/maintenance/*.sh`
 
-ESLint is scoped to `src/cli/` — the dashboard JS files (`src/dashboard/app.js`, `src/dashboard/preset-prompts.js`) are plain JavaScript outside the TypeScript project service and will produce parse errors if included in the ESLint scope.
+ESLint is scoped to `src/cli/` - the dashboard TypeScript files (`src/dashboard/app.ts`, `src/dashboard/preset-prompts.ts`) are compiled separately via `tsconfig.dashboard.json` and will produce parse errors if included in the main ESLint scope.
 
-Do not run `npm run build` and `preflight-checks.sh` concurrently — the build's `rm -rf dist/` will cause preflight to skip the audit check.
+Do not run `npm run build` and `preflight-checks.sh` concurrently - the build's `rm -rf dist/` will cause preflight to skip the audit check.
 
 ## Project Structure
 
@@ -55,14 +55,14 @@ Do not run `npm run build` and `preflight-checks.sh` concurrently — the build'
 
 ## How to Add a New Audit Check
 
-There are two check systems — pick the right one:
+There are two check systems - pick the right one:
 
-- **Build checks** (`src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts`) — 8 checks that gate CI pass/fail. Adding here makes it a blocking audit requirement.
-- **Quality checks** (`src/cli/audit/harness/`) — 18 advisory checks grouped by concern. Adding here adds a non-blocking quality signal.
+- **Build checks** (`src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts`) - 16 checks (12 setup scope + 4 agent scope) that gate CI pass/fail. Adding here makes it a blocking audit requirement.
+- **Quality checks** (`src/cli/audit/harness/`) - 16 checks grouped by 5 concerns. Adding here adds a quality signal.
 
 ## How to Add a New Skill Template
 
-Skill templates live in `workflow/skills/`. Shared conventions are in `workflow/skills/reference/` (skill-preamble.md and skill-conventions.md). Skills are installed verbatim from templates to project skill directories (e.g., `.claude/skills/`). Add your template and register it in the setup flow.
+Skill templates live in `workflow/skills/` as directories (e.g., `workflow/skills/goat-debug/SKILL.md`), mirroring the installed layout (e.g., `.claude/skills/goat-debug/SKILL.md`). Shared conventions are in `workflow/skills/reference/` (skill-preamble.md and skill-conventions.md). Skills are installed verbatim from templates to project skill directories. Add your template directory and register it in the setup flow.
 
 ## How to Add a New Stack to the Detector
 
@@ -78,7 +78,7 @@ Stack detection lives in `src/cli/detect/project-stack.ts`. Add a new detection 
 
 ## PR Conventions
 
-- Conventional commit format: `type(scope): description` — e.g., `refactor(ci): enhance CI workflow`, `feat(dashboard): improve UX`
+- Conventional commit format: `type(scope): description` - e.g., `refactor(ci): enhance CI workflow`, `feat(dashboard): improve UX`
 - Multi-line body when spanning multiple areas (blank line after summary)
 - Before opening: `npm run typecheck`, `npm test`, and `shellcheck` on any changed `.sh` files must all pass
 - See `docs/coding-standards/git-commit.md` for full conventions

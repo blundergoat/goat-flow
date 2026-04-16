@@ -25,7 +25,6 @@
   "files": [
     "dist",
     "!dist/**/*.map",
-    "src/dashboard",
     "docs/skills",
     "scripts/warn-node-pty.mjs",
     "workflow"
@@ -39,15 +38,17 @@
     ]
   },
   "scripts": {
-    "build": "rm -rf dist/ && tsc && cp -r src/dashboard dist/",
+    "build": "rm -rf dist/ && tsc && npm run build:dashboard",
+    "build:dashboard": "tsc -p tsconfig.dashboard.json && mkdir -p dist/dashboard && cp src/dashboard/index.html src/dashboard/styles.css dist/dashboard/ && rm -rf dist/dashboard/views && cp -r src/dashboard/views dist/dashboard/views",
     "test": "node --import tsx --test test/*/*.test.ts",
-    "typecheck": "tsc --noEmit",
+    "test:coverage": "node --import tsx --experimental-test-coverage --test test/*/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.dashboard.json --noEmit",
     "postinstall": "node scripts/warn-node-pty.mjs",
     "goat-flow:cli": "node dist/cli/cli.js",
     "audit": "node dist/cli/cli.js audit .",
     "audit:harness": "node dist/cli/cli.js audit . --harness",
     "audit:json": "node dist/cli/cli.js audit . --format json",
-    "dev": "tsc && node dist/cli/cli.js dashboard . --dev",
+    "dev": "tsc && npm run build:dashboard && node dist/cli/cli.js dashboard . --dev",
     "dashboard": "npm run build && node dist/cli/cli.js dashboard .",
     "preflight": "bash scripts/preflight-checks.sh",
     "validate": "bash workflow/validate-goat-flow-setup.sh",

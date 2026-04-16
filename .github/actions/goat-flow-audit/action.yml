@@ -62,7 +62,7 @@ runs:
             data = json.load(sys.stdin)
         except (json.JSONDecodeError, KeyError) as e:
             print(f'goat-flow audit output could not be parsed: {e}', file=sys.stderr)
-            data = {'status': 'error', 'message': 'Audit output was not valid JSON — see workflow logs'}
+            data = {'status': 'error', 'message': 'Audit output was not valid JSON - see workflow logs'}
         lines = []
         status = data.get('status', 'unknown')
         emoji = ':white_check_mark:' if status == 'pass' else ':x:'
@@ -79,7 +79,7 @@ runs:
                 detail = ', '.join(f'{k}: {v}' for k, v in summary.items()) if summary else ''
                 lines.append(f'| {se} {scope_name} | {s} | {detail} |')
                 for f in scope_data.get('failures', []):
-                    lines.append(f'|  | :x: | {f.get(\"check\", \"\")} — {f.get(\"message\", \"\")} |')
+                    lines.append(f'|  | :x: | {f.get(\"check\", \"\")} - {f.get(\"message\", \"\")} |')
             concerns = data.get('concerns')
             if concerns:
                 grade = data.get('overall', {}).get('grade', '?')
@@ -95,7 +95,7 @@ runs:
             data = json.load(sys.stdin)
         except (json.JSONDecodeError, KeyError) as e:
             print(f'goat-flow audit output could not be parsed: {e}', file=sys.stderr)
-            data = {'status': 'error', 'message': 'Audit output was not valid JSON — see workflow logs'}
+            data = {'status': 'error', 'message': 'Audit output was not valid JSON - see workflow logs'}
         print('true' if data.get('status') == 'pass' else 'false')
         ")
 
@@ -131,5 +131,5 @@ runs:
       if: steps.audit.outputs.audit_pass == 'false'
       shell: bash
       run: |
-        echo "::error::goat-flow audit failed — one or more scopes did not pass"
+        echo "::error::goat-flow audit failed - one or more scopes did not pass"
         exit 1

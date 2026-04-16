@@ -8,7 +8,7 @@ If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/), IGNORE th
 
 ## Skills to install
 
-Read the detailed templates in `workflow/skills/` (goat.md, goat-debug.md, goat-plan.md, goat-review.md, goat-sbao.md, goat-security.md, goat-test.md) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
+Read the detailed templates in `workflow/skills/` (each skill is a directory containing `SKILL.md`, e.g., `goat/SKILL.md`, `goat-debug/SKILL.md`) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
 
 1. **goat-debug/SKILL.md** - Diagnosis-first debugging. Hypothesis tracking, recurrence checks. Includes investigate mode for code exploration.
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.

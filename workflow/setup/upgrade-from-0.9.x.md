@@ -101,7 +101,7 @@ These files contain real project memory. Migrate the content, don't discard it.
 
 Install the 7 current skills from `workflow/skills/` templates into the agent's skills directory. Each skill must have `goat-flow-skill-version:` in frontmatter matching the current goat-flow version (run `goat-flow --version` to check).
 
-Check expected version: `workflow/skills/goat-debug.md` line 4.
+Check expected version: `workflow/skills/goat-debug/SKILL.md` line 4.
 
 **Verification:** All 7 skills present. All version tags match.
 

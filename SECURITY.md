@@ -2,7 +2,7 @@
 
 ## Scope
 
-GOAT Flow is a documentation framework for AI coding agent workflows. It consists of Markdown docs, Bash scripts, and a local auditor CLI. There is no hosted service and no data collection. The CLI runs locally. The optional dashboard (`goat-flow dashboard`) loads Tailwind CSS, Alpine.js, and xterm.js from jsDelivr CDN — these are the only network requests.
+GOAT Flow is a documentation framework for AI coding agent workflows. It consists of Markdown docs, Bash scripts, and a local auditor CLI. There is no hosted service and no data collection. The CLI runs locally. The optional dashboard (`goat-flow dashboard`) loads Tailwind CSS, Alpine.js, and xterm.js from jsDelivr CDN - these are the only network requests.
 
 Security concerns here are primarily about:
 - Workflow recommendations that could lead to unsafe agent behaviour

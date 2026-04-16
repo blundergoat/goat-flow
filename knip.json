@@ -1,4 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["src/dashboard/preset-prompts.js", "src/dashboard/app.js"]
+  "ignore": [
+    "src/dashboard/preset-prompts.ts",
+    "src/dashboard/app.ts",
+    "src/dashboard/globals.d.ts"
+  ]
 }

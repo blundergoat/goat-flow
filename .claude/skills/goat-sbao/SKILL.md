@@ -172,9 +172,9 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 
 ## Output Format
 
-**Quick mode** — omit Cross-Examination Results, Verified Unique Findings, Retracted Findings, and Clarification Responses (these require Phase 3/4 which quick mode skips). List unique findings without cross-examination verification.
+**Quick mode** - omit Cross-Examination Results, Verified Unique Findings, Retracted Findings, and Clarification Responses (these require Phase 3/4 which quick mode skips). List unique findings without cross-examination verification.
 
-**Full mode** — all sections.
+**Full mode** - all sections.
 
 ```markdown
 ## TL;DR

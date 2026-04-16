@@ -6,13 +6,13 @@ Capture approaches that worked well so future sessions can reuse them deliberate
 **Context:** Renaming setup files, moving shared references, or changing canonical doc paths.
 **Approach:** Update the replacement file first, grep the old path across active docs/code, fix every live reference, then rerun validation (`validate-goat-flow-setup`, preflight, audit) before closing the task.
 
-## Pattern: Multi-agent critique — how to run it effectively
+## Pattern: Multi-agent critique - how to run it effectively
 **Context:** Commissioning multiple independent agent reviews of a framework, architecture, or release candidate.
 
 **When to use:** Large surface area (docs + code + scripts + CI + installed outputs), high cost of a missed finding (audit honesty bugs, user-facing false paths), or pre-release validation.
 
 **How to run:**
-1. Give each reviewer the same prompt. Don't share prior reviews — contamination defeats independence.
+1. Give each reviewer the same prompt. Don't share prior reviews - contamination defeats independence.
 2. Use different models, not just different instances. Codex and Gemini have different systematic blind spots than Claude. One of each covers more ground than three Claudes.
 3. Synthesize and verify after each review. Track first-discovery per finding. Dispute false claims with source evidence before accepting them. ~15-20% of claims per review will need verification.
 4. Stop when score variance drops. If reviews 5, 6, and 7 all score within 3 points of each other, coverage is probably adequate. If scores still vary widely, major categories are still being missed.
@@ -32,7 +32,7 @@ Capture approaches that worked well so future sessions can reuse them deliberate
 
 ## Pattern: Verification scope must match change scope
 **Context:** Any change that touches more than just code.
-**Approach:** When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. When building on existing files, audit them first — errors in source files propagate to everything built on top.
+**Approach:** When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. When building on existing files, audit them first - errors in source files propagate to everything built on top.
 
 ## Pattern: Blocked ≠ impossible
 **Context:** A deny hook blocks a command.
@@ -40,7 +40,7 @@ Capture approaches that worked well so future sessions can reuse them deliberate
 
 ## Pattern: Skill consolidation requires a full grep after every merge
 **Context:** Renaming, merging, or deleting skills.
-**Approach:** After any skill rename/merge/delete: (1) grep entire repo for every old name, (2) check all 3 agent dirs (.claude/, .agents/), (3) check constants + types + test fixtures, (4) run the full test suite + audit. Don't trust "it builds and tests pass" — read the changed files.
+**Approach:** After any skill rename/merge/delete: (1) grep entire repo for every old name, (2) check all 3 agent dirs (.claude/, .agents/), (3) check constants + types + test fixtures, (4) run the full test suite + audit. Don't trust "it builds and tests pass" - read the changed files.
 
 ## Pattern: Complexity refactors need file-level lint before closeout
 **Context:** Reducing complexity in a specific function.

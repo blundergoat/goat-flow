@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-03-30
-**Supersedes:** ADR-007 (10→8 consolidation), partially supersedes ADR-016 (dispatcher counting)
+**Supersedes:** the initial 10→8 consolidation decision, partially supersedes ADR-016 (dispatcher counting)
 
 ## Context
 

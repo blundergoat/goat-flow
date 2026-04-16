@@ -19,5 +19,5 @@
     "isolatedModules": true
   },
   "include": ["src"],
-  "exclude": ["dist", "test", "node_modules"]
+  "exclude": ["dist", "test", "node_modules", "src/dashboard"]
 }

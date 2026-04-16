@@ -98,7 +98,7 @@ function jsonResponse(
   status: number,
   body: unknown,
 ): void {
-  res.writeHead(status, { "Content-Type": "application/json" });
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
 }
 
@@ -123,7 +123,7 @@ export function serveDashboard(
   options: DashboardOptions,
 ): Promise<DashboardServer> {
   return new Promise((resolveStart) => {
-    const shellPath = resolvePackageFile("src/dashboard/index.html");
+    const shellPath = resolvePackageFile("dist/dashboard/index.html");
     const devMode = options.dev === true;
     // In dev mode, re-read on every request. In prod, cache once.
     let cachedTemplate: string | null = devMode
@@ -139,6 +139,14 @@ export function serveDashboard(
     /** Resolve a user-supplied path to an absolute path. */
     function safeResolvePath(raw: string | null): string {
       return resolve(raw || absDefault);
+    }
+
+    /** Fail fast when an endpoint expects a real project directory. */
+    function requireProjectDirectory(projectPath: string): void {
+      const stats = statSync(projectPath);
+      if (!stats.isDirectory()) {
+        throw new Error(`${projectPath} is not a directory`);
+      }
     }
 
     // Live reload state (dev mode only)
@@ -185,7 +193,7 @@ export function serveDashboard(
       return true;
     }
 
-    /** Serve bundled dashboard JavaScript assets from the package source tree. */
+    /** Serve bundled dashboard assets from the compiled `dist/dashboard/` output. */
     function handleAssetRequest(url: URL, res: ServerResponse): boolean {
       if (!url.pathname.startsWith("/assets/")) return false;
 
@@ -196,7 +204,7 @@ export function serveDashboard(
         ? "text/css; charset=utf-8"
         : "application/javascript; charset=utf-8";
       try {
-        const content = loadPackageFile(`src/dashboard/${filename}`);
+        const content = loadPackageFile(`dist/dashboard/${filename}`);
         res.writeHead(200, { "Content-Type": contentType });
         res.end(content);
       } catch {
@@ -254,6 +262,7 @@ export function serveDashboard(
           : null;
 
       try {
+        requireProjectDirectory(projectPath);
         const fs = createFS(projectPath);
         const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
 
@@ -313,6 +322,7 @@ export function serveDashboard(
 
       const agent = agentParam as AgentId;
       try {
+        requireProjectDirectory(projectPath);
         const fs = createFS(projectPath);
         const { loadConfig } = await import("../config/reader.js");
         const { extractProjectFacts } =
@@ -359,6 +369,7 @@ export function serveDashboard(
       const agent = agentParam as AgentId;
 
       try {
+        requireProjectDirectory(projectPath);
         const { composeCritique } =
           await import("../prompt/compose-critique.js");
 
@@ -671,6 +682,7 @@ export function serveDashboard(
       const projectPath = safeResolvePath(url.searchParams.get("path"));
 
       try {
+        requireProjectDirectory(projectPath);
         jsonResponse(res, 200, {
           languages: detectLanguages(projectPath),
           frameworks: detectFrameworks(projectPath),
@@ -1018,7 +1030,10 @@ export function serveDashboard(
       req: IncomingMessage,
       res: ServerResponse,
     ): Promise<void> {
-      const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+      const url = new URL(
+        req.url ?? "/",
+        `http://${req.headers.host ?? "127.0.0.1"}`,
+      );
 
       if (rejectBadHost(req, url, res)) return;
 
@@ -1067,6 +1082,7 @@ export function serveDashboard(
     });
 
     // Dev mode: watch dashboard files and notify connected browsers
+    let closeDevWatcher: (() => void) | null = null;
     if (devMode) {
       const dashDir = dirname(shellPath);
       const notifyReload = (): void => {
@@ -1083,10 +1099,15 @@ export function serveDashboard(
         if (debounce) clearTimeout(debounce);
         debounce = setTimeout(notifyReload, 100);
       });
-      process.on("exit", () => {
+      const closeWatcher = (): void => {
         watcher.close();
-      });
-      console.log("Dev mode: watching src/dashboard/ for changes");
+      };
+      process.on("exit", closeWatcher);
+      closeDevWatcher = () => {
+        process.off("exit", closeWatcher);
+        closeWatcher();
+      };
+      console.log("Dev mode: watching dist/dashboard/ for changes");
     }
 
     // WebSocket upgrade for terminal and live-reload sessions
@@ -1143,15 +1164,45 @@ export function serveDashboard(
     });
 
     // Gracefully stop any live terminal sessions before the process exits.
-    /** Shut down the dashboard server's live terminal state before exiting the process. */
-    const doShutdown = (): void => {
-      void (async () => {
+    let closePromise: Promise<void> | null = null;
+    async function closeServer(): Promise<void> {
+      if (closePromise) return closePromise;
+
+      closePromise = (async () => {
+        process.off("SIGTERM", doShutdown);
+        process.off("SIGINT", doShutdown);
+        closeDevWatcher?.();
+
         if (managerPromise) {
           const manager = await managerPromise;
           manager.shutdown();
         }
-        process.exit(0);
+        if (wssPromise) {
+          const wss = await wssPromise;
+          await new Promise<void>((resolve) => {
+            wss.close(() => {
+              resolve();
+            });
+          });
+        }
+        await new Promise<void>((resolveClose, rejectClose) => {
+          server.close((err) => {
+            if (err) rejectClose(err);
+            else resolveClose();
+          });
+          server.closeIdleConnections?.();
+          server.closeAllConnections?.();
+        });
       })();
+
+      return closePromise;
+    }
+
+    /** Shut down the dashboard server's live terminal state before exiting the process. */
+    const doShutdown = (): void => {
+      void closeServer().finally(() => {
+        process.exit(0);
+      });
     };
     process.on("SIGTERM", doShutdown);
     process.on("SIGINT", doShutdown);
@@ -1188,13 +1239,7 @@ export function serveDashboard(
         });
       resolveStart({
         port: addr.port,
-        close: async () => {
-          if (managerPromise) {
-            const manager = await managerPromise;
-            manager.shutdown();
-          }
-          server.close();
-        },
+        close: closeServer,
       });
     });
   }); // end Promise

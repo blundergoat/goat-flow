@@ -199,6 +199,16 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
     "The execution loop is READ -> SCOPE -> ACT -> VERIFY (4 steps). Setup follows 6 numbered steps.",
   );
   lines.push("");
+  lines.push(
+    "**Design notes** (do NOT flag these as findings - they are intentional):",
+  );
+  lines.push(
+    '- Session logs (`.goat-flow/logs/sessions/*.md`) and task/milestone files (`.goat-flow/tasks/`) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
+  );
+  lines.push(
+    "- `toolchain` and `ask_first` fields in `config.yaml` were removed from the base setup in v1.1.0 (see ADR-039). A lean config.yaml with only version, agents, and skills is correct - not a gap.",
+  );
+  lines.push("");
 
   // Audit summary
   lines.push("---");

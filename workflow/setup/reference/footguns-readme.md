@@ -6,7 +6,7 @@ If the agent did something wrong → `.goat-flow/lessons/` instead.
 
 Every entry MUST include file path evidence. Line numbers should be kept current - the quality audit penalizes stale file:line refs in its context score.
 
-Each file:line ref must be in its own backtick span. Do not combine multiple refs inside a single backtick (e.g. `` `file1:N, file2:M` `` fails the staleness checker — use `` `file1:N` `` and `` `file2:M` `` separately).
+Each file:line ref must be in its own backtick span. Do not combine multiple refs inside a single backtick (e.g. `` `file1:N, file2:M` `` fails the staleness checker - use `` `file1:N` `` and `` `file2:M` `` separately).
 
 Agents should scan only entries above the `## Resolved Entries` section. Resolved entries are historical record, not active traps.
 
