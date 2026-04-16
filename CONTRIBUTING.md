@@ -58,7 +58,7 @@ Do not run `npm run build` and `preflight-checks.sh` concurrently - the build's 
 There are two check systems - pick the right one:
 
 - **Build checks** (`src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts`) - 16 checks (12 setup scope + 4 agent scope) that gate CI pass/fail. Adding here makes it a blocking audit requirement.
-- **Quality checks** (`src/cli/audit/harness/`) - 16 checks grouped by 5 concerns. Adding here adds a quality signal.
+- **Quality checks** (`src/cli/audit/harness/`) - 16 checks grouped by 5 concerns. Gating when `--harness` is passed; not included in this repo's default CI.
 
 ## How to Add a New Skill Template
 

@@ -171,7 +171,7 @@ else
             fail "Skill template $f has version '$ver', expected '$skill_version'"
             template_fail=1
         fi
-    done < <(find workflow/skills -maxdepth 1 -name 'goat*.md' -print0)
+    done < <(find workflow/skills -maxdepth 2 -name 'SKILL.md' -print0)
     if [[ "$template_fail" -eq 0 ]]; then
         pass "All workflow skill templates at version $skill_version"
     fi

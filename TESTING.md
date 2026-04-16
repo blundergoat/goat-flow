@@ -24,7 +24,7 @@ Tests live in `test/` with subdirectories:
 
 - Audit output has no scan references
 - Step 06 references audit (not scanner)
-- package.json version matches RUBRIC_VERSION
+- package.json version matches AUDIT_VERSION
 - SKILL_NAMES matches manifest.json canonical skills
 - Build check IDs are unique
 - Quality checks cover all 5 harness concerns

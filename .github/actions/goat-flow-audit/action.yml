@@ -73,6 +73,8 @@ runs:
             lines.append('')
             scopes = data.get('scopes', {})
             for scope_name, scope_data in scopes.items():
+                if scope_data is None:
+                    continue
                 s = scope_data.get('status', 'unknown')
                 se = ':white_check_mark:' if s == 'pass' else ':x:'
                 summary = scope_data.get('summary', {})

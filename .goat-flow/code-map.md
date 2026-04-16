@@ -73,9 +73,9 @@ deny-dangerous.sh          # Hook: blocks destructive commands
 maintenance/               # Git cleanup, secret scanning, formatting
 ```
 
-## workflow/ -- Setup templates, skills, and reference docs
+## workflow/validate-goat-flow-setup.sh
 
-Note: `validate-goat-flow-setup.sh` lives here, not in `scripts/`.
+Note: lives here, not in `scripts/`.
 
 ```
 validate-goat-flow-setup.sh  # Validates .goat-flow/ structure
