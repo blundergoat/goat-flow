@@ -21,4 +21,4 @@ For 1.1.0:
 - `.goat-flow/config.yaml` stays minimal: version, agents, skills, telemetry, line-limits
 - `workflow/install-goat-flow.sh` and setup docs stop asking agents to invent project commands and boundary lists
 - `audit --harness` must not penalize the absence of these fields
-- Future work is tracked in `.goat-flow/tasks/1.2.0/M22-optional-project-calibration-config.md`
+- Future work is tracked in `.goat-flow/tasks/1.4.0/M04-calibration-config-decisions.md`

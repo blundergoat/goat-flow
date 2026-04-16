@@ -51,3 +51,11 @@ The audit checks that hook files exist and pass `bash -n` syntax check, but neve
 - **Scanner reports enforcement features it didn't detect** (resolved 2026-04-13) - Scanner removed in v1.1.0; hook facts now read from actual file content via `enrichDenyFromExecpolicy()`.
 - **Scanner gives 100% while generated files are broken** (resolved 2026-04-13) - Scanner/rubric engine removed in v1.1.0; replaced with structural build checks plus pass/fail harness completeness checks.
 - **Setup reports scanner metrics as audit results** (resolved 2026-04-13) - Scanner removed; `cli.ts` now calls `runAudit()` and reports actual hook file counts.
+
+## Footgun: Structural Compliance Illusion
+
+**Status:** active | **Created:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
+
+Competitive analysis of 13 agent frameworks (including agnix and cclint) shows that agents frequently "game" the scanner by creating validly-structured but empty or hallucinated documentation files. A 100% structural pass does NOT mean the harness is effective. Without line-level content verification or automated cross-referencing, the auditor measures file existence rather than governance quality.
+
+**Prevention:** Move toward line-level diagnostic precision (see agnix) and automated link verification (see cclint). Use M13's "Enforcement-in-code" pivot to bridge the gap between structure and signal.
