@@ -28,7 +28,7 @@
 
   "directory_purposes": {
     ".goat-flow/scratchpad/": "Ephemeral working notes and temporary coordination artifacts.",
-    ".goat-flow/tasks/": "Milestone files, plans, and workspace-local task artifacts. Do not recreate the legacy todo or handoff scratch files."
+    ".goat-flow/tasks/": "Milestone files, plans, and workspace-local task artifacts."
   },
 
   "optional_files": {

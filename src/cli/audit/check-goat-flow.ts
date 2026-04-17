@@ -1,8 +1,8 @@
 /**
  * GOAT Flow Setup checks for `goat-flow audit`.
- * 12 setup-scope checks that validate project structure:
- *   9 named (lessons, footguns, architecture, code-map, glossary, patterns,
- *            decisions, session-logs, tasks)
+ * 13 setup-scope checks that validate project structure:
+ *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
+ *             decisions, session-logs, tasks, scratchpad)
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
  */
@@ -24,6 +24,10 @@ const NAMED_PATHS = new Set([
   ".goat-flow/logs/sessions/",
   ".goat-flow/tasks/",
   ".goat-flow/tasks/.gitignore",
+  ".goat-flow/tasks/README.md",
+  ".goat-flow/scratchpad/",
+  ".goat-flow/scratchpad/.gitignore",
+  ".goat-flow/scratchpad/README.md",
   ".goat-flow/config.yaml",
 ]);
 
@@ -176,13 +180,38 @@ const tasks: BuildCheck = {
     if (!ctx.fs.exists(".goat-flow/tasks")) missing.push(".goat-flow/tasks/");
     if (!ctx.fs.exists(".goat-flow/tasks/.gitignore"))
       missing.push(".goat-flow/tasks/.gitignore");
+    if (!ctx.fs.exists(".goat-flow/tasks/README.md"))
+      missing.push(".goat-flow/tasks/README.md");
     if (missing.length === 0) return null;
     return {
       check: "Tasks",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
       howToFix:
-        "Create tasks directory by running `goat-flow setup` or `mkdir -p .goat-flow/tasks`.",
+        "Create tasks directory by running `goat-flow setup`. README.md signals the dir is local-session-state by design.",
+    };
+  },
+};
+
+const scratchpad: BuildCheck = {
+  id: "scratchpad",
+  name: "Scratchpad",
+  scope: "setup",
+  run: (ctx) => {
+    const missing: string[] = [];
+    if (!ctx.fs.exists(".goat-flow/scratchpad"))
+      missing.push(".goat-flow/scratchpad/");
+    if (!ctx.fs.exists(".goat-flow/scratchpad/.gitignore"))
+      missing.push(".goat-flow/scratchpad/.gitignore");
+    if (!ctx.fs.exists(".goat-flow/scratchpad/README.md"))
+      missing.push(".goat-flow/scratchpad/README.md");
+    if (missing.length === 0) return null;
+    return {
+      check: "Scratchpad",
+      message: `Missing: ${missing.join(", ")}`,
+      evidence: missing[0],
+      howToFix:
+        "Create scratchpad directory by running `goat-flow setup`. README.md signals the dir is local WIP by design.",
     };
   },
 };
@@ -264,7 +293,7 @@ const configVersionCurrent: BuildCheck = {
   },
 };
 
-/** 12 setup-scope build checks */
+/** 13 setup-scope build checks */
 export const SETUP_CHECKS: BuildCheck[] = [
   lessons,
   footguns,
@@ -275,6 +304,7 @@ export const SETUP_CHECKS: BuildCheck[] = [
   decisions,
   sessionLogs,
   tasks,
+  scratchpad,
   otherFiles,
   configExistsAndParses,
   configVersionCurrent,

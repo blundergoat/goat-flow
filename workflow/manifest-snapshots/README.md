@@ -11,13 +11,13 @@ write. Used by CHANGELOG-scoped claim lint (M06b).
   after release).
 - **Relationship:** at release time, a post-release script copies
   `workflow/manifest.json` into this directory under the release tag. The
-  snapshot then drops out of the edit surface — all future changes land in
+  snapshot then drops out of the edit surface - all future changes land in
   the live file.
 
 ## Why snapshots exist
 
 CHANGELOG entries are frozen at release. The `## v1.1.0` section of
-`CHANGELOG.md` describes v1.1.0 as it shipped — "7 canonical skills",
+`CHANGELOG.md` describes v1.1.0 as it shipped - "7 canonical skills",
 "12 setup + 4 agent build checks", "16 harness checks". When v1.2.0 changes
 a count, the v1.1.0 CHANGELOG section must still read the v1.1.0 numbers.
 Comparing CHANGELOG v1.1.0 claims against the live manifest would flag valid

@@ -14,7 +14,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Hook scripts | `workflow/hooks/` | Copyable hook scripts (deny-dangerous.sh) + per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 16 build checks (12 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, multi-agent support |
+| CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, multi-agent support |
 | Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for critique, help, home, projects, settings, wizard, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -58,7 +58,18 @@ src/dashboard/
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, under 120 lines. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- loaded every turn, with a target of about 120 lines and a hard limit of 150. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+
+## Persistence Tiers
+
+`.goat-flow/` mixes committed project knowledge with local session state. Reviewers should expect both.
+
+| Tier | Paths | Committed? | Purpose |
+|------|-------|-----------|---------|
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns.md`, `skill-preamble.md`, `skill-conventions.md`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, `logs/sessions/` | Yes | Durable project record. Source of truth across sessions. |
+| **Local session state** | `tasks/**`, `scratchpad/**` | No (gitignored by design; only `README.md` and `.gitignore` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes. Coordinates a single work session — not project history. |
+
+**Not a persistence gap.** If a `tasks/` or `scratchpad/` artifact deserves to survive the session, it's promoted to the committed tier: lesson → `lessons/`, trap → `footguns/`, decision → `decisions/`, wrap-up → `logs/sessions/`.
 
 ## Deliberate Trade-offs
 

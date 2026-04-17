@@ -36,7 +36,7 @@ Install both convention files from `workflow/skills/reference/`:
 
 ## Clean stale cross-agent skills
 
-After installing canonical skills for the current agent, check other agents' skill directories for stale goat-flow skill names. For Claude: check `.agents/skills/`. For Codex: check `.claude/skills/`, `.agents/skills/`. For Gemini: check `.claude/skills/`. Do NOT check the current agent's own skill directory here — that was handled during installation above. Stale names to look for:
+After installing canonical skills for the current agent, check other agents' skill directories for stale goat-flow skill names. For Claude: check `.agents/skills/`. For Codex: check `.claude/skills/`, `.agents/skills/`. For Gemini: check `.claude/skills/`. Do NOT check the current agent's own skill directory here - that was handled during installation above. Stale names to look for:
 
 `goat-audit`, `goat-investigate`, `goat-onboard`, `goat-reflect`, `goat-resume`, `goat-preflight`, `goat-research`, `goat-simplify`, `goat-refactor`, `goat-context`
 

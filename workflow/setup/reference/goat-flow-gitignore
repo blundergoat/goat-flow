@@ -20,6 +20,8 @@
 !lessons/**
 !tasks/
 !tasks/**
+!scratchpad/
+!scratchpad/**
 !logs/
 !logs/sessions/
 !logs/sessions/.gitkeep

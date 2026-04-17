@@ -29,16 +29,17 @@ Binary pass/fail. This is the structural setup gate - it validates that files, c
 
 Checks are grouped by **scope**:
 
-**setup scope** (GOAT Flow Setup) - 12 checks on goat-flow-owned surfaces:
-- `lessons` - `.goat-flow/lessons/` directory exists
-- `footguns` - `.goat-flow/footguns/` directory exists
+**setup scope** (GOAT Flow Setup) - 13 checks on goat-flow-owned surfaces:
+- `lessons` - `.goat-flow/lessons/` directory and README exist
+- `footguns` - `.goat-flow/footguns/` directory and README exist
 - `architecture` - `.goat-flow/architecture.md` exists
 - `code-map` - `.goat-flow/code-map.md` exists
 - `glossary` - `.goat-flow/glossary.md` exists
 - `patterns` - `.goat-flow/patterns.md` exists
 - `decisions` - `.goat-flow/decisions/` directory exists
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists
-- `tasks` - `.goat-flow/tasks/` directory exists
+- `tasks` - `.goat-flow/tasks/` directory, `.gitignore`, and README exist (local-session state by design)
+- `scratchpad` - `.goat-flow/scratchpad/` directory, `.gitignore`, and README exist (local WIP by design)
 - `other-files` - Other required files from the project manifest exist (preamble, conventions, config)
 - `config-parses` - `.goat-flow/config.yaml` parses and has required fields
 - `config-version` - Config version matches current release

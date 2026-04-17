@@ -10,7 +10,7 @@ The `--agent` flag scopes the audit to one agent's surfaces: it checks that agen
 
 The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, instruction-file specificity, duplicate surfaces). The checks below cover those content concerns.
 
-`goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --harness` adds structural installation checks for 5 concerns (context, constraints, verification, recovery, feedback loop). Harness results contribute to the overall audit status — a harness failure is an audit failure. Not all checks can reach "installed" on every platform (e.g., Codex lacks compaction hooks), but install as much as possible.
+`goat-flow critique` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --harness` adds structural installation checks for 5 concerns (context, constraints, verification, recovery, feedback loop). Harness results contribute to the overall audit status - a harness failure is an audit failure. Not all checks can reach "installed" on every platform (e.g., Codex lacks compaction hooks), but install as much as possible.
 
 ## Manual verification (recommended, not gated by audit)
 

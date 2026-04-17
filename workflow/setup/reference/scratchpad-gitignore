@@ -1,0 +1,4 @@
+# Ignore all scratchpad contents except the anchor files.
+*
+!.gitignore
+!README.md

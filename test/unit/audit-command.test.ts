@@ -592,19 +592,12 @@ describe("build failure howToFix", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 8: scratchpad is enforced by the other-files setup gate
+// Test 8: scratchpad is enforced by its dedicated named setup check
 // ---------------------------------------------------------------------------
-describe("other-files setup gate", () => {
+describe("scratchpad setup gate", () => {
   it("fails on missing scratchpad because it is part of the setup contract", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "other-files")!;
+    const check = BUILD_CHECKS.find((c) => c.id === "scratchpad")!;
     const ctx = makeCtx({
-      structure: {
-        ...STUB_STRUCTURE,
-        required_dirs: [
-          ...STUB_STRUCTURE.required_dirs,
-          ".goat-flow/scratchpad/",
-        ],
-      },
       fs: stubFS({
         exists: (path: string) => path !== ".goat-flow/scratchpad",
       }),
@@ -613,7 +606,22 @@ describe("other-files setup gate", () => {
     assert.notEqual(
       result,
       null,
-      "scratchpad should be enforced by the other-files setup gate",
+      "scratchpad should be enforced by its named setup check",
+    );
+  });
+
+  it("fails on missing scratchpad README because the dir is local-by-design", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "scratchpad")!;
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path: string) => path !== ".goat-flow/scratchpad/README.md",
+      }),
+    });
+    const result = check.run(ctx);
+    assert.notEqual(
+      result,
+      null,
+      "missing scratchpad/README.md should be flagged — it signals local-by-design intent",
     );
   });
 });

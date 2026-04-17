@@ -6,6 +6,9 @@
     ".goat-flow/.gitignore",
     ".goat-flow/config.yaml",
     ".goat-flow/tasks/.gitignore",
+    ".goat-flow/tasks/README.md",
+    ".goat-flow/scratchpad/.gitignore",
+    ".goat-flow/scratchpad/README.md",
     ".goat-flow/lessons/README.md",
     ".goat-flow/footguns/README.md",
     ".goat-flow/skill-preamble.md",
@@ -26,8 +29,8 @@
   ],
 
   "directory_purposes": {
-    ".goat-flow/scratchpad/": "Ephemeral working notes and temporary coordination artifacts.",
-    ".goat-flow/tasks/": "Milestone files, plans, and workspace-local task artifacts. Do not recreate the legacy todo or handoff scratch files."
+    ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Permanent knowledge belongs in lessons/, footguns/, decisions/, or logs/sessions/. Only README.md and .gitignore are committed.",
+    ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
   "optional_files": {

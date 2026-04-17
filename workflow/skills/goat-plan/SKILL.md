@@ -12,7 +12,7 @@ On full-depth, also read `.goat-flow/skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in the active plan subdir of `.goat-flow/tasks/` (named by `.goat-flow/tasks/.active` — see Step 0) — local working state for the current session. These files are gitignored and not committed; they exist to coordinate between the human and coding agent during a work session, not as permanent project artifacts.
+Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in the active plan subdir of `.goat-flow/tasks/` (named by `.goat-flow/tasks/.active` - see Step 0) - local working state for the current session. These files are gitignored and not committed; they exist to coordinate between the human and coding agent during a work session, not as permanent project artifacts.
 
 **Invoke when:**
 - A feature, project, or significant change needs structured milestones before implementation
@@ -36,7 +36,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 - If `.active` is missing: list top-level entries in `.goat-flow/tasks/`, ask the user which is the active plan, and offer to write `.active` for next time.
 - If found: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
 - If found but stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead
-- Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). Sibling-version subdirs inside `.goat-flow/tasks/` (e.g. `1.4.0/`, `_archived/`) hold deferred or completed work and are NOT scanned by default — only the `.active`-named subdir is. If found, note them so the user knows about existing planning artifacts.
+- Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). Sibling-version subdirs inside `.goat-flow/tasks/` (e.g. `1.4.0/`, `_archived/`) hold deferred or completed work and are NOT scanned by default - only the `.active`-named subdir is. If found, note them so the user knows about existing planning artifacts.
 
 **If starting fresh:**
 1. What are we building? (Accept: a brief from the dispatcher, a requirements doc, a conversation summary, or just a description)

@@ -264,7 +264,7 @@ export function composeCritique(input: CritiqueInput): CritiquePayload {
   lines.push("");
   lines.push("# 3. Quick structural checks");
   lines.push(
-    `wc -l ${instructionFile}                          # target: under 120 lines`,
+    `wc -l ${instructionFile}                          # target: about 120 lines; hard limit: 150`,
   );
   lines.push(
     `ls ${skillsDir}/                                  # expect ${skillFacts.total} goat-flow skill directories`,
