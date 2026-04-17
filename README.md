@@ -79,16 +79,22 @@ Requires Node.js 20+.
 ### 1. Install
 
 ```bash
+# Recommended: local dev dependency (pin the version per project)
+npm install --save-dev @blundergoat/goat-flow
+
+# Or install globally to use goat-flow from any directory
 npm install -g @blundergoat/goat-flow
 
-# or use without installing
+# Or use without installing
 npx @blundergoat/goat-flow@latest audit .
 ```
+
+After a local install, run the CLI with `npx goat-flow ...` from the project root. With a global install, drop the `npx` prefix from the examples below.
 
 ### 2. Open the dashboard
 
 ```bash
-goat-flow dashboard .
+npx goat-flow dashboard .
 ```
 
 A local web UI opens with auditing, setup, and an integrated terminal.
@@ -100,7 +106,7 @@ A local web UI opens with auditing, setup, and an integrated terminal.
 ### 3. Audit your project
 
 ```bash
-goat-flow audit .
+npx goat-flow audit .
 ```
 
 Validates setup correctness across two scopes -- GOAT Flow Setup and Agent Setup -- and prints pass/fail per scope with actionable fix hints. A fresh project fails; that's the baseline you'll re-measure against in step 5. Audit checks setup files, config, skills, and hooks -- not code quality. Run your project's lint and test commands separately.
@@ -108,7 +114,7 @@ Validates setup correctness across two scopes -- GOAT Flow Setup and Agent Setup
 ### 4. Generate setup for your agent
 
 ```bash
-goat-flow setup . --agent claude
+npx goat-flow setup . --agent claude
 ```
 
 Prints a setup prompt. Paste it into Claude Code and let the agent configure your project: instruction file, skills, hooks, and learning loop.
@@ -116,7 +122,7 @@ Prints a setup prompt. Paste it into Claude Code and let the agent configure you
 ### 5. Re-audit
 
 ```bash
-goat-flow audit .
+npx goat-flow audit .
 ```
 
 Now passes. Add `--harness` to see advisory scoring across the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop).
@@ -131,7 +137,7 @@ Skills are structured workflows the agent follows. `/goat` auto-routes to the ri
 
 ## The Five Harness Concerns
 
-GOAT Flow's quality audit (`goat-flow audit . --harness`) evaluates your project's agent harness against 5 concerns - the things every major harness engineering source agrees matter for agent effectiveness.
+GOAT Flow's quality audit (`npx goat-flow audit . --harness`) evaluates your project's agent harness against 5 concerns - the things every major harness engineering source agrees matter for agent effectiveness.
 
 | Concern | Question | What GOAT Flow checks |
 |---------|----------|----------------------|
@@ -146,15 +152,15 @@ These aren't a proprietary model - they're a synthesis of consensus across the h
 ## Commands
 
 ```bash
-goat-flow audit .                      # Validate setup correctness (pass/fail)
-goat-flow audit . --harness            # Add advisory harness-quality scoring
-goat-flow audit . --format json        # JSON output for CI
-goat-flow critique . --agent claude    # Generate agent critique prompt
-goat-flow setup . --agent claude       # Generate setup prompt for Claude Code
-goat-flow setup . --agent gemini       # Gemini CLI setup
-goat-flow setup . --agent codex        # Codex setup
-goat-flow status .                     # Show project state (bare/partial/v0.9/v1.0/v1.1)
-goat-flow dashboard .                  # Visual dashboard with integrated terminal
+npx goat-flow audit .                      # Validate setup correctness (pass/fail)
+npx goat-flow audit . --harness            # Add advisory harness-quality scoring
+npx goat-flow audit . --format json        # JSON output for CI
+npx goat-flow critique . --agent claude    # Generate agent critique prompt
+npx goat-flow setup . --agent claude       # Generate setup prompt for Claude Code
+npx goat-flow setup . --agent gemini       # Gemini CLI setup
+npx goat-flow setup . --agent codex        # Codex setup
+npx goat-flow status .                     # Show project state (bare/partial/v0.9/v1.0/v1.1)
+npx goat-flow dashboard .                  # Visual dashboard with integrated terminal
 ```
 
 See [docs/cli.md](docs/cli.md) for the full command reference.
@@ -177,10 +183,10 @@ All agents share the same execution loop, autonomy tiers, skills, and learning l
 node-pty didn't compile. Run `npm rebuild node-pty`. If using pnpm: `pnpm approve-builds` (select node-pty).
 
 **Audit fails on a fresh project?**
-Expected. Run `goat-flow setup . --agent claude` and paste the output into your agent.
+Expected. Run `npx goat-flow setup . --agent claude` and paste the output into your agent.
 
 **Audit still fails after setup?**
-Re-run `goat-flow audit . --verbose` to see which check failed. The `howToFix` hint on each failure points at the missing file or config key. If hooks show as uninstalled, check `.claude/hooks/` (or `.gemini/hooks/`, `.codex/hooks/`) exists and contains `deny-dangerous.sh`.
+Re-run `npx goat-flow audit . --verbose` to see which check failed. The `howToFix` hint on each failure points at the missing file or config key. If hooks show as uninstalled, check `.claude/hooks/` (or `.gemini/hooks/`, `.codex/hooks/`) exists and contains `deny-dangerous.sh`.
 
 **Agent isn't following the execution loop?**
 Restart the agent session after setup so it re-reads the instruction file (CLAUDE.md, GEMINI.md, or AGENTS.md). Agents only pick up instruction-file changes on session start.

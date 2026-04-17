@@ -39,7 +39,7 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 
 Confirm: "Running [mode] on [scope]. Correct?"
 
-**Gather:** changed scope, existing test plan (if any), audience, footgun context, and concrete commands from `.goat-flow/config.yaml`.
+**Gather:** changed scope, existing test plan (if any), audience, footgun context. Check the instruction file's Essential Commands section or `package.json` scripts for test/lint commands.
 
 If arriving from the dispatcher with context already gathered, confirm and proceed.
 

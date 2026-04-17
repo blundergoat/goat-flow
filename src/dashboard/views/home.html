@@ -240,80 +240,42 @@
         </div>
       </div>
 
-      <!-- completeness gaps: wizard + agent fix buttons -->
+      <!-- completeness gaps: agent fix button -->
       <div x-show="priority() === 'completeness'" x-cloak>
-        <div
+        <button
+          @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+          class="gf-action-btn"
           style="
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            text-align: left;
+            display: flex;
+            align-items: center;
             gap: 10px;
+            width: 100%;
+            border-color: #166534;
           "
         >
-          <button
-            @click="activeView = 'wizard'; detectStack()"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              border-color: #166534;
-            "
+          <span
+            class="gf-play-icon"
+            style="color: #4ade80; border-color: #166534"
           >
-            <span
-              class="gf-play-icon"
-              style="color: #4ade80; border-color: #166534"
+            <svg
+              width="12"
+              height="12"
+              fill="currentColor"
+              viewBox="0 0 20 20"
             >
-              <svg
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title" style="color: #4ade80">
-                Fix harness in wizard
-              </div>
-              <div class="gf-action-desc">Open Setup Wizard</div>
+              <path
+                d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
+              />
+            </svg>
+          </span>
+          <div style="flex: 1; min-width: 0">
+            <div class="gf-action-title" style="color: #4ade80">
+              Fix harness with agent
             </div>
-          </button>
-          <button
-            @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
-          >
-            <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title">Fix harness with agent</div>
-              <div class="gf-action-desc">Send fix prompt to terminal</div>
-            </div>
-          </button>
-        </div>
+            <div class="gf-action-desc">Send fix prompt to terminal</div>
+          </div>
+        </button>
       </div>
 
       <!-- healthy (all passing): review + test + security presets -->

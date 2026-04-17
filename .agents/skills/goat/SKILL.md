@@ -1,6 +1,6 @@
 ---
 name: goat
-description: "The primary GOAT Flow skill for all engineering tasks. Includes modes: debug, test, plan, review, security, and sbao. Use this whenever you need to apply a structured workflow."
+description: "Single entry point that classifies intent and dispatches to the correct goat-* skill."
 goat-flow-skill-version: "1.1.0"
 ---
 # /goat
@@ -9,40 +9,35 @@ goat-flow-skill-version: "1.1.0"
 
 Read `.goat-flow/skill-preamble.md` for shared conventions.
 On full-depth, also read `.goat-flow/skill-conventions.md`.
+Universal constraints from `skill-preamble.md` apply.
 
-## Usage
+Use when the user describes an outcome and wants the right workflow chosen.
 
-Use this skill when you need to perform a structured engineering task. Choose the appropriate mode based on your intent:
+## How It Works
 
-| Mode | Use When... | Implementation |
-|------|-------------|----------------|
-| **debug** | Diagnosing a bug, failure, or investigating unfamiliar code. | Read `DEBUG.md` |
-| **test** | Identifying testing gaps, coverage, or verifying changes. | Read `TEST.md` |
-| **plan** | Creating milestones and structured task lists for features. | Read `PLAN.md` |
-| **review** | Performing a structured code review or quality audit. | Read `REVIEW.md` |
-| **security** | Threat modeling or auditing dependencies and security. | Read `SECURITY.md` |
-| **sbao** | Critiquing a plan or approach via multi-perspective analysis. | Read `SBAO.md` |
+1. **UNDERSTAND** - classify intent and target from the user's request.
+2. **GATHER** - collect minimal context: ask-first boundaries, footgun matches, recent git activity, config/architecture if relevant. Format: `User wants [intent] on [target] with boundaries [none / ask-first]. Recent git [summary / none].`
+3. **ROUTE** - dispatch to the target skill using the preamble routing table. Include a one-line rationale: "Routing to `/goat-debug` - you described a symptom ([symptom]), and the target is [area]."
 
-## Progressive Disclosure
+## Planning Route
 
-1. **Activate:** Call `activate_skill(name="goat")`.
-2. **Context:** Read `.goat-flow/skill-preamble.md` for shared conventions.
-3. **Dispatch:** Identify your mode from the table above and read the corresponding `.md` file.
-
-## Planning Route (Dispatcher)
-
-For planning requests, always check `.goat-flow/tasks/` for existing milestone files before starting fresh.
+For planning requests, check `.goat-flow/tasks/` for existing plans first.
 
 | Complexity | Approach |
 |------------|----------|
-| **Hotfix** | Skip `plan` mode. Implement directly using `READ → SCOPE → ACT → VERIFY`. |
-| **Small Feature** | Use `plan` mode for 1-2 milestones with minimal ceremony. |
-| **Standard** | Use `plan` mode for full milestone breakdown with testing gates. |
-| **System/Infra** | Use `plan` mode → `sbao` mode for cross-boundary critique. |
+| Hotfix | Route to direct execution, no planning needed |
+| Small Feature | Compressed brief → `/goat-plan` for 1-2 milestones |
+| Standard | Feature brief → `/goat-plan` (suggest `/goat-sbao` if approach uncertain) |
+| System / Infrastructure | Feature brief → `/goat-plan` → `/goat-sbao` (recommended) |
+
+## Handoff
+
+Pass the collected brief and any preselected depth to the target skill.
+If the user signals a re-route mid-workflow, preserve context and dispatch again.
 
 ## Constraints
 
-- MUST read `skill-preamble.md` before proceeding to any specific mode.
-- MUST choose exactly one mode for the current task.
-- MUST include a one-sentence rationale for the chosen mode in your response.
-- MUST NOT load more than one mode's logic unless the task specifically requires a transition (e.g., debug → plan).
+- MUST understand intent conversationally, not via keyword lookup.
+- MUST ask 0-2 clarification questions max; route with stated assumption if still ambiguous.
+- MUST include a one-line route rationale with every dispatch.
+- MUST respect explicit skill overrides.

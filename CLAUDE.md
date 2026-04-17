@@ -7,6 +7,7 @@ shellcheck workflow/validate-goat-flow-setup.sh scripts/*.sh scripts/maintenance
 bash -n workflow/validate-goat-flow-setup.sh scripts/*.sh scripts/maintenance/*.sh          # Syntax-check scripts
 bash scripts/preflight-checks.sh         # Full preflight gate
 bash workflow/validate-goat-flow-setup.sh         # Validate GOAT Flow setup scope
+npm run typecheck                                 # Type-check .ts (required by DoD)
 npm test                                          # Run test suite
 ```
 ## Truth Order

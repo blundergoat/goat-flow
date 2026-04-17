@@ -58,19 +58,22 @@
     "prepublishOnly": "npm run build && npm run check-versions"
   },
   "keywords": [
-    "ai",
-    "ai-agent",
-    "audit",
-    "claude",
+    "goat-flow",
+    "ai-agents",
+    "agentic-coding",
+    "ai-coding",
+    "ai-workflow",
+    "harness-engineering",
+    "prompt-engineering",
     "claude-code",
     "codex",
-    "coding-agent",
+    "gemini-cli",
     "copilot",
-    "dashboard",
-    "gemini",
     "llm",
-    "auditor",
-    "workflow"
+    "ai-safety",
+    "developer-tools",
+    "cli",
+    "auditor"
   ],
   "dependencies": {
     "js-yaml": "^4.1.0",

@@ -61,8 +61,15 @@ Scan using severity ordering above. Run negative verification and group linked f
 
 ## Constraints
 
+**Diff review (quick):**
 - MUST review diff for issues, read full files for context
 - MUST NOT flag pre-existing issues as part of this change
+
+**Area audit (full):**
+- MUST scan the declared area for issues regardless of recent changes
+- Pre-existing issues ARE in scope (they are the point of an area audit)
+
+**Both modes:**
 - MUST check each finding against `.goat-flow/footguns/` for matches. Omit footgun tags when no direct match is found.
 - MUST order findings by severity, not by file or discovery order
 - Universal constraints from skill-preamble.md apply.
