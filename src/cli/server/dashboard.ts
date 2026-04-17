@@ -370,8 +370,7 @@ export function serveDashboard(
 
       try {
         requireProjectDirectory(projectPath);
-        const { composeQuality } =
-          await import("../prompt/compose-quality.js");
+        const { composeQuality } = await import("../prompt/compose-quality.js");
 
         let auditReport: AuditReport | null = null;
         try {

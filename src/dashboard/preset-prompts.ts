@@ -56,11 +56,11 @@ const PRESETS: Preset[] = [
     cat: "review",
   },
   {
-    id: "critique",
+    id: "quality-check-goatflow",
     name: "Critique GOAT Flow",
     desc: "Deep honest audit of goat-flow setup quality",
     prompt:
-      "/goat deeply critique the GOAT Flow setup in this project. Be thorough, honest, and specific. This is a READ-ONLY critique — do NOT write, create, or modify any files.\n\n1. Pre-check: count .claude/skills/goat* directories (should be 7: goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test). Note stale ones.\n2. Read CLAUDE.md, all skills, hooks, settings.json. List what was created and what seems like noise.\n3. Assess each skill via file analysis on THIS codebase: /goat (routing logic), /goat-debug (diagnosis structure), /goat-plan (read-only analysis mode), /goat-review (review a real file), /goat-sbao (critique structure), /goat-security (threat model applicability), /goat-test (testing gap coverage).\n4. Critique: Is the execution loop useful or ceremonial? Are 7 skills the right number? What overlaps? What gaps? Any contradictions?\n5. Rate the system 0-100 (usefulness 0-25, signal-to-noise 0-25, adaptability 0-25, learnability 0-25). Rate the setup 0-100 (accuracy 0-25, relevance 0-25, completeness 0-25, friction 0-25).\n6. Top 5 highest-impact improvements with evidence.",
+      "/goat deeply critique the GOAT Flow setup in this project. Be thorough, honest, and specific. This is a READ-ONLY critique — do NOT write, create, or modify any files.\n\n1. Pre-check: count .claude/skills/goat* directories (should be 7: goat, goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa). Note stale ones.\n2. Read CLAUDE.md, all skills, hooks, settings.json. List what was created and what seems like noise.\n3. Assess each skill via file analysis on THIS codebase: /goat (routing logic), /goat-debug (diagnosis structure), /goat-plan (read-only analysis mode), /goat-review (review a real file), /goat-critique (critique structure), /goat-security (threat model applicability), /goat-qa (testing gap coverage).\n4. Critique: Is the execution loop useful or ceremonial? Are 7 skills the right number? What overlaps? What gaps? Any contradictions?\n5. Rate the system 0-100 (usefulness 0-25, signal-to-noise 0-25, adaptability 0-25, learnability 0-25). Rate the setup 0-100 (accuracy 0-25, relevance 0-25, completeness 0-25, friction 0-25).\n6. Top 5 highest-impact improvements with evidence.",
     cat: "review",
   },
 
@@ -89,48 +89,48 @@ const PRESETS: Preset[] = [
 
   // === Critique ===
   {
-    id: "sbao",
-    name: "SBAO Critique",
+    id: "critique-plan",
+    name: "Multi-perspective Critique",
     desc: "Multi-perspective critique with 3 sub-agents",
-    prompt: "/goat-sbao critique this plan",
+    prompt: "/goat-critique this plan",
     cat: "critique",
   },
   {
-    id: "sbao-artifact",
+    id: "critique-artifact",
     name: "Critique Any Artifact",
-    desc: "SBAO critique of any artifact - assessment, strategy, findings",
-    prompt: "/goat-sbao critique this artifact",
+    desc: "Multi-perspective critique of any artifact - assessment, strategy, findings",
+    prompt: "/goat-critique this artifact",
     cat: "critique",
   },
 
-  // === Test ===
+  // === QA ===
   {
     id: "test",
     name: "Testing Gap Analysis",
     desc: "Find undertested risks in recent changes",
-    prompt: "/goat-test analyse my recent changes",
-    cat: "test",
+    prompt: "/goat-qa analyse my recent changes",
+    cat: "qa",
   },
   {
     id: "test-audit",
     name: "Coverage Audit",
     desc: "Audit test coverage for an existing area",
-    prompt: "/goat-test audit mode",
-    cat: "test",
+    prompt: "/goat-qa audit mode",
+    cat: "qa",
   },
   {
     id: "test-regression",
     name: "Regression Guard",
     desc: "Lock down a bug fix with an invariant",
-    prompt: "/goat-test regression guard for my recent bug fix",
-    cat: "test",
+    prompt: "/goat-qa regression guard for my recent bug fix",
+    cat: "qa",
   },
   {
     id: "user-flow",
     name: "User Flow Diagram",
     desc: "Mermaid flow diagram for QA handoff",
-    prompt: "/goat-test I need a flow diagram for a user-visible feature",
-    cat: "test",
+    prompt: "/goat-qa I need a flow diagram for a user-visible feature",
+    cat: "qa",
   },
 
   // === Security ===
@@ -151,8 +151,8 @@ const PRESETS: Preset[] = [
   {
     id: "security-critique",
     name: "Critique Security Findings",
-    desc: "SBAO critique of a security assessment",
-    prompt: "/goat-sbao critique this security assessment",
+    desc: "Multi-perspective critique of a security assessment",
+    prompt: "/goat-critique this security assessment",
     cat: "security",
   },
 ];

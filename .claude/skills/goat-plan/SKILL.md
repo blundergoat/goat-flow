@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "Milestone task file generator and manager. Reads .goat-flow/tasks/.active to find the active plan subdir, creates structured milestone files there, tracks progress, enforces testing gates, and provides local working state for the current session."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
 # /goat-plan
 
@@ -17,15 +17,15 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 **Invoke when:**
 - A feature, project, or significant change needs structured milestones before implementation
 - The dispatcher's Planning Route has produced a brief and now needs milestone breakdown
-- A goat-sbao critique recommends restructuring the approach - milestones need rewriting
+- A `/goat-critique` run recommends restructuring the approach - milestones need rewriting
 - Mid-implementation: scope changed, something unexpected happened, milestones need updating
 - Resuming work after a break - milestone files show where you stopped and what's next
 
 **NOT this skill:**
 - Writing a feature brief → dispatcher Planning Route
 - Sharpening requirements → dispatcher Planning Route
-- Critiquing a plan → /goat-sbao
-- Finding testing gaps → /goat-test
+- Critiquing a plan → /goat-critique
+- Finding testing gaps → /goat-qa
 - Diagnosing a bug → /goat-debug
 - Reviewing code → /goat-review
 

@@ -15,6 +15,20 @@ category: skills
 
 **Prevention:** When editing `workflow/skills/*/SKILL.md`, update the installed copies in `.claude/skills/` and `.agents/skills/` in the same change, or expect the drift check to fail before unrelated work can be verified cleanly.
 
+## Footgun: Release-version bumps can break skill-rename work through stale fixtures and hardcoded current-version routing
+
+**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A skill rename can look complete on directory, manifest, and docs surfaces but still fail verification because release-coupled helpers lag the version bump. On 2026-04-18, the M07 rename run first failed `npm test` in `test/integration/audit-build.test.ts` because the shared config stub still encoded the previous release version. After fixing that, the same verification pass exposed a second break: setup routing still hardcoded `1.1.x` as the only current branch, so a healthy `1.2.0` project was misclassified as needing an upgrade.
+
+**Evidence:**
+- `src/cli/audit/check-goat-flow.ts:272-289` enforces exact equality between `.goat-flow/config.yaml` and `AUDIT_VERSION`.
+- `test/fixtures/projects/index.ts:34-48` is the shared `stubConfig()` used by audit-build fixtures; if it drifts from `AUDIT_VERSION`, "healthy project" tests fail for the wrong reason.
+- `src/cli/classify-state.ts:41,145-180` derives the current version family and routes current vs outdated installs; hardcoding a previous family breaks `composeSetup()` as soon as the package version advances.
+- `workflow/install-goat-flow.sh:72-81` must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
+
+**Prevention:** When a skill rename ships with a version bump, treat version-sensitive helpers as part of the rename surface. Update current-version classifiers, shared config fixtures, install-script version discovery, and setup-routing tests in the same change before trusting `npm test`.
+
 ## Footgun: Workflow template source and installed copy can silently diverge
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-15 | **Updated:** 2026-04-17 | **Evidence:** ACTUAL_MEASURED

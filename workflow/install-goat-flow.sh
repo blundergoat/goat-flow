@@ -70,7 +70,15 @@ case "$AGENT" in
 esac
 
 # --- Read version from package.json ---
-VERSION=$(node -e "console.log(require('$GOAT_FLOW_ROOT/package.json').version)" 2>/dev/null || echo "1.1.0")
+VERSION=$(
+  node -e "console.log(require('$GOAT_FLOW_ROOT/package.json').version)" 2>/dev/null ||
+    sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$GOAT_FLOW_ROOT/package.json" | head -n1
+)
+
+if [[ -z "$VERSION" ]]; then
+  echo "ERROR: could not determine goat-flow version from package.json"
+  exit 1
+fi
 
 COPIED=0
 SKIPPED=0
@@ -137,7 +145,7 @@ echo ""
 # 4. Install skills (always overwrite - verbatim from templates)
 # ==========================================================================
 echo "Skills → $SKILLS_DIR/:"
-SKILL_NAMES="goat goat-debug goat-plan goat-review goat-sbao goat-security goat-test"
+SKILL_NAMES="goat goat-debug goat-plan goat-review goat-critique goat-security goat-qa"
 for skill in $SKILL_NAMES; do
   skill_dir="$GOAT_FLOW_ROOT/workflow/skills/$skill"
   if [[ ! -d "$skill_dir" ]]; then

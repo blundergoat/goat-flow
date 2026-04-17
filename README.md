@@ -8,7 +8,7 @@ AI coding agents are powerful but unreliable. They skip verification steps, crea
 
 **Execution Loop** -- READ → SCOPE → ACT → VERIFY. Read before you write. Verify after you write. This prevents the agent from guessing at code it hasn't read or shipping without running checks.
 
-**Skills** -- Seven structured workflows (`/goat-debug`, `/goat-review`, `/goat-plan`, `/goat-sbao`, `/goat-security`, `/goat-test`, `/goat`) with phases and human gates. The `/goat` dispatcher classifies your request and routes to the right skill automatically.
+**Skills** -- Seven structured workflows (`/goat-debug`, `/goat-review`, `/goat-plan`, `/goat-critique`, `/goat-security`, `/goat-qa`, `/goat`) with phases and human gates. The `/goat` dispatcher classifies your request and routes to the right skill automatically.
 
 **Enforcement Hooks** -- Pre-tool hooks intercept dangerous commands (`rm -rf`, force push, secret file access) and reject them with an explanation. goat-flow ships `deny-dangerous.sh` - project-specific linting and constraints are registered in `config.yaml`.
 
@@ -46,7 +46,7 @@ GOAT Flow Audit: /your/project
 
 GOAT Flow Setup:         PASS
   Skills:                7/7 installed
-  Config:                valid, version 1.1.0
+  Config:                valid, version 1.2.0
   InstructionFile:       118 lines (max across agents)
 
 Agent Setup:             PASS
@@ -133,7 +133,7 @@ Now passes. Add `--harness` to see advisory scoring across the 5 harness concern
 /goat review src/auth.ts
 ```
 
-Skills are structured workflows the agent follows. `/goat` auto-routes to the right one -- debug, review, plan, security audit, test gap analysis, or multi-perspective critique (`/goat-sbao`).
+Skills are structured workflows the agent follows. `/goat` auto-routes to the right one -- debug, review, plan, security audit, test gap analysis, or multi-perspective critique (`/goat-critique`).
 
 ## The Five Harness Concerns
 

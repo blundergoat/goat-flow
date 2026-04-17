@@ -38,7 +38,7 @@ Commands:
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
   quality           Agent-driven quality assessment prompt (requires --agent)
   setup             Generate setup prompt (adapts to project state)
-  status            Show project state (bare/partial/v0.9/v1.0/v1.1)
+  status            Show project state (bare/partial/v0.9/outdated/current)
   dashboard         Launch browser dashboard with audit, setup, and terminal
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
 Arguments:
@@ -101,7 +101,8 @@ const REMOVED_COMMANDS: Record<string, string> = {
   fix: '"fix" was removed. Use "setup" instead - it adapts to your project\'s state.',
   eval: '"eval" was removed. Use "setup" instead - it adapts to your project\'s state.',
   scan: '"scan" was removed. Use "audit" for setup validation or "quality --agent <id>" for agent assessment.',
-  critique: '"critique" was renamed to "quality". Use "goat-flow quality . --agent <id>".',
+  critique:
+    '"critique" was renamed to "quality". Use "goat-flow quality . --agent <id>".',
 };
 /** Accepted values for the --format flag */
 const VALID_FORMATS = ["json", "text", "markdown"] as const;
@@ -250,8 +251,8 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
     bare: "\x1b[90m", // gray
     partial: "\x1b[33m", // yellow
     "v0.9": "\x1b[31m", // red
-    "v1.0": "\x1b[36m", // cyan
-    "v1.1": "\x1b[32m", // green
+    outdated: "\x1b[36m", // cyan
+    current: "\x1b[32m", // green
     error: "\x1b[31m", // red
   };
   const reset = "\x1b[0m";

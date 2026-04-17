@@ -1,4 +1,4 @@
-# CLAUDE.md - v1.1.0 (2026-04-06)
+# CLAUDE.md - v1.2.0 (2026-04-18)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 ## Essential Commands
 
@@ -117,7 +117,7 @@ If working from a plan/milestone file, tick `- [x]` on each completed task immed
 | CLI auditor/prompt code | `src/cli/` |
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
-| Skills | `.claude/skills/` (goat, goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test) |
+| Skills | `.claude/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
 | Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
 | Config | `.goat-flow/config.yaml` |

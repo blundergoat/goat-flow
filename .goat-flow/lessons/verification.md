@@ -90,7 +90,7 @@ category: verification
 
 **Created:** 2026-04-05
 
-**What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-test` skill generates test plans after implementation, and `stop-lint.sh` runs linting after every turn, but neither catches logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
+**What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-qa` skill generates test plans after implementation, and `stop-lint.sh` runs linting after every turn, but neither catches logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
 
 **Root cause:** The verification loop runs at the wrong granularity. Lint after every turn catches syntax. Tests after every milestone catch logic. The gap between these two is where regressions hide.
 
@@ -118,7 +118,7 @@ category: verification
 
 **Created:** 2026-04-11
 **What happened:** M17a extracted skill modes into the repository template directory and left repository-local template references in the skill files. Skills are installed verbatim, so every project received instructions that pointed back into the goat-flow repo instead of the installed project. R9 scored system avg 42 (down from 53.7) largely because of this single bug.
-**Evidence:** R9 critiques - 6 of 7 projects flagged broken template references. `workflow/skills/goat/SKILL.md`, `workflow/skills/goat-security/SKILL.md`, `workflow/skills/goat-test/SKILL.md` all used repository-local template paths instead of installed-project template paths. (Paths updated from retired flat-file layout to current directory structure.)
+**Evidence:** R9 critiques - 6 of 7 projects flagged broken template references. `workflow/skills/goat/SKILL.md`, `workflow/skills/goat-security/SKILL.md`, `workflow/skills/goat-qa/SKILL.md` all used repository-local template paths instead of installed-project template paths. (Paths updated from retired flat-file layout to current directory structure.)
 **Prevention:** After editing any skill file that references a path, verify the path exists from the PROJECT's perspective, not the goat-flow repo's perspective. Add to DoD: "grep skill files for repository-local template paths and replace them with the installed project-local equivalent before shipping."
 
 ---
@@ -225,7 +225,7 @@ category: verification
 
 **Created:** 2026-04-16
 
-**What happened:** `workflow/manifest.json` listed only `"goat"` in `skills.canonical` and classified the other 6 active skills (goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test) as `stale_names`. `src/cli/constants.ts` `SKILL_NAMES` also said `["goat"]`. The install script (`workflow/install-goat-flow.sh:137`) correctly installs all 7, and the repo itself has all 7 in `.claude/skills/`. But the audit read `canonical` to determine expected count, so it reported "1/1 installed" on target projects. The dashboard and setup prompt both showed "1/1 skills installed" - which looked correct but was silently wrong. Target project `/srv/halaxy-cypress` only had the `goat` dispatcher installed; the other 6 functional skills were missing.
+**What happened:** `workflow/manifest.json` listed only `"goat"` in `skills.canonical` and classified the other 6 active skills (goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa) as `stale_names`. `src/cli/constants.ts` `SKILL_NAMES` also said `["goat"]`. The install script (`workflow/install-goat-flow.sh:137`) correctly installs all 7, and the repo itself has all 7 in `.claude/skills/`. But the audit read `canonical` to determine expected count, so it reported "1/1 installed" on target projects. The dashboard and setup prompt both showed "1/1 skills installed" - which looked correct but was silently wrong. Target project `/srv/halaxy-cypress` only had the `goat` dispatcher installed; the other 6 functional skills were missing.
 
 **Root cause:** At some point the manifest was updated to reflect a "mono-skill dispatcher" model where `goat` was the only canonical skill (it dispatches to the others). But the install script, the repo's own skill directories, and user expectations all assumed 7 canonical skills. The contract test `SKILL_NAMES matches manifest.json canonical` existed but passed because both constants.ts AND manifest.json were wrong in the same direction - the test validated consistency between two broken sources, not correctness.
 

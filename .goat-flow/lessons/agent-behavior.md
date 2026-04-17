@@ -101,7 +101,7 @@ category: agent-behavior
 
 **Why it matters:** The core trio's value comes from triangular tension - one agent weighing "what could go wrong" against "what's the cost/benefit" against "what's the fastest path." Splitting them into separate agents eliminates that tension. The fresh-context agent exists to catch blind spots the framework creates - if all 3 agents use the framework, there's no control group.
 
-**Prevention:** Before launching SBAO sub-agents, re-read the SBAO spec in `workflow/skills/goat-sbao/SKILL.md` or `.claude/skills/goat-sbao/SKILL.md`. The structure is always: 2 agents with core trio, 1 agent without. Never split SKEPTIC/ANALYST/STRATEGIST into separate agents.
+**Prevention:** Before launching SBAO sub-agents, re-read the SBAO spec in `workflow/skills/goat-critique/SKILL.md` or `.claude/skills/goat-critique/SKILL.md`. The structure is always: 2 agents with core trio, 1 agent without. Never split SKEPTIC/ANALYST/STRATEGIST into separate agents.
 
 ---
 

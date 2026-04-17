@@ -50,15 +50,15 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks.
 
 | Complexity | Ceremony |
 |------------|----------|
-| Hotfix | Skip goat-plan - just implement directly. Skip goat-sbao entirely. |
-| Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-sbao. |
-| Standard | goat-plan: full milestone breakdown with testing gates. Use goat-sbao if approach is genuinely uncertain. |
-| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. goat-sbao strongly recommended. |
+| Hotfix | Skip goat-plan - just implement directly. Skip goat-critique entirely. |
+| Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-critique. |
+| Standard | goat-plan: full milestone breakdown with testing gates. Use goat-critique if approach is genuinely uncertain. |
+| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. goat-critique strongly recommended. |
 
 ## Depth Choice
 
 - **Quick:** compressed workflow, minimal ceremony, direct output
-- **Full:** all phases, SBAO if planning, full output format
+- **Full:** all phases, multi-perspective critique if planning, full output format
 - If arriving from the dispatcher with depth already chosen, skip the depth question
 
 ## Routing
@@ -68,9 +68,9 @@ When invoked via /goat or when intent is ambiguous:
 **Route by intent:**
 - Bug, failure, investigation → /goat-debug
 - Quality review, audit → /goat-review
-- Multi-perspective critique → /goat-sbao
+- Multi-perspective critique → /goat-critique
 - Security, compliance, dependency audit → /goat-security
-- Testing gaps, coverage, verification planning → /goat-test
+- Testing gaps, coverage, verification planning → /goat-qa
 - Feature planning, milestones → /goat-plan
 - Simple implementation (rename, add log, move constant) → no skill, use execution loop directly
 - Simple question → answer directly
@@ -82,10 +82,10 @@ When invoked via /goat or when intent is ambiguous:
 | Input | Options |
 |-------|---------|
 | "check the auth code" | debug vs review vs security |
-| "analyse/evaluate/critique this" | review vs sbao vs plan (depends on artifact type) |
-| "get a second opinion" | sbao vs review |
+| "analyse/evaluate/critique this" | review vs critique vs plan (depends on artifact type) |
+| "get a second opinion" | critique vs review |
 | "assess the setup" | review vs security (depends on concern) |
-| "refactor the tests" | plan vs test |
+| "refactor the tests" | plan vs qa |
 
 ## No-Skill Fast Path
 

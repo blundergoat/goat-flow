@@ -16,7 +16,7 @@ import type {
   AuditContext,
   ProjectStructure,
 } from "../../../src/cli/audit/types.js";
-import { SKILL_NAMES } from "../../../src/cli/constants.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "../../../src/cli/constants.js";
 
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   return {
@@ -38,7 +38,7 @@ export function stubConfig(
     exists: true,
     valid: true,
     config: {
-      version: "1.1.0",
+      version: AUDIT_VERSION,
       footguns: { path: ".goat-flow/footguns/" },
       lessons: { path: ".goat-flow/lessons/" },
       decisions: { path: ".goat-flow/decisions/" },

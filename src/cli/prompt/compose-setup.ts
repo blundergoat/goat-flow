@@ -1,7 +1,7 @@
 /**
  * Composes setup prompts from audit results and project facts.
  * Routes by project state: bare/partial → full setup guide,
- * v0.9/v1.0 → upgrade redirect, v1.1 → audit-driven pass/fail.
+ * v0.9/outdated → upgrade redirect, current → audit-driven pass/fail.
  */
 import type { AuditReport } from "../audit/types.js";
 import type { AgentId, ProjectFacts } from "../types.js";
@@ -43,7 +43,7 @@ const SETUP_FILES: Record<AgentId, string> = {
 };
 
 // ----------------------------------------------------------------
-// Mode: Audit pass (v1.1, all build checks passing)
+// Mode: Audit pass (current version, all build checks passing)
 // ----------------------------------------------------------------
 
 function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
@@ -96,7 +96,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 }
 
 // ----------------------------------------------------------------
-// Mode: Audit fail (v1.1, some build checks failing)
+// Mode: Audit fail (current version, some build checks failing)
 // ----------------------------------------------------------------
 
 function renderAuditFail(
@@ -146,21 +146,26 @@ function renderAuditFail(
 }
 
 // ----------------------------------------------------------------
-// Mode: Upgrade redirect (v0.9 or v1.0 projects)
+// Mode: Upgrade redirect (v0.9 or outdated projects)
 // ----------------------------------------------------------------
 
 function renderUpgradeRedirect(
   _facts: ProjectFacts,
   agentId: AgentId,
-  version: "v0.9" | "v1.0",
+  state: "v0.9" | "outdated",
+  detectedVersion?: string,
 ): string {
   const profile = PROFILES[agentId];
   const lines: string[] = [];
 
-  if (version === "v1.0") {
+  if (state === "outdated") {
     lines.push(`# GOAT Flow Upgrade - ${profile.name}`);
     lines.push("");
-    lines.push("This project has goat-flow v1.0.");
+    lines.push(
+      detectedVersion
+        ? `This project has goat-flow ${detectedVersion}.`
+        : "This project has an older goat-flow version.",
+    );
     lines.push("");
 
     lines.push("## Step 1 - Install files");
@@ -215,7 +220,7 @@ function renderUpgradeRedirect(
   }
 
   lines.push("");
-  lines.push(`## ${version === "v1.0" ? "Step 3" : "Step 4"} - Verify`);
+  lines.push(`## ${state === "outdated" ? "Step 3" : "Step 4"} - Verify`);
   lines.push("");
   lines.push(
     `**Audit:** Run \`${getCliCommand()} audit . --agent ${agentId}\``,
@@ -318,10 +323,10 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
  * Compose a setup prompt for the given agent.
  *
  * Routing:
- * - bare/partial/error → full setup guide (step references)
- * - v0.9/v1.0         → upgrade/migration redirect
- * - v1.1 + audit pass → success with real counts from facts
- * - v1.1 + audit fail → failing checks with howToFix + step references
+ * - bare/partial/error   → full setup guide (step references)
+ * - v0.9/outdated       → upgrade/migration redirect
+ * - current + audit pass → success with real counts from facts
+ * - current + audit fail → failing checks with howToFix + step references
  */
 export function composeSetup(
   auditReport: AuditReport,
@@ -338,10 +343,15 @@ export function composeSetup(
   ) {
     return renderFullSetup(facts, agentId);
   }
-  if (projectState.state === "v0.9" || projectState.state === "v1.0") {
-    return renderUpgradeRedirect(facts, agentId, projectState.state);
+  if (projectState.state === "v0.9" || projectState.state === "outdated") {
+    return renderUpgradeRedirect(
+      facts,
+      agentId,
+      projectState.state,
+      projectState.version,
+    );
   }
-  // v1.1: audit-driven
+  // Current version: audit-driven
   if (auditReport.status === "pass") {
     return renderAuditPass(facts, agentId);
   }

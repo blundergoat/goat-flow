@@ -102,16 +102,16 @@ describe("quality prompt content", () => {
       "Should reference goat-review skill",
     );
     assert.ok(
-      result.prompt.includes("/goat-sbao"),
-      "Should reference goat-sbao skill",
+      result.prompt.includes("/goat-critique"),
+      "Should reference goat-critique skill",
     );
     assert.ok(
       result.prompt.includes("/goat-security"),
       "Should reference goat-security skill",
     );
     assert.ok(
-      result.prompt.includes("/goat-test"),
-      "Should reference goat-test skill",
+      result.prompt.includes("/goat-qa"),
+      "Should reference goat-qa skill",
     );
     assert.ok(
       result.prompt.includes(

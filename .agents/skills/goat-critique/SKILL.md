@@ -1,9 +1,9 @@
 ---
-name: goat-sbao
+name: goat-critique
 description: "Multi-perspective critique using sub-agent orchestration. Generates competing analyses, ranks them, cross-examines disagreements, and synthesises a prime output."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
-# /goat-sbao
+# /goat-critique
 
 ## Shared Conventions
 
@@ -23,7 +23,7 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 **NOT this skill:**
 - No artifact exists yet → create one first (goat-review, goat-debug, etc.)
 - Simple factual question → answer directly
-- Trivial artifact (hotfix, single-file change) → use goat-review instead. If it's not worth 3 agents and 5 phases, don't use goat-sbao.
+- Trivial artifact (hotfix, single-file change) → use goat-review instead. If it's not worth 3 agents and 5 phases, don't use goat-critique.
 
 ## Step 0 - Intake
 
@@ -37,7 +37,7 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 **Mode choice:**
 - Quick (default): Agents B/C → Generate, Rank, Synthesise. 2 agents, 3 phases.
 - Full: Agents A/B/C → 5 phases with cross-examination and human dispute resolution.
-- `/goat-sbao` or router: confirm artifact and present mode recommendation based on stake calibration.
+- `/goat-critique` or router: confirm artifact and present mode recommendation based on stake calibration.
 - Read relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`.
 - Skill-chained: skip intake confirmation; use caller context and start at Phase 1.
 

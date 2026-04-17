@@ -12,7 +12,7 @@ Real verification requires a context boundary: a different agent, a fresh invoca
 
 **Trigger:** Any proposal to add self-verification phases within a single skill invocation. The value is in the skill handoff, not in asking the same agent to re-read its own diff.
 
-**Decision:** ADR-019. Don't add goat-doer/goat-verifier. Use existing skills (/goat-review, /goat-test) as the verification layer.
+**Decision:** ADR-019. Don't add goat-doer/goat-verifier. Use existing skills (/goat-review, /goat-qa) as the verification layer.
 
 ---
 
@@ -81,3 +81,21 @@ Keep internal audit taxonomy and counts in deeper diagnostic views, expanded sec
 **Trigger:** Any dashboard or status view that starts showing implementation shorthand, internal counters, or type-system vocabulary before it answers the basic user question.
 
 **Prevention:** If a label needs a glossary (`I`, `A`, `m`, "ack"), it probably does not belong in the first-glance card. Design summary UI from "what decision does the user need to make next?" and only then decide how much internal structure to expose.
+
+---
+
+## Lesson: Don't carve I/O side-effect exceptions into prompts that forbid I/O
+
+**Created:** 2026-04-18
+
+M13's first draft extended `goat-flow quality` by asking the agent to write a structured report to `.goat-flow/quality/history/<date>-<agent>.json` under a single-path READ-ONLY exception. The rest of `src/cli/prompt/compose-quality.ts` (`:137`, `:147`, `:431`) actively treats any agent write as a quality finding — so the draft required the agent to perform the exact operation the surrounding prompt is designed to detect and report. `/goat-sbao` full-mode critique caught this as the load-bearing architectural error across all three sub-agents.
+
+**Why it happened:** When a spec adds a new feature that needs persistence, "just carve a narrow exception" feels minimal. But the carved exception is prompt-text-only — there is no mechanical sandbox on what path the agent actually writes to (path traversal was Agent A's framing). More importantly, the agent is now instructed to (a) check existing files to compute a same-day suffix, (b) write to a specific path, (c) avoid writing anywhere else. Agents are unreliable at directory listing + race-free numbering + path discipline; pushing that onto the prompt is the kind of brittleness the project's feedback-loop footguns already document.
+
+**Evidence:** `src/cli/prompt/compose-quality.ts:137,147,431` (READ-ONLY + write-is-finding instructions) vs the draft's §3 "Instruct the agent to write …" bullet. Full critique in `.goat-flow/logs/sessions/2026-04-18-M13-sbao-restructure.md` §3-§4.
+
+**Decision:** Rebuilt M13 so the agent emits the JSON block inside its response only, and the CLI (`goat-flow quality capture --from-file <path>`) owns extraction, path validation, suffix numbering, and schema validation. READ-ONLY clause preserved verbatim.
+
+**Trigger:** Any spec that adds a feature to a prompt whose contract forbids an operation that feature needs. The feature goes on the other side of the boundary — almost always the CLI.
+
+**Prevention:** Before a plan proposes "carve a narrow exception to a contract the prompt enforces", test the inverse: "can the CLI do this instead, after the agent responds?" If yes, move the side effect. If the answer requires restructuring the command flow, do that restructuring — it is cheaper than carrying a prompt contradiction into production, where every future extender has to interpret the exception identically on first-try.

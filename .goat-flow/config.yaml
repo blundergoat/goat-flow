@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.1.0"
+version: "1.2.0"
 
 # ── Project Setup ───────────────────────────────
 agents:
@@ -15,9 +15,9 @@ skills:
     - goat-debug
     - goat-plan
     - goat-review
-    - goat-sbao
+    - goat-critique
     - goat-security
-    - goat-test
+    - goat-qa
 
 # ── Telemetry ─────────────────────────────────
 # Opt-in: logs skill invocations to .goat-flow/logs/skill-usage.jsonl

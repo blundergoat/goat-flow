@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
 # /goat-review
 
@@ -16,7 +16,7 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Boundary:** goat-review owns code quality, style, correctness. goat-security owns threat models, compliance, CVEs, auth boundaries. If you find a security issue, flag it and suggest `/goat-security`.
 
-**NOT this skill:** OWASP assessment → /goat-security. Understanding code → /goat-debug. Generating tests → /goat-test. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
+**NOT this skill:** OWASP assessment → /goat-security. Understanding code → /goat-debug. Generating tests → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
 
 ## Step 0 - Scope, Size, Spec
 
@@ -98,7 +98,7 @@ Check each finding against `.goat-flow/footguns/`. When a direct match exists, i
 
 When the target is a codebase area (not a diff). For >20 files, recommend splitting. Two-pass discipline still applies per file cluster: skim the surface for suspicions, then open files for verification. Pre-existing issues ARE in scope (they are the point of an area audit).
 
-**BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-sbao`.
+**BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-critique`.
 
 ## Spec Drift (opt-in)
 

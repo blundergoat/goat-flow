@@ -27,12 +27,12 @@ Three changes:
 - The execution loop (`docs/system-spec.md:154`, `docs/system-spec.md:185`, retired in v1.1.0; see `workflow/setup/reference/execution-loop.md`) already defines Implement as a core execution mode
 - ADR-017 says edits happen in the normal ACT step, not inside goat-plan
 - Skills must NOT jump into implementation early - investigation/diagnosis/planning must complete first
-- Real verification comes from /goat-review or /goat-test in a fresh invocation, not from the same agent re-reading its own diff
+- Real verification comes from /goat-review or /goat-qa in a fresh invocation, not from the same agent re-reading its own diff
 - Adding skills increases the count that critics already say is too many (ADR-017 consolidated 9→6 for this reason)
 
 ## Consequences
 
-- Supersedes ADR-016's canonical skill count. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-sbao, goat-security, goat-test + goat dispatcher)
+- Supersedes ADR-016's canonical skill count. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher)
 - goat-plan grows by ~15 lines (Phase 5)
 - Dispatcher routing table gains implementation-intent rows
 - .goat-flow/config.yaml gains `persona` field

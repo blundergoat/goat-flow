@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.1.0",
+  "version": "1.2.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -47,9 +47,9 @@
       "goat-debug",
       "goat-plan",
       "goat-review",
-      "goat-sbao",
+      "goat-critique",
       "goat-security",
-      "goat-test"
+      "goat-qa"
     ],
     "stale_names": [
       "goat-audit",
@@ -61,7 +61,9 @@
       "goat-simplify",
       "goat-refactor",
       "goat-preflight",
-      "goat-research"
+      "goat-research",
+      "goat-sbao",
+      "goat-test"
     ]
   },
 

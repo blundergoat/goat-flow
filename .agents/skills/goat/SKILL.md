@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Single entry point that classifies intent and dispatches to the correct goat-* skill."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
 # /goat
 
@@ -27,8 +27,8 @@ For planning requests, read `.goat-flow/tasks/.active` to find the active plan s
 |------------|----------|
 | Hotfix | Route to direct execution, no planning needed |
 | Small Feature | Compressed brief → `/goat-plan` for 1-2 milestones |
-| Standard | Feature brief → `/goat-plan` (suggest `/goat-sbao` if approach uncertain) |
-| System / Infrastructure | Feature brief → `/goat-plan` → `/goat-sbao` (recommended) |
+| Standard | Feature brief → `/goat-plan` (suggest `/goat-critique` if approach uncertain) |
+| System / Infrastructure | Feature brief → `/goat-plan` → `/goat-critique` (recommended) |
 
 ## Handoff
 

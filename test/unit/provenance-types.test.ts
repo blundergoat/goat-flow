@@ -1,7 +1,7 @@
 /**
  * Unit tests for M05 provenance schema validator.
  *
- * The `source_type: "unknown"` + required `reason` contract is the SBAO-locked
+ * The `source_type: "unknown"` + required `reason` contract is the critique-locked
  * M11 escape hatch. Must be mechanically enforced so back-fill work can't
  * silently ship without-reason unknowns.
  */

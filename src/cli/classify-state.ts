@@ -3,7 +3,7 @@
  * skill directories, and AI instruction markers. Used by both the dashboard
  * `/api/projects/status` endpoint and the `goat-flow status` CLI command.
  */
-import { SKILL_NAMES } from "./constants.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "./constants.js";
 
 /** Minimal filesystem interface needed for project state detection. */
 interface StateFS {
@@ -12,7 +12,13 @@ interface StateFS {
 }
 
 /** Recognised adoption states for a project. */
-type ProjectStateName = "bare" | "partial" | "v0.9" | "v1.0" | "v1.1" | "error";
+type ProjectStateName =
+  | "bare"
+  | "partial"
+  | "v0.9"
+  | "outdated"
+  | "current"
+  | "error";
 
 /** Recommended next action for a given project state. */
 type ProjectAction =
@@ -29,7 +35,10 @@ interface ProjectState {
   state: ProjectStateName;
   action: ProjectAction;
   details: string;
+  version?: string;
 }
+
+const CURRENT_VERSION_FAMILY = AUDIT_VERSION.split(".").slice(0, 2).join(".");
 
 const INSTRUCTION_FILES = ["CLAUDE.md", "AGENTS.md", "GEMINI.md"] as const;
 const SKILL_ROOTS = [".claude/skills", ".agents/skills"] as const;
@@ -88,7 +97,7 @@ function buildIncompleteDetails(
     missing.push("missing .goat-flow/skill-conventions.md");
   }
 
-  return `Config says v1.1.x but install is incomplete: ${missing.join("; ")}`;
+  return `Config says current goat-flow ${CURRENT_VERSION_FAMILY}.x but install is incomplete: ${missing.join("; ")}`;
 }
 
 /** Map from agentId to that agent's instruction file. */
@@ -133,7 +142,7 @@ export function classifyProjectState(
       };
     }
 
-    if (version.startsWith("1.1.")) {
+    if (version.startsWith(`${CURRENT_VERSION_FAMILY}.`)) {
       // Skill check is OR-union across roots - fast pre-check only.
       // A "healthy" classification here does not guarantee per-agent audit passes.
       // Run `goat-flow audit` for authoritative validation.
@@ -144,15 +153,15 @@ export function classifyProjectState(
         hasConventions;
       if (isHealthy) {
         return {
-          state: "v1.1",
+          state: "current",
           action: "audit",
-          details:
-            "Current version - run `goat-flow audit . --agent <agent>` for per-agent validation",
+          details: `Current version (${version}) - run \`goat-flow audit . --agent <agent>\` for per-agent validation`,
+          version,
         };
       }
 
       return {
-        state: "v1.1",
+        state: "current",
         action: "incomplete",
         details: buildIncompleteDetails(
           installedSkills,
@@ -160,13 +169,15 @@ export function classifyProjectState(
           hasPreamble,
           hasConventions,
         ),
+        version,
       };
     }
 
     return {
-      state: "v1.0",
+      state: "outdated",
       action: "upgrade",
       details: `Version ${version} - upgrade available`,
+      version,
     };
   }
 

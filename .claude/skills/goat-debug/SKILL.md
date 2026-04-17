@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Diagnosis-first debugging with hypothesis tracking and recurrence checks. Includes investigate mode for deep codebase exploration."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
 # /goat-debug
 
@@ -17,7 +17,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 
 **If you want to "just try something" before tracing the code path, STOP.** That is the failure mode this skill exists to prevent.
 
-**NOT this skill:** Reviewing → /goat-review. Test plans → /goat-test. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
+**NOT this skill:** Reviewing → /goat-review. Test plans → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
 
 ## Step 0 - Choose Depth
 
@@ -49,7 +49,7 @@ Present: root cause + confidence (HIGH = reproduced, MEDIUM = traced, LOW = infe
 
 For high-stakes diagnoses, run a 5-Whys chain. Every "because" MUST cite `file:line` or a reproduction step, not just prose.
 
-**BLOCKING GATE:** Present diagnosis, then pause. Human decides: dig deeper, propose fix, or stop. If confidence is MEDIUM or LOW with multiple competing hypotheses, consider `/goat-sbao` to critique the hypothesis set before choosing a fix direction.
+**BLOCKING GATE:** Present diagnosis, then pause. Human decides: dig deeper, propose fix, or stop. If confidence is MEDIUM or LOW with multiple competing hypotheses, consider `/goat-critique` on the hypothesis set before choosing a fix direction.
 
 ### D3 - Fix Plan (only if human approved)
 

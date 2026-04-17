@@ -21,7 +21,7 @@ import type {
   ObservedFacts,
 } from "../../src/cli/manifest/types.js";
 import { ManifestValidationError } from "../../src/cli/manifest/types.js";
-import { SKILL_NAMES } from "../../src/cli/constants.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "../../src/cli/constants.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
@@ -33,7 +33,7 @@ function fixtureJson(
 ): ManifestJson {
   return {
     description: "fixture",
-    version: "1.1.0",
+    version: AUDIT_VERSION,
     required_files: [],
     required_dirs: [],
     directory_purposes: {},
@@ -64,7 +64,7 @@ function fixtureObserved(
     setupChecks: 12,
     agentChecks: 4,
     harnessChecks: 16,
-    version: "1.1.0",
+    version: AUDIT_VERSION,
     ...overrides,
   };
 }
@@ -76,7 +76,7 @@ describe("composeManifest", () => {
   it("derives skill facts from observed SKILL_NAMES", () => {
     const json = fixtureJson();
     const observed = fixtureObserved({
-      skills: ["goat", "goat-debug", "goat-test"],
+      skills: ["goat", "goat-debug", "goat-qa"],
     });
     const m = composeManifest(json, observed);
     assert.equal(m.facts.skills.total, 3);
@@ -84,7 +84,7 @@ describe("composeManifest", () => {
     assert.equal(m.facts.skills.functional_count, 2);
     assert.deepEqual(
       [...m.facts.skills.names],
-      ["goat", "goat-debug", "goat-test"],
+      ["goat", "goat-debug", "goat-qa"],
     );
   });
 

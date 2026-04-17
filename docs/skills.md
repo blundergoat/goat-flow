@@ -10,8 +10,8 @@ flowchart LR
     Dispatcher --> Debug["/goat-debug"]
     Dispatcher --> Plan["/goat-plan"]
     Dispatcher --> Review["/goat-review"]
-    Dispatcher --> SBAO["/goat-sbao"]
-    Dispatcher --> Test["/goat-test"]
+    Dispatcher --> Critique["/goat-critique"]
+    Dispatcher --> QA["/goat-qa"]
     Dispatcher --> Security["/goat-security"]
 ```
 
@@ -21,9 +21,9 @@ flowchart LR
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode | No fixes until human reviews diagnosis | Bug or test failure, exploring unfamiliar code |
 | [/goat-plan](#goat-plan) | Milestone planning with testing gates | Human approval between milestones | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | MUST read all files before commenting | Before merging, quality audits |
-| [/goat-sbao](#goat-sbao) | Multi-perspective critique of any artifact | Disputes resolved before synthesis | High-stakes decisions, plans, assessments |
+| [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Disputes resolved before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST rank findings by exploitability | Before releases, after dependency changes, during audits |
-| [/goat-test](#goat-test) | Testing gap analysis and verification planning | Does not run or write tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
+| [/goat-qa](#goat-qa) | Testing gap analysis and verification planning | Does not run or write tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
 
 ---
 
@@ -38,8 +38,8 @@ flowchart LR
 | "I'm new to this project" | /goat-debug (investigate mode) | Progressive depth reading + orientation |
 | "How should we build this feature?" | /goat-plan | Planning before implementing |
 | "Are these changes safe to merge?" | /goat-review | Reviewing changes, not finding new issues |
-| "How do we verify this work?" | /goat-test | Risk-based testing gap analysis |
-| "Is this plan/assessment sound?" | /goat-sbao | Multi-perspective critique before shipping |
+| "How do we verify this work?" | /goat-qa | Risk-based testing gap analysis |
+| "Is this plan/assessment sound?" | /goat-critique | Multi-perspective critique before shipping |
 
 ---
 
@@ -66,10 +66,10 @@ The dispatcher classifies intent conversationally - not by keyword lookup. It as
 | Quality sweep, audit | /goat-review (audit) |
 | Security, vulnerability, compliance | /goat-security |
 | Plan, design, build a feature | /goat-plan (via Planning Route) |
-| Test gaps, coverage, verify | /goat-test |
-| Critique a plan/assessment | /goat-sbao |
+| Test gaps, coverage, verify | /goat-qa |
+| Critique a plan/assessment | /goat-critique |
 
-**Planning Route:** For planning requests, the dispatcher checks `.goat-flow/tasks/` for existing plans first, then routes based on complexity: Hotfix → direct execution; Small Feature → compressed brief → `/goat-plan`; Standard → feature brief → `/goat-plan`; System/Infrastructure → feature brief → `/goat-plan` → suggest `/goat-sbao`.
+**Planning Route:** For planning requests, the dispatcher checks `.goat-flow/tasks/` for existing plans first, then routes based on complexity: Hotfix → direct execution; Small Feature → compressed brief → `/goat-plan`; Standard → feature brief → `/goat-plan`; System/Infrastructure → feature brief → `/goat-plan` → suggest `/goat-critique`.
 
 ---
 
@@ -180,7 +180,7 @@ MUST NOT flag pre-existing issues as part of this change. MUST attempt to dispro
 
 ---
 
-## /goat-sbao
+## /goat-critique
 
 Multi-perspective critique using sub-agent orchestration. Takes any concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal) and generates competing analyses from multiple perspectives.
 
@@ -250,7 +250,7 @@ MUST check framework built-in mitigations before flagging. A finding mitigated b
 
 ---
 
-## /goat-test
+## /goat-qa
 
 Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort. Does not write test code - hands off to the coding agent.
 
@@ -297,4 +297,4 @@ See `.goat-flow/skill-preamble.md` (installed) or `workflow/skills/reference/ski
 
 Skills are created during step 03 of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them.
 
-> **Consolidation history (v0.8.0-v1.1.0):** Nine skills were consolidated into the current seven. See ADR-030 for the full rationale. goat-sbao was later extracted as a standalone critique skill in v1.1.0 (ADR-033).
+> **Consolidation history (v0.8.0-v1.1.0):** Nine skills were consolidated into the current seven. See ADR-030 for the full rationale. goat-critique was extracted as a standalone critique skill in v1.1.0, then renamed from goat-sbao in v1.2.0 (ADR-033).

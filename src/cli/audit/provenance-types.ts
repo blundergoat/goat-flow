@@ -8,7 +8,7 @@
  * Schema adapted from agnix rules.json + rust emission in
  * `/home/devgoat/projects/goat-flow-related/agnix/crates/agnix-core/`.
  *
- * The `"unknown"` source_type + required `reason` field is the SBAO-locked
+ * The `"unknown"` source_type + required `reason` field is the critique-locked
  * escape hatch: M11 back-fills ~32 existing checks, ~50% of which cannot
  * have their provenance reconstructed. Such checks declare `source_type:
  * "unknown"` and state the reason (e.g. "pre-dates v1.1.0 cleanup"),

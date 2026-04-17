@@ -403,7 +403,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("Either approach is acceptable. State which you used.");
   lines.push("");
   lines.push(
-    "1. **`/goat`** (dispatcher) - send 3 different read-only requests. Does routing work? Does the Planning Route handle briefs without pushing toward file creation? Does it route critique requests to `/goat-sbao` and planning questions to `/goat-plan` appropriately?",
+    "1. **`/goat`** (dispatcher) - send 3 different read-only requests. Does routing work? Does the Planning Route handle briefs without pushing toward file creation? Does it route critique requests to `/goat-critique` and planning questions to `/goat-plan` appropriately?",
   );
   lines.push(
     "2. **`/goat-debug`** - investigate a real module or risky pattern in this codebase",
@@ -415,13 +415,13 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "4. **`/goat-review`** - review a real source file for quality issues",
   );
   lines.push(
-    "5. **`/goat-sbao`** - critique one of the other probe outputs in the response only (e.g., goat-plan breakdown or goat-security assessment)",
+    "5. **`/goat-critique`** - critique one of the other probe outputs in the response only (e.g., goat-plan breakdown or goat-security assessment)",
   );
   lines.push(
     "6. **`/goat-security`** - threat-model one real component (auth, API, hooks, config, or whatever is riskiest) without making changes",
   );
   lines.push(
-    "7. **`/goat-test`** - find testing gaps in recent changes or audit coverage for a module without creating new tests",
+    "7. **`/goat-qa`** - find testing gaps in recent changes or audit coverage for a module without creating new tests",
   );
   lines.push("");
   lines.push(
@@ -432,7 +432,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "**If context is limited:** At minimum test `/goat` (routing), `/goat-review` (most common use), and `/goat-sbao` (highest-cost skill). Note which skills you skipped.",
+    "**If context is limited:** At minimum test `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill). Note which skills you skipped.",
   );
   lines.push("");
 
@@ -469,7 +469,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "- Are the quick/full depth choices meaningfully different? Or does everyone just pick one?",
   );
   lines.push(
-    "- Is `/goat-sbao` worth its cost (spawns sub-agents) for this project's scale?",
+    "- Is `/goat-critique` worth its cost (spawns sub-agents) for this project's scale?",
   );
   lines.push(
     "- What's missing that this codebase needs but goat-flow doesn't provide?",

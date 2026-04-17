@@ -21,10 +21,10 @@ If the version is older, use the upgrade path instead:
 
 ## What goat-flow is
 
-A framework that gives AI coding agents structured planning (with SBAO multi-perspective critique), persistent memory across sessions, and mechanical safety guardrails. Three layers:
+A framework that gives AI coding agents structured planning (with multi-perspective critique via `/goat-critique`), persistent memory across sessions, and mechanical safety guardrails. Three layers:
 
 1. **Instruction file** (CLAUDE.md / AGENTS.md / GEMINI.md) - The execution loop, autonomy tiers, definition of done, and router table. Loaded every turn.
-2. **Skills** (6 functional + 1 dispatcher) - Plan (milestone task files), critique (SBAO multi-perspective analysis), test, review, secure, debug. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
+2. **Skills** (6 functional + 1 dispatcher) - Plan (milestone task files), critique (`/goat-critique` multi-perspective analysis), QA, review, secure, debug. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
 3. **.goat-flow/ learning loop** - Footguns (architectural traps with file:line evidence), lessons (behavioural mistakes), decisions (ADRs), patterns (successful approaches), and optional local instruction files. AI extended memory persisting across sessions.
 
 Every project gets the full system. The components are lightweight infrastructure, not ceremony proportional to codebase size.

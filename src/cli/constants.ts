@@ -10,9 +10,9 @@ export const SKILL_NAMES = [
   "goat-debug",
   "goat-plan",
   "goat-review",
-  "goat-sbao",
+  "goat-critique",
   "goat-security",
-  "goat-test",
+  "goat-qa",
 ] as const;
 
 /**

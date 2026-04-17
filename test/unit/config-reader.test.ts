@@ -4,6 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig } from "../../src/cli/config/reader.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
 function configFS(content: string | null): ReadonlyFS {
@@ -41,7 +42,7 @@ describe("config defaults when file is missing", () => {
 describe("config merges custom toolchain", () => {
   it("merges toolchain commands from YAML", () => {
     const yaml = `
-version: "1.1.0"
+version: "${AUDIT_VERSION}"
 toolchain:
   test: ["npm test"]
   lint: ["eslint ."]
@@ -79,7 +80,7 @@ describe("harness.acknowledge in config", () => {
 
   it("parses an acknowledge list from YAML", () => {
     const yaml = `
-version: "1.1.0"
+version: "${AUDIT_VERSION}"
 harness:
   acknowledge:
     - compaction-hook
@@ -95,7 +96,7 @@ harness:
 
   it("errors when acknowledge is not an array", () => {
     const yaml = `
-version: "1.1.0"
+version: "${AUDIT_VERSION}"
 harness:
   acknowledge: compaction-hook
 `;

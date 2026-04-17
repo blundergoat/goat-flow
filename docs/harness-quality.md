@@ -20,7 +20,7 @@ Quality is not automated checks. It generates a prompt that walks an agent throu
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
-**Time and cost:** A full assessment runs 7 skill invocations (goat-sbao alone may spawn sub-agents). Expect 30-60 minutes and moderate token usage.
+**Time and cost:** A full assessment runs 7 skill invocations (`goat-critique` alone may spawn sub-agents). Expect 30-60 minutes and moderate token usage.
 
 ---
 

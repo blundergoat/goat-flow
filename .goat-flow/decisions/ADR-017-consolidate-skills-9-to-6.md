@@ -26,7 +26,7 @@ Merge 3 skills as modes into their natural hosts. Expand goat-security. No new s
 
 goat-security expanded with 2 new modes: Compliance (HIPAA/GDPR/PHI) and Dependency audit (CVE scanning).
 
-**Canonical skill set (v0.9.3):** goat (dispatcher), goat-debug, goat-review, goat-plan, goat-security, goat-test - 6 total.
+**Canonical skill set (v0.9.3):** goat (dispatcher), goat-debug, goat-review, goat-plan, goat-security, goat-qa - 6 total.
 
 ## Rationale
 

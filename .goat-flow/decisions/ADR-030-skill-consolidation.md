@@ -1,6 +1,6 @@
 # ADR-030: Skill consolidation - 9 skills to 5 + dispatcher
 
-**Status:** Partially superseded (goat-sbao extracted as 6th functional skill in v1.1.0)
+**Status:** Partially superseded (goat-critique extracted as 6th functional skill in v1.1.0, renamed from goat-sbao in v1.2.0)
 **Date:** 2026-04-06
 
 ## Context
@@ -21,7 +21,7 @@ A skill must have at least one of: a **distinct artefact**, a **hard workflow ga
 | `/goat-debug` | Special failure mode + hard gate + investigate/onboard mode |
 | `/goat-review` | Repeatable structured output + audit/simplify/instruction modes |
 | `/goat-plan` | Distinct artefact + hard gate + refactor planning mode |
-| `/goat-test` | Distinct artefact + hard gate |
+| `/goat-qa` | Distinct artefact + hard gate |
 | `/goat` (dispatcher) | Routes natural language to the right skill. 35-trigger table + 11 disambiguation rules too large for instruction file budget (ADR-029). |
 
 **Merged or removed skills:**
@@ -44,7 +44,7 @@ There is no implementation skill (see ADR-019). Implementation is what the agent
 
 ## Consequences
 
-- Canonical skill count: 7 (6 specialized + 1 dispatcher). Originally 5+1; goat-sbao was later extracted as a standalone critique skill (see ADR-033).
+- Canonical skill count: 7 (6 specialized + 1 dispatcher). Originally 5+1; goat-critique was later extracted as a standalone critique skill in v1.1.0, then renamed from goat-sbao in v1.2.0 (see ADR-033).
 - Fewer skills = less maintenance, less drift, less context consumed
 - Each surviving skill has clear justification and distinct output
 - New skills must pass the justification test before being added

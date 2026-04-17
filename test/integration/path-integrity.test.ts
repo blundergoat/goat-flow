@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const SCRIPT = join(PROJECT_ROOT, "scripts", "check-path-integrity.sh");
@@ -27,7 +28,7 @@ function makeTempProject(): string {
   mkdirSync(join(dir, ".goat-flow"), { recursive: true });
   writeFileSync(
     join(dir, ".goat-flow", "config.yaml"),
-    "version: 1.1.0\nfootguns:\n  path: .goat-flow/footguns/\nlessons:\n  path: .goat-flow/lessons/\ndecisions:\n  path: .goat-flow/decisions/\ntasks:\n  path: .goat-flow/tasks/\nlogs:\n  path: .goat-flow/logs/\n",
+    `version: ${AUDIT_VERSION}\nfootguns:\n  path: .goat-flow/footguns/\nlessons:\n  path: .goat-flow/lessons/\ndecisions:\n  path: .goat-flow/decisions/\ntasks:\n  path: .goat-flow/tasks/\nlogs:\n  path: .goat-flow/logs/\n`,
   );
   mkdirSync(join(dir, ".goat-flow", "footguns"), { recursive: true });
   mkdirSync(join(dir, ".goat-flow", "lessons"), { recursive: true });

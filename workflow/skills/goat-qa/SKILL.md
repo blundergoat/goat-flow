@@ -1,9 +1,9 @@
 ---
-name: goat-test
+name: goat-qa
 description: "Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
-# /goat-test
+# /goat-qa
 
 ## Shared Conventions
 
@@ -12,7 +12,7 @@ On full-depth, also read `.goat-flow/skill-conventions.md`.
 
 ## When to Use
 
-goat-test is a **testing gap analyser**: it maps changed code to testing coverage and prioritises what to test.
+goat-qa is a **testing gap analyser**: it maps changed code to testing coverage and prioritises what to test.
 
 It does not write test code or run full test commands.
 
@@ -127,7 +127,7 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 
 ## Constraints
 
-- goat-test is a testing GAP ANALYSER - it finds mismatches between code changes and testing coverage
+- goat-qa is a testing GAP ANALYSER - it finds mismatches between code changes and testing coverage
 - MUST read the actual diff, not just file names - a one-line auth change outranks a 200-line CSS change
 - MUST classify every change by risk level with plain-English description of what changed
 - MUST trace blast radius for CRITICAL/HIGH changes

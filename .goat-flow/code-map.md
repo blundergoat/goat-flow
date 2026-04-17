@@ -55,9 +55,9 @@ skills/
   goat-debug/SKILL.md      # Debug + investigate skill template
   goat-plan/SKILL.md       # Milestone planning skill template
   goat-review/SKILL.md     # Code review + audit skill template
-  goat-sbao/SKILL.md       # Multi-perspective critique skill template
+  goat-critique/SKILL.md   # Multi-perspective critique skill template
   goat-security/SKILL.md   # Security assessment skill template
-  goat-test/SKILL.md       # Testing gap analysis skill template
+  goat-qa/SKILL.md         # Testing gap analysis skill template
   reference/               # skill-preamble.md, skill-conventions.md
 
 hooks/                     # Hook templates (deny-dangerous.sh, etc.)
@@ -100,4 +100,3 @@ tasks/                     # Milestone files (gitignored, local working state)
 logs/sessions/             # Session logs (gitignored)
 scratchpad/                # Ephemeral working notes (gitignored)
 ```
-

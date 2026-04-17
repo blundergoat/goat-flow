@@ -14,9 +14,9 @@ const templates = [
   "workflow/skills/goat-debug/SKILL.md",
   "workflow/skills/goat-plan/SKILL.md",
   "workflow/skills/goat-review/SKILL.md",
-  "workflow/skills/goat-sbao/SKILL.md",
+  "workflow/skills/goat-critique/SKILL.md",
   "workflow/skills/goat-security/SKILL.md",
-  "workflow/skills/goat-test/SKILL.md",
+  "workflow/skills/goat-qa/SKILL.md",
 ];
 
 let ok = true;

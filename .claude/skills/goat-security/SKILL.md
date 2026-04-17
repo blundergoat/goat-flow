@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Threat-model-driven security assessment with framework-aware verification, exploitability ranking, and confidence classification."
-goat-flow-skill-version: "1.1.0"
+goat-flow-skill-version: "1.2.0"
 ---
 # /goat-security
 
@@ -63,7 +63,7 @@ Re-read `file:line` for Critical/High. Does code match the finding? Is the scena
 
 **Dependency audit:** If the project uses dependency management (npm, pip, cargo, composer, etc.), check for known vulnerabilities using the project's audit tool. If the audit tool isn't installed (e.g., `pip-audit` for Python), note it as a gap: "Dependency audit skipped - [tool] not available. Install with [command] for future scans." Do NOT fabricate audit results.
 
-**BLOCKING GATE:** Present final report. If PROBABLE > CONFIRMED, run `/goat-sbao` cross-examination.
+**BLOCKING GATE:** Present final report. If PROBABLE > CONFIRMED, run `/goat-critique` cross-examination.
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` — every CONFIRMED finding must have a fresh `file:line` re-read in this session, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
 

@@ -10,7 +10,7 @@ import { runAudit, computeHarness } from "../../src/cli/audit/audit.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
-import { SKILL_NAMES } from "../../src/cli/constants.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "../../src/cli/constants.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { composeSetup } from "../../src/cli/prompt/compose-setup.js";
 
@@ -54,7 +54,7 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
     exists: true,
     valid: true,
     config: {
-      version: "1.1.0",
+      version: AUDIT_VERSION,
       footguns: { path: ".goat-flow/footguns/" },
       lessons: { path: ".goat-flow/lessons/" },
       decisions: { path: ".goat-flow/decisions/" },
@@ -112,9 +112,9 @@ function stubAgentFacts(overrides: Partial<AgentFacts> = {}): AgentFacts {
         "goat-debug",
         "goat-plan",
         "goat-review",
-        "goat-sbao",
+        "goat-critique",
         "goat-security",
-        "goat-test",
+        "goat-qa",
       ],
       missing: [],
       allPresent: true,
@@ -174,9 +174,9 @@ const STUB_STRUCTURE: ProjectStructure = {
       "goat-debug",
       "goat-plan",
       "goat-review",
-      "goat-sbao",
+      "goat-critique",
       "goat-security",
-      "goat-test",
+      "goat-qa",
     ],
     stale_names: ["goat-audit", "goat-investigate"],
   },
@@ -936,12 +936,12 @@ describe("M01 scoring model", () => {
 // Setup prompt routing - verify composeSetup follows project state + audit
 // ---------------------------------------------------------------------------
 describe("composeSetup routing", () => {
-  it("renders audit-pass maintenance guidance for a healthy v1.1 codex project", async () => {
+  it("renders audit-pass maintenance guidance for a healthy current codex project", async () => {
     const project = await makeTempProject(async (root) => {
       await writeProjectFile(
         root,
         ".goat-flow/config.yaml",
-        'version: "1.1.0"\n',
+        `version: "${AUDIT_VERSION}"\n`,
       );
       await writeProjectFile(
         root,
@@ -1005,7 +1005,7 @@ describe("composeSetup routing", () => {
       await writeProjectFile(
         root,
         ".goat-flow/config.yaml",
-        'version: "1.1.0"\n',
+        `version: "${AUDIT_VERSION}"\n`,
       );
       await writeProjectFile(
         root,
@@ -1037,7 +1037,7 @@ describe("composeSetup routing", () => {
                 check: "Config version",
                 message: "Config version mismatch",
                 evidence: '.goat-flow/config.yaml says "1.0.0"',
-                howToFix: 'Set version to "1.1.0"',
+                howToFix: `Set version to "${AUDIT_VERSION}"`,
               },
             },
           ],
@@ -1061,9 +1061,11 @@ describe("composeSetup routing", () => {
 
       assert.ok(output, "composeSetup should return failure guidance");
       assert.match(output, /2 audit checks failed:/);
-      assert.match(
+      assert.ok(
+        output.includes(
+          `Fix: Set version to "${AUDIT_VERSION}" (see Step 05 (config version field))`,
+        ),
         output,
-        /Fix: Set version to "1\.1\.0" \(see Step 05 \(config version field\)\)/,
       );
       assert.match(
         output,
