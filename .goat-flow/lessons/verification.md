@@ -362,3 +362,20 @@ last_reviewed: 2026-04-18
 1. When preflight fails, immediately identify whether the failing files are in `git status` for the current task.
 2. Treat repo-wide formatter failures in untouched files as residual baseline debt, not silent task fallout.
 3. Keep the final verification section split between "checks that passed for this change" and "repo-wide checks still blocked by unrelated drift."
+
+---
+
+## Lesson: Semantic drift checks must normalize natural-language lists before claiming mismatch
+
+**Created:** 2026-04-18
+
+**What happened:** A new semantic-drift check was added for the runner list in `docs/dashboard.md`. The first verification run still failed content audit even after the doc was corrected to "Claude, Codex, and Gemini". The checker split on commas before handling the Oxford-comma `and`, so it parsed the claim as `["Claude", "Codex", "and Gemini"]` and reported a false mismatch against the manifest-backed list.
+
+**Root cause:** The drift check compared human-written prose too literally. It handled exact token matches but not natural-language list formatting, so a doc that was semantically correct still failed verification. The bug was in the checker, not in the docs.
+
+**Fix:** Normalize list items before comparison by stripping a leading `and ` token after the split, then add a regression test that proves the current dashboard wording does not trigger `dashboard-runner-drift`.
+
+**Prevention:**
+1. When adding semantic drift checks for prose, test both a known-bad example and the current canonical wording.
+2. Normalize natural-language list glue (`and`, Oxford commas, surrounding whitespace) before comparing against code-backed enumerations.
+3. Treat a new drift rule that immediately flags corrected docs as a checker bug until the parser is disproven.
