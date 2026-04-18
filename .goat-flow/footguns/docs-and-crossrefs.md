@@ -31,7 +31,7 @@ last_reviewed: 2026-04-18
 
 **Symptoms:** The CLI audit reports PASS while cold-path documentation contains false claims, wrong check descriptions, dead paths, and glossary misdirections. Contributors reading docs instead of code form incorrect mental models of what the system does.
 
-**Why it happens:** The audit validates structure (files exist, paths resolve, versions match) but not content accuracy. Cold-path docs are updated manually and drift as code changes. No automated check compares doc descriptions against actual code behavior.
+**Why it happens:** The audit validates structure (files exist, paths resolve, versions match). Partial content automation exists — `src/cli/audit/check-factual-claims.ts` catches count-claim drift on a fixed PROSE_TARGETS list (README, CONTRIBUTING, architecture, code-map), and `src/cli/audit/check-content-quality.ts` lints vague terms and generic instructions on a fixed QUALITY_TARGETS list (instruction files, skill-reference, public docs, ADRs, workflow/setup templates). Coverage is incomplete: footgun/lesson content is only schema-enforced via `stats --check` (status field, file:line or `(search:...)` anchors), not fact-checked. Cold-path surfaces outside these target lists still drift manually as code changes.
 
 **Evidence (verified by 8 independent critiques, 2026-04-15; recurrence confirmed by 4-critique cross-review, 2026-04-16):**
 

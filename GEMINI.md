@@ -5,6 +5,7 @@ Documentation framework for AI coding agent workflows. Markdown docs + Bash vali
 ```bash
 shellcheck scripts/*.sh scripts/maintenance/*.sh                                            # Lint shell scripts
 bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
+bash .gemini/hooks/deny-dangerous.sh --self-test  # Verify deny-hook runtime behaviour
 npm run typecheck                                   # Type-check .ts (required by DoD)
 bash scripts/preflight-checks.sh         # Full preflight gate
 npm test                                          # Run test suite
@@ -40,7 +41,7 @@ Over budget = checkpoint and re-classify before continuing. Budgets are heuristi
 
 | Mode | Behaviour |
 |------|-----------|
-| Plan | Produce artefact only. No file edits. Exit on LGTM |
+| Plan | Produce artefact only. File writes (e.g. milestone files) only on explicit approval. Exit on LGTM |
 | Implement | Edit in 2-3 turns. 4th read without writing = stop |
 | Explain | Walkthrough only. No changes unless asked |
 | Debug | Diagnosis with file:line first. Fixes after human reviews |
@@ -72,7 +73,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 
 ## Autonomy Tiers
 
-**Always:** Read any file, lint scripts, edit within assigned scope, append to log files.
+**Always:** Read any file, lint scripts, edit within assigned scope, append to session logs at `.goat-flow/logs/sessions/`. (Learning-loop updates — lessons/footguns/decisions — follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.)
 
 **Ask First** (MUST complete before proceeding):
 - [ ] Boundary touched: [name]
@@ -81,7 +82,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - [ ] Local instruction checked: [local GEMINI.md / .github/instructions/ / none]
 - [ ] Rollback command: [exact command]
 
-Boundaries: `.goat-flow/architecture.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `workflow/setup/**`, `workflow/skills/**`, `.github/workflows/**`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/skills/`, renaming/moving files, 3+ doc file changes.
+Boundaries: `.goat-flow/architecture.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `workflow/setup/**`, `workflow/skills/**`, `workflow/manifest.json` (canonical agent inventory), `src/cli/server/terminal.ts` (PTY runtime), `src/cli/server/dashboard.ts` (local HTTP/WS server), `.github/workflows/**`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/skills/`, renaming/moving files, 3+ doc file changes.
 
 **Never:** Delete docs without replacement. Modify secrets/.env. Push to main. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
 

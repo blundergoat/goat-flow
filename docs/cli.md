@@ -10,6 +10,8 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `goat-flow manifest` to inspect the current registry. |
 | `--harness` | Add AI Harness Completeness scope (16 checks, installed/not-installed per concern) |
+| `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
+| `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
 | `--format <type>` | Output: json, text, markdown (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |

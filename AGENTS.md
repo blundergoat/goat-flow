@@ -40,7 +40,7 @@ Over budget = checkpoint and re-classify before continuing. Budgets are planning
 
 | Mode | Behaviour |
 |------|-----------|
-| Plan | Produce artefact only. No file edits. Exit on LGTM |
+| Plan | Produce artefact only. File writes (e.g. milestone files) only on explicit approval. Exit on LGTM |
 | Implement | Edit in 2-3 turns. 4th read without writing = checkpoint or re-scope |
 | Explain | Walkthrough only. No changes unless asked |
 | Debug | Diagnosis with file:line first. Fixes after human reviews |
@@ -60,30 +60,25 @@ Over budget = checkpoint and re-classify before continuing. Budgets are planning
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD:
-- Lessons: `.goat-flow/lessons/` category bucket files (e.g. `verification.md`, `agent-behavior.md`). Add `## Lesson: <name>` entry with `**Created:** YYYY-MM-DD` then content.
-- Footguns: `.goat-flow/footguns/` category bucket files (e.g. `hooks.md`, `auditor.md`). Add `## Footgun: <name>` entry with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED` then content with grep-friendly file evidence (`file:line` when line-specific, `file` when file-level).
 
 | File | When to update |
 |------|---------------|
-| `.goat-flow/lessons/` | Behavioural mistake (agent did something wrong) |
-| `.goat-flow/footguns/` | Cross-doc architectural trap (with grep-friendly file evidence) |
-| `.goat-flow/decisions/` | Significant technical decision with context/rationale |
-| `.goat-flow/logs/sessions/` | Workspace-local session notes and summaries. Gitignored by design; only the directory anchor is committed. |
+| `.goat-flow/lessons/<category>.md` | Behavioural mistake. Append `## Lesson: <name>` + `**Created:** YYYY-MM-DD`. |
+| `.goat-flow/footguns/<category>.md` | Cross-doc architectural trap. Append `## Footgun: <name>` + `**Status:** active \| **Created:** YYYY-MM-DD \| **Evidence:** ACTUAL_MEASURED` with grep-friendly file evidence. |
+| `.goat-flow/decisions/` | Significant technical decision with context/rationale. |
+| `.goat-flow/logs/sessions/` | Workspace-local session notes. Gitignored by design; only the directory anchor is committed. |
 
 ## Autonomy Tiers
 
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts, update shared learning-loop files with evidence.
 
-**Ask First** (MUST complete before proceeding):
-- [ ] Boundary touched: [name]
-- [ ] Related code read: [yes/no]
-- [ ] Footgun entry checked: [relevant entry, or "none"]
-- [ ] Local instruction checked: [.github/instructions/ / AGENTS.md / none]
-- [ ] Rollback command: [exact command]
+**Ask First** — before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked (`.github/instructions/` / `AGENTS.md` / none), rollback command.
 
 Boundaries:
 - `.goat-flow/architecture.md` or primary instruction file changes (this file - `AGENTS.md`)
 - `workflow/setup/` or `workflow/skills/` template changes affecting generated output
+- `workflow/manifest.json` (canonical agent inventory)
+- `src/cli/server/terminal.ts` (PTY runtime) and `src/cli/server/dashboard.ts` (local HTTP/WS server)
 - `.github/workflows/**` (CI changes alter validation and release behavior)
 - `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**` (agent runtime files)
 - Other instruction files (`CLAUDE.md`, `GEMINI.md`)

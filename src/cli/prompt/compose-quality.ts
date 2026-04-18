@@ -112,7 +112,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "READ-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any files. Do NOT run write commands or apply patches. Only read files, run read-only inspection commands, and report your findings, ratings, and recommendations in the response.",
+    "READ-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches. Regenerable build artifacts written to gitignored paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine — they don't change the repo's committed state. Only modify tracked files if the user explicitly asks; otherwise read, run read-only or build-idempotent commands, and report findings in the response.",
   );
   lines.push("");
 
@@ -122,7 +122,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("These apply to EVERY finding you report:");
   lines.push("");
   lines.push(
-    "- **Read-only only.** Do NOT edit, create, rename, move, or delete files. Do NOT use write commands, redirection, or patch tools. If a skill probe tries to make changes, stop and report that as a finding.",
+    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored build directories (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine. If a skill probe tries to modify tracked files, stop and report that as a finding.",
   );
   lines.push(
     "- **No mutation commands.** When testing toolchain commands, use `--check`, `--dry-run`, or read-only flags. Use `format:check` not `format`. Use `eslint` not `eslint --fix`. If unsure, run the tool with `--help` first to find the read-only flag.",
@@ -232,10 +232,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("");
   lines.push("```bash");
   lines.push(
-    "# 1. Run read-only validation commands (do NOT run preflight-checks.sh - it writes to dist/)",
+    "# 1. Run read-only validation commands. If the project ships an umbrella script that ties shellcheck/typecheck/tests/audit together (e.g. `bash scripts/preflight-checks.sh`), run it — any writes land in gitignored build directories.",
   );
   lines.push(
-    `#    Run shellcheck and bash -n on shell scripts listed in ${instructionFile}.`,
+    `#    Otherwise, run shellcheck and bash -n on shell scripts listed in ${instructionFile}.`,
   );
   lines.push("#    Record: which pass, which fail, which don't exist.");
   lines.push("");
@@ -284,8 +284,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
   if (hooksDir) {
     lines.push("- All hook scripts in your agent's hooks directory");
   }
+
+  lines.push("");
   lines.push(
-    "- `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` (list and scan what exists)",
+    "For the learning loop — `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` — DO NOT broad-load. Use grep-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, run `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions`, open only matching entries, reword once on zero hits, then record a retrieval miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
   );
 
   lines.push("");

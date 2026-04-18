@@ -93,7 +93,7 @@ M13's first draft extended `goat-flow quality` by asking the agent to write a st
 
 **Why it happened:** When a spec adds a new feature that needs persistence, "just carve a narrow exception" feels minimal. But the carved exception is prompt-text-only — there is no mechanical sandbox on what path the agent actually writes to (path traversal was Agent A's framing). More importantly, the agent is now instructed to (a) check existing files to compute a same-day suffix, (b) write to a specific path, (c) avoid writing anywhere else. Agents are unreliable at directory listing + race-free numbering + path discipline; pushing that onto the prompt is the kind of brittleness the project's feedback-loop footguns already document.
 
-**Evidence:** `src/cli/prompt/compose-quality.ts:137,147,431` (READ-ONLY + write-is-finding instructions) vs the draft's §3 "Instruct the agent to write …" bullet. Full critique in `.goat-flow/logs/sessions/2026-04-18-M13-sbao-restructure.md` §3-§4.
+**Evidence:** `src/cli/prompt/compose-quality.ts:137,147,431` (READ-ONLY + write-is-finding instructions) vs the draft's §3 "Instruct the agent to write …" bullet.
 
 **Decision:** Rebuilt M13 so the agent emits the JSON block inside its response only; any later CLI tooling that needs to capture the output owns extraction, path validation, suffix numbering, and schema validation outside the prompt contract. READ-ONLY clause preserved verbatim. (Historical note: an earlier draft referenced a `goat-flow quality capture --from-file <path>` subcommand; that subcommand was not shipped — the capture step happens outside the agent prompt by design, not via a specific CLI form.)
 

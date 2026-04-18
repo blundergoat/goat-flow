@@ -69,8 +69,16 @@ describe("quality prompt content", () => {
       "Should end with a strong do-not-edit instruction",
     );
     assert.ok(
-      result.prompt.includes("Do NOT run write commands or apply patches."),
-      "Should forbid write commands and patches",
+      result.prompt.includes("Do NOT apply patches."),
+      "Should forbid patches",
+    );
+    assert.ok(
+      result.prompt.includes("tracked files"),
+      "Should scope the restriction to tracked files (gitignored build output is allowed)",
+    );
+    assert.ok(
+      result.prompt.includes("gitignored"),
+      "Should explicitly carve out gitignored build directories as permitted writes",
     );
     assert.ok(
       !result.prompt.includes("milestone task files"),

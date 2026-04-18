@@ -16,7 +16,7 @@ Domain-specific terms for new contributors. Standard programming terms are exclu
 | Concern | A grouping of related harness checks. Currently 5 concerns: context, constraints, verification, recovery, feedback-loop. Each concern's checks live in a matching file under `src/cli/audit/harness/`. | `docs/harness-audit.md` | Harness concern |
 | CSO | Context Search Optimization. A skill's `description` field must be trigger-only ("when to use this skill"), never workflow-summary ("what it does / how it works"). Workflow-summary descriptions cause agents to shortcut past the full skill body. | `workflow/skills/reference/skill-conventions.md` | Trigger-only description rule |
 | Definition of Done | Six explicit gates that must all pass before a task is considered complete. | `workflow/setup/reference/execution-loop.md` | DoD |
-| Doer-Verifier | The principle that the agent which wrote the code must not be the one that verifies it. | `workflow/skills/goat-qa/SKILL.md` | -- |
+| Doer-Verifier | Principle that real verification requires a context boundary — different agent, fresh invocation, or human. Single-agent self-verification is theater (ADR-005). | `.goat-flow/lessons/design-decisions.md` (search: `Doer-verifier is theater`) | -- |
 | Enforcement Gradient | Three-layer enforcement stack: permissions deny (hardest) > hooks > instruction-file rules (softest). | `workflow/hooks/README.md` | -- |
 | Evidence Standard | The requirement that every finding must include `file:line` references and be tagged OBSERVED or INFERRED. | `workflow/skills/reference/skill-preamble.md` | -- |
 | Execution Loop | The four-step agent workflow: READ, SCOPE, ACT, VERIFY. | `workflow/setup/reference/execution-loop.md` | Default loop |

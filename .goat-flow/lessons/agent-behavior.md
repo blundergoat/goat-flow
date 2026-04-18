@@ -46,7 +46,7 @@ last_reviewed: 2026-04-18
 2. Mechanical enforcement (a `goat-flow audit --transcript-scan` style check that grep's for verbatim-line presence after a "tests pass" claim) belongs in 1.3.0+. Track as a follow-up to M02.
 3. When designing future rules that demand specific output formats, anticipate brevity-vs-evidence trade-offs and either build the example into the rule (with risk of instruction-bloat) or accept that prose-only enforcement will achieve substantive but not strict-text compliance.
 
-**Evidence:** `.goat-flow/tasks/1.2.0/M02-pressure-test-log.md` (Scenarios A round 1 + round 2, both fails on Rule 1).
+**Evidence:** The constructed-summary quote in "What happened" above is the primary artifact. Raw pressure-test transcripts (M02 Scenarios A round 1 + round 2, both fail on Rule 1) are local-only session artifacts.
 
 ---
 

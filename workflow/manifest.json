@@ -31,7 +31,7 @@
   ],
 
   "directory_purposes": {
-    ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md and .gitignore are committed.",
+    ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed.",
     ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed."
   },

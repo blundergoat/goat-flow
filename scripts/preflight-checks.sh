@@ -384,6 +384,22 @@ else
     skip "GOAT Flow Audit (dist/cli/cli.js not built)"
 fi
 
+# ── Learning-Loop Schema ──────────────────────────────────────────────
+# Gates footgun schema rules: machine-simple status (active|resolved),
+# file:line or (search:) evidence on active entries, resolved-below-section.
+if [[ -f dist/cli/cli.js ]]; then
+    section "Learning-Loop Schema"
+    stats_output=$(node dist/cli/cli.js stats . --check 2>&1) && stats_exit=0 || stats_exit=$?
+    if [[ "$stats_exit" -eq 0 ]]; then
+        pass "Footgun/lesson schema passes"
+    else
+        fail "Footgun/lesson schema violations (exit $stats_exit)"
+        echo "$stats_output" | head -10 | sed 's/^/    /'
+    fi
+else
+    skip "Learning-Loop Schema (dist/cli/cli.js not built)"
+fi
+
 # ── Doc/Code Drift ───────────────────────────────────────────────────
 if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     section "Doc/Code Drift"
@@ -464,6 +480,23 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
         fi
     else
         skip "Template inventory (workflow/templates/ not present)"
+    fi
+
+    # B.8d: code-map.md scripts list matches filesystem (catches drift like
+    # code-map listing 3 scripts when scripts/ actually has 14).
+    if [[ -f .goat-flow/code-map.md ]]; then
+        listed_scripts=$(awk '
+            /^## scripts\/ -- Shell scripts/ { in_section=1; next }
+            in_section && /^## / { in_section=0 }
+            in_section
+        ' .goat-flow/code-map.md | grep -oE '^[a-z][a-zA-Z0-9_.-]*\.(sh|mjs)' | sort -u)
+        actual_scripts=$(find scripts/ -maxdepth 1 -type f \( -name '*.sh' -o -name '*.mjs' \) -printf '%f\n' | sort -u)
+        if [[ "$listed_scripts" == "$actual_scripts" ]]; then
+            pass "code-map.md scripts list matches scripts/ filesystem"
+        else
+            fail "code-map.md scripts list drifts from scripts/ filesystem"
+            diff <(echo "$actual_scripts") <(echo "$listed_scripts") 2>&1 | head -10 | sed 's/^/    /'
+        fi
     fi
 fi
 

@@ -31,20 +31,70 @@ interface PatternRule {
   suggestion?: (match: string, line: string) => string | undefined;
 }
 
-/** Target scope for content-quality checks: truth-bearing prose. */
+/** Target scope for content-quality checks: truth-bearing prose.
+ *
+ * .goat-flow/footguns/** and .goat-flow/lessons/** are intentionally excluded:
+ * they contain historical-incident prose that legitimately uses words like
+ * "correctly" or "properly" to describe past fixes ("projects that correctly
+ * omitted those fields"). Their quality is enforced by the footgun-schema
+ * check in stats --check, not by these detectors. */
 const QUALITY_TARGETS = [
+  // Hot-path instruction files
   "CLAUDE.md",
   "AGENTS.md",
   "GEMINI.md",
+  // Canonical docs
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
   ".goat-flow/patterns.md",
+  // Shared skill doctrine
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
+  // Public docs
   "docs/cli.md",
   "docs/skills.md",
   "docs/audit-and-quality.md",
+  // ADRs
+  ".goat-flow/decisions/README.md",
+  ".goat-flow/decisions/ADR-001-remove-confusion-log.md",
+  ".goat-flow/decisions/ADR-002-replace-preflight-with-security-skill.md",
+  ".goat-flow/decisions/ADR-003-reference-based-setup-prompts.md",
+  ".goat-flow/decisions/ADR-004-config-file-and-directory-learning-loop.md",
+  ".goat-flow/decisions/ADR-005-no-implementation-skill.md",
+  ".goat-flow/decisions/ADR-006-autonomous-skill-mode.md",
+  ".goat-flow/decisions/ADR-007-extract-skill-conventions.md",
+  ".goat-flow/decisions/ADR-008-instruction-budget-constraint.md",
+  ".goat-flow/decisions/ADR-009-skill-consolidation.md",
+  ".goat-flow/decisions/ADR-010-setup-file-ownership.md",
+  ".goat-flow/decisions/ADR-011-critique-mob-core-features.md",
+  ".goat-flow/decisions/ADR-012-quality-checks-expansion.md",
+  ".goat-flow/decisions/ADR-013-remove-scanner-system.md",
+  ".goat-flow/decisions/ADR-014-optional-project-calibration-config.md",
+  ".goat-flow/decisions/ADR-015-remove-stop-lint-from-core.md",
+  ".goat-flow/decisions/ADR-016-cold-path-truth-maintenance.md",
+  ".goat-flow/decisions/ADR-017-active-plan-marker.md",
+  ".goat-flow/decisions/ADR-018-no-goat-verify-skill.md",
+  ".goat-flow/decisions/ADR-019-rename-sbao-to-critique-and-test-to-qa.md",
+  ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+  // Setup templates
+  "workflow/setup/01-system-overview.md",
+  "workflow/setup/02-instruction-file.md",
+  "workflow/setup/03-install-skills.md",
+  "workflow/setup/04-architecture-code-map.md",
+  "workflow/setup/05-customise-to-project.md",
+  "workflow/setup/06-final-verification.md",
+  "workflow/setup/agents/claude.md",
+  "workflow/setup/agents/codex.md",
+  "workflow/setup/agents/gemini.md",
+  "workflow/setup/reference/ADR-000-template.md",
+  "workflow/setup/reference/execution-loop.md",
+  "workflow/setup/reference/footguns-readme.md",
+  "workflow/setup/reference/lessons-readme.md",
+  "workflow/setup/reference/reference-coding-guidelines.md",
+  "workflow/setup/reference/reference-polish.md",
+  "workflow/setup/reference/scratchpad-readme.md",
+  "workflow/setup/reference/tasks-readme.md",
 ] as const;
 
 const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [

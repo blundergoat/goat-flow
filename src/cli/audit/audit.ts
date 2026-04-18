@@ -181,7 +181,9 @@ function validateRegisteredCheckProvenance(fs: ReadonlyFS): void {
   const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
   const errors: string[] = [];
   for (const check of checks) {
-    for (const error of validateProvenance(check.provenance, fs.exists)) {
+    for (const error of validateProvenance(check.provenance, (p) =>
+      fs.exists(p),
+    )) {
       errors.push(`${check.id}: ${error}`);
     }
   }

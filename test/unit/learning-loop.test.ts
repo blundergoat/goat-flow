@@ -163,7 +163,7 @@ describe("extractFootgunFacts freshness integration", () => {
     const fs = stubFS(
       {
         [`${fixtureDir}hooks.md`]:
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: example\n\n**Evidence:** ACTUAL_MEASURED\n\nBody with `src/index.ts` evidence.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: example\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/index.ts` evidence.\n",
       },
       { [fixtureDir]: ["hooks.md"] },
     );

@@ -54,7 +54,7 @@ Checks are grouped by **scope**:
 
 ### Harness mode (`--harness`)
 
-Adds 16 pass/fail checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Like all audit checks, they are deterministic and affect the exit code.
+Adds 16 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state — affects concern status), **advisory** (best practice — affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal — never affects status).
 
 Harness checks are grouped by **concern** -- the five things every major harness engineering source agrees matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 

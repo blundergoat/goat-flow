@@ -5,6 +5,7 @@ Documentation framework for AI coding agent workflows. Markdown docs + Bash scri
 ```bash
 shellcheck scripts/*.sh scripts/maintenance/*.sh                                            # Lint shell scripts
 bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
+bash .claude/hooks/deny-dangerous.sh --self-test  # Verify deny-hook runtime behaviour
 bash scripts/preflight-checks.sh         # Full preflight gate
 npm run typecheck                                 # Type-check .ts (required by DoD)
 npm test                                          # Run test suite
@@ -42,7 +43,7 @@ Over budget = checkpoint and re-classify before continuing. Complexity-class bud
 
 | Mode | Behaviour |
 |------|-----------|
-| Plan | Produce artefact only. No file edits. Exit on LGTM |
+| Plan | Produce artefact only. File writes (e.g. milestone files) only on explicit approval. Exit on LGTM |
 | Implement | Edit in 2-3 turns. 4th read without writing = stop |
 | Explain | Walkthrough only. No changes unless asked |
 | Debug | Diagnosis with file:line first. Fixes after human reviews |
@@ -69,11 +70,11 @@ Over budget = checkpoint and re-classify before continuing. Complexity-class bud
 
 ## Autonomy Tiers
 
-**Always:** Read any file, lint scripts, edit within assigned scope, append to log files.
+**Always:** Read any file, lint scripts, edit within assigned scope, append to session logs at `.goat-flow/logs/sessions/`. (Learning-loop updates — lessons/footguns/decisions — follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.)
 
 **Ask First** — before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked, rollback command.
 
-Boundaries: `workflow/setup/`, `workflow/skills/`, `.goat-flow/architecture.md`, `.github/workflows/**`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**`, `AGENTS.md`, `GEMINI.md`, any add/remove/rename (breaks cross-refs), changes spanning 3+ docs.
+Boundaries: `workflow/setup/`, `workflow/skills/`, `workflow/manifest.json` (canonical agent inventory), `.goat-flow/architecture.md`, `src/cli/server/terminal.ts` (PTY runtime), `src/cli/server/dashboard.ts` (local HTTP/WS server), `.github/workflows/**`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**`, `AGENTS.md`, `GEMINI.md`, any add/remove/rename (breaks cross-refs), changes spanning 3+ docs.
 
 **Never:** Delete docs without replacement. Modify .env/secrets. Push to main. Force push. Commit unless asked. Invent hypothetical examples. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`). Delete/move/overwrite 5+ files in one operation without listing targets and getting confirmation.
 

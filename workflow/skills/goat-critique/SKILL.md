@@ -1,6 +1,6 @@
 ---
 name: goat-critique
-description: "Use when a decision or analysis needs independent perspectives from multiple viewpoints to avoid anchoring bias."
+description: "Use when a decision or analysis needs multi-lens critique to surface blind spots before shipping."
 goat-flow-skill-version: "1.2.0"
 ---
 # /goat-critique
@@ -88,7 +88,7 @@ Label each finding as consensus / split / unique.
 
 **Control group delta:** For fresh-eyes-only findings, mark each as CONTEXT DRIFT / READABILITY GAP / CONTEXT-LIMITED.
 
-Quick mode: skip **Phase 3 (Cross-Examine)** and **Phase 4 (Clarify)**. Proceed directly to **Phase 5 (Synthesise)** after Phase 2.
+Quick mode: skip **Phase 3 (Cross-Examine)** and **Phase 4 (Clarify)**. Proceed directly to **Phase 5 (Synthesise)** after Phase 2. **Because cross-examination is skipped, every split finding MUST be tagged as Decision Debt in the synthesis — without cross-exam, there is no basis to pick a winner.**
 
 ## Phase 3 - Cross-Examine
 
@@ -123,7 +123,7 @@ Produce the prime critique:
 - Verified unique findings (survived cross-examination)
 - Retracted findings (listed so user sees what was considered and dismissed)
 
-**Decision Debt:** For any recommendation where supporting evidence is INFERRED, only one agent raised it and cross-examination was inconclusive, or the recommendation depends on an unvalidated assumption - tag as Decision Debt:
+**Decision Debt:** Tag as Decision Debt when any of these apply: supporting evidence is INFERRED (not OBSERVED); only one agent/lens raised it and cross-examination was inconclusive (full mode) or skipped (quick mode — see Phase 2 rule); or the recommendation depends on an unvalidated assumption:
 
 > **Decision Debt:** [recommendation]
 > - Confidence: LOW/MEDIUM

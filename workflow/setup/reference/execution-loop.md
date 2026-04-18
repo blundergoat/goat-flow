@@ -8,7 +8,7 @@ These sections go in the project's instruction file. Target: under 120 lines. Ha
 
 a) Project identity - 1-2 lines: project name, domain, core technology, primary invariant
 
-b) Version header (v1.1 - YYYY-MM-DD)
+b) Version header (v&lt;current-version&gt; - YYYY-MM-DD, matching `package.json` version)
 
 c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
    When a goat-* skill is active, the skill's Step 0 satisfies READ/SCOPE. Resume at ACT.

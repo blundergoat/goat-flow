@@ -187,6 +187,11 @@ function countMatches(content: string, pattern: RegExp): number {
   return Array.from(content.matchAll(pattern)).length;
 }
 
+/** Remove strikethrough history so historical notes do not count as live evidence. */
+function stripStrikethrough(content: string): string {
+  return content.replace(/~~[\s\S]*?~~/g, "");
+}
+
 /** Count `## Lesson:` or `## Pattern:` bucket entries in one markdown file. */
 function countLessonEntries(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
@@ -265,7 +270,7 @@ function summarizeFootgunRefs(
     totalRefs: 0,
     validRefs: 0,
   };
-  const cleanedContent = content.replace(/~~[^~]+~~/g, "");
+  const cleanedContent = stripStrikethrough(content);
   const fileRefs = cleanedContent.matchAll(
     /`([^`]+):([0-9]+(?:[-,][0-9]+)*)`/g,
   );
@@ -306,6 +311,101 @@ function summarizeFootgunRefs(
   }
 
   return summary;
+}
+
+interface FootgunSection {
+  title: string;
+  start: number;
+  content: string;
+  status: string | null;
+}
+
+/** Split one footgun bucket into its individual `## Footgun:` sections. */
+function splitFootgunSections(body: string): FootgunSection[] {
+  const headings = Array.from(
+    body.matchAll(/^##\s+Footgun:\s+(.+)$/gm),
+    (match) => ({
+      title: (match[1] ?? "").trim(),
+      start: match.index ?? 0,
+    }),
+  );
+  return headings.map((heading, index) => {
+    const end = headings[index + 1]?.start ?? body.length;
+    const content = body.slice(heading.start, end);
+    const statusMatch = content.match(/\*\*Status:\*\*\s*([^|\n]+)/i);
+    return {
+      title: heading.title,
+      start: heading.start,
+      content,
+      status:
+        statusMatch?.[1] !== undefined
+          ? statusMatch[1].trim().toLowerCase()
+          : null,
+    };
+  });
+}
+
+/** Detect whether a footgun section has file:line or (search: ...) evidence. */
+function hasSectionEvidence(content: string): boolean {
+  return EVIDENCE_PATTERN.test(content) || /\(search:/i.test(content);
+}
+
+/** Check one active footgun section for placement, evidence, and retired-file patterns. */
+function diagnoseActiveSection(
+  section: FootgunSection,
+  path: string,
+  resolvedIndex: number,
+): string[] {
+  const out: string[] = [];
+  if (resolvedIndex !== -1 && section.start > resolvedIndex) {
+    out.push(
+      `${path} has active footgun "${section.title}" below ## Resolved Entries`,
+    );
+  }
+  if (!hasSectionEvidence(section.content)) {
+    out.push(
+      `${path} active footgun "${section.title}" missing file:line or (search: ...) evidence`,
+    );
+  }
+  const cleaned = stripStrikethrough(section.content);
+  if (/\(file retired/i.test(cleaned) || /\bretired in v\d/i.test(cleaned)) {
+    out.push(
+      `${path} active footgun "${section.title}" uses retired-file evidence`,
+    );
+  }
+  return out;
+}
+
+/** Check one footgun section's schema + (if active) its placement and evidence. */
+function diagnoseFootgunSection(
+  section: FootgunSection,
+  path: string,
+  resolvedIndex: number,
+): string[] {
+  if (section.status === null) {
+    return [`${path} footgun "${section.title}" missing Status field`];
+  }
+  // Schema: status must be exactly "active" or "resolved" (machine-simple per footguns/README.md:14)
+  if (section.status !== "active" && section.status !== "resolved") {
+    return [
+      `${path} footgun "${section.title}" has non-canonical status "${section.status}" (expected "active" or "resolved")`,
+    ];
+  }
+  if (section.status !== "active") return [];
+  return diagnoseActiveSection(section, path, resolvedIndex);
+}
+
+/** Detect stale active-footgun structure, evidence patterns, and schema violations. */
+function collectFootgunStructureDiagnostics(
+  path: string,
+  content: string,
+): string[] {
+  const { body } = parseMarkdownFrontmatter(content);
+  const resolvedIndex = body.indexOf("## Resolved Entries");
+  const sections = splitFootgunSections(body);
+  return sections.flatMap((section) =>
+    diagnoseFootgunSection(section, path, resolvedIndex),
+  );
 }
 
 /** Append a category-missing diagnostic when the bucket body requires one. */
@@ -435,6 +535,7 @@ function summarizeFootgunEntries(
     invalidLineRefs.push(...refSummary.invalidLineRefs);
     const diagnostic = getMissingFrontmatterDiagnostic(path, content);
     if (diagnostic) diagnostics.push(diagnostic);
+    diagnostics.push(...collectFootgunStructureDiagnostics(path, content));
     buckets.push(
       buildBucketFreshness(
         entry,
@@ -483,7 +584,7 @@ function summarizeLessonEntries(
     const bucketStaleRefs: string[] = [];
     // Strip strikethrough history (~~resolved~~) before scanning for stale refs,
     // mirroring the footgun extractor.
-    const cleanedContent = content.replace(/~~[^~]+~~/g, "");
+    const cleanedContent = stripStrikethrough(content);
     for (const match of cleanedContent.matchAll(pathPattern)) {
       const ref = match[1];
       // Skip glob wildcards (`*`, `?`, `{}`), angle-bracket placeholders

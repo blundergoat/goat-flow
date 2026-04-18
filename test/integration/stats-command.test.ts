@@ -129,7 +129,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nBody.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
       },
       lessons: {
         "verification.md":
@@ -190,5 +190,103 @@ describe("goat-flow stats --check", () => {
     const finding = verdict.findings.find((f) => f.rule === "stale-ref");
     assert.ok(finding, "expected a stale-ref finding");
     assert.ok(finding!.message.includes("src/gone.ts:42"));
+  });
+
+  it("fails when an active footgun appears below ## Resolved Entries", () => {
+    const report = loadReport({
+      footguns: {
+        "auditor.md":
+          "---\ncategory: auditor\nlast_reviewed: 2026-04-18\n---\n\n## Resolved Entries\n\n## Footgun: misplaced active entry\n\n**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "format" &&
+          f.message.includes("below ## Resolved Entries"),
+      ),
+      "expected an active-below-resolved finding",
+    );
+  });
+
+  it("fails when an active footgun relies on retired-file evidence", () => {
+    const report = loadReport({
+      footguns: {
+        "docs-and-crossrefs.md":
+          "---\ncategory: docs-and-crossrefs\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: stale evidence\n\n**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED\n\n**Evidence:**\n- `docs/getting-started.md` (file retired in v1.1.0)\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "format" &&
+          f.message.includes("uses retired-file evidence"),
+      ),
+      "expected a retired-file-evidence finding",
+    );
+  });
+
+  it("fails when a footgun has a non-canonical compound status", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** resolved (goat-flow) / active (consumer projects) | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "format" && f.message.includes("non-canonical status"),
+      ),
+      "expected a non-canonical-status finding",
+    );
+  });
+
+  it("fails when a footgun is missing its Status field", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "format" && f.message.includes("missing Status field"),
+      ),
+      "expected a missing-Status-field finding",
+    );
+  });
+
+  it("fails when an active footgun has no file:line or (search:) evidence", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nNo concrete file refs here, just prose.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "format" &&
+          f.message.includes("missing file:line or (search: ...) evidence"),
+      ),
+      "expected a missing-evidence finding",
+    );
   });
 });

@@ -31,7 +31,7 @@
   <body
     class="h-screen overflow-hidden"
     style="background: #1a1a1e; color: #e4e4e7"
-    :style="darkMode ? 'background:#1a1a1e;color:#e4e4e7;' : 'background:#fafafa;color:#18181b;'"
+    :style="darkMode ? { background: '#1a1a1e', color: '#e4e4e7' } : { background: '#fafafa', color: '#18181b' }"
   >
     <!-- Screen reader live region -->
     <div
@@ -208,7 +208,7 @@
                 background: none;
                 border: none;
               "
-              :style="dir.isProject ? 'font-weight: 600' : ''"
+              :style="dir.isProject ? { fontWeight: 600 } : {}"
             >
               <span x-text="dir.name"></span>
               <span

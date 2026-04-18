@@ -28,7 +28,7 @@ last_reviewed: 2026-04-18
 **Why it happens:** The learning-loop buckets index real incidents and failure classes, not milestone names. Queries like "support matrix" or "registry canonicality" sound precise in planning context but do not match the actual wording of stored hook/platform incidents.
 
 **Evidence:**
-- `.goat-flow/tasks/1.2.0/M10-ab-log.md` run 3: `support matrix|agent matrix|registry canonicality` returned `0` hits, while the reworded query `Codex has no compaction notification hook` immediately hit `.goat-flow/footguns/hooks.md`.
+- Observed during M10 task planning: initial query `support matrix|agent matrix|registry canonicality` returned 0 hits against `.goat-flow/footguns/`, while the reworded query `Codex has no compaction notification hook` immediately hit `.goat-flow/footguns/hooks.md`. (Raw retrieval run recorded in a local-only task log.)
 - `workflow/skills/reference/skill-preamble.md` now hard-codes the mitigation: derive 2-4 terms from target area + symptom + named file/tool, retry once, then record a miss instead of broad-loading a bucket.
 
 **Prevention:** Seed first-pass retrieval terms with the concrete symptom, platform, or file/tool name rather than milestone titles or abstract design labels. One reword is allowed; if the second query still misses, record the retrieval miss explicitly and move on. Broad-loading the bucket to compensate defeats the protocol.
@@ -58,8 +58,8 @@ last_reviewed: 2026-04-18
 **Evidence:**
 - `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) enforces exact equality between `.goat-flow/config.yaml` and `AUDIT_VERSION`.
 - `test/fixtures/projects/index.ts:34-48` is the shared `stubConfig()` used by audit-build fixtures; if it drifts from `AUDIT_VERSION`, "healthy project" tests fail for the wrong reason.
-- `src/cli/classify-state.ts:41,145-180` derives the current version family and routes current vs outdated installs; hardcoding a previous family breaks `composeSetup()` as soon as the package version advances.
-- `workflow/install-goat-flow.sh:72-81` must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
+- `src/cli/classify-state.ts` (search: `CURRENT_VERSION_FAMILY`) derives the current version family and routes current vs outdated installs; hardcoding a previous family breaks `composeSetup()` as soon as the package version advances.
+- `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
 
 **Prevention:** When a skill rename ships with a version bump, treat version-sensitive helpers as part of the rename surface. Update current-version classifiers, shared config fixtures, install-script version discovery, and setup-routing tests in the same change before trusting `npm test`.
 

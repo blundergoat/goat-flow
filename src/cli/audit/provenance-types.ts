@@ -51,7 +51,36 @@ export interface CheckEvidence {
 }
 
 /** Filesystem lookup used to verify repo-local evidence paths when available. */
-export type EvidencePathExists = (path: string) => boolean;
+type EvidencePathExists = (path: string) => boolean;
+
+function checkUnknownReason(e: CheckEvidence): string | null {
+  if (e.source_type === "unknown" && (!e.reason || e.reason.trim() === "")) {
+    return "source_type 'unknown' requires a non-empty `reason` explaining why provenance could not be reconstructed";
+  }
+  return null;
+}
+
+function checkVerifiedOn(e: CheckEvidence): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(e.verified_on)) return null;
+  return `verified_on must be ISO date YYYY-MM-DD, got ${JSON.stringify(e.verified_on)}`;
+}
+
+function checkSourceRequired(e: CheckEvidence): string | null {
+  if (e.source_type === "unknown") return null;
+  if (e.source_urls.length > 0) return null;
+  if (e.evidence_paths && e.evidence_paths.length > 0) return null;
+  return "non-unknown source_type must have at least one source_url or evidence_path";
+}
+
+function checkEvidencePathsExist(
+  e: CheckEvidence,
+  pathExists: EvidencePathExists,
+): string[] {
+  if (!e.evidence_paths) return [];
+  return e.evidence_paths
+    .filter((p) => !pathExists(p))
+    .map((p) => `evidence_path does not exist: ${p}`);
+}
 
 /** Runtime check that a CheckEvidence satisfies the unknown-reason contract. */
 export function validateProvenance(
@@ -59,31 +88,12 @@ export function validateProvenance(
   pathExists?: EvidencePathExists,
 ): string[] {
   const errors: string[] = [];
-  if (e.source_type === "unknown" && (!e.reason || e.reason.trim() === "")) {
-    errors.push(
-      "source_type 'unknown' requires a non-empty `reason` explaining why provenance could not be reconstructed",
-    );
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(e.verified_on)) {
-    errors.push(
-      `verified_on must be ISO date YYYY-MM-DD, got ${JSON.stringify(e.verified_on)}`,
-    );
-  }
-  if (
-    e.source_type !== "unknown" &&
-    e.source_urls.length === 0 &&
-    (!e.evidence_paths || e.evidence_paths.length === 0)
-  ) {
-    errors.push(
-      "non-unknown source_type must have at least one source_url or evidence_path",
-    );
-  }
-  if (pathExists && e.evidence_paths) {
-    for (const evidencePath of e.evidence_paths) {
-      if (!pathExists(evidencePath)) {
-        errors.push(`evidence_path does not exist: ${evidencePath}`);
-      }
-    }
-  }
+  const unknownErr = checkUnknownReason(e);
+  if (unknownErr) errors.push(unknownErr);
+  const dateErr = checkVerifiedOn(e);
+  if (dateErr) errors.push(dateErr);
+  const sourceErr = checkSourceRequired(e);
+  if (sourceErr) errors.push(sourceErr);
+  if (pathExists) errors.push(...checkEvidencePathsExist(e, pathExists));
   return errors;
 }

@@ -67,10 +67,21 @@ evaluation/                # Quality-assessment prompt templates
 ## scripts/ -- Shell scripts
 
 ```
+check-markdown-links.sh    # Verify relative markdown links resolve across docs
+check-path-integrity.sh    # Cross-reference path-integrity checks between docs and code
+check-versions.mjs         # Verify workflow/skills templates match package.json version
+dependency-install.sh      # Wrapper: npm install with guards
+dependency-update.sh       # Wrapper: upgrade dependencies
+deny-dangerous.sh          # Hook: blocks destructive commands (copied to agent hook dirs)
+npm-publish.sh             # Wrapper: npm publish sanity checks
 preflight-checks.sh        # Pre-commit/CI gate: lint, typecheck, cross-ref checks
+prettier-check.sh          # Wrapper: prettier --check (lint)
+prettier.sh                # Wrapper: prettier --write (format)
+run-cli.sh                 # Wrapper: run the local CLI via node
 setup-initial.sh           # First-time project scaffolding
-deny-dangerous.sh          # Hook: blocks destructive commands
-maintenance/               # Git cleanup, secret scanning, formatting
+start-dev.sh               # Wrapper: start dashboard in dev mode
+warn-node-pty.mjs          # npm postinstall guard: warn if node-pty is missing (skips in CI)
+maintenance/               # Git cleanup, secret scanning, Zone.Identifier removal
 ```
 
 ## docs/ -- Documentation
