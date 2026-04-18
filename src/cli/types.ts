@@ -83,6 +83,24 @@ export interface ProjectSignals {
   formatterGaps: string[];
 }
 
+/** Per-bucket learning-loop freshness + health record used by `goat-flow stats`. */
+export interface BucketFreshness {
+  /** Relative path of the bucket file */
+  path: string;
+  /** `last_reviewed` date from frontmatter in YYYY-MM-DD form, or null if missing/invalid */
+  lastReviewed: string | null;
+  /** Whole days between last_reviewed and "now"; null when lastReviewed is unknown */
+  freshnessDays: number | null;
+  /** Freshness band: <=30d fresh, 31-90d aging, >90d stale, unknown if no valid date */
+  freshnessBand: "fresh" | "aging" | "stale" | "unknown";
+  /** Entries counted live in this bucket (## Footgun/Lesson/Pattern headings) */
+  entryCount: number;
+  /** Stale file refs found in this bucket */
+  staleRefs: string[];
+  /** Invalid line refs (line out of bounds) found in this bucket */
+  invalidLineRefs: string[];
+}
+
 /** Facts shared across all agents (project-wide files and directories) */
 export interface SharedFacts {
   footguns: {
@@ -99,6 +117,8 @@ export interface SharedFacts {
     validRefs: number;
     formatDiagnostic: string | null;
     path: string;
+    /** Per-bucket freshness records; empty when the directory is missing. */
+    buckets: BucketFreshness[];
   };
   lessons: {
     exists: boolean;
@@ -108,6 +128,8 @@ export interface SharedFacts {
     duplicateSurfacePaths: string[];
     formatDiagnostic: string | null;
     path: string;
+    /** Per-bucket freshness records; empty when the directory is missing. */
+    buckets: BucketFreshness[];
   };
   decisions: {
     dirExists: boolean;

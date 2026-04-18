@@ -1,4 +1,4 @@
-# ADR-008: Replace inline setup skeletons with reference-based prompts
+# ADR-003: Replace inline setup skeletons with reference-based prompts
 
 **Date:** 2026-03-28
 **Status:** Accepted

@@ -96,7 +96,7 @@ footguns/                  # Architectural traps with file:line evidence (commit
 lessons/                   # Behavioural mistake records (committed)
 
 tasks/                     # Milestone files (gitignored, local working state)
-  .active                  # One-line marker naming the active plan subdir (see ADR-043)
+  .active                  # One-line marker naming the active plan subdir (see ADR-017)
   <version>/Mxx-*.md       # Active milestones live in the subdir named by .active
   _archived/               # Prior plans + research; not scanned by skills
 logs/sessions/             # Session logs (gitignored)

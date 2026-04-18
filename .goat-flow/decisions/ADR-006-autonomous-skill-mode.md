@@ -1,4 +1,4 @@
-# ADR-022: Autonomous skill mode via complexity-conditional ceremony
+# ADR-006: Autonomous skill mode via complexity-conditional ceremony
 
 **Status:** Accepted
 **Date:** 2026-04-03

@@ -1,4 +1,4 @@
-# ADR-043: Active-Plan Marker for `.goat-flow/tasks/`
+# ADR-017: Active-Plan Marker for `.goat-flow/tasks/`
 
 **Status:** Accepted
 **Date:** 2026-04-17

@@ -1,5 +1,6 @@
 ---
 category: auditor
+last_reviewed: 2026-04-18
 ---
 
 ## Footgun: Audit validates hook file content but not hook runtime behavior

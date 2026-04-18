@@ -1,4 +1,4 @@
-# ADR-033: Multi-perspective critique (goat-critique) is a core feature, not optional ceremony
+# ADR-011: Multi-perspective critique (goat-critique) is a core feature, not optional ceremony
 
 **Status:** Accepted (updated 2026-04-18; historical Mob Elaboration references removed after the 2026-04-15 amendment)
 **Date:** 2026-04-10

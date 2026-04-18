@@ -1,4 +1,4 @@
-# ADR-031: Setup file ownership - what setup can and cannot touch
+# ADR-010: Setup file ownership - what setup can and cannot touch
 
 **Status:** Accepted
 **Date:** 2026-04-06

@@ -1,4 +1,4 @@
-# ADR-028: Extract shared skill conventions to .goat-flow/skill-reference/skill-conventions.md
+# ADR-007: Extract shared skill conventions to .goat-flow/skill-reference/skill-conventions.md
 
 **Status:** Accepted (supersedes ADR-023, which superseded ADR-011)
 **Updated:** 2026-04-18 - also absorbs the shared-conventions flush-protocol change previously split into ADR-024.

@@ -99,6 +99,6 @@ export function extractRouterFacts(
 }
 
 // settingsLocal extraction removed - personal preference file, not a project quality signal.
-// askFirst extraction removed - ask_first config field removed from CLI (ADR-039).
+// askFirst extraction removed - ask_first config field removed from CLI (ADR-014).
 
 // ─── Composer ────────────────────────────────────────────────────────

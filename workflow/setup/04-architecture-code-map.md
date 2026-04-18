@@ -34,7 +34,7 @@ Create these directories and files if they don't already exist:
 
 - `.goat-flow/decisions/` - for architecture decision records when needed. Do not pre-fill with a blank template.
 - `.goat-flow/scratchpad/` - for ephemeral working notes and temporary coordination artifacts
-- `.goat-flow/tasks/` - for milestone and task tracking files (active plan subdir named by the `.active` marker; skills scope to that subdir - see ADR-043 if present)
+- `.goat-flow/tasks/` - for milestone and task tracking files (active plan subdir named by the `.active` marker; skills scope to that subdir - see ADR-017 if present)
 - `.goat-flow/logs/sessions/` - for session logs (if not already created by step 01)
 
 

@@ -1,4 +1,4 @@
-# ADR-045: No standalone goat-verify skill; use shared Proof Gate
+# ADR-018: No standalone goat-verify skill; use shared Proof Gate
 
 **Status:** Implemented
 **Date:** 2026-04-18
@@ -18,11 +18,11 @@ All 5 analyses converged on rejecting option 1. Evidence:
 - Per-skill gates are domain-specific and heterogeneous by design: goat-debug confidence (HIGH/MEDIUM/LOW = reproduced/traced/inferred), goat-security confidence (CONFIRMED/PROBABLE/THEORETICAL), goat-review severity tags `[MUST/SHOULD/MAY:patch/needs-decision]`, goat-plan per-milestone testing gates, goat-qa must/should/skip tiers. Collapsing them into a generic verifier would destroy information tuned to different consumers.
 - There is no cross-skill verification routing today — each gate is bespoke and self-contained. A new routed skill would have no clean trigger space distinct from `/goat-debug` (bug-fix verification), `/goat-review` (diff/PR verification), `/goat-qa` (coverage verification), or the DoD, violating the CSO rule in `.goat-flow/glossary.md:16`.
 - Prior ADRs establish precedent against this pattern:
-  - **ADR-030** (skill consolidation) — new skills must have a distinct artifact or failure mode.
-  - **ADR-019** (no implementation skill) — rejected the goat-doer / goat-verifier split; verification must come from fresh review/test invocations, not an artificial verifier layer over the same work.
-  - **ADR-004** (replace preflight with security skill) — rejected "glorified checklist skill" in favour of strengthening real enforcement surfaces.
+  - **ADR-009** (skill consolidation) — new skills must have a distinct artifact or failure mode.
+  - **ADR-005** (no implementation skill) — rejected the goat-doer / goat-verifier split; verification must come from fresh review/test invocations, not an artificial verifier layer over the same work.
+  - **ADR-002** (replace preflight with security skill) — rejected "glorified checklist skill" in favour of strengthening real enforcement surfaces.
   - Prior v1.1.0 cleanup already established the relevant pattern: duplicated always-on rules belong in `skill-preamble.md`, not in a separate always-loaded file such as the retired `RULES.md`.
-  - **ADR-030** (skill consolidation doctrine) — repo trends toward fewer skills, not more, and new skills must justify their existence.
+  - **ADR-009** (skill consolidation doctrine) — repo trends toward fewer skills, not more, and new skills must justify their existence.
 - Measured blast radius of a new canonical skill: 3 hardcoded surfaces (`workflow/install-goat-flow.sh:140` `SKILL_NAMES` string, `src/cli/constants.ts:8-16` `SKILL_NAMES` array, `workflow/manifest.json:45-52` canonical list), plus audit-drift test count bump (`test/integration/audit-drift.test.ts:76`), plus 3-way installed-copy parity (`.goat-flow/footguns/skills.md:5-16` documents real punctuation-only drift incidents that proved parity is not free).
 
 External pattern mining (superpowers/verification-before-completion, systematic-debugging, BMAD review decomposition, Archon debug/plan, claude-mem make-plan) yielded importable content for existing surfaces, not justification for a new skill. `SuperClaude_Framework/confidence-check` (≥90% numeric gate) was rejected across all 5 analyses as incompatible with goat-flow's evidence-over-hedges culture — a numeric confidence score is itself a hedge forbidden by `AGENTS.md:55` red-flag #4.
@@ -72,5 +72,5 @@ If any precondition fires, the new ADR's implementation must touch the 3 hardcod
 - `workflow/skills/{goat, goat-plan, goat-review, goat-critique, goat-security}/SKILL.md` — Proof Gate one-line references.
 - `.goat-flow/lessons/verification.md` — new `## Lesson: Verification rationalization anti-patterns` entry.
 - `test/integration/preamble-sync.test.ts`, `test/integration/verification-boundaries.test.ts` — contract tests.
-- Precedent: ADR-004, ADR-019, ADR-030, plus the earlier shared-preamble cleanup that retired `RULES.md`.
+- Precedent: ADR-002, ADR-005, ADR-009, plus the earlier shared-preamble cleanup that retired `RULES.md`.
 - Drift-risk motivation: `.goat-flow/footguns/skills.md:5-16`.

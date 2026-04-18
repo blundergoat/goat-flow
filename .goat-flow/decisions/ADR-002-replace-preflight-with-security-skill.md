@@ -1,4 +1,4 @@
-# ADR-004: Replace goat-preflight skill with goat-security
+# ADR-002: Replace goat-preflight skill with goat-security
 
 **Date:** 2026-03-22
 **Status:** Accepted

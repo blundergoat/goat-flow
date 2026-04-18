@@ -41,6 +41,7 @@ Commands:
   status            Show project state (bare/partial/v0.9/outdated/current)
   dashboard         Launch browser dashboard with audit, setup, and terminal
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
+  stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
 Arguments:
   project-path    Target project directory (default: .)
 
@@ -66,6 +67,8 @@ Examples:
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
   goat-flow manifest                   Print the resolved manifest
   goat-flow manifest --check           Verify the manifest is consistent with code
+  goat-flow stats                      Learning-loop health report
+  goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow --format markdown          PR-comment friendly output
   goat-flow --output report.json       Write results to file
 `);
@@ -84,7 +87,8 @@ type Command =
   | "status"
   | "audit"
   | "quality"
-  | "manifest";
+  | "manifest"
+  | "stats";
 
 /** List of recognized CLI subcommands */
 const COMMANDS: Command[] = [
@@ -95,6 +99,7 @@ const COMMANDS: Command[] = [
   "audit",
   "quality",
   "manifest",
+  "stats",
 ];
 /** Previously valid commands that now produce a helpful removal error */
 const REMOVED_COMMANDS: Record<string, string> = {
@@ -409,6 +414,50 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
+/** Handle the stats command: report learning-loop health (live counts, stale refs, freshness). */
+async function handleStatsCommand(options: ParsedCLI): Promise<void> {
+  const { createFS } = await import("./facts/fs.js");
+  const { loadConfig } = await import("./config/reader.js");
+  const { extractFootgunFacts, extractLessonsFacts } = await import(
+    "./facts/shared/learning-loop.js"
+  );
+  const { buildStatsReport, checkStats } = await import("./stats/stats.js");
+  const {
+    renderStatsText,
+    renderStatsJson,
+    renderStatsMarkdown,
+    renderStatsCheckText,
+  } = await import("./stats/render.js");
+
+  const fs = createFS(options.projectPath);
+  const configState = loadConfig(options.projectPath, fs);
+  const report = buildStatsReport({
+    footguns: extractFootgunFacts(fs, configState),
+    lessons: extractLessonsFacts(fs, configState),
+  });
+
+  if (options.check) {
+    const verdict = checkStats(report);
+    if (options.format === "json") {
+      writeOutput(options, JSON.stringify(verdict, null, 2));
+    } else {
+      writeOutput(options, renderStatsCheckText(verdict).trimEnd());
+    }
+    if (verdict.status === "fail") process.exitCode = 1;
+    return;
+  }
+
+  let rendered: string;
+  if (options.format === "json") {
+    rendered = renderStatsJson(report);
+  } else if (options.format === "markdown") {
+    rendered = renderStatsMarkdown(report);
+  } else {
+    rendered = renderStatsText(report);
+  }
+  writeOutput(options, rendered.trimEnd());
+}
+
 /** Handle the manifest command: resolve + print the single-source-of-truth manifest. */
 async function handleManifestCommand(options: ParsedCLI): Promise<void> {
   const { loadManifest, checkManifest, renderManifestMarkdown } =
@@ -465,6 +514,7 @@ async function dispatchCommand(options: ParsedCLI): Promise<void> {
   if (options.command === "audit") return handleAuditCommand(options);
   if (options.command === "quality") return handleQualityCommand(options);
   if (options.command === "manifest") return handleManifestCommand(options);
+  if (options.command === "stats") return handleStatsCommand(options);
   if (options.command === "status") return handleStatusCommand(options);
   if (options.command === "dashboard") {
     const { serveDashboard } = await import("./server/dashboard.js");

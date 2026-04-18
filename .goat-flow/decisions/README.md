@@ -8,44 +8,44 @@ This directory now has two live layers plus a historical summary:
 
 ## Core ADRs
 
-- `ADR-008` - reference-based setup prompts
-- `ADR-018` - config + learning-loop storage model
-- `ADR-028` - shared skill conventions extraction
-- `ADR-029` - instruction budget constraint
-- `ADR-030` - skill consolidation and canonical-skill doctrine
-- `ADR-031` - setup file ownership
-- `ADR-036` - audit as the sole evaluation engine
-- `ADR-039` - optional project calibration config
-- `ADR-041` - cold-path truth maintenance
-- `ADR-043` - active-plan marker
-- `ADR-045` - no standalone `goat-verify`
-- `ADR-046` - skill naming/routing cleanup
+- `ADR-003` - reference-based setup prompts
+- `ADR-004` - config + learning-loop storage model
+- `ADR-007` - shared skill conventions extraction
+- `ADR-008` - instruction budget constraint
+- `ADR-009` - skill consolidation and canonical-skill doctrine
+- `ADR-010` - setup file ownership
+- `ADR-013` - audit as the sole evaluation engine
+- `ADR-014` - optional project calibration config
+- `ADR-016` - cold-path truth maintenance
+- `ADR-017` - active-plan marker
+- `ADR-018` - no standalone `goat-verify`
+- `ADR-019` - skill naming/routing cleanup
+- `ADR-020` - add Copilot CLI as a first-class agent
 
 ## Secondary ADRs
 
-- `ADR-003` - confusion-log removal
-- `ADR-004` - preflight skill replaced by security skill
-- `ADR-019` - no implementation skill
-- `ADR-022` - autonomous skill mode
-- `ADR-033` - critique as a core feature
-- `ADR-034` - quality-check expansion
-- `ADR-035` - remove Copilot
-- `ADR-040` - remove `stop-lint.sh` from core
+- `ADR-001` - confusion-log removal
+- `ADR-002` - preflight skill replaced by security skill
+- `ADR-005` - no implementation skill
+- `ADR-006` - autonomous skill mode
+- `ADR-011` - critique as a core feature
+- `ADR-012` - quality-check expansion
+- `ADR-015` - remove `stop-lint.sh` from core
 
 ## Deleted Historical Topics
 
 The following topics were removed as standalone ADR files on 2026-04-18 after their surviving guidance was folded into umbrella records:
 
-- confusion-log disposition now lives in `ADR-003`
-- shared-conventions history (keep inline / expand inline / flush-protocol enforcement) now lives in `ADR-028`
-- dispatcher counting and the original 9→6 consolidation pass now live in `ADR-030`
-- category-bucket learning-loop format now lives in `ADR-018`
-- local-only `userRole` config handling now lives in `ADR-039`
-- retired scanner-era simplifications and heuristics are preserved in `ADR-036` and git history
+- confusion-log disposition now lives in `ADR-001`
+- shared-conventions history (keep inline / expand inline / flush-protocol enforcement) now lives in `ADR-007`
+- dispatcher counting and the original 9→6 consolidation pass now live in `ADR-009`
+- category-bucket learning-loop format now lives in `ADR-004`
+- local-only `userRole` config handling now lives in `ADR-014`
+- retired scanner-era simplifications and heuristics are preserved in `ADR-013` and git history
 - the retired spec-artifact workflow is preserved in git history; the current replacement is milestone files plus goat-review Spec Drift
-- evidence lifecycle state markers now live in `ADR-041`
-- dispatcher build history now lives in `ADR-030`
-- audit-era agent-check regrouping now lives in `ADR-036`
-- the shared-preamble pattern from the retired `RULES.md` cleanup now lives in `ADR-045`
+- evidence lifecycle state markers now live in `ADR-016`
+- dispatcher build history now lives in `ADR-009`
+- audit-era agent-check regrouping now lives in `ADR-013`
+- the shared-preamble pattern from the retired `RULES.md` cleanup now lives in `ADR-018`
 - repo-layout history, the ask-first hook lesson, the older skill-copy model, narrow tooling ADRs, and harness-card presentation are preserved in git history rather than the live ADR set
-- the deferred public-audit skill-integrity note was removed from the live ADR set; cold-path truth maintenance remains in `ADR-041`
+- the deferred public-audit skill-integrity note was removed from the live ADR set; cold-path truth maintenance remains in `ADR-016`

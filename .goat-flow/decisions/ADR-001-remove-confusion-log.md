@@ -1,4 +1,4 @@
-# ADR-003: Remove confusion-log.md from the workflow
+# ADR-001: Remove confusion-log.md from the workflow
 
 **Date:** 2026-03-21
 **Status:** Accepted

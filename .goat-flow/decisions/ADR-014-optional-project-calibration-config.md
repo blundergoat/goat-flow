@@ -1,4 +1,4 @@
-# ADR-039: Treat `toolchain` and `ask_first` as optional project calibration
+# ADR-014: Treat `toolchain` and `ask_first` as optional project calibration
 
 **Date:** 2026-04-15
 **Status:** Implemented

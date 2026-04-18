@@ -1,4 +1,4 @@
-# ADR-029: Instruction budget constraint - why 120 lines, why it matters
+# ADR-008: Instruction budget constraint - why 120 lines, why it matters
 
 **Status:** Accepted
 **Date:** 2026-04-06

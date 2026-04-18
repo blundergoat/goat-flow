@@ -207,10 +207,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "**Design notes** (do NOT flag these as findings - they are intentional):",
   );
   lines.push(
-    '- Session logs (`.goat-flow/logs/sessions/*.md`) and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker — see ADR-043) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
+    '- Session logs (`.goat-flow/logs/sessions/*.md`) and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker — see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
   );
   lines.push(
-    "- `toolchain` and `ask_first` fields in `config.yaml` were removed from the base setup in v1.1.0 (see ADR-039). A lean config.yaml with only version, agents, and skills is correct - not a gap.",
+    "- `toolchain` and `ask_first` fields in `config.yaml` were removed from the base setup in v1.1.0 (see ADR-014). A lean config.yaml with only version, agents, and skills is correct - not a gap.",
   );
   lines.push("");
 

@@ -212,7 +212,7 @@ echo ""
 # ==========================================================================
 # Convention: .goat-flow/tasks/.active is a one-line file naming the active
 # plan subdir (e.g. "1.2.0"). Skills (goat, goat-plan) read it to scope their
-# scan. See ADR-043. We only write it automatically when there is no ambiguity.
+# scan. See ADR-017. We only write it automatically when there is no ambiguity.
 echo "Active plan marker:"
 ACTIVE_FILE=".goat-flow/tasks/.active"
 if [[ -f "$ACTIVE_FILE" ]] && ! $FORCE; then

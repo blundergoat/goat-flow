@@ -1,5 +1,6 @@
 ---
 category: dashboard
+last_reviewed: 2026-04-05
 ---
 
 ## Footgun: Alpine.js string `:style` replaces static `style` attribute

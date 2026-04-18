@@ -1,4 +1,4 @@
-# ADR-036: Remove scanner/rubric system, drive setup from audit
+# ADR-013: Remove scanner/rubric system, drive setup from audit
 
 **Date:** 2026-04-13
 **Status:** Accepted

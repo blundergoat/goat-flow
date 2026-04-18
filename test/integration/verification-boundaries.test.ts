@@ -1,5 +1,5 @@
 /**
- * Contract test: verification routing boundaries (ADR-045).
+ * Contract test: verification routing boundaries (ADR-018).
  * Pins:
  *  - goat-qa quick-mode trigger no longer claims raw "verify" (now "verify coverage").
  *  - skill-preamble.md routes "verification planning" to /goat-qa (not bare "verification").
@@ -22,7 +22,7 @@ const CANONICAL_SKILLS = [
   "goat-qa",
 ];
 
-describe("verification routing boundaries (ADR-045)", () => {
+describe("verification routing boundaries (ADR-018)", () => {
   it("goat-qa does not claim raw 'verify' in its quick-mode trigger", () => {
     const content = readFileSync(
       resolve(PROJECT_ROOT, "workflow/skills/goat-qa/SKILL.md"),
@@ -35,7 +35,7 @@ describe("verification routing boundaries (ADR-045)", () => {
     assert.doesNotMatch(
       triggerLine!,
       /"verify"/,
-      'goat-qa Standard-mode trigger must not contain bare quoted "verify" (use "verify coverage" instead) — see ADR-045',
+      'goat-qa Standard-mode trigger must not contain bare quoted "verify" (use "verify coverage" instead) — see ADR-018',
     );
   });
 
@@ -47,12 +47,12 @@ describe("verification routing boundaries (ADR-045)", () => {
     assert.match(
       content,
       /verification planning → \/goat-qa/,
-      "preamble routing must read 'verification planning → /goat-qa' (ADR-045)",
+      "preamble routing must read 'verification planning → /goat-qa' (ADR-018)",
     );
     assert.doesNotMatch(
       content,
       /coverage, verification → \/goat-qa/,
-      "preamble routing must not use bare 'verification' as a goat-qa route (ADR-045)",
+      "preamble routing must not use bare 'verification' as a goat-qa route (ADR-018)",
     );
   });
 
@@ -65,7 +65,7 @@ describe("verification routing boundaries (ADR-045)", () => {
       assert.match(
         content,
         /Proof Gate/,
-        `${skill} SKILL.md must reference the Proof Gate (ADR-045)`,
+        `${skill} SKILL.md must reference the Proof Gate (ADR-018)`,
       );
     }
   });

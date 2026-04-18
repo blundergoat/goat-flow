@@ -1,4 +1,4 @@
-# ADR-034: Expand quality checks from 15 to 26
+# ADR-012: Expand quality checks from 15 to 26
 
 **Date:** 2026-04-12
 **Status:** Accepted

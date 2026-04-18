@@ -1,5 +1,6 @@
 ---
 category: skills
+last_reviewed: 2026-04-18
 ---
 
 ## Footgun: Workflow-summarising skill descriptions cause CSO shortcutting
@@ -11,7 +12,7 @@ category: skills
 **Why it happens:** LLMs anchor on the description as a sufficient summary and skip expanding the full skill content. This is the Claude Search Optimization (CSO) failure class.
 
 **Evidence:**
-- Original incident at `superpowers-skills/skills/meta/writing-skills/SKILL.md:134-172` — `subagent-driven-development`'s description said "dispatches subagent per task with code review between tasks" and Claude performed ONE review instead of the two-stage review defined in the body.
+- Original incident in the external `superpowers-skills` repo (path: skills/meta/writing-skills/SKILL.md, lines 134-172 at the time) — `subagent-driven-development`'s description said "dispatches subagent per task with code review between tasks" and Claude performed ONE review instead of the two-stage review defined in the body.
 - Regression caught in goat-flow itself on 2026-04-18: the `goat` dispatcher description was "Single entry point that classifies intent and dispatches to the correct goat-* skill" — workflow-summary, not trigger-only. Rewritten to "Use when you describe an outcome and need the right goat-* workflow chosen for you."
 
 **Prevention:** Descriptions must be trigger-only — say WHEN to invoke the skill, never WHAT it does or HOW. All 7 current goat-* descriptions (including the dispatcher) are compliant as of 2026-04-18. When adding or editing a skill, the description field must pass the trigger-only test: if removing it and reading only the description tells you the skill's workflow steps or internal phases, it is a CSO violation regardless of how accurate it is.

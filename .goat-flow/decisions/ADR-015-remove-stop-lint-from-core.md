@@ -1,4 +1,4 @@
-# ADR-040: Remove stop-lint.sh from goat-flow core
+# ADR-015: Remove stop-lint.sh from goat-flow core
 
 **Date:** 2026-04-15
 **Status:** Implemented
@@ -9,7 +9,7 @@ goat-flow shipped `stop-lint.sh` as a post-turn hook across all three agents (Cl
 
 Problems:
 
-1. **Stack guessing is unreliable.** The script hardcodes shellcheck + tsc. Consumer projects using Python, Go, Rust, PHP, or anything else get a hook that does nothing useful - or worse, runs the wrong tool. There's no reliable way to auto-detect the project stack from a shell script without the kind of project calibration that ADR-039 deferred.
+1. **Stack guessing is unreliable.** The script hardcodes shellcheck + tsc. Consumer projects using Python, Go, Rust, PHP, or anything else get a hook that does nothing useful - or worse, runs the wrong tool. There's no reliable way to auto-detect the project stack from a shell script without the kind of project calibration that ADR-014 deferred.
 2. **Hook enforcement mode was documented three different ways.** The Codex header said "advisory by default", the setup docs said "advisory by default", but the actual code defaulted to enforce (`GOAT_LINT_ENFORCE:-1`). Three critiques independently flagged this contradiction.
 3. **The hook is project-specific by nature.** Every project has different linters, configs, and performance constraints. A framework-shipped lint hook is either too generic to be useful or too opinionated to be portable.
 
@@ -27,4 +27,4 @@ Remove `stop-lint.sh` from goat-flow core for v1.1.0:
 
 - Harness verification score drops (91 → ~83 for goat-flow's own repo) due to "No post-turn hooks found to evaluate." This is accurate.
 - Consumer projects that already have `stop-lint.sh` are unaffected - the audit still detects and evaluates their hooks.
-- Post-turn linting will be revisited in a later version, likely calibrated via `config.yaml` toolchain commands (see ADR-039) rather than stack-guessing in a shell script.
+- Post-turn linting will be revisited in a later version, likely calibrated via `config.yaml` toolchain commands (see ADR-014) rather than stack-guessing in a shell script.

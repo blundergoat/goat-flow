@@ -1,4 +1,4 @@
-# ADR-018: Config File and Directory-Based Learning Loop
+# ADR-004: Config File and Directory-Based Learning Loop
 
 **Status:** Accepted
 **Updated:** 2026-04-18 - absorbs the category-bucket format decision that previously lived in ADR-021.

@@ -1,5 +1,6 @@
 ---
 category: design-decisions
+last_reviewed: 2026-04-18
 ---
 
 ## Lesson: Doer-verifier is theater in single-agent context
@@ -12,7 +13,7 @@ Real verification requires a context boundary: a different agent, a fresh invoca
 
 **Trigger:** Any proposal to add self-verification phases within a single skill invocation. The value is in the skill handoff, not in asking the same agent to re-read its own diff.
 
-**Decision:** ADR-019. Don't add goat-doer/goat-verifier. Use existing skills (/goat-review, /goat-qa) as the verification layer.
+**Decision:** ADR-005. Don't add goat-doer/goat-verifier. Use existing skills (/goat-review, /goat-qa) as the verification layer.
 
 ---
 

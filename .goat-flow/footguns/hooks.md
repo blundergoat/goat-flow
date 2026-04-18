@@ -1,5 +1,6 @@
 ---
 category: hooks
+last_reviewed: 2026-04-15
 ---
 
 ## Footgun: post-turn hook swallows failures with || true
@@ -8,9 +9,9 @@ category: hooks
 
 Consumer project post-turn hook scripts with `|| true` after lint/type-check commands never exit non-zero when validation fails, which hides lint failures.
 
-**Evidence (cross-project - not goat-flow's own hooks):** Found independently by Codex critiques on the-summit-chatroom (`.claude/hooks/stop-lint.sh:22`, `:29`, `:37` all swallow failure) and blundergoat-platform. Note: these line numbers are from those projects' hooks, not goat-flow's.
+**Evidence (cross-project - not goat-flow's own hooks):** Found independently by Codex critiques on the-summit-chatroom (the consumer project's `.claude/hooks/stop-lint.sh` had `|| true` at lines 22, 29, and 37) and blundergoat-platform. Line numbers are from those projects' hooks; goat-flow itself no longer ships a `stop-lint.sh` — this evidence does not point at an in-repo file.
 
-**goat-flow status:** Resolved. goat-flow removed `stop-lint.sh` from core in v1.1.0 (ADR-040). Post-turn lint hooks are project-specific, not shipped by goat-flow.
+**goat-flow status:** Resolved. goat-flow removed `stop-lint.sh` from core in v1.1.0 (ADR-015). Post-turn lint hooks are project-specific, not shipped by goat-flow.
 
 **Consumer project status:** Still active for projects set up before v1.1.0 that have their own `stop-lint.sh` with `|| true` swallowing failures.
 

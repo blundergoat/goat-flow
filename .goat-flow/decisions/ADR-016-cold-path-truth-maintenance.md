@@ -1,4 +1,4 @@
-# ADR-041: Cold-path truth maintenance
+# ADR-016: Cold-path truth maintenance
 
 **Status:** Accepted
 **Date:** 2026-04-15
@@ -15,7 +15,7 @@ Verified drift found by the critiques:
 - `.goat-flow/code-map.md` lists a script under the wrong directory
 - `.goat-flow/footguns/docs-and-crossrefs.md` cited a stale line number (346 vs actual 397)
 - `.goat-flow/lessons/verification.md` cited a file:line past end of file (commit.md:12, file is 9 lines)
-- `scripts/stop-lint.sh` exists despite ADR-040 saying it was removed
+- `scripts/stop-lint.sh` exists despite ADR-015 saying it was removed
 - `.goat-flow/tasks/.gitignore` ignores all new files while `/goat-plan` claims durable shared state
 - `src/cli/audit/check-agent-setup.ts` emits `rm -rf` howToFix that the deny hook blocks
 - `src/cli/prompt/compose-critique.ts` ships a literal `<your-hooks-dir>` placeholder
@@ -33,7 +33,7 @@ The older evidence-lifecycle convention now folds into this ADR as the state mod
 
 ### Tier 1 - Immediate fixes (do now)
 - Fix all verified stale evidence in footguns and lessons
-- Delete `scripts/stop-lint.sh` (contradicts ADR-040)
+- Delete `scripts/stop-lint.sh` (contradicts ADR-015)
 - Fix `.goat-flow/tasks/.gitignore` to track milestone files
 - Fix `compose-critique.ts` placeholder
 - Fix `check-agent-setup.ts` howToFix to not emit deny-hook-blocked commands

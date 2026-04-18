@@ -1,4 +1,4 @@
-# ADR-030: Skill consolidation and canonical-skill doctrine
+# ADR-009: Skill consolidation and canonical-skill doctrine
 
 **Status:** Accepted (updated 2026-04-18; absorbs the dispatcher-counting and 9→6 consolidation history previously split across ADR-016 and ADR-017)
 **Date:** 2026-04-06
@@ -68,7 +68,7 @@ Current canonical skills are 7 total:
 - `/goat-qa`
 - `/goat-critique`
 
-There is no implementation skill (see ADR-019). Implementation is what the agent does natively. Skills govern everything around it.
+There is no implementation skill (see ADR-005). Implementation is what the agent does natively. Skills govern everything around it.
 
 ## Consequences
 
