@@ -1,50 +1,76 @@
-# ADR-030: Skill consolidation - 9 skills to 5 + dispatcher
+# ADR-030: Skill consolidation and canonical-skill doctrine
 
-**Status:** Partially superseded (goat-critique extracted as 6th functional skill in v1.1.0, renamed from goat-sbao in v1.2.0)
+**Status:** Accepted (updated 2026-04-18; absorbs the dispatcher-counting and 9→6 consolidation history previously split across ADR-016 and ADR-017)
 **Date:** 2026-04-06
 
 ## Context
 
 Extracted from `docs/system-spec.md` (being retired in v1.1.0) to preserve design history.
 
-Early versions had 8-10 skills. Each skill consumes instruction budget when loaded and creates maintenance burden. The question: which skills earn their file?
+Early versions had 8-10 skills. Each skill consumed instruction budget when loaded and created maintenance burden. At the same time, rubric, facts, fragments, and docs were inconsistent about whether the dispatcher counted as a canonical skill at all.
+
+Cross-project reviews from 3 consumer projects (halaxy-cypress 66/100, blundergoat-platform 74/100, healthkit 68/100) made the usability pressure concrete:
+
+- "9 skills is too many for initial setup" (2/3 projects)
+- "goat-debug and goat-investigate have 95% Step 0 overlap" (halaxy-cypress)
+- "goat-simplify is a subset of goat-review" (healthkit)
+- "goat-simplify has never been invoked" (all 3 projects - 0 usage across all reviewers)
+
+The enduring question is not the exact count at a moment in history. It is what earns a skill file, when the dispatcher counts as canonical, and when capabilities should merge into modes instead of becoming standalone skills.
 
 ## Decision
 
-A skill must have at least one of: a **distinct artefact**, a **hard workflow gate**, a **special failure mode**, or a **repeatable structured output**.
+A skill must have at least one of:
 
-**Active skills (5 + dispatcher):**
+- a **distinct artefact**
+- a **hard workflow gate**
+- a **special failure mode**
+- a **repeatable structured output**
 
-| Skill | Justification |
-|-------|--------------|
-| `/goat-security` | Distinct artefact + hard gate |
-| `/goat-debug` | Special failure mode + hard gate + investigate/onboard mode |
-| `/goat-review` | Repeatable structured output + audit/simplify/instruction modes |
-| `/goat-plan` | Distinct artefact + hard gate + refactor planning mode |
-| `/goat-qa` | Distinct artefact + hard gate |
-| `/goat` (dispatcher) | Routes natural language to the right skill. 35-trigger table + 11 disambiguation rules too large for instruction file budget (ADR-029). |
+The dispatcher **does** count as canonical when it is shipped as a `SKILL.md` surface with its own constraints and failure modes. It is not a passive router.
 
-**Merged or removed skills:**
+### Consolidation history that now lives in this ADR
 
-| Former Skill | Now Lives | Why |
-|-------------|-----------|-----|
-| `/annotation-cycle` | Mob elaboration playbook | Planning refinement - no distinct artefact |
-| `/sbao-synthesis` | SBAO planning playbook | Template, not a workflow with gates |
-| `/review-triage` | ACT step review branch | Normal review behaviour, not a distinct mode |
-| `/goat-audit` | `/goat-review` (Audit Mode) | Merged - negative verification + fabrication self-check |
-| `/goat-reflect` | `/goat-review` (Instruction Review Mode) | Merged - friction signals + staleness audit |
-| `/goat-onboard` | `/goat-debug` (Onboard Mode) | Merged - stack detection + instruction drafting |
-| `/goat-investigate` | `/goat-debug` (Investigate Mode) | Merged - deep codebase investigation |
-| `/goat-simplify` | `/goat-review` (Simplify Mode) | Merged - readability without behaviour change |
-| `/goat-refactor` | `/goat-plan` (Refactor Planning Mode) | Merged - cross-file refactoring with blast radius |
-| `/goat-context` | Removed | Session resumption handled by agent built-in context |
-| `/revert-rescope` | VERIFY/stop-the-line paragraph | Tactic, not a workflow |
+**Dispatcher counting (from ADR-016):**
+
+- The dispatcher is canonical because it has its own failure modes (ambiguous intent, incorrect routing, missing override handling)
+- It produces structured output (skill announcement and disambiguation)
+- It has distinct constraints (must announce, must not load two skills, must present disambiguation)
+
+**9 → 6 consolidation (from ADR-017):**
+
+| Removed | Merged Into | As |
+|---------|-------------|-----|
+| `goat-investigate` | `goat-debug` | Investigate mode + Onboard mode |
+| `goat-simplify` | `goat-review` | Simplify mode |
+| `goat-refactor` | `goat-plan` | Refactor planning mode |
+
+`goat-security` expanded with Compliance and Dependency-audit modes during that consolidation pass.
+
+### Current doctrine
+
+The canonical skill set has continued to evolve after the 9→6 pass. The current rule is:
+
+- keep only skills that pass the justification test above
+- count the dispatcher when it is part of the installed canonical set
+- prefer modes inside an existing skill when the difference is routing or emphasis, not artifact/gate/failure-mode/output
+
+Current canonical skills are 7 total:
+
+- `/goat`
+- `/goat-debug`
+- `/goat-review`
+- `/goat-plan`
+- `/goat-security`
+- `/goat-qa`
+- `/goat-critique`
 
 There is no implementation skill (see ADR-019). Implementation is what the agent does natively. Skills govern everything around it.
 
 ## Consequences
 
-- Canonical skill count: 7 (6 specialized + 1 dispatcher). Originally 5+1; goat-critique was later extracted as a standalone critique skill in v1.1.0, then renamed from goat-sbao in v1.2.0 (see ADR-033).
-- Fewer skills = less maintenance, less drift, less context consumed
-- Each surviving skill has clear justification and distinct output
-- New skills must pass the justification test before being added
+- Skill-count debates now resolve through the justification test, not by ad hoc preference
+- Dispatcher counting is no longer a separate open question; it follows from whether the dispatcher is a shipped canonical skill surface
+- Fewer skills means less maintenance, less drift, and less context consumed
+- Each surviving skill must justify its existence with a distinct artifact, gate, failure mode, or structured output
+- New skills must pass the same test before being added

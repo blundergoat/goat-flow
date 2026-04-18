@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-22
 **Status:** Superseded — entire workflow retired in v1.1.0. `requirements-{feature}.md`, `REQ-NNN` IDs, the conditional Phase 0 in goat-review, and `workflow/playbooks/planning/requirements-template.md` have all been removed. Current goat-plan uses milestone files with assumptions + exit criteria; current goat-review uses the opt-in Spec Drift check against milestone exit criteria and assumptions. See `.claude/skills/goat-plan/SKILL.md` and `.claude/skills/goat-review/SKILL.md` for the replacement flow.
+**Disposition:** Historical from the active ADR set as of 2026-04-18.
 
 ## Context (historical)
 

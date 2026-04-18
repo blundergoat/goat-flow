@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-21
 **Status:** Accepted
+**Disposition:** Historical from the active ADR set as of 2026-04-18. Kept in place because it documents scanner-era design history.
 
 ## Context
 

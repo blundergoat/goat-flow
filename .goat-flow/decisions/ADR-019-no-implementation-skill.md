@@ -25,14 +25,14 @@ Three changes:
 ## Rationale
 
 - The execution loop (`docs/system-spec.md:154`, `docs/system-spec.md:185`, retired in v1.1.0; see `workflow/setup/reference/execution-loop.md`) already defines Implement as a core execution mode
-- ADR-017 says edits happen in the normal ACT step, not inside goat-plan
+- ADR-030 says implementation belongs in the normal ACT step, not inside a separate implementation skill
 - Skills must NOT jump into implementation early - investigation/diagnosis/planning must complete first
 - Real verification comes from /goat-review or /goat-qa in a fresh invocation, not from the same agent re-reading its own diff
-- Adding skills increases the count that critics already say is too many (ADR-017 consolidated 9→6 for this reason)
+- Adding skills increases the count that critics already say is too many (see ADR-030 for the skill-consolidation doctrine)
 
 ## Consequences
 
-- Supersedes ADR-016's canonical skill count. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher).
+- Supersedes the earlier dispatcher-counting split that now lives inside ADR-030. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher).
 - Dispatcher routing table gains implementation-intent rows (shipped).
 - goat-plan **did not** gain Phase 5 (Execute). Implementation remains the ordinary ACT step in the execution loop; goat-plan ends at milestone approval. Users wanting carry-through either invoke the implementation directly after planning or use `/goat-debug` D3/D4 for bug-fix flows.
 - `.goat-flow/config.yaml` **did not** gain a `persona` field. Persona-based mode locking was scoped out; CLAUDE.md `Autonomy Tiers` plus `Ask First` boundaries cover the same ground without a machine-readable lockout.

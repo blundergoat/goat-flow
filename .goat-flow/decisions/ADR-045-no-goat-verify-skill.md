@@ -22,7 +22,7 @@ All 5 analyses converged on rejecting option 1. Evidence:
   - **ADR-019** (no implementation skill) — rejected the goat-doer / goat-verifier split; verification must come from fresh review/test invocations, not an artificial verifier layer over the same work.
   - **ADR-004** (replace preflight with security skill) — rejected "glorified checklist skill" in favour of strengthening real enforcement surfaces.
   - **ADR-042** (remove RULES.md) — moved duplicated always-on rules into `skill-preamble.md`. This is the sanctioned pattern for cross-cutting doctrine.
-  - **ADR-017** (consolidate 9→6 skills) — repo trends toward fewer skills, not more.
+  - **ADR-030** (skill consolidation doctrine) — repo trends toward fewer skills, not more, and new skills must justify their existence.
 - Measured blast radius of a new canonical skill: 3 hardcoded surfaces (`workflow/install-goat-flow.sh:140` `SKILL_NAMES` string, `src/cli/constants.ts:8-16` `SKILL_NAMES` array, `workflow/manifest.json:45-52` canonical list), plus audit-drift test count bump (`test/integration/audit-drift.test.ts:76`), plus 3-way installed-copy parity (`.goat-flow/footguns/skills.md:5-16` documents real punctuation-only drift incidents that proved parity is not free).
 
 External pattern mining (superpowers/verification-before-completion, systematic-debugging, BMAD review decomposition, Archon debug/plan, claude-mem make-plan) yielded importable content for existing surfaces, not justification for a new skill. `SuperClaude_Framework/confidence-check` (≥90% numeric gate) was rejected across all 5 analyses as incompatible with goat-flow's evidence-over-hedges culture — a numeric confidence score is itself a hedge forbidden by `AGENTS.md:55` red-flag #4.
@@ -72,5 +72,5 @@ If any precondition fires, the new ADR's implementation must touch the 3 hardcod
 - `workflow/skills/{goat, goat-plan, goat-review, goat-critique, goat-security}/SKILL.md` — Proof Gate one-line references.
 - `.goat-flow/lessons/verification.md` — new `## Lesson: Verification rationalization anti-patterns` entry.
 - `test/integration/preamble-sync.test.ts`, `test/integration/verification-boundaries.test.ts` — contract tests.
-- Precedent: ADR-004, ADR-017, ADR-019, ADR-030, ADR-042.
+- Precedent: ADR-004, ADR-019, ADR-030, ADR-042.
 - Drift-risk motivation: `.goat-flow/footguns/skills.md:5-16`.

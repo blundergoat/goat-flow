@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-28
 **Status:** Accepted
+**Disposition:** Historical from the active ADR set as of 2026-04-18. The principle is preserved for history; the scanner-specific vocabulary is no longer current.
 
 ## Context
 

@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-21
 **Status:** Accepted
+**Updated:** 2026-04-18 - absorbs the disposition guidance that previously lived in ADR-010.
 
 ## Context
 
@@ -20,19 +21,24 @@ Meanwhile, the scanner penalized every project 1 point for the missing file (che
 
 ## Decision
 
-Remove confusion-log.md from the workflow entirely:
+Remove `confusion-log.md` from the workflow entirely and do not resurrect it as a first-class learning-loop surface.
+
 - Remove rubric check 2.3.5
 - Remove from all router tables (CLAUDE.md, AGENTS.md, GEMINI.md)
 - Remove from spec docs, setup prompts, fragment registry, shared facts
 - Remove `workflow/evaluation/confusion-log.md` template
 - Remove from CI allowed-missing paths
+- Projects that still carry an old confusion log may keep it as unscored historical material
+- Any useful surviving entries from older confusion logs should be merged into `.goat-flow/lessons/` with a note that they originated as navigation confusion
 
-Structural confusion is addressed by the router table and architecture.md.
+Structural confusion is addressed by the router table and `.goat-flow/architecture.md`. The practical minimum learning loop is two surfaces: architectural traps in `footguns/` and behavioural mistakes in `lessons/`.
 
 ## Consequences
 
 - Every project gains ~3 points on self-scan (1 pt check + 2 pt router cascade)
 - goat-flow repo went from B (87%) to A (92%) for Claude
 - One fewer create-on-first-use artifact to explain to new users
-- If structural confusion turns out to be a real problem in the future, lessons.md can capture it - no need for a separate file
+- If structural confusion turns out to be a real problem in the future, `lessons/` can capture it - no need for a separate file
 - 47 references removed across 25 files
+- Existing projects with stale confusion-log content have a merge path instead of a resurrection path
+- If a genuinely new learning-loop category emerges in future, it needs a new ADR rather than reviving `confusion-log.md`

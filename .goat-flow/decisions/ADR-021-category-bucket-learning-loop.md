@@ -1,33 +1,18 @@
 # ADR-021: Category bucket files for lessons and footguns
 
-**Status:** Accepted
 **Date:** 2026-04-03
-**Context:** The learning loop had evolved through three formats: (1) monolithic single file, (2) per-incident files, (3) category bucket files. Per-incident files created 51 files (20 footguns + 31 lessons) that were hard to navigate, created merge noise, and made it difficult to see patterns within a category.
+**Status:** Historical - merged into ADR-018 on 2026-04-18
 
-## Decision
+## Summary
 
-Use **category bucket files** - one file per category with multiple entries inside.
+This file carried the second half of the learning-loop storage evolution:
 
-**Footguns:** `.goat-flow/footguns/<category>.md` (e.g., `hooks.md`, `auditor.md`, `setup.md`)
-- Each entry: `## Footgun: <name>` with Status/Created/Evidence header line
-- New categories created only when no existing category fits
-- Split a bucket at ~200 lines or ~10 entries
+- monolithic files were replaced by directories
+- one-incident-per-file inside those directories proved too noisy
+- category bucket files became the current committed format
 
-**Lessons:** `.goat-flow/lessons/<category>.md` (e.g., `verification.md`, `agent-behavior.md`)
-- Each entry: `## Lesson: <name>` or `## Pattern: <name>` with Created line
-- Same split threshold
+That full evolution now lives in ADR-018 so the config surface and the on-disk format are documented together.
 
-## Rationale
+## Canonical Record
 
-| Approach | Files | Navigability | Merge noise | Pattern visibility |
-|----------|-------|-------------|-------------|-------------------|
-| Monolithic | 1 | Poor (scroll through everything) | Low | Poor |
-| Per-incident | 51 (and growing) | Poor (too many files) | High | Poor (each file is isolated) |
-| **Category bucket** | **10** | **Good (5 per type, category names)** | **Low** | **Good (related entries together)** |
-
-## Consequences
-
-- Scanner updated: counts `## Footgun:` / `## Lesson:` headings, not files
-- Evidence label detection updated: matches both `**Evidence type:**` and `**Evidence:** ACTUAL_MEASURED` formats
-- All instruction files (CLAUDE.md, AGENTS.md, GEMINI.md), skill files, workflow templates, and setup templates updated to reference category bucket format
-- Migration script not needed: sub-agents consolidated existing per-incident files into buckets
+See `ADR-018-config-file-and-directory-learning-loop.md`.
