@@ -33,8 +33,9 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 
 **Check for existing milestones first:**
 - Read `.goat-flow/tasks/.active` (one-line file naming the active plan subdir, e.g. `1.2.0`) to identify which subdir holds the current plan. Scan only that subdir for milestone files.
+- If the user explicitly names an existing milestone file, or clearly asks to "update", "improve", "tighten", "rewrite", or "fix" the current plan, treat that as approval to edit that file in place. Do NOT ask inline-vs-file or "resume/update/start fresh" when there is exactly one obvious target file. Ask only if multiple milestone files plausibly match or if the user explicitly signals read-only/no-write intent.
 - If `.active` is missing: list top-level entries in `.goat-flow/tasks/`, ask the user which is the active plan, and offer to write `.active` for next time.
-- If found: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
+- If found: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?" Use this only when the target file is not already obvious from the user's request.
 - If found but stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead
 - Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). Sibling-version subdirs inside `.goat-flow/tasks/` (e.g. `1.4.0/`, `_archived/`) hold deferred or completed work and are NOT scanned by default - only the `.active`-named subdir is. If found, note them so the user knows about existing planning artifacts.
 
@@ -48,6 +49,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 If the user's phrasing suggests analysis rather than implementation, offer read-only mode:
 - Analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "how would you approach", "sketch the milestones", "walk me through the plan"
 - Implementation signals: "create milestones", "set up the plan", "write the milestone files", "start planning"
+- Explicit file-update requests override analysis defaults. If the user names an existing milestone file and asks to change it, default to editing that file unless they also say "review only", "read-only", or "don't write yet".
 - If analysis signals detected: "This sounds like a planning analysis. I can present milestones inline without writing files (read-only mode), or write them to `.goat-flow/tasks/<active>/`. Which do you prefer?"
 - If ambiguous, default to asking.
 
@@ -120,6 +122,16 @@ When an assumption is validated, tick it and note the evidence. When an assumpti
 **BLOCKING GATE:** Present all milestones. "Approve milestones and start implementing, or adjust?"
 
 ## Phase 2 - Write Milestone Files
+
+### Updating Existing Milestone Files
+
+When the plan already exists and the user asks to revise it:
+
+- Edit the named or obvious milestone file in place rather than creating a parallel inline plan.
+- Treat the user's request as explicit approval to write that file.
+- Preserve title/status metadata unless the requested plan change requires updating them.
+- Present the updated milestone content or a concise delta after editing.
+- Ask only if multiple milestone files are plausible targets or if the change would spill into additional files beyond the named planning surface.
 
 ### Small-work Inline Mode
 
@@ -200,8 +212,9 @@ If updates are needed mid-flight, follow the detailed milestone retrospective pr
 
 ## Constraints
 
-- Default to inline/read-only milestones unless the user explicitly requests file creation. Offer to write milestone files to `.goat-flow/tasks/<active>/` when scope is Standard or above, but do not write without confirmation.
+- Default to inline/read-only milestones unless the user explicitly requests file creation or explicitly requests changes to an existing milestone file. Offer to write milestone files to `.goat-flow/tasks/<active>/` when scope is Standard or above, but do not ask for confirmation when the user has already told you to update a specific existing milestone file.
 - MUST check for existing milestone files before creating new ones
+- MUST default to in-place edits when the user explicitly requests changes to an existing milestone file and the target is unambiguous
 - MUST include a testing gate on every milestone - no milestone ships without verification
 - MUST re-read and potentially update the next milestone after completing each one
 - MUST check kill criteria between milestones - a triggered criterion is a BLOCKING GATE
@@ -210,6 +223,7 @@ If updates are needed mid-flight, follow the detailed milestone retrospective pr
 - MUST order tasks within a milestone so the riskiest work comes first
 - MUST ensure each task is completable in a single coding session - split if not
 - MUST NOT create vague tasks ("set up backend", "make it work", "research options")
+- MUST NOT ask whether to write files when the user has already named the file to update, unless there is genuine ambiguity about scope or additional files
 - MUST NOT skip the testing gate between milestones
 - Universal constraints from skill-preamble.md apply.
 - MUST NOT continue building on an invalidated assumption - update the plan first
