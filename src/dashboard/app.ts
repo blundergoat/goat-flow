@@ -517,20 +517,6 @@ function app() {
         command: "npx goat-flow audit . --harness",
         description: "Run AI harness completeness checks.",
       },
-      {
-        id: "stats",
-        label: "Learning-Loop Stats",
-        command: "npx goat-flow stats .",
-        description:
-          "Per-bucket entry counts, freshness, and stale refs for footguns/lessons.",
-      },
-      {
-        id: "stats-check",
-        label: "Learning-Loop Stats (CI)",
-        command: "npx goat-flow stats . --check",
-        description:
-          "Exits non-zero if any bucket is missing last_reviewed or has stale refs.",
-      },
     ] as AuditAction[],
 
     // --- Projects state ---

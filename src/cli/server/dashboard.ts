@@ -295,44 +295,6 @@ export function serveDashboard(
       return true;
     }
 
-    /** Return the learning-loop stats report as JSON for the dashboard. */
-    async function handleStatsRequest(
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/stats") return false;
-
-      const projectPath = safeResolvePath(url.searchParams.get("path"));
-      const checkOnly = url.searchParams.get("check") === "true";
-
-      try {
-        requireProjectDirectory(projectPath);
-        const fs = createFS(projectPath);
-        const { loadConfig } = await import("../config/reader.js");
-        const { extractFootgunFacts, extractLessonsFacts } =
-          await import("../facts/shared/learning-loop.js");
-        const { buildStatsReport, checkStats } =
-          await import("../stats/stats.js");
-
-        const configState = loadConfig(projectPath, fs);
-        const report = buildStatsReport({
-          footguns: extractFootgunFacts(fs, configState),
-          lessons: extractLessonsFacts(fs, configState),
-        });
-
-        if (checkOnly) {
-          jsonResponse(res, 200, { report, check: checkStats(report) });
-        } else {
-          jsonResponse(res, 200, { report });
-        }
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
-    }
-
     /** Compose setup output for one agent and return it to the dashboard. */
     async function handleSetupRequest(
       url: URL,
@@ -1085,7 +1047,6 @@ export function serveDashboard(
         () => Promise.resolve(handleSetupDetectRequest(url, res)),
         () => handleSetupRequest(url, res),
         () => handleQualityRequest(url, res),
-        () => handleStatsRequest(url, res),
 
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
