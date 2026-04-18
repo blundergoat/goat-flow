@@ -30,3 +30,8 @@
 !logs/sessions/
 !logs/sessions/.gitkeep
 logs/sessions/*.md
+# Keep the quality-history path and README committed, but ignore captured reports.
+!logs/quality/
+!logs/quality/README.md
+logs/quality/*.json
+logs/quality/*.md

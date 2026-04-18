@@ -1,0 +1,135 @@
+/**
+ * Unit tests for quality report schema validation.
+ */
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  QUALITY_REPORT_KIND,
+  parseQualityReport,
+  parseSavedQualityReport,
+} from "../../src/cli/quality/schema.js";
+
+function makeRawReport() {
+  return {
+    report_kind: QUALITY_REPORT_KIND,
+    goat_flow_version: "1.2.0",
+    agent: "claude",
+    project_path: "/tmp/quality-project",
+    run_date: "2026-04-18",
+    audit_status: "pass",
+    scores: {
+      setup: {
+        total: 75,
+        accuracy: 20,
+        relevance: 20,
+        completeness: 20,
+        friction: 15,
+      },
+      system: {
+        total: 80,
+        usefulness: 20,
+        signal_to_noise: 20,
+        adaptability: 20,
+        learnability: 20,
+      },
+    },
+    findings: [
+      {
+        type: "setup_quality",
+        severity: "MAJOR",
+        file: ".goat-flow/architecture.md",
+        line: 12,
+        summary: "Architecture doc drifts from the implemented command surface",
+        detail: "The command list omits a shipped quality subcommand.",
+        evidence_quality: "OBSERVED",
+        delta_tag: null,
+      },
+    ],
+  };
+}
+
+describe("parseQualityReport", () => {
+  it("accepts a valid raw report", () => {
+    const parsed = parseQualityReport(makeRawReport());
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.report.report_kind, QUALITY_REPORT_KIND);
+    assert.equal(parsed.report.findings[0]!.delta_tag, null);
+  });
+
+  it("rejects unknown top-level keys", () => {
+    const parsed = parseQualityReport({
+      ...makeRawReport(),
+      unexpected: true,
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /unknown key/i);
+  });
+
+  it("rejects raw findings that include an id", () => {
+    const report = makeRawReport();
+    const parsed = parseQualityReport({
+      ...report,
+      findings: [
+        {
+          ...report.findings[0],
+          id: "setup_quality:goat-flow-architecture-md:12",
+        },
+      ],
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /unknown key\(s\): id/i);
+  });
+
+  it("rejects unsupported delta tags", () => {
+    const report = makeRawReport();
+    const parsed = parseQualityReport({
+      ...report,
+      findings: [{ ...report.findings[0], delta_tag: "resolved" }],
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /must be one of: new, persisted/i);
+  });
+
+  it("rejects totals that do not equal the axis sum", () => {
+    const report = makeRawReport();
+    const parsed = parseQualityReport({
+      ...report,
+      scores: {
+        ...report.scores,
+        setup: {
+          ...report.scores.setup,
+          total: 70,
+        },
+      },
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /must sum exactly to total/i);
+  });
+});
+
+describe("parseSavedQualityReport", () => {
+  it("accepts persisted finding ids", () => {
+    const report = makeRawReport();
+    const parsed = parseSavedQualityReport({
+      ...report,
+      findings: [
+        {
+          id: "setup_quality:goat-flow-architecture-md:12",
+          ...report.findings[0],
+          delta_tag: "persisted",
+        },
+      ],
+    });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(
+      parsed.report.findings[0]!.id,
+      "setup_quality:goat-flow-architecture-md:12",
+    );
+  });
+});

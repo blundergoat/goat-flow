@@ -8,6 +8,7 @@ import { parseCLIArgs } from "../../src/cli/cli.js";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 
 // ---------------------------------------------------------------------------
 // Test 1: quality without --agent exits with usage error
@@ -183,6 +184,86 @@ describe("quality prompt content", () => {
     assert.ok(
       result.prompt.includes("Usefulness __/25"),
       "Should have usefulness sub-score",
+    );
+  });
+
+  it("includes prior-report context and json contract guidance when history exists", () => {
+    const priorReport: QualityHistoryEntry = {
+      id: "2026-04-15-claude",
+      path: "/tmp/test-project/.goat-flow/logs/quality/2026-04-15-claude.json",
+      date: "2026-04-15",
+      agent: "claude",
+      suffix: 1,
+      report: {
+        report_kind: "goat-flow-quality-report",
+        goat_flow_version: "1.2.0",
+        agent: "claude",
+        project_path: "/tmp/test-project",
+        run_date: "2026-04-15",
+        audit_status: "pass",
+        scores: {
+          setup: {
+            total: 80,
+            accuracy: 20,
+            relevance: 20,
+            completeness: 20,
+            friction: 20,
+          },
+          system: {
+            total: 75,
+            usefulness: 20,
+            signal_to_noise: 20,
+            adaptability: 20,
+            learnability: 15,
+          },
+        },
+        findings: [
+          {
+            id: "framework_flaw:src-cli-prompt-compose-quality-ts:600",
+            type: "framework_flaw",
+            severity: "BLOCKER",
+            file: "src/cli/prompt/compose-quality.ts",
+            line: 600,
+            summary: "Prompt still asks for resolved findings",
+            detail: "Resolved findings belong in diff output.",
+            evidence_quality: "OBSERVED",
+            delta_tag: "new",
+          },
+        ],
+      },
+    };
+
+    const result = composeQuality({
+      agent: "claude",
+      projectPath: "/tmp/test-project",
+      auditReport: null,
+      priorReport,
+      runDate: "2026-04-18",
+    });
+
+    assert.ok(
+      result.prompt.includes(
+        "Latest same-agent report: `2026-04-15-claude` (2026-04-15)",
+      ),
+      "Should surface prior-report identity and date",
+    );
+    assert.ok(
+      result.prompt.includes("Do NOT emit `resolved` in current findings"),
+      "Should keep resolved in derived diff output",
+    );
+    assert.ok(
+      result.prompt.includes(
+        '`delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`.',
+      ),
+      "Should tighten the JSON contract when prior history exists",
+    );
+    assert.ok(
+      result.prompt.includes('"report_kind": "goat-flow-quality-report"'),
+      "Should embed the report_kind-driven JSON contract",
+    );
+    assert.ok(
+      result.prompt.includes('"run_date": "2026-04-18"'),
+      "Should freeze the requested run date in the JSON contract example",
     );
   });
 });

@@ -9,6 +9,9 @@ goat-flow audit .                              # Build correctness (pass/fail)
 goat-flow audit . --harness                    # Include AI harness completeness checks
 goat-flow audit . --agent claude               # Scope to one agent
 goat-flow quality . --agent gemini             # Generate quality-assessment prompt for one agent
+goat-flow quality capture --from-file out.md   # Save an agent response locally
+goat-flow quality history --agent gemini       # Review saved trend history
+goat-flow quality diff --agent gemini          # Compare the latest two saved runs
 ```
 
 | Command | Output | Deterministic? | Gates CI? | Requires --agent? |
@@ -109,6 +112,23 @@ The generated prompt asks the agent to:
 
 The prompt includes the current `audit` summary so the agent knows what's already passing or failing. If audit is failing, the prompt explicitly asks the agent to assess the incomplete setup.
 
+### Quality report lifecycle
+
+`goat-flow quality` itself remains read-only and compose-only. Persistence is owned by separate CLI surfaces:
+
+```bash
+goat-flow quality . --agent gemini
+goat-flow quality capture --from-file gemini-quality.md
+goat-flow quality history --agent gemini
+goat-flow quality diff --agent gemini
+```
+
+- `quality capture` extracts the final matching fenced `json` block, validates it, computes positional finding ids, and saves the report under `.goat-flow/logs/quality/`
+- `quality history` lists saved reports and same-agent setup deltas
+- `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids
+
+This keeps audit and quality separated in both terminology and storage: audit remains deterministic CLI output, while quality reports are agent-emitted assessments saved locally only when you explicitly capture them.
+
 ### When to use quality
 
 - After setup is complete and audit passes - "is this actually good?"
@@ -135,8 +155,10 @@ goat-flow quality . --agent X  →  "What does an agent actually think?" →  Ge
 Typical workflow after setup:
 1. Run `audit` - fix any build failures
 2. Run `audit --harness` - fix any failing harness completeness checks
-3. Run `quality` - paste into an agent session, get a subjective review
-4. Feed findings back into the harness (footguns, lessons, constraints) - the feedback loop
+3. Run `quality` - paste the prompt into an agent session, get a subjective review
+4. Run `quality capture` - persist the response under `.goat-flow/logs/quality/`
+5. Run `quality history` / `quality diff` - compare trend lines and finding lifecycles across same-agent runs
+6. Feed durable findings back into the harness (footguns, lessons, decisions) - the feedback loop
 
 ---
 

@@ -26,12 +26,46 @@ npx goat-flow audit . --output report.json # Write to file
 
 ### `goat-flow quality [path] --agent <id>`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. This command stays compose-only: it prints the prompt and never writes report history by itself.
 
 ```bash
 goat-flow quality . --agent claude         # Quality prompt for Claude
 goat-flow quality . --agent codex          # Quality prompt for Codex
 ```
+
+If prior same-agent quality history exists under `.goat-flow/logs/quality/`, the prompt includes the latest saved report so the next review can mark current findings as `new` or `persisted`.
+
+### `goat-flow quality capture --from-file <path> | --from-stdin`
+
+Extract a saved quality report from an agent response and persist it locally. The CLI scans fenced `json` blocks, accepts the one whose top-level `report_kind` is `goat-flow-quality-report`, validates the schema, assigns positional finding ids, and writes both the structured report and companion prose.
+
+```bash
+goat-flow quality capture --from-file claude-quality.md   # Save one agent response
+pbpaste | goat-flow quality capture --from-stdin          # Capture directly from stdin
+```
+
+Saved files land under `.goat-flow/logs/quality/<YYYY-MM-DD>-<agent>[-NN].json` and `.md`. Same-day recaptures increment deterministically (`-02`, `-03`, ...).
+
+### `goat-flow quality history [--agent <id>] [--all] [--format json]`
+
+List saved quality reports and same-agent setup deltas. By default the text view shows the 20 most recent runs; `--all` lifts that limit.
+
+```bash
+goat-flow quality history --agent claude    # Claude-only saved runs
+goat-flow quality history --all             # All saved runs
+goat-flow quality history --format json     # Machine-readable report history
+```
+
+### `goat-flow quality diff [<from-id>:<to-id>] --agent <id> [--format json]`
+
+Compare two saved same-agent reports. Without an explicit pair, diff uses the two most recent saved runs for `--agent`. With an explicit pair, use saved-report basenames such as `2026-04-01-claude:2026-04-15-claude`.
+
+```bash
+goat-flow quality diff --agent claude
+goat-flow quality diff 2026-04-01-claude:2026-04-15-claude --format json
+```
+
+`quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
 
 ### `goat-flow setup [path] --agent <id>`
 
@@ -70,6 +104,9 @@ Common tasks and the commands to run:
 | Check if my project is ready | `npx goat-flow audit .` |
 | Check harness completeness | `npx goat-flow audit . --harness` |
 | Get a quality prompt | `goat-flow quality . --agent claude` |
+| Save an agent's quality review | `goat-flow quality capture --from-file claude-quality.md` |
+| Review quality trend history | `goat-flow quality history --agent claude` |
+| Compare two saved quality runs | `goat-flow quality diff --agent claude` |
 | Set up a new project | `goat-flow setup . --agent claude` |
 | Use this in CI | `npx goat-flow audit . --format json` |
 | Open the dashboard | `goat-flow dashboard .` |

@@ -37,7 +37,7 @@ Usage:
 
 Commands:
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
-  quality           Agent-driven quality assessment prompt (requires --agent)
+  quality           Agent-driven quality prompt plus capture/history/diff surfaces
   setup             Generate setup prompt (adapts to project state)
   status            Show project state (bare/partial/v0.9/outdated/current)
   dashboard         Launch browser dashboard with audit, setup, and terminal
@@ -49,6 +49,9 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: ${VALID_AGENT_LIST}
+  --from-file <p>   Quality capture: read the agent response from a file
+  --from-stdin      Quality capture: read the agent response from stdin
+  --all             Quality history: lift the default 20-run limit
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
@@ -66,6 +69,9 @@ Examples:
   goat-flow audit . --format json      JSON output for CI
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
+  goat-flow quality capture --from-file response.md
+  goat-flow quality history --agent claude
+  goat-flow quality diff --agent claude
   goat-flow manifest                   Print the resolved manifest
   goat-flow manifest --check           Verify the manifest is consistent with code
   goat-flow stats                      Learning-loop health report
@@ -90,6 +96,8 @@ type Command =
   | "quality"
   | "manifest"
   | "stats";
+
+type QualitySubcommand = "prompt" | "capture" | "history" | "diff";
 
 /** List of recognized CLI subcommands */
 const COMMANDS: Command[] = [
@@ -133,6 +141,11 @@ export interface ParsedCLI extends CLIOptions {
   checkDrift: boolean;
   checkContent: boolean;
   check: boolean;
+  qualitySubcommand: QualitySubcommand;
+  qualityDiffPair: string | null;
+  fromFile: string | null;
+  fromStdin: boolean;
+  all: boolean;
 }
 
 /** Parse the positional subcommand from raw CLI args, defaulting to `audit`. */
@@ -187,15 +200,71 @@ function parseAgentArg(value: string | undefined): AgentId | null {
 /** Resolve `--output`, defaulting bare file names into `.goat-flow/` under the target repo. */
 function resolveOutputPath(
   output: string | undefined,
-  positionals: string[],
+  projectRoot: string,
 ): string | null {
   if (!output) return null;
-  const projectRoot = positionals[0] ?? ".";
   return resolve(
     output.includes("/") || output.includes("\\")
       ? output
       : join(projectRoot, ".goat-flow", output),
   );
+}
+
+// eslint-disable-next-line complexity -- quality has four subcommand modes with distinct positional rules
+function parseQualityPositionals(positionals: string[]): {
+  qualitySubcommand: QualitySubcommand;
+  projectPath: string;
+  qualityDiffPair: string | null;
+} {
+  const [first, second, ...rest] = positionals;
+
+  if (first === "capture") {
+    if (second !== undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality capture does not accept positional arguments. Use --from-file or --from-stdin.",
+        2,
+      );
+    }
+    return {
+      qualitySubcommand: "capture",
+      projectPath: resolve("."),
+      qualityDiffPair: null,
+    };
+  }
+
+  if (first === "history") {
+    if (second !== undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality history does not accept positional arguments.",
+        2,
+      );
+    }
+    return {
+      qualitySubcommand: "history",
+      projectPath: resolve("."),
+      qualityDiffPair: null,
+    };
+  }
+
+  if (first === "diff") {
+    if (rest.length > 0) {
+      throw new CLIError(
+        "quality diff accepts at most one positional pair in the form <from-id>:<to-id>.",
+        2,
+      );
+    }
+    return {
+      qualitySubcommand: "diff",
+      projectPath: resolve("."),
+      qualityDiffPair: second ?? null,
+    };
+  }
+
+  return {
+    qualitySubcommand: "prompt",
+    projectPath: resolve(first ?? "."),
+    qualityDiffPair: null,
+  };
 }
 
 /** Parse raw CLI argv into a structured ParsedCLI options object */
@@ -210,6 +279,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       agent: { type: "string" },
       verbose: { type: "boolean", default: false },
       output: { type: "string", short: "o" },
+      "from-file": { type: "string" },
+      "from-stdin": { type: "boolean", default: false },
+      all: { type: "boolean", default: false },
       harness: { type: "boolean", default: false },
       "check-drift": { type: "boolean", default: false },
       "check-content": { type: "boolean", default: false },
@@ -222,17 +294,40 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     strict: true,
   });
 
+  const qualityPositionals =
+    command === "quality"
+      ? parseQualityPositionals(positionals)
+      : {
+          qualitySubcommand: "prompt" as QualitySubcommand,
+          projectPath: resolve(positionals[0] ?? "."),
+          qualityDiffPair: null,
+        };
+
+  if (command !== "quality") {
+    if (values["from-file"] || values["from-stdin"] || values.all === true) {
+      throw new CLIError(
+        "--from-file, --from-stdin, and --all are only valid for the quality command.",
+        2,
+      );
+    }
+  }
+
   return {
     command,
-    projectPath: resolve(positionals[0] ?? "."),
+    projectPath: qualityPositionals.projectPath,
     format: parseFormatArg(values.format),
     agent: parseAgentArg(values.agent),
     verbose: values.verbose === true,
-    output: resolveOutputPath(values.output, positionals),
+    output: resolveOutputPath(values.output, qualityPositionals.projectPath),
     harness: values.harness === true,
     checkDrift: values["check-drift"] === true,
     checkContent: values["check-content"] === true,
     check: values.check === true,
+    qualitySubcommand: qualityPositionals.qualitySubcommand,
+    qualityDiffPair: qualityPositionals.qualityDiffPair,
+    fromFile: values["from-file"] ?? null,
+    fromStdin: values["from-stdin"] === true,
+    all: values.all === true,
     dev: values.dev === true,
     help: values.help === true,
     version: values.version === true,
@@ -378,7 +473,117 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
 }
 
 /** Handle the quality command: generate a structured quality-assessment prompt for a selected agent. */
+// eslint-disable-next-line complexity -- quality prompt, capture, history, and diff intentionally share one command dispatcher
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
+  if (options.qualitySubcommand === "capture") {
+    const { captureQualityResponse, readCaptureInput } =
+      await import("./quality/capture.js");
+
+    const input = readCaptureInput({
+      fromFile: options.fromFile,
+      fromStdin: options.fromStdin,
+    });
+    if (!input.ok) throw new CLIError(input.error, 2);
+
+    const captured = captureQualityResponse({
+      projectPath: options.projectPath,
+      responseText: input.text,
+    });
+    if (!captured.ok) throw new CLIError(captured.error, 2);
+
+    if (options.format === "json") {
+      writeOutput(options, JSON.stringify(captured.result, null, 2));
+      return;
+    }
+
+    writeOutput(
+      options,
+      [
+        `Captured quality report: ${captured.result.id}`,
+        `JSON: ${captured.result.jsonPath}`,
+        `Markdown: ${captured.result.markdownPath}`,
+      ].join("\n"),
+    );
+    return;
+  }
+
+  if (options.qualitySubcommand === "history") {
+    const {
+      buildQualityHistoryRows,
+      loadQualityHistory,
+      renderQualityHistoryText,
+      selectQualityHistoryEntries,
+    } = await import("./quality/history.js");
+
+    const history = loadQualityHistory(options.projectPath);
+    for (const warning of history.warnings) {
+      console.error(warning);
+    }
+
+    const selectedEntries = selectQualityHistoryEntries(history.entries, {
+      agent: options.agent,
+      limit: options.all ? null : 20,
+    });
+    const rows = buildQualityHistoryRows(history.entries, {
+      agent: options.agent,
+      limit: options.all ? null : 20,
+    });
+    if (options.format === "json") {
+      writeOutput(
+        options,
+        JSON.stringify(
+          {
+            reports: selectedEntries.map((entry) => ({
+              id: entry.id,
+              path: entry.path,
+              report: entry.report,
+            })),
+            deltas: rows.map((row) => ({
+              id: row.id,
+              setup_delta: row.setupDelta,
+            })),
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+
+    writeOutput(
+      options,
+      renderQualityHistoryText(rows, {
+        agent: options.agent,
+        all: options.all,
+      }),
+    );
+    return;
+  }
+
+  if (options.qualitySubcommand === "diff") {
+    const { buildQualityDiff, loadQualityHistory, renderQualityDiffText } =
+      await import("./quality/history.js");
+
+    const history = loadQualityHistory(options.projectPath);
+    for (const warning of history.warnings) {
+      console.error(warning);
+    }
+
+    const diff = buildQualityDiff(history.entries, {
+      agent: options.agent,
+      pair: options.qualityDiffPair,
+    });
+    if (!diff.ok) throw new CLIError(diff.error, 2);
+
+    if (options.format === "json") {
+      writeOutput(options, JSON.stringify(diff.diff, null, 2));
+      return;
+    }
+
+    writeOutput(options, renderQualityDiffText(diff.diff));
+    return;
+  }
+
   if (!options.agent) {
     throw new CLIError(
       `quality requires --agent. Usage: goat-flow quality . --agent ${VALID_AGENTS[0] ?? "claude"}`,
@@ -389,6 +594,8 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   const { createFS } = await import("./facts/fs.js");
   const { runAudit } = await import("./audit/audit.js");
   const { composeQuality } = await import("./prompt/compose-quality.js");
+  const { getLatestQualityHistoryEntry, loadQualityHistory } =
+    await import("./quality/history.js");
 
   const fs = createFS(options.projectPath);
 
@@ -403,10 +610,20 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
     // Audit failure is fine - quality prompt generates with degraded context
   }
 
+  const history = loadQualityHistory(options.projectPath);
+  const priorReport = getLatestQualityHistoryEntry(
+    history.entries,
+    options.agent,
+  );
+  for (const warning of history.warnings) {
+    console.error(warning);
+  }
+
   const result = composeQuality({
     agent: options.agent,
     projectPath: options.projectPath,
     auditReport,
+    priorReport,
   });
 
   if (options.format === "json") {
@@ -511,7 +728,7 @@ async function runSetupPipeline(options: ParsedCLI): Promise<void> {
 }
 
 /** Dispatch one parsed CLI command to its handler. */
-async function dispatchCommand(options: ParsedCLI): Promise<void> {
+export async function dispatchCommand(options: ParsedCLI): Promise<void> {
   if (options.command === "audit") return handleAuditCommand(options);
   if (options.command === "quality") return handleQualityCommand(options);
   if (options.command === "manifest") return handleManifestCommand(options);

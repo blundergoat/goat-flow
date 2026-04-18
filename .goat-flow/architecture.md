@@ -14,7 +14,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Hook scripts | `workflow/hooks/` | Copyable hook scripts (deny-dangerous.sh) + per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, multi-agent support |
+| CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/capture/history/diff surfaces, multi-agent support |
 | Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for help, home, projects, prompts, quality, settings, wizard, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -41,6 +41,7 @@ src/cli/
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   prompt/             # Prompt generation (compose-setup.ts, compose-quality.ts)
+  quality/            # Quality report schema, positional ids, capture, history, and diff
   audit/              # Build checks, quality checks, render.ts (output formatters: text, json, markdown)
   server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
 
@@ -68,6 +69,7 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- lo
 |------|-------|-----------|---------|
 | **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns.md`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, and the three shared reference files at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, `.goat-flow/skill-reference/skill-quality-testing.md` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `tasks/**`, `scratchpad/**`, `.goat-flow/logs/sessions/*.md` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, and session continuity logs. Coordinates a single work session — not project history. |
+| **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports plus captured prose. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
 
 **Not a persistence gap.** If a `tasks/`, `scratchpad/`, or `.goat-flow/logs/sessions/` artifact deserves to survive the session, promote its durable content into the committed tier: lesson → `lessons/`, trap → `footguns/`, decision → `decisions/`. Session logs themselves are checkout-local continuity artifacts.
 

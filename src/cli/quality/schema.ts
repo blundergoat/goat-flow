@@ -1,0 +1,536 @@
+/**
+ * Strict schema validation for quality reports emitted by agents and persisted by the CLI.
+ */
+import { isAbsolute } from "node:path";
+import type { AgentId } from "../types.js";
+
+export const QUALITY_REPORT_KIND = "goat-flow-quality-report";
+
+const QUALITY_FINDING_TYPES = [
+  "setup_quality",
+  "skill_flaw",
+  "contradiction",
+  "false_path",
+  "content_quality",
+  "framework_flaw",
+] as const;
+
+const QUALITY_FINDING_SEVERITIES = ["BLOCKER", "MAJOR", "MINOR"] as const;
+const QUALITY_EVIDENCE_QUALITIES = ["OBSERVED", "INFERRED"] as const;
+const QUALITY_DELTA_TAGS = ["new", "persisted"] as const;
+const QUALITY_AUDIT_STATUSES = ["pass", "fail", "unavailable"] as const;
+const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
+
+export type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
+export type QualityFindingSeverity =
+  (typeof QUALITY_FINDING_SEVERITIES)[number];
+export type QualityEvidenceQuality =
+  (typeof QUALITY_EVIDENCE_QUALITIES)[number];
+export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
+export type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
+export type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
+
+export interface QualitySetupScores {
+  total: number;
+  accuracy: QualityAxisScore;
+  relevance: QualityAxisScore;
+  completeness: QualityAxisScore;
+  friction: QualityAxisScore;
+}
+
+export interface QualitySystemScores {
+  total: number;
+  usefulness: QualityAxisScore;
+  signal_to_noise: QualityAxisScore;
+  adaptability: QualityAxisScore;
+  learnability: QualityAxisScore;
+}
+
+export interface QualityScores {
+  setup: QualitySetupScores;
+  system: QualitySystemScores;
+}
+
+export interface QualityFinding {
+  type: QualityFindingType;
+  severity: QualityFindingSeverity;
+  file: string | null;
+  line: number | null;
+  summary: string;
+  detail: string;
+  evidence_quality: QualityEvidenceQuality;
+  delta_tag: QualityDeltaTag | null;
+}
+
+export interface SavedQualityFinding extends QualityFinding {
+  id: string;
+}
+
+export interface QualityReport {
+  report_kind: typeof QUALITY_REPORT_KIND;
+  goat_flow_version: string;
+  agent: AgentId;
+  project_path: string;
+  run_date: string;
+  audit_status: QualityAuditStatus;
+  scores: QualityScores;
+  findings: QualityFinding[];
+}
+
+export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
+  findings: SavedQualityFinding[];
+}
+
+type ParseResult<T> = { ok: true; report: T } | { ok: false; error: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  path: string,
+): string | null {
+  const unknown = Object.keys(value).filter(
+    (key) => !allowedKeys.includes(key),
+  );
+  if (unknown.length === 0) return null;
+  return `${path} has unknown key(s): ${unknown.join(", ")}`;
+}
+
+function expectString(
+  value: unknown,
+  path: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  if (typeof value !== "string") {
+    return { ok: false, error: `${path} must be a string` };
+  }
+  return { ok: true, value };
+}
+
+function expectNonEmptyString(
+  value: unknown,
+  path: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const parsed = expectString(value, path);
+  if (!parsed.ok) return parsed;
+  if (parsed.value.trim().length === 0) {
+    return { ok: false, error: `${path} must not be empty` };
+  }
+  return { ok: true, value: parsed.value };
+}
+
+function expectEnumValue<T extends string>(
+  value: unknown,
+  path: string,
+  values: readonly T[],
+): { ok: true; value: T } | { ok: false; error: string } {
+  if (typeof value !== "string" || !values.includes(value as T)) {
+    return {
+      ok: false,
+      error: `${path} must be one of: ${values.join(", ")}`,
+    };
+  }
+  return { ok: true, value: value as T };
+}
+
+function expectNullableString(
+  value: unknown,
+  path: string,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null) return { ok: true, value: null };
+  const parsed = expectNonEmptyString(value, path);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value };
+}
+
+function expectNullablePositiveInteger(
+  value: unknown,
+  path: string,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (value === null) return { ok: true, value: null };
+  if (!Number.isInteger(value) || Number(value) <= 0) {
+    return { ok: false, error: `${path} must be a positive integer or null` };
+  }
+  return { ok: true, value: Number(value) };
+}
+
+function expectAxisScore(
+  value: unknown,
+  path: string,
+): { ok: true; value: QualityAxisScore } | { ok: false; error: string } {
+  if (
+    !Number.isInteger(value) ||
+    !QUALITY_SCORE_VALUES.includes(Number(value) as QualityAxisScore)
+  ) {
+    return {
+      ok: false,
+      error: `${path} must be one of: ${QUALITY_SCORE_VALUES.join(", ")}`,
+    };
+  }
+  return { ok: true, value: Number(value) as QualityAxisScore };
+}
+
+function expectScoreTotal(
+  value: unknown,
+  path: string,
+): { ok: true; value: number } | { ok: false; error: string } {
+  if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 100) {
+    return { ok: false, error: `${path} must be an integer between 0 and 100` };
+  }
+  return { ok: true, value: Number(value) };
+}
+
+function parseSetupScores(
+  raw: unknown,
+  path: string,
+): { ok: true; scores: QualitySetupScores } | { ok: false; error: string } {
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const unknownKeyError = rejectUnknownKeys(
+    raw,
+    ["total", "accuracy", "relevance", "completeness", "friction"],
+    path,
+  );
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  const total = expectScoreTotal(raw.total, `${path}.total`);
+  if (!total.ok) return total;
+  const accuracy = expectAxisScore(raw.accuracy, `${path}.accuracy`);
+  if (!accuracy.ok) return accuracy;
+  const relevance = expectAxisScore(raw.relevance, `${path}.relevance`);
+  if (!relevance.ok) return relevance;
+  const completeness = expectAxisScore(
+    raw.completeness,
+    `${path}.completeness`,
+  );
+  if (!completeness.ok) return completeness;
+  const friction = expectAxisScore(raw.friction, `${path}.friction`);
+  if (!friction.ok) return friction;
+
+  const sum =
+    accuracy.value + relevance.value + completeness.value + friction.value;
+  if (sum !== total.value) {
+    return {
+      ok: false,
+      error: `${path} axis scores must sum exactly to total`,
+    };
+  }
+
+  return {
+    ok: true,
+    scores: {
+      total: total.value,
+      accuracy: accuracy.value,
+      relevance: relevance.value,
+      completeness: completeness.value,
+      friction: friction.value,
+    },
+  };
+}
+
+function parseSystemScores(
+  raw: unknown,
+  path: string,
+): { ok: true; scores: QualitySystemScores } | { ok: false; error: string } {
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const unknownKeyError = rejectUnknownKeys(
+    raw,
+    ["total", "usefulness", "signal_to_noise", "adaptability", "learnability"],
+    path,
+  );
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  const total = expectScoreTotal(raw.total, `${path}.total`);
+  if (!total.ok) return total;
+  const usefulness = expectAxisScore(raw.usefulness, `${path}.usefulness`);
+  if (!usefulness.ok) return usefulness;
+  const signalToNoise = expectAxisScore(
+    raw.signal_to_noise,
+    `${path}.signal_to_noise`,
+  );
+  if (!signalToNoise.ok) return signalToNoise;
+  const adaptability = expectAxisScore(
+    raw.adaptability,
+    `${path}.adaptability`,
+  );
+  if (!adaptability.ok) return adaptability;
+  const learnability = expectAxisScore(
+    raw.learnability,
+    `${path}.learnability`,
+  );
+  if (!learnability.ok) return learnability;
+
+  const sum =
+    usefulness.value +
+    signalToNoise.value +
+    adaptability.value +
+    learnability.value;
+  if (sum !== total.value) {
+    return {
+      ok: false,
+      error: `${path} axis scores must sum exactly to total`,
+    };
+  }
+
+  return {
+    ok: true,
+    scores: {
+      total: total.value,
+      usefulness: usefulness.value,
+      signal_to_noise: signalToNoise.value,
+      adaptability: adaptability.value,
+      learnability: learnability.value,
+    },
+  };
+}
+
+function parseScores(
+  raw: unknown,
+  path: string,
+): { ok: true; scores: QualityScores } | { ok: false; error: string } {
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const unknownKeyError = rejectUnknownKeys(raw, ["setup", "system"], path);
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  const setup = parseSetupScores(raw.setup, `${path}.setup`);
+  if (!setup.ok) return setup;
+  const system = parseSystemScores(raw.system, `${path}.system`);
+  if (!system.ok) return system;
+
+  return {
+    ok: true,
+    scores: {
+      setup: setup.scores,
+      system: system.scores,
+    },
+  };
+}
+
+// eslint-disable-next-line complexity -- finding validation is intentionally explicit so every rejected field gets a precise path-specific error
+function parseFinding(
+  raw: unknown,
+  index: number,
+  allowId: boolean,
+):
+  | { ok: true; finding: QualityFinding | SavedQualityFinding }
+  | { ok: false; error: string } {
+  const path = `findings[${index}]`;
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const allowedKeys = allowId
+    ? [
+        "id",
+        "type",
+        "severity",
+        "file",
+        "line",
+        "summary",
+        "detail",
+        "evidence_quality",
+        "delta_tag",
+      ]
+    : [
+        "type",
+        "severity",
+        "file",
+        "line",
+        "summary",
+        "detail",
+        "evidence_quality",
+        "delta_tag",
+      ];
+  const unknownKeyError = rejectUnknownKeys(raw, allowedKeys, path);
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+  if (!allowId && Object.hasOwn(raw, "id")) {
+    return {
+      ok: false,
+      error: `${path}.id is not allowed in agent-emitted reports`,
+    };
+  }
+
+  const type = expectEnumValue(raw.type, `${path}.type`, QUALITY_FINDING_TYPES);
+  if (!type.ok) return type;
+  const severity = expectEnumValue(
+    raw.severity,
+    `${path}.severity`,
+    QUALITY_FINDING_SEVERITIES,
+  );
+  if (!severity.ok) return severity;
+  const file = expectNullableString(raw.file ?? null, `${path}.file`);
+  if (!file.ok) return file;
+  const line = expectNullablePositiveInteger(raw.line ?? null, `${path}.line`);
+  if (!line.ok) return line;
+  const summary = expectNonEmptyString(raw.summary, `${path}.summary`);
+  if (!summary.ok) return summary;
+  if (summary.value.length > 200) {
+    return {
+      ok: false,
+      error: `${path}.summary must be 200 characters or fewer`,
+    };
+  }
+  const detail = expectNonEmptyString(raw.detail, `${path}.detail`);
+  if (!detail.ok) return detail;
+  const evidenceQuality = expectEnumValue(
+    raw.evidence_quality,
+    `${path}.evidence_quality`,
+    QUALITY_EVIDENCE_QUALITIES,
+  );
+  if (!evidenceQuality.ok) return evidenceQuality;
+
+  const deltaTagRaw = Object.hasOwn(raw, "delta_tag") ? raw.delta_tag : null;
+  let deltaTag: QualityDeltaTag | null = null;
+  if (deltaTagRaw !== null) {
+    const parsedDeltaTag = expectEnumValue(
+      deltaTagRaw,
+      `${path}.delta_tag`,
+      QUALITY_DELTA_TAGS,
+    );
+    if (!parsedDeltaTag.ok) return parsedDeltaTag;
+    deltaTag = parsedDeltaTag.value;
+  }
+
+  const findingBase: QualityFinding = {
+    type: type.value,
+    severity: severity.value,
+    file: file.value,
+    line: line.value,
+    summary: summary.value,
+    detail: detail.value,
+    evidence_quality: evidenceQuality.value,
+    delta_tag: deltaTag,
+  };
+
+  if (!allowId) {
+    return { ok: true, finding: findingBase };
+  }
+
+  const id = expectNonEmptyString(raw.id, `${path}.id`);
+  if (!id.ok) return id;
+  return {
+    ok: true,
+    finding: {
+      ...findingBase,
+      id: id.value,
+    },
+  };
+}
+
+// eslint-disable-next-line complexity -- report validation stays fully expanded so schema errors name the exact failing field
+function parseReportInternal(
+  raw: unknown,
+  allowFindingId: boolean,
+): ParseResult<QualityReport | SavedQualityReport> {
+  if (!isRecord(raw)) {
+    return { ok: false, error: "quality report must be an object" };
+  }
+  const unknownKeyError = rejectUnknownKeys(
+    raw,
+    [
+      "report_kind",
+      "goat_flow_version",
+      "agent",
+      "project_path",
+      "run_date",
+      "audit_status",
+      "scores",
+      "findings",
+    ],
+    "report",
+  );
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  if (raw.report_kind !== QUALITY_REPORT_KIND) {
+    return {
+      ok: false,
+      error: `report.report_kind must equal "${QUALITY_REPORT_KIND}"`,
+    };
+  }
+
+  const version = expectNonEmptyString(
+    raw.goat_flow_version,
+    "report.goat_flow_version",
+  );
+  if (!version.ok) return version;
+  const agent = expectEnumValue(raw.agent, "report.agent", [
+    "claude",
+    "codex",
+    "gemini",
+  ] satisfies readonly AgentId[]);
+  if (!agent.ok) return agent;
+  const projectPath = expectNonEmptyString(
+    raw.project_path,
+    "report.project_path",
+  );
+  if (!projectPath.ok) return projectPath;
+  if (!isAbsolute(projectPath.value)) {
+    return {
+      ok: false,
+      error: "report.project_path must be an absolute path",
+    };
+  }
+  const runDate = expectNonEmptyString(raw.run_date, "report.run_date");
+  if (!runDate.ok) return runDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate.value)) {
+    return { ok: false, error: "report.run_date must be YYYY-MM-DD" };
+  }
+  const auditStatus = expectEnumValue(
+    raw.audit_status,
+    "report.audit_status",
+    QUALITY_AUDIT_STATUSES,
+  );
+  if (!auditStatus.ok) return auditStatus;
+  const scores = parseScores(raw.scores, "report.scores");
+  if (!scores.ok) return scores;
+  if (!Array.isArray(raw.findings)) {
+    return { ok: false, error: "report.findings must be an array" };
+  }
+
+  const findings: Array<QualityFinding | SavedQualityFinding> = [];
+  for (const [index, item] of raw.findings.entries()) {
+    const parsedFinding = parseFinding(item, index, allowFindingId);
+    if (!parsedFinding.ok) return parsedFinding;
+    findings.push(parsedFinding.finding);
+  }
+
+  const reportBase: Omit<QualityReport, "findings"> = {
+    report_kind: QUALITY_REPORT_KIND,
+    goat_flow_version: version.value,
+    agent: agent.value,
+    project_path: projectPath.value,
+    run_date: runDate.value,
+    audit_status: auditStatus.value,
+    scores: scores.scores,
+  };
+
+  if (allowFindingId) {
+    return {
+      ok: true,
+      report: {
+        ...reportBase,
+        findings: findings as SavedQualityFinding[],
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    report: {
+      ...reportBase,
+      findings: findings as QualityFinding[],
+    },
+  };
+}
+
+export function parseQualityReport(raw: unknown): ParseResult<QualityReport> {
+  const result = parseReportInternal(raw, false);
+  if (!result.ok) return result;
+  return { ok: true, report: result.report as QualityReport };
+}
+
+export function parseSavedQualityReport(
+  raw: unknown,
+): ParseResult<SavedQualityReport> {
+  const result = parseReportInternal(raw, true);
+  if (!result.ok) return result;
+  return { ok: true, report: result.report as SavedQualityReport };
+}

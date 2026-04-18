@@ -30,7 +30,13 @@ audit/
 
 prompt/
   compose-setup.ts         # Generates audit-driven setup prompts for agents
-  compose-quality.ts       # Generates quality-assessment prompts for agents
+  compose-quality.ts       # Generates quality-assessment prompts for agents (prompt mode only)
+
+quality/
+  schema.ts                # Strict quality-report parser for agent output and saved reports
+  ids.ts                   # Positional finding-id generation (`type:file-slug:line-or-_`)
+  capture.ts               # Extracts and persists reports from agent responses
+  history.ts               # Loads saved reports, renders history, and derives diffs
 
 server/
   dashboard.ts             # HTTP server for dashboard + API
@@ -111,5 +117,6 @@ tasks/                     # Milestone files (gitignored, local working state)
   <version>/Mxx-*.md       # Active milestones live in the subdir named by .active
   _archived/               # Prior plans + research; not scanned by skills
 logs/sessions/             # Session logs (gitignored)
+logs/quality/             # Saved quality reports + prose companions (gitignored; README committed)
 scratchpad/                # Ephemeral working notes (gitignored)
 ```

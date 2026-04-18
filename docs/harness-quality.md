@@ -22,6 +22,19 @@ Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality mar
 
 **Time and cost:** A full assessment runs 7 skill invocations (`goat-critique` alone may spawn sub-agents). Expect 30-60 minutes and moderate token usage.
 
+## Persisting quality reports
+
+`goat-flow quality . --agent X` only generates the prompt. If you want trend history, save the agent response and capture it explicitly:
+
+```bash
+goat-flow quality . --agent claude
+goat-flow quality capture --from-file claude-quality.md
+goat-flow quality history --agent claude
+goat-flow quality diff --agent claude
+```
+
+Captured reports are stored locally under `.goat-flow/logs/quality/` as a validated `.json` report plus a companion `.md` prose file. The history and diff commands only operate on saved reports.
+
 ---
 
 ## What the quality assessment evaluates beyond audit

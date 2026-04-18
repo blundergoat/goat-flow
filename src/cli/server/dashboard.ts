@@ -368,6 +368,8 @@ export function serveDashboard(
       try {
         requireProjectDirectory(projectPath);
         const { composeQuality } = await import("../prompt/compose-quality.js");
+        const { getLatestQualityHistoryEntry, loadQualityHistory } =
+          await import("../quality/history.js");
 
         let auditReport: AuditReport | null = null;
         try {
@@ -380,7 +382,17 @@ export function serveDashboard(
           // Audit failure is fine - quality prompt generates with degraded context
         }
 
-        const result = composeQuality({ agent, projectPath, auditReport });
+        const history = loadQualityHistory(projectPath);
+        const priorReport = getLatestQualityHistoryEntry(
+          history.entries,
+          agent,
+        );
+        const result = composeQuality({
+          agent,
+          projectPath,
+          auditReport,
+          priorReport,
+        });
         jsonResponse(res, 200, result);
       } catch (err) {
         jsonResponse(res, 500, {

@@ -1,0 +1,48 @@
+{
+  "report_kind": "goat-flow-quality-report",
+  "goat_flow_version": "1.2.0",
+  "agent": "claude",
+  "project_path": "/tmp/quality-fixture-project",
+  "run_date": "2026-04-01",
+  "audit_status": "pass",
+  "scores": {
+    "setup": {
+      "total": 70,
+      "accuracy": 20,
+      "relevance": 20,
+      "completeness": 15,
+      "friction": 15
+    },
+    "system": {
+      "total": 70,
+      "usefulness": 20,
+      "signal_to_noise": 20,
+      "adaptability": 15,
+      "learnability": 15
+    }
+  },
+  "findings": [
+    {
+      "id": "content_quality:goat-flow-architecture-md:49",
+      "type": "content_quality",
+      "severity": "MAJOR",
+      "file": ".goat-flow/architecture.md",
+      "line": 49,
+      "summary": "Architecture doc still references outdated quality output behavior",
+      "detail": "Readers are told quality output is session-only even though the persistence design is changing.",
+      "evidence_quality": "OBSERVED",
+      "delta_tag": "new"
+    },
+    {
+      "id": "false_path:src-cli-cli-ts:66",
+      "type": "false_path",
+      "severity": "MINOR",
+      "file": "src/cli/cli.ts",
+      "line": 66,
+      "summary": "CLI help lacks quality capture/history/diff examples",
+      "detail": "Operators cannot discover the new report-lifecycle commands from help text alone.",
+      "evidence_quality": "OBSERVED",
+      "delta_tag": "new"
+    }
+  ]
+}

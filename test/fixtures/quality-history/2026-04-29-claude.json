@@ -1,0 +1,48 @@
+{
+  "report_kind": "goat-flow-quality-report",
+  "goat_flow_version": "1.2.0",
+  "agent": "claude",
+  "project_path": "/tmp/quality-fixture-project",
+  "run_date": "2026-04-29",
+  "audit_status": "pass",
+  "scores": {
+    "setup": {
+      "total": 85,
+      "accuracy": 25,
+      "relevance": 20,
+      "completeness": 20,
+      "friction": 20
+    },
+    "system": {
+      "total": 80,
+      "usefulness": 20,
+      "signal_to_noise": 20,
+      "adaptability": 20,
+      "learnability": 20
+    }
+  },
+  "findings": [
+    {
+      "id": "framework_flaw:src-cli-prompt-compose-quality-ts:600",
+      "type": "framework_flaw",
+      "severity": "BLOCKER",
+      "file": "src/cli/prompt/compose-quality.ts",
+      "line": 600,
+      "summary": "Prompt still asks the agent to emit unsupported resolved delta tags",
+      "detail": "Current findings cannot represent resolved issues because resolved items disappear from the latest report.",
+      "evidence_quality": "OBSERVED",
+      "delta_tag": "persisted"
+    },
+    {
+      "id": "content_quality:goat-flow-architecture-md:49",
+      "type": "content_quality",
+      "severity": "MAJOR",
+      "file": ".goat-flow/architecture.md",
+      "line": 49,
+      "summary": "Architecture doc still references outdated quality output behavior",
+      "detail": "Readers are told quality output is session-only even though the persistence design is changing.",
+      "evidence_quality": "OBSERVED",
+      "delta_tag": "persisted"
+    }
+  ]
+}

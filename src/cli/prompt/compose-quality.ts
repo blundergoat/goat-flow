@@ -4,14 +4,18 @@
  */
 import type { AgentId } from "../types.js";
 import type { AuditReport, AuditConcernKey } from "../audit/types.js";
+import type { QualityHistoryEntry } from "../quality/history.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { getAgentProfile } from "../agents/registry.js";
 import { getPackageVersion } from "../paths.js";
+import { QUALITY_REPORT_KIND } from "../quality/schema.js";
 
 interface QualityInput {
   agent: AgentId;
   projectPath: string;
   auditReport: AuditReport | null;
+  priorReport?: QualityHistoryEntry | null;
+  runDate?: string;
 }
 
 interface QualityPayload {
@@ -74,10 +78,22 @@ function renderDegradedNote(): string {
   ].join("\n");
 }
 
+function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
+  if (severity === "BLOCKER") return 0;
+  if (severity === "MAJOR") return 1;
+  return 2;
+}
+
 /** Compose the quality-assessment prompt for the selected agent. */
 // eslint-disable-next-line complexity -- prompt assembly branches on audit availability and split hook-config surfaces
 export function composeQuality(input: QualityInput): QualityPayload {
-  const { agent, projectPath, auditReport } = input;
+  const {
+    agent,
+    projectPath,
+    auditReport,
+    priorReport = null,
+    runDate = new Date().toISOString().slice(0, 10),
+  } = input;
   const profile = getAgentProfile(agent);
   const agentLabel = profile.name;
   const skillsDir = profile.skillsDir;
@@ -218,6 +234,49 @@ export function composeQuality(input: QualityInput): QualityPayload {
   } else {
     lines.push("**Audit: UNAVAILABLE**");
     lines.push(renderDegradedNote());
+  }
+  lines.push("");
+
+  lines.push("---");
+  lines.push("");
+  lines.push("## Prior report context");
+  lines.push("");
+  if (priorReport) {
+    const priorHighSeverityCount = priorReport.report.findings.filter(
+      (finding) =>
+        finding.severity === "BLOCKER" || finding.severity === "MAJOR",
+    ).length;
+    const priorTopFindings = [...priorReport.report.findings]
+      .sort((left, right) => {
+        const severityDiff =
+          findingSeverityRank(left.severity) -
+          findingSeverityRank(right.severity);
+        if (severityDiff !== 0) return severityDiff;
+        return left.id.localeCompare(right.id);
+      })
+      .slice(0, 3);
+
+    lines.push(
+      `Latest same-agent report: \`${priorReport.id}\` (${priorReport.report.run_date})`,
+    );
+    lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
+    lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
+    lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
+    lines.push("- Top prior findings by severity:");
+    for (const finding of priorTopFindings) {
+      lines.push(
+        `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${finding.summary}`,
+      );
+    }
+    lines.push("");
+    lines.push(
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
+    );
+  } else {
+    lines.push("No prior same-agent quality report exists for this project.");
+    lines.push(
+      "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
+    );
   }
   lines.push("");
 
@@ -551,6 +610,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push(
     "- Evidence quality: `OBSERVED` (verified in code/output) or `INFERRED` (state what's missing)",
   );
+  lines.push(
+    "- If prior report context was provided, current findings only use `delta_tag: new | persisted`; `resolved` belongs in derived diff output, not the current finding list.",
+  );
   lines.push("");
 
   lines.push("### Setup Quality");
@@ -594,6 +656,34 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
 
+  lines.push("### Rating bands");
+  lines.push("Use exact 25 / 20 / 15 / 10 / 5 / 0 increments only:");
+  lines.push(
+    "- Setup / Accuracy: 25 = all fact-checked claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = instruction file materially misstates the project; 0 = fabricated or wrong project.",
+  );
+  lines.push(
+    "- Setup / Relevance: 25 = content is project-specific and directly useful; 20 = mostly adapted with small boilerplate residue; 15 = meaningful generic carry-over; 10 = mostly boilerplate; 5 = barely adapted; 0 = generic template noise.",
+  );
+  lines.push(
+    "- Setup / Completeness: 25 = no important setup surface missing; 20 = one minor omission; 15 = one important omission with workaround; 10 = multiple gaps; 5 = missing a load-bearing surface; 0 = incomplete to the point of blocking productive use.",
+  );
+  lines.push(
+    "- Setup / Friction: 25 = frictionless orientation; 20 = minor ceremony; 15 = noticeable but workable friction; 10 = frequent unnecessary steps; 5 = heavy ceremony or confusion; 0 = setup actively impedes work.",
+  );
+  lines.push(
+    "- System / Usefulness: 25 = consistently improves work on this repo; 20 = useful more often than not; 15 = mixed value; 10 = occasional value only; 5 = mostly overhead; 0 = not useful.",
+  );
+  lines.push(
+    "- System / Signal-to-noise: 25 = almost all content carries its weight; 20 = some redundancy; 15 = meaningful noise; 10 = more noise than signal; 5 = mostly ceremony; 0 = overwhelming noise.",
+  );
+  lines.push(
+    "- System / Adaptability: 25 = clearly shaped for this codebase; 20 = mostly adapted; 15 = partial adaptation; 10 = generic assumptions leak through; 5 = poor fit; 0 = incompatible with the repo's real shape.",
+  );
+  lines.push(
+    "- System / Learnability: 25 = fast to understand and apply; 20 = small onboarding tax; 15 = moderate study required; 10 = confusing structure; 5 = hard to learn; 0 = effectively opaque.",
+  );
+  lines.push("");
+
   lines.push("### Top 5 Improvements");
   lines.push("For each:");
   lines.push("1. What to change");
@@ -604,6 +694,67 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("### What You Did Not Verify");
   lines.push(
     "Be explicit about remaining uncertainty. List skipped skills, untested commands, unverified claims.",
+  );
+  lines.push("");
+
+  lines.push("### JSON Output Contract");
+  lines.push("");
+  lines.push(
+    "End your response with ONE fenced JSON block as the final block in the message. Use standard CommonMark `json` fencing. The CLI accepts the block whose top-level `report_kind` equals the required literal below.",
+  );
+  lines.push("");
+  lines.push("```json");
+  lines.push("{");
+  lines.push(`  "report_kind": "${QUALITY_REPORT_KIND}",`);
+  lines.push(`  "goat_flow_version": "${getPackageVersion()}",`);
+  lines.push(`  "agent": "${agent}",`);
+  lines.push(`  "project_path": "${projectPath}",`);
+  lines.push(`  "run_date": "${runDate}",`);
+  lines.push(`  "audit_status": "${auditStatus}",`);
+  lines.push('  "scores": {');
+  lines.push(
+    '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
+  );
+  lines.push(
+    '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
+  );
+  lines.push("  },");
+  lines.push('  "findings": [');
+  lines.push("    {");
+  lines.push(
+    '      "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": 12,',
+  );
+  lines.push(
+    '      "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "delta_tag": null',
+  );
+  lines.push("    }");
+  lines.push("  ]");
+  lines.push("}");
+  lines.push("```");
+  lines.push("");
+  lines.push("JSON rules:");
+  lines.push(
+    "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
+  );
+  lines.push(
+    "- Allowed `type` values: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
+  );
+  lines.push("- Allowed `severity` values: `BLOCKER`, `MAJOR`, `MINOR`.");
+  lines.push("- Allowed `evidence_quality` values: `OBSERVED`, `INFERRED`.");
+  if (priorReport) {
+    lines.push(
+      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`.',
+    );
+  } else {
+    lines.push(
+      "- `delta_tag` must be `null` or omitted when no prior report context exists.",
+    );
+  }
+  lines.push(
+    "- Do NOT include an `id` field. The CLI computes positional finding ids during capture.",
+  );
+  lines.push(
+    "- Do NOT include extra top-level keys, extra finding keys, combined multi-agent reports, or prose inside the JSON block. Unknown keys are rejected.",
   );
   lines.push("");
 

@@ -95,7 +95,7 @@ M13's first draft extended `goat-flow quality` by asking the agent to write a st
 
 **Evidence:** `src/cli/prompt/compose-quality.ts:137,147,431` (READ-ONLY + write-is-finding instructions) vs the draft's §3 "Instruct the agent to write …" bullet.
 
-**Decision:** Rebuilt M13 so the agent emits the JSON block inside its response only; any later CLI tooling that needs to capture the output owns extraction, path validation, suffix numbering, and schema validation outside the prompt contract. READ-ONLY clause preserved verbatim. (Historical note: an earlier draft referenced a `goat-flow quality capture --from-file <path>` subcommand; that subcommand was not shipped — the capture step happens outside the agent prompt by design, not via a specific CLI form.)
+**Decision:** Rebuilt M13 so the agent emits the JSON block inside its response only; any later CLI tooling that needs to capture the output owns extraction, path validation, suffix numbering, and schema validation outside the prompt contract. READ-ONLY clause preserved verbatim. (Historical note: the earlier redesign kept capture out of the initial prompt rewrite; M13 later ships `goat-flow quality capture --from-file <path>` as a CLI-owned post-response step, not as a prompt exception.)
 
 **Trigger:** Any spec that adds a feature to a prompt whose contract forbids an operation that feature needs. The feature goes on the other side of the boundary — almost always the CLI.
 
