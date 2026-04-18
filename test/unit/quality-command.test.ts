@@ -134,7 +134,9 @@ describe("quality prompt content", () => {
     ];
 
     assert.ok(
-      result.prompt.includes("No legacy task-state residue from pre-v1.1 workflows?"),
+      result.prompt.includes(
+        "No legacy task-state residue from pre-v1.1 workflows?",
+      ),
       "Should use generic wording for the pre-check",
     );
     assert.ok(

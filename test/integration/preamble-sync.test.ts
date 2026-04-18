@@ -100,7 +100,10 @@ describe("preamble/conventions sync: regression detection", () => {
     const originalInstalled = readFileSync(INSTALLED_PREAMBLE);
 
     // Back up installed; modify it to diverge
-    const backup = resolve(PROJECT_ROOT, ".goat-flow/skill-reference/skill-preamble.md.bak");
+    const backup = resolve(
+      PROJECT_ROOT,
+      ".goat-flow/skill-reference/skill-preamble.md.bak",
+    );
     try {
       copyFileSync(INSTALLED_PREAMBLE, backup);
       writeFileSync(INSTALLED_PREAMBLE, originalInstalled + "\n# DIVERGED\n");
