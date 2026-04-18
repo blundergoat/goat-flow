@@ -2,12 +2,22 @@
  * Regression test for the preflight preamble/conventions sync check.
  * Verifies the diff-based check correctly detects when template and installed
  * copies of skill-preamble.md or skill-conventions.md diverge.
+ *
+ * Regression detection runs in a tmpdir — never mutates tracked repo files.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
+import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const TEMPLATE_PREAMBLE = resolve(
@@ -88,7 +98,8 @@ describe("preamble/conventions sync: current state", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Regression: diverged files are detected (non-zero diff status)
+// Regression: diverged files are detected (non-zero diff status).
+// Runs entirely in a tmpdir — never touches tracked repo files.
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: regression detection", () => {
   it("detects when installed skill-preamble.md diverges from template", () => {
@@ -96,41 +107,38 @@ describe("preamble/conventions sync: regression detection", () => {
       return;
     }
 
-    const originalTemplate = readFileSync(TEMPLATE_PREAMBLE);
-    const originalInstalled = readFileSync(INSTALLED_PREAMBLE);
-
-    // Back up installed; modify it to diverge
-    const backup = resolve(
-      PROJECT_ROOT,
-      ".goat-flow/skill-reference/skill-preamble.md.bak",
-    );
+    const tmp = mkdtempSync(join(tmpdir(), "goat-flow-preamble-sync-"));
     try {
-      copyFileSync(INSTALLED_PREAMBLE, backup);
-      writeFileSync(INSTALLED_PREAMBLE, originalInstalled + "\n# DIVERGED\n");
+      const tmpTemplate = join(tmp, "template-preamble.md");
+      const tmpInstalled = join(tmp, "installed-preamble.md");
+      copyFileSync(TEMPLATE_PREAMBLE, tmpTemplate);
+      copyFileSync(INSTALLED_PREAMBLE, tmpInstalled);
+
+      // Sanity: tmp copies match before divergence
+      assert.equal(
+        diffQuiet(tmpTemplate, tmpInstalled),
+        0,
+        "Tmp copies should match before induced divergence",
+      );
+
+      // Diverge the tmp installed copy
+      const original = readFileSync(tmpInstalled);
+      writeFileSync(tmpInstalled, original + "\n# DIVERGED\n");
 
       // diff should now report non-zero
       assert.notEqual(
-        diffQuiet(TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE),
+        diffQuiet(tmpTemplate, tmpInstalled),
         0,
         "Diff should detect divergence",
       );
 
-      // Simulate the preflight sync check directly
       assert.notDeepStrictEqual(
-        readFileSync(TEMPLATE_PREAMBLE),
-        readFileSync(INSTALLED_PREAMBLE),
+        readFileSync(tmpTemplate),
+        readFileSync(tmpInstalled),
         "Files should differ after modification",
       );
     } finally {
-      // Restore
-      writeFileSync(INSTALLED_PREAMBLE, originalInstalled);
-      writeFileSync(TEMPLATE_PREAMBLE, originalTemplate);
-      // Clean up backup
-      try {
-        spawnSync("rm", ["-f", backup]);
-      } catch {
-        // ignore
-      }
+      rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

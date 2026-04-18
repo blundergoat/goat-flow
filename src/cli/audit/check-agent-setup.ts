@@ -25,6 +25,8 @@ function agentArtifactsExist(
 function checkInstructionPresent(ctx: AuditContext): AuditFailure | null {
   const found = ctx.agents.some((af) => af.agent.id === ctx.agentFilter);
   if (found) return null;
+  // In --agent mode we look up the expected instruction path from the detected
+  // structure so the failure message stays specific even when the file is absent.
   const profile = ctx.structure.agents[ctx.agentFilter!];
   const instructionFile =
     profile?.instruction_file ?? `${ctx.agentFilter} instruction file`;
@@ -134,6 +136,8 @@ function checkDeprecatedSkills(ctx: AuditContext): AuditFailure | null {
     }
   }
   if (found.length === 0) return null;
+  // Convert the compact agent:name identifiers back into filesystem paths so the
+  // remediation text points to concrete directories the user can remove.
   const paths = found.map((s) => {
     const [agent, name] = s.split(":");
     const af = ctx.agents.find((a) => a.agent.id === agent);
@@ -214,6 +218,7 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
     }
     for (const file of files) {
       if (!file.endsWith(".sh")) continue;
+      // ctx.fs may be backed by an in-memory fixture, but bash -n needs a real workspace path.
       const fullPath = join(ctx.projectPath, hooksDir, file);
       try {
         execFileSync("bash", ["-n", fullPath], {
@@ -255,7 +260,9 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     if (!af.agent.hooksDir) continue;
     const denyRelPath = join(af.agent.hooksDir, "deny-dangerous.sh");
     const content = ctx.fs.readFile(denyRelPath);
-    if (content === null) continue; // no deny hook file to self-test
+    // Config-based deny rules satisfy the deny-mechanism requirement, but only an
+    // on-disk shell hook can run the registered self-test.
+    if (content === null) continue;
     const denyPath = join(ctx.projectPath, denyRelPath);
     try {
       execFileSync("bash", [denyPath, "--self-test"], {
@@ -281,6 +288,8 @@ const agentDenyMechanism: BuildCheck = {
   scope: "agent",
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
+    // Order the checks from cheapest/static to most expensive/runtime so we stop on
+    // the clearest failure before attempting shell execution.
     return (
       checkDenyHookPresent(ctx) ??
       checkHookSyntax(ctx) ??

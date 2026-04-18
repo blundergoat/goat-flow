@@ -42,7 +42,7 @@ goat-flow setup --agent codex     # Codex setup/upgrade prompt
 
 ### `goat-flow status [path]`
 
-Show project adoption state (`bare`, `partial`, `v0.9`, `v1.0`, `v1.1`) and recommended next action (`setup`, `migration`, `upgrade`, `audit`).
+Show project adoption state (`bare`, `partial`, `v0.9`, `outdated`, `current`, `error`) and recommended next action (`setup`, `migration`, `upgrade`, `fix`, `audit`, `incomplete`).
 
 ```bash
 goat-flow status .                    # Check current project state

@@ -71,6 +71,8 @@ const executionLoopPresent: HarnessCheck = {
       if (missing.length === 0) {
         findings.push(`${af.agent.id}: execution loop has all 4 steps`);
       } else if (found.length >= 2) {
+        // Treat partial matches as an informative drift signal rather than a hard fail.
+        // Different instruction templates may phrase one or two steps indirectly.
         findings.push(
           `${af.agent.id}: execution loop found ${found.length}/4 steps (missing ${missing.join(", ")})`,
         );
@@ -96,7 +98,8 @@ function checkAllDocPaths(ctx: AuditContext) {
   let resolvedCount = 0;
   const findings: string[] = [];
 
-  // Router table paths
+  // Router tables enumerate the docs and directories the agent is expected to consult,
+  // so dead entries here are a high-signal context failure.
   for (const af of ctx.agents) {
     totalPaths += af.router.paths.length;
     resolvedCount += af.router.resolved;
@@ -107,7 +110,8 @@ function checkAllDocPaths(ctx: AuditContext) {
     }
   }
 
-  // Architecture doc
+  // architecture.md is canonical and gets separate reporting instead of being folded
+  // into the generic doc-file loop below.
   if (!ctx.facts.shared.architecture.exists) {
     findings.push("architecture.md does not exist");
   } else {
@@ -134,6 +138,8 @@ function checkAllDocPaths(ctx: AuditContext) {
     "docs/cli.md",
     "docs/audit-and-quality.md",
   ];
+  // Keep this list curated and deterministic. The goal is to validate the core docs
+  // goat-flow owns, not recursively scan every user-authored markdown file.
   for (const file of docFiles) {
     const content = ctx.fs.readFile(file);
     if (!content) continue;
@@ -158,6 +164,7 @@ const docPathsResolve: HarnessCheck = {
     const { totalPaths, resolvedCount, findings } = checkAllDocPaths(ctx);
 
     if (totalPaths === 0) {
+      // Missing files still produce findings even when there were no path literals to inspect.
       if (findings.length > 0) {
         return fail(findings, [
           "Fix missing docs and add backtick-quoted file paths for drift detection",

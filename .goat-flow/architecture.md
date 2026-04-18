@@ -66,10 +66,10 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md) are the hot path -- lo
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns.md`, `skill-preamble.md`, `skill-conventions.md`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**` | Yes | Durable project record. Source of truth across sessions. |
-| **Local session state** | `tasks/**`, `scratchpad/**`, `logs/sessions/*.md` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, and session continuity logs. Coordinates a single work session — not project history. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns.md`, `skill-reference/skill-preamble.md`, `skill-reference/skill-conventions.md`, `skill-reference/skill-quality-testing.md`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**` | Yes | Durable project record. Source of truth across sessions. |
+| **Local session state** | `tasks/**`, `scratchpad/**`, `.goat-flow/logs/sessions/*.md` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, and session continuity logs. Coordinates a single work session — not project history. |
 
-**Not a persistence gap.** If a `tasks/`, `scratchpad/`, or `logs/sessions/` artifact deserves to survive the session, promote its durable content into the committed tier: lesson → `lessons/`, trap → `footguns/`, decision → `decisions/`. Session logs themselves are checkout-local continuity artifacts.
+**Not a persistence gap.** If a `tasks/`, `scratchpad/`, or `.goat-flow/logs/sessions/` artifact deserves to survive the session, promote its durable content into the committed tier: lesson → `lessons/`, trap → `footguns/`, decision → `decisions/`. Session logs themselves are checkout-local continuity artifacts.
 
 ## Deliberate Trade-offs
 

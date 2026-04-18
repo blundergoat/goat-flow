@@ -24,6 +24,8 @@ export function extractBacktickPaths(content: string): string[] {
   let m;
   while ((m = pattern.exec(content))) {
     const p = m[1]!;
+    // This helper is intentionally heuristic. Ignore URLs, globs, and call-like
+    // snippets so the doc-path check only validates likely repo-relative paths.
     if (p.includes("://") || p.includes("*") || p.includes("(")) continue;
     if (p.startsWith("/") || p.includes(" ")) continue;
     paths.push(p);
@@ -43,6 +45,8 @@ export function collectMarkdownFiles(
   } catch {
     return mdFiles;
   }
+  // One level of descent is enough for the current docs layout and keeps the scan
+  // deterministic for tests instead of walking arbitrarily deep trees.
   for (const entry of entries) {
     const entryPath = `${dir}/${entry}`;
     if (entry.endsWith(".md")) {

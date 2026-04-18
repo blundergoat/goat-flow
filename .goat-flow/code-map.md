@@ -85,8 +85,11 @@ glossary.md                # Domain terms
 patterns.md                # Successful repeatable approaches
 
 config.yaml                # Project config (version, agents, skills, line limits)
-skill-preamble.md          # Loaded by every goat-* skill invocation
-skill-conventions.md       # Loaded by full-depth skill invocations
+
+skill-reference/           # Shared skill doctrine (committed, install-copied from workflow/skills/reference/)
+  skill-preamble.md        # Loaded by every goat-* skill invocation
+  skill-conventions.md     # Loaded by full-depth skill invocations
+  skill-quality-testing.md # Authoring methodology for creating or hardening a skill
 
 decisions/                 # ADRs (committed)
 footguns/                  # Architectural traps with file:line evidence (committed)

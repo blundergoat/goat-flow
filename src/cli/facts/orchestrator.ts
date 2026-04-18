@@ -24,11 +24,12 @@ export function extractProjectFacts(
   /** All detected agent profiles in the project */
   let agents = detectAgents(fs);
 
-  // Filter to specific agent if requested via --agent flag
+  // An explicit --agent flag is the strongest selector and wins over config.yaml.
   if (options.agentFilter) {
     agents = agents.filter((a) => a.id === options.agentFilter);
   }
-  // When config.yaml lists specific agents, restrict to that set
+  // Otherwise, config.yaml can narrow an auto-detected project to the supported agents
+  // the project has chosen to manage with goat-flow.
   else if (options.configState.config.agents) {
     const configured = new Set(options.configState.config.agents);
     agents = agents.filter((a) => configured.has(a.id));
@@ -50,7 +51,8 @@ export function extractProjectFacts(
     const warranted: string[] = [];
     /** Warranted directories that lack a local context file */
     const missing: string[] = [];
-    // Iterate over footgun directory mentions to identify warranted local context
+    // Repeated footgun references are treated as a signal that the directory is
+    // risky enough to deserve local instructions. A single mention is often noise.
     for (const [dir, count] of shared.footguns.dirMentions) {
       if (count >= 2) {
         warranted.push(dir);
