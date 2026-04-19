@@ -918,8 +918,8 @@
           </div>
         </section>
 
-        <!-- ==== Further reading ==== -->
-        <section id="help-further-reading" style="margin-bottom: 52px">
+        <!-- ==== Five concerns ==== -->
+        <section id="help-five-concerns" style="margin-bottom: 52px">
           <div
             class="gf-text-disabled"
             style="
@@ -941,32 +941,32 @@
               letter-spacing: -0.01em;
             "
           >
-            Further reading
+            The five concerns of AI harness engineering
           </h2>
           <p
             class="gf-text-muted"
             style="font-size: 15px; max-width: 640px; margin: 0 0 18px"
           >
-            The literature goat-flow draws on. Every source proposes something
-            different, and no one owns a standard yet. These are the ones worth
-            reading.
+            The common ground across the public harness engineering literature.
+            goat-flow's <span class="mono gf-text-primary">--harness</span>
+            audit scores every installed harness against these five.
           </p>
 
-          <!-- TODO: real URLs -->
           <div class="gf-card" style="overflow: hidden; padding: 0">
             <template
               x-for="(item, idx) in [
-                { label: 'Mitchell Hashimoto', desc: 'Coined harness engineering and the compounding-fix principle. Feb 2026.' },
-                { label: 'Birgitta Böckeler (martinfowler.com)', desc: 'Guides × sensors model. Two axes: feedforward/feedback and computational/inferential.' },
-                { label: 'Anthropic engineering blog', desc: 'Three-component virtualised harness: session, brain, sandbox.' },
-                { label: 'HumanLayer', desc: 'Configuration surfaces: CLAUDE.md, MCP, skills, hooks, back-pressure.' }
+                { label: 'Context', desc: 'Give the agent a map, not a 1,000-page manual. Concise instructions, the right files, progress notes across sessions.' },
+                { label: 'Constraints', desc: 'Deterministic rules that steer before the agent acts. Linters, deny-hooks, permissions, required sections.' },
+                { label: 'Verification', desc: 'Structural checks the agent runs to prove its own work. Tests, typecheck, post-action hooks, back-pressure.' },
+                { label: 'Recovery', desc: 'Session durability and restart paths. Checkpoint/resume, compaction handlers, milestone checkboxes, loop detection.' },
+                { label: 'Feedback loop', desc: 'Capture every mistake as persistent context so the next session does not repeat it. Footguns, lessons, decisions, logs.' }
               ]"
               :key="item.label"
             >
               <div
                 style="
                   display: grid;
-                  grid-template-columns: 240px 1fr;
+                  grid-template-columns: 160px 1fr;
                   gap: 16px;
                   align-items: center;
                   padding: 9px 14px;
@@ -974,15 +974,11 @@
                 "
                 :style="idx > 0 ? { borderTop: '1px solid var(--border-subtle)' } : {}"
               >
-                <a
-                  style="
-                    color: var(--accent);
-                    font-weight: 500;
-                    text-decoration: none;
-                    cursor: default;
-                  "
+                <span
+                  class="gf-text-primary"
+                  style="font-weight: 500"
                   x-text="item.label"
-                ></a>
+                ></span>
                 <span class="gf-text-muted" x-text="item.desc"></span>
               </div>
             </template>
@@ -992,8 +988,10 @@
             class="gf-text-muted"
             style="font-size: 14px; margin-top: 16px; line-height: 1.65"
           >
-            goat-flow synthesises these into a working system with strong
-            defaults, rather than a framework you have to assemble yourself.
+            Sources: Mitchell Hashimoto, Birgitta Böckeler (martinfowler.com),
+            Anthropic engineering, and HumanLayer. goat-flow synthesises these
+            into a working system with strong defaults, rather than a framework
+            you have to assemble yourself.
           </p>
         </section>
 
@@ -1105,7 +1103,7 @@
               { id: 'hooks', label: 'Safety-net hooks' },
               { id: 'learning-loop', label: 'Learning loop' },
               { id: 'execution-loop', label: 'Execution loop' },
-              { id: 'further-reading', label: 'Further reading' },
+              { id: 'five-concerns', label: 'Five concerns' },
               { id: 'quicklinks', label: 'Where to go next' }
             ]"
             :key="item.id"
