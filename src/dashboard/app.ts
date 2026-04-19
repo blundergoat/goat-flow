@@ -758,7 +758,11 @@ function app() {
       const labelOverrides: Record<string, string> = { qa: "QA" };
       for (const p of this.presets)
         if (!cats.has(p.cat))
-          cats.set(p.cat, labelOverrides[p.cat] ?? p.cat.charAt(0).toUpperCase() + p.cat.slice(1));
+          cats.set(
+            p.cat,
+            labelOverrides[p.cat] ??
+              p.cat.charAt(0).toUpperCase() + p.cat.slice(1),
+          );
       return [
         { id: "all", label: "All" },
         { id: "favorites", label: "\u2605 Favorites" },
@@ -1386,7 +1390,10 @@ function app() {
         const res = await fetch(
           `/api/quality/history?path=${encodeURIComponent(this.projectPath)}&agent=${encodeURIComponent(this.qualityAgent)}&limit=20`,
         );
-        const payload = readRecord(await res.json(), "Quality history response");
+        const payload = readRecord(
+          await res.json(),
+          "Quality history response",
+        );
         const error = readErrorMessage(payload);
         if (error) {
           this.showToast(error, true);

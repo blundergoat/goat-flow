@@ -29,6 +29,7 @@ import {
 import { detectAgents as detectConfiguredAgents } from "../detect/agents.js";
 import type { AgentId } from "../types.js";
 import type { AuditReport } from "../audit/types.js";
+import type { QualityHistoryEntry } from "../quality/history.js";
 import type { DashboardReport, Runner } from "./types.js";
 import type { TerminalManager } from "./terminal.js";
 import { MAX_SESSIONS } from "./terminal.js";
@@ -125,6 +126,42 @@ interface DashboardOptions {
 interface DashboardServer {
   close: () => Promise<void>;
   port: number;
+}
+
+interface LatestQualitySummary {
+  id: string;
+  date: string;
+  time: string;
+  agent: AgentId;
+  setupTotal: number;
+  systemTotal: number;
+  blockerCount: number;
+  majorCount: number;
+  minorCount: number;
+}
+
+function parseQualityHistoryLimit(param: string | null): number | null {
+  if (param === null) return 20;
+  const parsed = Number.parseInt(param, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : null;
+}
+
+function buildLatestQualitySummary(
+  entry: QualityHistoryEntry | null,
+): LatestQualitySummary | null {
+  if (!entry) return null;
+  const findings = entry.report.findings;
+  return {
+    id: entry.id,
+    date: entry.date,
+    time: entry.time,
+    agent: entry.agent,
+    setupTotal: entry.report.scores.setup.total,
+    systemTotal: entry.report.scores.system.total,
+    blockerCount: findings.filter((f) => f.severity === "BLOCKER").length,
+    majorCount: findings.filter((f) => f.severity === "MAJOR").length,
+    minorCount: findings.filter((f) => f.severity === "MINOR").length,
+  };
 }
 
 /** Start the local dashboard server and expose its API endpoints. */
@@ -412,13 +449,10 @@ export function serveDashboard(
 
       const projectPath = safeResolvePath(url.searchParams.get("path"));
       const agentParam = url.searchParams.get("agent");
-      const limitParam = url.searchParams.get("limit");
       const agent =
         agentParam && VALID_AGENTS.has(agentParam)
           ? (agentParam as AgentId)
-          : agentParam
-            ? null
-            : null;
+          : null;
 
       if (agentParam && !agent) {
         jsonResponse(res, 400, {
@@ -427,12 +461,7 @@ export function serveDashboard(
         return true;
       }
 
-      let limit: number | null = 20;
-      if (limitParam !== null) {
-        const parsed = Number.parseInt(limitParam, 10);
-        limit =
-          Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 100) : null;
-      }
+      const limit = parseQualityHistoryLimit(url.searchParams.get("limit"));
 
       try {
         requireProjectDirectory(projectPath);
@@ -448,30 +477,11 @@ export function serveDashboard(
         });
         const latestEntry = agent
           ? getLatestQualityHistoryEntry(history.entries, agent)
-          : history.entries[0] ?? null;
-        const latest = latestEntry
-          ? {
-              id: latestEntry.id,
-              date: latestEntry.date,
-              time: latestEntry.time,
-              agent: latestEntry.agent,
-              setupTotal: latestEntry.report.scores.setup.total,
-              systemTotal: latestEntry.report.scores.system.total,
-              blockerCount: latestEntry.report.findings.filter(
-                (finding) => finding.severity === "BLOCKER",
-              ).length,
-              majorCount: latestEntry.report.findings.filter(
-                (finding) => finding.severity === "MAJOR",
-              ).length,
-              minorCount: latestEntry.report.findings.filter(
-                (finding) => finding.severity === "MINOR",
-              ).length,
-            }
-          : null;
+          : (history.entries[0] ?? null);
 
         jsonResponse(res, 200, {
           rows,
-          latest,
+          latest: buildLatestQualitySummary(latestEntry),
           warnings: history.warnings,
         });
       } catch (err) {

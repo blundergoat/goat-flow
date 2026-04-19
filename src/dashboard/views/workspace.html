@@ -36,24 +36,76 @@
       min-height: 0;
     "
   >
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px">
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 14px;
+      "
+    >
       <div style="max-width: 720px">
-        <h2 class="gf-text-primary" style="font-size: 18px; font-weight: 600; margin-bottom: 4px">Workspace</h2>
+        <h2
+          class="gf-text-primary"
+          style="font-size: 18px; font-weight: 600; margin-bottom: 4px"
+        >
+          Workspace
+        </h2>
         <p class="gf-text-muted" style="font-size: 14px">
           Terminal sessions running across projects. Pick a session on the left
           to inspect output and continue work.
         </p>
       </div>
-      <div class="gf-card" style="padding: 6px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-        <span class="gf-text-muted" style="font-size: 12px" x-text="`${serverSessions.length} of ${serverMaxSessions}`"></span>
+      <div
+        class="gf-card"
+        style="
+          padding: 6px 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        "
+      >
+        <span
+          class="gf-text-muted"
+          style="font-size: 12px"
+          x-text="`${serverSessions.length} of ${serverMaxSessions}`"
+        ></span>
         <span class="gf-text-muted">·</span>
-        <span style="width: 8px; height: 8px; border-radius: 999px; background: #4ade80"></span>
-        <span class="gf-text-muted" style="font-size: 12px" x-text="`${meterRunning()} running`"></span>
+        <span
+          style="
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #4ade80;
+          "
+        ></span>
+        <span
+          class="gf-text-muted"
+          style="font-size: 12px"
+          x-text="`${meterRunning()} running`"
+        ></span>
         <span class="gf-text-muted">·</span>
-        <span style="width: 8px; height: 8px; border-radius: 999px; background: #fbbf24"></span>
-        <span class="gf-text-muted" style="font-size: 12px" x-text="`${meterWaiting()} waiting`"></span>
+        <span
+          style="
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #fbbf24;
+          "
+        ></span>
+        <span
+          class="gf-text-muted"
+          style="font-size: 12px"
+          x-text="`${meterWaiting()} waiting`"
+        ></span>
         <span class="gf-text-muted">·</span>
-        <span class="gf-text-muted" style="font-size: 12px" x-text="`${meterRecent()} recent`"></span>
+        <span
+          class="gf-text-muted"
+          style="font-size: 12px"
+          x-text="`${meterRecent()} recent`"
+        ></span>
       </div>
     </div>
 
@@ -67,10 +119,26 @@
       "
     >
       <!-- Left rail -->
-      <div style="display: flex; flex-direction: column; gap: 12px; min-height: 0">
-        <div style="display: flex; flex-direction: column; min-height: 0; flex: 1">
-          <div class="section-label" style="margin-bottom: 8px">Active <span x-text="allSessions().length"></span></div>
-          <div class="scrollbar" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding-right: 4px; flex: 1">
+      <div
+        style="display: flex; flex-direction: column; gap: 12px; min-height: 0"
+      >
+        <div
+          style="display: flex; flex-direction: column; min-height: 0; flex: 1"
+        >
+          <div class="section-label" style="margin-bottom: 8px">
+            Active <span x-text="allSessions().length"></span>
+          </div>
+          <div
+            class="scrollbar"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+              overflow-y: auto;
+              padding-right: 4px;
+              flex: 1;
+            "
+          >
             <template x-for="s in allSessions()" :key="'ws-s-' + s.id">
               <div
                 @click="openSession(s)"
@@ -84,12 +152,25 @@
               >
                 <div style="display: flex; gap: 10px; align-items: flex-start">
                   <span
-                    style="width: 8px; height: 8px; border-radius: 999px; margin-top: 5px; flex-shrink: 0"
+                    style="
+                      width: 8px;
+                      height: 8px;
+                      border-radius: 999px;
+                      margin-top: 5px;
+                      flex-shrink: 0;
+                    "
                     :style="{ background: (typeof s.idleDuration === 'number' && s.idleDuration >= 45 * 60) ? '#fbbf24' : (s.status === 'active' ? '#4ade80' : '#9ca3af') }"
                   ></span>
                   <div style="min-width: 0; flex: 1">
-                    <div class="gf-text-primary" style="font-size: 13px; font-weight: 500" x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"></div>
-                    <p class="gf-text-muted" style="font-size: 12px; margin: 2px 0 0">
+                    <div
+                      class="gf-text-primary"
+                      style="font-size: 13px; font-weight: 500"
+                      x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
+                    ></div>
+                    <p
+                      class="gf-text-muted"
+                      style="font-size: 12px; margin: 2px 0 0"
+                    >
                       <span x-text="s.projectName || projectName"></span>
                       <span style="color: var(--text-dim)"> · </span>
                       <span class="mono" x-text="s.runner"></span>
@@ -98,8 +179,14 @@
                       style="font-size: 12px; margin: 4px 0 0"
                       :style="{ color: (typeof s.idleDuration === 'number' && s.idleDuration >= 45 * 60) ? '#fbbf24' : 'var(--text-muted)' }"
                     >
-                      <span x-text="(typeof s.idleDuration === 'number' && s.idleDuration >= 45 * 60) ? 'Waiting' : 'Running'"></span>
-                      <span class="mono" style="color: var(--text-dim); margin-left: 5px" x-text="ageLabel(s)"></span>
+                      <span
+                        x-text="(typeof s.idleDuration === 'number' && s.idleDuration >= 45 * 60) ? 'Waiting' : 'Running'"
+                      ></span>
+                      <span
+                        class="mono"
+                        style="color: var(--text-dim); margin-left: 5px"
+                        x-text="ageLabel(s)"
+                      ></span>
                     </p>
                   </div>
                   <button
@@ -112,26 +199,75 @@
                 </div>
                 <div
                   x-show="confirmEndSessionId === s.id"
-                  style="margin-top: 7px; display: flex; justify-content: flex-end; gap: 6px"
+                  style="
+                    margin-top: 7px;
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 6px;
+                  "
                 >
-                  <button @click.stop="endServerSession(s.id); confirmEndSessionId = null" class="gf-btn gf-btn-sm gf-btn-danger">Yes</button>
-                  <button @click.stop="confirmEndSessionId = null" class="gf-btn gf-btn-sm">No</button>
+                  <button
+                    @click.stop="endServerSession(s.id); confirmEndSessionId = null"
+                    class="gf-btn gf-btn-sm gf-btn-danger"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    @click.stop="confirmEndSessionId = null"
+                    class="gf-btn gf-btn-sm"
+                  >
+                    No
+                  </button>
                 </div>
               </div>
             </template>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; min-height: 0; max-height: 180px">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
-            <div class="section-label">Recent <span x-text="recentSessions().length"></span></div>
-            <button @click="endAllSessions()" class="gf-btn gf-btn-sm">Clear</button>
+        <div
+          style="
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            max-height: 180px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <div class="section-label">
+              Recent <span x-text="recentSessions().length"></span>
+            </div>
+            <button @click="endAllSessions()" class="gf-btn gf-btn-sm">
+              Clear
+            </button>
           </div>
-          <div class="scrollbar" style="display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding-right: 4px">
+          <div
+            class="scrollbar"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+              overflow-y: auto;
+              padding-right: 4px;
+            "
+          >
             <template x-for="s in recentSessions()" :key="'ws-r-' + s.id">
               <div class="gf-card" style="padding: 8px 10px; opacity: 0.8">
-                <div class="gf-text-primary" style="font-size: 13px; font-weight: 500" x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"></div>
-                <p class="gf-text-muted" style="font-size: 12px; margin: 2px 0 0">
+                <div
+                  class="gf-text-primary"
+                  style="font-size: 13px; font-weight: 500"
+                  x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
+                ></div>
+                <p
+                  class="gf-text-muted"
+                  style="font-size: 12px; margin: 2px 0 0"
+                >
                   <span x-text="s.projectName || projectName"></span>
                   <span style="color: var(--text-dim)"> · </span>
                   <span class="mono" x-text="s.runner"></span>
@@ -151,16 +287,32 @@
       </div>
 
       <!-- Right terminal panel -->
-      <div class="gf-card" style="display: flex; flex-direction: column; overflow: hidden; min-height: 0">
+      <div
+        class="gf-card"
+        style="
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-height: 0;
+        "
+      >
         <template x-if="!terminalAvailable">
           <div class="flex-1 flex items-center justify-center">
             <div class="text-center space-y-3 max-w-md px-4">
               <div class="text-4xl">&#9000;</div>
-              <h2 class="text-xl font-semibold gf-text-secondary">Terminal not available</h2>
-              <p class="text-sm gf-text-muted">Requires node-pty. Common with pnpm.</p>
+              <h2 class="text-xl font-semibold gf-text-secondary">
+                Terminal not available
+              </h2>
+              <p class="text-sm gf-text-muted">
+                Requires node-pty. Common with pnpm.
+              </p>
               <div class="gf-card" style="padding: 10px 12px; text-align: left">
-                <code class="block text-xs font-mono gf-text-secondary">npm install node-pty</code>
-                <code class="block text-xs font-mono gf-text-secondary">pnpm approve-builds</code>
+                <code class="block text-xs font-mono gf-text-secondary"
+                  >npm install node-pty</code
+                >
+                <code class="block text-xs font-mono gf-text-secondary"
+                  >pnpm approve-builds</code
+                >
               </div>
             </div>
           </div>
@@ -174,30 +326,92 @@
 
         <template x-if="terminalAvailable && sessions.length > 0">
           <div class="flex flex-col flex-1 overflow-hidden">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border-subtle);
+                flex-shrink: 0;
+              "
+            >
               <div style="display: flex; gap: 10px; min-width: 0">
-                <span style="width: 8px; height: 8px; border-radius: 999px; margin-top: 6px; background: #4ade80"></span>
+                <span
+                  style="
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 999px;
+                    margin-top: 6px;
+                    background: #4ade80;
+                  "
+                ></span>
                 <div style="min-width: 0">
-                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-                    <h3 class="gf-text-primary" style="font-size: 14px; font-weight: 600" x-text="lastRunPrompt || 'Terminal'"></h3>
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                      flex-wrap: wrap;
+                    "
+                  >
+                    <h3
+                      class="gf-text-primary"
+                      style="font-size: 14px; font-weight: 600"
+                      x-text="lastRunPrompt || 'Terminal'"
+                    ></h3>
                     <span
                       x-show="lastRunPrompt"
-                      style="font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--accent-border); color: var(--accent); background: var(--accent-bg)"
-                    >active</span>
+                      style="
+                        font-family: var(--font-mono);
+                        font-size: 10px;
+                        padding: 1px 7px;
+                        border-radius: 999px;
+                        border: 1px solid var(--accent-border);
+                        color: var(--accent);
+                        background: var(--accent-bg);
+                      "
+                      >active</span
+                    >
                   </div>
-                  <p class="gf-text-muted" style="font-size: 12px; margin: 3px 0 0">
-                    <span style="color: #4ade80" x-text="terminalConnected ? 'Running' : 'Disconnected'"></span>
+                  <p
+                    class="gf-text-muted"
+                    style="font-size: 12px; margin: 3px 0 0"
+                  >
+                    <span
+                      style="color: #4ade80"
+                      x-text="terminalConnected ? 'Running' : 'Disconnected'"
+                    ></span>
                     <span style="color: var(--text-dim); margin: 0 6px">·</span>
-                    <span class="mono" x-text="lastRunAgent || activeRunner"></span>
+                    <span
+                      class="mono"
+                      x-text="lastRunAgent || activeRunner"
+                    ></span>
                     <span style="color: var(--text-dim); margin: 0 6px">·</span>
                     <span class="mono" x-text="terminalAge"></span>
                   </p>
                 </div>
               </div>
               <div style="display: flex; gap: 6px; flex-shrink: 0">
-                <button @click="sendToTerminal('clear', { adapt: false })" class="gf-btn gf-btn-sm">Clear</button>
-                <button @click="detachTerminal(projectPath)" class="gf-btn gf-btn-sm">Detach</button>
-                <button @click="exitTerminal()" class="gf-btn gf-btn-sm gf-btn-danger">Stop</button>
+                <button
+                  @click="sendToTerminal('clear', { adapt: false })"
+                  class="gf-btn gf-btn-sm"
+                >
+                  Clear
+                </button>
+                <button
+                  @click="detachTerminal(projectPath)"
+                  class="gf-btn gf-btn-sm"
+                >
+                  Detach
+                </button>
+                <button
+                  @click="exitTerminal()"
+                  class="gf-btn gf-btn-sm gf-btn-danger"
+                >
+                  Stop
+                </button>
               </div>
             </div>
 
@@ -212,7 +426,10 @@
               </template>
               <div x-show="terminalEnded" class="terminal-overlay">
                 <div class="text-center space-y-3">
-                  <p class="text-white text-lg font-semibold" x-text="_projectSessions[projectPath] ? 'Session detached' : 'Session ended'"></p>
+                  <p
+                    class="text-white text-lg font-semibold"
+                    x-text="_projectSessions[projectPath] ? 'Session detached' : 'Session ended'"
+                  ></p>
                   <div class="flex gap-2 justify-center">
                     <button
                       x-show="_projectSessions[projectPath]"
@@ -231,7 +448,6 @@
                 </div>
               </div>
             </div>
-
           </div>
         </template>
       </div>

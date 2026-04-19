@@ -58,9 +58,19 @@
   }"
 >
   <div style="max-width: 1060px; margin: 0 auto; padding: 14px 28px 24px">
-    <div x-show="!report" class="gf-card" style="padding: 26px; text-align: center">
-      <p class="gf-text-muted" style="margin-bottom: 10px">No audit results yet</p>
-      <button @click="runAudit()" :disabled="auditing" class="gf-btn gf-btn-md gf-btn-audit">
+    <div
+      x-show="!report"
+      class="gf-card"
+      style="padding: 26px; text-align: center"
+    >
+      <p class="gf-text-muted" style="margin-bottom: 10px">
+        No audit results yet
+      </p>
+      <button
+        @click="runAudit()"
+        :disabled="auditing"
+        class="gf-btn gf-btn-md gf-btn-audit"
+      >
         <span x-text="auditing ? 'Auditing...' : 'Run audit'"></span>
       </button>
     </div>
@@ -68,15 +78,38 @@
     <div x-show="report">
       <div
         class="gf-card"
-        style="padding: 14px 18px; margin-bottom: 12px; border-color: rgba(148,163,184,0.2)"
+        style="
+          padding: 14px 18px;
+          margin-bottom: 12px;
+          border-color: rgba(148, 163, 184, 0.2);
+        "
       >
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
-          <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+          "
+        >
+          <div
+            style="display: flex; align-items: center; gap: 10px; min-width: 0"
+          >
             <span
-              style="width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0"
+              style="
+                width: 9px;
+                height: 9px;
+                border-radius: 999px;
+                flex-shrink: 0;
+              "
               :style="{ background: setupFailed() ? '#f87171' : '#4ade80' }"
             ></span>
-            <span class="gf-text-primary" style="font-size: 15px; font-weight: 600" x-text="projectName"></span>
+            <span
+              class="gf-text-primary"
+              style="font-size: 15px; font-weight: 600"
+              x-text="projectName"
+            ></span>
             <span class="gf-text-muted">·</span>
             <span
               style="font-size: 14px; font-weight: 500"
@@ -84,12 +117,24 @@
               x-text="setupFailed() ? 'Not installed' : 'All clear'"
             ></span>
             <span class="gf-text-muted">·</span>
-            <span class="gf-text-muted" style="font-size: 13px" x-show="setupFailed()"
-              x-text="`${setupPassed()} of ${setupTotal()} checks passing`"></span>
-            <span class="gf-text-muted" style="font-size: 13px" x-show="!setupFailed()"
-              x-text="`audited ${auditAgeLabel()}`"></span>
+            <span
+              class="gf-text-muted"
+              style="font-size: 13px"
+              x-show="setupFailed()"
+              x-text="`${setupPassed()} of ${setupTotal()} checks passing`"
+            ></span>
+            <span
+              class="gf-text-muted"
+              style="font-size: 13px"
+              x-show="!setupFailed()"
+              x-text="`audited ${auditAgeLabel()}`"
+            ></span>
           </div>
-          <button @click="runAudit()" :disabled="auditing" class="gf-btn gf-btn-md">
+          <button
+            @click="runAudit()"
+            :disabled="auditing"
+            class="gf-btn gf-btn-md"
+          >
             <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
           </button>
         </div>
@@ -98,20 +143,44 @@
       <div
         x-show="setupFailed()"
         class="gf-card"
-        style="padding: 16px 18px; margin-bottom: 12px; border-color: rgba(248,113,113,0.25)"
+        style="
+          padding: 16px 18px;
+          margin-bottom: 12px;
+          border-color: rgba(248, 113, 113, 0.25);
+        "
       >
-        <div class="gf-text-primary" style="font-size: 16px; font-weight: 600; margin-bottom: 6px">
+        <div
+          class="gf-text-primary"
+          style="font-size: 16px; font-weight: 600; margin-bottom: 6px"
+        >
           Install goat-flow on this project
         </div>
         <div class="gf-text-muted" style="font-size: 14px; margin-bottom: 10px">
-          <span x-text="`${setupTotal() - setupPassed()} of ${setupTotal()} components are missing.`"></span>
-          Setup creates instruction files, skills, and hooks adapted to your project.
+          <span
+            x-text="`${setupTotal() - setupPassed()} of ${setupTotal()} components are missing.`"
+          ></span>
+          Setup creates instruction files, skills, and hooks adapted to your
+          project.
         </div>
-        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px">
-          <button @click="runSetupNow()" class="gf-btn gf-btn-md gf-btn-primary">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+          "
+        >
+          <button
+            @click="runSetupNow()"
+            class="gf-btn gf-btn-md gf-btn-primary"
+          >
             Run setup with agent
           </button>
-          <button @click="activeView = 'setup'; detectStack()" class="gf-btn gf-btn-md gf-btn-ghost">
+          <button
+            @click="activeView = 'setup'; detectStack()"
+            class="gf-btn gf-btn-md gf-btn-ghost"
+          >
             or use the setup wizard →
           </button>
         </div>
@@ -129,8 +198,17 @@
         ></div>
       </div>
 
-      <div style="display: flex; align-items: center; justify-content: space-between; margin: 8px 2px 8px">
-        <div class="gf-text-primary" style="font-size: 18px; font-weight: 600">AI Harness</div>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin: 8px 2px 8px;
+        "
+      >
+        <div class="gf-text-primary" style="font-size: 18px; font-weight: 600">
+          AI Harness
+        </div>
         <div
           class="gf-text-muted"
           style="font-size: 12px"
@@ -141,38 +219,105 @@
           class="gf-text-muted"
           style="font-size: 12px"
           x-show="setupFailed()"
-        >Scores reflect current install state — will improve after setup</div>
+        >
+          Scores reflect current install state — will improve after setup
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px">
-        <template x-for="agent in (report?.agentScores || [])" :key="'home-agent-' + agent.id">
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 12px;
+        "
+      >
+        <template
+          x-for="agent in (report?.agentScores || [])"
+          :key="'home-agent-' + agent.id"
+        >
           <div
             class="gf-card"
-            style="padding: 14px 14px 12px; cursor: pointer; transition: border-color 0.15s"
+            style="
+              padding: 14px 14px 12px;
+              cursor: pointer;
+              transition: border-color 0.15s;
+            "
             :style="{ borderColor: expandedAgent === agent.id ? '#4ade80' : '' }"
             @click="expandedAgent = (expandedAgent === agent.id ? null : agent.id)"
           >
-            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px">
-              <div class="gf-text-primary" style="font-size: 14px; font-weight: 500" x-text="agent.name"></div>
+            <div
+              style="
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                margin-bottom: 2px;
+              "
+            >
+              <div
+                class="gf-text-primary"
+                style="font-size: 14px; font-weight: 500"
+                x-text="agent.name"
+              ></div>
               <div style="display: flex; align-items: baseline; gap: 6px">
-                <span style="font-size: 18px; font-weight: 500" :style="{ color: concernBarColor(agentScore(agent)) }" x-text="grade(agentScore(agent))"></span>
-                <span style="font-size: 13px" class="gf-text-muted" x-text="agentScore(agent) + '%'"></span>
+                <span
+                  style="font-size: 18px; font-weight: 500"
+                  :style="{ color: concernBarColor(agentScore(agent)) }"
+                  x-text="grade(agentScore(agent))"
+                ></span>
+                <span
+                  style="font-size: 13px"
+                  class="gf-text-muted"
+                  x-text="agentScore(agent) + '%'"
+                ></span>
               </div>
             </div>
-            <div class="gf-text-muted" style="font-size: 12px; margin-bottom: 8px">
-              <span x-text="`${recCount(agent)} recommendation${recCount(agent) === 1 ? '' : 's'}`"></span>
+            <div
+              class="gf-text-muted"
+              style="font-size: 12px; margin-bottom: 8px"
+            >
+              <span
+                x-text="`${recCount(agent)} recommendation${recCount(agent) === 1 ? '' : 's'}`"
+              ></span>
             </div>
-            <template x-for="key in concernKeys" :key="'home-agent-' + agent.id + '-' + key">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
-                <span class="gf-text-muted" style="font-size: 11px; width: 62px; text-align: right" x-text="concernLabels[key]"></span>
-                <div style="flex: 1; height: 5px; border-radius: 999px; background: rgba(148,163,184,0.22); overflow: hidden">
+            <template
+              x-for="key in concernKeys"
+              :key="'home-agent-' + agent.id + '-' + key"
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  margin-bottom: 4px;
+                "
+              >
+                <span
+                  class="gf-text-muted"
+                  style="font-size: 11px; width: 62px; text-align: right"
+                  x-text="concernLabels[key]"
+                ></span>
+                <div
+                  style="
+                    flex: 1;
+                    height: 5px;
+                    border-radius: 999px;
+                    background: rgba(148, 163, 184, 0.22);
+                    overflow: hidden;
+                  "
+                >
                   <div
                     style="height: 100%; border-radius: 999px"
                     :style="{ width: concernScore(agent, key) + '%', background: concernBarColor(concernScore(agent, key)) }"
                   ></div>
                 </div>
                 <span
-                  style="font-size: 11px; font-weight: 600; width: 35px; text-align: right"
+                  style="
+                    font-size: 11px;
+                    font-weight: 600;
+                    width: 35px;
+                    text-align: right;
+                  "
                   :style="{ color: concernBarColor(concernScore(agent, key)) }"
                   x-text="concernScore(agent, key) + '%'"
                 ></span>
@@ -183,34 +328,99 @@
       </div>
 
       <!-- Agent detail panel (expands below grid when card clicked) -->
-      <template x-for="agent in (report?.agentScores || [])" :key="'home-detail-' + agent.id">
+      <template
+        x-for="agent in (report?.agentScores || [])"
+        :key="'home-detail-' + agent.id"
+      >
         <template x-if="expandedAgent === agent.id">
           <div class="gf-card" style="padding: 16px 20px; margin-bottom: 12px">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px">
-              <div class="gf-text-primary" style="font-size: 15px; font-weight: 500" x-text="agent.name"></div>
-              <span class="gf-text-muted" style="font-size: 12px" x-text="'Last audited ' + auditAgeLabel()"></span>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 14px;
+              "
+            >
+              <div
+                class="gf-text-primary"
+                style="font-size: 15px; font-weight: 500"
+                x-text="agent.name"
+              ></div>
+              <span
+                class="gf-text-muted"
+                style="font-size: 12px"
+                x-text="'Last audited ' + auditAgeLabel()"
+              ></span>
             </div>
 
             <!-- Agent setup checks -->
-            <div x-show="agent.agent?.checks?.length > 0" style="margin-bottom: 14px">
-              <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600">
+            <div
+              x-show="agent.agent?.checks?.length > 0"
+              style="margin-bottom: 14px"
+            >
+              <div
+                class="gf-text-muted"
+                style="
+                  font-size: 10px;
+                  text-transform: uppercase;
+                  letter-spacing: 0.5px;
+                  margin-bottom: 8px;
+                  font-weight: 600;
+                "
+              >
                 Agent Setup
-                <span class="gf-text-secondary" style="margin-left: 4px"
-                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} installed)`"></span>
+                <span
+                  class="gf-text-secondary"
+                  style="margin-left: 4px"
+                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} installed)`"
+                ></span>
               </div>
               <div style="display: flex; flex-direction: column; gap: 4px">
-                <template x-for="(check, idx) in agent.agent.checks" :key="agent.id + '-det-check-' + idx">
-                  <div :style="{ paddingBottom: check.failure ? '10px' : '3px', borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none', marginBottom: check.failure ? '4px' : '0' }">
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
-                      <span style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
+                <template
+                  x-for="(check, idx) in agent.agent.checks"
+                  :key="agent.id + '-det-check-' + idx"
+                >
+                  <div
+                    :style="{ paddingBottom: check.failure ? '10px' : '3px', borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none', marginBottom: check.failure ? '4px' : '0' }"
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        font-size: 13px;
+                      "
+                    >
+                      <span
+                        style="
+                          flex-shrink: 0;
+                          font-weight: 600;
+                          width: 14px;
+                          text-align: center;
+                        "
                         :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
-                        x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"></span>
-                      <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
+                        x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
+                      ></span>
+                      <span
+                        class="gf-text-primary"
+                        style="font-weight: 500"
+                        x-text="check.name"
+                      ></span>
                     </div>
                     <template x-if="check.failure">
                       <div style="margin-left: 22px; margin-top: 2px">
-                        <p class="gf-text-muted" style="font-size: 12px; margin: 0" x-text="check.failure.message"></p>
-                        <p x-show="check.failure.howToFix" class="gf-text-secondary" style="font-size: 11px; margin: 3px 0 0" x-text="'Fix: ' + (check.failure.howToFix || '')"></p>
+                        <p
+                          class="gf-text-muted"
+                          style="font-size: 12px; margin: 0"
+                          x-text="check.failure.message"
+                        ></p>
+                        <p
+                          x-show="check.failure.howToFix"
+                          class="gf-text-secondary"
+                          style="font-size: 11px; margin: 3px 0 0"
+                          x-text="'Fix: ' + (check.failure.howToFix || '')"
+                        ></p>
                       </div>
                     </template>
                   </div>
@@ -221,42 +431,164 @@
             <!-- Concern sections -->
             <template x-if="agent.concerns">
               <div style="display: flex; flex-direction: column; gap: 10px">
-                <template x-for="ck in concernKeys" :key="agent.id + '-det-concern-' + ck">
-                  <div style="padding: 12px 0; border-top: 0.5px solid var(--border-subtle)">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
-                      <span class="gf-text-primary" style="font-size: 13px; font-weight: 500" x-text="concernLabels[ck]"></span>
-                      <span style="font-size: 12px; font-weight: 600" :style="{ color: concernBarColor(agent.concerns[ck]?.score ?? 0) }" x-text="(agent.concerns[ck]?.score ?? 0) + '%'"></span>
+                <template
+                  x-for="ck in concernKeys"
+                  :key="agent.id + '-det-concern-' + ck"
+                >
+                  <div
+                    style="
+                      padding: 12px 0;
+                      border-top: 0.5px solid var(--border-subtle);
+                    "
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        margin-bottom: 6px;
+                      "
+                    >
+                      <span
+                        class="gf-text-primary"
+                        style="font-size: 13px; font-weight: 500"
+                        x-text="concernLabels[ck]"
+                      ></span>
+                      <span
+                        style="font-size: 12px; font-weight: 600"
+                        :style="{ color: concernBarColor(agent.concerns[ck]?.score ?? 0) }"
+                        x-text="(agent.concerns[ck]?.score ?? 0) + '%'"
+                      ></span>
                     </div>
-                    <div style="height: 4px; border-radius: 999px; background: rgba(148,163,184,0.15); overflow: hidden; margin-bottom: 8px">
-                      <div style="height: 100%; border-radius: 999px; transition: width 0.3s" :style="{ width: (agent.concerns[ck]?.score ?? 0) + '%', background: concernBarColor(agent.concerns[ck]?.score ?? 0) }"></div>
+                    <div
+                      style="
+                        height: 4px;
+                        border-radius: 999px;
+                        background: rgba(148, 163, 184, 0.15);
+                        overflow: hidden;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <div
+                        style="
+                          height: 100%;
+                          border-radius: 999px;
+                          transition: width 0.3s;
+                        "
+                        :style="{ width: (agent.concerns[ck]?.score ?? 0) + '%', background: concernBarColor(agent.concerns[ck]?.score ?? 0) }"
+                      ></div>
                     </div>
 
                     <!-- Findings -->
                     <template x-if="agent.concerns[ck]?.findings?.length > 0">
                       <div style="margin-bottom: 6px">
-                        <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">Findings</div>
-                        <template x-for="(finding, fi) in agent.concerns[ck].findings" :key="agent.id + '-' + ck + '-f-' + fi">
-                          <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px; margin-bottom: 2px">
-                            <span class="gf-text-muted" style="flex-shrink: 0; line-height: 1.5">&#8226;</span>
-                            <span class="gf-text-secondary" style="line-height: 1.5" x-text="finding"></span>
+                        <div
+                          class="gf-text-muted"
+                          style="
+                            font-size: 10px;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 4px;
+                            font-weight: 600;
+                          "
+                        >
+                          Findings
+                        </div>
+                        <template
+                          x-for="(finding, fi) in agent.concerns[ck].findings"
+                          :key="agent.id + '-' + ck + '-f-' + fi"
+                        >
+                          <div
+                            style="
+                              display: flex;
+                              align-items: flex-start;
+                              gap: 6px;
+                              font-size: 12px;
+                              margin-bottom: 2px;
+                            "
+                          >
+                            <span
+                              class="gf-text-muted"
+                              style="flex-shrink: 0; line-height: 1.5"
+                              >&#8226;</span
+                            >
+                            <span
+                              class="gf-text-secondary"
+                              style="line-height: 1.5"
+                              x-text="finding"
+                            ></span>
                           </div>
                         </template>
                       </div>
                     </template>
 
                     <!-- Recommendations -->
-                    <template x-if="agent.concerns[ck]?.recommendations?.length > 0">
+                    <template
+                      x-if="agent.concerns[ck]?.recommendations?.length > 0"
+                    >
                       <div>
-                        <div class="gf-text-muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600">Recommendations</div>
-                        <template x-for="(rec, ri) in agent.concerns[ck].recommendations" :key="agent.id + '-' + ck + '-r-' + ri">
+                        <div
+                          class="gf-text-muted"
+                          style="
+                            font-size: 10px;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            margin-bottom: 4px;
+                            font-weight: 600;
+                          "
+                        >
+                          Recommendations
+                        </div>
+                        <template
+                          x-for="(rec, ri) in agent.concerns[ck].recommendations"
+                          :key="agent.id + '-' + ck + '-r-' + ri"
+                        >
                           <div style="margin-bottom: 4px">
-                            <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 12px">
-                              <span style="color: #fb923c; flex-shrink: 0; font-weight: 600">&#8594;</span>
-                              <span class="gf-text-primary" style="font-weight: 500" x-text="rec"></span>
+                            <div
+                              style="
+                                display: flex;
+                                align-items: flex-start;
+                                gap: 6px;
+                                font-size: 12px;
+                              "
+                            >
+                              <span
+                                style="
+                                  color: #fb923c;
+                                  flex-shrink: 0;
+                                  font-weight: 600;
+                                "
+                                >&#8594;</span
+                              >
+                              <span
+                                class="gf-text-primary"
+                                style="font-weight: 500"
+                                x-text="rec"
+                              ></span>
                             </div>
-                            <div x-show="agent.concerns[ck].howToFix?.[ri]" style="margin-top: 3px; margin-left: 18px; padding: 5px 10px; border-radius: 4px; font-size: 11px; background: var(--surface-elevated, rgba(39,39,42,0.5))">
-                              <span class="gf-text-muted" style="font-weight: 600">Fix: </span>
-                              <span class="gf-text-secondary" x-text="agent.concerns[ck].howToFix?.[ri]"></span>
+                            <div
+                              x-show="agent.concerns[ck].howToFix?.[ri]"
+                              style="
+                                margin-top: 3px;
+                                margin-left: 18px;
+                                padding: 5px 10px;
+                                border-radius: 4px;
+                                font-size: 11px;
+                                background: var(
+                                  --surface-elevated,
+                                  rgba(39, 39, 42, 0.5)
+                                );
+                              "
+                            >
+                              <span
+                                class="gf-text-muted"
+                                style="font-weight: 600"
+                                >Fix:
+                              </span>
+                              <span
+                                class="gf-text-secondary"
+                                x-text="agent.concerns[ck].howToFix?.[ri]"
+                              ></span>
                             </div>
                           </div>
                         </template>
@@ -264,8 +596,11 @@
                     </template>
 
                     <!-- All clear -->
-                    <div x-show="!(agent.concerns[ck]?.recommendations?.length > 0) && !(agent.concerns[ck]?.findings?.length > 0)"
-                      class="gf-text-secondary" style="font-size: 12px">
+                    <div
+                      x-show="!(agent.concerns[ck]?.recommendations?.length > 0) && !(agent.concerns[ck]?.findings?.length > 0)"
+                      class="gf-text-secondary"
+                      style="font-size: 12px"
+                    >
                       All checks passing for this concern.
                     </div>
                   </div>
@@ -308,12 +643,29 @@
           }
         }"
       >
-        <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap">
-          <span class="gf-text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px">
+        <div
+          style="
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+          "
+        >
+          <span
+            class="gf-text-muted"
+            style="
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            "
+          >
             Project-level gaps
           </span>
-          <span class="gf-text-muted" style="font-size: 12px"
-            x-text="`affect all ${(report?.agentScores || []).length} agents`"></span>
+          <span
+            class="gf-text-muted"
+            style="font-size: 12px"
+            x-text="`affect all ${(report?.agentScores || []).length} agents`"
+          ></span>
         </div>
         <div
           class="gf-text-secondary mono"
@@ -328,7 +680,8 @@
         ></div>
       </div>
 
-      <div x-data="{
+      <div
+        x-data="{
         showChecks: false,
         checkDesc: {
           'Lessons': 'Records behavioural mistakes so agents avoid repeating them',
@@ -345,22 +698,50 @@
           'Config file': 'Central YAML config that controls GOAT Flow behaviour',
           'Config version': 'Ensures config schema matches the installed CLI version',
         }
-      }">
+      }"
+      >
         <button
           @click="showChecks = !showChecks"
           class="gf-card"
-          style="padding: 10px 14px; width: 100%; text-align: left; cursor: pointer"
+          style="
+            padding: 10px 14px;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+          "
         >
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+            "
+          >
             <div style="display: flex; align-items: center; gap: 8px">
-              <span class="gf-text-muted" style="font-size: 12px"
-                x-text="`Install state · ${setupPassed()} of ${setupTotal()} components installed`"></span>
+              <span
+                class="gf-text-muted"
+                style="font-size: 12px"
+                x-text="`Install state · ${setupPassed()} of ${setupTotal()} components installed`"
+              ></span>
               <svg
                 :style="{ transform: showChecks ? 'rotate(180deg)' : '' }"
-                style="width: 12px; height: 12px; color: var(--text-muted); transition: transform 0.2s"
-                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                style="
+                  width: 12px;
+                  height: 12px;
+                  color: var(--text-muted);
+                  transition: transform 0.2s;
+                "
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </div>
             <span
@@ -374,7 +755,12 @@
           x-show="showChecks"
           x-cloak
           class="gf-card"
-          style="padding: 14px 18px; margin-top: -1px; border-top: none; border-radius: 0 0 8px 8px"
+          style="
+            padding: 14px 18px;
+            margin-top: -1px;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+          "
         >
           <div style="display: flex; flex-direction: column; gap: 4px">
             <template
@@ -388,13 +774,29 @@
                   marginBottom: check.failure ? '4px' : '0'
                 }"
               >
-                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    font-size: 13px;
+                  "
+                >
                   <span
-                    style="flex-shrink: 0; font-weight: 600; width: 14px; text-align: center"
+                    style="
+                      flex-shrink: 0;
+                      font-weight: 600;
+                      width: 14px;
+                      text-align: center;
+                    "
                     :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
                     x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
                   ></span>
-                  <span class="gf-text-primary" style="font-weight: 500" x-text="check.name"></span>
+                  <span
+                    class="gf-text-primary"
+                    style="font-weight: 500"
+                    x-text="check.name"
+                  ></span>
                   <span
                     class="gf-text-muted"
                     style="font-size: 12px; margin-left: 2px"
@@ -404,7 +806,11 @@
                 </div>
                 <template x-if="check.failure">
                   <div style="margin-left: 22px; margin-top: 2px">
-                    <p class="gf-text-muted" style="font-size: 12px; margin: 0" x-text="check.failure.message"></p>
+                    <p
+                      class="gf-text-muted"
+                      style="font-size: 12px; margin: 0"
+                      x-text="check.failure.message"
+                    ></p>
                     <p
                       x-show="check.failure.howToFix"
                       class="gf-text-secondary"
@@ -420,9 +826,17 @@
       </div>
     </div>
 
-    <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 14px 0">
+    <div
+      class="gf-footer"
+      style="text-align: center; font-size: 11px; padding: 14px 0"
+    >
       Built by
-      <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a>
+      <a
+        href="https://www.blundergoat.com"
+        target="_blank"
+        class="gf-footer-link"
+        >BlunderGOAT</a
+      >
       · <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
     </div>
   </div>

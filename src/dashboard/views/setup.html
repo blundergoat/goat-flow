@@ -6,7 +6,12 @@
 >
   <div style="max-width: 1280px; margin: 0 auto; padding: 20px 24px 24px">
     <div style="margin-bottom: 14px">
-      <h2 class="gf-text-primary" style="font-size: 18px; font-weight: 600; margin-bottom: 4px">Setup</h2>
+      <h2
+        class="gf-text-primary"
+        style="font-size: 18px; font-weight: 600; margin-bottom: 4px"
+      >
+        Setup
+      </h2>
       <p class="gf-text-muted" style="font-size: 14px; max-width: 760px">
         Generate and run a setup prompt to install or refresh goat-flow for a
         specific Runner. Existing artifacts are detected automatically.
@@ -15,13 +20,27 @@
 
     <!-- Status banner (full width) -->
     <div class="gf-card" style="padding: 14px 18px; margin-bottom: 12px">
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
-        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        "
+      >
+        <div
+          style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"
+        >
           <span
             style="width: 8px; height: 8px; border-radius: 999px"
             :style="{ background: report?.scopes?.setup?.status === 'pass' ? '#4ade80' : '#f87171' }"
           ></span>
-          <span class="gf-text-primary" style="font-size: 15px; font-weight: 600" x-text="projectName"></span>
+          <span
+            class="gf-text-primary"
+            style="font-size: 15px; font-weight: 600"
+            x-text="projectName"
+          ></span>
           <span class="gf-text-muted">·</span>
           <span
             style="font-size: 14px; font-weight: 500"
@@ -29,9 +48,15 @@
             x-text="(() => { const checks = report?.scopes?.setup?.checks || []; const p = checks.filter(c => c.status === 'pass').length; return `${p} of ${checks.length} installed`; })()"
           ></span>
           <span class="gf-text-muted">·</span>
-          <span class="gf-text-muted" style="font-size: 13px">audited just now</span>
+          <span class="gf-text-muted" style="font-size: 13px"
+            >audited just now</span
+          >
         </div>
-        <button @click="runAudit()" :disabled="auditing" class="gf-btn gf-btn-md">
+        <button
+          @click="runAudit()"
+          :disabled="auditing"
+          class="gf-btn gf-btn-md"
+        >
           <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
         </button>
       </div>
@@ -39,21 +64,48 @@
 
     <!-- Runner selector (full width) -->
     <div style="margin-bottom: 12px">
-      <div class="section-label" style="margin-bottom: 8px">Install for runner</div>
-      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
-        <template x-for="agent in supportedAgents" :key="'setup-runner-' + agent.id">
+      <div class="section-label" style="margin-bottom: 8px">
+        Install for runner
+      </div>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        "
+      >
+        <template
+          x-for="agent in supportedAgents"
+          :key="'setup-runner-' + agent.id"
+        >
           <button
             @click="setupSelectedAgent = agent.id; generateSetupPrompt();"
             class="gf-card"
             :style="setupSelectedAgent === agent.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}"
             style="padding: 11px 12px; text-align: left"
           >
-            <div class="gf-text-primary" style="font-size: 14px; font-weight: 500" x-text="agent.name"></div>
-            <div style="display: flex; align-items: baseline; gap: 6px; margin-top: 4px">
-              <span style="color: var(--accent); font-size: 18px; font-weight: 600"
-                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return '—'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'F'; })()"></span>
-              <span class="gf-text-muted" style="font-size: 13px"
-                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct + '%'; })()"></span>
+            <div
+              class="gf-text-primary"
+              style="font-size: 14px; font-weight: 500"
+              x-text="agent.name"
+            ></div>
+            <div
+              style="
+                display: flex;
+                align-items: baseline;
+                gap: 6px;
+                margin-top: 4px;
+              "
+            >
+              <span
+                style="color: var(--accent); font-size: 18px; font-weight: 600"
+                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return '—'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'F'; })()"
+              ></span>
+              <span
+                class="gf-text-muted"
+                style="font-size: 13px"
+                x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct + '%'; })()"
+              ></span>
             </div>
           </button>
         </template>
@@ -61,79 +113,201 @@
     </div>
 
     <!-- Two-column layout -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start">
-
+    <div
+      style="
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        align-items: start;
+      "
+    >
       <!-- LEFT COLUMN: config, installs, recommendation -->
       <div style="display: flex; flex-direction: column; gap: 12px">
         <!-- Detected config -->
         <div class="gf-card" style="padding: 16px 18px">
-          <div class="section-label" style="margin-bottom: 10px">Detected configuration</div>
+          <div class="section-label" style="margin-bottom: 10px">
+            Detected configuration
+          </div>
           <div style="display: flex; flex-direction: column; gap: 6px">
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
-              <span class="gf-text-muted" style="font-size: 13px">Languages</span>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
+              <span class="gf-text-muted" style="font-size: 13px"
+                >Languages</span
+              >
               <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                <template x-for="lang in setupData.languages" :key="'set-lang-' + lang">
+                <template
+                  x-for="lang in setupData.languages"
+                  :key="'set-lang-' + lang"
+                >
                   <span class="gf-tag" x-text="lang"></span>
                 </template>
-                <span x-show="setupData.languages.length === 0" class="gf-text-muted" style="font-size: 13px; font-style: italic">None detected</span>
+                <span
+                  x-show="setupData.languages.length === 0"
+                  class="gf-text-muted"
+                  style="font-size: 13px; font-style: italic"
+                  >None detected</span
+                >
               </div>
             </div>
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
-              <span class="gf-text-muted" style="font-size: 13px">Frameworks</span>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
+              <span class="gf-text-muted" style="font-size: 13px"
+                >Frameworks</span
+              >
               <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                <template x-for="fw in setupData.frameworks" :key="'set-fw-' + fw">
+                <template
+                  x-for="fw in setupData.frameworks"
+                  :key="'set-fw-' + fw"
+                >
                   <span class="gf-tag" x-text="fw"></span>
                 </template>
-                <span x-show="setupData.frameworks.length === 0" class="gf-text-muted" style="font-size: 13px; font-style: italic">None detected</span>
+                <span
+                  x-show="setupData.frameworks.length === 0"
+                  class="gf-text-muted"
+                  style="font-size: 13px; font-style: italic"
+                  >None detected</span
+                >
               </div>
             </div>
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
               <span class="gf-text-muted" style="font-size: 13px">Build</span>
-              <span class="gf-text-secondary mono" style="font-size: 12.5px" x-text="setupData.commands.build || '—'"></span>
+              <span
+                class="gf-text-secondary mono"
+                style="font-size: 12.5px"
+                x-text="setupData.commands.build || '—'"
+              ></span>
             </div>
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
               <span class="gf-text-muted" style="font-size: 13px">Test</span>
-              <span class="gf-text-secondary mono" style="font-size: 12.5px" x-text="setupData.commands.test || '—'"></span>
+              <span
+                class="gf-text-secondary mono"
+                style="font-size: 12.5px"
+                x-text="setupData.commands.test || '—'"
+              ></span>
             </div>
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
               <span class="gf-text-muted" style="font-size: 13px">Lint</span>
-              <span class="gf-text-secondary mono" style="font-size: 12.5px" x-text="setupData.commands.lint || '—'"></span>
+              <span
+                class="gf-text-secondary mono"
+                style="font-size: 12.5px"
+                x-text="setupData.commands.lint || '—'"
+              ></span>
             </div>
-            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center">
-              <span class="gf-text-muted" style="font-size: 13px">Formatter</span>
-              <span class="gf-text-secondary mono" style="font-size: 12.5px" x-text="setupData.commands.format || '—'"></span>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 90px 1fr;
+                gap: 10px;
+                align-items: center;
+              "
+            >
+              <span class="gf-text-muted" style="font-size: 13px"
+                >Formatter</span
+              >
+              <span
+                class="gf-text-secondary mono"
+                style="font-size: 12.5px"
+                x-text="setupData.commands.format || '—'"
+              ></span>
             </div>
           </div>
         </div>
 
         <div class="gf-card" style="padding: 16px 18px">
-          <div class="section-label" style="margin-bottom: 10px">Setup installs or refreshes</div>
-          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px">
-            <div style="display: grid; grid-template-columns: 92px 1fr; gap: 8px">
+          <div class="section-label" style="margin-bottom: 10px">
+            Setup installs or refreshes
+          </div>
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 8px;
+              font-size: 13px;
+            "
+          >
+            <div
+              style="display: grid; grid-template-columns: 92px 1fr; gap: 8px"
+            >
               <span class="gf-text-muted">Skills</span>
-              <span class="gf-text-secondary mono" style="font-size: 12px">goat, goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa</span>
+              <span class="gf-text-secondary mono" style="font-size: 12px"
+                >goat, goat-debug, goat-plan, goat-review, goat-critique,
+                goat-security, goat-qa</span
+              >
             </div>
-            <div style="display: grid; grid-template-columns: 92px 1fr; gap: 8px">
+            <div
+              style="display: grid; grid-template-columns: 92px 1fr; gap: 8px"
+            >
               <span class="gf-text-muted">Hooks</span>
-              <span class="gf-text-secondary mono" style="font-size: 12px">deny-dangerous, tick-checkboxes</span>
+              <span class="gf-text-secondary mono" style="font-size: 12px"
+                >deny-dangerous, tick-checkboxes</span
+              >
             </div>
-            <div style="display: grid; grid-template-columns: 92px 1fr; gap: 8px">
+            <div
+              style="display: grid; grid-template-columns: 92px 1fr; gap: 8px"
+            >
               <span class="gf-text-muted">Instructions</span>
-              <span class="gf-text-secondary mono" style="font-size: 12px">AGENTS.md, CLAUDE.md, .claude/settings.json</span>
+              <span class="gf-text-secondary mono" style="font-size: 12px"
+                >AGENTS.md, CLAUDE.md, .claude/settings.json</span
+              >
             </div>
-            <div style="display: grid; grid-template-columns: 92px 1fr; gap: 8px">
+            <div
+              style="display: grid; grid-template-columns: 92px 1fr; gap: 8px"
+            >
               <span class="gf-text-muted">Templates</span>
-              <span class="gf-text-secondary mono" style="font-size: 12px">.goat-flow/footguns, /lessons, /decisions</span>
+              <span class="gf-text-secondary mono" style="font-size: 12px"
+                >.goat-flow/footguns, /lessons, /decisions</span
+              >
             </div>
           </div>
         </div>
 
-        <div class="gf-card" style="padding: 14px 16px; border-color: rgba(245,158,11,0.35)">
-          <div class="section-label" style="color: #fbbf24; margin-bottom: 6px">Recommendation</div>
+        <div
+          class="gf-card"
+          style="padding: 14px 16px; border-color: rgba(245, 158, 11, 0.35)"
+        >
+          <div class="section-label" style="color: #fbbf24; margin-bottom: 6px">
+            Recommendation
+          </div>
           <p class="gf-text-muted" style="font-size: 13px; margin: 0 0 8px">
-            Add project-specific architecture and pitfalls context in instruction files after setup for stronger agent context scores.
+            Add project-specific architecture and pitfalls context in
+            instruction files after setup for stronger agent context scores.
           </p>
-          <button @click="activeView = 'home'" class="gf-btn gf-btn-sm">View harness on Home</button>
+          <button @click="activeView = 'home'" class="gf-btn gf-btn-sm">
+            View harness on Home
+          </button>
         </div>
       </div>
 
@@ -143,7 +317,12 @@
           <div>
             <div class="section-label">Setup prompt</div>
             <div class="gf-text-muted" style="font-size: 13px; margin-top: 2px">
-              for <span class="gf-text-primary" style="font-weight: 500" x-text="agentName(setupSelectedAgent)"></span>
+              for
+              <span
+                class="gf-text-primary"
+                style="font-weight: 500"
+                x-text="agentName(setupSelectedAgent)"
+              ></span>
             </div>
           </div>
           <div style="display: flex; gap: 6px">
@@ -154,11 +333,16 @@
             >
               <span x-text="copied ? 'Copied' : 'Copy'"></span>
             </button>
-            <button @click="generateSetupPrompt()" class="gf-btn gf-btn-md">Regenerate</button>
+            <button @click="generateSetupPrompt()" class="gf-btn gf-btn-md">
+              Regenerate
+            </button>
           </div>
         </div>
 
-        <div class="gf-terminal-cta" style="padding: 14px 16px; border-radius: 0">
+        <div
+          class="gf-terminal-cta"
+          style="padding: 14px 16px; border-radius: 0"
+        >
           <button
             @click="if (setupOutputs[setupSelectedAgent]) { launchPreset(setupOutputs[setupSelectedAgent], activeRunner); activeView = 'workspace'; }"
             :disabled="launching || !setupOutputs[setupSelectedAgent]"
@@ -166,21 +350,55 @@
             style="width: 100%; justify-content: center; padding: 11px"
           >
             Run Setup in Terminal
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            <svg
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M14 5l7 7m0 0l-7 7m7-7H3"
+              />
             </svg>
           </button>
-          <p class="gf-text-muted" style="font-size: 13px; margin: 10px 0 0; line-height: 1.5">
-            Launches <span class="mono gf-text-secondary" x-text="activeRunner"></span> in Workspace to run setup in this project.
+          <p
+            class="gf-text-muted"
+            style="font-size: 13px; margin: 10px 0 0; line-height: 1.5"
+          >
+            Launches
+            <span class="mono gf-text-secondary" x-text="activeRunner"></span>
+            in Workspace to run setup in this project.
           </p>
         </div>
 
         <div x-show="setupGenerating" class="gf-loader-overlay">
-          <svg class="animate-spin" style="width: 16px; height: 16px; color: #4ade80" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          <svg
+            class="animate-spin"
+            style="width: 16px; height: 16px; color: #4ade80"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
-          <span class="gf-text-muted" style="font-size: 12px">Generating...</span>
+          <span class="gf-text-muted" style="font-size: 12px"
+            >Generating...</span
+          >
         </div>
 
         <pre
@@ -191,17 +409,30 @@
         <p
           x-show="!setupGenerating && !setupOutputs[setupSelectedAgent]"
           class="gf-text-disabled"
-          style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 12px"
+          style="
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+          "
         >
           Select an agent to auto-generate the setup prompt.
         </p>
       </div>
-
     </div>
 
-    <div class="gf-footer" style="text-align: center; font-size: 11px; padding: 12px 0">
+    <div
+      class="gf-footer"
+      style="text-align: center; font-size: 11px; padding: 12px 0"
+    >
       Built by
-      <a href="https://www.blundergoat.com" target="_blank" class="gf-footer-link">BlunderGOAT</a>
+      <a
+        href="https://www.blundergoat.com"
+        target="_blank"
+        class="gf-footer-link"
+        >BlunderGOAT</a
+      >
       · <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
     </div>
   </div>

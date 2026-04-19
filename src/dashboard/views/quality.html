@@ -19,7 +19,14 @@
     </div>
 
     <!-- Agent selector (full width above columns) -->
-    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px">
+    <div
+      style="
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      "
+    >
       <template x-for="agent in supportedAgents" :key="'quality-' + agent.id">
         <button
           @click="qualityAgent = agent.id"
@@ -27,12 +34,26 @@
           :style="qualityAgent === agent.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}"
           style="padding: 11px 12px; text-align: left"
         >
-          <div class="gf-text-primary" style="font-size: 14px; font-weight: 500" x-text="agent.name"></div>
-          <div style="display: flex; align-items: baseline; gap: 6px; margin-top: 4px">
-            <span style="color: var(--accent); font-size: 18px; font-weight: 600"
+          <div
+            class="gf-text-primary"
+            style="font-size: 14px; font-weight: 500"
+            x-text="agent.name"
+          ></div>
+          <div
+            style="
+              display: flex;
+              align-items: baseline;
+              gap: 6px;
+              margin-top: 4px;
+            "
+          >
+            <span
+              style="color: var(--accent); font-size: 18px; font-weight: 600"
               x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return '—'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'F'; })()"
             ></span>
-            <span class="gf-text-muted" style="font-size: 13px"
+            <span
+              class="gf-text-muted"
+              style="font-size: 13px"
               x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct + '%'; })()"
             ></span>
           </div>
@@ -41,8 +62,14 @@
     </div>
 
     <!-- Two-column layout -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start">
-
+    <div
+      style="
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        align-items: start;
+      "
+    >
       <!-- LEFT COLUMN: baseline + history -->
       <div style="display: flex; flex-direction: column; gap: 12px">
         <!-- Current deterministic baseline -->
@@ -134,7 +161,12 @@
                       :key="selectedAgent.id + '-quality-bar-' + ck"
                     >
                       <div
-                        style="display: flex; align-items: center; gap: 8px; padding: 2px 0"
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          padding: 2px 0;
+                        "
                       >
                         <span
                           class="gf-text-muted"
@@ -156,7 +188,11 @@
                           "
                         >
                           <div
-                            style="height: 100%; border-radius: 999px; transition: width 0.3s"
+                            style="
+                              height: 100%;
+                              border-radius: 999px;
+                              transition: width 0.3s;
+                            "
                             :style="{ width: selectedAgent.concerns[ck].score + '%', background: scoreColor(selectedAgent.concerns[ck].score) }"
                           ></div>
                         </div>
@@ -205,7 +241,10 @@
               Some history files were skipped
             </div>
             <div style="display: flex; flex-direction: column; gap: 3px">
-              <template x-for="warning in qualityHistoryWarnings" :key="warning">
+              <template
+                x-for="warning in qualityHistoryWarnings"
+                :key="warning"
+              >
                 <div x-text="warning"></div>
               </template>
             </div>
@@ -254,19 +293,34 @@
               "
             >
               <div class="gf-card" style="padding: 10px 12px">
-                <div class="gf-text-muted" style="font-size: 10px; margin-bottom: 2px">
+                <div
+                  class="gf-text-muted"
+                  style="font-size: 10px; margin-bottom: 2px"
+                >
                   Latest run
                 </div>
-                <div class="gf-text-primary" style="font-size: 12px; font-weight: 600">
+                <div
+                  class="gf-text-primary"
+                  style="font-size: 12px; font-weight: 600"
+                >
                   <span x-text="qualityHistoryLatest.date"></span>
-                  <span class="gf-text-muted" x-text="' ' + qualityHistoryLatest.time"></span>
+                  <span
+                    class="gf-text-muted"
+                    x-text="' ' + qualityHistoryLatest.time"
+                  ></span>
                 </div>
               </div>
               <div class="gf-card" style="padding: 10px 12px">
-                <div class="gf-text-muted" style="font-size: 10px; margin-bottom: 2px">
+                <div
+                  class="gf-text-muted"
+                  style="font-size: 10px; margin-bottom: 2px"
+                >
                   Setup trend
                 </div>
-                <div class="gf-text-primary" style="font-size: 12px; font-weight: 600">
+                <div
+                  class="gf-text-primary"
+                  style="font-size: 12px; font-weight: 600"
+                >
                   <span x-text="qualityHistoryLatest.setupTotal + '%'"></span>
                   <span
                     class="gf-text-muted"
@@ -276,10 +330,16 @@
                 </div>
               </div>
               <div class="gf-card" style="padding: 10px 12px">
-                <div class="gf-text-muted" style="font-size: 10px; margin-bottom: 2px">
+                <div
+                  class="gf-text-muted"
+                  style="font-size: 10px; margin-bottom: 2px"
+                >
                   System score
                 </div>
-                <div class="gf-text-primary" style="font-size: 12px; font-weight: 600">
+                <div
+                  class="gf-text-primary"
+                  style="font-size: 12px; font-weight: 600"
+                >
                   <span x-text="qualityHistoryLatest.systemTotal + '%'"></span>
                   <span
                     class="gf-text-muted"
@@ -289,13 +349,27 @@
                 </div>
               </div>
               <div class="gf-card" style="padding: 10px 12px">
-                <div class="gf-text-muted" style="font-size: 10px; margin-bottom: 2px">
+                <div
+                  class="gf-text-muted"
+                  style="font-size: 10px; margin-bottom: 2px"
+                >
                   Findings
                 </div>
-                <div class="gf-text-primary" style="font-size: 12px; font-weight: 600">
-                  <span x-text="'B:' + qualityHistoryLatest.blockerCount"></span>
-                  <span class="gf-text-muted" x-text="' M:' + qualityHistoryLatest.majorCount"></span>
-                  <span class="gf-text-muted" x-text="' m:' + qualityHistoryLatest.minorCount"></span>
+                <div
+                  class="gf-text-primary"
+                  style="font-size: 12px; font-weight: 600"
+                >
+                  <span
+                    x-text="'B:' + qualityHistoryLatest.blockerCount"
+                  ></span>
+                  <span
+                    class="gf-text-muted"
+                    x-text="' M:' + qualityHistoryLatest.majorCount"
+                  ></span>
+                  <span
+                    class="gf-text-muted"
+                    x-text="' m:' + qualityHistoryLatest.minorCount"
+                  ></span>
                 </div>
               </div>
             </div>
@@ -303,7 +377,9 @@
 
           <div x-show="!qualityHistoryLoading && qualityHistoryRows.length > 0">
             <div style="overflow-x: auto">
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+              <table
+                style="width: 100%; border-collapse: collapse; font-size: 12px"
+              >
                 <thead>
                   <tr class="gf-text-muted" style="text-align: left">
                     <th style="padding: 8px 10px">Date</th>
@@ -315,21 +391,45 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <template x-for="row in qualityHistoryRows" :key="'qh-' + row.id">
+                  <template
+                    x-for="row in qualityHistoryRows"
+                    :key="'qh-' + row.id"
+                  >
                     <tr style="border-top: 1px solid var(--border-subtle)">
-                      <td style="padding: 8px 10px" class="gf-text-secondary" x-text="row.date"></td>
+                      <td
+                        style="padding: 8px 10px"
+                        class="gf-text-secondary"
+                        x-text="row.date"
+                      ></td>
                       <td style="padding: 8px 10px">
-                        <span class="gf-text-primary" x-text="row.setupTotal + '%'"></span>
+                        <span
+                          class="gf-text-primary"
+                          x-text="row.setupTotal + '%'"
+                        ></span>
                         <span
                           class="gf-text-muted"
                           x-show="row.setupDelta !== null"
                           x-text="row.setupDelta > 0 ? ' (+' + row.setupDelta + ')' : ' (' + row.setupDelta + ')'"
                         ></span>
                       </td>
-                      <td style="padding: 8px 10px" class="gf-text-primary" x-text="row.systemTotal + '%'"></td>
-                      <td style="padding: 8px 10px; color: #f87171" x-text="row.blockerCount"></td>
-                      <td style="padding: 8px 10px; color: #fbbf24" x-text="row.majorCount"></td>
-                      <td style="padding: 8px 10px" class="gf-text-secondary" x-text="row.minorCount"></td>
+                      <td
+                        style="padding: 8px 10px"
+                        class="gf-text-primary"
+                        x-text="row.systemTotal + '%'"
+                      ></td>
+                      <td
+                        style="padding: 8px 10px; color: #f87171"
+                        x-text="row.blockerCount"
+                      ></td>
+                      <td
+                        style="padding: 8px 10px; color: #fbbf24"
+                        x-text="row.majorCount"
+                      ></td>
+                      <td
+                        style="padding: 8px 10px"
+                        class="gf-text-secondary"
+                        x-text="row.minorCount"
+                      ></td>
                     </tr>
                   </template>
                 </tbody>
@@ -342,8 +442,8 @@
             class="gf-text-muted"
             style="font-size: 12px; padding: 8px 0"
           >
-            No saved quality history yet. Run a quality assessment and save findings
-            in `.goat-flow/logs/quality` to start trend tracking.
+            No saved quality history yet. Run a quality assessment and save
+            findings in `.goat-flow/logs/quality` to start trend tracking.
           </div>
         </div>
       </div>
@@ -352,11 +452,15 @@
       <div class="gf-prompt-card" style="position: sticky; top: 20px">
         <div class="gf-prompt-hdr">
           <div>
-            <span class="gf-text-primary" style="font-size: 16px; font-weight: 600">
+            <span
+              class="gf-text-primary"
+              style="font-size: 16px; font-weight: 600"
+            >
               Quality prompt
             </span>
             <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
-              Generates a runner prompt for qualitative review, not deterministic validation.
+              Generates a runner prompt for qualitative review, not
+              deterministic validation.
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 8px">
@@ -413,7 +517,10 @@
                 <span>Run Quality Assessment in Runner</span>
               </button>
             </div>
-            <div class="gf-text-muted" style="font-size: 12px; line-height: 1.4">
+            <div
+              class="gf-text-muted"
+              style="font-size: 12px; line-height: 1.4"
+            >
               <template x-if="!(terminalSessionId && !terminalEnded)">
                 <span>
                   Launches
@@ -422,7 +529,8 @@
                     class="gf-text-secondary"
                     style="font-weight: 500"
                   ></span>
-                  in read-only assessment mode to inspect setup quality and report findings with evidence.
+                  in read-only assessment mode to inspect setup quality and
+                  report findings with evidence.
                 </span>
               </template>
               <template x-if="terminalSessionId && !terminalEnded">
@@ -461,7 +569,9 @@
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
             />
           </svg>
-          <span class="gf-text-muted" style="font-size: 12px">Generating...</span>
+          <span class="gf-text-muted" style="font-size: 12px"
+            >Generating...</span
+          >
         </div>
 
         <template x-if="!qualityLoading && qualityResult">
@@ -482,7 +592,6 @@
           Select a Runner to auto-generate the quality prompt.
         </p>
       </div>
-
     </div>
 
     <div
