@@ -33,10 +33,9 @@ prompt/
   compose-quality.ts       # Generates quality-assessment prompts for agents (prompt mode only)
 
 quality/
-  schema.ts                # Strict quality-report parser for agent output and saved reports
+  schema.ts                # Strict quality-report parser for agent-written JSON reports
   ids.ts                   # Positional finding-id generation (`type:file-slug:line-or-_`)
-  capture.ts               # Extracts and persists reports from agent responses
-  history.ts               # Loads saved reports, renders history, and derives diffs
+  history.ts               # Loads agent-written reports, renders history, and derives diffs
 
 server/
   dashboard.ts             # HTTP server for dashboard + API
@@ -86,6 +85,7 @@ prettier.sh                # Wrapper: prettier --write (format)
 run-cli.sh                 # Wrapper: run the local CLI via node
 setup-initial.sh           # First-time project scaffolding
 start-dev.sh               # Wrapper: start dashboard in dev mode
+tick-checkboxes.sh         # Hook: PostToolUse nudge when milestone-file edits lack `- [x]` (copied to agent hook dirs)
 warn-node-pty.mjs          # npm postinstall guard: warn if node-pty is missing (skips in CI)
 maintenance/               # Git cleanup, secret scanning, Zone.Identifier removal
 ```

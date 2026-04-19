@@ -24,16 +24,15 @@ Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality mar
 
 ## Persisting quality reports
 
-`goat-flow quality . --agent X` only generates the prompt. If you want trend history, save the agent response and capture it explicitly:
+`goat-flow quality . --agent X` composes a prompt that instructs the agent to save its final JSON report directly to `.goat-flow/logs/quality/` — a gitignored path. No separate capture step: the agent owns the write, and `history` / `diff` read whatever the agent saved.
 
 ```bash
-goat-flow quality . --agent claude
-goat-flow quality capture --from-file claude-quality.md
+goat-flow quality . --agent claude    # Agent writes .goat-flow/logs/quality/<...>.json itself
 goat-flow quality history --agent claude
 goat-flow quality diff --agent claude
 ```
 
-Captured reports are stored locally under `.goat-flow/logs/quality/` as a validated `.json` report plus a companion `.md` prose file. The history and diff commands only operate on saved reports.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated `.json` files (with any companion `.md` prose the agent chooses). `history` and `diff` only operate on saved reports.
 
 ---
 

@@ -408,10 +408,10 @@
           <!-- Launch in new terminal -->
           <button
             @click="launchPreset(selectedPreset.prompt, activeRunner)"
-            :disabled="launching || serverSessions.length >= 7"
+            :disabled="launching || serverSessions.length >= 10"
             class="gf-btn-terminal"
-            :title="serverSessions.length >= 7 ? 'Session limit reached (7/7). End one to launch another.' : 'Launch in a new terminal session.'"
-            :style="(serverSessions.length >= 7 || launching) ? { opacity: '0.5', cursor: 'not-allowed' } : {}"
+            :title="serverSessions.length >= 10 ? 'Session limit reached (10/10). End one to launch another.' : 'Launch in a new terminal session.'"
+            :style="(serverSessions.length >= 10 || launching) ? { opacity: '0.5', cursor: 'not-allowed' } : {}"
           >
             Launch in new terminal
           </button>

@@ -455,6 +455,7 @@ function parseReportInternal(
     "claude",
     "codex",
     "gemini",
+    "copilot",
   ] satisfies readonly AgentId[]);
   if (!agent.ok) return agent;
   const projectPath = expectNonEmptyString(

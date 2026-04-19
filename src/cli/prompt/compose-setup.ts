@@ -40,6 +40,7 @@ const SETUP_FILES: Record<AgentId, string> = {
   claude: "workflow/setup/agents/claude.md",
   codex: "workflow/setup/agents/codex.md",
   gemini: "workflow/setup/agents/gemini.md",
+  copilot: "workflow/setup/agents/copilot.md",
 };
 
 // ----------------------------------------------------------------

@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-04-15
+last_reviewed: 2026-04-19
 ---
 
 ## Lesson: Agents given broad setup tasks rewrite shared docs as agent-specific
@@ -19,7 +19,7 @@ last_reviewed: 2026-04-15
 
 **What happened:** Rampart's CLAUDE.md had `redaction.rs` (doesn't exist - redaction is Python only). Blundergoat's CLAUDE.md had a stale web middleware path pointing at `middleware.ts` instead of `proxy.ts`, plus a stale API SQL directory pointing at `migrations/` instead of `schema/`. Sub-agents creating coding-standards files (feature removed in v1.1.0) read these wrong paths from the existing instruction files and copied them into the new cold-path files, propagating the error.
 **Root cause:** The verification gate said "verify paths in the generated files" but didn't say "also audit the existing instruction file you're reading from." Agents trust the hot-path file as authoritative without checking.
-**Fix:** Added "ALSO AUDIT EXISTING INSTRUCTION FILES" gate to docs-seed.md - verify Ask First paths exist, check router entries resolve, fix stale paths before copying them into cold-path files.
+**Fix:** Added an "ALSO AUDIT EXISTING INSTRUCTION FILES" gate to the shared setup-reference guidance - verify Ask First paths exist, check router entries resolve, and fix stale paths before copying them into cold-path files.
 
 ---
 

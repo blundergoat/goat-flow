@@ -98,11 +98,17 @@ const agentInstruction: BuildCheck = {
 function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
   const canonical = ctx.structure.skills.canonical;
   const missing: string[] = [];
+  const references = ctx.structure.skills.references ?? {};
   for (const af of ctx.agents) {
     for (const skill of canonical) {
-      const skillPath = `${af.agent.skillsDir}/${skill}/SKILL.md`;
-      if (!ctx.fs.exists(skillPath)) {
-        missing.push(`${af.agent.id}:${skill}`);
+      const referenceFiles = Array.isArray(references[skill])
+        ? references[skill].filter((file) => typeof file === "string")
+        : [];
+      for (const relativeFile of ["SKILL.md", ...referenceFiles]) {
+        const skillPath = `${af.agent.skillsDir}/${skill}/${relativeFile}`;
+        if (!ctx.fs.exists(skillPath)) {
+          missing.push(`${af.agent.id}:${skill}:${relativeFile}`);
+        }
       }
     }
   }

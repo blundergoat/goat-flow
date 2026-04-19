@@ -195,6 +195,23 @@
               width: 120px;
               flex-shrink: 0;
             "
+            >/goat-critique</span
+          >
+          <span class="gf-text-muted" style="font-size: 12px"
+            >Multi-lens critique to surface blind spots before shipping</span
+          >
+        </div>
+        <div style="display: flex; gap: 10px; align-items: baseline">
+          <span
+            class="gf-text-primary"
+            style="
+              font-size: 12px;
+              font-weight: 500;
+              font-family:
+                &quot;JetBrains Mono&quot;, &quot;Fira Code&quot;, monospace;
+              width: 120px;
+              flex-shrink: 0;
+            "
             >/goat-security</span
           >
           <span class="gf-text-muted" style="font-size: 12px"
@@ -510,7 +527,7 @@
         </div>
         <div style="display: flex; gap: 10px; align-items: baseline">
           <button
-            @click="activeView = 'home'"
+            @click="activeView = 'quality'"
             class="gf-link"
             style="
               font-size: 12px;
@@ -523,11 +540,11 @@
               padding: 0;
             "
           >
-            Audit
+            Quality
           </button>
           <span class="gf-text-muted" style="font-size: 12px"
-            >Detailed check-by-check breakdown per agent with
-            recommendations</span
+            >Generate an agent-driven quality assessment for the selected
+            agent</span
           >
         </div>
         <div style="display: flex; gap: 10px; align-items: baseline">
@@ -575,7 +592,7 @@
         </div>
         <div style="display: flex; gap: 10px; align-items: baseline">
           <button
-            @click="activeView = 'wizard'; detectStack()"
+            @click="activeView = 'setup'; detectStack()"
             class="gf-link"
             style="
               font-size: 12px;
@@ -591,7 +608,8 @@
             Setup
           </button>
           <span class="gf-text-muted" style="font-size: 12px"
-            >Guided wizard to generate agent instructions and hook configs</span
+            >Guided setup flow to generate agent instructions and hook
+            configs</span
           >
         </div>
       </div>

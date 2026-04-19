@@ -1,6 +1,6 @@
 ---
 category: design-decisions
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-19
 ---
 
 ## Lesson: Doer-verifier is theater in single-agent context
@@ -100,3 +100,5 @@ M13's first draft extended `goat-flow quality` by asking the agent to write a st
 **Trigger:** Any spec that adds a feature to a prompt whose contract forbids an operation that feature needs. The feature goes on the other side of the boundary — almost always the CLI.
 
 **Prevention:** Before a plan proposes "carve a narrow exception to a contract the prompt enforces", test the inverse: "can the CLI do this instead, after the agent responds?" If yes, move the side effect. If the answer requires restructuring the command flow, do that restructuring — it is cheaper than carrying a prompt contradiction into production, where every future extender has to interpret the exception identically on first-try.
+
+**2026-04-19 amendment — partially superseded:** `goat-flow quality capture` was removed in v1.2.0; the write returned to the prompt by design. The original reasoning held because the hypothetical write could have landed anywhere in the repo. The current contract pins the write to `.goat-flow/logs/quality/*.json` — a gitignored path — so the "committed-state pollution" concern does not apply. `src/cli/prompt/compose-quality.ts:131,141,702-705,728,795` still forbids tracked-file writes and allows only this single gitignored path. The general principle still holds for tracked-file writes; the specific ruling against the quality-report write is superseded.

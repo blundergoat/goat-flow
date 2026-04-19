@@ -1,12 +1,26 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
- * 3 deterministic integrity checks (instruction size, execution loop, doc paths).
- * Content-quality judgments (e.g. footgun evidence currency) live in the
- * `quality` assessment prompt, not here.
+ * 4 deterministic checks (instruction size, execution loop, doc paths,
+ * instruction sections). Content-quality judgments (e.g. footgun evidence
+ * currency) live in the `quality` assessment prompt, not here.
  */
 import type { AuditContext, HarnessCheck } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail, extractBacktickPaths } from "./helpers.js";
+
+/** Instruction-file headings that every hot-path instruction file is expected
+ *  to carry. The quality prompt enumerates these as the hot-path contract
+ *  (`src/cli/prompt/compose-quality.ts` Pre-check: "Has required sections").
+ *  Advisory rather than integrity: a skeleton/overlay instruction file (e.g.
+ *  Copilot's current .github/copilot-instructions.md) deliberately defers to
+ *  AGENTS.md and will fail this check. Advisory severity reports the drift
+ *  without gating the main build. */
+const REQUIRED_INSTRUCTION_SECTIONS: { label: string; pattern: RegExp }[] = [
+  { label: "Truth Order", pattern: /^#+\s+Truth Order/im },
+  { label: "Execution Loop", pattern: /^#+\s+Execution Loop/im },
+  { label: "Definition of Done", pattern: /^#+\s+Definition of Done/im },
+  { label: "Router Table", pattern: /^#+\s+Router Table/im },
+];
 
 const VERIFIED_ON = "2026-04-18";
 
@@ -224,8 +238,58 @@ const docPathsResolve: HarnessCheck = {
   },
 };
 
+const instructionSectionsPresent: HarnessCheck = {
+  id: "instruction-sections-present",
+  name: "Instruction file required sections",
+  concern: "context",
+  type: "advisory",
+  provenance: contextProvenance("advisory", [
+    "docs/harness-audit.md",
+    "src/cli/prompt/compose-quality.ts",
+    "CLAUDE.md",
+    "AGENTS.md",
+  ]),
+  run: (ctx) => {
+    const findings: string[] = [];
+    const recs: string[] = [];
+    const fixes: string[] = [];
+    let anyFail = false;
+
+    for (const af of ctx.agents) {
+      if (!af.instruction.exists || !af.instruction.content) {
+        findings.push(`${af.agent.id}: no instruction file to check`);
+        anyFail = true;
+        continue;
+      }
+      const content = af.instruction.content;
+      const missing = REQUIRED_INSTRUCTION_SECTIONS.filter(
+        ({ pattern }) => !pattern.test(content),
+      ).map(({ label }) => label);
+      if (missing.length === 0) {
+        findings.push(
+          `${af.agent.id}: all ${REQUIRED_INSTRUCTION_SECTIONS.length} required sections present`,
+        );
+      } else {
+        findings.push(
+          `${af.agent.id}: missing sections — ${missing.join(", ")}`,
+        );
+        recs.push(
+          `Add the missing hot-path sections to ${af.agent.instructionFile}: ${missing.join(", ")}`,
+        );
+        fixes.push(
+          `Add level-2 (or deeper) headings for ${missing.join(", ")} to ${af.agent.instructionFile}. Skeleton overlays are not sufficient for hot-path contract.`,
+        );
+        anyFail = true;
+      }
+    }
+    if (anyFail) return fail(findings, recs, fixes);
+    return pass(findings);
+  },
+};
+
 export const CONTEXT_CHECKS: HarnessCheck[] = [
   instructionLineCount,
   executionLoopPresent,
   docPathsResolve,
+  instructionSectionsPresent,
 ];

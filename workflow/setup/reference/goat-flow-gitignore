@@ -8,6 +8,7 @@
 !code-map.md
 !glossary.md
 !patterns.md
+!security-policy.md
 
 # Committed goat-flow directories
 !decisions/
@@ -30,3 +31,10 @@
 !logs/sessions/
 !logs/sessions/.gitkeep
 logs/sessions/*.md
+# Keep the quality-history path and README committed, but ignore captured reports.
+# Order matters: the `logs/quality/*.md` rule must come BEFORE the README re-include
+# so the last matching pattern keeps `README.md` tracked.
+!logs/quality/
+logs/quality/*.json
+logs/quality/*.md
+!logs/quality/README.md

@@ -30,6 +30,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { ReadonlyFS } from "../types.js";
 import { SKILL_NAMES } from "../constants.js";
 import { getTemplatePath, getProjectStructure } from "../paths.js";
+import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
 import type { DriftFinding, DriftReport } from "./types.js";
 
 /** Remove nullish values from nested data before comparing manifests. */
@@ -90,8 +91,6 @@ interface CheckDriftOptions {
   templateRoot?: string;
 }
 
-const AGENT_SKILL_DIRS = [".claude/skills", ".agents/skills"] as const;
-
 interface SharedFileSpec {
   /** Relative to templateRoot. */
   template: string;
@@ -140,30 +139,40 @@ function compareSkills(
   findings: DriftFinding[],
 ): number {
   let checked = 0;
+  const skillRoots = getInstalledSkillRoots();
   for (const name of SKILL_NAMES) {
-    const templateRel = `workflow/skills/${name}/SKILL.md`;
-    const template = readTemplate(templateRoot, templateRel);
-    if (template === null) continue;
-
-    for (const agentDir of AGENT_SKILL_DIRS) {
-      const installedRel = `${agentDir}/${name}/SKILL.md`;
-      checked++;
-      if (!fs.exists(installedRel)) {
+    for (const relativeFile of getSkillFiles(name)) {
+      const templateRel = `workflow/skills/${name}/${relativeFile}`;
+      const template = readTemplate(templateRoot, templateRel);
+      if (template === null) {
         findings.push({
           kind: "missing",
-          path: installedRel,
-          message: `${name}: template at ${templateRel} has no installed copy at ${installedRel}`,
+          path: templateRel,
+          message: `${name}: manifest declares ${templateRel} but the workflow template is missing`,
         });
         continue;
       }
-      const installed = fs.readFile(installedRel);
-      if (installed === null) continue;
-      if (!skillContentsEquivalent(template, installed)) {
-        findings.push({
-          kind: "content",
-          path: installedRel,
-          message: `${name}: template (${templateRel}) and installed copy (${installedRel}) differ`,
-        });
+
+      for (const agentDir of skillRoots) {
+        const installedRel = `${agentDir}/${name}/${relativeFile}`;
+        checked++;
+        if (!fs.exists(installedRel)) {
+          findings.push({
+            kind: "missing",
+            path: installedRel,
+            message: `${name}: template at ${templateRel} has no installed copy at ${installedRel}`,
+          });
+          continue;
+        }
+        const installed = fs.readFile(installedRel);
+        if (installed === null) continue;
+        if (!skillContentsEquivalent(template, installed)) {
+          findings.push({
+            kind: "content",
+            path: installedRel,
+            message: `${name}: template (${templateRel}) and installed copy (${installedRel}) differ`,
+          });
+        }
       }
     }
   }
@@ -206,7 +215,7 @@ function compareSharedFiles(
 function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
   const canonical = new Set<string>(SKILL_NAMES);
   const stale = getStaleSkillNames();
-  for (const agentDir of AGENT_SKILL_DIRS) {
+  for (const agentDir of getInstalledSkillRoots()) {
     if (!fs.exists(agentDir)) continue;
     for (const entry of fs.listDir(agentDir)) {
       if (canonical.has(entry)) continue;

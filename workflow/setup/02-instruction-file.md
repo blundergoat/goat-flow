@@ -1,6 +1,6 @@
 # Step 02 - Instruction File
 
-Create or update the agent's instruction file (CLAUDE.md / AGENTS.md / GEMINI.md).
+Create or update the agent's instruction file (CLAUDE.md / AGENTS.md / GEMINI.md / `.github/copilot-instructions.md`).
 
 ## First: detect the stack
 

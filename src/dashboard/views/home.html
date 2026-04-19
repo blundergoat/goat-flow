@@ -4,7 +4,7 @@
   x-cloak
   style="height: calc(100vh - 5rem); overflow-y: auto"
 >
-  <div style="max-width: 880px; margin: 0 auto; padding: 12px 28px 24px">
+  <div style="max-width: 1060px; margin: 0 auto; padding: 12px 28px 24px">
     <!-- Recommended actions -->
     <div
       x-show="report"
@@ -68,7 +68,7 @@
           const sections = [];
           for (const a of (report?.agentScores || [])) {
             if (a.agent?.status !== 'fail') continue;
-            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
+            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : a.id === 'gemini' ? 'Gemini CLI' : 'Copilot CLI';
             let num = 1;
             const fails = (a.agent.failures || []).map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See harness documentation for this check.'}`).join('\n');
             sections.push(`**${label}:**\n${fails}`);
@@ -80,7 +80,7 @@
           const sections = [];
           for (const a of (report?.agentScores || [])) {
             if (!a.harness) continue;
-            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : 'Gemini CLI';
+            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : a.id === 'gemini' ? 'Gemini CLI' : 'Copilot CLI';
             const integrity = [];
             const advisory = [];
             for (const check of (a.harness.checks || [])) {
@@ -128,7 +128,7 @@
         x-text="subtext()"
       ></div>
 
-      <!-- setup priority: wizard button + agent-fix button -->
+      <!-- setup priority: setup-view button + agent-fix button -->
       <div x-show="priority() === 'setup'" x-cloak>
         <div
           style="
@@ -138,7 +138,7 @@
           "
         >
           <button
-            @click="activeView = 'wizard'; detectStack()"
+            @click="activeView = 'setup'; detectStack()"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -169,9 +169,9 @@
             </span>
             <div style="flex: 1; min-width: 0">
               <div class="gf-action-title" style="color: #4ade80">
-                Fix in Wizard
+                Fix in Setup
               </div>
-              <div class="gf-action-desc">Open Setup Wizard</div>
+              <div class="gf-action-desc">Open Setup</div>
             </div>
           </button>
           <button
@@ -204,7 +204,7 @@
         </div>
       </div>
 
-      <!-- harness priority: wizard button + agent-fix button -->
+      <!-- harness priority: setup-view button + agent-fix button -->
       <div x-show="priority() === 'harness'" x-cloak>
         <div
           style="
@@ -214,7 +214,7 @@
           "
         >
           <button
-            @click="activeView = 'wizard'; detectStack()"
+            @click="activeView = 'setup'; detectStack()"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -245,9 +245,9 @@
             </span>
             <div style="flex: 1; min-width: 0">
               <div class="gf-action-title" style="color: #4ade80">
-                Fix harness in wizard
+                Fix harness in setup
               </div>
-              <div class="gf-action-desc">Open Setup Wizard</div>
+              <div class="gf-action-desc">Open Setup</div>
             </div>
           </button>
           <button
@@ -282,35 +282,47 @@
 
       <!-- completeness gaps: agent fix button -->
       <div x-show="priority() === 'completeness'" x-cloak>
-        <button
-          @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
-          class="gf-action-btn"
+        <div
           style="
-            text-align: left;
-            display: flex;
-            align-items: center;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
-            width: 100%;
-            border-color: #166534;
           "
         >
-          <span
-            class="gf-play-icon"
-            style="color: #4ade80; border-color: #166534"
+          <button
+            @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            class="gf-action-btn"
+            style="
+              text-align: left;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              border-color: #166534;
+            "
           >
-            <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-              />
-            </svg>
-          </span>
-          <div style="flex: 1; min-width: 0">
-            <div class="gf-action-title" style="color: #4ade80">
-              Fix harness with agent
+            <span
+              class="gf-play-icon"
+              style="color: #4ade80; border-color: #166534"
+            >
+              <svg
+                width="12"
+                height="12"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
+                />
+              </svg>
+            </span>
+            <div style="flex: 1; min-width: 0">
+              <div class="gf-action-title" style="color: #4ade80">
+                Fix harness with agent
+              </div>
+              <div class="gf-action-desc">Send fix prompt to terminal</div>
             </div>
-            <div class="gf-action-desc">Send fix prompt to terminal</div>
-          </div>
-        </button>
+          </button>
+        </div>
       </div>
 
       <!-- healthy (all passing): review + test + security presets -->
@@ -726,7 +738,7 @@
 
       <!-- Agent cards (entire card is clickable, mini-bars are purely visual) -->
       <div
-        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px"
+        style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px"
       >
         <template
           x-for="agent in (report?.agentScores || [])"

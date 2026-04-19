@@ -50,6 +50,7 @@ export interface AgentProfile {
 export interface SkillsStructure {
   canonical: string[];
   stale_names: string[];
+  references?: Record<string, string[]>;
 }
 
 /** On-disk shape of `workflow/manifest.json` after M06a extends it.

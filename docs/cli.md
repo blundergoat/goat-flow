@@ -4,12 +4,12 @@
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (16 checks across 5 concerns — verifies structural installation of each concern). Harness results contribute to the overall audit status. Default command when run without arguments.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (17 checks across 5 concerns — verifies structural installation of each concern). Harness results contribute to the overall audit status. Default command when run without arguments.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `goat-flow manifest` to inspect the current registry. |
-| `--harness` | Add AI Harness Completeness scope (16 checks, installed/not-installed per concern) |
+| `--harness` | Add AI Harness Completeness scope (17 checks, installed/not-installed per concern) |
 | `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
 | `--format <type>` | Output: json, text, markdown (default: auto) |
@@ -26,25 +26,14 @@ npx goat-flow audit . --output report.json # Write to file
 
 ### `goat-flow quality [path] --agent <id>`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. This command stays compose-only: it prints the prompt and never writes report history by itself.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. The prompt tells the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored); prose findings come back in the agent's reply, the JSON does not.
 
 ```bash
 goat-flow quality . --agent claude         # Quality prompt for Claude
 goat-flow quality . --agent codex          # Quality prompt for Codex
 ```
 
-If prior same-agent quality history exists under `.goat-flow/logs/quality/`, the prompt includes the latest saved report so the next review can mark current findings as `new` or `persisted`.
-
-### `goat-flow quality capture --from-file <path> | --from-stdin`
-
-Extract a saved quality report from an agent response and persist it locally. The CLI scans fenced `json` blocks, accepts the one whose top-level `report_kind` is `goat-flow-quality-report`, validates the schema, assigns positional finding ids, and writes both the structured report and companion prose.
-
-```bash
-goat-flow quality capture --from-file claude-quality.md   # Save one agent response
-pbpaste | goat-flow quality capture --from-stdin          # Capture directly from stdin
-```
-
-Saved files land under `.goat-flow/logs/quality/<YYYY-MM-DD>-<agent>[-NN].json` and `.md`. Same-day recaptures increment deterministically (`-02`, `-03`, ...).
+The agent derives the date/time from its shell and generates a 5-character lowercase-alphanumeric random suffix so parallel runs do not collide. If prior same-agent quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
 ### `goat-flow quality history [--agent <id>] [--all] [--format json]`
 
@@ -58,14 +47,34 @@ goat-flow quality history --format json     # Machine-readable report history
 
 ### `goat-flow quality diff [<from-id>:<to-id>] --agent <id> [--format json]`
 
-Compare two saved same-agent reports. Without an explicit pair, diff uses the two most recent saved runs for `--agent`. With an explicit pair, use saved-report basenames such as `2026-04-01-claude:2026-04-15-claude`.
+Compare two saved same-agent reports. Without an explicit pair, diff uses the two most recent saved runs for `--agent`. With an explicit pair, use saved-report basenames (the filename without `.json`).
 
 ```bash
 goat-flow quality diff --agent claude
-goat-flow quality diff 2026-04-01-claude:2026-04-15-claude --format json
+goat-flow quality diff 2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb --format json
 ```
 
 `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
+
+### `goat-flow manifest [--check] [--format json]`
+
+Print the resolved single-source-of-truth manifest (agent registry, installed skills, required files, and derived facts). Pass `--check` to validate that the static manifest matches observed repo state (exits non-zero on drift, used by CI).
+
+```bash
+goat-flow manifest                    # Print resolved manifest as Markdown
+goat-flow manifest --format json      # Machine-readable manifest
+goat-flow manifest --check            # Fail if manifest disagrees with live filesystem
+```
+
+### `goat-flow stats [--check] [--format json|markdown]`
+
+Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI — it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, or contains stale file references.
+
+```bash
+goat-flow stats                       # Learning-loop health report
+goat-flow stats --check               # CI gate for bucket hygiene
+goat-flow stats --format json         # Machine-readable report
+```
 
 ### `goat-flow setup [path] --agent <id>`
 
@@ -104,7 +113,6 @@ Common tasks and the commands to run:
 | Check if my project is ready | `npx goat-flow audit .` |
 | Check harness completeness | `npx goat-flow audit . --harness` |
 | Get a quality prompt | `goat-flow quality . --agent claude` |
-| Save an agent's quality review | `goat-flow quality capture --from-file claude-quality.md` |
 | Review quality trend history | `goat-flow quality history --agent claude` |
 | Compare two saved quality runs | `goat-flow quality diff --agent claude` |
 | Set up a new project | `goat-flow setup . --agent claude` |

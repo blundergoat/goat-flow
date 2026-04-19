@@ -19,7 +19,12 @@ function trimDir(path: string | undefined): string | null {
 }
 
 function isAgentId(value: string): value is AgentId {
-  return value === "claude" || value === "codex" || value === "gemini";
+  return (
+    value === "claude" ||
+    value === "codex" ||
+    value === "gemini" ||
+    value === "copilot"
+  );
 }
 
 function toDenyMechanism(deny: ManifestDenyMechanism): DenyMechanism {

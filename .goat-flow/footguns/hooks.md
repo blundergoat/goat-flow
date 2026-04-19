@@ -1,13 +1,21 @@
 ---
 category: hooks
-last_reviewed: 2026-04-15
+last_reviewed: 2026-04-19
 ---
 
 ## Footgun: Codex has no compaction notification hook
 
 **Status:** active | **Created:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** medium — platform support differs across agents; verify against the agent's live hook config before relying on compaction notifications.
 
-Platform limitation, not a repo defect. Codex `hooks.json` only supports `PreToolUse`. Claude and Gemini have `Notification` hooks on `compact` that help with context recovery. Codex agents lose this signal after compaction. Not fixable until Codex adds Notification hook support.
+Platform limitation, not a repo defect. Codex's hook surface only supports `PreToolUse`; there is no `Notification`/compact event. Claude and Gemini do have `Notification` hooks on `compact` that help with context recovery, so Codex agents lose this signal after compaction.
+
+**Evidence:**
+- `.codex/hooks.json` (search: `PreToolUse`) — declares only a `PreToolUse` hook; no `Notification` or `compact` section exists.
+- `workflow/manifest.json` (search: `"codex"`) — `agents.codex.hook_events.post_turn` is `null`, confirming no end-of-turn or compaction hook is wired.
+- By contrast, `.claude/settings.json` and `.gemini/settings.json` both register a `Notification`/`compact` hook that echoes recovery guidance.
+
+**Prevention:** When designing cross-agent hook behaviour, read the per-agent `hook_events` field in `workflow/manifest.json` before assuming parity; treat Codex's `post_turn: null` as an explicit gap rather than an oversight. Not fixable until Codex adds Notification-hook support.
 
 ---
 

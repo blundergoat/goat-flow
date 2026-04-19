@@ -31,6 +31,7 @@ import type { AgentId } from "../types.js";
 import type { AuditReport } from "../audit/types.js";
 import type { DashboardReport, Runner } from "./types.js";
 import type { TerminalManager } from "./terminal.js";
+import { MAX_SESSIONS } from "./terminal.js";
 import type { WebSocketServer, WebSocket as WsWebSocket } from "ws";
 
 const KNOWN_AGENT_IDS = getKnownAgentIds();
@@ -641,7 +642,8 @@ export function serveDashboard(
     ): Record<string, boolean> {
       const existing: Record<string, boolean> = {
         skills: false,
-        instructions: false,
+        instructionsRepoWide: false,
+        instructionsPathScoped: false,
         lessons: false,
         footguns: false,
         config: false,
@@ -664,7 +666,10 @@ export function serveDashboard(
         }
       }
 
-      existing.instructions = existsSync(
+      existing.instructionsRepoWide = existsSync(
+        join(projectPath, ".github", "copilot-instructions.md"),
+      );
+      existing.instructionsPathScoped = existsSync(
         join(projectPath, ".github", "instructions"),
       );
       existing.lessons =
@@ -697,7 +702,7 @@ export function serveDashboard(
       return nonGoatFlow;
     }
 
-    /** Detect project stack, commands, agents, and existing config for the setup wizard. */
+    /** Detect project stack, commands, agents, and existing config for the setup view. */
     function handleSetupDetectRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== "/api/setup/detect") return false;
 
@@ -929,7 +934,7 @@ export function serveDashboard(
         }));
         jsonResponse(res, 200, {
           sessions: enriched,
-          maxSessions: 7,
+          maxSessions: MAX_SESSIONS,
           activeCount: sessions.length,
         });
       } catch (err) {

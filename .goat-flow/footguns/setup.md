@@ -1,24 +1,26 @@
 ---
 category: setup
-last_reviewed: 2026-04-16
+last_reviewed: 2026-04-19
 ---
 
 ## Footgun: Setup creates parallel surfaces instead of migrating existing ones
 
-**Status:** active | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-04-03 | **Updated:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
 
-When a project already has learning-loop artifacts, setup creates NEW parallel surfaces instead of using the existing ones:
+When a project already has learning-loop artifacts at legacy paths, the installer creates NEW `.goat-flow/*` surfaces alongside them instead of detecting and migrating the existing ones:
 
-- `tasks/` AND `.goat-flow/tasks/` both created
-- `docs/footguns.md` (flat) AND `.goat-flow/footguns/` (directory) both created
-- `docs/lessons.md` AND `.goat-flow/lessons/` both created
-- `ai/instructions/` AND `.goat-flow/coding-standards/` both created with overlapping content
+- `tasks/` AND `.goat-flow/tasks/` both end up present
+- `docs/footguns.md` (flat) AND `.goat-flow/footguns/` (directory) both end up present
+- `docs/lessons.md` AND `.goat-flow/lessons/` both end up present
 
-**Evidence:** Found by Codex on ambient-scribe (4 duplicate surfaces), blundergoat-platform (context-validate.sh:105 requires BOTH old and new), healthkit (contradictory paths in CLAUDE.md vs config.yaml vs skills).
+**Evidence:**
+- `workflow/install-goat-flow.sh` (search: `# 1. Create .goat-flow/ directories`) unconditionally `mkdir -p`s the `.goat-flow/*` tree without checking for pre-existing legacy equivalents at `tasks/`, `docs/footguns.md`, `docs/lessons.md`.
+- Found by Codex on consumer projects: ambient-scribe (4 duplicate surfaces), blundergoat-platform (context-validate.sh required BOTH old and new at the time), healthkit (contradictory paths in CLAUDE.md vs config.yaml vs skills).
+- `.goat-flow/coding-standards/` was historically part of this pattern in v0.9 installs. v1.1.0 removed `coding-standards` as a first-class surface (see `workflow/setup/05-customise-to-project.md` and `.goat-flow/glossary.md`), so it is no longer a live duplicate example but older consumer projects may still have it.
 
 **Impact:** Agents receive contradictory instructions about where to write lessons and footguns. The same information ends up in multiple places and drifts. Users can't tell which is canonical.
 
-**Prevention:** Setup must detect existing artifact locations and use them, not create parallel ones.
+**Prevention:** Setup must detect existing artifact locations and use them, not create parallel ones. The installer currently does not run this detection — consumer projects on legacy layouts need manual migration before running install, and this footgun stays active until installer-side detection lands.
 
 ---
 
@@ -42,7 +44,7 @@ When a project already has learning-loop artifacts, setup creates NEW parallel s
 
 **Evidence (historical, pre-subdir-move paths):** `RULES.md` sections mapped 1:1 to existing surfaces. Evidence Standard, Severity Scale, and Learning Loop all duplicated content already in the shared preamble; Execution Loop duplicated CLAUDE.md's loop section. Specific line numbers from 2026-04-16 are stale after the `.goat-flow/skill-reference/` subdir move and are no longer recorded here.
 
-**Resolution:** Deleted RULES.md (ADR-042). Moved 2 unique lines into the shared preamble's "Engineering Standards" section.
+**Resolution:** Deleted `RULES.md`. Moved 2 unique lines into the shared preamble's "Engineering Standards" section.
 
 **Prevention:** When adding a new shared-context file, check whether its content already exists in CLAUDE.md or the shared preamble. Before promoting any file to "load on every invocation," verify it provides net-new signal per token.
 

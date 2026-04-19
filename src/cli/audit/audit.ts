@@ -4,10 +4,11 @@
  * harness completeness checks (--harness, deterministic pass/fail per concern).
  * Returns an AuditReport consumed by renderers and the dashboard.
  */
+import { existsSync } from "node:fs";
 import type { AgentId, ReadonlyFS } from "../types.js";
 import { loadConfig } from "../config/index.js";
 import { extractProjectFacts } from "../facts/orchestrator.js";
-import { getProjectStructure } from "../paths.js";
+import { getProjectStructure, getTemplatePath } from "../paths.js";
 import { SETUP_CHECKS } from "./check-goat-flow.js";
 import { AGENT_CHECKS } from "./check-agent-setup.js";
 import { HARNESS_CHECKS } from "./harness/index.js";
@@ -73,6 +74,10 @@ function parseProjectStructure(raw: Record<string, unknown>): ProjectStructure {
       stale_names:
         ((raw.skills as Record<string, unknown> | undefined)
           ?.stale_names as string[]) ?? [],
+      references:
+        ((raw.skills as Record<string, unknown> | undefined)?.references as
+          | Record<string, string[]>
+          | undefined) ?? {},
     },
     agents: (raw.agents as ProjectStructure["agents"] | undefined) ?? {},
   };
@@ -176,13 +181,14 @@ function toCheckResult(
   };
 }
 
-/** Validate provenance on every registered check against the current project tree. */
+/** Validate provenance on every registered check against the target project or package root. */
 function validateRegisteredCheckProvenance(fs: ReadonlyFS): void {
   const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
   const errors: string[] = [];
   for (const check of checks) {
-    for (const error of validateProvenance(check.provenance, (p) =>
-      fs.exists(p),
+    for (const error of validateProvenance(
+      check.provenance,
+      (p) => fs.exists(p) || existsSync(getTemplatePath(p)),
     )) {
       errors.push(`${check.id}: ${error}`);
     }

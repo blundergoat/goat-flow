@@ -104,10 +104,31 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 ## Output Format
 
+Diagnose and investigate modes produce different artifacts. Use the block that matches the mode you actually ran.
+
+### Diagnose mode (D1–D4)
+
 ```markdown
 ## TL;DR       <!-- 1 sentence: root cause + confidence -->
 ## Hypotheses  <!-- table: #, Hypothesis, Category, Status, Evidence (file:line) -->
 ## Root Cause  <!-- Confidence + Location (file:line) + Description -->
 ## Reproduction Steps  <!-- numbered, with Expected vs Actual -->
 ## Fix Plan    <!-- only if human approved D3 -->
+```
+
+### Investigate mode (I1–I3)
+
+```markdown
+## TL;DR  <!-- 1 sentence: what this area does + top signal found -->
+## Scope
+- **In scope:** [files / dirs]
+- **Out of scope:** [what was deliberately skipped]
+- **Read estimate vs actual:** [N planned / M actually read]
+## Reading  <!-- one row per file read -->
+| File | Role | Connections | Evidence |
+| --- | --- | --- | --- |
+| `path:line` | [role] | [what calls / is called by this] | OBSERVED/INFERRED |
+## Current vs Expected State  <!-- where the code matches and diverges from the mental model -->
+## What I Didn't Read  <!-- every skipped file plus one-line reason -->
+## Open Questions  <!-- genuine unknowns to resolve next -->
 ```

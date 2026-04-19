@@ -395,6 +395,22 @@ describe("audit on well-configured project", () => {
       `Setup failures: ${JSON.stringify(report.scopes.setup.failures)}`,
     );
   });
+
+  it("audits an external project root without throwing on package-root provenance paths", async () => {
+    const project = await makeTempProject(async () => {});
+    try {
+      const fs = createFS(project.root);
+      const report = runAudit(fs, project.root, {
+        agentFilter: null,
+        harness: false,
+      });
+      assert.equal(report.command, "audit");
+      assert.equal(report.target, project.root);
+      assert.ok(["pass", "fail"].includes(report.status));
+    } finally {
+      await project.cleanup();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -813,13 +829,13 @@ describe("M01 harness check type tagging", () => {
     }
   });
 
-  it("matches the locked M01 distribution (9 integrity, 5 advisory, 2 metric)", () => {
+  it("matches the locked M01 distribution (9 integrity, 6 advisory, 2 metric)", () => {
     const byType = { integrity: 0, advisory: 0, metric: 0 } as Record<
       string,
       number
     >;
     for (const check of HARNESS_CHECKS) byType[check.type]!++;
-    assert.deepStrictEqual(byType, { integrity: 9, advisory: 5, metric: 2 });
+    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 2 });
   });
 
   it("known-integrity ids are tagged integrity", () => {

@@ -25,8 +25,9 @@ type NodePtyModule = typeof import("node-pty");
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 type IPty = ReturnType<typeof import("node-pty").spawn>;
 
-/** Maximum number of concurrent terminal sessions allowed */
-const MAX_SESSIONS = 7;
+/** Maximum number of concurrent terminal sessions allowed.
+ *  Single source of truth consumed by the dashboard API, client guards, and docs. */
+export const MAX_SESSIONS = 10;
 /** Idle timeout before a terminal session is automatically killed.
  *  Resets on both user input (ws 'input' message) and agent output (pty onData). */
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
@@ -36,6 +37,7 @@ const RUNNER_BINARIES: Record<Runner, string> = {
   claude: "claude",
   codex: "codex",
   gemini: "gemini",
+  copilot: "copilot",
 };
 
 /** Maximum output to buffer while a session is detached (characters). */

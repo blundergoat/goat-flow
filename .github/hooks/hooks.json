@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/deny-dangerous.sh",
+        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/deny-dangerous.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash is required to run .github/hooks/deny-dangerous.sh on Windows.\"}' }",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

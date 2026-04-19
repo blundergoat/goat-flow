@@ -128,7 +128,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "READ-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches. Regenerable build artifacts written to gitignored paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine — they don't change the repo's committed state. Only modify tracked files if the user explicitly asks; otherwise read, run read-only or build-idempotent commands, and report findings in the response.",
+    "READ-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches. Regenerable build artifacts written to gitignored paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine — they don't change the repo's committed state. **Exception:** this prompt instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json` — that path is gitignored and that single write is expected. Do not write anywhere else.",
   );
   lines.push("");
 
@@ -138,7 +138,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("These apply to EVERY finding you report:");
   lines.push("");
   lines.push(
-    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored build directories (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine. If a skill probe tries to modify tracked files, stop and report that as a finding.",
+    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored build directories (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine. The single expected write is your final JSON report to `.goat-flow/logs/quality/<filename>.json` (gitignored) as instructed below. If a skill probe tries to modify tracked files, stop and report that as a finding.",
   );
   lines.push(
     "- **No mutation commands.** When testing toolchain commands, use `--check`, `--dry-run`, or read-only flags. Use `format:check` not `format`. Use `eslint` not `eslint --fix`. If unsure, run the tool with `--help` first to find the read-only flag.",
@@ -335,7 +335,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push(
     "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/patterns.md` (if they exist)",
   );
-  lines.push(`- All installed skills - every \`SKILL.md\` in \`${skillsDir}\``);
+  lines.push(
+    `- All installed skill files in \`${skillsDir}\` - each \`SKILL.md\` plus any nested \`references/*.md\` packs`,
+  );
   lines.push(`- Agent settings: \`${settingsFile}\``);
   if (hookConfigFile !== settingsFile) {
     lines.push(`- Hook registration file: \`${hookConfigFile}\``);
@@ -369,7 +371,6 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("- `.goat-flow/skill-reference/skill-conventions.md` exists?");
   lines.push("- `.goat-flow/config.yaml` exists and parseable?");
   lines.push("- No `playbooks/` directory (that's legacy)?");
-  lines.push("- No legacy task-state residue from pre-v1.1 workflows?");
   lines.push("");
   lines.push("**Instruction file (from Step 0 output):**");
   lines.push("- Line count (target: under 120, hard limit: 150)?");
@@ -697,11 +698,36 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
 
-  lines.push("### JSON Output Contract");
+  lines.push("### Write the JSON report");
   lines.push("");
   lines.push(
-    "End your response with ONE fenced JSON block as the final block in the message. Use standard CommonMark `json` fencing. The CLI accepts the block whose top-level `report_kind` equals the required literal below.",
+    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` — that path is gitignored and expected, no other writes are permitted.",
   );
+  lines.push("");
+  lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
+  lines.push("");
+  lines.push("Where:");
+  lines.push(
+    "- `YYYY-MM-DD-HHMM` is the current local date and 24-hour time (e.g. `2026-04-19-1430`)",
+  );
+  lines.push(`- \`<agent>\` is the literal string \`${agent}\``);
+  lines.push(
+    "- `<rand5>` is 5 lowercase alphanumeric characters (a-z, 0-9) that you generate fresh to avoid collisions with other parallel runs",
+  );
+  lines.push("");
+  lines.push(
+    "**Derive the date/time/random parts via your shell** (so the filename reflects when the report was actually written, not when this prompt was generated). On Linux/macOS:",
+  );
+  lines.push("");
+  lines.push("```bash");
+  lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"      # e.g. 2026-04-19-1430');
+  lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
+  lines.push(`FILE=".goat-flow/logs/quality/\${STAMP}-${agent}-\${RAND}.json"`);
+  lines.push("mkdir -p .goat-flow/logs/quality");
+  lines.push("# (then write the JSON below to $FILE)");
+  lines.push("```");
+  lines.push("");
+  lines.push("**JSON body shape:**");
   lines.push("");
   lines.push("```json");
   lines.push("{");
@@ -751,17 +777,24 @@ export function composeQuality(input: QualityInput): QualityPayload {
     );
   }
   lines.push(
-    "- Do NOT include an `id` field. The CLI computes positional finding ids during capture.",
+    "- Do NOT include an `id` field. The CLI attaches positional finding ids deterministically when the report is loaded.",
   );
   lines.push(
-    "- Do NOT include extra top-level keys, extra finding keys, combined multi-agent reports, or prose inside the JSON block. Unknown keys are rejected.",
+    "- Do NOT include extra top-level keys or extra finding keys. Unknown keys are rejected.",
+  );
+  lines.push(
+    "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose — do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
+  );
+  lines.push("");
+  lines.push(
+    "**End of response:** After writing the file, confirm in prose with a single line: `Wrote quality report to .goat-flow/logs/quality/<your-filename>.json`. Do not include the JSON inline in your reply.",
   );
   lines.push("");
 
   lines.push("---");
   lines.push("");
   lines.push(
-    "**IMPORTANT:** Respond directly with all findings. DO NOT EDIT ANY FILES. ONLY READ, INSPECT, AND REPORT. Do not summarise - give the full assessment with evidence, ratings, and recommendations in your response.",
+    "**IMPORTANT:** Respond with the full prose assessment (Pre-check Results through What You Did Not Verify). Write the JSON report to the file path described above. Then end your reply with the one-line confirmation. Do not edit any tracked file. Do not emit the JSON as a fenced block in your reply.",
   );
 
   const prompt = lines.join("\n");

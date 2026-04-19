@@ -69,11 +69,11 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 | `.goat-flow/lessons/` | Behavioural mistake (agent did something wrong) |
 | `.goat-flow/footguns/` | Cross-doc architectural trap (with file:line evidence) |
 | `.goat-flow/decisions/` | Significant technical decision with context/rationale |
-| `.goat-flow/logs/sessions/` | End of every significant session - `YYYY-MM-DD-slug.md` summary |
+| `.goat-flow/logs/sessions/` | Optional. On `/compact` without an active milestone file, write `YYYY-MM-DD-slug.md` continuity summary |
 
 ## Autonomy Tiers
 
-**Always:** Read any file, lint scripts, edit within assigned scope, append to session logs at `.goat-flow/logs/sessions/`. (Learning-loop updates — lessons/footguns/decisions — follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.)
+**Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes — write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.
 
 **Ask First** (MUST complete before proceeding):
 - [ ] Boundary touched: [name]
@@ -89,8 +89,6 @@ Boundaries: `.goat-flow/architecture.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
 ## Definition of Done
 
 MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-refs (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames.
-
-Sub-agents: ONE objective, structured return, 5-call budget. When blocked: one question + default.
 
 ## Hard Rules
 - If file exists, modify in-place. NEVER create `_modified`, `_new`, `_backup`, `_v2` variants.
@@ -113,10 +111,12 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.agents/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
-| Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
+| Footguns (most-queried) | `.goat-flow/footguns/` |
+| Lessons | `.goat-flow/lessons/` |
+| Patterns | `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
 | Config | `.goat-flow/config.yaml` |
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `CLAUDE.md`, `AGENTS.md` |
+| Peer instructions | `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` |

@@ -21,6 +21,7 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import { SKILL_NAMES } from "../constants.js";
+import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
 
 interface PatternRule {
   rule: string;
@@ -31,18 +32,24 @@ interface PatternRule {
   suggestion?: (match: string, line: string) => string | undefined;
 }
 
-/** Target scope for content-quality checks: truth-bearing prose.
- *
- * .goat-flow/footguns/** and .goat-flow/lessons/** are intentionally excluded:
- * they contain historical-incident prose that legitimately uses words like
- * "correctly" or "properly" to describe past fixes ("projects that correctly
- * omitted those fields"). Their quality is enforced by the footgun-schema
- * check in stats --check, not by these detectors. */
+/** Scan mode for a target.
+ *  - "full": all three detector families (vague-term, generic-instruction, non-actionable).
+ *  - "restricted": generic-instruction + non-actionable only. Used for
+ *    learning-loop surfaces (footguns/lessons), whose historical-incident
+ *    prose legitimately uses vague-adjacent words ("projects that correctly
+ *    omitted those fields"). The narrow generic and non-actionable patterns
+ *    rarely false-positive on historical prose; vague-term does. */
+type ScanMode = "full" | "restricted";
+
+/** Target scope for full content-quality checks: truth-bearing prose.
+ *  Learning-loop buckets (footguns/lessons) are resolved separately at scan
+ *  time and get restricted-mode treatment — see LEARNING_LOOP_DIRS. */
 const QUALITY_TARGETS = [
   // Hot-path instruction files
   "CLAUDE.md",
   "AGENTS.md",
   "GEMINI.md",
+  ".github/copilot-instructions.md",
   // Canonical docs
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
@@ -51,6 +58,7 @@ const QUALITY_TARGETS = [
   // Shared skill doctrine
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-reference/skill-quality-testing.md",
   // Public docs
   "docs/cli.md",
   "docs/skills.md",
@@ -87,6 +95,7 @@ const QUALITY_TARGETS = [
   "workflow/setup/agents/claude.md",
   "workflow/setup/agents/codex.md",
   "workflow/setup/agents/gemini.md",
+  "workflow/setup/agents/copilot.md",
   "workflow/setup/reference/ADR-000-template.md",
   "workflow/setup/reference/execution-loop.md",
   "workflow/setup/reference/footguns-readme.md",
@@ -95,6 +104,16 @@ const QUALITY_TARGETS = [
   "workflow/setup/reference/reference-polish.md",
   "workflow/setup/reference/scratchpad-readme.md",
   "workflow/setup/reference/tasks-readme.md",
+] as const;
+
+/** Learning-loop buckets. Scanned in restricted mode (no vague-term checks)
+ *  because the Symptoms/Why/Evidence sections describe past incidents and
+ *  legitimately use words like "correctly"/"properly". Generic-instruction and
+ *  non-actionable detectors still apply — those patterns should never appear
+ *  in actionable Prevention blocks. */
+const LEARNING_LOOP_DIRS = [
+  ".goat-flow/footguns/",
+  ".goat-flow/lessons/",
 ] as const;
 
 const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [
@@ -206,19 +225,22 @@ function scanLine(
   lineNumber: number,
   path: string,
   findings: ContentFinding[],
+  mode: ScanMode = "full",
 ): void {
-  for (const { term, suggestion } of VAGUE_TERMS) {
-    const rx = new RegExp(`\\b${term}\\b`, "i");
-    const match = rx.exec(line);
-    if (match) {
-      findings.push({
-        severity: "info",
-        rule: "vague-term",
-        path,
-        line: lineNumber,
-        message: `Vague term "${match[0]}" — no measurable standard.`,
-        suggestion: suggestion(line),
-      });
+  if (mode === "full") {
+    for (const { term, suggestion } of VAGUE_TERMS) {
+      const rx = new RegExp(`\\b${term}\\b`, "i");
+      const match = rx.exec(line);
+      if (match) {
+        findings.push({
+          severity: "info",
+          rule: "vague-term",
+          path,
+          line: lineNumber,
+          message: `Vague term "${match[0]}" — no measurable standard.`,
+          suggestion: suggestion(line),
+        });
+      }
     }
   }
   for (const rule of GENERIC_INSTRUCTIONS) {
@@ -247,10 +269,13 @@ function scanLine(
   }
 }
 
-/** Scan one file. Returns zero or more findings, skipping fenced code blocks. */
+/** Scan one file. Returns zero or more findings, skipping fenced code blocks.
+ *  Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
+ *  on incident-description prose. */
 export function scanContentQuality(
   path: string,
   text: string,
+  mode: ScanMode = "full",
 ): ContentFinding[] {
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
@@ -262,7 +287,7 @@ export function scanContentQuality(
       continue;
     }
     if (inCodeBlock) continue;
-    scanLine(line, i + 1, path, findings);
+    scanLine(line, i + 1, path, findings, mode);
   }
   return findings;
 }
@@ -270,12 +295,24 @@ export function scanContentQuality(
 /** Full list of target paths, including every installed skill SKILL.md. */
 function resolveTargets(): string[] {
   const targets: string[] = [...QUALITY_TARGETS];
-  for (const agentDir of [".claude/skills", ".agents/skills"]) {
+  for (const agentDir of getInstalledSkillRoots()) {
     for (const name of SKILL_NAMES) {
-      targets.push(`${agentDir}/${name}/SKILL.md`);
+      for (const relativeFile of getSkillFiles(name)) {
+        targets.push(`${agentDir}/${name}/${relativeFile}`);
+      }
     }
   }
   return targets;
+}
+
+/** List `<dir>/*.md` entries, excluding README.md. Used to pick up learning-loop
+ *  buckets without resolving hidden or non-markdown files. */
+function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
+  if (!ctx.fs.exists(dir)) return [];
+  return ctx.fs
+    .listDir(dir)
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
+    .map((name) => `${dir}${name}`);
 }
 
 /** Run content-quality checks across the configured documentation targets. */
@@ -290,7 +327,15 @@ export function runContentQualityChecks(ctx: AuditContext): {
     const text = ctx.fs.readFile(rel);
     if (text === null) continue;
     filesScanned++;
-    findings.push(...scanContentQuality(rel, text));
+    findings.push(...scanContentQuality(rel, text, "full"));
+  }
+  for (const dir of LEARNING_LOOP_DIRS) {
+    for (const rel of listBucketMarkdown(ctx, dir)) {
+      const text = ctx.fs.readFile(rel);
+      if (text === null) continue;
+      filesScanned++;
+      findings.push(...scanContentQuality(rel, text, "restricted"));
+    }
   }
   return { findings, filesScanned };
 }

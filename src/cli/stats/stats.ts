@@ -31,6 +31,7 @@ export interface StatsFinding {
   rule:
     | "missing-last-reviewed"
     | "invalid-last-reviewed"
+    | "stale-last-reviewed"
     | "stale-ref"
     | "invalid-line-ref"
     | "format";
@@ -75,30 +76,56 @@ export function buildStatsReport(shared: {
   };
 }
 
+function checkBucketLastReviewed(
+  bucket: BucketSection["buckets"][number],
+): StatsFinding | null {
+  if (bucket.lastReviewed === null) {
+    return {
+      file: bucket.path,
+      rule: "missing-last-reviewed",
+      message: `${bucket.path}: missing or invalid frontmatter last_reviewed (expected YYYY-MM-DD)`,
+    };
+  }
+  if (
+    bucket.maxEntryDate !== null &&
+    bucket.maxEntryDate > bucket.lastReviewed
+  ) {
+    return {
+      file: bucket.path,
+      rule: "stale-last-reviewed",
+      message: `${bucket.path}: last_reviewed (${bucket.lastReviewed}) is older than the newest entry date (${bucket.maxEntryDate}); bump frontmatter last_reviewed.`,
+    };
+  }
+  return null;
+}
+
+function collectBucketFindings(
+  bucket: BucketSection["buckets"][number],
+): StatsFinding[] {
+  const findings: StatsFinding[] = [];
+  const reviewFinding = checkBucketLastReviewed(bucket);
+  if (reviewFinding !== null) findings.push(reviewFinding);
+  for (const ref of bucket.staleRefs) {
+    findings.push({
+      file: bucket.path,
+      rule: "stale-ref",
+      message: `${bucket.path}: stale file ref ${ref}`,
+    });
+  }
+  for (const ref of bucket.invalidLineRefs) {
+    findings.push({
+      file: bucket.path,
+      rule: "invalid-line-ref",
+      message: `${bucket.path}: invalid line ref ${ref}`,
+    });
+  }
+  return findings;
+}
+
 function collectFindings(section: BucketSection): StatsFinding[] {
   const findings: StatsFinding[] = [];
   for (const bucket of section.buckets) {
-    if (bucket.lastReviewed === null) {
-      findings.push({
-        file: bucket.path,
-        rule: "missing-last-reviewed",
-        message: `${bucket.path}: missing or invalid frontmatter last_reviewed (expected YYYY-MM-DD)`,
-      });
-    }
-    for (const ref of bucket.staleRefs) {
-      findings.push({
-        file: bucket.path,
-        rule: "stale-ref",
-        message: `${bucket.path}: stale file ref ${ref}`,
-      });
-    }
-    for (const ref of bucket.invalidLineRefs) {
-      findings.push({
-        file: bucket.path,
-        rule: "invalid-line-ref",
-        message: `${bucket.path}: invalid line ref ${ref}`,
-      });
-    }
+    findings.push(...collectBucketFindings(bucket));
   }
   if (section.formatDiagnostic !== null) {
     const alreadyReported = findings.some(

@@ -37,7 +37,7 @@ Usage:
 
 Commands:
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
-  quality           Agent-driven quality prompt plus capture/history/diff surfaces
+  quality           Agent-driven quality prompt plus history/diff surfaces
   setup             Generate setup prompt (adapts to project state)
   status            Show project state (bare/partial/v0.9/outdated/current)
   dashboard         Launch browser dashboard with audit, setup, and terminal
@@ -48,9 +48,7 @@ Arguments:
 
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
-  --agent <id>      Filter to one agent: ${VALID_AGENT_LIST}
-  --from-file <p>   Quality capture: read the agent response from a file
-  --from-stdin      Quality capture: read the agent response from stdin
+  --agent <id>      Filter to one agent: ${validAgentList()}
   --all             Quality history: lift the default 20-run limit
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
@@ -69,7 +67,6 @@ Examples:
   goat-flow audit . --format json      JSON output for CI
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
-  goat-flow quality capture --from-file response.md
   goat-flow quality history --agent claude
   goat-flow quality diff --agent claude
   goat-flow manifest                   Print the resolved manifest
@@ -97,7 +94,7 @@ type Command =
   | "manifest"
   | "stats";
 
-type QualitySubcommand = "prompt" | "capture" | "history" | "diff";
+type QualitySubcommand = "prompt" | "history" | "diff";
 
 /** List of recognized CLI subcommands */
 const COMMANDS: Command[] = [
@@ -120,12 +117,29 @@ const REMOVED_COMMANDS: Record<string, string> = {
 };
 /** Accepted values for the --format flag */
 const VALID_FORMATS = ["json", "text", "markdown"] as const;
-/** Accepted values for the --agent flag */
-const VALID_AGENTS: AgentId[] = getKnownAgentIds();
-const VALID_AGENT_LIST = VALID_AGENTS.join(", ");
-const VALID_AGENT_FLAGS = VALID_AGENTS.map((agent) => `--agent ${agent}`).join(
-  ", ",
-);
+/** Accepted values for the --agent flag. Resolved lazily so that manifest drift
+ *  does not crash commands (like `--help` or `--version`) that do not need the
+ *  agent list. Strict callers get the exception; help-text callers fall back. */
+let cachedValidAgents: AgentId[] | null = null;
+function validAgents(): AgentId[] {
+  return (cachedValidAgents ??= getKnownAgentIds());
+}
+function validAgentList(): string {
+  try {
+    return validAgents().join(", ");
+  } catch {
+    return "run `goat-flow manifest` for the current list";
+  }
+}
+function validAgentFlags(): string {
+  try {
+    return validAgents()
+      .map((agent) => `--agent ${agent}`)
+      .join(", ");
+  } catch {
+    return "--agent <id> (run `goat-flow manifest` for valid ids)";
+  }
+}
 /** Banner text warning that multi-agent setup output must stay in sync */
 const MULTI_AGENT_SYNC_BANNER = [
   "**Multi-agent sync:** This prompt generates setup for multiple agents. The execution loop",
@@ -143,8 +157,6 @@ export interface ParsedCLI extends CLIOptions {
   check: boolean;
   qualitySubcommand: QualitySubcommand;
   qualityDiffPair: string | null;
-  fromFile: string | null;
-  fromStdin: boolean;
   all: boolean;
 }
 
@@ -187,12 +199,12 @@ function parseAgentArg(value: string | undefined): AgentId | null {
   if (!value) return null;
   if (value === "all") {
     throw new CLIError(
-      `--agent all is no longer supported. Run setup separately for each agent: ${VALID_AGENT_FLAGS}`,
+      `--agent all is no longer supported. Run setup separately for each agent: ${validAgentFlags()}`,
       2,
     );
   }
-  if (!VALID_AGENTS.includes(value as AgentId)) {
-    throw new CLIError(`Invalid agent: ${value}. Use: ${VALID_AGENT_LIST}`, 2);
+  if (!validAgents().includes(value as AgentId)) {
+    throw new CLIError(`Invalid agent: ${value}. Use: ${validAgentList()}`, 2);
   }
   return value as AgentId;
 }
@@ -210,7 +222,6 @@ function resolveOutputPath(
   );
 }
 
-// eslint-disable-next-line complexity -- quality has four subcommand modes with distinct positional rules
 function parseQualityPositionals(positionals: string[]): {
   qualitySubcommand: QualitySubcommand;
   projectPath: string;
@@ -219,17 +230,10 @@ function parseQualityPositionals(positionals: string[]): {
   const [first, second, ...rest] = positionals;
 
   if (first === "capture") {
-    if (second !== undefined || rest.length > 0) {
-      throw new CLIError(
-        "quality capture does not accept positional arguments. Use --from-file or --from-stdin.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "capture",
-      projectPath: resolve("."),
-      qualityDiffPair: null,
-    };
+    throw new CLIError(
+      '"quality capture" was removed in v1.2.0. Agents now write reports directly to `.goat-flow/logs/quality/`; no capture step is needed.',
+      2,
+    );
   }
 
   if (first === "history") {
@@ -279,8 +283,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       agent: { type: "string" },
       verbose: { type: "boolean", default: false },
       output: { type: "string", short: "o" },
-      "from-file": { type: "string" },
-      "from-stdin": { type: "boolean", default: false },
       all: { type: "boolean", default: false },
       harness: { type: "boolean", default: false },
       "check-drift": { type: "boolean", default: false },
@@ -303,13 +305,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
           qualityDiffPair: null,
         };
 
-  if (command !== "quality") {
-    if (values["from-file"] || values["from-stdin"] || values.all === true) {
-      throw new CLIError(
-        "--from-file, --from-stdin, and --all are only valid for the quality command.",
-        2,
-      );
-    }
+  if (command !== "quality" && values.all === true) {
+    throw new CLIError("--all is only valid for the quality command.", 2);
   }
 
   return {
@@ -325,8 +322,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     check: values.check === true,
     qualitySubcommand: qualityPositionals.qualitySubcommand,
     qualityDiffPair: qualityPositionals.qualityDiffPair,
-    fromFile: values["from-file"] ?? null,
-    fromStdin: values["from-stdin"] === true,
     all: values.all === true,
     dev: values.dev === true,
     help: values.help === true,
@@ -392,7 +387,7 @@ async function handleSetupCommand(
   const agentIds = getSetupAgentIds(options, facts);
   if (agentIds.length === 0) {
     throw new CLIError(
-      `No agents detected. Use one of: ${VALID_AGENT_FLAGS}`,
+      `No agents detected. Use one of: ${validAgentFlags()}`,
       1,
     );
   }
@@ -473,40 +468,8 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
 }
 
 /** Handle the quality command: generate a structured quality-assessment prompt for a selected agent. */
-// eslint-disable-next-line complexity -- quality prompt, capture, history, and diff intentionally share one command dispatcher
+// eslint-disable-next-line complexity -- quality prompt, history, and diff intentionally share one command dispatcher
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
-  if (options.qualitySubcommand === "capture") {
-    const { captureQualityResponse, readCaptureInput } =
-      await import("./quality/capture.js");
-
-    const input = readCaptureInput({
-      fromFile: options.fromFile,
-      fromStdin: options.fromStdin,
-    });
-    if (!input.ok) throw new CLIError(input.error, 2);
-
-    const captured = captureQualityResponse({
-      projectPath: options.projectPath,
-      responseText: input.text,
-    });
-    if (!captured.ok) throw new CLIError(captured.error, 2);
-
-    if (options.format === "json") {
-      writeOutput(options, JSON.stringify(captured.result, null, 2));
-      return;
-    }
-
-    writeOutput(
-      options,
-      [
-        `Captured quality report: ${captured.result.id}`,
-        `JSON: ${captured.result.jsonPath}`,
-        `Markdown: ${captured.result.markdownPath}`,
-      ].join("\n"),
-    );
-    return;
-  }
-
   if (options.qualitySubcommand === "history") {
     const {
       buildQualityHistoryRows,
@@ -586,7 +549,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
 
   if (!options.agent) {
     throw new CLIError(
-      `quality requires --agent. Usage: goat-flow quality . --agent ${VALID_AGENTS[0] ?? "claude"}`,
+      `quality requires --agent. Usage: goat-flow quality . --agent ${validAgents()[0] ?? "claude"}`,
       2,
     );
   }

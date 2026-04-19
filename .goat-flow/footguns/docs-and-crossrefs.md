@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-19
 ---
 
 ## Footgun: Cross-reference fragility across docs
@@ -64,6 +64,28 @@ last_reviewed: 2026-04-18
 
 ---
 
+## Footgun: Filesystem-backed validation can miss untracked or ignored replacement files
+
+**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Local validation passes, but the next commit or CI run breaks because the replacement file exists only in the working tree. The repo appears fixed to the current operator while collaborators still receive the broken state.
+
+**Why it happens:** Several goat-flow verification paths inspect the real filesystem, not the git index. `src/cli/manifest/manifest.ts` enumerates dashboard views with `readdirSync()`, and path-integrity/preflight treat a path as fixed once it exists on disk. That means an untracked replacement file can satisfy local checks. A second variant is worse: `.goat-flow/.gitignore` ignores almost everything by default, so a new repo-local file can look present locally while remaining impossible to commit.
+
+**Evidence:**
+- `src/cli/manifest/manifest.ts` (search: `readdirSync(dir)`) validates `facts.dashboard_views` against the working tree, not the index.
+- `src/dashboard/index.html` (search: `views/setup.html`) can include a replacement view file even if that file is still untracked.
+- `.goat-flow/.gitignore` (search: `*`) ignores new `.goat-flow/*` files unless they are explicitly whitelisted, which masked `.goat-flow/security-policy.md` during local verification.
+
+**Prevention:**
+1. After any add/rename/delete tied to setup, dashboard views, or repo-local policy files, run `git status --short` and confirm the replacement path is tracked.
+2. Use `git ls-files --error-unmatch <path>` for any new canonical path that a fix depends on.
+3. When introducing a new tracked file under `.goat-flow/`, update `.goat-flow/.gitignore` in the same change or the fix is local-only.
+
+---
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -77,3 +99,4 @@ last_reviewed: 2026-04-18
 - **CONTRIBUTING.md directs contributors to the wrong subsystem** (resolved 2026-04-13) - Rewritten to describe build checks in `check-goat-flow.ts` + `check-agent-setup.ts` and quality checks in `src/cli/audit/harness/`.
 - **Stale references from old project structure** (resolved 2026-04-15) - `ai-workflow-framework` no longer appears anywhere in the repo (verified by `rg "ai-workflow-framework"`).
 - **Preflight validates doc totals but not sub-breakdowns** (resolved 2026-04-17) - `scripts/preflight-checks.sh:412-419` now extracts `setup_count` and `agent_count` from the audit modules and validates the `(N setup + M agent)` breakdown claim in `.goat-flow/architecture.md`, not just the total. Verified by grep of preflight source.
+- **Dashboard session-limit constants drift across server, UI, docs, and tests** (resolved 2026-04-19) - `src/cli/server/terminal.ts` exports `MAX_SESSIONS = 10`, `src/cli/server/dashboard.ts:34` imports it, `test/integration/dashboard-server.test.ts:506` asserts `data.maxSessions === 10`, and `docs/dashboard.md` says "Maximum 10 concurrent sessions" — all four surfaces agree on 10. Pattern-class hygiene ("single exported constant reused in API payload, UI guards, and static copy") remains good practice for any future repo-wide cap; grep `maxSessions`, `serverSessions.length >=`, `Maximum of` before closing a similar change.

@@ -22,6 +22,11 @@ const EVIDENCE_PATTERN =
 /** Regex to extract file paths from backtick-wrapped references (with optional line numbers). */
 const FILE_REF_REGEX = /`([^`]+\.[a-zA-Z]{1,10})(?::[0-9]+(?:[-,][0-9]+)*)?`/g;
 
+/** Matches `` `<file>` (search: `<needle>`) `` — the footgun evidence form that
+ *  cites a literal string to grep for inside the referenced file. */
+const SEARCH_ANCHOR_REGEX =
+  /`([^`]+\.[a-zA-Z0-9]{1,10})`\s*\(search:\s*`([^`]+)`\)/g;
+
 /** Check if a backtick-wrapped file:line reference is a real file path (not a URL/hostname) */
 function isFileRef(filePath: string): boolean {
   // Skip hostname/URL patterns (not file references)
@@ -310,7 +315,44 @@ function summarizeFootgunRefs(
     summary.validRefs++;
   }
 
+  scanSearchAnchors(fs, cleanedContent, summary);
+
   return summary;
+}
+
+/** `(search: "<needle>")` anchors: confirm the literal string still appears in
+ *  the referenced file. A stale anchor is the mechanism that lets retired-code
+ *  footguns pass validation while pointing at code that no longer exists. */
+function scanSearchAnchors(
+  fs: ReadonlyFS,
+  cleanedContent: string,
+  summary: FootgunRefSummary,
+): void {
+  const searchAnchors = cleanedContent.matchAll(
+    new RegExp(SEARCH_ANCHOR_REGEX.source, "g"),
+  );
+  for (const match of searchAnchors) {
+    const filePath = match[1];
+    const needle = match[2];
+    if (
+      filePath === undefined ||
+      needle === undefined ||
+      !isFileRef(filePath) ||
+      !isCheckableForStaleness(filePath, fs)
+    )
+      continue;
+    summary.totalRefs++;
+    if (!fs.exists(filePath)) {
+      summary.staleRefs.push(`${filePath} (search: \`${needle}\`)`);
+      continue;
+    }
+    const fileContent = fs.readFile(filePath);
+    if (fileContent === null || !fileContent.includes(needle)) {
+      summary.staleRefs.push(`${filePath} (search: \`${needle}\`)`);
+      continue;
+    }
+    summary.validRefs++;
+  }
 }
 
 interface FootgunSection {
@@ -466,6 +508,21 @@ function getMissingFrontmatterDiagnostic(
   return diagnostics.length === 0 ? null : diagnostics.join("; ");
 }
 
+/** Extract the most recent `**Created:**` or `**Updated:**` date from a bucket body.
+ *  Returns YYYY-MM-DD or null if no parseable dates are found. Any non-YYYY-MM-DD
+ *  value is ignored; malformed dates would already be caught elsewhere. */
+function extractMaxEntryDate(body: string): string | null {
+  const pattern =
+    /\*\*(?:Created|Updated|Resolved):\*\*\s*(\d{4}-\d{2}-\d{2})/gi;
+  let max: string | null = null;
+  for (const match of body.matchAll(pattern)) {
+    const date = match[1];
+    if (date === undefined || !ISO_DATE_REGEX.test(date)) continue;
+    if (max === null || date > max) max = date;
+  }
+  return max;
+}
+
 /** Build a per-bucket freshness record from one markdown entry. */
 function buildBucketFreshness(
   entry: MarkdownEntry,
@@ -474,13 +531,14 @@ function buildBucketFreshness(
   invalidLineRefs: string[],
   now: Date,
 ): BucketFreshness {
-  const { frontmatter } = parseMarkdownFrontmatter(entry.content);
+  const { frontmatter, body } = parseMarkdownFrontmatter(entry.content);
   const fields =
     frontmatter === null ? {} : parseFrontmatterFields(frontmatter);
   const raw = fields.last_reviewed;
   const lastReviewed =
     raw !== undefined && raw !== "" && ISO_DATE_REGEX.test(raw) ? raw : null;
   const { days, band } = computeFreshness(lastReviewed, now);
+  const maxEntryDate = extractMaxEntryDate(body);
   return {
     path: entry.path,
     lastReviewed,
@@ -489,6 +547,7 @@ function buildBucketFreshness(
     entryCount,
     staleRefs,
     invalidLineRefs,
+    maxEntryDate,
   };
 }
 

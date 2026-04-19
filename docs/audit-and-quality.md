@@ -9,7 +9,6 @@ goat-flow audit .                              # Build correctness (pass/fail)
 goat-flow audit . --harness                    # Include AI harness completeness checks
 goat-flow audit . --agent claude               # Scope to one agent
 goat-flow quality . --agent gemini             # Generate quality-assessment prompt for one agent
-goat-flow quality capture --from-file out.md   # Save an agent response locally
 goat-flow quality history --agent gemini       # Review saved trend history
 goat-flow quality diff --agent gemini          # Compare the latest two saved runs
 ```
@@ -61,8 +60,8 @@ Adds 16 checks across the five harness concerns on top of the default build chec
 
 Harness checks are grouped by **concern** -- the five things every major harness engineering source agrees matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
-**harness scope** (AI Harness Completeness) - 16 checks across 5 concerns:
-- **Context** (3) - instruction file within line limit, execution loop present, doc paths resolve
+**harness scope** (AI Harness Completeness) - 17 checks across 5 concerns:
+- **Context** (4) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present (advisory)
 - **Constraints** (4) - deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings
 - **Verification** (4) - test runner configured, hooks in sync, commit guidance, post-turn hook integrity
 - **Recovery** (3) - milestone tracking, session logs, compaction hook
@@ -78,7 +77,7 @@ GOAT Flow Setup:          PASS
 
 Agent Setup:              PASS
   Toolchain:              not configured (optional)
-  Hooks:                  claude:deny installed, codex:deny installed, gemini:deny installed
+  Hooks:                  claude:deny installed, codex:deny installed, gemini:deny installed, copilot:deny installed
 
 AI Harness Completeness:  PASS
   Context:                PASS (3/3)
@@ -114,20 +113,19 @@ The prompt includes the current `audit` summary so the agent knows what's alread
 
 ### Quality report lifecycle
 
-`goat-flow quality` itself remains read-only and compose-only. Persistence is owned by separate CLI surfaces:
+`goat-flow quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` — a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
 
 ```bash
-goat-flow quality . --agent gemini
-goat-flow quality capture --from-file gemini-quality.md
-goat-flow quality history --agent gemini
-goat-flow quality diff --agent gemini
+goat-flow quality . --agent gemini             # Compose prompt; agent writes its own JSON report
+goat-flow quality history --agent gemini       # List saved reports + same-agent score deltas
+goat-flow quality diff --agent gemini          # Derive resolved / new / persisted / stuck vs the prior run
 ```
 
-- `quality capture` extracts the final matching fenced `json` block, validates it, computes positional finding ids, and saves the report under `.goat-flow/logs/quality/`
-- `quality history` lists saved reports and same-agent setup deltas
-- `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids
+- `quality` composes a structured prompt that ends with an instruction to save the JSON report under `.goat-flow/logs/quality/`. Positional finding ids are computed at load time by `history` / `diff`.
+- `quality history` lists saved reports and same-agent setup/system score deltas.
+- `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
-This keeps audit and quality separated in both terminology and storage: audit remains deterministic CLI output, while quality reports are agent-emitted assessments saved locally only when you explicitly capture them.
+This keeps audit and quality separated in both terminology and storage: audit remains deterministic CLI output, while quality reports are agent-emitted assessments saved to a gitignored log directory for local trend analysis.
 
 ### When to use quality
 
@@ -155,10 +153,9 @@ goat-flow quality . --agent X  →  "What does an agent actually think?" →  Ge
 Typical workflow after setup:
 1. Run `audit` - fix any build failures
 2. Run `audit --harness` - fix any failing harness completeness checks
-3. Run `quality` - paste the prompt into an agent session, get a subjective review
-4. Run `quality capture` - persist the response under `.goat-flow/logs/quality/`
-5. Run `quality history` / `quality diff` - compare trend lines and finding lifecycles across same-agent runs
-6. Feed durable findings back into the harness (footguns, lessons, decisions) - the feedback loop
+3. Run `quality` - paste the prompt into an agent session, get a subjective review; the agent writes its JSON report to `.goat-flow/logs/quality/` itself
+4. Run `quality history` / `quality diff` - compare trend lines and finding lifecycles across same-agent runs
+5. Feed durable findings back into the harness (footguns, lessons, decisions) - the feedback loop
 
 ---
 

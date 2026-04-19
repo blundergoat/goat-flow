@@ -3,38 +3,26 @@
   "goat_flow_version": "1.2.0",
   "agent": "claude",
   "project_path": "/tmp/quality-fixture-project",
-  "run_date": "2026-04-15",
+  "run_date": "2026-04-01",
   "audit_status": "pass",
   "scores": {
     "setup": {
-      "total": 80,
+      "total": 70,
       "accuracy": 20,
       "relevance": 20,
-      "completeness": 20,
-      "friction": 20
+      "completeness": 15,
+      "friction": 15
     },
     "system": {
-      "total": 75,
+      "total": 70,
       "usefulness": 20,
       "signal_to_noise": 20,
-      "adaptability": 20,
+      "adaptability": 15,
       "learnability": 15
     }
   },
   "findings": [
     {
-      "id": "framework_flaw:src-cli-prompt-compose-quality-ts:600",
-      "type": "framework_flaw",
-      "severity": "BLOCKER",
-      "file": "src/cli/prompt/compose-quality.ts",
-      "line": 600,
-      "summary": "Prompt still asks the agent to emit unsupported resolved delta tags",
-      "detail": "Current findings cannot represent resolved issues because resolved items disappear from the latest report.",
-      "evidence_quality": "OBSERVED",
-      "delta_tag": "new"
-    },
-    {
-      "id": "content_quality:goat-flow-architecture-md:49",
       "type": "content_quality",
       "severity": "MAJOR",
       "file": ".goat-flow/architecture.md",
@@ -42,7 +30,17 @@
       "summary": "Architecture doc still references outdated quality output behavior",
       "detail": "Readers are told quality output is session-only even though the persistence design is changing.",
       "evidence_quality": "OBSERVED",
-      "delta_tag": "persisted"
+      "delta_tag": "new"
+    },
+    {
+      "type": "false_path",
+      "severity": "MINOR",
+      "file": "src/cli/cli.ts",
+      "line": 66,
+      "summary": "CLI help lacks quality history/diff examples",
+      "detail": "Operators cannot discover the new report-lifecycle commands from help text alone.",
+      "evidence_quality": "OBSERVED",
+      "delta_tag": "new"
     }
   ]
 }

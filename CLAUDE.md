@@ -20,7 +20,7 @@ node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_r
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
-When a goat-* skill is active, its Step 0 satisfies READ/SCOPE. Resume at ACT.
+When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write — skills with write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) gate on explicit approval. Resume at ACT when the skill's first blocking gate releases.
 
 **READ** - MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns.md`; open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
 ```
@@ -66,11 +66,11 @@ Over budget = checkpoint and re-classify before continuing. Complexity-class bud
 - `.goat-flow/lessons/<category>.md` — behavioural mistake. `## Lesson: <name>` + `**Created:** YYYY-MM-DD`.
 - `.goat-flow/footguns/<category>.md` — cross-doc architectural trap with file evidence. `## Footgun: <name>` + `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`.
 - `.goat-flow/decisions/` — significant technical decision with context/rationale.
-- `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` — end-of-session summary.
+- `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` — optional continuity note written on `/compact` when no active milestone file exists; skip otherwise.
 
 ## Autonomy Tiers
 
-**Always:** Read any file, lint scripts, edit within assigned scope, append to session logs at `.goat-flow/logs/sessions/`. (Learning-loop updates — lessons/footguns/decisions — follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.)
+**Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes — write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.
 
 **Ask First** — before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked, rollback command.
 
@@ -98,10 +98,12 @@ MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh,
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.claude/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
-| Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
+| Footguns (most-queried) | `.goat-flow/footguns/` |
+| Lessons | `.goat-flow/lessons/` |
+| Patterns | `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
 | Config | `.goat-flow/config.yaml` |
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `AGENTS.md`, `GEMINI.md` |
+| Peer instructions | `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md` |

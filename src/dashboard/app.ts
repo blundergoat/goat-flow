@@ -7,7 +7,7 @@
 type JsonRecord = Record<string, unknown>;
 type ProjectSortKey = "name" | keyof ProjectEntry;
 
-const DEFAULT_WIZARD_COMMANDS: WizardCommands = {
+const DEFAULT_SETUP_COMMANDS: SetupCommands = {
   test: "",
   lint: "",
   build: "",
@@ -16,7 +16,8 @@ const DEFAULT_WIZARD_COMMANDS: WizardCommands = {
 
 const DEFAULT_EXISTING_ARTIFACTS: ExistingArtifacts = {
   skills: false,
-  instructions: false,
+  instructionsRepoWide: false,
+  instructionsPathScoped: false,
   lessons: false,
   footguns: false,
   config: false,
@@ -62,11 +63,11 @@ function readRunnerId(value: unknown): RunnerId | null {
   return runner.length > 0 ? runner : null;
 }
 
-/** Build the default wizard-agent selection from the injected support list. */
-function buildDefaultWizardAgents(
+/** Build the default setup-agent selection from the injected support list. */
+function buildDefaultSetupAgents(
   supportedAgents: SupportedAgent[],
   defaultRunner: RunnerId,
-): WizardData["agents"] {
+): SetupData["agents"] {
   if (supportedAgents.length === 0) {
     return { [defaultRunner]: true };
   }
@@ -443,7 +444,7 @@ function getXtermConstructors(): {
 function app() {
   const supportedAgents = readInjectedSupportedAgents();
   const defaultRunner = supportedAgents[0]?.id ?? "claude";
-  const defaultWizardAgents = buildDefaultWizardAgents(
+  const defaultSetupAgents = buildDefaultSetupAgents(
     supportedAgents,
     defaultRunner,
   );
@@ -501,6 +502,7 @@ function app() {
     terminalAvailable: false,
     terminalSessionCount: 0,
     serverSessions: [] as ServerSessionInfo[],
+    serverMaxSessions: 10,
     showMaxSessionsModal: false,
     sessions: [] as LocalSession[],
     activeSessionId: null as string | null,
@@ -509,8 +511,10 @@ function app() {
     launching: false,
     availableRunners: [] as RunnerId[],
     // Project switches intentionally preserve backend sessions so returning to a workspace
-    // can reattach instead of spawning a fresh agent process.
-    _projectSessions: {} as Record<string, SavedSession>,
+    // can reattach instead of spawning a fresh agent process. Each project keeps the full
+    // list of its bound sessions plus the id that was active at detach time.
+    _projectSessions: {} as Record<string, SavedSession[]>,
+    _projectActiveSession: {} as Record<string, string>,
     _terminalRefs: {} as Record<string, TerminalRefs>,
     _xtermLoaded: false,
     // detachTerminal() flips this while it closes browser-side sockets so ws.onclose only
@@ -614,7 +618,7 @@ function app() {
     },
 
     /** Return the audit-based status shown on each Setup page agent card. */
-    wizardAgentStatus(agentId: RunnerId): { label: string; color: string } {
+    setupAgentStatus(agentId: RunnerId): { label: string; color: string } {
       if (!this.report) return { label: "Not audited", color: "#52525b" };
       const score = this.report.agentScores.find((s) => s.id === agentId);
       if (!score) return { label: "Not audited", color: "#52525b" };
@@ -626,19 +630,19 @@ function app() {
       return { label: "Harness failing", color: "#fbbf24" };
     },
 
-    // --- Wizard state ---
-    wizardDetecting: false,
-    wizardSelectedAgent: defaultRunner,
-    wizardData: {
+    // --- Setup state ---
+    setupDetecting: false,
+    setupSelectedAgent: defaultRunner,
+    setupData: {
       languages: [],
       frameworks: [],
-      commands: { ...DEFAULT_WIZARD_COMMANDS },
-      agents: { ...defaultWizardAgents },
+      commands: { ...DEFAULT_SETUP_COMMANDS },
+      agents: { ...defaultSetupAgents },
       existing: { ...DEFAULT_EXISTING_ARTIFACTS },
       nonGoatFlow: [],
-    } as WizardData,
-    wizardGenerating: false,
-    wizardSetupOutputs: {} as Record<string, string>,
+    } as SetupData,
+    setupGenerating: false,
+    setupOutputs: {} as Record<string, string>,
 
     // --- Launcher state ---
     presets: PRESETS,
@@ -1079,7 +1083,8 @@ function app() {
               if (
                 this.selectedPreset &&
                 !this.launching &&
-                Math.max(this.sessions.length, this.serverSessions.length) < 7
+                Math.max(this.sessions.length, this.serverSessions.length) <
+                  this.serverMaxSessions
               ) {
                 e.preventDefault();
                 this.launchPreset(
@@ -1160,9 +1165,9 @@ function app() {
       } else this.browseTo(dir.path);
     },
 
-    // -- Wizard --
+    // -- Setup --
     async detectStack() {
-      this.wizardDetecting = true;
+      this.setupDetecting = true;
       try {
         const res = await fetch(
           `/api/setup/detect?path=${encodeURIComponent(this.projectPath)}`,
@@ -1174,25 +1179,25 @@ function app() {
         const error = readErrorMessage(payload);
         if (error) {
           this.showToast(error, true);
-          this.wizardDetecting = false;
+          this.setupDetecting = false;
           return;
         }
         const commands = isRecord(payload.commands) ? payload.commands : {};
         const agents = isRecord(payload.agents) ? payload.agents : {};
         const existing = isRecord(payload.existing) ? payload.existing : {};
-        this.wizardData.languages = readStringArray(payload.languages);
-        this.wizardData.frameworks = readStringArray(payload.frameworks);
-        this.wizardData.commands = {
+        this.setupData.languages = readStringArray(payload.languages);
+        this.setupData.frameworks = readStringArray(payload.frameworks);
+        this.setupData.commands = {
           test: readString(commands.test),
           lint: readString(commands.lint),
           build: readString(commands.build),
           format: readString(commands.format),
         };
-        const defaultAgents = buildDefaultWizardAgents(
+        const defaultAgents = buildDefaultSetupAgents(
           this.supportedAgents,
-          this.wizardSelectedAgent,
+          this.setupSelectedAgent,
         );
-        this.wizardData.agents = Object.fromEntries(
+        this.setupData.agents = Object.fromEntries(
           Object.keys(defaultAgents).map((agentId) => [
             agentId,
             typeof agents[agentId] === "boolean"
@@ -1200,18 +1205,22 @@ function app() {
               : (defaultAgents[agentId] ?? false),
           ]),
         );
-        if (!Object.values(this.wizardData.agents).some((v) => v)) {
-          this.wizardData.agents[this.wizardSelectedAgent] = true;
+        if (!Object.values(this.setupData.agents).some((v) => v)) {
+          this.setupData.agents[this.setupSelectedAgent] = true;
         }
-        this.wizardData.existing = {
+        this.setupData.existing = {
           skills:
             typeof existing.skills === "boolean"
               ? existing.skills
               : DEFAULT_EXISTING_ARTIFACTS.skills,
-          instructions:
-            typeof existing.instructions === "boolean"
-              ? existing.instructions
-              : DEFAULT_EXISTING_ARTIFACTS.instructions,
+          instructionsRepoWide:
+            typeof existing.instructionsRepoWide === "boolean"
+              ? existing.instructionsRepoWide
+              : DEFAULT_EXISTING_ARTIFACTS.instructionsRepoWide,
+          instructionsPathScoped:
+            typeof existing.instructionsPathScoped === "boolean"
+              ? existing.instructionsPathScoped
+              : DEFAULT_EXISTING_ARTIFACTS.instructionsPathScoped,
           lessons:
             typeof existing.lessons === "boolean"
               ? existing.lessons
@@ -1225,18 +1234,18 @@ function app() {
               ? existing.config
               : DEFAULT_EXISTING_ARTIFACTS.config,
         };
-        this.wizardData.nonGoatFlow = readStringArray(payload.nonGoatFlow);
+        this.setupData.nonGoatFlow = readStringArray(payload.nonGoatFlow);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(msg || "Detection failed", true);
       }
-      this.wizardDetecting = false;
+      this.setupDetecting = false;
     },
-    /** Generate setup output for the agent selected in the wizard. */
-    async generateWizardSetup() {
-      this.wizardGenerating = true;
-      this.wizardSetupOutputs = {};
-      const agent = this.wizardSelectedAgent;
+    /** Generate setup output for the agent selected in the setup view. */
+    async generateSetupPrompt() {
+      this.setupGenerating = true;
+      this.setupOutputs = {};
+      const agent = this.setupSelectedAgent;
       try {
         const res = await fetch(
           `/api/setup?path=${encodeURIComponent(this.projectPath)}&agent=${agent}`,
@@ -1246,14 +1255,14 @@ function app() {
         if (error) {
           this.showToast(`${agent}: ${error}`, true);
         } else {
-          this.wizardSetupOutputs[agent] =
+          this.setupOutputs[agent] =
             readString(payload.output) || "No output generated.";
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(msg || "Generation failed", true);
       }
-      this.wizardGenerating = false;
+      this.setupGenerating = false;
     },
 
     // -- Quality --
@@ -1458,6 +1467,9 @@ function app() {
         );
         this.terminalSessionCount =
           typeof payload.activeCount === "number" ? payload.activeCount : 0;
+        if (typeof payload.maxSessions === "number") {
+          this.serverMaxSessions = payload.maxSessions;
+        }
         this.serverSessions = Array.isArray(payload.sessions)
           ? payload.sessions
               .map((session) => readServerSessionInfo(session))
@@ -1499,6 +1511,7 @@ function app() {
         }
         this._terminalRefs = {};
         this._projectSessions = {};
+        this._projectActiveSession = {};
         this.sessions = [];
         this.activeSessionId = null;
         for (const [presetId, state] of Object.entries(this.promptRunStates)) {
@@ -1579,18 +1592,49 @@ function app() {
         presetId,
       });
     },
+    /** Drop a session id from every project's saved list, pruning empty entries. */
+    _forgetSavedSession(sessionId: string) {
+      for (const [path, list] of Object.entries(this._projectSessions)) {
+        const filtered = list.filter((sv) => sv.sessionId !== sessionId);
+        if (filtered.length === 0) {
+          delete this._projectSessions[path];
+        } else if (filtered.length !== list.length) {
+          this._projectSessions[path] = filtered;
+        }
+        if (this._projectActiveSession[path] === sessionId) {
+          const first = filtered[0];
+          if (first) {
+            this._projectActiveSession[path] = first.sessionId;
+          } else {
+            delete this._projectActiveSession[path];
+          }
+        }
+      }
+    },
     /** Detach the current browser terminal while preserving reconnect metadata. */
     detachTerminal(forProjectPath?: string) {
       this._detaching = true;
       const savePath = forProjectPath || this.projectPath;
-      const active = this._activeSession;
-      if (active && !active.ended) {
-        this._projectSessions[savePath] = {
-          sessionId: active.id,
-          startTime: active.startTime,
-          prompt: active.promptLabel,
-          agent: active.runner,
-        };
+      const toSave: SavedSession[] = this.sessions
+        .filter((s) => s.projectPath === savePath && !s.ended)
+        .map((s) => ({
+          sessionId: s.id,
+          startTime: s.startTime,
+          prompt: s.promptLabel ?? "",
+          agent: s.runner,
+        }));
+      if (toSave.length > 0) {
+        this._projectSessions[savePath] = toSave;
+        const activeId = this.activeSessionId;
+        const fallback = toSave[0];
+        if (activeId && toSave.some((s) => s.sessionId === activeId)) {
+          this._projectActiveSession[savePath] = activeId;
+        } else if (fallback) {
+          this._projectActiveSession[savePath] = fallback.sessionId;
+        }
+      } else {
+        delete this._projectSessions[savePath];
+        delete this._projectActiveSession[savePath];
       }
       for (const id of Object.keys(this._terminalRefs)) {
         const refs = this._terminalRefs[id];
@@ -1602,54 +1646,70 @@ function app() {
       this.promptRunStates = {};
       this._detaching = false;
     },
-    /** Reconnect the workspace to a saved backend terminal session for this project. */
+    /** Reconnect the workspace to every saved backend session for this project. */
     async reconnectTerminal(): Promise<boolean> {
-      const saved = this._projectSessions[this.projectPath];
-      if (!saved) return false;
-      let alive: ServerSessionInfo | null = null;
+      const savedList = this._projectSessions[this.projectPath];
+      if (!savedList || savedList.length === 0) return false;
+      const aliveMap = new Map<string, ServerSessionInfo>();
       try {
         const res = await fetch("/api/terminal/sessions");
         const payload = readRecord(
           await res.json(),
           "Terminal sessions response",
         );
-        alive = Array.isArray(payload.sessions)
-          ? (payload.sessions
-              .map((session) => readServerSessionInfo(session))
-              .filter(
-                (session): session is ServerSessionInfo => session !== null,
-              )
-              .find((session) => session.id === saved.sessionId) ?? null)
-          : null;
-        if (!alive) {
-          delete this._projectSessions[this.projectPath];
-          return false;
+        if (Array.isArray(payload.sessions)) {
+          for (const raw of payload.sessions) {
+            const session = readServerSessionInfo(raw);
+            if (session) aliveMap.set(session.id, session);
+          }
         }
       } catch {
         delete this._projectSessions[this.projectPath];
+        delete this._projectActiveSession[this.projectPath];
         return false;
       }
+      const liveSaved = savedList.filter((sv) => aliveMap.has(sv.sessionId));
+      if (liveSaved.length === 0) {
+        delete this._projectSessions[this.projectPath];
+        delete this._projectActiveSession[this.projectPath];
+        return false;
+      }
+      this._projectSessions[this.projectPath] = liveSaved;
       const self = this as typeof this & AlpineMagics<typeof this>;
       await this.loadXterm();
-      const session: LocalSession = {
-        id: saved.sessionId,
-        runner: saved.agent,
-        promptLabel: saved.prompt,
-        projectPath: this.projectPath,
-        startTime: saved.startTime,
-        lastInputTime: alive.lastInputAt,
-        connected: false,
-        ended: false,
-        age: "",
-        presetId: null,
-      };
-      this.sessions.push(session);
-      this._terminalRefs[session.id] = {};
-      this.activeSessionId = session.id;
+      for (const saved of liveSaved) {
+        const alive = aliveMap.get(saved.sessionId);
+        if (!alive) continue;
+        const session: LocalSession = {
+          id: saved.sessionId,
+          runner: saved.agent,
+          promptLabel: saved.prompt,
+          projectPath: this.projectPath,
+          startTime: saved.startTime,
+          lastInputTime: alive.lastInputAt,
+          connected: false,
+          ended: false,
+          age: "",
+          presetId: null,
+        };
+        this.sessions.push(session);
+        this._terminalRefs[session.id] = {};
+      }
+      const savedActiveId = this._projectActiveSession[this.projectPath];
+      const first = liveSaved[0];
+      this.activeSessionId =
+        savedActiveId && liveSaved.some((s) => s.sessionId === savedActiveId)
+          ? savedActiveId
+          : (first?.sessionId ?? null);
       this.activeView = "workspace";
       this.workspacePanel = "terminal";
       await self.$nextTick();
-      this.connectTerminal(session.id, `/ws/terminal/${saved.sessionId}`);
+      for (const saved of liveSaved) {
+        this.connectTerminal(
+          saved.sessionId,
+          `/ws/terminal/${saved.sessionId}`,
+        );
+      }
       this.updateSessionCount();
       return true;
     },
@@ -1662,7 +1722,10 @@ function app() {
         presetId = null,
       }: { promptLabel?: string | null; presetId?: string | null } = {},
     ) {
-      if (Math.max(this.sessions.length, this.serverSessions.length) >= 7) {
+      if (
+        Math.max(this.sessions.length, this.serverSessions.length) >=
+        this.serverMaxSessions
+      ) {
         this.showMaxSessionsModal = true;
         return;
       }
@@ -1829,10 +1892,7 @@ function app() {
           } else if (type === "exit") {
             session.ended = true;
             session.connected = false;
-            for (const [path, sv] of Object.entries(this._projectSessions)) {
-              if (sv.sessionId === sessionId)
-                delete this._projectSessions[path];
-            }
+            this._forgetSavedSession(sessionId);
             if (
               session.presetId &&
               this.promptRunStates[session.presetId] === "running"
@@ -1931,9 +1991,7 @@ function app() {
       if (refs?.cleanup) refs.cleanup();
       delete this._terminalRefs[sessionId];
       this.sessions = this.sessions.filter((s) => s.id !== sessionId);
-      for (const [path, sv] of Object.entries(this._projectSessions)) {
-        if (sv.sessionId === sessionId) delete this._projectSessions[path];
-      }
+      this._forgetSavedSession(sessionId);
       if (this.activeSessionId === sessionId) {
         this.activeSessionId = this.sessions[0]?.id || null;
       }

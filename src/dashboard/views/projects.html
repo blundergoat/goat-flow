@@ -35,9 +35,9 @@
       if (project.action === 'audit') {
         this.projectPath = project.path; this.activeView = 'home'; this.runAudit();
       } else if (project.action === 'setup') {
-        this.projectPath = project.path; this.activeView = 'wizard'; this.detectStack();
+        this.projectPath = project.path; this.activeView = 'setup'; this.detectStack();
       } else if (project.action === 'migration' || project.action === 'upgrade') {
-        this.projectPath = project.path; this.activeView = 'wizard'; this.detectStack();
+        this.projectPath = project.path; this.activeView = 'setup'; this.detectStack();
       } else {
         this.projectPath = project.path; this.activeView = 'home'; this.runAudit();
       }

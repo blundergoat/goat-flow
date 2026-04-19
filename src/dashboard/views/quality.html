@@ -292,8 +292,8 @@
               >
                 <button
                   @click="launchPreset(qualityResult.prompt, activeRunner); activeView = 'workspace'"
-                  :disabled="launching || serverSessions.length >= 7"
-                  :title="serverSessions.length >= 7 ? 'Session limit reached (7/7). End one to launch another.' : 'Launch in a new terminal session.'"
+                  :disabled="launching || serverSessions.length >= 10"
+                  :title="serverSessions.length >= 10 ? 'Session limit reached (10/10). End one to launch another.' : 'Launch in a new terminal session.'"
                   class="gf-btn-terminal-cta"
                 >
                   <svg

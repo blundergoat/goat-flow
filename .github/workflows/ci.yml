@@ -99,8 +99,7 @@ jobs:
             fi
           done
 
-          # .github/skills/ excluded: copilot is bridge-only, not covered by audit system
-          for dir in .claude/skills .agents/skills; do
+          for dir in .claude/skills .agents/skills .github/skills; do
             if [ -d "$dir" ]; then
               for f in $(find "$dir" -name 'SKILL.md'); do
                 ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)

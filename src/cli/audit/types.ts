@@ -142,6 +142,7 @@ export interface ProjectStructure {
   skills: {
     canonical: string[];
     stale_names: string[];
+    references?: Record<string, string[]>;
   };
   agents: Record<
     string,

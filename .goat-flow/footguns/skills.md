@@ -1,22 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-04-18
----
-
-## Footgun: Workflow-summarising skill descriptions cause CSO shortcutting
-
-**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Agents invoking a skill via `/<skill>` shortcut past the full `SKILL.md` body when the `description:` field summarises WHAT the skill does or HOW it works — the description becomes a substitute for reading the body.
-
-**Why it happens:** LLMs anchor on the description as a sufficient summary and skip expanding the full skill content. This is the Context Search Optimization (CSO) failure class.
-
-**Evidence:**
-- Original incident in the external `superpowers-skills` repo (path: skills/meta/writing-skills/SKILL.md, lines 134-172 at the time) — `subagent-driven-development`'s description said "dispatches subagent per task with code review between tasks" and Claude performed ONE review instead of the two-stage review defined in the body.
-- Regression caught in goat-flow itself on 2026-04-18: the `goat` dispatcher description was "Single entry point that classifies intent and dispatches to the correct goat-* skill" — workflow-summary, not trigger-only. Rewritten to "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-
-**Prevention:** Descriptions must be trigger-only — say WHEN to invoke the skill, never WHAT it does or HOW. All 7 current goat-* descriptions (including the dispatcher) are compliant as of 2026-04-18. When adding or editing a skill, the description field must pass the trigger-only test: if removing it and reading only the description tells you the skill's workflow steps or internal phases, it is a CSO violation regardless of how accurate it is.
-
+last_reviewed: 2026-04-19
 ---
 
 ## Footgun: Weak retrieval cues cause learning-loop misses
@@ -112,6 +96,7 @@ Skills enforce phase gates (Step 0 must complete before Phase 1, gates pause for
 
 > Historical record. These entries are no longer active traps.
 
+- **Workflow-summarising skill descriptions cause CSO shortcutting** (resolved 2026-04-19) — All 7 current goat-* descriptions (including the dispatcher) are compliant with the trigger-only rule ("Use when …"), not workflow summaries. The rule is enforced in `workflow/skills/reference/skill-quality-testing.md` GREEN-phase checklist ("`description` is CSO-optimised: 'Use when [trigger]', not a workflow summary"). Original incident was in the external `superpowers-skills` repo; the goat-flow regression was on the dispatcher description and was rewritten the same day it was caught.
 - **Dispatcher intent mapping has no coverage for analysis/evaluation verbs** (resolved 2026-04-14) - Added analysis/evaluation verbs to the dispatcher disambiguation table so ambiguous requests prompt skill selection instead of auto-routing.
 - **CI template derives skill names by prefixing instead of listing them** (resolved 2026-04-14) - Removed `src/cli/prompt/fragments/` directory in v1.1.0; CI template generation no longer exists.
 - **Blind mv/cp/Write can overwrite existing files** (resolved 2026-04-18) - Covered by the Never-tier no-clobber rule and destination-check guidance in the hot-path instruction files; no longer kept as an active architectural footgun.

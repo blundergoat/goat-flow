@@ -197,11 +197,11 @@ interface Preset {
 }
 
 // ---------------------------------------------------------------------------
-// Wizard types
+// Setup types
 // ---------------------------------------------------------------------------
 
-/** Detected command slots shown in the setup wizard. */
-interface WizardCommands {
+/** Detected command slots shown in the setup view. */
+interface SetupCommands {
   test: string;
   lint: string;
   build: string;
@@ -211,17 +211,18 @@ interface WizardCommands {
 /** Existing GOAT Flow artifacts detected in the selected project. */
 interface ExistingArtifacts {
   skills: boolean;
-  instructions: boolean;
+  instructionsRepoWide: boolean;
+  instructionsPathScoped: boolean;
   lessons: boolean;
   footguns: boolean;
   config: boolean;
 }
 
-/** Aggregated setup-wizard detection data returned by `/api/setup/detect`. */
-interface WizardData {
+/** Aggregated setup-view detection data returned by `/api/setup/detect`. */
+interface SetupData {
   languages: string[];
   frameworks: string[];
-  commands: WizardCommands;
+  commands: SetupCommands;
   agents: Record<RunnerId, boolean>;
   existing: ExistingArtifacts;
   nonGoatFlow: string[];

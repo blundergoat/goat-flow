@@ -3,25 +3,14 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli.js";
 
 describe("quality subcommand parsing", () => {
-  it("parses capture mode and resolves bare output files under the project root", () => {
-    const parsed = parseCLIArgs([
-      "quality",
-      "capture",
-      "--from-file",
-      "response.md",
-      "--output",
-      "report.json",
-    ]);
-
-    assert.equal(parsed.command, "quality");
-    assert.equal(parsed.qualitySubcommand, "capture");
-    assert.equal(parsed.fromFile, "response.md");
-    assert.equal(parsed.projectPath, resolve("."));
-    assert.equal(parsed.output, resolve(".goat-flow", "report.json"));
+  it("rejects the removed capture subcommand with a migration hint", () => {
+    assert.throws(
+      () => parseCLIArgs(["quality", "capture"]),
+      /quality capture.+removed/i,
+    );
   });
 
   it("parses history mode with --all", () => {
@@ -41,17 +30,20 @@ describe("quality subcommand parsing", () => {
     const parsed = parseCLIArgs([
       "quality",
       "diff",
-      "2026-04-01-claude:2026-04-15-claude",
+      "2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb",
       "--agent",
       "claude",
     ]);
     assert.equal(parsed.qualitySubcommand, "diff");
-    assert.equal(parsed.qualityDiffPair, "2026-04-01-claude:2026-04-15-claude");
+    assert.equal(
+      parsed.qualityDiffPair,
+      "2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb",
+    );
   });
 
-  it("rejects quality-only flags on non-quality commands", () => {
+  it("rejects --all on non-quality commands", () => {
     assert.throws(
-      () => parseCLIArgs(["audit", ".", "--from-file", "response.md"]),
+      () => parseCLIArgs(["audit", ".", "--all"]),
       /only valid for the quality command/i,
     );
   });

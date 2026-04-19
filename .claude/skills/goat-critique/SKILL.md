@@ -23,63 +23,53 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 **NOT this skill:**
 - No artifact exists yet → create one first (goat-review, goat-debug, etc.)
 - Simple factual question → answer directly
-- Trivial artifact (hotfix, single-file change) → use goat-review instead. If it's not worth 3 agents and 5 phases, don't use goat-critique.
+- Trivial artifact (hotfix, single-file change) → use goat-review instead. If it is not worth 3 agents and 5 phases, do not use goat-critique.
+- Delegated sub-agents unavailable in this session → the skill cannot run. Redirect the user to `/goat-review`; do not run inline role-play as a substitute.
 
 ## Step 0 - Intake
 
-**Stake calibration (if user doesn't specify quick/full):**
-- What is the blast radius if this artifact is wrong?
-  - 1-2 files affected → quick mode is proportional
-  - 3-10 files or cross-boundary → quick mode default, offer full
-  - 10+ files, production systems, or security-critical → full mode default
-- Standard complexity → quick mode. System/Infrastructure → full mode.
+goat-critique runs in one mode: full delegated, 5 phases, 2-3 sub-agents. There is no quick/inline fallback — if the work does not justify sub-agent delegation, use `/goat-review` instead. See `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` for the rationale.
 
-**Mode choice:**
-- Quick (default): inline multi-lens critique. No delegated sub-agents. 3 phases.
-- Full / delegated: Agents A/B/C → 5 phases with cross-examination and human dispute resolution.
-- Full / delegated mode is only valid when the user explicitly asks for delegation / parallel agents, or the caller already supplied that authorization.
-- If delegation is unavailable, stay in quick mode and say so explicitly.
-- `/goat-critique` or router: confirm artifact and present mode recommendation based on stake calibration.
+**Intake checklist:**
+- Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings — not a vague idea).
+- Confirm sub-agent delegation is available in this session. If it is not, stop and redirect the user to `/goat-review`.
 - Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`; record explicit misses instead of broad-loading buckets.
-- Skill-chained: skip intake confirmation; use caller context and start at Phase 1.
+- Skill-chained entry: skip intake confirmation, use caller context, start at Phase 1. Skill-chaining does not unlock a quick variant — all 5 phases still run.
 
 ## Phase 1 - Generate Competing Critiques
 
-Quick mode: run the alternatives pass and fresh-eyes pass inline.
-Full / delegated mode: spawn 2-3 sub-agents.
+Spawn 2-3 sub-agents via the Agent tool. MUST NOT inline role-play as a substitute.
 
-Context varies intentionally - informational diversity catches more than tonal diversity.
+Context varies intentionally — informational diversity catches more than tonal diversity.
 
 ### The Core Trio Lens
 
-Agents A and B both use the SKEPTIC/ANALYST/STRATEGIST combined lens. These three perspectives work as a unit - never split them into separate agents:
+Agents A and B both use the SKEPTIC/ANALYST/STRATEGIST combined lens. These three perspectives work as a unit — never split them into separate agents:
 
-- **SKEPTIC** - "What could go wrong? What assumptions are unproven? What's the worst-case scenario?"
-- **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
-- **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
+- **SKEPTIC** — "What could go wrong? What assumptions are unproven? What's the worst-case scenario?"
+- **ANALYST** — "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
+- **STRATEGIST** — "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
 All three perspectives must appear in every critique from Agents A and B. The tension between them is the point.
 
-### Delegated Sub-Agent Definitions
+### Sub-Agent Definitions
 
-**Sub-agent A (Risk Focus - backward-looking context):**
+**Sub-agent A (Risk Focus — backward-looking context):**
 Gets: artifact + architecture.md + footguns + lessons + critique rubric.
-Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the fastest safe path looks like. Your context includes past mistakes (footguns, lessons) - use them."
+Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the fastest safe path looks like. Your context includes past mistakes (footguns, lessons) — use them."
 
-**Sub-agent B (Alternatives Focus - current-state context):**
+**Sub-agent B (Alternatives Focus — current-state context):**
 Gets: artifact + architecture.md + recent git history (`git log --oneline -20`) + config.yaml + critique rubric.
-Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on ALTERNATIVES: generate 2-3 different approaches to the key decisions. Your context includes how the project actually works right now (git history, config) - ground alternatives in real project patterns, not theory."
+Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on ALTERNATIVES: generate 2-3 different approaches to the key decisions. Your context includes how the project actually works right now (git history, config) — ground alternatives in real project patterns, not theory."
 
-**Sub-agent C (Fresh Eyes - NO project context):**
+**Sub-agent C (Fresh Eyes — NO project context):**
 Gets: artifact + critique rubric ONLY. No architecture, footguns, lessons, git, or config.
-Directive: "Critique this artifact as if you know nothing about the project. Flag every assumption the artifact makes without stating explicitly. If you find nothing confusing, note whether that's because the artifact is exceptionally clear or because you didn't probe hard enough. Your findings that overlap with other agents are convergent evidence, not redundancy."
+Directive: "Critique this artifact as if you know nothing about the project. Flag every assumption the artifact makes without stating explicitly. If you find nothing confusing, note whether that is because the artifact is exceptionally clear or because you didn't probe hard enough. Your findings that overlap with other agents are convergent evidence, not redundancy."
 
-Each delegated sub-agent MUST return:
+Each sub-agent MUST return:
 - 3-7 findings: title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file:line or artifact section reference), confidence (HIGH/MEDIUM/LOW), one-sentence rationale
 - Overall assessment: STRONG / ADEQUATE / WEAK / FLAWED
 - One thing the artifact gets RIGHT that should be preserved
-
-Full / delegated mode MUST use Agent tool calls, not inline role-play. Delegated sub-agents run in isolated context.
 
 ## Phase 2 - Rank and Compare
 
@@ -87,8 +77,6 @@ Build a quick matrix and score by grounding/specificity/actionability/coverage/c
 Label each finding as consensus / split / unique.
 
 **Control group delta:** For fresh-eyes-only findings, mark each as CONTEXT DRIFT / READABILITY GAP / CONTEXT-LIMITED.
-
-Quick mode: skip **Phase 3 (Cross-Examine)** and **Phase 4 (Clarify)**. Proceed directly to **Phase 5 (Synthesise)** after Phase 2. **Because cross-examination is skipped, every split finding MUST be tagged as Decision Debt in the synthesis — without cross-exam, there is no basis to pick a winner.**
 
 ## Phase 3 - Cross-Examine
 
@@ -102,17 +90,17 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 Before synthesising, present the unresolved items to the human:
 
-1. **Still-disputed findings** from Phase 3 - present both positions, ask which to adopt
-2. **Material trade-offs** - where two valid approaches exist, present the fork and ask which path
-3. **Context drift signals** - any CONTEXT DRIFT findings from Phase 2 that challenge the artifact's assumptions
+1. **Still-disputed findings** from Phase 3 — present both positions, ask which to adopt
+2. **Material trade-offs** — where two valid approaches exist, present the fork and ask which path
+3. **Context drift signals** — any CONTEXT DRIFT findings from Phase 2 that challenge the artifact's assumptions
 
 Format:
 > **Dispute [N]:** Agent A says [X], Agent B says [Y]. Cross-examination was inconclusive. Which position should the synthesis adopt?
 > **Trade-off [N]:** [Option A] prioritises [X] at the cost of [Y]. [Option B] does the reverse. Which matters more here?
 > **Context drift [N]:** Fresh eyes found [assumption]. Is this intentional or an oversight?
 
-**If disputes exist or Decision Debt items need resolution:** BLOCKING GATE - STOP and present disputes for human resolution.
-**If all agents agree (no disputes):** CHECKPOINT - note consensus and proceed to synthesis.
+**If disputes exist or Decision Debt items need resolution:** BLOCKING GATE — STOP and present disputes for human resolution.
+**If all agents agree (no disputes):** CHECKPOINT — note consensus and proceed to synthesis.
 
 ## Phase 5 - Synthesise
 
@@ -123,19 +111,19 @@ Produce the prime critique:
 - Verified unique findings (survived cross-examination)
 - Retracted findings (listed so user sees what was considered and dismissed)
 
-**Decision Debt:** Tag as Decision Debt when any of these apply: supporting evidence is INFERRED (not OBSERVED); only one agent/lens raised it and cross-examination was inconclusive (full mode) or skipped (quick mode — see Phase 2 rule); or the recommendation depends on an unvalidated assumption:
+**Decision Debt:** Tag as Decision Debt when any of these apply: supporting evidence is INFERRED (not OBSERVED); only one agent raised it and cross-examination was inconclusive; or the recommendation depends on an unvalidated assumption:
 
 > **Decision Debt:** [recommendation]
 > - Confidence: LOW/MEDIUM
 > - Evidence needed to resolve: [what specific evidence would settle this]
-> - Revisit when: [concrete trigger - next milestone, specific file change, before deploy]
+> - Revisit when: [concrete trigger — next milestone, specific file change, before deploy]
 
 **Blind spot check:** Before presenting, identify:
 - Sections of the artifact that no sub-agent addressed
 - Aspects of the critique rubric that no finding maps to
 - Files or systems referenced by the artifact that were not read by any sub-agent
 
-List these as "What Wasn't Critiqued." This section must never be empty - if everything was covered, state that explicitly.
+List these as "What Wasn't Critiqued." This section must never be empty — if everything was covered, state that explicitly.
 
 **BLOCKING GATE:** Present the synthesised critique. Human decides: apply recommendations, dig deeper, re-run with different framing, or close. After critique of a plan, suggest `/goat-plan` to update milestones based on recommendations.
 
@@ -155,30 +143,25 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 
 ## Constraints
 
-- Quick: inline fallback, no delegated agents. Full / delegated: 2-3 agents.
-- Quick mode runs 3 phases (Generate, Rank, Synthesise). Full / delegated mode runs 5.
-- Full / delegated mode MUST use Agent tool calls for sub-agents, not inline role-play
-- Full / delegated mode MUST isolate Phase 1 contexts
+- Full delegated mode is the only mode. 2-3 sub-agents, 5 phases. No quick/inline fallback. If delegation is unavailable, stop and redirect to `/goat-review`.
+- MUST use Agent tool calls for sub-agents, not inline role-play
+- MUST isolate Phase 1 contexts per sub-agent
 - Fresh-eyes analysis MUST be restricted to artifact + rubric only
-- MUST use SKEPTIC/ANALYST/STRATEGIST as a combined lens per agent - never split into separate roles
-- Full / delegated mode MUST differentiate Agent A (risk) from Agent B (alternatives) by instructions
+- MUST use SKEPTIC/ANALYST/STRATEGIST as a combined lens per agent — never split into separate roles
+- MUST differentiate Agent A (risk) from Agent B (alternatives) by instructions
 - MUST flag control group delta: CONTEXT DRIFT / READABILITY GAP / CONTEXT-LIMITED for each unique fresh-eyes finding
 - MUST include critique rubric appropriate to artifact type
 - MUST present consensus/split/unique classification for every finding
-- Full / delegated mode only: MUST cross-examine split findings and unique HIGH/CRITICAL findings (Phase 3)
-- Full / delegated mode only: MUST gate on unresolved disputes before synthesis (Phase 4)
+- MUST cross-examine split findings and unique HIGH/CRITICAL findings (Phase 3)
+- MUST gate on unresolved disputes before synthesis (Phase 4)
 - MUST tag low-confidence recommendations as Decision Debt
 - MUST always include "What Wasn't Critiqued"
 - Universal constraints from skill-preamble.md apply.
-- MUST NOT auto-apply recommendations - human gate required
-- Full / delegated mode sub-agent budget: max 5 tool calls per sub-agent in Phase 1, max 3 in cross-examination
-- Skill-chained: skip confirmation, still run footgun/lesson checks and rubric selection
+- MUST NOT auto-apply recommendations — human gate required
+- Sub-agent budget: max 5 tool calls per sub-agent in Phase 1, max 3 in cross-examination
+- Skill-chained: skip confirmation, still run footgun/lesson checks and rubric selection; still run all 5 phases
 
 ## Output Format
-
-**Quick mode** - omit Cross-Examination Results, Verified Unique Findings, Retracted Findings, and Clarification Responses (these require Phase 3/4 which quick mode skips). List unique findings without cross-examination verification.
-
-**Full mode** - all sections.
 
 ```markdown
 ## TL;DR
@@ -187,10 +170,10 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 ## Sub-Agent Rankings  <!-- grounding, specificity, actionability, coverage, calibration -->
 ## Control Group Delta  <!-- Agent C unique findings: context drift / readability gap / context-limited -->
 ## Consensus Findings  <!-- highest confidence -->
-## Cross-Examination Results  <!-- full mode only -->
-## Verified Unique Findings  <!-- full mode only; quick mode: list unique findings unverified -->
-## Retracted Findings  <!-- full mode only -->
-## Clarification Responses  <!-- full mode only -->
+## Cross-Examination Results
+## Verified Unique Findings
+## Retracted Findings
+## Clarification Responses
 ## Strengths  <!-- what to preserve -->
 ## Recommended Changes  <!-- ordered by severity, each with concrete action -->
 ## Decision Debt  <!-- decisions with incomplete evidence, confidence, revisit trigger -->

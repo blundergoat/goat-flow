@@ -108,18 +108,49 @@ For flow diagrams, use Mermaid flowcharts with 8-15 nodes per diagram, happy pat
 
 ## Audit Mode
 
-Analyse existing code areas with no recent change.
+For a codebase area with no recent change. Audit mode analyses *what already exists* — which files carry load-bearing behaviour, which have test coverage, where that coverage is structural (import/construct only) versus behavioural (exercises real code paths). It does NOT read a diff; skip Phase 1 and its diff-specific constraints.
 
 ### A1 - Scope
-Declare scope and existing test coverage.
 
-### A2 - Coverage Analysis
-For each file: test exists? behavior covered or only structure? flag mock-heavy or integration-only blind spots.
+Declare the audit boundary explicitly. Supported shapes:
+- A directory (e.g. `src/cli/audit/`) — every source file inside.
+- A module (e.g. `src/cli/quality/`) — the module's entry point and direct callees.
+- A risk class (e.g. "everything touching auth tokens") — files you would need to read to verify the claim.
 
-### A3 - Gap Report
-Produce a risk-ordered table and recommendation list for the coding agent.
+If unsure, ask the user before A2.
 
-**BLOCKING GATE:** Present gap report.
+### A2 - Inventory and Risk Ranking
+
+Without any diff, classify each in-scope file by its *role*, not its recency:
+
+| Role | Examples |
+|------|----------|
+| Load-bearing | auth, payments, permission checks, data mutation, migration |
+| Interface boundary | API routes, CLI commands, public exports |
+| Integration glue | config loaders, filesystem bridges, external clients |
+| UI / presentation | views, templates, styling |
+| Support | types, constants, pure helpers |
+
+Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
+
+### A3 - Coverage Analysis
+
+For each in-scope file:
+1. Does a test file exist? If not → coverage `NONE`.
+2. If yes, read the test. Does it assert behaviour (outputs, side effects, error paths) or only construct the unit?
+3. Flag mock-heavy tests (everything mocked = behaviour untested) and integration-only blind spots (suite skips when the external service is unavailable).
+
+Record coverage as `NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL`.
+
+### A4 - Gap Report
+
+Rank gaps by `Risk × (1 - CoverageLevel)` descending. Output:
+
+- **Blocking gaps** — CRITICAL-risk file with NONE or STRUCTURAL coverage. One line per file: missing behaviour + the test the user should add.
+- **High-value additions** — HIGH-risk file with PARTIAL coverage. Describe the untested path.
+- **Defer** — LOW-risk or already well-covered files. Name them explicitly so the user sees what was considered and why.
+
+**BLOCKING GATE:** Present gap report; wait for human decision before generating plan files.
 
 ## Regression Guard Mode
 
@@ -127,18 +158,19 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 
 ## Constraints
 
-- goat-qa is a testing GAP ANALYSER - it finds mismatches between code changes and testing coverage
-- MUST read the actual diff, not just file names - a one-line auth change outranks a 200-line CSS change
-- MUST classify every change by risk level with plain-English description of what changed
-- MUST trace blast radius for CRITICAL/HIGH changes
-- MUST compare changes against existing testing coverage (manual plan, automated tests, or neither)
+- goat-qa is a testing GAP ANALYSER - it finds mismatches between code (changed or existing) and testing coverage
+- MUST compare in-scope code against existing testing coverage (manual plan, automated tests, or neither)
 - MUST find gaps in BOTH directions: undertested risks AND misaligned test effort
 - MUST produce "must test / should test / safe to skip" tiers with rationale for skips
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
 - MUST NOT generate test code - hand off to the coding agent
 - Universal constraints from skill-preamble.md apply.
-- Audit mode: MUST include gap report with risk-of-gap ratings
+- Standard mode: MUST read the actual diff, not just file names — a one-line auth change outranks a 200-line CSS change
+- Standard mode: MUST classify every change by risk level with plain-English description of what changed
+- Standard mode: MUST trace blast radius for CRITICAL/HIGH changes
+- Audit mode: MUST classify every in-scope file by role (load-bearing, interface, glue, UI, support), not by recency; MUST NOT read a diff or ask for one
+- Audit mode: MUST include a risk-ranked gap report with blocking-gap / high-value-addition / defer tiers
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).
 - Regression guard: MUST state invariants as human-readable sentences
 

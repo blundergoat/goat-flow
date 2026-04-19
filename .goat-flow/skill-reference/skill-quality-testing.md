@@ -413,7 +413,7 @@ Every skill MUST pass this checklist before merging. Use TodoWrite to create tod
 - [ ] "NOT this skill" boundary section listing what routes elsewhere
 - [ ] No narrative storytelling ("in session 2025-10-03 we found...")
 - [ ] Supporting files only for executable tools or heavy reference (100+ lines)
-- [ ] Token budget met (frequently-loaded skills <200 words, others <500)
+- [ ] Token budget met (dispatcher <500 words, functional skill <2500 words, reference pack <400 words per file). Skills that exceed their tier must either shed content or be split into a reference pack under `references/`.
 
 **Deployment:**
 - [ ] Write TDD iteration log to `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`

@@ -240,3 +240,41 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
     assert.deepEqual(facts.staleRefs, []);
   });
 });
+
+describe("extractFootgunFacts search-anchor staleness", () => {
+  const fixtureDir = ".goat-flow/footguns/";
+  const pinnedNow = new Date("2026-04-19T12:00:00Z");
+
+  it("flags a search anchor whose needle no longer appears in the referenced file", () => {
+    const fs = stubFS(
+      {
+        [`${fixtureDir}quality.md`]:
+          '---\ncategory: quality\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: stale\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\n- `src/cli/cli.ts` (search: `qualitySubcommand === "capture"`) - retired handler\n',
+        "src/cli/cli.ts":
+          "// handlers for 'history' and 'diff' only; capture removed in v1.2.0\n",
+      },
+      { [fixtureDir]: ["quality.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.ok(
+      facts.staleRefs.some((ref) =>
+        ref.includes('qualitySubcommand === "capture"'),
+      ),
+      `expected stale search anchor in ${JSON.stringify(facts.staleRefs)}`,
+    );
+  });
+
+  it("does not flag a search anchor whose needle still appears", () => {
+    const fs = stubFS(
+      {
+        [`${fixtureDir}quality.md`]:
+          "---\ncategory: quality\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: live\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\n- `src/cli/quality/history.ts` (search: `No saved quality history`) - handler\n",
+        "src/cli/quality/history.ts":
+          "return `No saved quality history${scope}.`;\n",
+      },
+      { [fixtureDir]: ["quality.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, []);
+  });
+});

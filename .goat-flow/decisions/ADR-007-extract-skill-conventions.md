@@ -1,33 +1,32 @@
 # ADR-007: Extract shared skill conventions to .goat-flow/skill-reference/skill-conventions.md
 
 **Status:** Accepted (supersedes ADR-023, which superseded ADR-011)
-**Updated:** 2026-04-18 - also absorbs the shared-conventions flush-protocol change previously split into ADR-024.
+**Updated:** 2026-04-19 — revised to match shipped behaviour; the earlier "7-line inline fallback" was never implemented in the installed skills.
 **Date:** 2026-04-06
 
 ## Context
 
 ADR-011 (2026-03-28) chose to keep shared conventions inline in each skill template for self-containment. At 12 lines per skill, the duplication cost was acceptable. ADR-023 (2026-04-04) expanded the inline block from 12 to 62 lines, preserving the self-containment principle while closing content gaps (recovery, working memory, autonomy awareness, closing protocol).
 
-By v1.1.0, the shared conventions had grown to 152 lines. With 5 functional skills across 3 agent directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`), this meant 2,280 lines of duplicated content. The M03.2 drift check - the only mechanism preventing divergence - could not keep pace with the maintenance burden. The duplication surface was now actively causing the drift it was designed to prevent.
+By v1.1.0, the shared conventions had grown to 152 lines. With the functional skills across three agent directories (`.claude/skills/`, `.agents/skills/`, `.github/skills/`), this produced thousands of lines of duplicated content. The drift check — the only mechanism preventing divergence — could not keep pace with the maintenance burden. The duplication surface was now actively causing the drift it was designed to prevent.
 
-One more pressure in the same chain came from ADR-024: the same checkbox-ticking failure recurred twice in four days, and the fix was to push another behavioural rule into the shared conventions flush protocol. That solved the immediate failure, but it made the “keep everything inline” approach even more expensive to maintain.
+One more pressure in the same chain came from ADR-024: the same checkbox-ticking failure recurred twice in four days, and the fix was to push another behavioural rule into the shared conventions. That solved the immediate failure, but it made the "keep everything inline" approach even more expensive to maintain.
 
 ## Decision
 
 Extract shared conventions from inline in each skill to a single file: `.goat-flow/skill-reference/skill-conventions.md`. Setup copies this from `workflow/skills/reference/skill-conventions.md`.
 
-Each skill retains a 7-line inline fallback so skills degrade gracefully (not catastrophically) if the file is missing:
+Each skill keeps a short header that points to the shared file. It is a pointer, not a fallback:
 
 ```
 ## Shared Conventions
-Read `.goat-flow/skill-reference/skill-conventions.md` for full shared conventions.
-If unavailable, use these essentials:
-- Severity: SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
-- Evidence: every finding MUST include file:line, tag OBSERVED vs INFERRED
-- Learning loop: check .goat-flow/lessons/ and .goat-flow/footguns/ after completion
-- Gates: BLOCKING GATE = stop and wait. CHECKPOINT = continue unless interrupted.
-- Task tracking: tick checkboxes immediately when completed, not at the end.
+
+Read `.goat-flow/skill-reference/skill-preamble.md` for shared conventions.
+On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
+Universal constraints from `skill-preamble.md` apply.
 ```
+
+**No inline fallback ships.** An earlier draft of this ADR specified a 7-line essentials-only fallback intended to let skills degrade gracefully if the shared file were missing. In practice the installed skills never embedded that fallback, and testing showed it did not provide enough behaviour to keep a skill coherent — the preamble/conventions files carry interlocking rules (Proof Gate, severity, evidence, routing, gates, task tracking) that cannot be usefully summarised in seven lines. Instead, skill-reference file presence is validated directly by the audit ("Preamble/Conventions Sync" and structural checks), so a missing file is caught at install time, not masked by a partial fallback.
 
 The flush protocol guidance introduced during the ADR-024 incident stays in the shared conventions layer after extraction:
 
@@ -36,10 +35,8 @@ The flush protocol guidance introduced during the ADR-024 incident stays in the 
 
 ## Consequences
 
-- Skills are no longer fully self-contained - they require one external file read at invocation
-- The inline fallback preserves the self-containment principle in spirit: skills still function (degraded) without the file
-- Updates to shared conventions are 1 file edit instead of 15
-- The drift surface drops from 2,280 lines to ~35 lines (7-line fallback × 5 skills)
-- Scanner gains a check for `.goat-flow/skill-reference/skill-conventions.md` existence
-- `upgrade-0.9.x.md` and `upgrade-1.0.0.md` must include skill-conventions.md as an upgrade surface
-- Behavioural fixes like the checkbox-ticking flush rule stop creating another round of large copy-edit sweeps across every skill template
+- Skills are no longer fully self-contained — they require one external file read at invocation.
+- A missing `skill-conventions.md` or `skill-preamble.md` degrades skill behaviour rather than being masked by a partial fallback; the audit's sync/parity checks catch the absence at install time.
+- Updates to shared conventions are 1 template edit plus a sync step to installed copies, validated by preflight's Preamble/Conventions Sync and Skill SKILL.md Parity checks.
+- The drift surface drops from thousands of duplicated lines to the pointer header, which is stable.
+- Behavioural fixes like the checkbox-ticking flush rule stop creating another round of large copy-edit sweeps across every skill template.

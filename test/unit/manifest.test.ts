@@ -11,8 +11,10 @@ import assert from "node:assert/strict";
 import {
   composeManifest,
   validateManifest,
+  validateSkillReferenceSchema,
   loadManifest,
   checkManifest,
+  getSkillFiles,
   renderManifestMarkdown,
   resetManifestCache,
 } from "../../src/cli/manifest/manifest.js";
@@ -42,6 +44,7 @@ function fixtureJson(
     skills: {
       canonical: skillsCanonical,
       stale_names: ["goat-audit", "goat-investigate"],
+      references: {},
     },
     agents: {},
     instruction_file: {},
@@ -126,6 +129,21 @@ describe("composeManifest", () => {
       ["goat-audit", "goat-investigate"],
     );
   });
+
+  it("exposes per-skill reference files from the live manifest", () => {
+    resetManifestCache();
+    assert.deepEqual(getSkillFiles("goat"), ["SKILL.md"]);
+    assert.deepEqual(getSkillFiles("goat-security"), [
+      "SKILL.md",
+      "references/common-threats.md",
+      "references/auth-authz.md",
+      "references/file-upload-and-paths.md",
+      "references/secrets-and-data-exposure.md",
+      "references/dependency-and-supply-chain.md",
+      "references/cicd-and-agent-surfaces.md",
+      "references/project-policy-template.md",
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -136,6 +154,51 @@ describe("validateManifest (clean case)", () => {
     const json = fixtureJson();
     const observed = fixtureObserved();
     assert.doesNotThrow(() => validateManifest(json, observed));
+  });
+});
+
+describe("validateSkillReferenceSchema", () => {
+  it("accepts an omitted references map", () => {
+    const json = fixtureJson();
+    assert.doesNotThrow(() => validateSkillReferenceSchema(json));
+  });
+
+  it("throws when one skill reference entry is not an array", () => {
+    const json = fixtureJson();
+    (json.skills.references as Record<string, unknown>).goat = "SKILL.md";
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some((f) => f.includes("skills.references.goat")),
+    );
+  });
+
+  it("throws when one skill reference entry contains non-strings", () => {
+    const json = fixtureJson();
+    (json.skills.references as Record<string, unknown>).goat = [
+      "references/x.md",
+      42,
+    ];
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some((f) => f.includes("skills.references.goat")),
+    );
+  });
+
+  it("throws when a references entry uses an unknown skill key", () => {
+    const json = fixtureJson();
+    (json.skills.references as Record<string, unknown>).goat_typo = [
+      "references/x.md",
+    ];
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some((f) => f.includes("skills.references.goat_typo")),
+    );
   });
 });
 

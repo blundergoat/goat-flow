@@ -37,7 +37,59 @@ const DISPATCHER_NAME = "goat";
 function readManifestJson(): ManifestJson {
   const path = getTemplatePath("workflow/manifest.json");
   const raw = readFileSync(path, "utf-8");
-  return JSON.parse(raw) as ManifestJson;
+  const json = JSON.parse(raw) as ManifestJson;
+  validateSkillReferenceSchema(json);
+  return json;
+}
+
+/** Validate optional `skills.references` shape before any consumer reads it. */
+function validateOneSkillReference(
+  canonical: ReadonlySet<string>,
+  skillName: string,
+  files: unknown,
+): string[] {
+  const findings: string[] = [];
+  if (!canonical.has(skillName)) {
+    findings.push(
+      `skills.references.${skillName} must reference a canonical skill name.`,
+    );
+  }
+  if (!Array.isArray(files)) {
+    findings.push(`skills.references.${skillName} must be a string array.`);
+    return findings;
+  }
+  if (files.some((file) => typeof file !== "string")) {
+    findings.push(`skills.references.${skillName} must contain only strings.`);
+  }
+  return findings;
+}
+
+export function validateSkillReferenceSchema(json: ManifestJson): void {
+  const references = json.skills.references;
+  if (references === undefined) return;
+  if (
+    typeof references !== "object" ||
+    references === null ||
+    Array.isArray(references)
+  ) {
+    throw new ManifestValidationError(
+      "workflow/manifest.json has an invalid `skills.references` value.",
+      ["skills.references must be an object keyed by canonical skill name."],
+    );
+  }
+
+  const findings: string[] = [];
+  const canonical = new Set(json.skills.canonical);
+  for (const [skillName, files] of Object.entries(references)) {
+    findings.push(...validateOneSkillReference(canonical, skillName, files));
+  }
+
+  if (findings.length > 0) {
+    throw new ManifestValidationError(
+      `workflow/manifest.json has invalid skill reference metadata (${findings.length} finding${findings.length === 1 ? "" : "s"}).`,
+      findings,
+    );
+  }
 }
 
 /** Enumerate dashboard view names by listing `src/dashboard/views/*.html`. */
@@ -161,6 +213,29 @@ export function composeManifest(
     agents: json.agents,
     facts,
   };
+}
+
+/** Return the canonical template-file list for one skill. */
+export function getSkillFiles(name: string): string[] {
+  const references = loadManifest().skills.references ?? {};
+  const files = references[name];
+  return [
+    "SKILL.md",
+    ...(Array.isArray(files)
+      ? files.filter((file) => typeof file === "string")
+      : []),
+  ];
+}
+
+/** Return unique installed skill roots declared by the manifest-backed agents. */
+export function getInstalledSkillRoots(): string[] {
+  return [
+    ...new Set(
+      Object.values(loadManifest().agents)
+        .map((agent) => agent.skills_dir.replace(/\/$/, ""))
+        .filter((dir) => dir.length > 0),
+    ),
+  ];
 }
 
 let cached: Manifest | null = null;

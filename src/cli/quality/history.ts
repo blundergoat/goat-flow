@@ -1,21 +1,28 @@
 /**
  * Load, classify, and render persisted quality-report history.
+ *
+ * Agents write reports directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json`
+ * in the agent-shape schema (no `id` field on findings). Positional finding ids
+ * are attached deterministically at load time via `attachFindingIds`, so cross-run
+ * diff/persistence tracking stays stable without trusting the agent's slugging.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentId } from "../types.js";
 import type { SavedQualityFinding, SavedQualityReport } from "./schema.js";
-import { parseSavedQualityReport } from "./schema.js";
+import { parseQualityReport } from "./schema.js";
+import { attachFindingIds } from "./ids.js";
 
 const QUALITY_HISTORY_FILENAME =
-  /^(\d{4}-\d{2}-\d{2})-(claude|codex|gemini)(?:-(\d{2}))?\.json$/;
+  /^(\d{4}-\d{2}-\d{2})-(\d{4})-(claude|codex|gemini|copilot)-([a-z0-9]{5})\.json$/;
 
 export interface QualityHistoryEntry {
   id: string;
   path: string;
   date: string;
+  time: string;
   agent: AgentId;
-  suffix: number;
+  randomId: string;
   report: SavedQualityReport;
 }
 
@@ -70,8 +77,8 @@ function compareEntriesDesc(
   right: QualityHistoryEntry,
 ): number {
   if (left.date !== right.date) return right.date.localeCompare(left.date);
+  if (left.time !== right.time) return right.time.localeCompare(left.time);
   if (left.agent !== right.agent) return left.agent.localeCompare(right.agent);
-  if (left.suffix !== right.suffix) return right.suffix - left.suffix;
   return right.id.localeCompare(left.id);
 }
 
@@ -98,17 +105,18 @@ function formatDelta(delta: number | null): string {
 
 function parseHistoryFilename(
   filename: string,
-): { date: string; agent: AgentId; suffix: number } | null {
+): { date: string; time: string; agent: AgentId; randomId: string } | null {
   const match = QUALITY_HISTORY_FILENAME.exec(filename);
   if (!match) return null;
   return {
     date: match[1]!,
-    agent: match[2] as AgentId,
-    suffix: match[3] ? Number(match[3]) : 1,
+    time: match[2]!,
+    agent: match[3] as AgentId,
+    randomId: match[4]!,
   };
 }
 
-export function getQualityLogsDir(projectPath: string): string {
+function getQualityLogsDir(projectPath: string): string {
   return join(projectPath, ".goat-flow", "logs", "quality");
 }
 
@@ -138,10 +146,17 @@ export function loadQualityHistory(projectPath: string): {
       );
       continue;
     }
-    const parsedReport = parseSavedQualityReport(raw);
+    const parsedReport = parseQualityReport(raw);
     if (!parsedReport.ok) {
       warnings.push(
         `Skipping malformed quality history file ${filename}: ${parsedReport.error}`,
+      );
+      continue;
+    }
+    const withIds = attachFindingIds(parsedReport.report);
+    if (!withIds.ok) {
+      warnings.push(
+        `Skipping malformed quality history file ${filename}: ${withIds.error}`,
       );
       continue;
     }
@@ -150,9 +165,10 @@ export function loadQualityHistory(projectPath: string): {
       id: filename.replace(/\.json$/, ""),
       path: fullPath,
       date: parsedName.date,
+      time: parsedName.time,
       agent: parsedName.agent,
-      suffix: parsedName.suffix,
-      report: parsedReport.report,
+      randomId: parsedName.randomId,
+      report: withIds.report,
     });
   }
 
@@ -374,7 +390,7 @@ export function renderQualityHistoryText(
     const scope = options.agent ? ` for ${options.agent}` : "";
     return [
       `No saved quality history${scope}.`,
-      "Generate a prompt with `goat-flow quality . --agent <id>` and save a response with `goat-flow quality capture --from-file <path>`.",
+      "Generate a prompt with `goat-flow quality . --agent <id>`; the agent writes its report directly to `.goat-flow/logs/quality/`.",
     ].join("\n");
   }
 
@@ -425,7 +441,7 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
   renderSection("Stuck", diff.stuck);
 
   lines.push(
-    "Stuck counter resets on history gaps. For strict persistence tracking, run `goat-flow quality capture` at least once per 30 days.",
+    "Stuck counter resets on history gaps. For strict persistence tracking, ensure at least one quality run lands within every 30-day window.",
   );
   return lines.join("\n");
 }

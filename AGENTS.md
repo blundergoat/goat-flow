@@ -92,7 +92,6 @@ MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh,
 
 ## Working Memory
 If working from a plan/milestone file, tick `- [x]` on each completed task immediately - not at the end. If context drifts or two approaches fail, restate scope and start fresh.
-Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 
 ## Router Table
 | Resource | Path |
@@ -102,13 +101,15 @@ Sub-agents: ONE objective, structured return (paths, evidence, confidence, next 
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.agents/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
-| Footguns, lessons, patterns | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md` |
+| Footguns (most-queried) | `.goat-flow/footguns/` |
+| Lessons | `.goat-flow/lessons/` |
+| Patterns | `.goat-flow/patterns.md` |
 | Decisions | `.goat-flow/decisions/` |
 | Config | `.goat-flow/config.yaml` |
 | Dashboard source | `src/dashboard/` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `CLAUDE.md`, `GEMINI.md` |
+| Peer instructions | `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md` |
 
 ## Hard Rules
 - If file exists, modify in-place. NEVER create `_modified`, `_new`, `_backup`, `_v2` variants.

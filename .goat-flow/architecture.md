@@ -14,15 +14,15 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Hook scripts | `workflow/hooks/` | Copyable hook scripts (deny-dangerous.sh) + per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/capture/history/diff surfaces, multi-agent support |
-| Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for help, home, projects, prompts, quality, settings, wizard, workspace |
+| CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
+| Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for help, home, projects, prompts, quality, settings, setup, workspace |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
 
 ```
 User runs `npx goat-flow setup .` or reads workflow/setup/
-  -> Chooses agent (workflow/setup/agents/claude.md, workflow/setup/agents/codex.md, workflow/setup/agents/gemini.md)
+  -> Chooses agent (workflow/setup/agents/claude.md, workflow/setup/agents/codex.md, workflow/setup/agents/gemini.md, workflow/setup/agents/copilot.md)
   -> Follows numbered setup steps (01-06) via their agent config
   -> Agent reads workflow/setup/ (01-system-overview.md, 02-instruction-file.md, reference/execution-loop.md)
   -> Agent generates project-specific files (CLAUDE.md, hooks, skills, etc.)
@@ -41,14 +41,14 @@ src/cli/
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   prompt/             # Prompt generation (compose-setup.ts, compose-quality.ts)
-  quality/            # Quality report schema, positional ids, capture, history, and diff
+  quality/            # Quality report schema, positional ids, history, and diff
   audit/              # Build checks, quality checks, render.ts (output formatters: text, json, markdown)
   server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
 
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.ts    # Preset configurations
-  views/              # Page views (help, home, projects, prompts, quality, settings, wizard, workspace)
+  views/              # Page views (help, home, projects, prompts, quality, settings, setup, workspace)
 ```
 
 ## Key Constraints

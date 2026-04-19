@@ -167,7 +167,7 @@ See [docs/cli.md](docs/cli.md) for the full command reference.
 
 ## Multi-Agent Support
 
-Framework support metadata is sourced from `workflow/manifest.json` through `src/cli/agents/registry.ts`. Run `goat-flow manifest` to inspect the live agent matrix that drives CLI validation, installer paths, and dashboard labels. In `v1.2.0` the shipped support set is Claude Code, Codex, and Gemini CLI.
+Framework support metadata is sourced from `workflow/manifest.json` through `src/cli/agents/registry.ts`. Run `goat-flow manifest` to inspect the live agent matrix that drives CLI validation, installer paths, and dashboard labels. In `v1.2.0` the shipped support set is Claude Code, Codex, Gemini CLI, and Copilot CLI.
 
 All supported agents share the same execution loop, autonomy tiers, skills, and learning loop. The `setup` command generates the agent-specific configuration surfaces for the selected runtime.
 
@@ -183,10 +183,10 @@ Expected. Run `npx goat-flow setup . --agent claude` and paste the output into y
 Re-run `npx goat-flow audit . --verbose` to see which check failed. The `howToFix` hint on each failure points at the missing file or config key. If hooks show as uninstalled, check `.claude/hooks/` (or `.gemini/hooks/`, `.codex/hooks/`) exists and contains `deny-dangerous.sh`.
 
 **Agent isn't following the execution loop?**
-Restart the agent session after setup so it re-reads the instruction file (CLAUDE.md, GEMINI.md, or AGENTS.md). Agents only pick up instruction-file changes on session start.
+Restart the agent session after setup so it re-reads the instruction file (CLAUDE.md, GEMINI.md, AGENTS.md, or `.github/copilot-instructions.md`). Agents only pick up instruction-file changes on session start.
 
 **Not sure which agent to pick?**
-Pick the one you're already using. All three agents share the same skills, execution loop, and learning loop -- only the instruction filename and hook directory differ. See the [Multi-Agent Support](#multi-agent-support) table.
+Pick the one you're already using. All supported agents share the same skills, execution loop, and learning loop -- only the instruction filename, skills root, and hook/config surfaces differ. See the [Multi-Agent Support](#multi-agent-support) table.
 
 ## Documentation
 

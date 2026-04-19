@@ -8,7 +8,7 @@ If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/), IGNORE th
 
 ## Skills to install
 
-Read the detailed templates in `workflow/skills/` (each skill is a directory containing `SKILL.md`, e.g., `goat/SKILL.md`, `goat-debug/SKILL.md`) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
+Read the detailed templates in `workflow/skills/` (each skill is a directory containing `SKILL.md` and, for some skills, a nested `references/` subdir) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
 
 1. **goat-debug/SKILL.md** - Diagnosis-first debugging. Hypothesis tracking, recurrence checks. Includes investigate mode for code exploration.
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
@@ -26,7 +26,7 @@ Each SKILL.md MUST include:
 
 **Exception:** The dispatcher (`goat/SKILL.md`) uses `How It Works` instead of `When to Use` and has no Output Format section. The validator accepts this.
 
-**IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/footguns/`, `.goat-flow/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
+**IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/footguns/`, `.goat-flow/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
 ## Skill conventions
 
@@ -36,7 +36,7 @@ Install both convention files from `workflow/skills/reference/`:
 
 ## Clean stale cross-agent skills
 
-After installing canonical skills for the current agent, check other agents' skill directories for stale goat-flow skill names. For Claude: check `.agents/skills/`. For Codex: check `.claude/skills/`, `.agents/skills/`. For Gemini: check `.claude/skills/`. Do NOT check the current agent's own skill directory here - that was handled during installation above. Stale names to look for (manifest `skills.stale_names`):
+After installing canonical skills for the current agent, check other agents' skill directories for stale goat-flow skill names. For Claude: check `.agents/skills/`, `.github/skills/`. For Codex: check `.claude/skills/`, `.github/skills/`. For Gemini: check `.claude/skills/`, `.github/skills/`. For Copilot: check `.claude/skills/`, `.agents/skills/`. Do NOT check the current agent's own skill directory here - that was handled during installation above. Stale names to look for (manifest `skills.stale_names`):
 
 `goat-audit`, `goat-investigate`, `goat-onboard`, `goat-reflect`, `goat-resume`, `goat-preflight`, `goat-research`, `goat-simplify`, `goat-refactor`, `goat-context`, `goat-sbao`, `goat-test`
 

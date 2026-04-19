@@ -4,13 +4,13 @@
 // === Agent Types ===
 
 /** Supported AI coding agent identifiers */
-export type AgentId = "claude" | "codex" | "gemini";
+export type AgentId = "claude" | "codex" | "gemini" | "copilot";
 
 // === Agent Profile ===
 
 /**
  * Describes an agent's file layout and enforcement mechanisms.
- * One profile per supported agent (Claude, Codex, Gemini).
+ * One profile per supported agent (Claude, Codex, Gemini, Copilot).
  */
 export interface AgentProfile {
   id: AgentId;
@@ -60,7 +60,7 @@ export interface ProjectFacts {
   // Absolute path to the project root
   root: string;
   stack: StackInfo;
-  // One entry per detected agent (Claude, Codex, Gemini)
+  // One entry per detected agent (Claude, Codex, Gemini, Copilot)
   agents: AgentFacts[];
   shared: SharedFacts;
 }
@@ -110,6 +110,9 @@ export interface BucketFreshness {
   staleRefs: string[];
   /** Invalid line refs (line out of bounds) found in this bucket */
   invalidLineRefs: string[];
+  /** Most recent `**Created:**` or `**Updated:**` date in the body, YYYY-MM-DD or null.
+   *  Used to detect frontmatter `last_reviewed` that is stale relative to entry dates. */
+  maxEntryDate: string | null;
 }
 
 /** Facts shared across all agents (project-wide files and directories) */

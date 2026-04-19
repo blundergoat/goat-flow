@@ -25,6 +25,13 @@ const FIXTURE_DIR = resolve(
   "fixtures",
   "quality-history",
 );
+
+const FIXTURE_IDS = {
+  april01: "2026-04-01-0900-claude-aaaaa",
+  april15: "2026-04-15-1000-claude-bbbbb",
+  april29: "2026-04-29-1100-claude-ccccc",
+} as const;
+
 const disposables: string[] = [];
 
 after(() => {
@@ -51,9 +58,15 @@ function installFixture(root: string, id: string): void {
 describe("loadQualityHistory", () => {
   it("warns and skips malformed files", () => {
     const root = makeTempProject();
-    installFixture(root, "2026-04-01-claude");
+    installFixture(root, FIXTURE_IDS.april01);
     writeFileSync(
-      join(root, ".goat-flow", "logs", "quality", "2026-04-30-claude.json"),
+      join(
+        root,
+        ".goat-flow",
+        "logs",
+        "quality",
+        "2026-04-30-1200-claude-zzzzz.json",
+      ),
       "{\n",
       "utf-8",
     );
@@ -71,9 +84,9 @@ describe("loadQualityHistory", () => {
 describe("buildQualityHistoryRows", () => {
   it("calculates same-agent setup deltas from newest to oldest", () => {
     const root = makeTempProject();
-    installFixture(root, "2026-04-01-claude");
-    installFixture(root, "2026-04-15-claude");
-    installFixture(root, "2026-04-29-claude");
+    installFixture(root, FIXTURE_IDS.april01);
+    installFixture(root, FIXTURE_IDS.april15);
+    installFixture(root, FIXTURE_IDS.april29);
 
     const history = loadQualityHistory(root);
     const rows = buildQualityHistoryRows(history.entries, {
@@ -84,9 +97,9 @@ describe("buildQualityHistoryRows", () => {
     assert.deepEqual(
       rows.map((row) => [row.id, row.setupDelta]),
       [
-        ["2026-04-29-claude", 5],
-        ["2026-04-15-claude", 10],
-        ["2026-04-01-claude", null],
+        [FIXTURE_IDS.april29, 5],
+        [FIXTURE_IDS.april15, 10],
+        [FIXTURE_IDS.april01, null],
       ],
     );
   });
@@ -95,15 +108,15 @@ describe("buildQualityHistoryRows", () => {
 describe("buildQualityDiff", () => {
   it("derives resolved, new, persisted, and stuck from saved ids", () => {
     const root = makeTempProject();
-    installFixture(root, "2026-04-01-claude");
-    installFixture(root, "2026-04-15-claude");
-    installFixture(root, "2026-04-29-claude");
+    installFixture(root, FIXTURE_IDS.april01);
+    installFixture(root, FIXTURE_IDS.april15);
+    installFixture(root, FIXTURE_IDS.april29);
 
     const history = loadQualityHistory(root);
 
     const firstDiff = buildQualityDiff(history.entries, {
       agent: "claude",
-      pair: "2026-04-01-claude:2026-04-15-claude",
+      pair: `${FIXTURE_IDS.april01}:${FIXTURE_IDS.april15}`,
     });
     assert.equal(firstDiff.ok, true);
     if (!firstDiff.ok) return;
@@ -113,7 +126,7 @@ describe("buildQualityDiff", () => {
 
     const secondDiff = buildQualityDiff(history.entries, {
       agent: "claude",
-      pair: "2026-04-15-claude:2026-04-29-claude",
+      pair: `${FIXTURE_IDS.april15}:${FIXTURE_IDS.april29}`,
     });
     assert.equal(secondDiff.ok, true);
     if (!secondDiff.ok) return;
@@ -129,12 +142,18 @@ describe("buildQualityDiff", () => {
 
   it("rejects cross-agent pairs", () => {
     const root = makeTempProject();
-    installFixture(root, "2026-04-29-claude");
+    installFixture(root, FIXTURE_IDS.april29);
     const codexReport = JSON.parse(
-      readFileSync(join(FIXTURE_DIR, "2026-04-29-claude.json"), "utf-8"),
+      readFileSync(join(FIXTURE_DIR, `${FIXTURE_IDS.april29}.json`), "utf-8"),
     );
     writeFileSync(
-      join(root, ".goat-flow", "logs", "quality", "2026-04-20-codex.json"),
+      join(
+        root,
+        ".goat-flow",
+        "logs",
+        "quality",
+        "2026-04-20-1200-codex-ddddd.json",
+      ),
       `${JSON.stringify(
         {
           ...codexReport,
@@ -150,7 +169,7 @@ describe("buildQualityDiff", () => {
     const history = loadQualityHistory(root);
     const diff = buildQualityDiff(history.entries, {
       agent: null,
-      pair: "2026-04-29-claude:2026-04-20-codex",
+      pair: `${FIXTURE_IDS.april29}:2026-04-20-1200-codex-ddddd`,
     });
     assert.equal(diff.ok, false);
     if (diff.ok) return;

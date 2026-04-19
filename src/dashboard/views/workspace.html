@@ -25,14 +25,14 @@
       >
       <span
         style="font-size: 11px; font-weight: 600"
-        :style="{ color: serverSessions.length >= 7 ? 'var(--red-400)' : 'var(--text-muted)' }"
-        x-text="serverSessions.length + '/7'"
+        :style="{ color: serverSessions.length >= 10 ? 'var(--red-400)' : 'var(--text-muted)' }"
+        x-text="serverSessions.length + '/10'"
       ></span>
     </div>
 
     <!-- Max-sessions banner -->
     <div
-      x-show="serverSessions.length >= 7"
+      x-show="serverSessions.length >= 10"
       class="px-3 py-2 border-b shrink-0 text-xs"
       style="
         background: rgba(248, 113, 113, 0.08);
@@ -41,7 +41,7 @@
         line-height: 1.4;
       "
     >
-      Session limit reached (7/7). End one to launch another.
+      Session limit reached (10/10). End one to launch another.
     </div>
 
     <!-- List area -->
@@ -104,8 +104,8 @@
                   flex-shrink: 0;
                 "
                 :style="{
-                  background: ({ claude: 'rgba(251,146,60,0.15)', codex: 'rgba(74,222,128,0.15)', gemini: 'rgba(96,165,250,0.15)' }[s.runner] || 'rgba(160,160,160,0.15)'),
-                  color: ({ claude: '#fb923c', codex: '#4ade80', gemini: '#60a5fa' }[s.runner] || '#a0a0a0')
+                  background: ({ claude: 'rgba(251,146,60,0.15)', codex: 'rgba(74,222,128,0.15)', gemini: 'rgba(96,165,250,0.15)', copilot: 'rgba(244,114,182,0.15)' }[s.runner] || 'rgba(160,160,160,0.15)'),
+                  color: ({ claude: '#fb923c', codex: '#4ade80', gemini: '#60a5fa', copilot: '#f472b6' }[s.runner] || '#a0a0a0')
                 }"
                 x-text="s.runner"
               ></span>
@@ -119,7 +119,7 @@
                 })()"
               ></span>
               <span
-                x-show="_projectSessions[s.projectPath] && _projectSessions[s.projectPath].sessionId === s.id && s.id !== activeSessionId"
+                x-show="_projectSessions[s.projectPath]?.some(sv => sv.sessionId === s.id) && s.id !== activeSessionId"
                 class="gf-text-muted"
                 style="
                   font-size: 10px;
@@ -263,8 +263,8 @@
                     flex-shrink: 0;
                   "
                   :style="{
-                    background: ({ claude: 'rgba(251,146,60,0.15)', codex: 'rgba(74,222,128,0.15)', gemini: 'rgba(96,165,250,0.15)' }[s.runner] || 'rgba(160,160,160,0.15)'),
-                    color: ({ claude: '#fb923c', codex: '#4ade80', gemini: '#60a5fa' }[s.runner] || '#a0a0a0')
+                    background: ({ claude: 'rgba(251,146,60,0.15)', codex: 'rgba(74,222,128,0.15)', gemini: 'rgba(96,165,250,0.15)', copilot: 'rgba(244,114,182,0.15)' }[s.runner] || 'rgba(160,160,160,0.15)'),
+                    color: ({ claude: '#fb923c', codex: '#4ade80', gemini: '#60a5fa', copilot: '#f472b6' }[s.runner] || '#a0a0a0')
                   }"
                   x-text="s.runner"
                 ></span>

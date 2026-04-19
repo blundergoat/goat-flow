@@ -1,10 +1,13 @@
 /**
- * Integration tests for the shipped quality capture/history/diff CLI surfaces.
+ * Integration tests for the shipped quality history/diff CLI surfaces.
+ *
+ * Agents write reports directly to `.goat-flow/logs/quality/` under the new
+ * `<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` filename scheme. These tests seed
+ * that directory from the fixtures and exercise `history` + `diff`.
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -14,7 +17,6 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { QUALITY_REPORT_KIND } from "../../src/cli/quality/schema.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -66,165 +68,40 @@ function runCLI(
   };
 }
 
-function makeResponse(report: Record<string, unknown>, prose: string): string {
-  return `${prose}\n\n\`\`\`json\n${JSON.stringify(report, null, 2)}\n\`\`\`\n`;
-}
-
-describe("quality capture CLI", () => {
-  it("captures responses and increments same-day ids", () => {
-    const root = makeTempProject();
-    const response1Path = join(root, "response-1.md");
-    const response2Path = join(root, "response-2.md");
-
-    const response1 = makeResponse(
-      {
-        report_kind: QUALITY_REPORT_KIND,
-        goat_flow_version: "1.2.0",
-        agent: "claude",
-        project_path: root,
-        run_date: "2026-04-18",
-        audit_status: "pass",
-        scores: {
-          setup: {
-            total: 75,
-            accuracy: 20,
-            relevance: 20,
-            completeness: 20,
-            friction: 15,
-          },
-          system: {
-            total: 80,
-            usefulness: 20,
-            signal_to_noise: 20,
-            adaptability: 20,
-            learnability: 20,
-          },
-        },
-        findings: [
-          {
-            type: "setup_quality",
-            severity: "MAJOR",
-            file: ".goat-flow/architecture.md",
-            line: 12,
-            summary:
-              "Architecture doc drifts from the implemented command surface",
-            detail: "The command list omits a shipped quality subcommand.",
-            evidence_quality: "OBSERVED",
-            delta_tag: null,
-          },
-        ],
-      },
-      "First capture",
-    );
-    const response2 = makeResponse(
-      {
-        report_kind: QUALITY_REPORT_KIND,
-        goat_flow_version: "1.2.0",
-        agent: "claude",
-        project_path: root,
-        run_date: "2026-04-18",
-        audit_status: "pass",
-        scores: {
-          setup: {
-            total: 80,
-            accuracy: 20,
-            relevance: 20,
-            completeness: 20,
-            friction: 20,
-          },
-          system: {
-            total: 80,
-            usefulness: 20,
-            signal_to_noise: 20,
-            adaptability: 20,
-            learnability: 20,
-          },
-        },
-        findings: [
-          {
-            type: "setup_quality",
-            severity: "MAJOR",
-            file: ".goat-flow/architecture.md",
-            line: 12,
-            summary:
-              "Architecture doc drifts from the implemented command surface",
-            detail: "The command list omits a shipped quality subcommand.",
-            evidence_quality: "OBSERVED",
-            delta_tag: "persisted",
-          },
-          {
-            type: "framework_flaw",
-            severity: "MINOR",
-            file: "src/cli/cli.ts",
-            line: 72,
-            summary: "History examples are easy to miss in help text",
-            detail: "Operators need a clearer diff/history discovery path.",
-            evidence_quality: "OBSERVED",
-            delta_tag: "new",
-          },
-        ],
-      },
-      "Second capture",
-    );
-
-    writeFileSync(response1Path, response1, "utf-8");
-    writeFileSync(response2Path, response2, "utf-8");
-
-    const first = runCLI(root, [
-      "quality",
-      "capture",
-      "--from-file",
-      response1Path,
-      "--format",
-      "json",
-    ]);
-    assert.equal(first.status, 0, first.stderr);
-    const firstPayload = JSON.parse(first.stdout);
-    assert.equal(firstPayload.id, "2026-04-18-claude");
-    assert.equal(existsSync(firstPayload.jsonPath), true);
-    assert.equal(existsSync(firstPayload.markdownPath), true);
-
-    const second = runCLI(root, [
-      "quality",
-      "capture",
-      "--from-file",
-      response2Path,
-      "--format",
-      "json",
-    ]);
-    assert.equal(second.status, 0, second.stderr);
-    const secondPayload = JSON.parse(second.stdout);
-    assert.equal(secondPayload.id, "2026-04-18-claude-02");
-    const persisted = JSON.parse(readFileSync(secondPayload.jsonPath, "utf-8"));
-    assert.equal(
-      persisted.findings[0].id,
-      "setup_quality:goat-flow-architecture-md:12",
-    );
-  });
-});
-
 describe("quality history and diff CLI", () => {
   it("renders history text and filtered history/diff json from saved reports", () => {
     const root = makeTempProject();
-    for (const id of [
-      "2026-04-01-claude",
-      "2026-04-15-claude",
-      "2026-04-29-claude",
-    ]) {
+    const fixtures = [
+      "2026-04-01-0900-claude-aaaaa",
+      "2026-04-15-1000-claude-bbbbb",
+      "2026-04-29-1100-claude-ccccc",
+    ];
+    for (const id of fixtures) {
       writeFileSync(
         join(root, ".goat-flow", "logs", "quality", `${id}.json`),
         readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf-8"),
         "utf-8",
       );
     }
-    const codexFixture = JSON.parse(
-      readFileSync(join(FIXTURE_DIR, "2026-04-29-claude.json"), "utf-8"),
+    // Seed a codex-agent entry by cloning the latest claude fixture so history
+    // filtering has cross-agent data to discriminate.
+    const codexSource = JSON.parse(
+      readFileSync(
+        join(FIXTURE_DIR, "2026-04-29-1100-claude-ccccc.json"),
+        "utf-8",
+      ),
     );
     writeFileSync(
-      join(root, ".goat-flow", "logs", "quality", "2026-04-20-codex.json"),
+      join(
+        root,
+        ".goat-flow",
+        "logs",
+        "quality",
+        "2026-04-20-1200-codex-ddddd.json",
+      ),
       `${JSON.stringify(
         {
-          ...codexFixture,
+          ...codexSource,
           agent: "codex",
           run_date: "2026-04-20",
         },
@@ -267,13 +144,17 @@ describe("quality history and diff CLI", () => {
     );
     assert.deepEqual(
       historyPayload.deltas.map((delta: { id: string }) => delta.id),
-      ["2026-04-29-claude", "2026-04-15-claude", "2026-04-01-claude"],
+      [
+        "2026-04-29-1100-claude-ccccc",
+        "2026-04-15-1000-claude-bbbbb",
+        "2026-04-01-0900-claude-aaaaa",
+      ],
     );
 
     const diff = runCLI(root, [
       "quality",
       "diff",
-      "2026-04-01-claude:2026-04-15-claude",
+      "2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb",
       "--format",
       "json",
     ]);
@@ -282,7 +163,7 @@ describe("quality history and diff CLI", () => {
     assert.equal(diffPayload.resolved.length, 1);
     assert.equal(diffPayload.newFindings.length, 1);
     assert.equal(diffPayload.persisted.length, 1);
-    assert.equal(diffPayload.from.id, "2026-04-01-claude");
-    assert.equal(diffPayload.to.id, "2026-04-15-claude");
+    assert.equal(diffPayload.from.id, "2026-04-01-0900-claude-aaaaa");
+    assert.equal(diffPayload.to.id, "2026-04-15-1000-claude-bbbbb");
   });
 });

@@ -17,11 +17,11 @@ flowchart LR
 
 | Skill | Purpose | Hard Gate | When to Use |
 |-------|---------|-----------|-------------|
-| [/goat](#goat--dispatcher) | Route to the right skill | -- | Always (convenience layer) |
+| [/goat](#goat--dispatcher) | Route to the right skill | -- | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode | No fixes until human reviews diagnosis | Bug or test failure, exploring unfamiliar code |
 | [/goat-plan](#goat-plan) | Milestone planning with testing gates | Human approval between milestones | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
-| [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Full mode blocks on unresolved disputes; quick mode has an inline fallback when delegation is unavailable | High-stakes decisions, plans, assessments |
+| [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
 | [/goat-qa](#goat-qa) | Testing gap analysis and verification planning | Does not run or write tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
 
@@ -184,16 +184,15 @@ MUST NOT flag pre-existing issues as part of this change. MUST attempt to dispro
 
 ## /goat-critique
 
-Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). On Codex, quick mode has an inline fallback so the skill is still usable when the user has not explicitly authorized delegated sub-agents.
+Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 2-3 sub-agents, 5 phases. If delegated sub-agents are unavailable in the session, the skill does not run — it redirects to `/goat-review`. Rationale: `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md`.
 
-| Mode | When | Agents | Phases |
-|------|------|--------|--------|
-| **Quick** (default) | Standard complexity, 1-10 files affected, or delegation not explicitly authorized | 0 delegated agents (inline multi-lens fallback) | 3: Generate → Rank → Synthesise |
-| **Full / Delegated** | System/Infrastructure complexity, security-critical, 10+ files, or explicit delegation request | 2-3 delegated agents | 5: Generate → Rank → Cross-Examine → Clarify → Synthesise |
+| Sub-agents | Phases |
+|------------|--------|
+| 2-3 delegated agents (Agent-tool calls, isolated contexts) | 5: Generate → Rank → Cross-Examine → Clarify → Synthesise |
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nStake calibration\nChoose quick/full"] --> P1
+    S0["Step 0\nConfirm artifact + delegation available"] --> P1
 
     subgraph Generate["Phase 1: Generate"]
         A["Agent A (Risk Focus)\nSKEPTIC/ANALYST/STRATEGIST\n+ footguns + lessons"]
@@ -208,9 +207,7 @@ flowchart TD
     P4 -->|"BLOCKING GATE"| P5["Phase 5: Synthesise\nConsensus + Resolved + Verified + Retracted\n+ Decision Debt + What Wasn't Critiqued"]
 ```
 
-Quick mode skips Phases 3 and 4 - goes directly from Rank to Synthesise.
-
-**Key constraints:** Full/delegated mode MUST use Agent tool calls for sub-agents, not inline role-play. When delegation is unavailable, quick mode falls back to an inline multi-lens critique and must say so explicitly. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST tag low-confidence recommendations as Decision Debt.
+**Key constraints:** MUST use Agent tool calls for sub-agents, not inline role-play. If delegation is unavailable, stop and redirect to `/goat-review`. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST tag low-confidence recommendations as Decision Debt.
 
 ---
 
@@ -294,7 +291,8 @@ See `.goat-flow/skill-reference/skill-preamble.md` (installed) or `workflow/skil
 | Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
 | Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
+| Copilot CLI | `.github/skills/goat-{name}/SKILL.md` |
 
-Skills are created during step 03 of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them.
+Skills are created during step 03 of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them. A skill may also ship a nested `references/` directory; install and parity checks treat those files as part of the skill surface.
 
 > **Consolidation history (v0.8.0-v1.1.0):** Nine skills were consolidated into the current seven. See ADR-009 for the full rationale. goat-critique was extracted as a standalone critique skill in v1.1.0, then renamed from goat-sbao in v1.2.0 (ADR-019).

@@ -64,10 +64,12 @@ describe("quality prompt content", () => {
       "Should explicitly mark assessment mode as read-only",
     );
     assert.ok(
-      result.prompt.includes(
-        "DO NOT EDIT ANY FILES. ONLY READ, INSPECT, AND REPORT.",
-      ),
+      result.prompt.includes("Do not edit any tracked file."),
       "Should end with a strong do-not-edit instruction",
+    );
+    assert.ok(
+      result.prompt.includes(".goat-flow/logs/quality/"),
+      "Should instruct the agent to write its JSON report to the gitignored quality log path",
     );
     assert.ok(
       result.prompt.includes("Do NOT apply patches."),
@@ -143,14 +145,8 @@ describe("quality prompt content", () => {
     ];
 
     assert.ok(
-      result.prompt.includes(
-        "No legacy task-state residue from pre-v1.1 workflows?",
-      ),
-      "Should use generic wording for the pre-check",
-    );
-    assert.ok(
       result.prompt.includes("removed legacy task-state surfaces"),
-      "Should use generic wording for stale-concept checks",
+      "Should keep generic wording for stale-concept checks",
     );
     assert.ok(
       removedLegacyNames.every((name) => !result.prompt.includes(name)),
@@ -189,11 +185,12 @@ describe("quality prompt content", () => {
 
   it("includes prior-report context and json contract guidance when history exists", () => {
     const priorReport: QualityHistoryEntry = {
-      id: "2026-04-15-claude",
-      path: "/tmp/test-project/.goat-flow/logs/quality/2026-04-15-claude.json",
+      id: "2026-04-15-1000-claude-bbbbb",
+      path: "/tmp/test-project/.goat-flow/logs/quality/2026-04-15-1000-claude-bbbbb.json",
       date: "2026-04-15",
+      time: "1000",
       agent: "claude",
-      suffix: 1,
+      randomId: "bbbbb",
       report: {
         report_kind: "goat-flow-quality-report",
         goat_flow_version: "1.2.0",
@@ -243,7 +240,7 @@ describe("quality prompt content", () => {
 
     assert.ok(
       result.prompt.includes(
-        "Latest same-agent report: `2026-04-15-claude` (2026-04-15)",
+        "Latest same-agent report: `2026-04-15-1000-claude-bbbbb` (2026-04-15)",
       ),
       "Should surface prior-report identity and date",
     );

@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-19
 ---
 
 ## Lesson: Retrieval terms must name the concrete failure class
@@ -155,7 +155,7 @@ last_reviewed: 2026-04-18
 
 **Why it matters:** Derived artifacts (scripts, docs, CI) can drift from the canonical source. When they conflict, the agent must identify which source is authoritative rather than picking whichever it read first. For Node version requirements, `package.json` `engines` is always canonical - it's what npm enforces, what CI reads, and what downstream consumers see.
 
-**Prevention:** When version requirements conflict across files, check `package.json` first. It's the published contract. Scripts and docs are derived from it, not the other way around. See ADR-027.
+**Prevention:** When version requirements conflict across files, check `package.json` first. It's the published contract. Scripts and docs are derived from it, not the other way around.
 
 ---
 

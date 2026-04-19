@@ -7,7 +7,7 @@ also read `skill-conventions.md`.
 
 ## Execution Loop Integration
 
-When a goat-* skill is active, the skill's Step 0 satisfies READ/SCOPE. Resume the loop at ACT.
+When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write: skills with write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) gate on explicit approval. Resume the loop at ACT when the skill's first blocking gate releases.
 
 ## Severity Scale
 
@@ -99,7 +99,7 @@ If Step 0 exceeds 5 file reads without producing output or asking a question, ch
 ## Learning-Loop Retrieval
 
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md`
+- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md` if `rg` is not available in the agent's environment)
 - Open only matching entries first. Follow related references only when they look relevant, with a maximum depth of 2 hops.
 - If the first search returns nothing useful, reword once and search again.
 - If the second search still misses, record a retrieval miss in your output or working notes. Do not broad-load a whole bucket "just in case".
@@ -132,7 +132,7 @@ last_reviewed: YYYY-MM-DD
 ---
 ```
 
-When you add an entry or materially edit the body of a bucket file, bump `last_reviewed` to today's date. Cosmetic edits (typos, whitespace, link formatting) do not require a bump. `goat-flow stats --check` fails when `last_reviewed` is missing, not `YYYY-MM-DD`, or when the bucket contains stale file refs or out-of-bounds line refs.
+When you add an entry or materially edit the body of a bucket file, bump `last_reviewed` to today's date. Cosmetic edits (typos, whitespace, link formatting) do not require a bump. `goat-flow stats --check` fails when `last_reviewed` is missing, not `YYYY-MM-DD`, older than the newest `**Created:**` / `**Updated:**` / `**Resolved:**` date in the bucket, or when the bucket contains stale file refs or out-of-bounds line refs.
 
 ## Human Gates
 

@@ -7,7 +7,7 @@ The exact mechanism depends on the agent runtime.
 
 | Surface | Path | Used by | Role |
 |---------|------|---------|------|
-| Shared hook template | `workflow/hooks/deny-dangerous.sh` | Claude, Codex, Gemini | Runtime shell hook that blocks dangerous Bash tool calls before execution |
+| Shared hook template | `workflow/hooks/deny-dangerous.sh` | Claude, Codex, Gemini, Copilot | Runtime shell hook that blocks dangerous Bash tool calls before execution |
 | Local validation helper | `scripts/deny-dangerous.sh` | Repo maintenance | Checks whether a command string would be allowed or blocked; does not intercept runtime execution |
 
 ## Agent mapping
@@ -17,6 +17,7 @@ The exact mechanism depends on the agent runtime.
 | Claude Code | `PreToolUse` shell hook plus settings deny patterns | `.claude/hooks/deny-dangerous.sh`, `.claude/settings.json` |
 | Gemini CLI | `BeforeTool` shell hook plus `.geminiignore` and settings deny patterns | `.gemini/hooks/deny-dangerous.sh`, `.geminiignore`, `.gemini/settings.json` |
 | Codex | `PreToolUse` shell hook (registered in hooks.json) | `.codex/hooks/deny-dangerous.sh`, `.codex/hooks.json` |
+| Copilot CLI | `preToolUse` hook registered in `.github/hooks/hooks.json` | `.github/hooks/deny-dangerous.sh`, `.github/hooks/hooks.json` |
 
 ## What it blocks
 
@@ -41,6 +42,7 @@ These files are command guards, not general ignore files.
 - Claude sensitive-file exclusion is primarily `permissions.deny` in `.claude/settings.json`.
 - Gemini sensitive-file exclusion is primarily `.geminiignore`, with settings and hooks as defense in depth.
 - Codex has no separate ignore file in this repo; the deny hook in `.codex/hooks/deny-dangerous.sh` is the primary guard.
+- Copilot uses `.copilotignore` for context exclusion and `.github/hooks/deny-dangerous.sh` for runtime command blocking.
 
 ## Verification
 
@@ -71,3 +73,4 @@ If this doc drifts, prefer the live templates and agent setup docs:
 - `workflow/setup/agents/claude.md`
 - `workflow/setup/agents/gemini.md`
 - `workflow/setup/agents/codex.md`
+- `workflow/setup/agents/copilot.md`

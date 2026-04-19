@@ -289,16 +289,37 @@ function readHooksObject(
 }
 
 /** Extract the shell command from one hook entry when it uses command mode. */
+function hasSupportedHookType(hookObj: Record<string, unknown>): boolean {
+  return (
+    hookObj.type === undefined ||
+    hookObj.type === "command" ||
+    hookObj.type === "Command"
+  );
+}
+
+/** Read one shell command field from a normalized hook object. */
+function readHookCommand(hookObj: Record<string, unknown>): string | null {
+  if (typeof hookObj.bash === "string") return hookObj.bash;
+  if (typeof hookObj.command === "string") return hookObj.command;
+  const nestedCommand = hookObj.command;
+  if (!nestedCommand || typeof nestedCommand !== "object") return null;
+  return typeof (nestedCommand as Record<string, unknown>).bash === "string"
+    ? ((nestedCommand as Record<string, unknown>).bash as string)
+    : null;
+}
+
 function extractCommandFromHook(hook: unknown): string | null {
   if (!hook || typeof hook !== "object") return null;
   const hookObj = hook as Record<string, unknown>;
-  if (hookObj.type !== "command") return null;
-  return typeof hookObj.command === "string" ? hookObj.command : null;
+  if (!hasSupportedHookType(hookObj)) return null;
+  return readHookCommand(hookObj);
 }
 
 /** Extract all shell commands declared inside one event registration entry. */
 function extractCommandsFromEventEntry(entry: unknown): string[] {
   if (!entry || typeof entry !== "object") return [];
+  const directCommand = extractCommandFromHook(entry);
+  if (directCommand !== null) return [directCommand];
   const eventHooks = (entry as Record<string, unknown>).hooks;
   if (!Array.isArray(eventHooks)) return [];
 

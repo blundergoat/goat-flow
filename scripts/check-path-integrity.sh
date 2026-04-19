@@ -18,6 +18,9 @@ set -uo pipefail
 
 root="${1:-.}"
 errors=0
+skill_dirs=".claude/skills .agents/skills .github/skills"
+instruction_files="CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
+hook_configs=".claude/settings.json .gemini/settings.json .codex/hooks.json .github/hooks/hooks.json"
 
 err() { echo "FAIL: $1" >&2; errors=$((errors + 1)); }
 
@@ -26,17 +29,19 @@ err() { echo "FAIL: $1" >&2; errors=$((errors + 1)); }
 # installed skills. In the goat-flow repo, those paths resolve - so a
 # naive "does it exist?" check would miss the bug. Any workflow/ path
 # in installed skill files is an error regardless of resolution.
-for agent_dir in ".claude/skills" ".agents/skills"; do
+for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue
-    while IFS= read -r match; do
-        file="${match%%:*}"
-        err "${file}: contains framework-local workflow/ path (should use .goat-flow/ paths): ${match#*:}"
-    done < <(grep -rn 'workflow/' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | grep -Ev ':[0-9]+:[[:space:]]*#' || true)
+    while IFS= read -r -d '' file; do
+        while IFS= read -r match; do
+            file_path="${match%%:*}"
+            err "${file_path}: contains framework-local workflow/ path (should use .goat-flow/ paths): ${match#*:}"
+        done < <(grep -nH 'workflow/' "$file" 2>/dev/null | grep -Ev ':[0-9]+:[[:space:]]*#' || true)
+    done < <(find "$dir" -type f -name '*.md' -print0 2>/dev/null)
 done
 
 # ── 2. .goat-flow/ paths in installed skills must resolve ───────────
-for agent_dir in ".claude/skills" ".agents/skills"; do
+for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue
     while IFS= read -r ref_path; do
@@ -45,11 +50,17 @@ for agent_dir in ".claude/skills" ".agents/skills"; do
         if [[ "$clean" == .goat-flow/* ]] && [[ ! -e "${root}/${clean}" ]]; then
             err "Installed skill references missing path: ${clean}"
         fi
-    done < <(grep -rohE '\.goat-flow/[a-zA-Z0-9_./-]+' "${dir}"/goat-*/SKILL.md "${dir}"/goat/SKILL.md 2>/dev/null | sort -u || true)
+    done < <(
+        find "$dir" -type f -name '*.md' -print0 2>/dev/null |
+            while IFS= read -r -d '' file; do
+                grep -hoE '\.goat-flow/[a-zA-Z0-9_./-]+' "$file" 2>/dev/null || true
+            done |
+            sort -u
+    )
 done
 
 # ── 3. Instruction file router table paths must exist ───────────────
-for ifile in CLAUDE.md AGENTS.md GEMINI.md; do
+for ifile in $instruction_files; do
     filepath="${root}/${ifile}"
     [[ -f "$filepath" ]] || continue
     in_router=0
@@ -96,7 +107,7 @@ if [[ -f "$config" ]]; then
 fi
 
 # ── 6. Hook files in settings/config must exist and be executable ───
-for settings in ".claude/settings.json" ".gemini/settings.json" ".codex/hooks.json"; do
+for settings in $hook_configs; do
     sfile="${root}/${settings}"
     [[ -f "$sfile" ]] || continue
     while IFS= read -r hook_path; do
@@ -110,8 +121,8 @@ for settings in ".claude/settings.json" ".gemini/settings.json" ".codex/hooks.js
 done
 
 # ── 7. No stale skill names ─────────────────────────────────────────
-stale_skills="goat-preflight goat-research goat-audit goat-investigate goat-onboard goat-reflect goat-resume goat-context goat-simplify goat-refactor"
-for agent_dir in ".claude/skills" ".agents/skills"; do
+stale_skills="goat-preflight goat-research goat-audit goat-investigate goat-onboard goat-reflect goat-resume goat-context goat-simplify goat-refactor goat-sbao goat-test"
+for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue
     for stale in $stale_skills; do

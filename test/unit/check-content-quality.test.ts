@@ -155,3 +155,44 @@ describe("scanContentQuality: code-block state tracking", () => {
     assert.equal(findings[0]!.line, 4);
   });
 });
+
+describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
+  it("skips vague-term checks in restricted mode", () => {
+    const text =
+      "The test was handling it correctly before the regression landed.";
+    const findings = scanContentQuality(
+      ".goat-flow/footguns/x.md",
+      text,
+      "restricted",
+    );
+    assert.equal(
+      findings.filter((f) => f.rule === "vague-term").length,
+      0,
+      "vague-term should be skipped on historical incident prose",
+    );
+  });
+
+  it("still flags generic-instruction patterns in restricted mode", () => {
+    const findings = scanContentQuality(
+      ".goat-flow/lessons/x.md",
+      "Follow best practices when recovering from this.",
+      "restricted",
+    );
+    assert.ok(
+      findings.some((f) => f.rule === "generic-best-practices"),
+      "generic patterns should still apply in restricted mode",
+    );
+  });
+
+  it("still flags non-actionable patterns in restricted mode", () => {
+    const findings = scanContentQuality(
+      ".goat-flow/footguns/x.md",
+      "Remember: the repo uses strict mode.",
+      "restricted",
+    );
+    assert.ok(
+      findings.some((f) => f.rule === "non-actionable-remember"),
+      "non-actionable patterns should still apply in restricted mode",
+    );
+  });
+});

@@ -45,10 +45,15 @@ function stubConfig(agents: string[] | null): LoadedConfig {
 
 describe("agent registry", () => {
   it("exposes the manifest-backed support set", () => {
-    assert.deepEqual(getKnownAgentIds(), ["claude", "codex", "gemini"]);
+    assert.deepEqual(getKnownAgentIds(), [
+      "claude",
+      "codex",
+      "gemini",
+      "copilot",
+    ]);
     assert.deepEqual(
       getAgentProfiles().map((agent) => agent.id),
-      ["claude", "codex", "gemini"],
+      ["claude", "codex", "gemini", "copilot"],
     );
   });
 
@@ -68,8 +73,16 @@ describe("agent registry", () => {
     );
     assert.deepEqual(
       getConfiguredAgents(stubConfig(null)).map((agent) => agent.id),
-      ["claude", "codex", "gemini"],
+      ["claude", "codex", "gemini", "copilot"],
     );
+  });
+
+  it("exposes Copilot's hook-config-only profile cleanly", () => {
+    const copilot = getAgentProfile("copilot");
+    assert.equal(copilot.settingsFile, null);
+    assert.equal(copilot.hookConfigFile, ".github/hooks/hooks.json");
+    assert.equal(copilot.denyHookFile, ".github/hooks/deny-dangerous.sh");
+    assert.equal(copilot.skillsDir, ".github/skills");
   });
 
   it("reports unknown configured agents outside the manifest", () => {

@@ -23,7 +23,6 @@
   },
   "findings": [
     {
-      "id": "framework_flaw:src-cli-prompt-compose-quality-ts:600",
       "type": "framework_flaw",
       "severity": "BLOCKER",
       "file": "src/cli/prompt/compose-quality.ts",
@@ -34,7 +33,6 @@
       "delta_tag": "persisted"
     },
     {
-      "id": "content_quality:goat-flow-architecture-md:49",
       "type": "content_quality",
       "severity": "MAJOR",
       "file": ".goat-flow/architecture.md",

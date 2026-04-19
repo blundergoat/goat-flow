@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-19
 ---
 
 ## Lesson: "Double check" means read the files, not re-run the tests
@@ -106,7 +106,7 @@ last_reviewed: 2026-04-18
 
 **Created:** 2026-04-05
 
-**What happened:** Claude Insights showed 75 overlap events across 77 sessions - 37% of all messages happened during parallel Claude sessions. Learning loop files (`.goat-flow/logs/`, `.goat-flow/lessons/`, `.goat-flow/footguns/`) are append-only by convention, but nothing prevents two agents from writing to the same file simultaneously. Session logs use date-slug filenames which reduces collisions, but category bucket files (e.g. `.goat-flow/lessons/verification.md`) are shared write targets.
+**What happened:** Local Claude Insights instrumentation (external to this repo, not committed here) showed 75 overlap events across 77 sessions — 37% of all messages happened during parallel Claude sessions. Learning loop files (`.goat-flow/logs/`, `.goat-flow/lessons/`, `.goat-flow/footguns/`) are append-only by convention, but nothing prevents two agents from writing to the same file simultaneously. Session logs use date-slug filenames which reduces collisions, but category bucket files (e.g. `.goat-flow/lessons/verification.md`) are shared write targets. The 37% figure is an external measurement, not something repo grep can reproduce; the observed write-contention risk is the durable part.
 
 **Root cause:** goat-flow was designed for single-agent sessions. The category bucket format (multiple entries in one file) creates write contention that per-entry files (one file per lesson) wouldn't have.
 
@@ -118,8 +118,8 @@ last_reviewed: 2026-04-18
 ## Lesson: Framework paths vs project paths in verbatim-installed skills
 
 **Created:** 2026-04-11
-**What happened:** M17a extracted skill modes into the repository template directory and left repository-local template references in the skill files. Skills are installed verbatim, so every project received instructions that pointed back into the goat-flow repo instead of the installed project. R9 scored system avg 42 (down from 53.7) largely because of this single bug.
-**Evidence:** R9 critiques - 6 of 7 projects flagged broken template references. `workflow/skills/goat/SKILL.md`, `workflow/skills/goat-security/SKILL.md`, `workflow/skills/goat-qa/SKILL.md` all used repository-local template paths instead of installed-project template paths. (Paths updated from retired flat-file layout to current directory structure.)
+**What happened:** M17a extracted skill modes into the repository template directory and left repository-local template references in the skill files. Skills are installed verbatim, so every project received instructions that pointed back into the goat-flow repo instead of the installed project. A multi-agent critique pass ("R9" — the 9th run; transcripts are local-only, not committed) scored system avg 42 (down from 53.7) largely because of this single bug.
+**Evidence:** The R9 pass flagged broken template references in 6 of 7 reviewed consumer projects. `workflow/skills/goat/SKILL.md`, `workflow/skills/goat-security/SKILL.md`, `workflow/skills/goat-qa/SKILL.md` all used repository-local template paths instead of installed-project template paths. (Paths updated from retired flat-file layout to current directory structure; the 42-vs-53.7 scoreline is recalled from that local critique run, not reproducible from the repo today.)
 **Prevention:** After editing any skill file that references a path, verify the path exists from the PROJECT's perspective, not the goat-flow repo's perspective. Add to DoD: "grep skill files for repository-local template paths and replace them with the installed project-local equivalent before shipping."
 
 ---
@@ -379,3 +379,69 @@ last_reviewed: 2026-04-18
 1. When adding semantic drift checks for prose, test both a known-bad example and the current canonical wording.
 2. Normalize natural-language list glue (`and`, Oxford commas, surrounding whitespace) before comparing against code-backed enumerations.
 3. Treat a new drift rule that immediately flags corrected docs as a checker bug until the parser is disproven.
+
+---
+
+## Lesson: Optional skill-path examples still need real targets or non-path phrasing
+
+**Created:** 2026-04-18
+
+**What happened:** The first preflight run after M14/M15/Wave 6 landed failed path integrity on installed `goat-security` copies and blocked release verification. Two new lines in `workflow/skills/goat-security/SKILL.md` still referenced `workflow/skills/**`, and the new optional policy hook named `.goat-flow/security-policy.md` without shipping the file. Preflight reported the exact failures:
+
+- `FAIL: ./.claude/skills/goat-security/SKILL.md: contains framework-local workflow/ path`
+- `FAIL: Installed skill references missing path: .goat-flow/security-policy.md`
+
+**Root cause:** The skill rewrite was authored from the framework repo’s perspective instead of the installed project’s perspective. The policy hook text was written as “optional” in prose, but the path-integrity check correctly treated the literal path as a promised target. That is the same underlying mistake as other installed-skill path bugs: if a shipped skill names a path, the installed project must be able to resolve it.
+
+**Fix:** Reworded the agent-surface bullets to use installed-project paths only, updated the CI/agent-surface reference pack to avoid `workflow/`, and added the canonical stub file at `.goat-flow/security-policy.md`. Preflight then passed with `PREFLIGHT PASSED  45 checks, 19 warning(s)`.
+
+**Prevention:**
+1. After editing any skill or reference pack, run path-integrity or full preflight before syncing milestone state.
+2. If a path is truly optional, either ship a stub at that exact location or describe the surface without a literal unresolved path.
+3. Treat installed skills as project-facing docs, not framework-facing docs; `workflow/` is evidence of perspective drift unless the file lives only in the framework repo.
+
+---
+
+## Lesson: Temp-repo preflight harnesses inherit formatting debt from copied test files
+
+**Created:** 2026-04-19
+
+**What happened:** The new M14 round-trip integration test cloned the repo into a tmpdir, patched the temp copy, and ran `bash scripts/preflight-checks.sh`. Installer, parity, and drift logic were correct, but the first verification run still failed because the cloned `test/integration/audit-drift.test.ts` was not formatted, and preflight's formatter gate checks `test/**/*.ts`, not just the files patched inside the tmp repo after cloning.
+
+**Root cause:** Treated the tmp repo like a narrow scratch fixture instead of a full repo clone. Formatting only the temp-mutated files under-approximated the real preflight surface, so the harness initially proved a weaker condition than the milestone claimed.
+
+**Fix:** For tmp-repo preflight coverage, either keep the source test file formatted in the real checkout before cloning or explicitly format any copied `src/**/*.ts` and `test/**/*.ts` files that changed in the source repo. Assume preflight sees the entire cloned repo, not only the temp patch set.
+
+---
+
+## Lesson: Renaming a tracked file requires manifest fact updates, not just cross-ref updates
+
+**Created:** 2026-04-19
+
+**What happened:** Renamed the dashboard's old setup-view file to `setup.html` and updated the include in `index.html`. `npm run typecheck` passed. User ran `npm run dashboard` and the CLI threw `ManifestValidationError: workflow/manifest.json has drifted from observed state` at startup because `facts.dashboard_views` still listed `wizard` instead of `setup`.
+
+**Root cause:** Verified with typecheck + grep for direct references, but `workflow/manifest.json` tracks filesystem facts (view names, preset counts) that are validated against observed state at every CLI entry via `validateManifest()`. Typecheck and grep-for-filename don't cover static facts registered in the manifest; drift only surfaces when the manifest loader runs.
+
+**Fix:** When renaming, adding, or removing files tracked in `workflow/manifest.json` `facts.*` arrays (currently `dashboard_views`, `presets_count`), update the manifest alongside the code change and run `node --import tsx src/cli/cli.ts manifest --check` before declaring done. `manifest --check` is the canonical gate for this drift; typecheck will not catch it.
+
+**Prevention update (2026-04-19):**
+1. `manifest --check` proves filesystem state, not git index state. New or replacement files can exist locally and still be missing from the next commit.
+2. After any file add/rename/delete tied to manifest facts or install contracts, confirm the replacement is tracked with `git status --short` or `git ls-files --error-unmatch <path>`.
+3. If the fix depends on a new repo-local path under `.goat-flow/`, verify that `.goat-flow/.gitignore` explicitly allows it to be tracked before declaring the issue closed.
+
+---
+
+## Lesson: Filesystem validation does not prove commit state
+
+**Created:** 2026-04-19
+
+**What happened:** Two separate fixes looked complete locally but were still absent from the repository state that collaborators and CI would see. `src/dashboard/views/setup.html` existed on disk and satisfied `workflow/manifest.json`'s `dashboard_views` fact check, but the file was untracked while `wizard.html` was deleted. `.goat-flow/security-policy.md` also existed locally and satisfied path-integrity expectations for `goat-security`, but the file was ignored by `.goat-flow/.gitignore` and therefore absent from git history.
+
+**Root cause:** The local verification gates used filesystem reads, not the git index. `src/cli/manifest/manifest.ts` validates dashboard views with `readdirSync()`, and preflight/path-integrity only care whether a path resolves on disk. That is necessary, but it does not prove the replacement file is staged, tracked, or even eligible to be tracked.
+
+**Fix:** Add an explicit tracked-state checkpoint whenever a fix depends on a new or replacement file. For this incident the concrete repair was: whitelist `.goat-flow/security-policy.md` in `.goat-flow/.gitignore`, ensure the replacement dashboard view is tracked, and use `git status --short` plus `git ls-files --error-unmatch <path>` before closing the loop.
+
+**Prevention:**
+1. Treat filesystem checks and tracked-state checks as separate gates.
+2. After any add/rename/delete, run `git status --short` and confirm the intended replacement path is listed as tracked or staged, not `??` or hidden behind ignore rules.
+3. If a local-only fix relies on a repo path under `.goat-flow/`, inspect `.goat-flow/.gitignore` before assuming the file can ship.

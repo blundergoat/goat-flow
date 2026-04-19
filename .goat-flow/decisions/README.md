@@ -30,7 +30,7 @@ This directory now has two live layers plus a historical summary:
 - `ADR-011` - critique as a core feature
 - `ADR-012` - quality-check expansion
 - `ADR-015` - remove `stop-lint.sh` from core
-- `ADR-020` - deferred Copilot CLI first-class support
+- `ADR-020` - accepted Copilot CLI first-class support
 
 ## Deleted Historical Topics
 

@@ -113,7 +113,8 @@
           class="gf-text-muted"
           style="font-size: 13px; line-height: 1.5; margin: 0 0 16px"
         >
-          Maximum of 7 terminal sessions. End an existing session from the
+          Maximum of <span x-text="serverMaxSessions"></span> terminal sessions.
+          End an existing session from the
           <button
             @click="showMaxSessionsModal = false; activeView = 'workspace'"
             style="
@@ -253,9 +254,9 @@
               Quality
             </button>
             <button
-              @click="activeView = 'wizard'; detectStack()"
+              @click="activeView = 'setup'; detectStack()"
               class="gf-nb"
-              :class="activeView === 'wizard' && 'gf-nb-active'"
+              :class="activeView === 'setup' && 'gf-nb-active'"
             >
               Setup
             </button>
@@ -299,7 +300,7 @@
         <span
           class="gf-text-muted"
           style="font-size: 11px; margin-right: 6px; white-space: nowrap"
-          >Terminal:</span
+          >Runner:</span
         >
         <div class="gf-asel">
           <template x-for="agent in installedAgents" :key="agent.id">
@@ -307,7 +308,6 @@
               @click="activeRunner = agent.id"
               class="gf-ab"
               :class="activeRunner === agent.id && 'gf-ab-active'"
-              :disabled="terminalSessionId && !terminalEnded"
               x-text="agent.id"
             ></button>
           </template>
@@ -445,7 +445,7 @@
 
         <!-- include: views/prompts.html -->
         <!-- include: views/quality.html -->
-        <!-- include: views/wizard.html -->
+        <!-- include: views/setup.html -->
         <!-- include: views/home.html -->
         <!-- include: views/projects.html -->
         <!-- include: views/settings.html -->

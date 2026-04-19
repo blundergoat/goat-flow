@@ -6,7 +6,7 @@ Launch: `goat-flow dashboard .` (or `goat-flow dashboard . --dev` for live reloa
 
 ### Home
 
-Overview landing page. Shows "What to do next" action cards based on your latest audit results, per-agent status indicators, and quick-launch buttons for the setup wizard and terminal. Full audit results render inline on this page: each scope (GOAT Flow Setup, Agent Setup, AI Harness Completeness) shows pass/fail status and can be expanded for details, with per-agent cards and actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. When all agents pass audit, the action cards are replaced with a success banner.
+Overview landing page. Shows "What to do next" action cards based on your latest audit results, per-agent status indicators, and quick-launch buttons for the setup view and terminal. Full audit results render inline on this page: each scope (GOAT Flow Setup, Agent Setup, AI Harness Completeness) shows pass/fail status and can be expanded for details, with per-agent cards and actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. When all agents pass audit, the action cards are replaced with a success banner.
 
 ### Quality
 
@@ -14,7 +14,7 @@ Generate and view agent quality-assessment prompts. Select a target agent, gener
 
 ### Setup
 
-Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent (Claude, Codex, Gemini), then generates a setup prompt you can preview and launch directly in a terminal session.
+Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent (Claude, Codex, Gemini, Copilot), then generates a setup prompt you can preview and launch directly in a terminal session.
 
 ### Projects
 
@@ -26,7 +26,7 @@ Dedicated prompt library. Two-pane layout: left pane is the list with search, ca
 
 ### Workspace
 
-Split layout focused on terminal work. The left **Sessions rail** lists all running terminal sessions (up to 7) grouped by current project first then other projects, with single-click session switching, runner/age/idle/detached indicators, inline-confirm `End`, an `End all` footer, and a `+ New session` shortcut that jumps to Prompts. The right pane is the active xterm.js terminal. The rail uses `x-transition` on collapse/expand.
+Split layout focused on terminal work. The left **Sessions rail** lists all running terminal sessions (up to 10) grouped by current project first then other projects, with single-click session switching, runner/age/idle/detached indicators, inline-confirm `End`, an `End all` footer, and a `+ New session` shortcut that jumps to Prompts. The right pane is the active xterm.js terminal. The rail uses `x-transition` on collapse/expand.
 
 ### Settings
 
@@ -38,10 +38,10 @@ Getting-started page for new users. Explains what goat-flow is, the audit/qualit
 
 ## Terminal
 
-- Supports Claude, Codex, and Gemini runners from `workflow/manifest.json` in v1.2.0
+- Supports Claude, Codex, Gemini, and Copilot runners from `workflow/manifest.json` in v1.2.0
 - WebSocket-based PTY sessions via xterm.js
 - 60-minute idle timeout with auto-kill
-- Maximum 7 concurrent sessions
+- Maximum 10 concurrent sessions
 - Session state: running / ended / error
 
 ## API Endpoints

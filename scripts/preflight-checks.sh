@@ -23,6 +23,76 @@ set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT_DIR" || exit 1
+MANIFEST_PATH="$ROOT_DIR/workflow/manifest.json"
+
+manifest_eval() {
+    node - "$MANIFEST_PATH" "$@" <<'NODE'
+const fs = require("node:fs");
+
+const manifestPath = process.argv[2];
+const mode = process.argv[3];
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+if (mode === "skill-roots") {
+  const roots = [
+    ...new Set(
+      Object.values(manifest.agents || {})
+        .map((agent) =>
+          typeof agent.skills_dir === "string"
+            ? agent.skills_dir.replace(/\/$/, "")
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+  for (const root of roots) console.log(root);
+  process.exit(0);
+}
+
+if (mode === "hook-dirs") {
+  const dirs = [
+    ...new Set(
+      Object.values(manifest.agents || {})
+        .map((agent) =>
+          typeof agent.hooks_dir === "string"
+            ? agent.hooks_dir.replace(/\/$/, "")
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+  for (const dir of dirs) console.log(dir);
+  process.exit(0);
+}
+
+if (mode === "supported-skills") {
+  for (const skill of manifest.skills?.canonical || []) console.log(skill);
+  process.exit(0);
+}
+
+if (mode === "skill-files") {
+  const skillName = process.argv[4];
+  const canonical = manifest.skills?.canonical;
+  const references = manifest.skills?.references || {};
+  if (!Array.isArray(canonical) || !canonical.includes(skillName)) {
+    process.stderr.write(`unknown skill: ${skillName}\n`);
+    process.exit(2);
+  }
+  const referenceFiles = Array.isArray(references[skillName])
+    ? references[skillName].filter((value) => typeof value === "string")
+    : [];
+  const files = [
+    "SKILL.md",
+    ...referenceFiles,
+  ];
+  for (const file of files) console.log(file);
+  process.exit(0);
+}
+
+process.stderr.write(`unknown manifest_eval mode: ${mode}\n`);
+process.exit(1);
+NODE
+}
 
 # ── Colours (disabled if not a terminal) ─────────────────────────────
 if [[ -t 1 ]]; then
@@ -80,7 +150,7 @@ else
 fi
 
 # Also syntax-check installed hooks
-for hookdir in .claude/hooks .gemini/hooks .codex/hooks; do
+while IFS= read -r hookdir; do
     if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
         if bash -n "$hookdir"/*.sh 2>/dev/null; then
             pass "Bash syntax ($hookdir/)"
@@ -88,7 +158,7 @@ for hookdir in .claude/hooks .gemini/hooks .codex/hooks; do
             fail "Bash syntax check ($hookdir/)"
         fi
     fi
-done
+done < <(manifest_eval hook-dirs)
 
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh >/dev/null 2>&1; then
@@ -98,7 +168,7 @@ if command -v shellcheck >/dev/null 2>&1; then
     fi
 
     # Also shellcheck installed hooks (SC2016 excluded: sed patterns intentionally use single quotes)
-    for hookdir in .claude/hooks .gemini/hooks .codex/hooks; do
+    while IFS= read -r hookdir; do
         if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
             if shellcheck --exclude=SC2001,SC2016 "$hookdir"/*.sh >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
@@ -106,7 +176,7 @@ if command -v shellcheck >/dev/null 2>&1; then
                 fail "Shellcheck ($hookdir/) - run shellcheck $hookdir/*.sh for details"
             fi
         fi
-    done
+    done < <(manifest_eval hook-dirs)
 else
     warn "Shellcheck not installed - run: bash scripts/setup-initial.sh"
 fi
@@ -120,7 +190,7 @@ else
 fi
 
 # Also self-test installed hooks
-for hookdir in .claude/hooks .gemini/hooks; do
+while IFS= read -r hookdir; do
     if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
         if bash "$hookdir/deny-dangerous.sh" --self-test >/dev/null 2>&1; then
             pass "$hookdir/deny-dangerous.sh self-test"
@@ -128,25 +198,39 @@ for hookdir in .claude/hooks .gemini/hooks; do
             fail "$hookdir/deny-dangerous.sh self-test"
         fi
     fi
-done
+done < <(manifest_eval hook-dirs)
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
-for hookdir in .claude/hooks .codex/hooks .gemini/hooks; do
+while IFS= read -r hookdir; do
     if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
-        # Simulate a Bash tool call with a dangerous command
-        test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
-        if echo "$test_payload" | bash "$hookdir/deny-dangerous.sh" >/dev/null 2>&1; then
-            fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
-        else
-            exit_code=$?
-            if [[ $exit_code -eq 2 ]]; then
-                pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
+        if [[ "$hookdir" == ".github/hooks" ]]; then
+            test_payload='{"toolName":"bash","toolArgs":"{\"command\":\"rm -rf /\"}"}'
+            if output=$(printf '%s' "$test_payload" | bash "$hookdir/deny-dangerous.sh" 2>&1); then
+                if echo "$output" | grep -q '"permissionDecision":"deny"'; then
+                    pass "$hookdir/deny-dangerous.sh runtime smoke test (copilot payload denied rm -rf)"
+                else
+                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Copilot payload"
+                fi
             else
-                warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
+                exit_code=$?
+                warn "$hookdir/deny-dangerous.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
+            fi
+        else
+            # Simulate a VS Code-style Bash tool call with a dangerous command
+            test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
+            if printf '%s' "$test_payload" | bash "$hookdir/deny-dangerous.sh" >/dev/null 2>&1; then
+                fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
+            else
+                exit_code=$?
+                if [[ $exit_code -eq 2 ]]; then
+                    pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
+                else
+                    warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
+                fi
             fi
         fi
     fi
-done
+done < <(manifest_eval hook-dirs)
 
 # ── Skill Template Versions ──────────────────────────────────────────
 section "Skill Template Versions"
@@ -168,7 +252,7 @@ else
 
     # Installed skill copies must also match
     installed_fail=0
-    for dir in .claude/skills .agents/skills; do
+    while IFS= read -r dir; do
         if [[ -d "$dir" ]]; then
             while IFS= read -r -d '' f; do
                 ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
@@ -178,7 +262,7 @@ else
                 fi
             done < <(find "$dir" -name 'SKILL.md' -print0)
         fi
-    done
+    done < <(manifest_eval skill-roots)
     if [[ "$installed_fail" -eq 0 ]]; then
         pass "All installed skills at version $skill_version"
     fi
@@ -570,22 +654,31 @@ fi
 # adds YAML-aware normalisation. Both paths coexist per M04.
 section "Skill SKILL.md Parity"
 skill_parity_ok=true
-for skill_dir in workflow/skills/goat*/; do
-    skill_name=$(basename "$skill_dir")
-    template="workflow/skills/${skill_name}/SKILL.md"
-    [[ -f "$template" ]] || continue
-    for agent_dir in .claude/skills .agents/skills; do
-        installed="${agent_dir}/${skill_name}/SKILL.md"
-        if [[ -f "$installed" ]]; then
+while IFS= read -r skill_name; do
+    while IFS= read -r relative_file; do
+        [[ -n "$relative_file" ]] || continue
+        template="workflow/skills/${skill_name}/${relative_file}"
+        if [[ ! -f "$template" ]]; then
+            fail "Skill template missing: ${template}"
+            skill_parity_ok=false
+            continue
+        fi
+        while IFS= read -r agent_dir; do
+            installed="${agent_dir}/${skill_name}/${relative_file}"
+            if [[ ! -f "$installed" ]]; then
+                fail "Skill file missing: ${installed}"
+                skill_parity_ok=false
+                continue
+            fi
             if ! diff -q "$template" "$installed" >/dev/null 2>&1; then
-                fail "SKILL.md diverged: ${template} vs ${installed}"
+                fail "Skill file diverged: ${template} vs ${installed}"
                 skill_parity_ok=false
             fi
-        fi
-    done
-done
+        done < <(manifest_eval skill-roots)
+    done < <(manifest_eval skill-files "$skill_name")
+done < <(manifest_eval supported-skills)
 if [[ "$skill_parity_ok" == true ]]; then
-    pass "All installed SKILL.md files match workflow templates"
+    pass "All installed skill files match workflow templates"
 fi
 
 # ── Path Integrity ───────────────────────────────────────────────────

@@ -24,9 +24,11 @@ export function extractBacktickPaths(content: string): string[] {
   let m;
   while ((m = pattern.exec(content))) {
     const p = m[1]!;
-    // This helper is intentionally heuristic. Ignore URLs, globs, and call-like
-    // snippets so the doc-path check only validates likely repo-relative paths.
+    // This helper is intentionally heuristic. Ignore URLs, globs, call-like
+    // snippets, and angle-bracket placeholders (e.g. `<YYYY-MM-DD>`) so the
+    // doc-path check only validates likely repo-relative paths.
     if (p.includes("://") || p.includes("*") || p.includes("(")) continue;
+    if (p.includes("<") || p.includes(">")) continue;
     if (p.startsWith("/") || p.includes(" ")) continue;
     paths.push(p);
   }

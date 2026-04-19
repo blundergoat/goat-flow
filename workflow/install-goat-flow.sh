@@ -37,6 +37,41 @@ if (mode === "supported-agents") {
   process.exit(0);
 }
 
+if (mode === "supported-skills") {
+  for (const skill of manifest.skills?.canonical || []) {
+    console.log(skill);
+  }
+  process.exit(0);
+}
+
+if (mode === "stale-skills") {
+  for (const name of manifest.skills?.stale_names || []) {
+    console.log(name);
+  }
+  process.exit(0);
+}
+
+if (mode === "skill-files") {
+  const skillName = process.argv[4];
+  const canonical = manifest.skills?.canonical;
+  const references = manifest.skills?.references || {};
+  if (!Array.isArray(canonical) || !canonical.includes(skillName)) {
+    process.stderr.write(`unknown skill: ${skillName}\n`);
+    process.exit(2);
+  }
+  const referenceFiles = Array.isArray(references[skillName])
+    ? references[skillName].filter((value) => typeof value === "string")
+    : [];
+  const files = [
+    "SKILL.md",
+    ...referenceFiles,
+  ];
+  for (const file of files) {
+    console.log(file);
+  }
+  process.exit(0);
+}
+
 if (mode === "agent-profile") {
   const agentId = process.argv[4];
   const agent = manifest.agents?.[agentId];
@@ -128,10 +163,17 @@ while IFS=$'\t' read -r key value; do
   esac
 done <<< "$PROFILE_DATA"
 
-if [[ -z "${SKILLS_DIR:-}" || -z "${HOOKS_DIR:-}" || -z "${SETTINGS_SRC:-}" || -z "${SETTINGS_DST:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
+if [[ -z "${SKILLS_DIR:-}" || -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
   echo "ERROR: manifest profile for '$AGENT' is incomplete"
   exit 1
 fi
+
+if [[ -n "${SETTINGS_DST:-}" && -z "${SETTINGS_SRC:-}" ]]; then
+  echo "ERROR: manifest profile for '$AGENT' is missing settings_src"
+  exit 1
+fi
+
+readarray -t SKILL_NAMES < <(manifest_eval supported-skills)
 
 # --- Read version from package.json ---
 VERSION=$(
@@ -176,10 +218,43 @@ echo ""
 cd "$PROJECT"
 
 # ==========================================================================
+# 0. Legacy surface detection (non-blocking — warnings only)
+# ==========================================================================
+# If the project predates goat-flow v1.x or was set up by hand, it may already
+# carry learning-loop or skill surfaces at old paths. We do NOT auto-migrate:
+# content merge across versions is error-prone and schema-sensitive. Instead
+# we report what we found and let the user consolidate manually.
+LEGACY_FOUND=0
+legacy_warn() {
+  if [[ "$LEGACY_FOUND" -eq 0 ]]; then
+    echo "Legacy surfaces detected:"
+    LEGACY_FOUND=1
+  fi
+  echo "  ⚠ $1"
+}
+[[ -f docs/footguns.md ]] && legacy_warn "docs/footguns.md exists — move entries into .goat-flow/footguns/<category>.md (category-bucket layout)"
+[[ -f docs/lessons.md ]] && legacy_warn "docs/lessons.md exists — move entries into .goat-flow/lessons/<category>.md"
+[[ -d docs/lessons ]] && legacy_warn "docs/lessons/ exists — move entries into .goat-flow/lessons/<category>.md"
+while IFS= read -r stale_name; do
+  [[ -n "$stale_name" ]] || continue
+  for agent_skills_dir in .claude/skills .codex/skills .gemini/skills .agents/skills .github/skills; do
+    if [[ -d "$agent_skills_dir/$stale_name" ]]; then
+      legacy_warn "$agent_skills_dir/$stale_name/ is a deprecated skill — delete after confirming the canonical replacement is installed"
+    fi
+  done
+done < <(manifest_eval stale-skills)
+if [[ "$LEGACY_FOUND" -eq 1 ]]; then
+  echo ""
+  echo "The installer will not auto-migrate these. Migrate content manually after install,"
+  echo "then re-run \`goat-flow audit --check-drift\` to confirm the parallels are gone."
+  echo ""
+fi
+
+# ==========================================================================
 # 1. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/skill-reference; do
+for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/skill-reference; do
   if [[ ! -d "$dir" ]]; then
     mkdir -p "$dir"
     echo "  ✓ $dir/"
@@ -200,6 +275,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/lessons-readme.md" ".goat-fl
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/footguns-readme.md" ".goat-flow/footguns/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/tasks-readme.md" ".goat-flow/tasks/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/scratchpad-readme.md" ".goat-flow/scratchpad/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/quality-readme.md" ".goat-flow/logs/quality/README.md"
 echo ""
 
 # ==========================================================================
@@ -209,25 +285,23 @@ echo "Reference files → .goat-flow/skill-reference/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-reference/skill-preamble.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-reference/skill-conventions.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-quality-testing.md" ".goat-flow/skill-reference/skill-quality-testing.md"
+copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/security-policy.md" ".goat-flow/security-policy.md"
 echo ""
 
 # ==========================================================================
 # 4. Install skills (always overwrite - verbatim from templates)
 # ==========================================================================
 echo "Skills → $SKILLS_DIR/:"
-SKILL_NAMES="goat goat-debug goat-plan goat-review goat-critique goat-security goat-qa"
-for skill in $SKILL_NAMES; do
+for skill in "${SKILL_NAMES[@]}"; do
   skill_dir="$GOAT_FLOW_ROOT/workflow/skills/$skill"
   if [[ ! -d "$skill_dir" ]]; then
     echo "  ✗ $skill (template dir not found: $skill_dir)"
     continue
   fi
-  # Copy every .md file in the template directory (SKILL.md, etc.)
-  for src_file in "$skill_dir"/*.md; do
-    [[ -f "$src_file" ]] || continue
-    filename="$(basename "$src_file")"
-    copy_file "$src_file" "$SKILLS_DIR/$skill/$filename"
-  done
+  while IFS= read -r relative_file; do
+    [[ -n "$relative_file" ]] || continue
+    copy_file "$skill_dir/$relative_file" "$SKILLS_DIR/$skill/$relative_file"
+  done < <(manifest_eval skill-files "$skill")
 done
 echo ""
 
@@ -247,7 +321,11 @@ echo ""
 # 6. Install agent settings (skip if exists, unless --force)
 # ==========================================================================
 echo "Settings:"
-copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
+  copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+else
+  echo "  · no settings file for $AGENT"
+fi
 echo ""
 
 # ==========================================================================

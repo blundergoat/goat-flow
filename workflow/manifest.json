@@ -7,6 +7,7 @@
     ".goat-flow/config.yaml",
     ".goat-flow/tasks/.gitignore",
     ".goat-flow/tasks/README.md",
+    ".goat-flow/logs/quality/README.md",
     ".goat-flow/scratchpad/.gitignore",
     ".goat-flow/scratchpad/README.md",
     ".goat-flow/lessons/README.md",
@@ -25,15 +26,21 @@
     ".goat-flow/footguns/",
     ".goat-flow/lessons/",
     ".goat-flow/logs/sessions/",
+    ".goat-flow/logs/quality/",
     ".goat-flow/scratchpad/",
     ".goat-flow/skill-reference/",
     ".goat-flow/tasks/"
   ],
 
   "directory_purposes": {
+    ".goat-flow/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
+    ".goat-flow/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
+    ".goat-flow/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
+    ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed.",
+    ".goat-flow/logs/quality/": "Workspace-local, gitignored-by-design quality report history. Saved agent quality reports (JSON) and their captured prose companions (MD); feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed.",
-    ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed."
+    ".goat-flow/skill-reference/": "Committed shared cold-path skill doctrine copied from workflow templates. Holds skill-preamble.md, skill-conventions.md, and skill-quality-testing.md; durable reference state used across sessions, not transient notes.",
+    ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
   "optional_files": {
@@ -54,6 +61,17 @@
       "goat-security",
       "goat-qa"
     ],
+    "references": {
+      "goat-security": [
+        "references/common-threats.md",
+        "references/auth-authz.md",
+        "references/file-upload-and-paths.md",
+        "references/secrets-and-data-exposure.md",
+        "references/dependency-and-supply-chain.md",
+        "references/cicd-and-agent-surfaces.md",
+        "references/project-policy-template.md"
+      ]
+    },
     "stale_names": [
       "goat-audit",
       "goat-investigate",
@@ -138,6 +156,27 @@
         "compaction_support": "native"
       },
       "hooks": ["deny-dangerous.sh"]
+    },
+    "copilot": {
+      "name": "Copilot CLI",
+      "instruction_file": ".github/copilot-instructions.md",
+      "skills_dir": ".github/skills/",
+      "hooks_dir": ".github/hooks/",
+      "hook_config_file": ".github/hooks/hooks.json",
+      "deny_hook": ".github/hooks/deny-dangerous.sh",
+      "deny_mechanism": {
+        "type": "deny-script",
+        "path": ".github/hooks/deny-dangerous.sh"
+      },
+      "local_pattern": ".github/instructions/**/*.instructions.md",
+      "hook_events": {
+        "pre_tool": "preToolUse",
+        "post_turn": null
+      },
+      "capabilities": {
+        "compaction_support": "none"
+      },
+      "hooks": ["hooks.json", "deny-dangerous.sh"]
     }
   },
 
@@ -183,9 +222,9 @@
       "prompts",
       "quality",
       "settings",
-      "wizard",
+      "setup",
       "workspace"
     ],
-    "presets_count": 21
+    "presets_count": 22
   }
 }

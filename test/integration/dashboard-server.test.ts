@@ -10,6 +10,7 @@ import {
   getAgentProfileMap,
   getKnownAgentIds,
 } from "../../src/cli/agents/registry.js";
+import type { AgentId } from "../../src/cli/types.js";
 
 const PROJECT_PATH = resolve(import.meta.dirname, "..", "..");
 const PROJECTS_LIST_PATH = resolve(
@@ -229,13 +230,8 @@ describe("dashboard /api/audit", () => {
     for (const score of agentScores) {
       const entry = expectRecord(score, "Dashboard report agent score");
       const id = String(entry.id);
-      assert.ok(
-        getKnownAgentIds().includes(id as "claude" | "codex" | "gemini"),
-      );
-      assert.equal(
-        entry.name,
-        getAgentProfileMap()[id as "claude" | "codex" | "gemini"].name,
-      );
+      assert.ok(getKnownAgentIds().includes(id as AgentId));
+      assert.equal(entry.name, getAgentProfileMap()[id as AgentId].name);
       assertAuditScope(entry.agent, "Dashboard report agentScores[].agent");
       if (entry.harness !== null) {
         assertAuditScope(
@@ -507,7 +503,7 @@ describe("dashboard terminal endpoints", () => {
     const data = expectRecord(body, "Terminal sessions response");
     assert.ok(Array.isArray(data.sessions));
     assert.deepEqual(data.sessions, []);
-    assert.equal(data.maxSessions, 7);
+    assert.equal(data.maxSessions, 10);
     assert.equal(data.activeCount, 0);
   });
 });

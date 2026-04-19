@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   scanCountClaims,
   scanPathReferences,
+  scanRemovedCommands,
   runFactualClaimChecks,
 } from "../../src/cli/audit/check-factual-claims.js";
 import { SKILL_NAMES } from "../../src/cli/constants.js";
@@ -113,6 +114,38 @@ describe("scanCountClaims: code-block guard", () => {
       `Actual: ${SKILL_NAMES.length} skills.`,
     ].join("\n");
     const findings = scanCountClaims("x.md", text);
+    assert.equal(findings.length, 0);
+  });
+});
+
+describe("scanRemovedCommands", () => {
+  it("flags a dead CLI command in prose", () => {
+    const findings = scanRemovedCommands(
+      "docs/audit-and-quality.md",
+      "Run `goat-flow quality capture --from-file <path>` after each review.",
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]!.rule, "removed-command-quality-capture");
+    assert.equal(findings[0]!.severity, "warning");
+  });
+
+  it("flags a dead CLI command inside a fenced code block", () => {
+    const text = [
+      "```bash",
+      "goat-flow quality capture --from-stdin",
+      "```",
+    ].join("\n");
+    const findings = scanRemovedCommands("docs/harness-quality.md", text);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]!.rule, "removed-command-quality-capture");
+    assert.equal(findings[0]!.line, 2);
+  });
+
+  it("does not flag unrelated content", () => {
+    const findings = scanRemovedCommands(
+      "README.md",
+      "Capture agent output for quality review.",
+    );
     assert.equal(findings.length, 0);
   });
 });
@@ -228,7 +261,7 @@ describe("runFactualClaimChecks", () => {
   it("does not flag the current dashboard runner list with natural-language commas", () => {
     const fs = stubFSFromFiles({
       "docs/dashboard.md":
-        "- Supports Claude, Codex, and Gemini runners\n- Sessions rail: up to 7\n",
+        "- Supports Claude, Codex, Gemini, and Copilot runners\n- Sessions rail: up to 7\n",
       "src/cli/server/terminal.ts": "const MAX_SESSIONS = 7;\n",
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));
@@ -239,7 +272,6 @@ describe("runFactualClaimChecks", () => {
     const fs = stubFSFromFiles({
       "docs/skills.md": [
         "Reviewers MUST read all files before commenting.",
-        "Disputes resolved before synthesis.",
         "This skill uses a 10-category checklist.",
         "MUST rank findings by exploitability.",
       ].join("\n"),
@@ -247,18 +279,15 @@ describe("runFactualClaimChecks", () => {
     const { findings } = runFactualClaimChecks(stubCtx(fs));
     assert.ok(findings.some((f) => f.rule === "skills-review-contract-drift"));
     assert.ok(
-      findings.some((f) => f.rule === "skills-critique-contract-drift"),
-    );
-    assert.ok(
       findings.some((f) => f.rule === "skills-security-contract-drift"),
     );
     assert.ok(findings.some((f) => f.rule === "skills-security-gate-drift"));
   });
 
-  it("flags accepted ADR-020 while Copilot is not in the manifest-backed runtime", () => {
+  it("flags deferred ADR-020 while Copilot is in the manifest-backed runtime", () => {
     const fs = stubFSFromFiles({
       ".goat-flow/decisions/ADR-020-add-copilot-cli.md":
-        "# ADR-020\n\n**Status:** Accepted\n",
+        "# ADR-020\n\n**Status:** Deferred\n",
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));
     assert.ok(findings.some((f) => f.rule === "adr020-copilot-drift"));

@@ -102,3 +102,76 @@ describe("path-integrity script: router table", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Copilot surfaces and nested skill references are covered
+// ---------------------------------------------------------------------------
+describe("path-integrity script: copilot surfaces", () => {
+  it("fails when .github/copilot-instructions.md router paths are dead", () => {
+    const dir = makeTempProject();
+    try {
+      mkdirSync(join(dir, ".github"), { recursive: true });
+      writeFileSync(
+        join(dir, ".github", "copilot-instructions.md"),
+        [
+          "# Copilot CLI - Repo Guidance",
+          "## Router Table",
+          "| Resource | Path |",
+          "|----------|------|",
+          "| Missing | `.goat-flow/missing.md` |",
+          "",
+        ].join("\n"),
+      );
+
+      const result = runScript(dir);
+      assert.equal(result.ok, false, "Should fail on dead Copilot router path");
+      assert.ok(
+        result.output.includes(
+          ".github/copilot-instructions.md router table: path does not exist: .goat-flow/missing.md",
+        ),
+        `Should mention dead Copilot router path: ${result.output}`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when .github skill references point at missing .goat-flow paths", () => {
+    const dir = makeTempProject();
+    try {
+      mkdirSync(join(dir, ".github", "skills", "goat-security", "references"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(dir, ".github", "skills", "goat-security", "SKILL.md"),
+        "# goat-security\n",
+      );
+      writeFileSync(
+        join(
+          dir,
+          ".github",
+          "skills",
+          "goat-security",
+          "references",
+          "project-policy-template.md",
+        ),
+        "Read `.goat-flow/security-policy.md` before ranking findings.\n",
+      );
+
+      const result = runScript(dir);
+      assert.equal(
+        result.ok,
+        false,
+        "Should fail on missing nested skill path",
+      );
+      assert.ok(
+        result.output.includes(
+          "Installed skill references missing path: .goat-flow/security-policy.md",
+        ),
+        `Should mention missing nested skill path: ${result.output}`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

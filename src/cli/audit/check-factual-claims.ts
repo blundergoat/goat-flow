@@ -112,6 +112,54 @@ function isFenceLine(line: string): boolean {
   return /^\s*```/.test(line);
 }
 
+interface RemovedCommand {
+  rule: string;
+  pattern: RegExp;
+  message: string;
+}
+
+/** CLI commands that were deliberately removed. Docs must not teach them.
+ *  Unlike count/path checks, this scanner runs on fenced lines too, because
+ *  the most common failure is copy-pasted command examples inside fences. */
+const REMOVED_COMMANDS: RemovedCommand[] = [
+  {
+    rule: "removed-command-quality-capture",
+    // Match the fully-qualified form (`goat-flow quality capture`) and the
+    // backticked shorthand (`` `quality capture` ``) that docs/glossaries use.
+    pattern: /\bgoat-flow\s+quality\s+capture\b|`quality\s+capture`/g,
+    message:
+      "`goat-flow quality capture` was removed in v1.2.0; agents now write reports directly to `.goat-flow/logs/quality/`.",
+  },
+];
+
+/** Scan one doc file for references to removed CLI commands. Runs across every
+ *  line including fenced code blocks — fenced command examples are the primary
+ *  leak path this check exists to catch. */
+export function scanRemovedCommands(
+  path: string,
+  text: string,
+  removed: RemovedCommand[] = REMOVED_COMMANDS,
+): ContentFinding[] {
+  const findings: ContentFinding[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    for (const cmd of removed) {
+      const rx = new RegExp(cmd.pattern.source, cmd.pattern.flags);
+      if (rx.test(line)) {
+        findings.push({
+          severity: "warning",
+          rule: cmd.rule,
+          path,
+          line: i + 1,
+          message: cmd.message,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
 /** Scan one doc file for numeric-count drift using the provided check set. */
 export function scanCountClaims(
   path: string,
@@ -209,6 +257,7 @@ function looksLikeRepoPath(candidate: string): boolean {
   if (candidate.includes("*") || candidate.includes("?")) return false;
   // Template placeholders are not literal on-disk paths.
   if (candidate.includes("{") || candidate.includes("}")) return false;
+  if (candidate.includes("<") || candidate.includes(">")) return false;
   return REPO_PATH_PREFIXES.some((p) => candidate.startsWith(p));
 }
 
@@ -243,8 +292,14 @@ function readMaxSessions(ctx: AuditContext): number | null {
 
 /** Normalise display names for docs that list runner names. */
 function docAgentNames(): string[] {
-  return Object.values(loadManifest().agents).map((agent) =>
-    agent.name.replace(/\s+(Code|CLI)$/u, ""),
+  const docLabels: Record<string, string> = {
+    claude: "Claude",
+    codex: "Codex",
+    gemini: "Gemini",
+    copilot: "Copilot",
+  };
+  return Object.entries(loadManifest().agents).map(
+    ([id, agent]) => docLabels[id] ?? agent.name.replace(/\s+(Code|CLI)$/u, ""),
   );
 }
 
@@ -272,24 +327,41 @@ function driftCodeMapClassifyState(
   ];
 }
 
-/** Drift: docs/dashboard.md session cap doesn't match MAX_SESSIONS. */
+/** Drift: docs/dashboard.md session-cap claims don't match MAX_SESSIONS.
+ *  Matches both the rail phrasing (`up to N`) and the hard-cap phrasing
+ *  (`Maximum N concurrent sessions`). Every claim that disagrees with the live
+ *  constant is reported separately so same-doc contradictions surface too. */
 function driftDashboardSessions(
   dashboard: string,
   ctx: AuditContext,
 ): ContentFinding[] {
   const maxSessions = readMaxSessions(ctx);
-  const railMatch = dashboard.match(/up to (\d+)/);
-  if (maxSessions === null || railMatch?.[1] === undefined) return [];
-  if (Number(railMatch[1]) === maxSessions) return [];
-  return [
-    {
-      severity: "warning",
-      rule: "dashboard-sessions-drift",
-      path: "docs/dashboard.md",
-      message: `Dashboard docs say sessions rail is up to ${railMatch[1]}, but terminal.ts uses ${maxSessions}.`,
-      suggestion: `Update docs/dashboard.md to the live session cap (${maxSessions}).`,
-    },
+  if (maxSessions === null) return [];
+
+  const patterns: { regex: RegExp; label: string }[] = [
+    { regex: /up to (\d+)/g, label: "rail is up to" },
+    { regex: /Maximum (\d+) concurrent sessions?/g, label: "Maximum" },
   ];
+
+  const findings: ContentFinding[] = [];
+  const seen = new Set<string>();
+  for (const { regex, label } of patterns) {
+    for (const match of dashboard.matchAll(regex)) {
+      const claimed = Number(match[1]);
+      if (claimed === maxSessions) continue;
+      const key = `${label}:${claimed}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      findings.push({
+        severity: "warning",
+        rule: "dashboard-sessions-drift",
+        path: "docs/dashboard.md",
+        message: `Dashboard docs say ${label} ${claimed}, but terminal.ts uses ${maxSessions}.`,
+        suggestion: `Update docs/dashboard.md to the live session cap (${maxSessions}).`,
+      });
+    }
+  }
+  return findings;
 }
 
 /** Drift: docs/dashboard.md runner list doesn't match manifest. */
@@ -325,12 +397,6 @@ const SKILLS_DOC_STALE_PHRASES: Array<{
     rule: "skills-review-contract-drift",
     message:
       "docs/skills.md still claims goat-review must read all files before commenting; the live skill uses diff-first review with explicit files-not-opened reporting.",
-  },
-  {
-    needle: "Disputes resolved before synthesis",
-    rule: "skills-critique-contract-drift",
-    message:
-      "docs/skills.md still describes goat-critique as always resolving disputes before synthesis; quick mode skips cross-examination and clarification.",
   },
   {
     needle: "10-category checklist",
@@ -415,21 +481,41 @@ function driftSetupOverview(setupOverview: string): ContentFinding[] {
 
 /** Drift: ADR-020 still says Copilot accepted while manifest excludes it. */
 function driftAdr020(adr020: string): ContentFinding[] {
-  if (!/\*\*Status:\*\*\s*Accepted/u.test(adr020)) return [];
-  if (Object.prototype.hasOwnProperty.call(loadManifest().agents, "copilot")) {
-    return [];
+  const hasCopilot = Object.prototype.hasOwnProperty.call(
+    loadManifest().agents,
+    "copilot",
+  );
+  const isAccepted = /\*\*Status:\*\*\s*Accepted/u.test(adr020);
+
+  if (isAccepted && !hasCopilot) {
+    return [
+      {
+        severity: "warning",
+        rule: "adr020-copilot-drift",
+        path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+        message:
+          "ADR-020 still says Copilot support is accepted while the manifest-backed runtime supports only claude/codex/gemini.",
+        suggestion:
+          "Either defer/revert ADR-020 or implement manifest/type/runtime Copilot parity in the same change.",
+      },
+    ];
   }
-  return [
-    {
-      severity: "warning",
-      rule: "adr020-copilot-drift",
-      path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
-      message:
-        "ADR-020 still says Copilot support is accepted while the manifest-backed runtime supports only claude/codex/gemini.",
-      suggestion:
-        "Either defer/revert ADR-020 or implement manifest/type/runtime Copilot parity in the same change.",
-    },
-  ];
+
+  if (!isAccepted && hasCopilot) {
+    return [
+      {
+        severity: "warning",
+        rule: "adr020-copilot-drift",
+        path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+        message:
+          "ADR-020 no longer reflects the live manifest-backed runtime: Copilot is shipped in code but the ADR is not accepted.",
+        suggestion:
+          "Update ADR-020 to Accepted and align its decision text with the manifest-backed Copilot support.",
+      },
+    ];
+  }
+
+  return [];
 }
 
 /** Drift: ADR-013 still carries pre-simplification implementation detail. */
@@ -482,7 +568,10 @@ function scanSemanticDrift(ctx: AuditContext): {
   if (skillsDoc !== null) findings.push(...driftSkillsDoc(skillsDoc));
 
   const glossary = readAndTrack(".goat-flow/glossary.md");
-  if (glossary !== null) findings.push(...driftGlossary(glossary));
+  if (glossary !== null) {
+    findings.push(...driftGlossary(glossary));
+    findings.push(...scanRemovedCommands(".goat-flow/glossary.md", glossary));
+  }
 
   const setupOverview = readAndTrack("workflow/setup/01-system-overview.md");
   if (setupOverview !== null)
@@ -514,6 +603,7 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     filesScanned++;
     findings.push(...scanCountClaims(rel, text));
     findings.push(...scanPathReferences(rel, text, ctx));
+    findings.push(...scanRemovedCommands(rel, text));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).
   for (const rel of DASHBOARD_SCOPED_TARGETS) {
