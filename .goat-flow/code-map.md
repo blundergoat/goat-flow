@@ -85,7 +85,6 @@ prettier.sh                # Wrapper: prettier --write (format)
 run-cli.sh                 # Wrapper: run the local CLI via node
 setup-initial.sh           # First-time project scaffolding
 start-dev.sh               # Wrapper: start dashboard in dev mode
-tick-checkboxes.sh         # Hook: PostToolUse nudge when milestone-file edits lack `- [x]` (copied to agent hook dirs)
 warn-node-pty.mjs          # npm postinstall guard: warn if node-pty is missing (skips in CI)
 maintenance/               # Git cleanup, secret scanning, Zone.Identifier removal
 ```
