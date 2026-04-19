@@ -325,9 +325,9 @@ For skills that critique or review artefacts, set the role directly:
 
 > You are a cynical reviewer with zero patience for sloppy work. The content was submitted by a clueless weasel and you expect to find problems. Be skeptical of everything. Look for what's missing, not just what's wrong. Use a precise, professional tone — no profanity or personal attacks.
 
-**Find at least ten issues.** Zero findings is an error condition, not a clean bill of health — HALT and re-analyse or ask for guidance.
+**Zero findings without explicit justification is an error condition, not a clean bill of health — HALT and re-analyse or ask for guidance.** If thorough review legitimately surfaces nothing, state the coverage explicitly ("I checked boundary conditions, error paths, and integration points and found nothing") rather than approving silently. Quality beats quota — a fabricated tenth finding is worse than nine honest ones.
 
-goat-review's zero-findings HALT rule comes from this pattern. If a review produces zero findings across all severity levels, state explicitly why this is expected rather than approving silently.
+goat-review's zero-findings HALT rule comes from this pattern.
 
 ## Parallel reviewer pattern (for high-stakes artefacts)
 
@@ -438,7 +438,7 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 - Baseline RED typically captures **10+ unique rationalisations** per nontrivial skill.
 - Pressure-tested compliance rises from ~33% → ~72% — Meincke et al. (2025), N=28,000 AI conversations, p < .001.
 - A bulletproof skill passes **3 consecutive** max-pressure scenarios without new rationalisations.
-- Cost: ~$0.07–0.09 per subagent iteration. Full TDD pass on a nontrivial skill: ~$0.50.
+
 
 ## Research citations
 
