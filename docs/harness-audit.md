@@ -59,11 +59,12 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 The agent can only work with what it sees. Stale router paths, missing execution loops, and oversized instruction files all degrade performance. The audit checks structural wiring only; use `quality` to assess whether the content is actually useful for this project.
 
-**Checks (3):**
+**Context checks (4):**
 
 - `instruction-line-count` - each configured agent's instruction file is within the configured hard limit (`line-limits.limit` in `config.yaml`)
 - `execution-loop-present` - instruction file contains at least 2 of the 4 READ / SCOPE / ACT / VERIFY keywords
 - `doc-paths-resolve` - router-table paths, architecture.md backtick paths, and backtick paths in a small set of doc files (`CONTRIBUTING.md`, `.goat-flow/code-map.md`, `docs/cli.md`, `docs/audit-and-quality.md`) all resolve to real files on disk
+- `instruction-sections-present` - instruction file carries the hot-path contract headings (Truth Order, Execution Loop, Definition of Done, Router Table); advisory — skeleton overlays that defer to a shared instruction file will fail this check
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 
@@ -76,9 +77,9 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 Constraints are the cheapest, most reliable layer of the harness. They cost zero tokens, produce zero false positives when well-designed, and prevent entire failure categories without any LLM involvement.
 
-**Checks (4):**
+**Constraints checks (4):**
 
-- `deny-covers-secrets` - for agents with settings-based deny (Claude, Gemini), the deny configuration covers `.env`, credentials, `*.key`, `*.pem`. Script-only agents (Codex) are noted as a platform limitation, not a failure.
+- `deny-covers-secrets` - for agents with settings-based deny (Claude, Gemini), the deny configuration covers `.env`, credentials, `*.key`, `*.pem`. Script-only agents (Codex, Copilot) rely entirely on the Bash deny hook, which is checked for the same coverage; the settings-based Read-deny check is skipped for them as a platform limitation, not a failure.
 - `deny-blocks-dangerous` - each agent's deny configuration blocks `rm -rf`, force-push, and `chmod`
 - `deny-blocks-pipe-to-shell` - each agent's deny configuration blocks `curl | bash` / `wget | sh` pipe-to-shell patterns
 - `deny-hook-registered` - hook registrations and hook files are in sync (registered hooks exist on disk, existing hooks are registered)
@@ -95,7 +96,7 @@ Constraints are the cheapest, most reliable layer of the harness. They cost zero
 
 Verification loops are consistently reported as the single highest-impact harness pattern. The audit checks that the wiring is present; it does not grade whether the verification is sufficient.
 
-**Checks (4):**
+**Verification checks (4):**
 
 - `test-runner-configured` - informational (always passes). Reports whether `toolchain.test` is set in `config.yaml`, or notes that project-local / instruction-file commands are the source of truth. Missing `toolchain.test` is explicitly treated as valid.
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
@@ -114,7 +115,7 @@ Verification loops are consistently reported as the single highest-impact harnes
 
 Agents that run for minutes or hours need durable state. Without recovery mechanisms, a crashed session means starting from scratch.
 
-**Checks (2):**
+**Recovery checks (2):**
 
 - `milestone-tracking` - `.goat-flow/tasks/` directory exists. Passes if directory exists (even if empty - valid for fresh installs). Reports checkbox coverage informationally.
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists. Does not count entries.
@@ -131,7 +132,7 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 
 A fresh install with zero footguns and zero lessons is a valid PASS. The audit only checks that the infrastructure exists; `quality` assesses whether the content is high-quality and actively maintained.
 
-**Checks (2):**
+**Feedback Loop checks (2):**
 
 - `feedback-loop-active` - `.goat-flow/footguns/` and `.goat-flow/lessons/` directories both exist. Entry count is reported but never used as a failure condition.
 - `decisions-tracked` - `.goat-flow/decisions/` directory exists. Record count is reported informationally.

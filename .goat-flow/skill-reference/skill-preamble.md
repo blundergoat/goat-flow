@@ -75,7 +75,7 @@ When invoked via /goat or when intent is ambiguous:
 - Simple implementation (rename, add log, move constant) → no skill, use execution loop directly
 - Simple question → answer directly
 
-**Depth-aware routing:** If the user asks for a plan, offer quick/full before routing.
+**Planning intake:** Planning requests route directly to `/goat-plan`; the skill's Step 0 detects read-only-analysis vs file-write intent from the user's phrasing — no depth question at the dispatcher.
 **Clarification:** If ambiguous, ask ONE question.
 **Override:** If the user names a skill explicitly, respect it.
 

@@ -1,6 +1,7 @@
 /**
  * Constraints concern: Do deterministic rules catch failures before the LLM runs?
- * 3 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell.
+ * 4 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell,
+ * deny-hook-registered.
  */
 import type { HarnessCheck, AuditContext } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";

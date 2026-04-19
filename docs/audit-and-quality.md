@@ -82,7 +82,7 @@ Agent Setup:              PASS
   Hooks:                  claude:deny installed, codex:deny installed, gemini:deny installed, copilot:deny installed
 
 AI Harness Completeness:  PASS
-  Context:                PASS (3/3)
+  Context:                PASS (4/4)
   Constraints:            FAIL (3/4) - pipe-to-shell not blocked for codex
   Verification:           PASS (4/4)
   Recovery:               PASS (2/2)
