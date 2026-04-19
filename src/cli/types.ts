@@ -29,7 +29,6 @@ export interface AgentProfile {
   // Glob pattern for agent-specific local instruction files
   localPattern: string;
   hookEvents: HookEvents;
-  capabilities: AgentCapabilities;
 }
 
 /**
@@ -46,11 +45,6 @@ export interface HookEvents {
   preTool: string;
   // Null when the runtime exposes no post-turn hook event.
   postTurn: string | null;
-}
-
-/** Framework-level capabilities independent of current project enablement. */
-export interface AgentCapabilities {
-  compactionSupport: "native" | "none";
 }
 
 // === Facts ===
@@ -268,10 +262,14 @@ export interface AgentFacts {
     postTurnExitsZero: boolean;
     postTurnHasValidation: boolean;
     postTurnSwallowsFailures: boolean;
-    compactionHookExists: boolean;
     /** Hook scripts containing hardcoded absolute paths (not wrapped in $(git rev-parse)) */
     absolutePathHooks: string[];
     readDenyCoversSecrets: boolean;
+    /** True when the Bash deny hook script has pattern coverage for secret-bearing
+     *  file reads (.env, /.ssh/, /.aws/, .pem/.key/.pfx). Settings.json Read()
+     *  denies do not cover Bash commands, so this check is the only line of
+     *  defence against shell-based secret exfil. */
+    bashDenyCoversSecrets: boolean;
   };
   deny: {
     gitCommitBlocked: boolean;

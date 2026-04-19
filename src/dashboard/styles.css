@@ -1001,6 +1001,11 @@ body {
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
+.gf-ib-active {
+  background: var(--accent-bg) !important;
+  color: var(--accent) !important;
+  border-color: var(--accent-border) !important;
+}
 
 @media (max-width: 1280px) {
   .gf-header-proj {

@@ -4,40 +4,6 @@
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import { pushUniquePath } from "./routing.js";
 
-/** Check whether the agent settings include a compaction/notification hook matching 'compact'. */
-function checkCompactionHook(
-  settingsParsed: unknown,
-  settingsValid: boolean,
-): boolean {
-  if (!settingsParsed || !settingsValid) return false;
-
-  /** Top-level settings object cast for property access */
-  const settings = settingsParsed as Record<string, unknown>;
-  /** Hooks configuration from settings */
-  const hooks = settings.hooks as Record<string, unknown> | undefined;
-  if (!hooks || typeof hooks !== "object") return false;
-
-  if (Array.isArray(hooks)) {
-    // Array format: hooks: [{type: "Notification", matcher: "compact"}]
-    return (hooks as Array<Record<string, unknown>>).some(
-      (h) =>
-        h.type === "Notification" &&
-        (typeof h.matcher === "string" ? h.matcher : "").includes("compact"),
-    );
-  }
-  // Nested format: hooks.Notification[{matcher: "compact"}]
-  /** Notification hooks array from the nested hooks object */
-  const notifHooks = hooks.Notification as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (Array.isArray(notifHooks)) {
-    return notifHooks.some((h) =>
-      (typeof h.matcher === "string" ? h.matcher : "").includes("compact"),
-    );
-  }
-  return false;
-}
-
 /** Regex matching common lint, typecheck, and format-check tool invocations. */
 const POST_TURN_VALIDATION_COMMAND_PATTERN =
   /\b(shellcheck|eslint|tsc|phpstan|ruff|mypy|flake8|rubocop|stylelint|ktlint|swiftlint)\b|biome\s+check|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:lint|typecheck|format(?::check)?)\b|cargo\s+check|go\s+vet|prettier\s+--check|bash\s+-n\b|(?:^|\s)(?:bash\s+)?(?:\.\/)?scripts\/preflight-checks\.sh\b/i;
@@ -407,18 +373,6 @@ function buildDenyRegistration(
   };
 }
 
-/** Detect whether the current agent has a compaction/session-start hook configured. */
-function detectCompactionHookExists(
-  agent: AgentProfile,
-  hookConfigParsed: unknown,
-  hookConfigValid: boolean,
-): boolean {
-  if (agent.capabilities.compactionSupport !== "native") {
-    return false;
-  }
-  return checkCompactionHook(hookConfigParsed, hookConfigValid);
-}
-
 /** Resolve the deny hook script path for the current agent, if it has one. */
 function resolveDenyHookPath(
   fs: ReadonlyFS,
@@ -485,6 +439,23 @@ function analyzeDenyHookPath(
   };
 }
 
+/** Detect whether the Bash deny hook has pattern coverage for secret-bearing
+ *  file reads (.env, /.ssh/, /.aws/, *.pem/*.key/*.pfx). Required because
+ *  settings.json Read() deny rules only apply to the Read tool, not Bash. */
+function detectBashDenyCoversSecrets(
+  fs: ReadonlyFS,
+  denyHookPath: string | null,
+): boolean {
+  if (!denyHookPath || !fs.exists(denyHookPath)) return false;
+  const content = fs.readFile(denyHookPath);
+  if (!content) return false;
+  const hasEnv = /\\\.env/.test(content);
+  const hasSsh = /\/\\\.ssh\//.test(content);
+  const hasAws = /\/\\\.aws\//.test(content);
+  const hasKeys = /\\\.\(pem\|key\|pfx\)/.test(content);
+  return hasEnv && hasSsh && hasAws && hasKeys;
+}
+
 /** Detect hardcoded absolute paths inside shell hook lines. */
 function lineHasAbsolutePath(line: string): boolean {
   return (
@@ -523,15 +494,12 @@ export function extractHookFacts(
   settingsValid: boolean,
 ): Omit<AgentFacts["hooks"], "readDenyCoversSecrets"> {
   const hookConfig = readHookConfig(fs, agent, settingsParsed, settingsValid);
-  const compactionHookExists = detectCompactionHookExists(
-    agent,
-    hookConfig.parsed,
-    hookConfig.valid,
-  );
   const registration = buildHookRegistration(agent, hookConfig.parsed);
-  const hook = analyzeDenyHookPath(fs, resolveDenyHookPath(fs, agent));
+  const denyHookPath = resolveDenyHookPath(fs, agent);
+  const hook = analyzeDenyHookPath(fs, denyHookPath);
   const absolutePathHooks = findAbsolutePathHooks(fs, agent.hooksDir);
   const denyRegistration = buildDenyRegistration(agent, hookConfig.parsed);
+  const bashDenyCoversSecrets = detectBashDenyCoversSecrets(fs, denyHookPath);
 
   // Second: also check settings.json Bash deny patterns
   enrichDenyFromSettings(settingsParsed, hasDenyPatterns, hook);
@@ -542,8 +510,8 @@ export function extractHookFacts(
     ...hook,
     ...denyRegistration,
     ...postTurn,
-    compactionHookExists,
     absolutePathHooks,
+    bashDenyCoversSecrets,
   };
 }
 
