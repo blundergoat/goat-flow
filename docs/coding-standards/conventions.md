@@ -24,7 +24,12 @@ src/cli/
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   audit/              # Audit engine (audit.ts, check-goat-flow.ts, check-agent-setup.ts, harness/, render.ts, types.ts)
   prompt/             # Prompt generation (compose-setup.ts, compose-quality.ts)
-  server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
+  server/             # Dashboard server modules:
+                      #   dashboard.ts (bootstrap, dispatch, live reload)
+                      #   dashboard-routes.ts (non-terminal HTTP handlers)
+                      #   dashboard-terminal.ts (terminal HTTP/WebSocket wiring)
+                      #   dashboard-assets.ts (HTML shell + asset loading)
+                      #   setup-detect.ts, terminal.ts, types.ts
 src/dashboard/        # Dashboard UI (views/, static assets)
 workflow/
   install-goat-flow.sh        # Install workflow assets into a target project

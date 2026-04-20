@@ -15,7 +15,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 17 build checks (13 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| Dashboard | `src/cli/server/dashboard.ts` (server), `src/dashboard/` (HTML + views) | HTML dashboard with views for help, home, projects, prompts, quality, settings, setup, workspace |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for help, home, projects, prompts, quality, settings, setup, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -43,7 +43,13 @@ src/cli/
   prompt/             # Prompt generation (compose-setup.ts, compose-quality.ts)
   quality/            # Quality report schema, positional ids, history, and diff
   audit/              # Build checks, quality checks, render.ts (output formatters: text, json, markdown)
-  server/             # Dashboard server (dashboard.ts, terminal.ts, types.ts)
+  server/             # Dashboard server modules:
+                     #   dashboard.ts (bootstrap, dispatch, live reload)
+                     #   dashboard-routes.ts (non-terminal HTTP handlers)
+                     #   dashboard-terminal.ts (terminal HTTP/WebSocket wiring)
+                     #   dashboard-assets.ts (HTML shell + bundled asset loading)
+                     #   setup-detect.ts (setup-detection payload helpers)
+                     #   terminal.ts, types.ts
   agents/             # Manifest-backed agent registry (M12)
   manifest/           # Single-source-of-truth manifest loader (M06a)
   stats/              # Learning-loop health report (goat-flow stats)

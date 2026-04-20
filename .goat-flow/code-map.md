@@ -57,8 +57,12 @@ quality/
   history.ts               # Loads agent-written reports, renders history, and derives diffs
 
 server/
-  dashboard.ts             # HTTP server for dashboard + API
-  terminal.ts              # WebSocket PTY sessions (xterm.js backend)
+  dashboard.ts             # HTTP server bootstrap, route dispatch, live reload, shutdown
+  dashboard-routes.ts      # Non-terminal dashboard HTTP handlers and response shaping
+  dashboard-terminal.ts    # Terminal HTTP routes, WebSocket upgrades, startup/shutdown wiring
+  dashboard-assets.ts      # Dashboard HTML shell assembly and bundled asset loaders
+  setup-detect.ts          # Setup-detection payload helpers for dashboard routes
+  terminal.ts              # PTY-backed terminal session manager (xterm.js backend)
 
 stats/
   stats.ts                 # Learning-loop health report (goat-flow stats); consumes SharedFacts pipeline
