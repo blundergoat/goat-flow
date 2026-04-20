@@ -43,6 +43,17 @@ export function getTemplatePath(relative: string): string {
   return join(GOAT_FLOW_ROOT, relative);
 }
 
+/** Resolve the first existing goat-flow path from a priority-ordered list. */
+export function resolveFirstExistingPackagePath(
+  relatives: readonly string[],
+): string {
+  for (const relative of relatives) {
+    const absolute = getTemplatePath(relative);
+    if (existsSync(absolute)) return absolute;
+  }
+  throw new Error(`Could not find any of: ${relatives.join(", ")}`);
+}
+
 /** Build the absolute CLI command used to run goat-flow from any project. */
 export function getCliCommand(): string {
   return `node ${join(GOAT_FLOW_ROOT, "dist", "cli", "cli.js")}`;

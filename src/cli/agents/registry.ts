@@ -11,17 +11,15 @@ import type {
   AgentProfile as ManifestAgentProfile,
   ManifestDenyMechanism,
 } from "../manifest/types.js";
-import type { AgentId, AgentProfile, DenyMechanism } from "../types.js";
+import {
+  KNOWN_AGENT_IDS,
+  type AgentId,
+  type AgentProfile,
+  type DenyMechanism,
+} from "../types.js";
 
-/** Canonical runtime authority for agent identity. Adding a fifth agent
- *  requires updating this tuple AND the `AgentId` union in `src/cli/types.ts`.
- *  See `.goat-flow/decisions/ADR-022-agent-authority-canonical-source.md`. */
-export const KNOWN_AGENT_IDS = [
-  "claude",
-  "codex",
-  "gemini",
-  "copilot",
-] as const satisfies readonly AgentId[];
+/** Re-export the canonical runtime authority for agent identity. */
+export { KNOWN_AGENT_IDS } from "../types.js";
 
 /** Trim the trailing slash from a directory path. */
 function trimDir(path: string | undefined): string | null {

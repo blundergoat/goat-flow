@@ -15,12 +15,15 @@ import {
   watch,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { createFS } from "../facts/fs.js";
 import { classifyProjectState } from "../classify-state.js";
 import { runAudit } from "../audit/audit.js";
-import { getPackageVersion } from "../paths.js";
+import {
+  getPackageVersion,
+  getTemplatePath,
+  resolveFirstExistingPackagePath,
+} from "../paths.js";
 import {
   getAgentProfileMap,
   getAgentProfiles,
@@ -28,6 +31,7 @@ import {
 } from "../agents/registry.js";
 import { detectAgents as detectConfiguredAgents } from "../detect/agents.js";
 import type { AgentId } from "../types.js";
+import { detectStack as detectCanonicalStack } from "../detect/project-stack.js";
 import type { AuditReport } from "../audit/types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
 import type { DashboardReport, Runner } from "./types.js";
@@ -49,49 +53,11 @@ const DEFAULT_RUNNER: Runner = KNOWN_AGENT_IDS[0] ?? "claude";
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 /** Current goat-flow package version for dashboard UI */
 const PACKAGE_VERSION = getPackageVersion();
-/** Resolve the absolute path to a file in the package root by walking up */
-function resolvePackageFile(name: string): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 5; i++) {
-    const candidate = join(dir, name);
-    try {
-      statSync(candidate);
-      return candidate;
-    } catch {
-      /* up */
-    }
-    dir = dirname(dir);
-  }
-  throw new Error(`${name} not found`);
-}
-
-/** Load a file from the package root by walking up */
-function loadPackageFile(name: string): string {
-  return readFileSync(resolvePackageFile(name), "utf-8");
-}
-
-/** Resolve a package file when a source-path fallback is acceptable during tests. */
-function resolvePackageFileWithFallback(
-  primary: string,
-  fallback: string,
-): string {
-  try {
-    return resolvePackageFile(primary);
-  } catch {
-    return resolvePackageFile(fallback);
-  }
-}
-
-/** Load a package file with a source-path fallback during unbuilt test runs. */
-function loadPackageFileWithFallback(
-  primary: string,
-  fallback: string,
-): string {
-  return readFileSync(
-    resolvePackageFileWithFallback(primary, fallback),
-    "utf-8",
-  );
-}
+/** Relative locations where the dashboard preset catalog may exist. */
+const DASHBOARD_PRESET_CATALOG_PATHS = [
+  "dist/dashboard/preset-prompts.json",
+  "src/dashboard/preset-prompts.json",
+] as const;
 
 /** Replace `<!-- include: path -->` markers with fragment file contents (one level, no nesting). */
 function assembleHtml(shellPath: string): string {
@@ -207,14 +173,16 @@ function buildLatestQualitySummary(
 
 /** Read the dashboard preset definitions shipped with the frontend bundle. */
 function loadDashboardPresets(): DashboardPreset[] {
-  const raw = JSON.parse(
-    loadPackageFileWithFallback(
-      "dist/dashboard/preset-prompts.json",
-      "src/dashboard/preset-prompts.json",
-    ),
-  ) as unknown;
+  const presetPath = resolveFirstExistingPackagePath(
+    DASHBOARD_PRESET_CATALOG_PATHS,
+  );
+  const relativePath =
+    DASHBOARD_PRESET_CATALOG_PATHS.find(
+      (candidate) => getTemplatePath(candidate) === presetPath,
+    ) ?? DASHBOARD_PRESET_CATALOG_PATHS[0];
+  const raw = JSON.parse(readFileSync(presetPath, "utf-8")) as unknown;
   if (!Array.isArray(raw)) {
-    throw new Error("dist/dashboard/preset-prompts.json must contain an array");
+    throw new Error(`${relativePath} must contain an array`);
   }
   return raw.map((entry, index) => {
     if (
@@ -227,9 +195,7 @@ function loadDashboardPresets(): DashboardPreset[] {
       typeof entry.prompt !== "string" ||
       typeof entry.cat !== "string"
     ) {
-      throw new Error(
-        `dist/dashboard/preset-prompts.json has an invalid preset at index ${index}`,
-      );
+      throw new Error(`${relativePath} has an invalid preset at index ${index}`);
     }
     return entry;
   });
@@ -240,7 +206,7 @@ export function serveDashboard(
   options: DashboardOptions,
 ): Promise<DashboardServer> {
   return new Promise((resolveStart) => {
-    const shellPath = resolvePackageFile("dist/dashboard/index.html");
+    const shellPath = getTemplatePath("dist/dashboard/index.html");
     const dashboardPresets = loadDashboardPresets();
     const devMode = options.dev === true;
     // In dev mode, re-read on every request. In prod, cache once.
@@ -327,11 +293,13 @@ export function serveDashboard(
       try {
         const content =
           filename === "preset-prompts.json"
-            ? loadPackageFileWithFallback(
-                "dist/dashboard/preset-prompts.json",
-                "src/dashboard/preset-prompts.json",
+            ? readFileSync(
+                resolveFirstExistingPackagePath(
+                  DASHBOARD_PRESET_CATALOG_PATHS,
+                ),
+                "utf-8",
               )
-            : loadPackageFile(`dist/dashboard/${filename}`);
+            : readFileSync(getTemplatePath(`dist/dashboard/${filename}`), "utf-8");
         res.writeHead(200, { "Content-Type": contentType });
         res.end(content);
       } catch {
@@ -572,67 +540,6 @@ export function serveDashboard(
       return true;
     }
 
-    /** Detect languages by scanning file extensions, manifest files, and tsconfig. */
-    function detectLanguages(projectPath: string): string[] {
-      const extMap: Record<string, string> = {
-        ".php": "PHP",
-        ".py": "Python",
-        ".ts": "TypeScript",
-        ".js": "JavaScript",
-        ".go": "Go",
-        ".rs": "Rust",
-        ".rb": "Ruby",
-        ".java": "Java",
-        ".cs": "C#",
-        ".swift": "Swift",
-        ".kt": "Kotlin",
-      };
-      const langSet = new Set<string>();
-      const ignoredDirs = new Set([
-        "node_modules",
-        "vendor",
-        "__pycache__",
-        "dist",
-        "build",
-      ]);
-
-      /** Scan a project tree for source-file extensions when inferring languages. */
-      const scanExtensions = (dir: string, depth: number): void => {
-        if (depth > 3) return;
-        try {
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith(".") || ignoredDirs.has(entry.name))
-              continue;
-            if (entry.isDirectory()) {
-              scanExtensions(join(dir, entry.name), depth + 1);
-            } else {
-              const ext = entry.name.slice(entry.name.lastIndexOf("."));
-              if (extMap[ext]) langSet.add(extMap[ext]);
-            }
-          }
-        } catch {
-          /* unreadable dir */
-        }
-      };
-      scanExtensions(projectPath, 0);
-
-      const manifestLangs: [string, string][] = [
-        ["package.json", "JavaScript"],
-        ["composer.json", "PHP"],
-        ["go.mod", "Go"],
-        ["pyproject.toml", "Python"],
-        ["Cargo.toml", "Rust"],
-        ["Gemfile", "Ruby"],
-      ];
-      for (const [file, lang] of manifestLangs) {
-        if (existsSync(join(projectPath, file))) langSet.add(lang);
-      }
-      if (existsSync(join(projectPath, "tsconfig.json")))
-        langSet.add("TypeScript");
-
-      return [...langSet];
-    }
-
     /** Detect frameworks by matching patterns against dependency file contents. */
     function detectFrameworks(projectPath: string): string[] {
       const frameworkPatterns: [string, RegExp][] = [
@@ -690,99 +597,62 @@ export function serveDashboard(
       format: string;
     };
 
-    /** Fill empty command slots from package.json scripts. */
-    function detectCommandsFromNpm(
-      projectPath: string,
-      commands: CommandSlots,
-    ): void {
-      const pkgPath = join(projectPath, "package.json");
-      if (!existsSync(pkgPath)) return;
-      try {
-        const scripts =
-          JSON.parse(readFileSync(pkgPath, "utf-8")).scripts || {};
-        if (scripts.test) commands.test = "npm test";
-        if (scripts.lint) commands.lint = "npm run lint";
-        if (scripts.build) commands.build = "npm run build";
-        if (scripts.format) commands.format = "npm run format";
-      } catch {
-        /* invalid JSON */
-      }
-    }
+    /** Display labels for canonical stack language ids shown in the setup UI. */
+    const SETUP_LANGUAGE_LABELS: Record<string, string> = {
+      javascript: "JavaScript",
+      typescript: "TypeScript",
+      php: "PHP",
+      python: "Python",
+      go: "Go",
+      rust: "Rust",
+      ruby: "Ruby",
+      java: "Java",
+      csharp: "C#",
+      bash: "Bash",
+      swift: "Swift",
+      kotlin: "Kotlin",
+      markdown: "Markdown",
+      blade: "Blade",
+      jinja: "Jinja",
+    };
 
-    /** Fill empty command slots from composer.json scripts. */
-    function detectCommandsFromComposer(
-      projectPath: string,
-      commands: CommandSlots,
-    ): void {
-      const composerPath = join(projectPath, "composer.json");
-      if (!existsSync(composerPath)) return;
-      try {
-        const scripts =
-          JSON.parse(readFileSync(composerPath, "utf-8")).scripts || {};
-        if (scripts.test && !commands.test) commands.test = "composer test";
-        if (scripts.lint && !commands.lint) commands.lint = "composer lint";
-      } catch {
-        /* invalid JSON */
-      }
-    }
-
-    /** Fill empty command slots from Makefile targets. */
-    function detectCommandsFromMakefile(
-      projectPath: string,
-      commands: CommandSlots,
-    ): void {
-      const makefilePath = join(projectPath, "Makefile");
-      if (!existsSync(makefilePath)) return;
-      try {
-        const makefile = readFileSync(makefilePath, "utf-8");
-        const makeTargets: [keyof CommandSlots, RegExp][] = [
-          ["test", /^test\s*:/m],
-          ["lint", /^lint\s*:/m],
-          ["build", /^build\s*:/m],
-          ["format", /^(?:fmt|format)\s*:/m],
-        ];
-        for (const [slot, pattern] of makeTargets) {
-          if (!commands[slot] && pattern.test(makefile))
-            commands[slot] = `make ${slot}`;
-        }
-      } catch {
-        /* unreadable */
-      }
-    }
-
-    /** Fill empty command slots from pyproject.toml tool references. */
-    function detectCommandsFromPyproject(
-      projectPath: string,
-      commands: CommandSlots,
-    ): void {
-      const pyprojectPath = join(projectPath, "pyproject.toml");
-      if (!existsSync(pyprojectPath)) return;
-      try {
-        const pyproject = readFileSync(pyprojectPath, "utf-8");
-        if (/pytest|unittest/.test(pyproject) && !commands.test)
-          commands.test = "pytest";
-        if (/ruff|flake8|pylint/.test(pyproject) && !commands.lint)
-          commands.lint = "ruff check .";
-        if (/black|ruff format/.test(pyproject) && !commands.format)
-          commands.format = "ruff format .";
-      } catch {
-        /* unreadable */
-      }
-    }
-
-    /** Detect test/lint/build/format commands from package.json, composer.json, Makefile, pyproject.toml. */
-    function detectCommands(projectPath: string): CommandSlots {
-      const commands: CommandSlots = {
-        test: "",
-        lint: "",
-        build: "",
-        format: "",
+    /** Convert canonical stack command fields into setup-view command slots. */
+    function buildSetupCommands(stack: {
+      testCommand: string | null;
+      lintCommand: string | null;
+      buildCommand: string | null;
+      formatCommand: string | null;
+    }): CommandSlots {
+      return {
+        test: stack.testCommand ?? "",
+        lint: stack.lintCommand ?? "",
+        build: stack.buildCommand ?? "",
+        format: stack.formatCommand ?? "",
       };
-      detectCommandsFromNpm(projectPath, commands);
-      detectCommandsFromComposer(projectPath, commands);
-      detectCommandsFromMakefile(projectPath, commands);
-      detectCommandsFromPyproject(projectPath, commands);
-      return commands;
+    }
+
+    /** Convert canonical stack language ids into the setup-view display labels. */
+    function buildSetupLanguages(stackLanguages: readonly string[]): string[] {
+      const labels: string[] = [];
+      for (const language of stackLanguages) {
+        const display = SETUP_LANGUAGE_LABELS[language];
+        if (display && !labels.includes(display)) labels.push(display);
+      }
+      return labels;
+    }
+
+    /** Build the setup-view stack summary from canonical detection plus setup-only framework probing. */
+    function detectSetupStack(projectPath: string): {
+      languages: string[];
+      frameworks: string[];
+      commands: CommandSlots;
+    } {
+      const stack = detectCanonicalStack(createFS(projectPath));
+      return {
+        languages: buildSetupLanguages(stack.languages),
+        frameworks: detectFrameworks(projectPath),
+        commands: buildSetupCommands(stack),
+      };
     }
 
     /** Detect which supported agent surfaces already exist in the project. */
@@ -879,10 +749,11 @@ export function serveDashboard(
 
       try {
         requireProjectDirectory(projectPath);
+        const stack = detectSetupStack(projectPath);
         jsonResponse(res, 200, {
-          languages: detectLanguages(projectPath),
-          frameworks: detectFrameworks(projectPath),
-          commands: detectCommands(projectPath),
+          languages: stack.languages,
+          frameworks: stack.frameworks,
+          commands: stack.commands,
           agents: detectScaffoldedAgents(projectPath),
           existing: detectExistingArtifacts(projectPath),
           nonGoatFlow: detectNonGoatFlowConfig(projectPath),

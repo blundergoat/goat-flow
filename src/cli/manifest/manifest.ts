@@ -21,6 +21,7 @@ import {
   getPackageVersion,
   getTemplatePath,
   isPackagedInstall,
+  resolveFirstExistingPackagePath,
 } from "../paths.js";
 import type {
   CheckFacts,
@@ -115,21 +116,24 @@ const PRESET_CATALOG_PATHS = [
 
 /** Count preset objects in the dashboard preset catalog JSON file. */
 function countPresetsFromSource(): number {
-  const candidate = PRESET_CATALOG_PATHS.map((relative) => ({
-    relative,
-    absolute: getTemplatePath(relative),
-  })).find(({ absolute }) => existsSync(absolute));
-  if (!candidate) {
+  let absolute: string;
+  try {
+    absolute = resolveFirstExistingPackagePath(PRESET_CATALOG_PATHS);
+  } catch {
     throw new ManifestValidationError(
       "Could not find a dashboard preset catalog in src/ or dist/.",
       PRESET_CATALOG_PATHS.map((relative) => `${relative} not found.`),
     );
   }
-  const raw = JSON.parse(readFileSync(candidate.absolute, "utf-8")) as unknown;
+  const relative =
+    PRESET_CATALOG_PATHS.find(
+      (candidate) => getTemplatePath(candidate) === absolute,
+    ) ?? PRESET_CATALOG_PATHS[0];
+  const raw = JSON.parse(readFileSync(absolute, "utf-8")) as unknown;
   if (!Array.isArray(raw)) {
     throw new ManifestValidationError(
-      `${candidate.relative} must contain a JSON array.`,
-      [`${candidate.relative} must contain a JSON array.`],
+      `${relative} must contain a JSON array.`,
+      [`${relative} must contain a JSON array.`],
     );
   }
   return raw.length;

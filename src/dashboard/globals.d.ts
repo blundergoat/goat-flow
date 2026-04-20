@@ -6,7 +6,7 @@
 type AuditStatus = "pass" | "fail";
 /** Build-time dashboard runner union. Runtime validation uses
  *  `window.__GOAT_FLOW_RUNNER_IDS__` injected by the server. */
-type RunnerId = "claude" | "codex" | "gemini" | "copilot";
+type RunnerId = import("../cli/types.js").AgentId;
 type SessionStatus = "starting" | "active" | "terminated";
 
 // ---------------------------------------------------------------------------

@@ -3,8 +3,16 @@
  */
 // === Agent Types ===
 
-/** Supported AI coding agent identifiers */
-export type AgentId = "claude" | "codex" | "gemini" | "copilot";
+/** Canonical supported AI coding agent identifiers in stable display order. */
+export const KNOWN_AGENT_IDS = [
+  "claude",
+  "codex",
+  "gemini",
+  "copilot",
+] as const;
+
+/** Supported AI coding agent identifiers derived from the canonical tuple. */
+export type AgentId = (typeof KNOWN_AGENT_IDS)[number];
 
 // === Agent Profile ===
 
