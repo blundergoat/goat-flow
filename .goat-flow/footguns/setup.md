@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-04-19
+last_reviewed: 2026-04-20
 ---
 
 ## Footgun: Setup creates parallel surfaces instead of migrating existing ones
@@ -15,7 +15,7 @@ When a project already has learning-loop artifacts at legacy paths, the installe
 
 **Evidence:**
 - `workflow/install-goat-flow.sh` (search: `# 0. Legacy surface detection`) now performs non-blocking detection and warns on `docs/footguns.md`, `docs/lessons.md`, `docs/lessons/`, and stale skill dirs before creating the `.goat-flow/*` tree. Detection landed 2026-04-18; auto-migration is still out of scope.
-- Found by Codex on consumer projects: ambient-scribe (4 duplicate surfaces), blundergoat-platform (context-validate.sh required BOTH old and new at the time), healthkit (contradictory paths in CLAUDE.md vs config.yaml vs skills).
+- Found by Codex on consumer projects: ambient-scribe (4 duplicate surfaces), blundergoat-platform (context-validate.sh required BOTH old and new at the time), another consumer project (contradictory paths in CLAUDE.md vs config.yaml vs skills).
 - `.goat-flow/coding-standards/` was historically part of this pattern in v0.9 installs. v1.1.0 removed `coding-standards` as a first-class surface (see `workflow/setup/05-customise-to-project.md` and `.goat-flow/glossary.md`), so it is no longer a live duplicate example but older consumer projects may still have it.
 
 **Impact:** Agents receive contradictory instructions about where to write lessons and footguns. The same information ends up in multiple places and drifts. Users can't tell which is canonical.
@@ -38,7 +38,7 @@ When a project already has learning-loop artifacts at legacy paths, the installe
 
 **Status:** resolved | **Created:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `RULES.md` (432 words) in the goat dispatcher skill loaded on every `/goat` dispatch. 6 of 6 sections duplicated content already in CLAUDE.md and the shared skill preamble. Net unique content: ~30 words. Flagged by a coding agent critique of halaxy-cypress as a framework flaw.
+**Symptoms:** `RULES.md` (432 words) in the goat dispatcher skill loaded on every `/goat` dispatch. 6 of 6 sections duplicated content already in CLAUDE.md and the shared skill preamble. Net unique content: ~30 words. Flagged by a coding agent critique on a consumer project as a framework flaw.
 
 **Why it happened:** RULES.md was created as a standalone "core mandates" file for the mono-skill dispatcher model. When the architecture split into 7 separate skills with a shared preamble (now at `.goat-flow/skill-reference/skill-preamble.md`), the preamble absorbed the same rules but RULES.md was never removed.
 

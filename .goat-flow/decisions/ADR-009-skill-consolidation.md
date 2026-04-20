@@ -11,12 +11,12 @@ Early versions had 8-10 skills. Each skill consumed instruction budget when load
 
 Before the canonical-count question was settled, the framework first had to decide whether the dispatcher should exist at all. The original dispatcher build ADR concluded that keyword-first routing plus one-question disambiguation was cheaper than loading the wrong skill and bouncing through its "NOT this skill" block. That origin story now lives here because the durable question is not whether `/goat` was worth building once; it is whether routing deserves canonical skill status and how that status interacts with the consolidation doctrine.
 
-Cross-project reviews from 3 consumer projects (halaxy-cypress 66/100, blundergoat-platform 74/100, healthkit 68/100) made the usability pressure concrete:
+Cross-project reviews from consumer projects made the usability pressure concrete:
 
-- "9 skills is too many for initial setup" (2/3 projects)
-- "goat-debug and goat-investigate have 95% Step 0 overlap" (halaxy-cypress)
-- "goat-simplify is a subset of goat-review" (healthkit)
-- "goat-simplify has never been invoked" (all 3 projects - 0 usage across all reviewers)
+- "9 skills is too many for initial setup" (multiple projects)
+- "goat-debug and goat-investigate have 95% Step 0 overlap"
+- "goat-simplify is a subset of goat-review"
+- "goat-simplify has never been invoked" (no usage across any reviewer)
 
 The enduring question is not the exact count at a moment in history. It is what earns a skill file, when the dispatcher counts as canonical, and when capabilities should merge into modes instead of becoming standalone skills.
 

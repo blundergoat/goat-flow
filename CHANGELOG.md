@@ -6,7 +6,7 @@ Skill-compliance trio (drift detection, content linting, manifest), skill rename
 
 - **Skill Renames** - `goat-sbao` → `goat-critique` and `goat-test` → `goat-qa`. Mechanical rename only — behaviour, step structure, routing semantics, and the critique-as-core-feature stance were preserved. Old names recorded in `workflow/manifest.json:stale_names` for orphan detection.
 - **CLI: critique → quality** - `goat-flow critique` → `goat-flow quality`. Dashboard view, `/api/critique` → `/api/quality`, prompt title, `compose-critique.ts` → `compose-quality.ts`, `critique.html` → `quality.html`, `docs/audit-and-critique.md` → `docs/audit-and-quality.md`, `harness-critique-quality.md` → `harness-quality.md`. Pairs cleanly with `audit`: audit answers "is it installed?", quality answers "is it any good?".
-- **Harness Check Type Tagging** - 16 harness checks split into `integrity`/`advisory`/`metric` types. Score reflects integrity + unacknowledged advisory only; maturity surfaced as counts, not failures. New `harness.acknowledge: [check-id]` config opts out deliberate skips. Resolves halaxy-cypress field report where stale architecture.md path (drift) and missing compaction hook (best practice) were framed identically as "failing concerns".
+- **Harness Check Type Tagging** - 16 harness checks split into `integrity`/`advisory`/`metric` types. Score reflects integrity + unacknowledged advisory only; maturity surfaced as counts, not failures. New `harness.acknowledge: [check-id]` config opts out deliberate skips. Resolves a consumer-project field report where stale architecture.md path (drift) and missing compaction hook (best practice) were framed identically as "failing concerns".
 - **Hallucination Red-Flags** - Five red-flag rules added to CLAUDE.md VERIFY phase: tests-pass evidence requirement, completion claim files-list requirement, fix verification reproduction steps, no-hedged-claims rule, check-passed verbatim-output requirement. Counter-rationalization patterns inline.
 - **Active-Plan Marker** - `.goat-flow/tasks/.active` marker file tells `/goat` and `/goat-plan` which `tasks/<version>/` directory is live, so agents stop starting work in `_archived/` clutter (~400 files). Skill files (`goat`, `goat-plan`) updated to consult the marker.
 - **Skill Drift Detection** - New `goat-flow audit --check-drift` compares installed `.claude/skills/`, `.agents/skills/`, and `.gemini/skills/` against `workflow/skills/` templates. Reports diverged, missing, and orphan skills. Backs M07 rename rollout and gates M08 propagation.
@@ -105,7 +105,7 @@ Scanner honesty, config file, directory restructure, embedded terminal, dashboar
 
 ## v0.9.3 - 2026-03-30
 
-Skill consolidation, scanner improvements, enforcement hardening. Driven by cross-project reviews from halaxy-cypress (66), blundergoat-platform (74), healthkit (68). 101 checks + 17 anti-patterns. 216 tests.
+Skill consolidation, scanner improvements, enforcement hardening. Driven by cross-project reviews from consumer projects. 101 checks + 17 anti-patterns. 216 tests.
 
 - **Skills (9→6)** - goat-investigate/simplify/refactor merged into goat-debug/review/plan as modes. goat-security expanded with compliance + dependency audit. Dispatcher added as 6th canonical skill. All synced across 3 agent dirs. 1,790→1,067 lines.
 - **Scanner** - AP deductions in default output. AP18 (ADAPT comments), AP19 (absolute paths in hooks). Fabrication detection validates file:line ranges. CI patterns hardened to invocation matching.

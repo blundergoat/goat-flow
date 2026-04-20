@@ -1,13 +1,13 @@
 ---
 category: design-decisions
-last_reviewed: 2026-04-19
+last_reviewed: 2026-04-20
 ---
 
 ## Lesson: Doer-verifier is theater in single-agent context
 
 **Created:** 2026-04-03
 
-When the same agent writes code and then "independently verifies" it, the verification is fake. The agent has full context of its own reasoning and will rationalize its own decisions. 6/6 reviewers independently confirmed this.
+When the same agent writes code and then "independently verifies" it, the verification is fake. The agent has full context of its own reasoning and will rationalize its own decisions.
 
 Real verification requires a context boundary: a different agent, a fresh invocation, or a human. The natural doer-verifier split in goat-flow is between skill invocations (implement in /goat-debug, verify in /goat-review), not within one skill.
 

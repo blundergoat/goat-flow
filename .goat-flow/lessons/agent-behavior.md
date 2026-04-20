@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-04-19
+last_reviewed: 2026-04-20
 ---
 
 ## Lesson: Retrieval terms must name the concrete failure class
@@ -183,14 +183,14 @@ last_reviewed: 2026-04-19
 
 **Created:** 2026-04-13
 
-**What happened:** 9 independent agent reviews of the same codebase produced scores from 74/100 to 93/100 - a 19-point spread. The highest scorer (Codex, 93) missed the docs/coding-standards/ infestation entirely (the highest-impact finding) and produced the least actionable output. The lowest scorer (Reviewer 7, 74) caught the most items and had the sharpest framing.
+**What happened:** A multi-agent review run on the same codebase produced a wide spread of scores. The highest scorer missed the docs/coding-standards/ infestation entirely (the highest-impact finding) and produced the least actionable output. The lowest scorer caught the most items and had the sharpest framing.
 
 **Root cause:** Score divergence tracks coverage scope, not analytical quality. Codex reviewed source code and CLI behavior, found both solid, and scored generously. Reviewers who read docs/coding-standards/ scored lower because they found more problems. A reviewer who checks 2/7 skill diffs and finds both identical will report "skills match templates" - not because they're wrong, but because they didn't check the other 5.
 
 **What this means:**
 1. Don't use score to rank reviewers or prioritize findings. A generous reviewer may have simply not checked a surface.
 2. Track first-discovery per finding. High-scoring reviewers who first-discovered no items are low-coverage, not low-quality.
-3. Score convergence is a better coverage signal than score level. Four reviewers at 74-78 means the surface is well-covered. Scores ranging 74-93 means someone missed a major category.
+3. Score convergence is a better coverage signal than score level. Several reviewers clustering within a tight band means the surface is well-covered. A wide score spread means someone missed a major category.
 
 **Patterns that inflate agent review scores without adding coverage:**
 - Reviewing only source code and CLI, skipping documentation and developer guides

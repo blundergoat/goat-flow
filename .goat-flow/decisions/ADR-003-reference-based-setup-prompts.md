@@ -13,7 +13,7 @@ The v0.6.0 `goat-flow setup` command generated ~860-line inline prompts containi
 
 3. **Context budget waste.** 860 lines consumed a significant portion of the agent's context window on template boilerplate, leaving less room for the agent to read actual project files and adapt the output.
 
-The reference-based alternative was validated during manual setup of healthkit and halaxy-cypress: giving the agent a path to a template file and saying "adapt this for the project" produced better results than giving it the template inline.
+The reference-based alternative was validated during manual setup on downstream consumer projects: giving the agent a path to a template file and saying "adapt this for the project" produced better results than giving it the template inline.
 
 ## Decision
 

@@ -15,7 +15,7 @@ Capture approaches that worked well so future sessions can reuse them deliberate
 1. Give each reviewer the same prompt. Don't share prior reviews - contamination defeats independence.
 2. Use different models, not just different instances. Codex and Gemini have different systematic blind spots than Claude. One of each covers more ground than three Claudes.
 3. Synthesize and verify after each review. Track first-discovery per finding. Dispute false claims with source evidence before accepting them. ~15-20% of claims per review will need verification.
-4. Stop when score variance drops. If reviews 5, 6, and 7 all score within 3 points of each other, coverage is probably adequate. If scores still vary widely, major categories are still being missed.
+4. Stop when score variance drops. If several consecutive reviews cluster within a tight score band, coverage is probably adequate. If scores still vary widely, major categories are still being missed.
 
 **Sweet spot by task type:**
 - Routine PR or module review: 1, maybe 2 if high-stakes
@@ -23,7 +23,7 @@ Capture approaches that worked well so future sessions can reuse them deliberate
 - Framework or architecture audit: 4-5, with explicit surface-area scoping in the prompt
 - Pre-release with audit honesty concerns: up to 7; accept the synthesis overhead
 
-**Key insight:** MAJOR findings can appear late. In a 9-review session on this repo, Review 6 found the Codex compaction hook false positive (found by no prior reviewer). Review 9 found the ask_first glob comparison bug (found by no prior reviewer). Both are audit honesty issues that would have shipped. Late reviews don't always find only minor things.
+**Key insight:** MAJOR findings can appear late. Late-session reviews on this repo have surfaced audit-honesty findings (Codex compaction hook false positive, ask_first glob comparison bug) that no earlier reviewer raised. Both would have shipped. Late reviews don't always find only minor things.
 
 **What NOT to do:**
 - Don't rank findings by how many reviewers found them. The most important findings are often found by exactly one reviewer.
