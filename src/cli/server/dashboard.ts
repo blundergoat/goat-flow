@@ -16,10 +16,9 @@ import {
   loadDashboardPresets,
 } from "./dashboard-assets.js";
 import { createDashboardRouteHandlers } from "./dashboard-routes.js";
+import { createDashboardTerminalHandlers } from "./dashboard-terminal.js";
 import type { Runner } from "./types.js";
-import type { TerminalManager } from "./terminal.js";
-import { MAX_SESSIONS } from "./terminal.js";
-import type { WebSocketServer, WebSocket as WsWebSocket } from "ws";
+import type { WebSocket as WsWebSocket, WebSocketServer } from "ws";
 
 const KNOWN_AGENT_IDS = getKnownAgentIds();
 /** Recognized runner identifiers for terminal session creation. */
@@ -113,174 +112,35 @@ export function serveDashboard(
       jsonResponse,
       readBody,
     });
+    const {
+      handleTerminalCreateRequest,
+      handleTerminalListRequest,
+      handleTerminalDeleteRequest,
+      handleHealthRequest,
+      handleTerminalSessionsRequest,
+      handleTerminalUpgrade,
+      logStartupNotice,
+      close: closeTerminalResources,
+    } = createDashboardTerminalHandlers({
+      absDefault,
+      validRunners: VALID_RUNNERS,
+      defaultRunner: DEFAULT_RUNNER,
+      jsonResponse,
+      readBody,
+    });
 
     // Live reload state (dev mode only)
     const liveReloadClients = new Set<WsWebSocket>();
+    let liveReloadWssPromise: Promise<WebSocketServer> | null = null;
 
-    // Lazy-init terminal manager + WSS on first terminal request
-    let managerPromise: Promise<TerminalManager> | null = null;
-    let wssPromise: Promise<WebSocketServer> | null = null;
-
-    /** Lazy-load the terminal manager the first time a terminal route is used. */
-    async function getManager(): Promise<TerminalManager> {
-      if (!managerPromise) {
-        managerPromise = import("./terminal.js").then(
-          ({ TerminalManager: TM }) => new TM(),
-        );
-      }
-      return managerPromise;
-    }
-
-    /** Lazy-load the WebSocket server that bridges browser terminals to PTY sessions. */
-    async function getWSS(): Promise<WebSocketServer> {
-      if (!wssPromise) {
-        wssPromise = import("ws").then(
+    /** Lazy-load the live-reload WebSocket server for dev-mode browser refreshes. */
+    async function getLiveReloadWSS(): Promise<WebSocketServer> {
+      if (!liveReloadWssPromise) {
+        liveReloadWssPromise = import("ws").then(
           ({ WebSocketServer: WSS }) => new WSS({ noServer: true }),
         );
       }
-      return wssPromise;
-    }
-
-    /** Map terminal-launch failures to the client-facing HTTP status codes we expose. */
-    function terminalCreateStatus(message: string): number {
-      return message.includes("Maximum") ||
-        message.includes("not found") ||
-        message.includes("not available") ||
-        message.includes("not a directory") ||
-        message.includes("does not exist") ||
-        message.includes("too large")
-        ? 400
-        : 500;
-    }
-
-    /** Start a terminal session for the requested runner and workspace. */
-    async function handleTerminalCreateRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/terminal/create" || req.method !== "POST")
-        return false;
-
-      try {
-        const manager = await getManager();
-        const { decodeTerminalCreateBody } = await import("./decoders.js");
-        const decoded = decodeTerminalCreateBody(await readBody(req), {
-          validRunners: VALID_RUNNERS,
-          defaultRunner: DEFAULT_RUNNER,
-        });
-        if (!decoded.ok) {
-          jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
-          return true;
-        }
-        const { prompt, projectPath, runner } = decoded.value;
-        const result = await manager.create(
-          prompt,
-          projectPath || absDefault,
-          runner,
-        );
-        jsonResponse(res, 200, result);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        jsonResponse(res, terminalCreateStatus(message), { error: message });
-      }
-      return true;
-    }
-
-    /** Return the set of currently live terminal sessions. */
-    async function handleTerminalListRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/terminal/list" || req.method !== "GET")
-        return false;
-
-      try {
-        const manager = await getManager();
-        jsonResponse(res, 200, manager.list());
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
-    }
-
-    /** Kill one terminal session and report whether it existed. */
-    async function handleTerminalDeleteRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (!url.pathname.startsWith("/api/terminal/") || req.method !== "DELETE")
-        return false;
-
-      const id = url.pathname.slice("/api/terminal/".length);
-      try {
-        const manager = await getManager();
-        const killed = manager.kill(id);
-        if (killed) {
-          jsonResponse(res, 200, { ok: true });
-        } else {
-          jsonResponse(res, 404, { error: "Session not found" });
-        }
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
-    }
-
-    /** Return terminal-backend health details for dashboard diagnostics. */
-    async function handleHealthRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/health" || req.method !== "GET") return false;
-
-      try {
-        const manager = await getManager();
-        jsonResponse(res, 200, await manager.health());
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
-    }
-
-    /** Return enriched terminal session info with age and idle duration. */
-    async function handleTerminalSessionsRequest(
-      req: IncomingMessage,
-      url: URL,
-      res: ServerResponse,
-    ): Promise<boolean> {
-      if (url.pathname !== "/api/terminal/sessions" || req.method !== "GET")
-        return false;
-
-      try {
-        const manager = await getManager();
-        const sessions = manager.list();
-        const now = Date.now();
-        const enriched = sessions.map((s) => ({
-          ...s,
-          age: Math.floor((now - new Date(s.createdAt).getTime()) / 1000),
-          idleDuration: Math.floor((now - s.lastInputAt) / 1000),
-        }));
-        jsonResponse(res, 200, {
-          sessions: enriched,
-          maxSessions: MAX_SESSIONS,
-          activeCount: sessions.length,
-        });
-      } catch (err) {
-        jsonResponse(res, 500, {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      return true;
+      return liveReloadWssPromise;
     }
 
     /** DNS rebinding protection: reject API requests with unexpected Host header. */
@@ -403,11 +263,11 @@ export function serveDashboard(
       if (url.pathname === "/ws/livereload" && devMode) {
         void (async () => {
           try {
-            const wss = await getWSS();
-            wss.handleUpgrade(req, socket, head, (ws) => {
-              liveReloadClients.add(ws as unknown as WsWebSocket);
-              (ws as unknown as WsWebSocket).on("close", () => {
-                liveReloadClients.delete(ws as unknown as WsWebSocket);
+            const wss = await getLiveReloadWSS();
+            wss.handleUpgrade(req, socket, head, (ws: WsWebSocket) => {
+              liveReloadClients.add(ws);
+              ws.on("close", () => {
+                liveReloadClients.delete(ws);
               });
             });
           } catch {
@@ -417,35 +277,14 @@ export function serveDashboard(
         return;
       }
 
+      if (handleTerminalUpgrade(req, socket, head, server)) {
+        return;
+      }
+
       if (!url.pathname.startsWith("/ws/terminal/")) {
         socket.destroy();
         return;
       }
-
-      // Origin check - reject non-localhost origins (DNS rebinding protection)
-      const origin = req.headers.origin;
-      const addr = server.address();
-      if (origin && addr && typeof addr !== "string") {
-        const expected = `http://127.0.0.1:${addr.port}`;
-        if (origin !== expected && origin !== `http://localhost:${addr.port}`) {
-          socket.destroy();
-          return;
-        }
-      }
-
-      const sessionId = url.pathname.slice("/ws/terminal/".length);
-
-      void (async () => {
-        try {
-          const wss = await getWSS();
-          const manager = await getManager();
-          wss.handleUpgrade(req, socket, head, (ws) => {
-            manager.attachWebSocket(sessionId, ws as unknown as WsWebSocket);
-          });
-        } catch {
-          socket.destroy();
-        }
-      })();
     });
 
     // Gracefully stop any live terminal sessions before the process exits.
@@ -458,19 +297,15 @@ export function serveDashboard(
         process.off("SIGTERM", doShutdown);
         process.off("SIGINT", doShutdown);
         closeDevWatcher?.();
-
-        if (managerPromise) {
-          const manager = await managerPromise;
-          manager.shutdown();
-        }
-        if (wssPromise) {
-          const wss = await wssPromise;
+        if (liveReloadWssPromise) {
+          const liveReloadWss = await liveReloadWssPromise;
           await new Promise<void>((resolve) => {
-            wss.close(() => {
+            liveReloadWss.close(() => {
               resolve();
             });
           });
         }
+        await closeTerminalResources();
         await new Promise<void>((resolveClose, rejectClose) => {
           server.close((err) => {
             if (err) rejectClose(err);
@@ -498,31 +333,7 @@ export function serveDashboard(
       if (!addr || typeof addr === "string") return;
       const url = `http://127.0.0.1:${addr.port}`;
       console.log(`Dashboard: ${url}`);
-      // Warn once at startup when the embedded terminal backend is unavailable.
-      void getManager()
-        .then((m) => m.health())
-        .then((h) => {
-          if (!h.nodePtyAvailable) {
-            console.log(
-              "Note: Terminal feature unavailable (node-pty not installed)",
-            );
-            console.log(
-              "  Fix: npm install node-pty (or: pnpm approve-builds)",
-            );
-            console.log(
-              "  See: https://github.com/blundergoat/goat-flow#troubleshooting",
-            );
-          }
-        })
-        .catch(() => {
-          console.log(
-            "Note: Terminal feature unavailable (node-pty not installed)",
-          );
-          console.log("  Fix: npm install node-pty (or: pnpm approve-builds)");
-          console.log(
-            "  See: https://github.com/blundergoat/goat-flow#troubleshooting",
-          );
-        });
+      logStartupNotice();
       resolveStart({
         port: addr.port,
         close: closeServer,
