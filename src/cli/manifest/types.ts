@@ -106,7 +106,7 @@ export interface DashboardViewFacts {
   names: readonly string[];
 }
 
-/** Resolved preset facts. Static count validated against preset-prompts.ts. */
+/** Resolved preset facts. Static count validated against preset-prompts.json. */
 export interface PresetFacts {
   count: number;
 }

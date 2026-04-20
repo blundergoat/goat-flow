@@ -57,16 +57,20 @@ function readAuditStatus(value: unknown): AuditStatus | null {
   return value === "pass" || value === "fail" ? value : null;
 }
 
-/** Known runner ids. Keep in sync with RunnerId in globals.d.ts. */
-const KNOWN_RUNNER_IDS = ["claude", "codex", "gemini", "copilot"] as const;
+/** Read the runner IDs injected into the dashboard shell. */
+function readInjectedRunnerIds(): string[] {
+  return Array.isArray(window.__GOAT_FLOW_RUNNER_IDS__)
+    ? window.__GOAT_FLOW_RUNNER_IDS__.filter(
+        (id): id is string => typeof id === "string",
+      )
+    : [];
+}
 
 /** Read a runner ID from raw payload data. Unknown values narrow to null so
  *  the server's wire contract isn't silently widened to arbitrary strings. */
 function readRunnerId(value: unknown): RunnerId | null {
   const runner = readString(value).trim();
-  return (KNOWN_RUNNER_IDS as readonly string[]).includes(runner)
-    ? (runner as RunnerId)
-    : null;
+  return readInjectedRunnerIds().includes(runner) ? (runner as RunnerId) : null;
 }
 
 /** Build the default setup-agent selection from the injected support list. */
@@ -326,6 +330,27 @@ function readInjectedSupportedAgents(): SupportedAgent[] {
     ? window.__GOAT_FLOW_AGENTS__
         .map((agent) => readSupportedAgent(agent))
         .filter((agent): agent is SupportedAgent => agent !== null)
+    : [];
+}
+
+/** Read one preset definition from dashboard shell injection. */
+function readPreset(value: unknown): Preset | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const name = readString(value.name);
+  const desc = readString(value.desc);
+  const prompt = readString(value.prompt);
+  const cat = readString(value.cat);
+  if (!id || !name || !desc || !prompt || !cat) return null;
+  return { id, name, desc, prompt, cat };
+}
+
+/** Read the preset list injected into the dashboard shell. */
+function readInjectedPresets(): Preset[] {
+  return Array.isArray(window.__GOAT_FLOW_PRESETS__)
+    ? window.__GOAT_FLOW_PRESETS__
+        .map((preset) => readPreset(preset))
+        .filter((preset): preset is Preset => preset !== null)
     : [];
 }
 
@@ -730,7 +755,7 @@ function app() {
     setupOutputs: {} as Record<string, string>,
 
     // --- Launcher state ---
-    presets: PRESETS,
+    presets: readInjectedPresets(),
     presetFilter: "all",
     presetSearch: "",
     presetFavorites: readStoredStringArray("goat-flow-preset-favorites"),

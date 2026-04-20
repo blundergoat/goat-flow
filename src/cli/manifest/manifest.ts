@@ -107,13 +107,18 @@ function readDashboardViewNames(): string[] {
     .sort();
 }
 
-/** Count preset objects in preset-prompts.ts by matching each top-level `id:` field. */
+/** Count preset objects in the dashboard presets JSON file. */
 function countPresetsFromSource(): number {
-  const file = getTemplatePath(join("src", "dashboard", "preset-prompts.ts"));
+  const file = getTemplatePath(join("src", "dashboard", "preset-prompts.json"));
   if (!existsSync(file)) return 0;
-  const text = readFileSync(file, "utf-8");
-  const matches = text.match(/^\s+id:\s*"[^"]+",/gm);
-  return matches ? matches.length : 0;
+  const raw = JSON.parse(readFileSync(file, "utf-8")) as unknown;
+  if (!Array.isArray(raw)) {
+    throw new ManifestValidationError(
+      "src/dashboard/preset-prompts.json must contain a JSON array.",
+      ["src/dashboard/preset-prompts.json must contain a JSON array."],
+    );
+  }
+  return raw.length;
 }
 
 /** Compute derived skill facts from `SKILL_NAMES` and the manifest's stale list. */
@@ -183,7 +188,7 @@ export function validateManifest(
 
     if (json.facts.presets_count !== observed.presetsCount) {
       findings.push(
-        `facts.presets_count drift: manifest declares ${json.facts.presets_count}; src/dashboard/preset-prompts.ts defines ${observed.presetsCount}.`,
+        `facts.presets_count drift: manifest declares ${json.facts.presets_count}; src/dashboard/preset-prompts.json defines ${observed.presetsCount}.`,
       );
     }
   }
@@ -358,7 +363,7 @@ export function renderManifestMarkdown(m: Manifest): string {
     `| Dashboard views | ${m.facts.dashboard_views.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/views/\`) |`,
   );
   lines.push(
-    `| Presets | ${m.facts.presets.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/preset-prompts.ts\`) |`,
+    `| Presets | ${m.facts.presets.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/preset-prompts.json\`) |`,
   );
   lines.push("");
   lines.push(

@@ -295,8 +295,8 @@ function countConsecutivePresence(
   return count;
 }
 
-// eslint-disable-next-line complexity -- diff selection branches on implicit latest-vs-explicit pair resolution and validation
 /** Build the diff between two quality-history runs. */
+// eslint-disable-next-line complexity -- diff selection branches on implicit latest-vs-explicit pair resolution and validation
 export function buildQualityDiff(
   entries: QualityHistoryEntry[],
   options: { agent: AgentId | null; pair: string | null },

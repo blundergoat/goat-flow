@@ -4,8 +4,8 @@
  */
 
 type AuditStatus = "pass" | "fail";
-/** Keep in sync with `AgentId` in `src/cli/types.ts`. M17-12 will introduce
- *  a single canonical authority; until then, this is the manual mirror. */
+/** Build-time dashboard runner union. Runtime validation uses
+ *  `window.__GOAT_FLOW_RUNNER_IDS__` injected by the server. */
 type RunnerId = "claude" | "codex" | "gemini" | "copilot";
 type SessionStatus = "starting" | "active" | "terminated";
 
@@ -311,6 +311,8 @@ interface Window {
   __GOAT_FLOW_DEFAULT_PATH__?: string;
   __GOAT_FLOW_VERSION__?: string;
   __GOAT_FLOW_AGENTS__?: SupportedAgent[];
+  __GOAT_FLOW_RUNNER_IDS__?: string[];
+  __GOAT_FLOW_PRESETS__?: Preset[];
   Terminal?: new (options: Record<string, unknown>) => XTermInstance;
   FitAddon?: { FitAddon: new () => FitAddonInstance };
 }

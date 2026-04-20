@@ -85,9 +85,8 @@ function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
   return 2;
 }
 
-/** Compose the quality-assessment prompt for the selected agent. */
-// eslint-disable-next-line complexity -- prompt assembly branches on audit availability and split hook-config surfaces
 /** Compose the quality review prompt. */
+// eslint-disable-next-line complexity -- prompt assembly branches on audit availability and split hook-config surfaces
 export function composeQuality(input: QualityInput): QualityPayload {
   const {
     agent,

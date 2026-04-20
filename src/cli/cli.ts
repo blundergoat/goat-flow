@@ -228,8 +228,8 @@ function resolveOutputPath(
   );
 }
 
-// eslint-disable-next-line complexity -- quality subcommand dispatch is intentionally explicit: each branch has its own positional validation
 /** Parse quality subcommand positionals. */
+// eslint-disable-next-line complexity -- quality subcommand dispatch is intentionally explicit: each branch has its own positional validation
 function parseQualityPositionals(positionals: string[]): {
   qualitySubcommand: QualitySubcommand;
   projectPath: string;
@@ -496,9 +496,8 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/** Handle the quality command: generate a structured quality-assessment prompt for a selected agent. */
-// eslint-disable-next-line complexity -- quality prompt, history, and diff intentionally share one command dispatcher
 /** Dispatch the quality subcommands. */
+// eslint-disable-next-line complexity -- quality prompt, history, and diff intentionally share one command dispatcher
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   if (options.qualitySubcommand === "history") {
     const {

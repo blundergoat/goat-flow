@@ -60,9 +60,8 @@ export function checkDenyPatterns(
   };
 }
 
-/** Extract settings facts including deny patterns and read-deny secret coverage. */
-// eslint-disable-next-line complexity -- multi-format settings extraction (JSON, TOML, Starlark) requires branching
 /** Extract settings facts from supported agent config formats. */
+// eslint-disable-next-line complexity -- multi-format settings extraction (JSON, TOML, Starlark) requires branching
 export function extractSettingsFacts(
   fs: ReadonlyFS,
   agent: AgentProfile,

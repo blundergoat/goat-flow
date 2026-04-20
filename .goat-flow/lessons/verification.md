@@ -445,3 +445,20 @@ last_reviewed: 2026-04-20
 1. Treat filesystem checks and tracked-state checks as separate gates.
 2. After any add/rename/delete, run `git status --short` and confirm the intended replacement path is listed as tracked or staged, not `??` or hidden behind ignore rules.
 3. If a local-only fix relies on a repo path under `.goat-flow/`, inspect `.goat-flow/.gitignore` before assuming the file can ship.
+
+---
+
+## Lesson: New dashboard assets must work in both built and source-run server paths
+
+**Status:** active | **Created:** 2026-04-20
+
+**What happened:** Moving the dashboard preset catalog into `src/dashboard/preset-prompts.json` compiled cleanly and updated the production build copy step, but the first focused verification run failed every dashboard-server integration test. `serveDashboard()` immediately tried to read `dist/dashboard/preset-prompts.json`, and the source-run test harness starts the server from `src/cli/server/dashboard.ts` without guaranteeing that newly added static files already exist under `dist/`.
+
+**Root cause:** Verified the TypeScript surface but missed the dashboard server's dual runtime shape. The server can be exercised from built artifacts and from source-driven test runs. The new JSON asset was only wired for the built path, so verification exposed a runtime assumption that typecheck could not see.
+
+**Fix:** Keep the production copy step in `package.json`, but make the dashboard server prefer `dist/dashboard/preset-prompts.json` and fall back to `src/dashboard/preset-prompts.json` when the built copy is absent. Re-run the focused dashboard + manifest tests after the fallback lands.
+
+**Prevention:**
+1. After introducing a new dashboard static asset, verify both the build script path and the source-run server/test path.
+2. Treat `npm run typecheck` as schema coverage only; any new file-loading path still needs a runtime test.
+3. When the dashboard server reads shipped assets during startup, prefer a controlled fallback instead of assuming `dist/` is always populated in local verification flows.

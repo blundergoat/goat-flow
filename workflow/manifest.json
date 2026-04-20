@@ -185,7 +185,7 @@
   },
 
   "facts": {
-    "_note": "Static facts. Derived facts (check counts, skill names, version) are computed by src/cli/manifest/manifest.ts at load time. `goat-flow manifest --check` validates these against observed state (src/dashboard/views/*.html and src/dashboard/preset-prompts.ts).",
+    "_note": "Static facts. Derived facts (check counts, skill names, version) are computed by src/cli/manifest/manifest.ts at load time. `goat-flow manifest --check` validates these against observed state (src/dashboard/views/*.html and src/dashboard/preset-prompts.json).",
     "dashboard_views": [
       "help",
       "home",

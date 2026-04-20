@@ -70,6 +70,29 @@ function loadPackageFile(name: string): string {
   return readFileSync(resolvePackageFile(name), "utf-8");
 }
 
+/** Resolve a package file when a source-path fallback is acceptable during tests. */
+function resolvePackageFileWithFallback(
+  primary: string,
+  fallback: string,
+): string {
+  try {
+    return resolvePackageFile(primary);
+  } catch {
+    return resolvePackageFile(fallback);
+  }
+}
+
+/** Load a package file with a source-path fallback during unbuilt test runs. */
+function loadPackageFileWithFallback(
+  primary: string,
+  fallback: string,
+): string {
+  return readFileSync(
+    resolvePackageFileWithFallback(primary, fallback),
+    "utf-8",
+  );
+}
+
 /** Replace `<!-- include: path -->` markers with fragment file contents (one level, no nesting). */
 function assembleHtml(shellPath: string): string {
   let html = readFileSync(shellPath, "utf-8");
@@ -144,6 +167,14 @@ interface LatestQualitySummary {
   scope: string | null;
 }
 
+interface DashboardPreset {
+  id: string;
+  name: string;
+  desc: string;
+  prompt: string;
+  cat: string;
+}
+
 /** Parse the quality history limit. */
 function parseQualityHistoryLimit(param: string | null): number | null {
   if (param === null) return 20;
@@ -174,12 +205,43 @@ function buildLatestQualitySummary(
   };
 }
 
+/** Read the dashboard preset definitions shipped with the frontend bundle. */
+function loadDashboardPresets(): DashboardPreset[] {
+  const raw = JSON.parse(
+    loadPackageFileWithFallback(
+      "dist/dashboard/preset-prompts.json",
+      "src/dashboard/preset-prompts.json",
+    ),
+  ) as unknown;
+  if (!Array.isArray(raw)) {
+    throw new Error("dist/dashboard/preset-prompts.json must contain an array");
+  }
+  return raw.map((entry, index) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      typeof entry.id !== "string" ||
+      typeof entry.name !== "string" ||
+      typeof entry.desc !== "string" ||
+      typeof entry.prompt !== "string" ||
+      typeof entry.cat !== "string"
+    ) {
+      throw new Error(
+        `dist/dashboard/preset-prompts.json has an invalid preset at index ${index}`,
+      );
+    }
+    return entry;
+  });
+}
+
 /** Start the local dashboard server and expose its API endpoints. */
 export function serveDashboard(
   options: DashboardOptions,
 ): Promise<DashboardServer> {
   return new Promise((resolveStart) => {
     const shellPath = resolvePackageFile("dist/dashboard/index.html");
+    const dashboardPresets = loadDashboardPresets();
     const devMode = options.dev === true;
     // In dev mode, re-read on every request. In prod, cache once.
     let cachedTemplate: string | null = devMode
@@ -237,7 +299,7 @@ export function serveDashboard(
     function handleHtmlRequest(url: URL, res: ServerResponse): boolean {
       if (url.pathname !== "/") return false;
 
-      const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(absDefault)}; window.__GOAT_FLOW_VERSION__ = ${JSON.stringify(PACKAGE_VERSION)}; window.__GOAT_FLOW_AGENTS__ = ${JSON.stringify(SUPPORTED_AGENTS)};</script>`;
+      const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(absDefault)}; window.__GOAT_FLOW_VERSION__ = ${JSON.stringify(PACKAGE_VERSION)}; window.__GOAT_FLOW_AGENTS__ = ${JSON.stringify(SUPPORTED_AGENTS)}; window.__GOAT_FLOW_RUNNER_IDS__ = ${JSON.stringify(KNOWN_AGENT_IDS)}; window.__GOAT_FLOW_PRESETS__ = ${JSON.stringify(dashboardPresets)};</script>`;
       const liveReloadScript = devMode
         ? `<script>(function(){var ws=new WebSocket('ws://'+location.host+'/ws/livereload');ws.onmessage=function(){location.reload()};ws.onclose=function(){setTimeout(function(){location.reload()},1000)}})()</script>`
         : "";
@@ -255,13 +317,21 @@ export function serveDashboard(
       if (!url.pathname.startsWith("/assets/")) return false;
 
       const filename = url.pathname.slice("/assets/".length);
-      if (!/^[a-z0-9_-]+\.(js|css)$/i.test(filename)) return false;
+      if (!/^[a-z0-9_-]+\.(js|css|json)$/i.test(filename)) return false;
 
       const contentType = filename.endsWith(".css")
         ? "text/css; charset=utf-8"
-        : "application/javascript; charset=utf-8";
+        : filename.endsWith(".json")
+          ? "application/json; charset=utf-8"
+          : "application/javascript; charset=utf-8";
       try {
-        const content = loadPackageFile(`dist/dashboard/${filename}`);
+        const content =
+          filename === "preset-prompts.json"
+            ? loadPackageFileWithFallback(
+                "dist/dashboard/preset-prompts.json",
+                "src/dashboard/preset-prompts.json",
+              )
+            : loadPackageFile(`dist/dashboard/${filename}`);
         res.writeHead(200, { "Content-Type": contentType });
         res.end(content);
       } catch {

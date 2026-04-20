@@ -337,8 +337,8 @@ function parseScores(
   };
 }
 
-// eslint-disable-next-line complexity -- finding validation is intentionally explicit so every rejected field gets a precise path-specific error
 /** Parse one quality finding payload. */
+// eslint-disable-next-line complexity -- finding validation is intentionally explicit so every rejected field gets a precise path-specific error
 function parseFinding(
   raw: unknown,
   index: number,
@@ -462,8 +462,8 @@ function parseFinding(
   };
 }
 
-// eslint-disable-next-line complexity -- report validation stays fully expanded so schema errors name the exact failing field
 /** Parse a quality report with optional finding IDs. */
+// eslint-disable-next-line complexity -- report validation stays fully expanded so schema errors name the exact failing field
 function parseReportInternal(
   raw: unknown,
   allowFindingId: boolean,

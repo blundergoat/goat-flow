@@ -3,7 +3,7 @@
  * skill directories, and AI instruction markers. Used by both the dashboard
  * `/api/projects/status` endpoint and the `goat-flow status` CLI command.
  */
-import { AUDIT_VERSION, SKILL_NAMES } from "./constants.js";
+import { AUDIT_VERSION, SKILL_NAMES, STALE_SKILL_NAMES } from "./constants.js";
 import { getAgentProfiles } from "./agents/registry.js";
 
 /** Minimal filesystem interface needed for project state detection. */
@@ -48,19 +48,6 @@ const INSTRUCTION_FILES = AGENT_PROFILES.map(
 const SKILL_ROOTS = [
   ...new Set(AGENT_PROFILES.map((profile) => profile.skillsDir)),
 ];
-const OLD_SKILLS = [
-  "goat-audit",
-  "goat-investigate",
-  "goat-refactor",
-  "goat-simplify",
-  "goat-context",
-  "goat-onboard",
-  "goat-reflect",
-  "goat-resume",
-  "goat-preflight",
-  "goat-research",
-] as const;
-
 /** Collect canonical skills found in any supported skill root. */
 function collectInstalledSkills(fs: StateFS): string[] {
   return SKILL_NAMES.filter((skill) =>
@@ -75,7 +62,7 @@ function hasAnyInstructionFile(fs: StateFS): boolean {
 
 /** Collect deprecated skill directories still present in the project. */
 function collectOldSkills(fs: StateFS): string[] {
-  return OLD_SKILLS.filter((skill) =>
+  return STALE_SKILL_NAMES.filter((skill) =>
     SKILL_ROOTS.some((root) => fs.exists(`${root}/${skill}/SKILL.md`)),
   );
 }
@@ -115,9 +102,8 @@ const AGENT_INSTRUCTION_FILE = Object.fromEntries(
   AGENT_PROFILES.map((profile) => [profile.id, profile.instructionFile]),
 ) as Record<string, string>;
 
-/** Detect which adoption stage a project is at based on its on-disk artifacts. */
-// eslint-disable-next-line complexity -- intentionally branchy state machine
 /** Classify a project's GOAT Flow adoption state. */
+// eslint-disable-next-line complexity -- intentionally branchy state machine
 export function classifyProjectState(
   fs: StateFS,
   agentId?: string,

@@ -50,7 +50,7 @@ src/cli/
 
 src/dashboard/
   index.html          # Dashboard entry point
-  preset-prompts.ts    # Preset configurations
+  preset-prompts.json  # Preset configurations
   views/              # Page views (help, home, projects, prompts, quality, settings, setup, workspace)
 ```
 

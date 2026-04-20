@@ -179,8 +179,9 @@ describe("dashboard HTML", () => {
     assert.match(html, /__GOAT_FLOW_DEFAULT_PATH__/);
     assert.match(html, /__GOAT_FLOW_VERSION__/);
     assert.match(html, /__GOAT_FLOW_AGENTS__/);
+    assert.match(html, /__GOAT_FLOW_RUNNER_IDS__/);
+    assert.match(html, /__GOAT_FLOW_PRESETS__/);
     assert.match(html, /alpinejs@3/i);
-    assert.match(html, /\/assets\/preset-prompts\.js/);
     assert.match(html, /\/assets\/app\.js/);
   });
 });
@@ -201,13 +202,14 @@ describe("dashboard assets", () => {
     assert.match(res.headers.get("content-type") ?? "", /text\/css/i);
   });
 
-  it("GET /assets/preset-prompts.js returns preset data", async () => {
-    const res = await fetch(`${baseUrl}/assets/preset-prompts.js`);
+  it("GET /assets/preset-prompts.json returns preset data", async () => {
+    const res = await fetch(`${baseUrl}/assets/preset-prompts.json`);
     assert.equal(res.status, 200);
-    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+    assert.match(res.headers.get("content-type") ?? "", /json/i);
 
-    const body = await res.text();
-    assert.match(body, /PRESETS/);
+    const body = (await res.json()) as unknown;
+    assert.ok(Array.isArray(body));
+    assert.ok(body.length > 0);
   });
 
   it("rejects path traversal asset requests", async () => {
