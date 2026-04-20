@@ -535,3 +535,15 @@ last_reviewed: 2026-04-21
 **Prevention:**
 1. When preflight suddenly fails with mixed ESLint + Prettier + drift-fixture errors after a small change, scan for untracked source-shadow files under `src/` before changing the requested code again.
 2. Treat `src/**/*.js` siblings of tracked `src/**/*.ts` files as suspicious unless the repo intentionally tracks them.
+
+---
+
+## Lesson: Shared hook refactors need both hook-local proof and repo-wide preflight
+
+**Created:** 2026-04-21
+
+**What happened:** A `deny-dangerous.sh` hardening pass looked correct after the first edit, but the canonical self-test immediately failed because `BASH_REMATCH` was reused after a recursive `check_segment` call inside the new command-substitution helper. After fixing that, the hook copies all passed their own `--self-test`, yet full `bash scripts/preflight-checks.sh` still failed because `scripts/deny-dangerous.sh` is linted under the stricter repo-wide `shellcheck scripts/*.sh` profile, which does not exclude `SC2016` the way the hook-directory check does. The installer round-trip fixture failed for the same reason because it clones the current checkout before running temp-repo preflight.
+
+**Prevention:**
+1. In Bash regex helpers, copy `BASH_REMATCH[n]` into local variables before any recursive call or nested regex operation that can overwrite it.
+2. For shared hook templates, do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh` and full `bash scripts/preflight-checks.sh`, because `scripts/deny-dangerous.sh` and fixture clones exercise stricter paths than the hook directories.
