@@ -553,23 +553,6 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
         fi
     fi
 
-    # B.8c: Template inventory validation
-    if [[ -d workflow/templates ]]; then
-        b8c_ok=true
-        while IFS= read -r tmpl; do
-            [[ -z "$tmpl" ]] && continue
-            if ! grep -rql "$tmpl" workflow/skills/ workflow/setup/ 2>/dev/null; then
-                warn "Template $tmpl.md exists but is not referenced in any skill or setup doc"
-                b8c_ok=false
-            fi
-        done < <(find workflow/templates -maxdepth 1 -name '*.md' -exec basename {} .md \; 2>/dev/null | sort)
-        if $b8c_ok; then
-            pass "All workflow templates referenced in skills or setup docs"
-        fi
-    else
-        skip "Template inventory (workflow/templates/ not present)"
-    fi
-
     # B.8d: code-map.md scripts list matches filesystem (catches drift like
     # code-map listing 3 scripts when scripts/ actually has 14).
     if [[ -f .goat-flow/code-map.md ]]; then

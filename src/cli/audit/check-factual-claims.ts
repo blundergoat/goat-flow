@@ -76,6 +76,10 @@ interface CountClaimCheck {
   /** When true, the check is applied inside fenced code blocks too (for
    *  catching sample-output drift like `Context: PASS (3/3)`). Default false. */
   scanFenced?: boolean;
+  /** When set, only run this check on files whose path starts with one of
+   *  these prefixes. Prevents generic patterns (e.g. "N skills") from
+   *  false-positiving on consumer documentation unrelated to goat-flow. */
+  scopedTo?: string[];
 }
 
 /** Per-concern count check: pattern has TWO capture groups - the concern name
@@ -165,6 +169,7 @@ const COUNT_CHECKS: CountClaimCheck[] = [
     /** Return the live skills count. */
     actual: () => SKILL_NAMES.length,
     label: "skills",
+    scopedTo: [".goat-flow/", "ai-docs/"],
   },
   {
     rule: "agent-check-count-drift",
@@ -304,6 +309,8 @@ export function scanCountClaims(
     }
     for (const check of checks) {
       if (inCodeBlock && !check.scanFenced) continue;
+      if (check.scopedTo && !check.scopedTo.some((p) => path.startsWith(p)))
+        continue;
       const rx = new RegExp(check.pattern.source, check.pattern.flags);
       let match: RegExpExecArray | null;
       while ((match = rx.exec(line)) !== null) {
