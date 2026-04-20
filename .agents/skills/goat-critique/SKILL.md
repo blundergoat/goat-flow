@@ -55,11 +55,11 @@ All three perspectives must appear in every critique from Agents A and B. The te
 
 **Sub-agent A (Risk Focus - backward-looking context):**
 Gets: artifact + architecture.md + footguns + lessons + critique rubric.
-Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name — speculation without a named target gets retracted in Phase 3. Your context includes past mistakes (footguns, lessons) - use them."
+Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name - speculation without a named target gets retracted in Phase 3. Your context includes past mistakes (footguns, lessons) - use them."
 
 **Sub-agent B (Alternatives Focus - current-state context):**
 Gets: artifact + architecture.md + recent git history (`git log --oneline -20`) + config.yaml + critique rubric.
-Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on ALTERNATIVES: generate 2-3 mutually distinct approaches to the key decisions, ranked by implementation friction (easiest-to-ship first). You MUST recommend at least one alternative even if the artifact is mostly fine — if you can't find a better approach, surface a meaningfully different one and explain why the artifact's choice wins. Your context includes how the project actually works right now (git history, config) — ground alternatives in real project patterns, not theory."
+Directive: "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on ALTERNATIVES: generate 2-3 mutually distinct approaches to the key decisions, ranked by implementation friction (easiest-to-ship first). You MUST recommend at least one alternative even if the artifact is mostly fine - if you can't find a better approach, surface a meaningfully different one and explain why the artifact's choice wins. Your context includes how the project actually works right now (git history, config) - ground alternatives in real project patterns, not theory."
 
 **Sub-agent C (Fresh Eyes - NO project context):**
 Gets: artifact + critique rubric ONLY. No architecture, footguns, lessons, git, or config.
@@ -68,10 +68,10 @@ Directive: "Critique this artifact as if you know nothing about the project. Fla
 Each sub-agent MUST return:
 - 3-7 findings, each with:
   - Title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file:line or artifact section reference), confidence (HIGH/MEDIUM/LOW)
-  - **SKEPTIC:** one line — what could go wrong, worst case (or "N/A — [reason]" if genuinely inapplicable)
-  - **ANALYST:** one line — what the evidence says, cost/benefit
-  - **STRATEGIST:** one line — fastest path, what to defer, highest-leverage action
-  - The tension between lenses is the point. If all three agree, say so — forced disagreement is noise.
+  - **SKEPTIC:** one line - what could go wrong, worst case (or "N/A - [reason]" if genuinely inapplicable)
+  - **ANALYST:** one line - what the evidence says, cost/benefit
+  - **STRATEGIST:** one line - fastest path, what to defer, highest-leverage action
+  - The tension between lenses is the point. If all three agree, say so - forced disagreement is noise.
 - Rubric dimensions covered: list which rubric dimensions this finding addresses (used by orchestrator for coverage-gap detection in Phase 2)
 - Overall assessment: STRONG / ADEQUATE / WEAK / FLAWED
 - One thing the artifact gets RIGHT that should be preserved
@@ -79,16 +79,16 @@ Each sub-agent MUST return:
 ## Phase 2 - Rank and Compare
 
 Build a comparison matrix and score each sub-agent's critique on five axes:
-- **Grounding** — are claims backed by file:line evidence or artifact sections?
-- **Specificity** — are findings concrete enough to act on, or vague?
-- **Actionability** — does each finding suggest a clear next step?
-- **Coverage** — how many rubric dimensions did this agent's findings address?
-- **Calibration** — do severity and confidence ratings match the evidence strength?
+- **Grounding** - are claims backed by file:line evidence or artifact sections?
+- **Specificity** - are findings concrete enough to act on, or vague?
+- **Actionability** - does each finding suggest a clear next step?
+- **Coverage** - how many rubric dimensions did this agent's findings address?
+- **Calibration** - do severity and confidence ratings match the evidence strength?
 
 Label each finding as consensus / split / unique:
-- **Consensus** — same finding raised by ≥2 agents, severity within ±1 level
-- **Split** — same finding raised by ≥2 agents, but severity differs by ≥2 levels or one agent dismisses what another flags as blocking
-- **Unique** — raised by only one agent
+- **Consensus** - same finding raised by ≥2 agents, severity within ±1 level
+- **Split** - same finding raised by ≥2 agents, but severity differs by ≥2 levels or one agent dismisses what another flags as blocking
+- **Unique** - raised by only one agent
 
 **Rubric coverage gates:** Compute `unaddressed = all rubric dimensions \ union(dimensions covered across all agents)`. For each unaddressed dimension, auto-generate a HIGH coverage-gap finding: "No sub-agent addressed [dimension]. This is a blind spot."
 
@@ -96,9 +96,9 @@ Label each finding as consensus / split / unique:
 
 ## Phase 3 - Cross-Examine
 
-**Early exit:** If Phase 2 yields zero split findings and zero unique HIGH/CRITICAL findings, skip Phase 3. Note "no disputes — full consensus" in output and proceed to Phase 4.
+**Early exit:** If Phase 2 yields zero split findings and zero unique HIGH/CRITICAL findings, skip Phase 3. Note "no disputes - full consensus" in output and proceed to Phase 4.
 
-**Cross-examination budget:** Max 3 cross-examination agents total. If splits + unique HIGH/CRITICAL exceed 3, batch multiple disputes into a single agent prompt. Triage by severity — CRITICAL and HIGH first.
+**Cross-examination budget:** Max 3 cross-examination agents total. If splits + unique HIGH/CRITICAL exceed 3, batch multiple disputes into a single agent prompt. Triage by severity - CRITICAL and HIGH first.
 
 For each split finding, spawn a cross-exam agent: "Agent A says [X], Agent B says [Y]. Which is correct given the actual codebase?"
 
@@ -106,7 +106,7 @@ For unique HIGH/CRITICAL findings, spawn verification: "Only one critique raised
 
 Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive confirmed).
 
-**Persist before gate:** Before entering Phase 4, write Phase 3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD-artifact-slug>.md` — sub-agent summaries, comparison matrix, cross-examination outcomes. If the session is interrupted at the Phase 4 gate, this file preserves the work done so far.
+**Persist before gate:** Before entering Phase 4, write Phase 3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD-artifact-slug>.md` - sub-agent summaries, comparison matrix, cross-examination outcomes. If the session is interrupted at the Phase 4 gate, this file preserves the work done so far.
 
 ## Phase 4 - Clarify
 
@@ -114,30 +114,30 @@ Before synthesising, present the unresolved items to the human conversationally.
 
 **Opener:** Lead with a one-line summary of how many decisions are needed and their titles. Example: "3 decisions before synthesis: (1) SEC-01 severity, (2) remediation path, (3) attacker model scope."
 
-**Per-question format — question first, options as one-liners, explicit default:**
+**Per-question format - question first, options as one-liners, explicit default:**
 
 > **Q[N]: [Short question phrased as a decision]?**
-> - (A) [one-line summary] — [what it costs or trades away]
-> - (B) [one-line summary] — [what it costs or trades away]
+> - (A) [one-line summary] - [what it costs or trades away]
+> - (B) [one-line summary] - [what it costs or trades away]
 > - Default: [A or B] if you skip. [One sentence explaining why this is the default.]
-> - Background: [One sentence max — demoted context, not the main event.]
+> - Background: [One sentence max - demoted context, not the main event.]
 
 Question types that use this format:
-1. **Disputes** — still-disputed findings from Phase 3. Present both positions as options.
-2. **Trade-offs** — where two valid approaches exist. Present the fork as options.
-3. **Context drift** — CONTEXT DRIFT findings from Phase 2 that challenge the artifact's assumptions. Options: intentional vs oversight.
+1. **Disputes** - still-disputed findings from Phase 3. Present both positions as options.
+2. **Trade-offs** - where two valid approaches exist. Present the fork as options.
+3. **Context drift** - CONTEXT DRIFT findings from Phase 2 that challenge the artifact's assumptions. Options: intentional vs oversight.
 
 **Closer:** After all questions, end with: "Reply with your picks (e.g. 'A, B, go with defaults on the rest') or push back on any framing."
 
 **If questions exist:** BLOCKING GATE - STOP and wait for human response.
-**If no questions (full consensus, no trade-offs, no context drift):** CHECKPOINT - note "no disputes — proceeding to synthesis" and continue.
+**If no questions (full consensus, no trade-offs, no context drift):** CHECKPOINT - note "no disputes - proceeding to synthesis" and continue.
 
 ## Phase 5 - Synthesise
 
 Produce the prime critique. Lead with a **Verdict** block:
 - Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
 - Risk level: LOW / MEDIUM / HIGH / CRITICAL
-- Top 1-3 blockers (if any) — one line each, linked to findings below
+- Top 1-3 blockers (if any) - one line each, linked to findings below
 
 Then the full critique:
 - Consensus findings (preserved as-is)
@@ -161,7 +161,7 @@ Then the full critique:
 List these as "What Wasn't Critiqued." This section must never be empty - if everything was covered, state that explicitly.
 
 **BLOCKING GATE:** Present the synthesised critique with a conversational close:
-"Done. Options: (A) apply recommendations to the artifact, (B) dig deeper into [name top unresolved area], (C) re-run with different framing, (D) close — you apply manually. Default: D."
+"Done. Options: (A) apply recommendations to the artifact, (B) dig deeper into [name top unresolved area], (C) re-run with different framing, (D) close - you apply manually. Default: D."
 After critique of a plan, suggest `/goat-plan` to update milestones based on recommendations.
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to every synthesised finding - sub-agent reports are inputs to verify, not evidence to launder. Re-read each surviving finding's `file:line` in this session before inclusion.
@@ -181,15 +181,15 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 ## Constraints
 
 - Full delegated mode is the only mode. Three sub-agents, 5 phases.
-- MUST use Agent tool calls for sub-agents — spawn all three in a single parallel batch
+- MUST use Agent tool calls for sub-agents - spawn all three in a single parallel batch
 - MUST isolate Phase 1 contexts per sub-agent
 - Fresh-eyes (Agent C) MUST be restricted to artifact + rubric only; explicit negative directive on .goat-flow/*, architecture.md, config.yaml, git
-- MUST use SKEPTIC/ANALYST/STRATEGIST as explicit per-finding sub-fields (one line each) — never split into separate agents, never fold into undifferentiated prose
+- MUST use SKEPTIC/ANALYST/STRATEGIST as explicit per-finding sub-fields (one line each) - never split into separate agents, never fold into undifferentiated prose
 - MUST differentiate Agent A (risk) from Agent B (alternatives) by instructions; B MUST surface at least one alternative even if artifact is mostly fine
 - MUST flag control group delta: CONTEXT DRIFT / READABILITY GAP / CONTEXT-LIMITED for each unique fresh-eyes finding
 - MUST select critique rubric at intake (Step 0) and include in all sub-agent prompts
 - MUST present consensus/split/unique classification for every finding (definitions in Phase 2)
-- MUST compute rubric coverage gates in Phase 2 — unaddressed dimensions auto-emit HIGH findings
+- MUST compute rubric coverage gates in Phase 2 - unaddressed dimensions auto-emit HIGH findings
 - MUST cross-examine split findings and unique HIGH/CRITICAL findings (Phase 3); max 3 cross-exam agents, batch if over
 - MUST persist Phase 3 results to `.goat-flow/logs/critiques/` before entering Phase 4
 - MUST gate on unresolved disputes before synthesis (Phase 4) using recommendation-first format with explicit defaults
@@ -197,7 +197,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type:
 - MUST tag low-confidence recommendations as Decision Debt
 - MUST always include "What Wasn't Critiqued"
 - Universal constraints from skill-preamble.md apply
-- MUST NOT auto-apply recommendations — human gate required
+- MUST NOT auto-apply recommendations - human gate required
 - Sub-agent budget: max 5 tool calls per sub-agent in Phase 1, max 3 in cross-examination
 - Skill-chained: skip confirmation, still run footgun/lesson checks and rubric selection; still run all 5 phases
 

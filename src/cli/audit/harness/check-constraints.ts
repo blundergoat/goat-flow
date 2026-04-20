@@ -121,7 +121,7 @@ const denyCoversSecrets: HarnessCheck = {
     }
     if (uncoveredScript.length > 0) {
       findings.push(
-        `${uncoveredScript.join(", ")}: Bash deny hook does not cover secret paths (script-only agent — no settings.json layer applies)`,
+        `${uncoveredScript.join(", ")}: Bash deny hook does not cover secret paths (script-only agent - no settings.json layer applies)`,
       );
       recs.push(
         `Add secret-path coverage to the Bash deny hook for ${uncoveredScript.join(", ")}: block cat/source/base64/etc. on .env, .ssh, .aws, credentials, *.key, *.pem.`,

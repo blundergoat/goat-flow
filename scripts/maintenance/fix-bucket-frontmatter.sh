@@ -62,7 +62,7 @@ CHANGED=0
 add_last_reviewed() {
   local file="$1"
   if ! head -n1 "$file" | grep -qE '^---$'; then
-    # No frontmatter block at top. Skip without error — bucket is malformed
+    # No frontmatter block at top. Skip without error - bucket is malformed
     # in a different way that the content-quality audit will flag.
     return 1
   fi
@@ -97,7 +97,7 @@ add_last_reviewed() {
 
 # Inject `**Status:** active | **Created:** ... | **Evidence:** OBSERVED` as the
 # first non-blank line after every `## Footgun:` heading that lacks an existing
-# `**Status:**` line. Preserves all other content. Idempotent — re-running
+# `**Status:**` line. Preserves all other content. Idempotent - re-running
 # a file with Status already present returns 1 (no change).
 #
 # Only `## Footgun:` sections get injection; other headings (like

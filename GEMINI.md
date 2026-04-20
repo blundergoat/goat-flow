@@ -54,7 +54,7 @@ Over budget = checkpoint and re-classify before continuing. Budgets are heuristi
 2. **Completion.** Do not claim completion without listing the specific files changed in this turn. If no files were changed, say so explicitly.
 3. **Fix verification.** Do not claim a fix works without running the reproduction steps that originally demonstrated the bug. "Looks correct" is not verification.
 4. **Hedged claims.** Do not use "should work", "probably fine", "looks good" as verification. These are guesses, not evidence.
-5. **Check passed.** Do not claim a check passed (shellcheck, typecheck, preflight, audit) without showing the command and its output in the same turn — verbatim output, or at minimum the literal pass/fail line copied from it.
+5. **Check passed.** Do not claim a check passed (shellcheck, typecheck, preflight, audit) without showing the command and its output in the same turn - verbatim output, or at minimum the literal pass/fail line copied from it.
 
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human
 - Two corrections on same approach = MUST rewind
@@ -73,7 +73,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 
 ## Autonomy Tiers
 
-**Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes — write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.
+**Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes - write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rules above: update only when VERIFY caught a failure or you corrected course.
 
 **Ask First** (MUST complete before proceeding):
 - [ ] Boundary touched: [name]

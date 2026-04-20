@@ -334,7 +334,7 @@ run_self_test() {
     0 \
     "stdout" \
     'Hook payload did not expose a bash command'
-  # Non-bash tool invocations (view/edit/Task/etc.) must pass through — the hook
+  # Non-bash tool invocations (view/edit/Task/etc.) must pass through - the hook
   # only inspects shell commands, not structured tool payloads. A '!' prefix on
   # the expected pattern asserts the string is absent (so we catch regressions
   # where the hook emits deny JSON for a non-bash tool).
