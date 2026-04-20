@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   findUnknownConfiguredAgents,
   getAgentProfile,
+  getAgentProfileMap,
   getAgentProfiles,
   getConfiguredAgents,
   getKnownAgentIds,
@@ -82,6 +83,37 @@ describe("agent registry", () => {
     assert.equal(copilot.hookConfigFile, ".github/hooks/hooks.json");
     assert.equal(copilot.denyHookFile, ".github/hooks/deny-dangerous.sh");
     assert.equal(copilot.skillsDir, ".github/skills");
+  });
+
+  it("translates manifest deny mechanisms into runtime profiles", () => {
+    const claude = getAgentProfile("claude");
+    assert.deepEqual(claude.denyMechanism, {
+      type: "both",
+      settingsPath: ".claude/settings.json",
+      scriptPath: ".claude/hooks/deny-dangerous.sh",
+    });
+
+    const codex = getAgentProfile("codex");
+    assert.deepEqual(codex.denyMechanism, {
+      type: "deny-script",
+      path: ".codex/hooks/deny-dangerous.sh",
+    });
+  });
+
+  it("builds a normalized profile map without empty skill roots", () => {
+    const profiles = getAgentProfileMap();
+    assert.deepEqual(Object.keys(profiles), [
+      "claude",
+      "codex",
+      "gemini",
+      "copilot",
+    ]);
+    for (const profile of Object.values(profiles)) {
+      assert.notEqual(profile.skillsDir, "");
+      assert.ok(!profile.skillsDir.endsWith("/"));
+    }
+    assert.equal(profiles.claude.hooksDir, ".claude/hooks");
+    assert.equal(profiles.copilot.skillsDir, ".github/skills");
   });
 
   it("reports unknown configured agents outside the manifest", () => {
