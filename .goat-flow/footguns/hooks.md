@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-04-20
+last_reviewed: 2026-04-21
 ---
 
 ## Footgun: Settings.json Read() deny does not bind Bash shell reads of secret files
@@ -23,6 +23,28 @@ last_reviewed: 2026-04-20
 1. For any new secret-path family added to the harness, extend BOTH `checkReadDenyCoversSecrets` in `src/cli/facts/agent/settings.ts` AND `detectBashDenyCoversSecrets` in `src/cli/facts/agent/hooks.ts`. A settings-only addition creates the same false-pass.
 2. Every hook `--self-test` must include `run_case "cat <secret>" "cat <secret>" 2` assertions; a structural PASS without live probes re-opens the gap.
 3. When reviewing a new agent's deny setup, run a runtime probe explicitly (e.g. `bash <hook> 'cat .env'`). Static inspection alone cannot distinguish tool-scoped deny from shell-scoped deny.
+
+---
+
+## Footgun: Copilot deny hook conflates "structured payload" with "bash call"
+
+**Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high - the Copilot variant's `preToolUse` hook is registered for *all* tools, but the command-extraction path assumes every structured payload is a `bash` invocation. When it can't find a `command` field it denies with "Hook payload did not expose a bash command to evaluate", which blocks every non-bash tool (view, edit, Task, etc.) — making Copilot unusable for anything except shell calls.
+
+**Symptoms:** Running a skill (e.g. `/goat-review`) under Copilot CLI surfaces `Denied by preToolUse hook: Hook payload did not expose a bash command to evaluate` for the skill itself and for any sub-agent (Task) invocation. Bash commands inside the same session still work. Self-tests pass because the original test matrix only exercised bash-shaped payloads.
+
+**Why it happens:** `.github/hooks/hooks.json` registers the hook unconditionally for `preToolUse`, so Copilot pipes *every* tool call through it. The hook enters `copilot-json` output mode whenever the payload contains `toolName` / `toolArgs` / `sessionId`, then tries to pull a `.command` string out of it. Non-bash tools have no `command` field, so the "structured but no command" branch fires a deny. The Claude and Gemini variants aren't affected — they fall back to treating the full JSON as the command string, and the pattern matchers then find nothing dangerous and allow.
+
+**Evidence:**
+- `.github/hooks/deny-dangerous.sh` (search: `Hook payload did not expose a bash command`) - the original deny branch that fired for every non-bash structured payload.
+- `workflow/hooks/deny-dangerous.sh` (search: `tool_name_lc`) - the source-of-truth template. Fix extracts `toolName` and exits 0 silently for anything that isn't `bash`/`shell`/`sh`.
+- Runtime probe: `printf '{"toolName":"Task","toolArgs":{"description":"review"}}' | bash .github/hooks/deny-dangerous.sh` returned `{"permissionDecision":"deny",...}` before the fix; now returns empty stdout with exit 0.
+- Self-test (`bash .github/hooks/deny-dangerous.sh --self-test`) now covers `view`, `edit`, and `Task` payloads with a `!permissionDecision` assertion so a regression re-adding the deny JSON fails loudly.
+
+**Prevention:**
+1. Any hook registered for a non-bash-specific event MUST read `toolName` before applying bash-only checks. Structured-payload ≠ bash-payload on runtimes like Copilot that pipe all tool calls through `preToolUse`.
+2. When adding a new runtime surface, the self-test must include at least one non-bash `toolName` payload (e.g. `view`, `edit`, `Task`). Bash-only test coverage masks this exact failure shape.
+3. Use the forbidden-pattern helper (`!pattern` prefix in `run_stdin_case`) for allow-path assertions — exit 0 alone does NOT distinguish "allowed silently" from "denied via copilot-json" because both exit 0.
 
 ---
 

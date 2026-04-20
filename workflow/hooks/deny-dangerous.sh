@@ -69,6 +69,27 @@ if [[ "$STRUCTURED_INPUT" -eq 1 ]]; then
   fi
 fi
 
+TOOL_NAME=""
+if [[ "$STRUCTURED_INPUT" -eq 1 ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.toolName // .tool_name // empty' 2>/dev/null)
+  else
+    TOOL_NAME=$(printf '%s' "$INPUT" | sed -n 's/.*"toolName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    [[ -z "$TOOL_NAME" ]] && TOOL_NAME=$(printf '%s' "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  fi
+fi
+
+# Non-bash tool calls (Task, Read, Grep, etc.) go through the same preToolUse
+# pipeline on Copilot. This hook only inspects shell commands, so let any other
+# tool pass through rather than denying it for missing a "command" field.
+if [[ "$STRUCTURED_INPUT" -eq 1 && -n "$TOOL_NAME" ]]; then
+  tool_name_lc="${TOOL_NAME,,}"
+  case "$tool_name_lc" in
+    bash|shell|sh) ;;
+    *) exit 0 ;;
+  esac
+fi
+
 COMMAND=""
 if command -v jq >/dev/null 2>&1; then
   COMMAND=$(
@@ -159,7 +180,14 @@ run_self_test() {
       echo "FAIL [${name}]: expected $expected, got $status"
     fi
 
-    if [[ -n "$expected_pattern" ]]; then
+    # Pattern prefixed with '!' means "must NOT contain" (forbidden pattern).
+    local forbid_mode=0
+    local pattern_body="$expected_pattern"
+    if [[ "$pattern_body" == !* ]]; then
+      forbid_mode=1
+      pattern_body="${pattern_body#!}"
+    fi
+    if [[ -n "$pattern_body" ]]; then
       case "$expected_stream" in
         stdout) target_file="$stdout_file" ;;
         stderr) target_file="$stderr_file" ;;
@@ -169,9 +197,16 @@ run_self_test() {
           target_file=""
           ;;
       esac
-      if [[ -n "$target_file" ]] && ! grep -Fq "$expected_pattern" "$target_file"; then
-        failures=$((failures + 1))
-        echo "FAIL [${name}]: missing pattern '${expected_pattern}' in ${expected_stream}"
+      if [[ -n "$target_file" ]]; then
+        if [[ "$forbid_mode" -eq 1 ]]; then
+          if grep -Fq "$pattern_body" "$target_file"; then
+            failures=$((failures + 1))
+            echo "FAIL [${name}]: forbidden pattern '${pattern_body}' present in ${expected_stream}"
+          fi
+        elif ! grep -Fq "$pattern_body" "$target_file"; then
+          failures=$((failures + 1))
+          echo "FAIL [${name}]: missing pattern '${pattern_body}' in ${expected_stream}"
+        fi
       fi
     fi
 
@@ -248,6 +283,28 @@ run_self_test() {
     0 \
     "stdout" \
     'Hook payload did not expose a bash command'
+  # Non-bash tool invocations (view/edit/Task/etc.) must pass through — the hook
+  # only inspects shell commands, not structured tool payloads. A '!' prefix on
+  # the expected pattern asserts the string is absent (so we catch regressions
+  # where the hook emits deny JSON for a non-bash tool).
+  run_stdin_case \
+    "copilot non-bash view allowed" \
+    '{"toolName":"view","toolArgs":{"path":"README.md"}}' \
+    0 \
+    "stdout" \
+    '!permissionDecision'
+  run_stdin_case \
+    "copilot non-bash edit allowed" \
+    '{"toolName":"edit","toolArgs":{"path":"README.md","old_string":"a","new_string":"b"}}' \
+    0 \
+    "stdout" \
+    '!permissionDecision'
+  run_stdin_case \
+    "copilot non-bash Task allowed" \
+    '{"toolName":"Task","toolArgs":{"description":"review"}}' \
+    0 \
+    "stdout" \
+    '!permissionDecision'
 
   if [[ "$failures" -ne 0 ]]; then
     echo "FAIL: $failures self-test failures"

@@ -31,6 +31,8 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Spec source (opt-in):** if `.goat-flow/tasks/.active` exists, read it to find the active plan subdir and scan for a milestone file with `Status: in-progress` or `testing-gate`. If found, offer: "Include Spec Drift check against M[NN] exit criteria?" Default: skip for quick, offer for full. Note the choice in Review Integrity.
 
+**Temporary review artifacts:** If you need to persist a repo diff, scoped diff, grep summary, or similar helper file during review, write it under `.goat-flow/scratchpad/` only. Do not drop ad hoc review artifacts at repo root. Use a filename with a random suffix so concurrent review agents do not collide; prefer `mktemp -p .goat-flow/scratchpad goat-review-<artifact>.XXXXXX.txt` or an equivalent `<base>.<random>.txt` pattern.
+
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 
 ## Diff Review (Quick) - Two-Pass Discipline
@@ -151,6 +153,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines
 - MUST emit Spec Drift only when opt-in triggered; if skipped, log `spec-drift-skipped` in Review Integrity
 - MUST split Spec Drift output by direction: exit-criteria drift as `[advisory]` (no severity tag), assumption invalidation as `[MUST:needs-decision]` under `## Findings`, open-criterion satisfaction as `[ready-to-tick]`
+- MUST store any temporary review artifact files (saved diffs, scoped diffs, grep summaries) under `.goat-flow/scratchpad/` with a random suffix in the filename; never write them to repo root
 - MUST attempt to disprove each Pass-1 suspicion during Pass 2
 - MUST group 3+ related findings as systemic patterns
 - MUST NOT make file edits in review or audit mode unless the user says "implement"
