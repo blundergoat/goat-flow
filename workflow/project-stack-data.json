@@ -1,0 +1,69 @@
+{
+  "nodeFrameworks": [
+    { "language": "react", "packages": ["react", "react-dom", "next"] },
+    { "language": "vue", "packages": ["vue", "nuxt"] },
+    { "language": "angular", "packages": ["@angular/core"] },
+    { "language": "svelte", "packages": ["svelte", "@sveltejs/kit"] },
+    { "language": "express", "packages": ["express"] },
+    { "language": "cypress", "packages": ["cypress"] }
+  ],
+  "extraLanguageSignals": [
+    { "language": "blade", "paths": [], "globs": ["**/*.blade.php"] },
+    { "language": "twig", "paths": [], "globs": ["**/*.twig"] },
+    { "language": "erb", "paths": [], "globs": ["**/*.erb", "**/*.html.erb"] },
+    { "language": "jinja", "paths": [], "globs": ["**/*.jinja2", "**/*.html"] },
+    {
+      "language": "swift",
+      "paths": ["Package.swift"],
+      "globs": ["**/*.xcodeproj", "**/*.swift"]
+    },
+    { "language": "blazor", "paths": [], "globs": ["**/*.razor"] }
+  ],
+  "codeGenSignals": [
+    { "tool": "sqlc", "paths": ["sqlc.yaml", "sqlc.yml"], "globs": [] },
+    { "tool": "hygen", "paths": ["_templates"], "globs": ["**/.hygen.js"] },
+    { "tool": "protobuf", "paths": ["buf.yaml", "buf.gen.yaml"], "globs": [] },
+    {
+      "tool": "openapi",
+      "paths": [],
+      "globs": ["**/openapi-generator*", "**/openapi*.yaml"]
+    }
+  ],
+  "deploySignals": [
+    { "tool": "amplify", "paths": ["amplify.yml", "amplify"], "globs": [] },
+    {
+      "tool": "docker",
+      "paths": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"],
+      "globs": []
+    },
+    { "tool": "fly", "paths": ["fly.toml"], "globs": [] },
+    { "tool": "vercel", "paths": ["vercel.json"], "globs": [] },
+    {
+      "tool": "terraform",
+      "paths": ["terraform"],
+      "globs": ["**/main.tf", "**/*.tf"]
+    },
+    { "tool": "packer", "paths": ["packer.json"], "globs": ["**/*.pkr.hcl"] }
+  ],
+  "rootPythonFiles": ["pyproject.toml", "setup.py", "requirements.txt"],
+  "subdirPythonGlobs": ["*/pyproject.toml", "*/requirements.txt"],
+  "javaManifestPaths": ["pom.xml", "build.gradle", "build.gradle.kts"],
+  "llmEnvFiles": [".env.example", ".env.sample", ".env"],
+  "llmDepFiles": ["requirements.txt", "pyproject.toml", "package.json"],
+  "complianceDocs": [
+    "README.md",
+    ".goat-flow/architecture.md",
+    ".github/instructions/security.instructions.md"
+  ],
+  "formatterMap": {
+    "typescript": ["prettier", "biome", "dprint"],
+    "javascript": ["prettier", "biome", "dprint"],
+    "php": ["php-cs-fixer", "phpcbf", "pint"],
+    "python": ["black", "ruff", "yapf", "autopep8"],
+    "rust": ["rustfmt"],
+    "go": ["gofmt", "goimports"],
+    "bash": ["shfmt"],
+    "ruby": ["rubocop"],
+    "java": ["google-java-format", "spotless"]
+  }
+}
