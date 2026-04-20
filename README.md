@@ -8,57 +8,42 @@ Works with Claude Code, Codex, Gemini CLI, and Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 
-## Before and after
 
-A fresh repo fails the audit. That's the baseline:
-
-```
-$ npx @blundergoat/goat-flow@latest audit .
-GOAT Flow Audit: .
-
-GOAT Flow Setup:         FAIL
-  Skills:                7/7 installed
-  Config:                invalid or missing
-  InstructionFile:       0 lines (max across agents)
-  x Lessons: Missing: .goat-flow/lessons/
-  x Footguns: Missing: .goat-flow/footguns/
-  x Architecture: Missing: .goat-flow/architecture.md
-  ... 9 more failures
-
-Result: FAIL
-```
-
-Run setup, paste the prompt into your agent, re-audit:
-
-```
-$ npx goat-flow audit .
-GOAT Flow Audit: /your/project
-
-GOAT Flow Setup:         PASS
-  Skills:                7/7 installed
-  Config:                valid, version 1.2.0
-  InstructionFile:       118 lines (max across agents)
-
-Agent Setup:             PASS
-  Hooks:                 claude:deny installed
-
-Result: PASS
-```
-
-Takes about 30 seconds. The rest of this README explains what changed.
 
 ## What you get
 
 | Concept | What it prevents |
 |---|---|
-| **Execution Loop** — READ → SCOPE → ACT → VERIFY | Guessing at unread code, shipping without checks |
-| **Skills** — seven `/goat-*` commands plus a `/goat` dispatcher | Free-form prompting that drifts mid-task |
-| **Enforcement Hooks** — `deny-dangerous.sh` ships by default | `rm -rf`, force-push, secret file access |
-| **Learning Loop** — footguns, lessons, decisions, session logs in `.goat-flow/` | Same mistake recurring next session |
-| **Autonomy Tiers** — Always / Ask First / Never | Agent overreach, missed approvals |
-| **Reference Templates** — planning, security, compliance | Generic output when the domain has specifics |
+| **Execution Loop** - READ → SCOPE → ACT → VERIFY | Guessing at unread code, shipping without checks |
+| **Skills** - seven `/goat-*` commands plus a `/goat` dispatcher | Free-form prompting that drifts mid-task |
+| **Enforcement Hooks** - `deny-dangerous.sh` ships by default | `rm -rf`, force-push, secret file access |
+| **Learning Loop** - footguns, lessons, decisions, session logs in `.goat-flow/` | Same mistake recurring next session |
+| **Autonomy Tiers** - Always / Ask First / Never | Agent overreach, missed approvals |
+| **Reference Templates** - planning, security, compliance | Generic output when the domain has specifics |
 
 Each row maps to a concrete failure mode that free-running agents reliably hit. Skills have phases and human gates. Hooks intercept tool calls before they execute. The learning loop gets read at session start so mistakes compound into context, not repetition.
+
+## Try it
+
+```bash
+npx @blundergoat/goat-flow@latest audit .
+```
+
+No install. Runs against your current directory and prints what's missing. Fresh projects fail by design - that's the baseline the setup fills in.
+
+## Why not just CLAUDE.md / Cursor rules?
+
+Instruction files tell the agent what to do. They don't enforce it.
+
+|  | Instruction file alone | GOAT Flow |
+|---|---|---|
+| Tell the agent the rules | ✓ | ✓ |
+| Block dangerous commands at tool level | ✗ | ✓ |
+| Structured workflows with human gates | ✗ | ✓ |
+| Capture lessons across sessions | ✗ | ✓ |
+| Audit whether setup is actually correct | ✗ | ✓ |
+
+Use an instruction file for rules the agent should *remember*. Use GOAT Flow for rules the agent cannot *skip*.
 
 ## Getting started
 
@@ -67,17 +52,20 @@ Requires Node.js 20+.
 ### 1. Install
 
 ```bash
-# Recommended: local dev dependency (pin the version per project)
-npm install --save-dev @blundergoat/goat-flow
+# Local dev dependency (pin per project - recommended)
+npm install --save-dev @blundergoat/goat-flow    # npm
+pnpm add -D @blundergoat/goat-flow               # pnpm
 
-# Or install globally to use goat-flow from any directory
-npm install -g @blundergoat/goat-flow
+# Global (use from any directory)
+npm install -g @blundergoat/goat-flow            # npm
+pnpm add -g @blundergoat/goat-flow               # pnpm
 
-# Or use without installing
-npx @blundergoat/goat-flow@latest audit .
+# One-off, no install
+npx @blundergoat/goat-flow@latest audit .        # npm / yarn
+pnpm dlx @blundergoat/goat-flow@latest audit .   # pnpm
 ```
 
-After a local install, run the CLI with `npx goat-flow ...` from the project root. With a global install, drop the `npx` prefix from the examples below.
+Examples below use `npx goat-flow`. With a global install, drop the `npx` prefix.
 
 ### 2. Open the dashboard
 
@@ -123,42 +111,13 @@ Now passes. Add `--harness` to see advisory scoring across the 5 harness concern
 
 Skills are structured workflows the agent follows. `/goat` auto-routes to the right one: debug, review, plan, security audit, test gap analysis, or multi-perspective critique (`/goat-critique`).
 
-## A real session
+## See it in action
 
-Captured trace from `.goat-flow/logs/sessions/2026-04-16-v1.1.0-review-and-cold-path-fixes.md`:
+**Without guardrails:** Agent claims "tests pass" without running them. Deletes a working function while "refactoring." Creates `config_v2.ts` next to `config.ts` because it missed the existing file. Repeats the same mistake next session.
 
-```
-READ    → 89-file diff, 4 independent agent critiques cross-referenced
-SCOPE   → "review" mode, no edits; fix scope declared after triage
-ACT     → Fixed 3 broken cross-references:
-          - 03-install-skills.md (stale flat file names)
-          - code-map.md (wrong harness count 15→16, stale skill tree)
-          - legacy upgrade guide entry (goat-debug.md → goat-debug/SKILL.md)
-          Marked 6 stale footgun entries resolved.
-VERIFY  → Preflight: 33 checks, 0 errors, 9 warnings. Tests: 92/92 passing.
-```
+**With GOAT Flow:** VERIFY requires running the proof and citing the literal pass/fail line - paraphrases don't count. Hooks intercept `rm -rf` and force-push before the tool call executes. The agent reads footguns at session start and avoids the trap that was documented last week.
 
-Every edit is auditable against the loop, after the fact, from the log alone. This is what the Learning Loop records for every non-trivial session.
-
-## The five harness concerns
-
-Every major source in the harness engineering field (Hashimoto, Fowler/Böckeler, Anthropic, HumanLayer) converges on roughly the same concerns: is the agent's context any good, are there rules that catch failures before the model runs, can the agent verify its work, can it resume after a crash, and does the system learn over time. GOAT Flow audits all five.
-
-| Concern | Question | What GOAT Flow checks |
-|---------|----------|----------------------|
-| **Context** | Is the agent's context accurate, lean, and useful? | Instruction file line count vs target, router table path resolution, footgun file:line evidence freshness, architecture doc existence (10+ lines) |
-| **Constraints** | Do deterministic rules catch failures before the LLM runs? | Deny patterns cover secrets and dangerous commands, Ask First boundary count |
-| **Verification** | Can the agent verify its work, and does failure feed back? | Test command configured, hook registrations in sync with hook files, commit guidance present |
-| **Recovery** | Can the agent resume after crash or interruption? | Milestone file count in `.goat-flow/tasks/`, session log count in `.goat-flow/logs/sessions/` |
-| **Feedback Loop** | Is the harness getting smarter from failures over time? | Footgun entry count (3+ threshold), lesson entry count (3+ threshold), decisions directory activity |
-
-Run the check:
-
-```bash
-npx goat-flow audit . --harness
-```
-
-These aren't a proprietary model, they're a synthesis of consensus across the field. See [docs/audit-and-quality.md](docs/audit-and-quality.md) for the full framework and sources.
+Same model, same prompt, different outcome.
 
 ## Commands
 
@@ -210,6 +169,26 @@ Re-run with `--verbose` for diagnostics, or regenerate from the dashboard Setup 
 
 **Not sure which agent to pick?**
 Pick the one you're already using. All supported agents share the same skills, execution loop, and learning loop. Only the instruction filename, skills root, and hook/config surfaces differ. See [Multi-agent support](#multi-agent-support) above.
+
+## The five harness concerns
+
+Every major source in the harness engineering field (Hashimoto, Fowler/Böckeler, Anthropic, HumanLayer) converges on roughly the same concerns: is the agent's context any good, are there rules that catch failures before the model runs, can the agent verify its work, can it resume after a crash, and does the system learn over time. GOAT Flow audits all five.
+
+| Concern | Question | What GOAT Flow checks |
+|---------|----------|----------------------|
+| **Context** | Is the agent's context accurate, lean, and useful? | Instruction file line count vs target, router table path resolution, footgun file:line evidence freshness, architecture doc existence (10+ lines) |
+| **Constraints** | Do deterministic rules catch failures before the LLM runs? | Deny patterns cover secrets and dangerous commands, Ask First boundary count |
+| **Verification** | Can the agent verify its work, and does failure feed back? | Test command configured, hook registrations in sync with hook files, commit guidance present |
+| **Recovery** | Can the agent resume after crash or interruption? | Milestone file count in `.goat-flow/tasks/`, session log count in `.goat-flow/logs/sessions/` |
+| **Feedback Loop** | Is the harness getting smarter from failures over time? | Footgun entry count (3+ threshold), lesson entry count (3+ threshold), decisions directory activity |
+
+Run the check:
+
+```bash
+npx goat-flow audit . --harness
+```
+
+These aren't a proprietary model, they're a synthesis of consensus across the field. See [docs/audit-and-quality.md](docs/audit-and-quality.md) for the full framework and sources.
 
 ## Documentation
 
