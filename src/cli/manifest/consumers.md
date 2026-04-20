@@ -25,7 +25,7 @@ that cannot be verified against running code are forbidden.
 | `facts.checks.total` | derived | sum of the three |
 | `facts.dashboard_views.names` | static | `workflow/manifest.json` `facts.dashboard_views`, validated against `src/dashboard/views/*.html` |
 | `facts.dashboard_views.count` | derived | list length |
-| `facts.presets.count` | static | `workflow/manifest.json` `facts.presets_count`, validated against `src/dashboard/preset-prompts.json` |
+| `facts.presets.count` | derived | array length from `src/dashboard/preset-prompts.json` (or `dist/dashboard/preset-prompts.json` in packaged installs) |
 
 ## Consumers
 

@@ -3,7 +3,7 @@
  *
  * package.json `files` ships only `dist/` + `workflow/` + a few helpers.
  * Consumer installs therefore lack:
- *   - `src/` (used by manifest.ts to observe dashboard_views + presets_count)
+ *   - `src/` (used by manifest.ts to observe dashboard_views)
  *   - `.goat-flow/*` and `docs/*` (used as evidence_paths on registered checks)
  *   - agent-scope dirs that the project doesn't install (single-agent setups)
  *
@@ -51,7 +51,7 @@ function withPackagedMode<T>(fn: () => T): T {
 }
 
 /** Build a drifted ManifestJson + ObservedFacts pair. In packaged mode the
- *  drift in source-derived facts must be ignored; in dev mode it must throw. */
+ *  source-only dashboard-view drift must be ignored; in dev mode it must throw. */
 function makeDriftedInputs(): {
   json: ManifestJson;
   observed: ObservedFacts;
@@ -67,12 +67,11 @@ function makeDriftedInputs(): {
     agents: {} as ManifestJson["agents"],
     facts: {
       dashboard_views: ["ship", "setup", "terminal"],
-      presets_count: 7,
     },
   } as ManifestJson;
   const observed: ObservedFacts = {
     views: [], // packaged install: src/ not shipped
-    presetsCount: 0, // packaged install: src/ not shipped
+    presetsCount: 0,
     skills: SKILL_NAMES,
     setupChecks: SETUP_CHECKS.length,
     agentChecks: AGENT_CHECKS.length,
@@ -122,7 +121,7 @@ describe("validateManifest: packaged vs dev mode", () => {
         "expected ManifestValidationError in dev mode",
       );
       const findings = thrown.findings.join(" | ");
-      assert.match(findings, /dashboard_views drift|presets_count drift/);
+      assert.match(findings, /dashboard_views drift/);
     } finally {
       if (prior !== undefined) process.env["GOAT_FLOW_PACKAGED_MODE"] = prior;
     }
@@ -150,7 +149,6 @@ describe("validateManifest: packaged vs dev mode", () => {
       agents: {} as ManifestJson["agents"],
       facts: {
         dashboard_views: [],
-        presets_count: 0,
       },
     } as ManifestJson;
     withPackagedMode(() => {

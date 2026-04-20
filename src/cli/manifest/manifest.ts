@@ -107,15 +107,29 @@ function readDashboardViewNames(): string[] {
     .sort();
 }
 
-/** Count preset objects in the dashboard presets JSON file. */
+/** Relative locations where the dashboard preset catalog may exist. */
+const PRESET_CATALOG_PATHS = [
+  join("src", "dashboard", "preset-prompts.json"),
+  join("dist", "dashboard", "preset-prompts.json"),
+] as const;
+
+/** Count preset objects in the dashboard preset catalog JSON file. */
 function countPresetsFromSource(): number {
-  const file = getTemplatePath(join("src", "dashboard", "preset-prompts.json"));
-  if (!existsSync(file)) return 0;
-  const raw = JSON.parse(readFileSync(file, "utf-8")) as unknown;
+  const candidate = PRESET_CATALOG_PATHS.map((relative) => ({
+    relative,
+    absolute: getTemplatePath(relative),
+  })).find(({ absolute }) => existsSync(absolute));
+  if (!candidate) {
+    throw new ManifestValidationError(
+      "Could not find a dashboard preset catalog in src/ or dist/.",
+      PRESET_CATALOG_PATHS.map((relative) => `${relative} not found.`),
+    );
+  }
+  const raw = JSON.parse(readFileSync(candidate.absolute, "utf-8")) as unknown;
   if (!Array.isArray(raw)) {
     throw new ManifestValidationError(
-      "src/dashboard/preset-prompts.json must contain a JSON array.",
-      ["src/dashboard/preset-prompts.json must contain a JSON array."],
+      `${candidate.relative} must contain a JSON array.`,
+      [`${candidate.relative} must contain a JSON array.`],
     );
   }
   return raw.length;
@@ -159,11 +173,12 @@ function sameSortedSet(a: readonly string[], b: readonly string[]): boolean {
 /** Validate manifest facts against the values observed from live code.
  *
  *  In packaged installs the `src/` tree isn't shipped (package.json `files`
- *  ships only `dist/` + `workflow/`), so source-derived drift checks
- *  (`dashboard_views`, `presets_count`) would always trip against empty
- *  observed values. Those facts were validated at publish time - here we
- *  trust the manifest and skip them. Skill-canonical drift is still checked
- *  because `SKILL_NAMES` lives in `constants.ts` which ships in `dist/`. */
+ *  ships only `dist/` + `workflow/`), so source-derived drift checks for
+ *  static facts (`dashboard_views`) would always trip against empty observed
+ *  values. That fact was validated at publish time - here we trust the
+ *  manifest and skip it. Preset count is derived from the shipped preset
+ *  catalog, and skill-canonical drift is still checked because `SKILL_NAMES`
+ *  ships in `dist/`. */
 export function validateManifest(
   json: ManifestJson,
   observed: ObservedFacts,
@@ -183,12 +198,6 @@ export function validateManifest(
     if (!sameSortedSet(declaredViews, observed.views)) {
       findings.push(
         `facts.dashboard_views drift: manifest declares [${[...declaredViews].sort().join(", ")}]; src/dashboard/views/ has [${observed.views.join(", ")}].`,
-      );
-    }
-
-    if (json.facts.presets_count !== observed.presetsCount) {
-      findings.push(
-        `facts.presets_count drift: manifest declares ${json.facts.presets_count}; src/dashboard/preset-prompts.json defines ${observed.presetsCount}.`,
       );
     }
   }
@@ -226,7 +235,7 @@ export function composeManifest(
       count: jsonFacts.dashboard_views.length,
       names: [...jsonFacts.dashboard_views].sort(),
     },
-    presets: { count: jsonFacts.presets_count } as PresetFacts,
+    presets: { count: observed.presetsCount } as PresetFacts,
   };
   return {
     version: json.version,
@@ -363,7 +372,7 @@ export function renderManifestMarkdown(m: Manifest): string {
     `| Dashboard views | ${m.facts.dashboard_views.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/views/\`) |`,
   );
   lines.push(
-    `| Presets | ${m.facts.presets.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/preset-prompts.json\`) |`,
+    `| Presets | ${m.facts.presets.count} | derived: preset catalog JSON length |`,
   );
   lines.push("");
   lines.push(

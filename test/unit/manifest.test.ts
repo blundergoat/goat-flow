@@ -62,7 +62,6 @@ function fixtureJson(
     },
     facts: {
       dashboard_views: ["quality", "help", "home"],
-      presets_count: 3,
       ...overrides,
     },
   };
@@ -129,6 +128,13 @@ describe("composeManifest", () => {
       ["home", "quality", "workspace"],
     );
     assert.equal(m.facts.dashboard_views.count, 3);
+  });
+
+  it("derives preset count from the observed preset catalog size", () => {
+    const json = fixtureJson();
+    const observed = fixtureObserved({ presetsCount: 7 });
+    const m = composeManifest(json, observed);
+    assert.equal(m.facts.presets.count, 7);
   });
 
   it("passes through stale_names from manifest.skills", () => {
@@ -241,17 +247,6 @@ describe("validateManifest (drifted count)", () => {
     );
   });
 
-  it("throws on presets_count drift", () => {
-    const json = fixtureJson({ presets_count: 99 });
-    const observed = fixtureObserved({ presetsCount: 3 });
-    assert.throws(
-      () => validateManifest(json, observed),
-      (err: unknown) =>
-        err instanceof ManifestValidationError &&
-        err.findings.some((f) => f.includes("presets_count drift")),
-    );
-  });
-
   it("throws on skills.canonical drift from SKILL_NAMES", () => {
     const json = fixtureJson({}, ["goat", "goat-debug"]);
     const observed = fixtureObserved();
@@ -264,10 +259,12 @@ describe("validateManifest (drifted count)", () => {
   });
 
   it("reports multiple findings in a single throw", () => {
-    const json = fixtureJson({
-      dashboard_views: ["quality"],
-      presets_count: 99,
-    });
+    const json = fixtureJson(
+      {
+        dashboard_views: ["quality"],
+      },
+      ["goat", "goat-debug"],
+    );
     const observed = fixtureObserved();
     try {
       validateManifest(json, observed);
@@ -302,6 +299,7 @@ describe("loadManifest (real repo)", () => {
     assert.equal(m.facts.checks.setup, SETUP_CHECKS.length);
     assert.equal(m.facts.checks.agent, AGENT_CHECKS.length);
     assert.equal(m.facts.checks.harness, HARNESS_CHECKS.length);
+    assert.equal(m.facts.presets.count, 22);
     assert.equal(
       m.facts.checks.total,
       SETUP_CHECKS.length + AGENT_CHECKS.length + HARNESS_CHECKS.length,
