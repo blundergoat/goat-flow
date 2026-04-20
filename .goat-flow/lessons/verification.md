@@ -259,7 +259,7 @@ last_reviewed: 2026-04-20
 
 **Root cause:** Two compounding failures. First, the install script was never updated to copy RULES.md when the audit check was added - the check and the installer were authored independently. Second, the resulting test failures were dismissed as background noise instead of investigated. Every test run showed "62 pass / 2 fail" and the response was "same 2 pre-existing failures, not from my change" - a correct but useless observation that prevented anyone from reading the actual failure messages.
 
-**Fix:** Created a rules template for the goat skill. Updated install script to copy it. (RULES.md was later deleted entirely per ADR-042; its 2 unique lines were moved to `skill-preamble.md`.)
+**Fix:** Created a rules template for the goat skill. Updated install script to copy it. (RULES.md was later deleted entirely; its 2 unique lines were moved to `skill-preamble.md`.)
 
 **Prevention:**
 1. Never dismiss test failures as "pre-existing" without reading what they actually assert. If 2 tests fail, read the 2 failure messages.
@@ -276,7 +276,7 @@ last_reviewed: 2026-04-20
 
 **Root cause:** No step in the setup or review process measures whether a shared-context file provides net-new information. Files that are "loaded on every invocation" are never challenged on token cost. Once a file exists and is wired into audit checks, it becomes self-justifying: the audit requires it, so it must be needed.
 
-**Fix:** Deleted RULES.md (ADR-042). Moved 2 unique lines to skill-preamble.md. Removed audit check and install script special-case.
+**Fix:** Deleted RULES.md. Moved 2 unique lines to skill-preamble.md. Removed audit check and install script special-case.
 
 **Prevention:** When reviewing shared-context files (anything loaded on every turn or every skill invocation), compare section-by-section against other loaded files. If >80% duplicates existing loaded content, merge the unique lines and delete the file. Architecture changes that add new shared surfaces (like skill-preamble.md) should include a cleanup pass of older surfaces they subsume.
 
