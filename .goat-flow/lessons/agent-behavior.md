@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-04-20
+last_reviewed: 2026-04-21
 ---
 
 ## Lesson: Retrieval terms must name the concrete failure class
@@ -348,3 +348,15 @@ last_reviewed: 2026-04-20
 **Why it matters:** Adding a "confirm delegation available" gate to the dispatcher burns tokens on every dispatch to defend against nothing real. Treating it as a valid finding inflates the ship-block list and creates churn around a non-issue. The failure mode is structurally similar to flagging "needs offline mode" on a framework that has no offline surface.
 
 **Prevention:** Before accepting a finding that flags a missing capability pre-check, verify against the four supported agents (Claude Code, Codex, Gemini, Copilot) whether the capability is universal. If all four ship it, retract the finding. Applies to sub-agents / delegated agents, hook support, MCP, slash commands, and any other capability that was historically partial but is now platform-wide.
+
+---
+
+## Lesson: Sanitizing shell variable capture breaks `set -u` when variable is scoped inside a conditional
+
+**Created:** 2026-04-21
+
+**What happened:** `preflight-checks.sh` had a flaky test: `node --input-type=module` commands occasionally emitted stray diagnostic output containing `[` characters, which `grep` interpreted as regex, producing `grep: Unmatched [` errors. The fix added `| grep -oE '^[0-9]+$' | tail -1` to strip non-numeric output and switched to `grep -Fq` for fixed-string matching. But the sanitization pipeline returned empty when the node command failed in the temp fixture (no working `dist/`), causing `build_count=""`. The outer `if [[ -n "$build_count" ]]` correctly skipped the architecture checks — but `setup_count` was only assigned inside that `if` block. A downstream `if [[ -n "$setup_count" ]]` outside the block hit `set -u` (`unbound variable`) and crashed the script.
+
+**Root cause:** Variable scoping assumption. `setup_count` was set on a line that only executes when `build_count` is non-empty, but was referenced unconditionally later. The original code never triggered this because without sanitization the node command always produced *some* stdout (even if it included garbage), so `build_count` was never empty — it was just wrong. The sanitization made the empty case reachable for the first time.
+
+**Prevention:** When adding a filter that can turn non-empty output into empty output, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must either be initialized before the conditional or only referenced inside the same branch.
