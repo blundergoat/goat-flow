@@ -266,6 +266,25 @@ else
     if [[ "$installed_fail" -eq 0 ]]; then
         pass "All installed skills at version $skill_version"
     fi
+
+    # Shipped test fixtures: the installer round-trip integration test copies
+    # these into a temp repo and runs preflight there. Catching stale versions
+    # here avoids a 30s+ round-trip just to learn the fixture drifted.
+    # Dynamic stale-version fixtures created programmatically inside tests
+    # are not on disk under test/fixtures/, so this scan only hits real ones.
+    if [[ -d test/fixtures ]]; then
+        fixtures_fail=0
+        while IFS= read -r -d '' f; do
+            ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+            if [[ -n "$ver" ]] && [[ "$ver" != "$skill_version" ]]; then
+                fail "Test fixture $f has version '$ver', expected '$skill_version'"
+                fixtures_fail=1
+            fi
+        done < <(find test/fixtures -name 'SKILL.md' -print0)
+        if [[ "$fixtures_fail" -eq 0 ]]; then
+            pass "All test fixture skills at version $skill_version"
+        fi
+    fi
 fi
 
 # ── Version Consistency ──────────────────────────────────────────────
