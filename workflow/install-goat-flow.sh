@@ -333,7 +333,7 @@ echo ""
 # 8. Write .active marker if exactly one version-named subdir exists
 # ==========================================================================
 # Convention: .goat-flow/tasks/.active is a one-line file naming the active
-# plan subdir (e.g. "1.2.0"). Skills (goat, goat-plan) read it to scope their
+# plan subdir (e.g. "1.2.1"). Skills (goat, goat-plan) read it to scope their
 # scan. See ADR-017. We only write it automatically when there is no ambiguity.
 echo "Active plan marker:"
 ACTIVE_FILE=".goat-flow/tasks/.active"

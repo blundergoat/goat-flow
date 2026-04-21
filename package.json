@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "CLI auditor, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
   "author": {
     "name": "Matthew Hansen",

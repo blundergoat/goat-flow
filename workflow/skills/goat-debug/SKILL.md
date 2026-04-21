@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Use when diagnosing a bug, unexpected behaviour, or system failure that needs structured investigation."
-goat-flow-skill-version: "1.2.0"
+goat-flow-skill-version: "1.2.1"
 ---
 # /goat-debug
 

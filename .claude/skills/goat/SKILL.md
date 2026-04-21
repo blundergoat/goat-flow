@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.2.0"
+goat-flow-skill-version: "1.2.1"
 ---
 # /goat
 
@@ -21,7 +21,7 @@ Use when the user describes an outcome and wants the right workflow chosen.
 
 ## Planning Route
 
-For planning requests, read `.goat-flow/tasks/.active` to find the active plan subdir (one-line file naming a subdir like `1.2.0`), then scan that subdir for milestone files. If `.active` is missing, list top-level entries in `.goat-flow/tasks/` and ask the user which is current.
+For planning requests, read `.goat-flow/tasks/.active` to find the active plan subdir (one-line file naming a subdir like `1.2.1`), then scan that subdir for milestone files. If `.active` is missing, list top-level entries in `.goat-flow/tasks/` and ask the user which is current.
 
 | Complexity | Approach |
 |------------|----------|

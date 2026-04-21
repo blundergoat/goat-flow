@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.2.0"
+goat-flow-skill-version: "1.2.1"
 ---
 # /goat-qa
 

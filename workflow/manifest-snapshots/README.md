@@ -18,7 +18,7 @@ write. Used by CHANGELOG-scoped claim lint (M06b).
 
 CHANGELOG entries are frozen at release. The `## v1.1.0` section of
 `CHANGELOG.md` describes v1.1.0 as it shipped - "7 canonical skills",
-"12 setup + 4 agent build checks", "16 harness checks". When v1.2.0 changes
+"12 setup + 4 agent build checks", "16 harness checks". When v1.2.1 changes
 a count, the v1.1.0 CHANGELOG section must still read the v1.1.0 numbers.
 Comparing CHANGELOG v1.1.0 claims against the live manifest would flag valid
 historical entries as drift; comparing against the matching snapshot catches

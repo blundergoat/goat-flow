@@ -37,7 +37,7 @@ Every skill MUST pass this checklist before merging. Track each item as a todo i
 
 **GREEN phase - write minimal skill:**
 - [ ] Name describes what you DO or the core insight
-- [ ] Frontmatter has `goat-flow-skill-version: "1.2.0"` and trigger-only `description`
+- [ ] Frontmatter has `goat-flow-skill-version: "1.2.1"` and trigger-only `description`
 - [ ] `description` is CSO-optimised: "Use when [trigger]", not a workflow summary
 - [ ] Keywords throughout for search (error messages, symptoms, tool names)
 - [ ] Overview states the core principle in 1–2 sentences
