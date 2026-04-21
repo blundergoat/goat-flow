@@ -364,14 +364,15 @@ function app() {
           if (attempts > TERMINAL_REFIT_MAX_ATTEMPTS) return;
           requestAnimationFrame(() => {
             if (!refit()) {
-              setTimeout(
-                () => poll(attempts + 1),
-                TERMINAL_REFIT_RETRY_DELAY_MS,
-              );
+              setTimeout(() => {
+                poll(attempts + 1);
+              }, TERMINAL_REFIT_RETRY_DELAY_MS);
             }
           });
         };
-        self.$nextTick(() => poll());
+        void self.$nextTick(() => {
+          poll();
+        });
       });
       self.$watch("workspacePanel", (v: string) => {
         const xterm = this._terminalXterm;
@@ -397,7 +398,7 @@ function app() {
         const xterm = refs?.xterm;
         const fitAddon = xterm?._addonFit;
         if (!xterm || !fitAddon) return;
-        self.$nextTick(() => {
+        void self.$nextTick(() => {
           requestAnimationFrame(() => {
             fitAddon.fit();
             if (refs.ws?.readyState === WebSocket.OPEN) {
@@ -419,26 +420,26 @@ function app() {
           this._workspacePoll = null;
         }
         if (v === "projects" || v === "workspace" || v === "prompts") {
-          this.updateSessionCount();
+          void this.updateSessionCount();
         }
         if (v === "workspace") {
           this._workspacePoll = setInterval(() => {
-            this.updateSessionCount();
+            void this.updateSessionCount();
           }, 10_000);
         }
         if (v === "quality") {
-          this.generateQuality();
-          this.generateQualityHistory();
+          void this.generateQuality();
+          void this.generateQualityHistory();
         }
         if (v === "setup") {
-          this.detectStack();
-          this.generateSetupPrompt();
+          void this.detectStack();
+          void this.generateSetupPrompt();
         }
       });
       self.$watch("qualityAgent", () => {
         if (this.activeView === "quality") {
-          this.generateQuality();
-          this.generateQualityHistory();
+          void this.generateQuality();
+          void this.generateQualityHistory();
         }
       });
       self.$watch("sessionsCollapsed", (v: boolean) => {
@@ -452,23 +453,23 @@ function app() {
         updateTitle();
         if (oldPath && newPath !== oldPath) {
           this.detachTerminal(oldPath);
-          this.reconnectTerminal();
-          this.updateSessionCount();
+          void this.reconnectTerminal();
+          void this.updateSessionCount();
           if (this.activeView === "quality") {
-            this.generateQuality();
-            this.generateQualityHistory();
+            void this.generateQuality();
+            void this.generateQualityHistory();
           }
         }
       });
       updateTitle();
       document.documentElement.classList.toggle("dark", this.darkMode);
-      this._loadSavedDashboardState().then(() => {
-        if (this.projectsList.length > 0) this.auditAllProjects();
+      void this._loadSavedDashboardState().then(() => {
+        if (this.projectsList.length > 0) void this.auditAllProjects();
       });
       if (location.protocol === "http:" || location.protocol === "https:") {
-        this.runAudit();
-        this.checkTerminalAvailable();
-        this.fetchInstalledAgents();
+        void this.runAudit();
+        void this.checkTerminalAvailable();
+        void this.fetchInstalledAgents();
       }
       document.addEventListener("keydown", (e: KeyboardEvent) => {
         if (e.key === "Escape") {
@@ -501,7 +502,7 @@ function app() {
           }
           e.preventDefault();
           this.activeView = "prompts";
-          self.$nextTick(() => {
+          void self.$nextTick(() => {
             const searchInput = self.$refs.presetSearchInput;
             if (searchInput instanceof HTMLInputElement) searchInput.focus();
           });
@@ -525,7 +526,7 @@ function app() {
                   this.serverMaxSessions
               ) {
                 e.preventDefault();
-                this.launchPreset(
+                void this.launchPreset(
                   this.selectedPreset.prompt,
                   this.activeRunner,
                 );
@@ -568,7 +569,7 @@ function app() {
       }
       this.auditing = false;
       if (!this.agentsLoaded) {
-        this.fetchInstalledAgents().then((loaded) => {
+        void this.fetchInstalledAgents().then((loaded) => {
           if (!loaded) this.agentsLoaded = true;
         });
       }
@@ -693,16 +694,23 @@ function app() {
       el.style.opacity = "0";
       document.body.appendChild(el);
       el.select();
+      // Clipboard API is preferred elsewhere; this keeps copy working in
+      // browsers/contexts where programmatic clipboard writes are unavailable.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
       document.execCommand("copy");
       document.body.removeChild(el);
       this.copyLabel = "Copied!";
-      setTimeout(() => (this.copyLabel = "Copy"), 2000);
+      setTimeout(() => {
+        this.copyLabel = "Copy";
+      }, 2000);
     },
     /** Show a temporary toast message. */
     showToast(msg: string, isError?: boolean) {
       this.toast = msg;
       this.toastError = isError ?? false;
-      setTimeout(() => (this.toast = ""), 4000);
+      setTimeout(() => {
+        this.toast = "";
+      }, 4000);
     },
 
     // -- Terminal --
@@ -785,10 +793,10 @@ function app() {
       const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
       if (s < 60) return "just now";
       const m = Math.floor(s / 60);
-      if (m < 60) return m + "m ago";
+      if (m < 60) return `${m}m ago`;
       const h = Math.floor(m / 60);
-      if (h < 24) return h + "h ago";
-      return Math.floor(h / 24) + "d ago";
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
     },
   };
 }

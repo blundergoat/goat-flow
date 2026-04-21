@@ -75,7 +75,7 @@ async function dashboardDetectStack(
       (Object.keys(defaultAgents) as RunnerId[]).map((agentId) => [
         agentId,
         typeof agents[agentId] === "boolean"
-          ? (agents[agentId] as boolean)
+          ? agents[agentId]
           : (defaultAgents[agentId] ?? false),
       ]),
     );

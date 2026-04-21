@@ -246,11 +246,12 @@ async function dashboardLoadXterm(
     script.src =
       "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js";
     /** Handle script load failures. */
-    script.onerror = () => reject(new Error("xterm.js load failed"));
-    const timer = setTimeout(
-      () => reject(new Error("xterm.js load timeout")),
-      5000,
-    );
+    script.onerror = () => {
+      reject(new Error("xterm.js load failed"));
+    };
+    const timer = setTimeout(() => {
+      reject(new Error("xterm.js load timeout"));
+    }, 5000);
     /** Handle successful script loads. */
     script.onload = () => {
       clearTimeout(timer);
@@ -262,17 +263,18 @@ async function dashboardLoadXterm(
     const script = document.createElement("script");
     script.src =
       "https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js";
-    const timer = setTimeout(
-      () => reject(new Error("fit addon load timeout")),
-      5000,
-    );
+    const timer = setTimeout(() => {
+      reject(new Error("fit addon load timeout"));
+    }, 5000);
     /** Handle successful script loads. */
     script.onload = () => {
       clearTimeout(timer);
       resolve();
     };
     /** Handle script load failures. */
-    script.onerror = () => reject(new Error("fit addon load failed"));
+    script.onerror = () => {
+      reject(new Error("fit addon load failed"));
+    };
     document.head.appendChild(script);
   });
   getXtermConstructors();
@@ -317,7 +319,7 @@ function dashboardForgetSavedSession(
   for (const [path, list] of Object.entries(ctx._projectSessions)) {
     const filtered = list.filter((sv) => sv.sessionId !== sessionId);
     if (filtered.length === 0) {
-      delete ctx._projectSessions[path];
+      Reflect.deleteProperty(ctx._projectSessions, path);
     } else if (filtered.length !== list.length) {
       ctx._projectSessions[path] = filtered;
     }
@@ -326,7 +328,7 @@ function dashboardForgetSavedSession(
       if (first) {
         ctx._projectActiveSession[path] = first.sessionId;
       } else {
-        delete ctx._projectActiveSession[path];
+        Reflect.deleteProperty(ctx._projectActiveSession, path);
       }
     }
   }
@@ -357,8 +359,8 @@ function dashboardDetachTerminal(
       ctx._projectActiveSession[savePath] = fallback.sessionId;
     }
   } else {
-    delete ctx._projectSessions[savePath];
-    delete ctx._projectActiveSession[savePath];
+    Reflect.deleteProperty(ctx._projectSessions, savePath);
+    Reflect.deleteProperty(ctx._projectActiveSession, savePath);
   }
   for (const id of Object.keys(ctx._terminalRefs)) {
     const refs = ctx._terminalRefs[id];
@@ -388,14 +390,14 @@ async function dashboardReconnectTerminal(
       }
     }
   } catch {
-    delete ctx._projectSessions[ctx.projectPath];
-    delete ctx._projectActiveSession[ctx.projectPath];
+    Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
+    Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
     return false;
   }
   const liveSaved = savedList.filter((sv) => aliveMap.has(sv.sessionId));
   if (liveSaved.length === 0) {
-    delete ctx._projectSessions[ctx.projectPath];
-    delete ctx._projectActiveSession[ctx.projectPath];
+    Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
+    Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
     return false;
   }
   ctx._projectSessions[ctx.projectPath] = liveSaved;
@@ -717,7 +719,7 @@ function dashboardEndSession(
   }
   const refs = ctx._terminalRefs[sessionId];
   if (refs?.cleanup) refs.cleanup();
-  delete ctx._terminalRefs[sessionId];
+  Reflect.deleteProperty(ctx._terminalRefs, sessionId);
   ctx.sessions = ctx.sessions.filter((s) => s.id !== sessionId);
   ctx._forgetSavedSession(sessionId);
   if (ctx.activeSessionId === sessionId) {

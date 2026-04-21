@@ -7,7 +7,7 @@ The test suite uses Node's built-in test runner (`node:test` + `node:assert`). N
 ```bash
 npm test                          # Run all tests
 npx tsc --noEmit                  # Type-check without emitting
-npx eslint src/cli/               # Lint
+npx eslint src/cli src/dashboard  # Lint
 bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the above)
 ```
 

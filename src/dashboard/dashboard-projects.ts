@@ -247,7 +247,7 @@ function dashboardSaveProjectTitle(ctx: DashboardProjectsContext): void {
     trimmed.length === 0 ||
     trimmed === getProjectDisplayName(ctx.projectPath)
   ) {
-    delete next[ctx.projectPath];
+    Reflect.deleteProperty(next, ctx.projectPath);
   } else {
     next[ctx.projectPath] = trimmed;
   }

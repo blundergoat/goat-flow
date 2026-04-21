@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.3 - 2026-04-22
+
+`.env.example` read-only handling, richer dashboard presets, prompt-loading polish, shared-reference doc cleanup, widened dashboard lint coverage, and goat-qa gate clarification.
+
+- **Secret-file guardrails** - `.env.example` is now explicitly allowed for read-only inspection while real `.env` / `.env.*` files and other secret paths remain blocked. All `deny-dangerous.sh` copies distinguish `.env.example` reads from writes, add self-tests for allowed reads and blocked writes/mixed secret reads, and keep shell-level secret exfiltration blocked. Claude/Gemini settings allow `Read(.env.example)` / `Read(**/.env.example)`, while `.copilotignore`, `.cursorignore`, and `.geminiignore` unignore `.env.example`; docs now describe the exception.
+- **Dashboard preset prompts** - Dashboard presets now carry more concrete task framing: richer codebase exploration, bug diagnosis/fix, code review, planning, critique, QA, and security prompts with explicit scope, evidence, risk, and handoff expectations.
+- **Dashboard loading states** - Setup and Quality prompt generation now use a dedicated `gf-prompt-loading` body state instead of the generic overlay, keeping loading feedback aligned with the prompt surface.
+- **Shared-reference docs** - Agent instruction files, code map, and quality prompt copy now spell out the split `skill-quality-testing` reference files explicitly instead of using shorthand brace notation.
+- **Preflight and CI lint coverage** - ESLint now runs across both `src/cli` and `src/dashboard` in preflight and CI. Dashboard classic-script lint configuration and focused cleanup make the wider gate pass with warnings rather than hiding dashboard errors behind a green CLI-only gate.
+- **goat-qa gates** - Phase 2 is now a real blocking gate: the skill presents gap analysis and waits for a human decision before producing the targeted testing plan. The wording is synced across workflow, Claude, Codex/Gemini shared, and Copilot skill copies.
+
 ## v1.2.2 - 2026-04-21
 
 Dashboard browser-code split, release metadata bump, and CLI documentation corrections.

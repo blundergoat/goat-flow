@@ -56,6 +56,15 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/dashboard/**/*.ts"],
+    rules: {
+      // Dashboard files are classic browser scripts loaded by index.html, so
+      // cross-file and HTML references are invisible to no-unused-vars.
+      "@typescript-eslint/no-unused-vars": "off",
+      complexity: ["error", { max: 30 }],
+    },
+  },
+  {
     ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"],
   },
 );

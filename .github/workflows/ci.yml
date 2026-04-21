@@ -32,7 +32,7 @@ jobs:
         run: node --import tsx --test --test-reporter=spec test/*/*.test.ts
 
       - name: Lint
-        run: npx eslint src/cli/
+        run: npx eslint src/cli src/dashboard
 
       - name: Format check
         run: npm run format:check
