@@ -32,6 +32,7 @@ Use when assessing security posture before release, after auth/input/storage cha
   - `references/secrets-and-data-exposure.md`
   - `references/dependency-and-supply-chain.md`
   - `references/cicd-and-agent-surfaces.md`
+  - `references/project-policy-template.md` is a setup template, not a scan reference — skip during reviews.
 - **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 
 ## Quick Scan Path
