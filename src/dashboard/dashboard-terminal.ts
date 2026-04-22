@@ -650,6 +650,7 @@ function dashboardConnectTerminal(
   };
   term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
     if (e.type === "keydown" && e.ctrlKey && e.key === "v") {
+      e.preventDefault();
       navigator.clipboard
         .readText()
         .then((text) => {
