@@ -99,7 +99,7 @@ If Step 0 exceeds 5 file reads without producing output or asking a question, ch
 ## Learning-Loop Retrieval
 
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md` if `rg` is not available in the agent's environment)
+- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md .goat-flow/decisions` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md .goat-flow/decisions` if `rg` is not available in the agent's environment)
 - Open only matching entries first. Follow related references only when they look relevant, with a maximum depth of 2 hops.
 - If the first search returns nothing useful, reword once and search again.
 - If the second search still misses, record a retrieval miss in your output or working notes. Do not broad-load a whole bucket "just in case".

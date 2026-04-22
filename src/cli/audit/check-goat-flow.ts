@@ -45,7 +45,7 @@ const NAMED_PATHS = new Set([
   ".goat-flow/config.yaml",
 ]);
 
-// Canonical install paths intentionally excluded from the base 12-check setup gate.
+// Canonical install paths intentionally excluded from the base 13-check setup gate.
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
 // === Named structure checks (9) ===

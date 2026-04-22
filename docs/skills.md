@@ -184,7 +184,7 @@ MUST NOT flag pre-existing issues as part of this change. MUST attempt to dispro
 
 ## /goat-critique
 
-Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 2-3 sub-agents, 5 phases. If delegated sub-agents are unavailable in the session, the skill does not run - it redirects to `/goat-review`. Rationale: `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md`.
+Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 2-3 sub-agents, 5 phases. Rationale: `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md`.
 
 | Sub-agents | Phases |
 |------------|--------|
@@ -192,7 +192,7 @@ Multi-perspective critique for a concrete artifact (plan, security assessment, d
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nConfirm artifact + delegation available"] --> P1
+    S0["Step 0\nConfirm artifact"] --> P1
 
     subgraph Generate["Phase 1: Generate"]
         A["Agent A (Risk Focus)\nSKEPTIC/ANALYST/STRATEGIST\n+ footguns + lessons"]
@@ -207,7 +207,7 @@ flowchart TD
     P4 -->|"BLOCKING GATE"| P5["Phase 5: Synthesise\nConsensus + Resolved + Verified + Retracted\n+ Decision Debt + What Wasn't Critiqued"]
 ```
 
-**Key constraints:** MUST use Agent tool calls for sub-agents, not inline role-play. If delegation is unavailable, stop and redirect to `/goat-review`. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST tag low-confidence recommendations as Decision Debt.
+**Key constraints:** MUST use Agent tool calls for sub-agents, not inline role-play. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST tag low-confidence recommendations as Decision Debt.
 
 ---
 

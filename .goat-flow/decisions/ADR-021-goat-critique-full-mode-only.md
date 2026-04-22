@@ -15,7 +15,7 @@
 ## Decision
 
 1. **goat-critique runs in one mode: full delegated.** 5 phases, 2-3 sub-agents spawned via the Agent tool. Phase 1 MUST use isolated Agent-tool calls; no inline role-play substitute is permitted.
-2. **If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.
+2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23):** All four supported agents (Claude Code, Codex, Gemini, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `lessons/agent-behavior.md` ("Sub-agent delegation is universal"). Removed from `docs/skills.md` and skill files.
 3. **Skill-chained entry still runs the full 5-phase flow.** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
 4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
 5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserts "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-claims.ts:352-357` - `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.

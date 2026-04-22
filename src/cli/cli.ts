@@ -7,6 +7,7 @@
 
 import { parseArgs } from "node:util";
 import { resolve, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync } from "node:fs";
 import type { CLIOptions, AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport } from "./audit/types.js";
@@ -800,13 +801,18 @@ async function main(): Promise<void> {
   await dispatchCommand(options);
 }
 
-main().catch((err: unknown) => {
-  if (err instanceof CLIError) {
-    console.error(err.message);
-    process.exit(err.exitCode);
-  }
-  console.error(
-    `Fatal error: ${err instanceof Error ? err.message : String(err)}`,
-  );
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch((err: unknown) => {
+    if (err instanceof CLIError) {
+      console.error(err.message);
+      process.exit(err.exitCode);
+    }
+    console.error(
+      `Fatal error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  });
+}
