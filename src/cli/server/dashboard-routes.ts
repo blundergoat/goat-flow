@@ -5,8 +5,9 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { isPackagedInstall } from "../paths.js";
 import { classifyProjectState } from "../classify-state.js";
 import { runAudit } from "../audit/audit.js";
 import type { AuditReport } from "../audit/types.js";
@@ -133,6 +134,73 @@ function buildDashboardReport(
     overall: auditRpt.overall,
     target: auditRpt.target,
   };
+}
+
+const AUDIT_CACHE_FILE = "audit-cache.json";
+
+function readConfigVersion(projectPath: string): string | null {
+  try {
+    const raw = readFileSync(
+      join(projectPath, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    const match = raw.match(/^version:\s*["']?([^\s"']+)["']?\s*$/m);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readAuditCache(
+  projectPath: string,
+  packageVersion: string,
+): { report: DashboardReport; cachedAt: string } | null {
+  try {
+    const raw = readFileSync(
+      join(projectPath, ".goat-flow", AUDIT_CACHE_FILE),
+      "utf-8",
+    );
+    const envelope = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof envelope.packageVersion !== "string" ||
+      typeof envelope.configVersion !== "string" ||
+      typeof envelope.cachedAt !== "string" ||
+      !envelope.report
+    )
+      return null;
+    if (envelope.packageVersion !== packageVersion) return null;
+    const configVersion = readConfigVersion(projectPath);
+    if (!configVersion || envelope.configVersion !== configVersion) return null;
+    return {
+      report: envelope.report as DashboardReport,
+      cachedAt: envelope.cachedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeAuditCache(
+  projectPath: string,
+  packageVersion: string,
+  report: DashboardReport,
+): void {
+  try {
+    const configVersion = readConfigVersion(projectPath);
+    if (!configVersion) return;
+    const envelope = {
+      packageVersion,
+      configVersion,
+      cachedAt: new Date().toISOString(),
+      report,
+    };
+    writeFileSync(
+      join(projectPath, ".goat-flow", AUDIT_CACHE_FILE),
+      JSON.stringify(envelope),
+    );
+  } catch {
+    // Cache write failure is non-fatal
+  }
 }
 
 /** Build the non-terminal dashboard route handlers for one server instance. */
@@ -297,6 +365,33 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
+  function isCacheEligible(
+    agentFilter: AgentId | null,
+    harness: boolean,
+  ): boolean {
+    return !agentFilter && harness && isPackagedInstall();
+  }
+
+  function collectPerAgentAudits(
+    fs: ReturnType<typeof createFS>,
+    projectPath: string,
+    harness: boolean,
+  ): { id: string; audit: AuditReport }[] {
+    const configAgents = detectConfiguredAgents(fs).map((agent) => agent.id);
+    const results: { id: string; audit: AuditReport }[] = [];
+    for (const agentId of configAgents) {
+      try {
+        results.push({
+          id: agentId,
+          audit: runAudit(fs, projectPath, { agentFilter: agentId, harness }),
+        });
+      } catch {
+        /* skip agents that fail to audit */
+      }
+    }
+    return results;
+  }
+
   /** Run both evaluation systems and return a typed DashboardReport. */
   function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
@@ -308,27 +403,33 @@ export function createDashboardRouteHandlers(
       agentParam && VALID_AGENTS.has(agentParam)
         ? (agentParam as AgentId)
         : null;
+    const fresh = url.searchParams.get("fresh") === "true";
 
     try {
       requireProjectDirectory(projectPath);
-      const fs = createFS(projectPath);
-      const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
 
-      const configAgents = detectConfiguredAgents(fs).map((agent) => agent.id);
-      const perAgentAudits: { id: string; audit: AuditReport }[] = [];
-      for (const agentId of configAgents) {
-        try {
-          const agentAudit = runAudit(fs, projectPath, {
-            agentFilter: agentId,
-            harness,
+      if (!fresh && isCacheEligible(agentFilter, harness)) {
+        const cached = readAuditCache(projectPath, packageVersion);
+        if (cached) {
+          jsonResponse(res, 200, {
+            ...cached.report,
+            cached: true,
+            cachedAt: cached.cachedAt,
           });
-          perAgentAudits.push({ id: agentId, audit: agentAudit });
-        } catch {
-          /* skip agents that fail to audit */
+          return true;
         }
       }
 
-      jsonResponse(res, 200, buildDashboardReport(auditRpt, perAgentAudits));
+      const fs = createFS(projectPath);
+      const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
+      const perAgentAudits = collectPerAgentAudits(fs, projectPath, harness);
+      const report = buildDashboardReport(auditRpt, perAgentAudits);
+
+      if (isCacheEligible(agentFilter, harness)) {
+        writeAuditCache(projectPath, packageVersion, report);
+      }
+
+      jsonResponse(res, 200, { ...report, cached: false, cachedAt: null });
     } catch (err) {
       jsonResponse(res, 500, {
         error: err instanceof Error ? err.message : String(err),

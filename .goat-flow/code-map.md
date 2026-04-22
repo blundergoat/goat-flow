@@ -98,12 +98,14 @@ evaluation/                # Quality-assessment prompt templates
 ## scripts/ -- Shell scripts
 
 ```
+bump-version.sh            # Bump package version across package.json, config.yaml, and skill templates
 check-markdown-links.sh    # Verify relative markdown links resolve across docs
 check-path-integrity.sh    # Cross-reference path-integrity checks between docs and code
 check-versions.mjs         # Verify workflow/skills templates match package.json version
 dependency-install.sh      # Wrapper: npm install with guards
 dependency-update.sh       # Wrapper: upgrade dependencies
 deny-dangerous.sh          # Hook: blocks destructive commands (copied to agent hook dirs)
+deploy-landing.sh          # Deploy landing page to hosting
 npm-publish.sh             # Wrapper: npm publish sanity checks
 preflight-checks.sh        # Pre-commit/CI gate: lint, typecheck, cross-ref checks
 prettier-check.sh          # Wrapper: prettier --check (lint)
@@ -162,8 +164,8 @@ footguns/                  # Architectural traps with file:line evidence (commit
 lessons/                   # Behavioural mistake records (committed)
 
 tasks/                     # Milestone files (gitignored, local working state)
-  .active                  # One-line marker naming the active plan subdir (see ADR-017)
-  <version>/Mxx-*.md       # Active milestones live in the subdir named by .active
+  .active                  # Advisory local pointer to the current plan subdir (may be stale; see ADR-017)
+  <version>/Mxx-*.md       # Milestones live in versioned local plan dirs; skills ask when .active is absent/stale
   _archived/               # Prior plans + research; not scanned by skills
 logs/sessions/             # Session logs (gitignored)
 logs/quality/             # Saved quality reports + prose companions (gitignored; README committed)

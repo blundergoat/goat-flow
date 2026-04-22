@@ -114,7 +114,7 @@ describe("quality produces prompt output", () => {
 // Test 3: Generated prompt contains skill testing section and ratings request
 // ---------------------------------------------------------------------------
 describe("quality prompt content", () => {
-  it("states the assessment is strictly read-only", () => {
+  it("states the assessment is reporting-only", () => {
     const result = composeQuality({
       agent: "claude",
       projectPath: "/tmp/test-project",
@@ -122,8 +122,8 @@ describe("quality prompt content", () => {
     });
 
     assert.ok(
-      result.prompt.includes("READ-ONLY ASSESSMENT MODE."),
-      "Should explicitly mark assessment mode as read-only",
+      result.prompt.includes("REPORTING-ONLY ASSESSMENT MODE."),
+      "Should explicitly mark assessment mode as reporting-only",
     );
     assert.ok(
       result.prompt.includes("Do not edit any tracked file."),
@@ -134,8 +134,8 @@ describe("quality prompt content", () => {
       "Should instruct the agent to write its JSON report to the gitignored quality log path",
     );
     assert.ok(
-      result.prompt.includes("Do NOT apply patches."),
-      "Should forbid patches",
+      result.prompt.includes("Do NOT apply patches or implement fixes."),
+      "Should forbid patches and implementation",
     );
     assert.ok(
       result.prompt.includes("tracked files"),
@@ -144,6 +144,10 @@ describe("quality prompt content", () => {
     assert.ok(
       result.prompt.includes("gitignored"),
       "Should explicitly carve out gitignored build directories as permitted writes",
+    );
+    assert.ok(
+      result.prompt.includes("strict no-write"),
+      "Should distinguish reporting-only from strict no-write mode",
     );
     assert.ok(
       !result.prompt.includes("milestone task files"),
@@ -187,10 +191,8 @@ describe("quality prompt content", () => {
       "Should reference goat-qa skill",
     );
     assert.ok(
-      result.prompt.includes(
-        "ask for a milestone/task breakdown in the response only",
-      ),
-      "Should keep goat-plan probe read-only",
+      result.prompt.includes("ask for a milestone/task breakdown inline"),
+      "Should keep goat-plan probe reporting-only without requiring task-file writes",
     );
   });
 

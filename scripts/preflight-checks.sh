@@ -380,7 +380,8 @@ if [[ -f tsconfig.json ]]; then
 
     # ESLint (type-checked rules)
     if command -v npx >/dev/null 2>&1 && [[ -f eslint.config.mjs ]]; then
-        lint_output=$(npx eslint src/cli/ 2>&1) && lint_exit=0 || lint_exit=$?
+        lint_targets=(src/cli src/dashboard)
+        lint_output=$(npx eslint "${lint_targets[@]}" 2>&1) && lint_exit=0 || lint_exit=$?
         # grep -c always prints a count (even 0) and exits non-zero on zero
         # matches. Using `|| echo 0` would double-up the output to "0\n0",
         # breaking the downstream `-gt` arithmetic. Use `|| true` to swallow
@@ -390,7 +391,7 @@ if [[ -f tsconfig.json ]]; then
         if [[ "$lint_exit" -eq 0 ]]; then
             pass "ESLint ($lint_warnings warnings)"
         elif [[ "$lint_errors" -gt 0 ]]; then
-            fail "ESLint ($lint_errors errors, $lint_warnings warnings) - run npx eslint src/cli/"
+            fail "ESLint ($lint_errors errors, $lint_warnings warnings) - run npx eslint ${lint_targets[*]}"
         else
             pass "ESLint (0 errors, $lint_warnings warnings)"
         fi

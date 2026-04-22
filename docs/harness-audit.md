@@ -79,7 +79,7 @@ Constraints are the cheapest, most reliable layer of the harness. They cost zero
 
 **Constraints checks (4):**
 
-- `deny-covers-secrets` - for agents with settings-based deny (Claude, Gemini), the deny configuration covers `.env`, credentials, `*.key`, `*.pem`. Script-only agents (Codex, Copilot) rely entirely on the Bash deny hook, which is checked for the same coverage; the settings-based Read-deny check is skipped for them as a platform limitation, not a failure.
+- `deny-covers-secrets` - for agents with settings-based deny (Claude, Gemini), the deny configuration covers real `.env` files, credentials, `*.key`, `*.pem`, while allowing read-only `.env.example` inspection. Script-only agents (Codex, Copilot) rely entirely on the Bash deny hook, which is checked for the same coverage; the settings-based Read-deny check is skipped for them as a platform limitation, not a failure.
 - `deny-blocks-dangerous` - each agent's deny configuration blocks `rm -rf`, force-push, and `chmod`
 - `deny-blocks-pipe-to-shell` - each agent's deny configuration blocks `curl | bash` / `wget | sh` pipe-to-shell patterns
 - `deny-hook-registered` - hook registrations and hook files are in sync (registered hooks exist on disk, existing hooks are registered)

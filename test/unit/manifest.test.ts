@@ -299,7 +299,7 @@ describe("loadManifest (real repo)", () => {
     assert.equal(m.facts.checks.setup, SETUP_CHECKS.length);
     assert.equal(m.facts.checks.agent, AGENT_CHECKS.length);
     assert.equal(m.facts.checks.harness, HARNESS_CHECKS.length);
-    assert.equal(m.facts.presets.count, 22);
+    assert.equal(m.facts.presets.count, 23);
     assert.equal(
       m.facts.checks.total,
       SETUP_CHECKS.length + AGENT_CHECKS.length + HARNESS_CHECKS.length,

@@ -1,4 +1,4 @@
-# AGENTS.md - v1.2.2 (2026-04-21)
+# AGENTS.md - v1.2.3 (2026-04-22)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 ## Essential Commands
 ```bash
@@ -102,6 +102,7 @@ If working from a plan/milestone file, tick `- [x]` on each completed task immed
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.agents/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
+| Shared skill reference | `.goat-flow/skill-reference/` (skill-preamble.md, skill-conventions.md, skill-quality-testing.md) |
 | Footguns (most-queried) | `.goat-flow/footguns/` |
 | Lessons | `.goat-flow/lessons/` |
 | Patterns | `.goat-flow/patterns.md` |

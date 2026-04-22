@@ -12,7 +12,7 @@ import {
 function makeRawReport() {
   return {
     report_kind: QUALITY_REPORT_KIND,
-    goat_flow_version: "1.2.2",
+    goat_flow_version: "1.2.3",
     agent: "claude",
     project_path: "/tmp/quality-project",
     run_date: "2026-04-18",
@@ -71,13 +71,13 @@ describe("parseQualityReport", () => {
     const parsed = parseQualityReport({
       ...report,
       scope: "framework-self",
-      rubric_version: "1.2.2",
+      rubric_version: "1.2.3",
       findings: [{ ...report.findings[0], evidence_method: "runtime-probe" }],
     });
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
     assert.equal(parsed.report.scope, "framework-self");
-    assert.equal(parsed.report.rubric_version, "1.2.2");
+    assert.equal(parsed.report.rubric_version, "1.2.3");
     assert.equal(parsed.report.findings[0]!.evidence_method, "runtime-probe");
   });
 

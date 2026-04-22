@@ -40,6 +40,15 @@ const RUNNER_BINARIES: Record<Runner, string> = {
   copilot: "copilot",
 };
 
+/** Flag to pass the initial prompt in interactive mode.
+ *  `null` means the runner accepts the prompt as a positional argument. */
+const RUNNER_PROMPT_FLAG: Record<Runner, string | null> = {
+  claude: null,
+  codex: null,
+  gemini: "-i",
+  copilot: "-i",
+};
+
 /** Maximum output to buffer while a session is detached (characters). */
 const DETACH_BUFFER_LIMIT = 512 * 1024; // 512KB
 
@@ -185,8 +194,11 @@ export class TerminalManager {
     // are passed via env vars (not interpolated into the command string) to avoid
     // shell-injection from user-controlled prompt text.
     const shell = process.env.SHELL || "/bin/bash";
+    const flag = RUNNER_PROMPT_FLAG[runner];
     const shellCmd = prompt
-      ? `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
+      ? flag
+        ? `"$GOAT_RUNNER" ${flag} "$GOAT_PROMPT"; exec "$SHELL" -i`
+        : `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
       : `"$GOAT_RUNNER"; exec "$SHELL" -i`;
 
     console.log(`[terminal] Starting ${runner} session in ${validatedPath}`);

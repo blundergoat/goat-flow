@@ -495,7 +495,7 @@
               "
             >
               <button
-                @click="launchPreset(qualityResult.prompt, activeRunner); activeView = 'workspace'"
+                @click="launchPreset(qualityResult.prompt, activeRunner, 'Quality ' + activeRunner); activeView = 'workspace'"
                 :disabled="launching || serverSessions.length >= 10"
                 :title="serverSessions.length >= 10 ? 'Session limit reached (10/10). End one to launch another.' : 'Launch in a new Runner session.'"
                 class="gf-btn-terminal-cta"
@@ -528,7 +528,7 @@
                     class="gf-text-secondary"
                     style="font-weight: 500"
                   ></span>
-                  in read-only assessment mode to inspect setup quality and
+                  in reporting-only assessment mode to inspect setup quality and
                   report findings with evidence.
                 </span>
               </template>
@@ -547,7 +547,7 @@
           </div>
         </template>
 
-        <div class="gf-loader-overlay" :class="!qualityLoading && 'gf-hidden'">
+        <div class="gf-prompt-loading" :class="!qualityLoading && 'gf-hidden'">
           <svg
             class="animate-spin"
             style="width: 16px; height: 16px; color: #4ade80"

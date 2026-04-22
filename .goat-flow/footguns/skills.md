@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-04-21
+last_reviewed: 2026-04-22
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -31,7 +31,7 @@ last_reviewed: 2026-04-21
 **Why it happens:** The learning-loop buckets index real incidents and failure classes, not milestone names. Queries like "support matrix" or "registry canonicality" sound precise in planning context but do not match the actual wording of stored hook/platform incidents.
 
 **Evidence:**
-- `.goat-flow/skill-reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) hard-codes the mitigation: derive 2-4 terms from target area + symptom + named file/tool, reword once, then record a miss instead of broad-loading the bucket. The Excuse/Reality table in that same section (search: `Broad-loading recreates the context-bloat failure`) captures the specific rationalisations that produced the miss - those rows are the durable in-repo trace of the incident.
+- `.goat-flow/skill-reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) hard-codes the mitigation: derive 2-4 terms from target area + symptom + named file/tool, reword once, open only matching entries, then record a miss instead of broad-loading the bucket.
 - `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) holds the template source that the installer copies from.
 
 **Prevention:** Seed first-pass retrieval terms with the concrete symptom, platform, or file/tool name rather than milestone titles or abstract design labels. One reword is allowed; if the second query still misses, record the retrieval miss explicitly and move on. Broad-loading the bucket to compensate defeats the protocol.

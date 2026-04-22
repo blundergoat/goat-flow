@@ -142,7 +142,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "READ-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches. Regenerable build artifacts written to gitignored paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine - they don't change the repo's committed state. **Exception:** this prompt instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json` - that path is gitignored and that single write is expected. Do not write anywhere else.",
+    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
   );
   lines.push("");
 
@@ -152,7 +152,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("These apply to EVERY finding you report:");
   lines.push("");
   lines.push(
-    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored build directories (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`) are fine. The single expected write is your final JSON report to `.goat-flow/logs/quality/<filename>.json` (gitignored) as instructed below. If a skill probe tries to modify tracked files, stop and report that as a finding.",
+    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored local/build/reporting paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine when they are part of normal validation or reporting. If a skill probe tries to modify tracked files or implement code, stop and report that as a finding.",
+  );
+  lines.push(
+    "- **Mode vocabulary matters.** `reporting-only` means no committed-file changes and no implementation; gitignored logs, critique snapshots, scratchpad notes, and task checkbox updates are still compatible with reporting-only work. `strict no-write` means no writes except paths explicitly named by the prompt. Do not label allowed gitignored reporting/local-state writes as read-only violations.",
   );
   lines.push(
     "- **No mutation commands.** When testing toolchain commands, use `--check`, `--dry-run`, or read-only flags. Use `format:check` not `format`. Use `eslint` not `eslint --fix`. If unsure, run the tool with `--help` first to find the read-only flag.",
@@ -223,7 +226,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "**Design notes** (do NOT flag these as findings - they are intentional):",
   );
   lines.push(
-    '- Session logs (`.goat-flow/logs/sessions/*.md`) and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
+    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
+  );
+  lines.push(
+    "- `.goat-flow/tasks/.active` is an advisory local pointer, not a setup invariant. Missing `.active`, or `.active` naming a missing subdir, is normal local churn when work completes, users switch projects, or a project does not use goat-flow task files. Do NOT report this by itself as a setup-quality finding; evaluate whether `/goat` and `/goat-plan` handle the fallback gracefully.",
   );
   lines.push(
     "- `toolchain` and `ask_first` fields in `config.yaml` were removed from the base setup in v1.1.0 (see ADR-014). A lean config.yaml with only version, agents, and skills is correct - not a gap.",
@@ -464,28 +470,28 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "**Option A (preferred): File analysis.** Read each SKILL.md and evaluate its structure, constraints, routing logic, cross-references, and coherence against the codebase. This is safe for read-only assessment and covers most quality signals.",
+    "**Option A (preferred): File analysis.** Read each SKILL.md and evaluate its structure, constraints, routing logic, cross-references, and coherence against the codebase. This is safe for reporting-only assessment and covers most quality signals.",
   );
   lines.push(
-    "**Option B (if context allows): Live invocation.** Invoke the skill through the agent's normal slash-command/runtime path on a real target. Monitor for file-write attempts - stop immediately if the skill tries to create or modify files. This tests runtime behavior but costs significant context.",
+    "**Option B (if context allows): Live invocation.** Invoke the skill through the agent's normal slash-command/runtime path on a real target. Monitor for committed-file changes or implementation attempts - stop immediately if the skill tries to modify tracked files or code. Gitignored reporting/local-state writes are allowed under reporting-only probes. This tests runtime behavior but costs significant context.",
   );
   lines.push("");
   lines.push("Either approach is acceptable. State which you used.");
   lines.push("");
   lines.push(
-    "1. **`/goat`** (dispatcher) - send 3 different read-only requests. Does routing work? Does the Planning Route handle briefs without pushing toward file creation? Does it route critique requests to `/goat-critique` and planning questions to `/goat-plan` appropriately?",
+    "1. **`/goat`** (dispatcher) - send 3 different reporting-only requests. Does routing work? Does the Planning Route handle briefs without pushing toward committed-file changes or implementation? Does it route critique requests to `/goat-critique` and planning questions to `/goat-plan` appropriately?",
   );
   lines.push(
     "2. **`/goat-debug`** - investigate a real module or risky pattern in this codebase",
   );
   lines.push(
-    "3. **`/goat-plan`** - ask for a milestone/task breakdown in the response only. Do NOT let it write milestone files; if it tries to, report that as a failure of read-only assessment behavior.",
+    "3. **`/goat-plan`** - ask for a milestone/task breakdown inline. If it writes milestone files despite an inline/reporting-only request, report the mode confusion; do not frame gitignored task-file writes as committed-state read-only violations.",
   );
   lines.push(
     "4. **`/goat-review`** - review a real source file for quality issues",
   );
   lines.push(
-    "5. **`/goat-critique`** - critique one of the other probe outputs in the response only (e.g., goat-plan breakdown or goat-security assessment)",
+    "5. **`/goat-critique`** - critique one of the other probe outputs in reporting-only / no-implementation mode (e.g., goat-plan breakdown or goat-security assessment). Gitignored critique logs are allowed; judge whether it attempts to implement recommendations or modify tracked files.",
   );
   lines.push(
     "6. **`/goat-security`** - threat-model one real component (auth, API, hooks, config, or whatever is riskiest) without making changes",
@@ -498,7 +504,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "For each skill report: (a) what worked, (b) what was confusing or failed, (c) what was useless ceremony. Cite `file:line` where possible.",
   );
   lines.push(
-    "If any skill attempts to edit files, create artifacts, or otherwise leave read-only mode, stop that probe immediately and report it as a finding.",
+    "If any skill attempts to edit tracked files, implement code, or write outside the allowed gitignored local-state/reporting paths, stop that probe immediately and report it as a finding.",
   );
   lines.push("");
   lines.push(
@@ -593,7 +599,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "2. **Truncation or corruption:** Do the installed skill files look complete? Are there any signs of truncation, merging, or adaptation that broke the structure? (Skills should be installed verbatim from templates - they should NOT be adapted.)",
   );
   lines.push(
-    '3. **Depth choice coherence:** Invoke one skill with "quick" and one with "full" in read-only mode. Is the experience meaningfully different?',
+    '3. **Depth choice coherence:** Invoke one skill with "quick" and one with "full" in reporting-only mode. Is the experience meaningfully different?',
   );
   lines.push("");
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.2.3 - 2026-04-22
+
+`.env.example` read-only handling, richer dashboard presets, dashboard audit caching, reporting-only quality prompts, active-plan local-state handling, goat-critique contract tightening, terminal fixes, prompt-label tracking, deployment scripts, prompt-loading polish, shared-reference doc cleanup, widened dashboard lint coverage, and goat-qa gate clarification. 19 commits, 92 files changed, 2,584 insertions, 708 deletions.
+
+- **Secret-file guardrails** - `.env.example` allowed for read-only inspection; real `.env`/`.env.*` and other secret paths stay blocked. All `deny-dangerous.sh` copies, agent settings, and ignore files updated with self-tests for the distinction.
+- **Dashboard** - Richer preset prompts with explicit scope/evidence/handoff framing. Audit caching for packaged installs (keyed by version, `fresh=true` bypass). Dedicated loading states for setup/quality. Prompt labels now carry the runner name so terminal sessions show which agent launched them.
+- **Terminal fixes** - Per-runner prompt flag (`-i`) for Copilot/Gemini sessions. Fixed duplicate paste from browser default handler firing alongside xterm clipboard write.
+- **Landing page and deployment** - Standalone product page (`docs/goat-flow-landing.html`). New `deploy-landing.sh` (S3/CloudFront/ACM/Route 53) and `bump-version.sh` (version bump across all files in one pass).
+- **Quality prompts** - "Reporting-only" mode replaces strict read-only language, allowing gitignored validation artifacts while forbidding tracked-file writes. Walkthrough comment prompt added. Execution-loop and footgun evidence corrected.
+- **Skill contracts** - goat-critique: explicit invocation binding (no triviality bypass), tighter retrieval/rubric handling, context-leak scanning, per-agent tool budgets. goat-qa: Phase 2 is now a blocking gate awaiting human decision before producing the test plan.
+- **Active plan semantics** - `.goat-flow/tasks/.active` treated as an advisory local pointer, not a setup invariant. Missing/stale markers fall back to listing task dirs and asking. ADR-017, glossary, code-map, and quality prompt aligned.
+- **Shared-reference docs** - Explicit `skill-quality-testing` split-file references replace brace shorthand. goat-security project-policy template documented across all agent skill copies.
+- **Preflight coverage** - ESLint widened to `src/dashboard` in preflight and CI. Dashboard lint config and cleanup so the wider gate passes.
+- **Cross-doc cleanup** - Router tables, code-map script listings, and instruction-file references synced to match current filesystem state.
+
 ## v1.2.2 - 2026-04-21
 
 Dashboard browser-code split, release metadata bump, and CLI documentation corrections.

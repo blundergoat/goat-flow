@@ -28,19 +28,19 @@ The shipped template is intended to block or prompt on the common high-risk comm
 - force push
 - `chmod 777`
 - pipe-to-shell and pipe-to-interpreter patterns like `curl | bash`
-- `.env` modification
+- `.env` / `.env.*` access, except read-only `.env.example` inspection
 - `git --no-verify`
 - `git reset --hard`
 - `git clean -f`
 - destructive database commands
-- access to secret paths such as `.env`, `.ssh`, `.aws`, `credentials`, `secrets`, `.pem`, `.key`, `.pfx`, `.gnupg`
+- access to secret paths such as `.env`, `.env.local`, `.ssh`, `.aws`, `credentials`, `secrets`, `.pem`, `.key`, `.pfx`, `.gnupg`; `.env.example` is allowed only for read-only inspection
 
 ## Important distinction
 
 These files are command guards, not general ignore files.
 
-- Claude sensitive-file exclusion is primarily `permissions.deny` in `.claude/settings.json`.
-- Gemini sensitive-file exclusion is primarily `.geminiignore`, with settings and hooks as defense in depth.
+- Claude sensitive-file exclusion is primarily `permissions.deny` in `.claude/settings.json`, with a `Read(.env.example)` allowlist for non-secret examples.
+- Gemini sensitive-file exclusion is primarily `.geminiignore`, with settings and hooks as defense in depth; `.env.example` is explicitly unignored for read-only inspection.
 - Codex has no separate ignore file in this repo; the deny hook in `.codex/hooks/deny-dangerous.sh` is the primary guard.
 - Copilot uses `.copilotignore` for context exclusion and `.github/hooks/deny-dangerous.sh` for runtime command blocking.
 

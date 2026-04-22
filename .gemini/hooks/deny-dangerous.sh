@@ -17,8 +17,8 @@
 # - Deeply nested command substitution beyond 3 levels is blocked as a
 #   precaution rather than parsed
 # - Defense in depth: combine with runtime deny patterns + instruction-file rules
-# NOTE: `source .env` and other shell-level secret reads ARE blocked - see
-#   `is_secret_path_touch` below and the self-test cases for the live contract.
+# NOTE: `source .env` and other shell-level secret reads ARE blocked. Plain
+#   `.env.example` reads are allowed; writes still block. See self-test cases.
 # =============================================================================
 set -uo pipefail
 
@@ -289,10 +289,19 @@ run_self_test() {
   run_case "grep pipe bash" 'grep pattern file | bash' 2
   # Secret-file reads must block (Bash bypass of settings.json Read() deny).
   run_case "cat .env" "cat .env" 2
+  run_case "cat .env.example" "cat .env.example" 0
+  run_case "head nested .env.example" "head config/.env.example" 0
   run_case "source .env" "source .env" 2
   run_case "dot-source .env" ". .env" 2
   run_case "less .env.local" "less .env.local" 2
   run_case "head .env.production" "head .env.production" 2
+  run_case "cat .env.example plus .env.local" "cat .env.example .env.local" 2
+  run_case "echo redirect .env.example" 'echo "data" > .env.example' 2
+  run_case "tee pipe .env.example" 'echo foo | tee .env.example' 2
+  run_case "clobber .env.example" 'echo foo >| .env.example' 2
+  run_case "cat single-quoted .env" "cat '.env'" 2
+  run_case "cat single-quoted .env.example" "cat '.env.example'" 0
+  run_case "sed -i single-quoted .env.example" "sed -i '' '.env.example'" 2
   run_case "base64 .env" "base64 .env" 2
   run_case "xxd pem" "xxd server.pem" 2
   run_case "cat ssh key" "cat ~/.ssh/id_rsa" 2
@@ -374,16 +383,25 @@ fi
 # Each function checks one dangerous pattern. Add project-specific blocks below.
 
 # Return 0 (match) if the command references a secret-bearing file path:
-# .env*, /.ssh/, /.aws/, ~/.config/gcloud/, /.gnupg/, /.docker/config.json,
-# /.kube/config, *.pem/*.key/*.pfx, credentials*, .npmrc, .pypirc.
+# .env or .env.* except .env.example, /.ssh/, /.aws/, ~/.config/gcloud/,
+# /.gnupg/, /.docker/config.json, /.kube/config, *.pem/*.key/*.pfx,
+# credentials*, .npmrc, .pypirc.
 # settings.json Read() patterns only cover the Read tool - this check is the
 # only line of defence against shell-based secret exfil (cat/less/source/base64/etc.).
 is_secret_path_touch() {
   local c="$1"
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/)(\.env)([[:space:]]|$|\"|\.[a-zA-Z0-9_-]+(\"|$)) ]]; then return 0; fi
+  local env_scan
+  env_scan=$(printf '%s' "$c" | sed -E "s#(^|[[:space:]=:/'\"])\.env\.example([[:space:]]|$|['\"])#\1__goat_env_example__\2#g")
+  if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"]).env([[:space:]]|$|[\'\"]|\.[a-zA-Z0-9_-]+([[:space:]]|$|[\'\"])) ]]; then return 0; fi
   if [[ "$c" =~ /\.ssh/|/\.aws/|/\.config/gcloud/|application_default_credentials\.json|/\.gnupg/|/\.docker/config\.json|/\.kube/config ]]; then return 0; fi
-  if [[ "$c" =~ (^|[[:space:]]|=|:)[^[:space:]]*\.(pem|key|pfx)([[:space:]]|$|\") ]]; then return 0; fi
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/)(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|\") ]]; then return 0; fi
+  if [[ "$c" =~ (^|[[:space:]]|=|:|[\'\"])[^[:space:]]*\.(pem|key|pfx)([[:space:]]|$|[\'\"]) ]]; then return 0; fi
+  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
+  return 1
+}
+
+is_env_example_touch() {
+  local c="$1"
+  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"]).env\.example([[:space:]]|$|[\'\"]) ]]; then return 0; fi
   return 1
 }
 
@@ -482,9 +500,13 @@ check_segment() {
   if is_secret_path_touch "$cmd"; then
     touches_secret=1
   fi
+  local touches_env_example=0
+  if is_env_example_touch "$cmd"; then
+    touches_env_example=1
+  fi
 
   local has_redirect=0 has_pipe=0
-  [[ "$cmd_unquoted" =~ \>[[:space:]] || "$cmd_unquoted" =~ \>\> ]] && has_redirect=1
+  [[ "$cmd_unquoted" =~ \>[[:space:]] || "$cmd_unquoted" =~ \>\> || "$cmd_unquoted" =~ \>\| ]] && has_redirect=1
   # Detect single pipe (|) but not logical OR (||), outside of quoted strings
   local pipe_stripped="${cmd_unquoted//||/}"
   [[ "$pipe_stripped" =~ \| ]] && has_pipe=1
@@ -495,6 +517,26 @@ check_segment() {
     fi
     if [[ "$cmd_unquoted" =~ \|[[:space:]]*(python|python3|node|perl|ruby)([[:space:]]|$) ]]; then
       block "Pipe to interpreter. Download or inspect first, then run."
+    fi
+  fi
+  if [[ "$touches_env_example" -eq 1 ]]; then
+    local env_example_read_only=0
+    case "$cmd_verb" in
+      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read)
+        env_example_read_only=1 ;;
+      sed)
+        if ! [[ "$cmd" =~ sed[[:space:]]+-[a-zA-Z]*i || "$cmd" =~ sed[[:space:]]+--in-place ]]; then
+          env_example_read_only=1
+        fi ;;
+    esac
+    if [[ "$cmd" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"[:space:]]*\.env\.example([\'\"[:space:]]|$) ]]; then
+      env_example_read_only=0
+    fi
+    if [[ "$has_pipe" -eq 1 && "$cmd_unquoted" =~ \|[[:space:]]*(tee|dd|cp|mv|sponge)[[:space:]] ]]; then
+      env_example_read_only=0
+    fi
+    if [[ "$env_example_read_only" -eq 0 ]]; then
+      block ".env.example is allowed for read-only inspection only. Use an explicit file-edit approval path for changes."
     fi
   fi
   if [[ "$has_redirect" -eq 0 && "$has_pipe" -eq 0 && "$touches_secret" -eq 0 ]]; then
@@ -569,10 +611,11 @@ check_segment() {
   fi
 
   # 9. Secret-file access (reads AND writes)
-  #    Block: any command that touches .env / SSH/AWS/GCP credentials /
-  #    .pem / .key / .pfx / credentials / .npmrc / .pypirc. settings.json
-  #    Read() patterns only cover the Read tool, not Bash - so this rule
-  #    is the only line of defence against shell-based exfil.
+  #    Block: any command that touches .env or .env.* (except read-only
+  #    `.env.example`) / SSH/AWS/GCP credentials / .pem / .key / .pfx /
+  #    credentials / .npmrc / .pypirc. settings.json Read() patterns only cover
+  #    the Read tool, not Bash - so this rule is the only line of defence
+  #    against shell-based exfil.
   if [[ "$touches_secret" -eq 1 ]]; then
     block "Secret-file access ($cmd_verb). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk."
   fi

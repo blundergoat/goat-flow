@@ -67,7 +67,7 @@
         No audit results yet
       </p>
       <button
-        @click="runAudit()"
+        @click="runAudit(true)"
         :disabled="auditing"
         class="gf-btn gf-btn-md gf-btn-audit"
       >
@@ -127,11 +127,11 @@
               class="gf-text-muted"
               style="font-size: 13px"
               x-show="!setupFailed()"
-              x-text="`audited ${auditAgeLabel()}`"
+              x-text="(auditCached ? 'cached · ' : '') + `audited ${auditAgeLabel()}`"
             ></span>
           </div>
           <button
-            @click="runAudit()"
+            @click="runAudit(true)"
             :disabled="auditing"
             class="gf-btn gf-btn-md"
           >
@@ -1018,7 +1018,7 @@
             </div>
           </button>
           <button
-            @click="launchPreset(setupFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            @click="launchPreset(setupFixPrompt(), activeRunner, 'Setup fix ' + activeRunner); workspacePanel = 'terminal'"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -1094,7 +1094,7 @@
             </div>
           </button>
           <button
-            @click="launchPreset(harnessFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            @click="launchPreset(harnessFixPrompt(), activeRunner, 'Harness fix ' + activeRunner); workspacePanel = 'terminal'"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -1133,7 +1133,7 @@
           "
         >
           <button
-            @click="launchPreset(qualityFixPrompt(), activeRunner); workspacePanel = 'terminal'"
+            @click="launchPreset(qualityFixPrompt(), activeRunner, 'Quality fix ' + activeRunner); workspacePanel = 'terminal'"
             class="gf-action-btn"
             style="
               text-align: left;
@@ -1272,7 +1272,7 @@
         No audit results yet
       </p>
       <button
-        @click="runAudit()"
+        @click="runAudit(true)"
         :disabled="auditing"
         class="gf-btn gf-btn-md gf-btn-audit"
       >
@@ -1291,7 +1291,7 @@
         "
       >
         <button
-          @click="runAudit()"
+          @click="runAudit(true)"
           :disabled="auditing"
           class="gf-btn gf-btn-md gf-btn-audit"
           style="margin-left: auto"

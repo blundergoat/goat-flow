@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-04-21
+last_reviewed: 2026-04-22
 ---
 
 ## Lesson: Retrieval terms must name the concrete failure class
@@ -360,3 +360,15 @@ last_reviewed: 2026-04-21
 **Root cause:** Variable scoping assumption. `setup_count` was set on a line that only executes when `build_count` is non-empty, but was referenced unconditionally later. The original code never triggered this because without sanitization the node command always produced *some* stdout (even if it included garbage), so `build_count` was never empty — it was just wrong. The sanitization made the empty case reachable for the first time.
 
 **Prevention:** When adding a filter that can turn non-empty output into empty output, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must either be initialized before the conditional or only referenced inside the same branch.
+
+---
+
+## Lesson: Quality findings must respect local-state and reporting-only contracts
+
+**Created:** 2026-04-22
+
+**What happened:** During a quality follow-up, the agent treated `.goat-flow/tasks/.active` pointing at a missing subdir as a MAJOR setup defect. The user corrected that the active marker is local working state: its target can disappear when a project completes, can change multiple times a day as users switch projects, or can be irrelevant when the user is only using goat-flow for bug work. The same review treated `/goat-critique` writing gitignored critique logs as a read-only violation. The user corrected the contract: read-only/reporting work means no committed-file changes and no implementation, not "never write gitignored continuity logs or task checkboxes."
+
+**Root cause:** The agent applied generic quality-report assumptions without first checking goat-flow's persistence tiers and local-state semantics. It judged stale local pointers and gitignored continuity writes as setup defects instead of asking whether the skill handles them gracefully and whether committed state changes.
+
+**Prevention:** Before reporting findings about `.goat-flow/tasks/`, `.goat-flow/logs/`, scratchpad files, or other gitignored state, classify the artifact as committed knowledge vs local session state. For local state, review behavior and fallback handling, not existence alone. Use "reporting-only" or "no implementation" when gitignored logs/checkpoints are allowed; reserve "strict no-write" for prompts that explicitly forbid all writes except a named artifact.

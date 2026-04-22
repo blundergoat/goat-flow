@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-04-21
+last_reviewed: 2026-04-22
 ---
 
 ## Footgun: Settings.json Read() deny does not bind Bash shell reads of secret files
@@ -8,7 +8,7 @@ last_reviewed: 2026-04-21
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high - `Read(**/.env*)` in `settings.json` looks like a blanket secret-read deny, but it only binds the Read tool. A Bash payload like `cat .env`, `source .env`, `base64 ~/.aws/credentials` is not bound by any `Read(...)` pattern and silently succeeds unless the Bash hook blocks it explicitly.
 
-**Symptoms:** `goat-flow audit --harness` reports `deny-covers-secrets: pass` while a live Bash probe (`bash .claude/hooks/deny-dangerous.sh 'cat .env'`) returns exit 0. A quality-report agent running in runtime-probe mode catches this gap; static-analysis reports miss it because the settings.json Read() coverage LOOKS complete.
+**Symptoms:** Settings-level `Read(**/.env*)` coverage can look complete even though shell-based secret reads require separate Bash-hook coverage. Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe (`bash .claude/hooks/deny-dangerous.sh 'cat .env'`) returned exit 0. Current expected behavior is exit 2 with `BLOCKED: Secret-file access ...`, verified by the runtime probe below.
 
 **Why it happens:** `settings.json` `"permissions.deny"` entries are tool-scoped: `Read(...)`, `Edit(...)`, `Write(...)`, `Bash(...)` each bind only that tool. An agent using the Bash tool to run `cat .env` is never dispatched through the Read tool, so `Read(**/.env*)` is irrelevant. Two independent coverage layers are required: `Read()` denies for the Read tool path AND Bash-hook regex coverage for shell paths.
 

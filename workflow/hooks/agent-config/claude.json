@@ -8,6 +8,10 @@
   // "git commit". Broad matching is intentional (safety-first). False positives
   // can be overridden in settings.local.json with an "allow" entry.
   "permissions": {
+    "allow": [
+      "Read(.env.example)",
+      "Read(**/.env.example)"
+    ],
     "deny": [
       "Bash(*git commit*)",
       "Bash(*git push*)",

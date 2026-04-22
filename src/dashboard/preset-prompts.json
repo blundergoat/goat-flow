@@ -126,6 +126,13 @@
     "cat": "qa"
   },
   {
+    "id": "walkthrough-comment",
+    "name": "Generate Walk-Through Comment",
+    "desc": "Two-part walk-through notes: plain-English summary and targeted discussion questions from code changes",
+    "prompt": "/goat-qa Use gh to carefully read the GitHub issue link and all comments, then analyse the code changes in the pull request. Git checkout the branch and read the code locally to understand what was actually built — not just what the PR description claims.\n\nIf I haven't provided the git branch, GitHub issue URL, or PR URL, ask me for them before proceeding.\n\nGenerate walk-through notes in two parts:\n\n**Part 1 — Summary (2 lines, plain English)**\nTwo lines max. Plain language describing what changed and what behaviour a tester or user would notice. No code terms. Not a list of files.\n\n**Part 2 — Discussion Questions for Dev and Tester (3-5)**\nOutput 3-5 sharp questions designed to sharpen the testing plan at walk-through. Skip anything the developer has already tested, anything PHPStan/static analysis would catch, and anything covered by view-all-pages/modals Cypress acceptance tests.\n\nEach question must target a real risk surfaced by the actual code changes — not generic advice. Probe areas like:\n- Production data divergence (legacy NULLs, abandoned workflows, columns base data doesn't represent)\n- Entry point consistency (portal, API, OLB, cron, webhook — does the change apply to all paths, or only one?)\n- Access control gaps (new endpoints without voters, queries missing PracGroup filters, URL/ID manipulation)\n- Cypress assertion depth (does existing coverage verify the changed behaviour, or just that the page loads?)\n- Background process behaviour (cron/queue context, full-dataset iteration, no user context)\n- Edge cases the code reveals but the dev notes don't address (negative paths, boundary values, state transitions)\n- Coexisting current vs deprecated implementations — which takes precedence and is the deprecated path still reachable?\n\nFormat each question as one line, followed by a one-sentence \"why this matters\" tied to the specific file/method/change that prompted it. Label any inferred behaviour as INFERRED so dev and tester can verify versus VERIFIED where you read it directly from the code.\n\nAim for fewer questions on small/low-risk PRs, more on complex ones — quality over quantity. Ask me clarifying questions before generating output if the scope is genuinely unclear.",
+    "cat": "qa"
+  },
+  {
     "id": "security",
     "name": "Security Assessment",
     "desc": "Full threat assessment with CONFIRMED/PROBABLE/THEORETICAL findings",

@@ -53,7 +53,7 @@
           >
         </div>
         <button
-          @click="runAudit()"
+          @click="runAudit(true)"
           :disabled="auditing"
           class="gf-btn gf-btn-md"
         >
@@ -344,7 +344,7 @@
           style="padding: 14px 16px; border-radius: 0"
         >
           <button
-            @click="if (setupOutputs[setupSelectedAgent]) { launchPreset(setupOutputs[setupSelectedAgent], activeRunner); activeView = 'workspace'; }"
+            @click="if (setupOutputs[setupSelectedAgent]) { launchPreset(setupOutputs[setupSelectedAgent], activeRunner, 'Setup ' + activeRunner); activeView = 'workspace'; }"
             :disabled="launching || !setupOutputs[setupSelectedAgent]"
             class="gf-btn-terminal-cta"
             style="width: 100%; justify-content: center; padding: 11px"
@@ -375,7 +375,7 @@
           </p>
         </div>
 
-        <div x-show="setupGenerating" class="gf-loader-overlay">
+        <div x-show="setupGenerating" class="gf-prompt-loading">
           <svg
             class="animate-spin"
             style="width: 16px; height: 16px; color: #4ade80"

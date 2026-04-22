@@ -15,7 +15,7 @@
 
 Adopt **Option B - marker file `.goat-flow/tasks/.active`**. Format: one-line, content = name of the active subdir relative to `.goat-flow/tasks/` (e.g. `1.2.0`). No trailing slash, no leading dot in the value.
 
-Skills (`goat`, `goat-plan` SKILL.md files) read `.active` first, then scan only the named subdir. If `.active` is missing, fall back to scanning top-level entries and asking the user which is current.
+Skills (`goat`, `goat-plan` SKILL.md files) read `.active` first. If it exists and names an existing subdir, they scan only that subdir. If `.active` is missing or names a missing subdir, they treat that as normal local churn (completed plan, project switch, or no task workflow), list top-level entries excluding `_archived`, prefer dirs with recent `M*.md` files, and ask the user which is current.
 
 The install script (`workflow/install-goat-flow.sh`) writes `.active` automatically when exactly one `X.Y.Z`-named subdir exists at install time; otherwise leaves it for the skill's fallback path.
 
@@ -33,8 +33,8 @@ The install script (`workflow/install-goat-flow.sh`) writes `.active` automatica
 - Marker is one line, trivially parseable from skills, install script, and any future audit check.
 
 **Costs:**
-- One more file to keep in sync. Forgetting to update `.active` when starting a new plan version means the planner scans the wrong subdir until the user notices.
+- One more local pointer that can drift. Forgetting to update `.active` when starting a new plan version means the planner may need to ask which subdir is current.
 - Hidden file (`.active`) is invisible to default `ls`; contributors who never `ls -la` may not notice it exists. Mitigated by the glossary entry, code-map note, and the install script's automatic write.
 - Skills must read the marker before the directory - a small protocol step, not a measurable performance cost.
 
-**Future enforcement (deferred):** A setup-scope audit check that validates `.active` exists AND names a subdir that exists is sketched in M03 Section 5 as optional. Not implemented in M03's main scope; revisit in 1.3.0+ if marker drift becomes a recurring class of failure.
+**Future enforcement (rejected):** Do not add a setup-scope audit check that fails when `.active` is missing or names a missing subdir. Task state is gitignored local working state, not committed setup integrity. At most, future checks may verify skill fallback behavior or surface an advisory metric; they must not turn local pointer drift into a setup-quality failure.

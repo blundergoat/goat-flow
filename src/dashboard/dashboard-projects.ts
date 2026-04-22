@@ -20,7 +20,7 @@ interface DashboardProjectsContext {
   projectTitleDraft: string;
   presetFavorites: string[];
   displayNameFor(path: string): string;
-  runAudit(): Promise<void>;
+  runAudit(fresh?: boolean): Promise<void>;
   showToast(msg: string, isError?: boolean): void;
   browseTo(path: string): Promise<void>;
   _saveProjectsList(): void;
@@ -247,7 +247,7 @@ function dashboardSaveProjectTitle(ctx: DashboardProjectsContext): void {
     trimmed.length === 0 ||
     trimmed === getProjectDisplayName(ctx.projectPath)
   ) {
-    delete next[ctx.projectPath];
+    Reflect.deleteProperty(next, ctx.projectPath);
   } else {
     next[ctx.projectPath] = trimmed;
   }

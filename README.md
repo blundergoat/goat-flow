@@ -144,7 +144,7 @@ See [docs/cli.md](docs/cli.md) for the full command reference.
 
 ## Multi-agent support
 
-goat-flow v1.2.2 supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. Only the instruction filename, skills root, and hook/config surfaces differ.
+goat-flow v1.2.3 supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. Only the instruction filename, skills root, and hook/config surfaces differ.
 
 Run `npx goat-flow manifest` to inspect the live agent matrix that drives CLI validation, installer paths, and dashboard labels.
 

@@ -57,7 +57,7 @@ function makeDriftedInputs(): {
   observed: ObservedFacts;
 } {
   const json: ManifestJson = {
-    version: "1.2.2",
+    version: "1.2.3",
     required_files: [],
     required_dirs: [],
     skills: {
@@ -76,7 +76,7 @@ function makeDriftedInputs(): {
     setupChecks: SETUP_CHECKS.length,
     agentChecks: AGENT_CHECKS.length,
     harnessChecks: HARNESS_CHECKS.length,
-    version: "1.2.2",
+    version: "1.2.3",
   };
   return { json, observed };
 }
@@ -139,7 +139,7 @@ describe("validateManifest: packaged vs dev mode", () => {
   it("still catches skills-canonical drift in packaged mode (constants.ts ships in dist/)", () => {
     const { observed } = makeDriftedInputs();
     const json: ManifestJson = {
-      version: "1.2.2",
+      version: "1.2.3",
       required_files: [],
       required_dirs: [],
       skills: {

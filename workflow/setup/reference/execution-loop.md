@@ -11,7 +11,7 @@ a) Project identity - 1-2 lines: project name, domain, core technology, primary 
 b) Version header (v&lt;current-version&gt; - YYYY-MM-DD, matching `package.json` version)
 
 c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
-   When a goat-* skill is active, the skill's Step 0 satisfies READ/SCOPE. Resume at ACT.
+   When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write. Resume at ACT when the skill's first blocking gate releases.
    - READ: gather evidence from relevant files before any claim. Never fabricate codebase facts.
    - SCOPE: declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius.
    - Include complexity tier, mode, and intent in this one step.

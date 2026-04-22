@@ -1,4 +1,4 @@
-# GEMINI.md - v1.2.2 (2026-04-21)
+# GEMINI.md - v1.2.3 (2026-04-22)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 ## Essential Commands
 

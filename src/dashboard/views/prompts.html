@@ -77,9 +77,9 @@
           class="gf-btn gf-btn-sm"
           @click="presetFilter = cat.id"
           :style="presetFilter === cat.id
-            ? { background: { all: 'rgba(74,222,128,0.15)', debug: 'rgba(96,165,250,0.15)', review: 'rgba(45,212,191,0.15)', plan: 'rgba(251,191,36,0.15)', critique: 'rgba(167,139,250,0.15)', qa: 'rgba(251,146,60,0.15)', security: 'rgba(248,113,113,0.15)' }[cat.id] || 'rgba(148,163,184,0.08)',
-                color: { all: '#4ade80', debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#fb923c', security: '#f87171' }[cat.id] || 'var(--text-primary)',
-                borderColor: { all: 'rgba(74,222,128,0.3)', debug: 'rgba(96,165,250,0.3)', review: 'rgba(45,212,191,0.3)', plan: 'rgba(251,191,36,0.3)', critique: 'rgba(167,139,250,0.3)', qa: 'rgba(251,146,60,0.3)', security: 'rgba(248,113,113,0.3)' }[cat.id] || 'var(--border-default)' }
+            ? { background: { all: 'rgba(74,222,128,0.15)', debug: 'rgba(96,165,250,0.15)', review: 'rgba(45,212,191,0.15)', plan: 'rgba(251,191,36,0.15)', critique: 'rgba(167,139,250,0.15)', qa: 'rgba(244,114,182,0.15)', security: 'rgba(248,113,113,0.15)' }[cat.id] || 'rgba(148,163,184,0.08)',
+                color: { all: '#4ade80', debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#f472b6', security: '#f87171' }[cat.id] || 'var(--text-primary)',
+                borderColor: { all: 'rgba(74,222,128,0.3)', debug: 'rgba(96,165,250,0.3)', review: 'rgba(45,212,191,0.3)', plan: 'rgba(251,191,36,0.3)', critique: 'rgba(167,139,250,0.3)', qa: 'rgba(244,114,182,0.3)', security: 'rgba(248,113,113,0.3)' }[cat.id] || 'var(--border-default)' }
             : {}"
           x-text="cat.id === 'all' ? `All ${presets.length}` : `${cat.label} ${(presets.filter(p => p.cat === cat.id).length)}`"
         ></button>
@@ -111,7 +111,7 @@
             :style="{
               ...(selectedPreset?.id === p.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}),
               borderLeftWidth: '3px',
-              borderLeftColor: { debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#fb923c', security: '#f87171' }[p.cat] || 'var(--border-subtle)'
+              borderLeftColor: { debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#f472b6', security: '#f87171' }[p.cat] || 'var(--border-subtle)'
             }"
             style="
               text-align: left;
@@ -201,7 +201,7 @@
               </button>
               <div style="flex: 1"></div>
               <button
-                @click="launchPreset(extraContext.trim() ? selectedPreset.prompt + '\n\n' + extraContext.trim() : selectedPreset.prompt, activeRunner)"
+                @click="launchPreset(extraContext.trim() ? selectedPreset.prompt + '\n\n' + extraContext.trim() : selectedPreset.prompt, activeRunner, selectedPreset.name)"
                 :disabled="launching || serverSessions.length >= 10"
                 class="gf-btn gf-btn-md gf-btn-primary"
               >

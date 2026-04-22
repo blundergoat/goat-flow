@@ -1153,6 +1153,16 @@ body {
   justify-content: center;
   gap: 8px;
 }
+.gf-prompt-loading {
+  flex: 1;
+  min-height: 140px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 32px;
+  background: var(--surface-deep);
+}
 .gf-hidden {
   display: none !important;
 }
