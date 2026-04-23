@@ -4,7 +4,6 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const REAL_CLI = join(PROJECT_ROOT, "dist", "cli", "cli.js");
