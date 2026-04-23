@@ -417,10 +417,11 @@ export class TerminalManager {
     this.clearIdleTimer(session);
     if (this.idleTimeoutMs === null) return;
     const timeoutMs = this.idleTimeoutMs;
+    const totalMins = Math.round(timeoutMs / 60000);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
     const label =
-      timeoutMs >= 3600000
-        ? `${Math.round(timeoutMs / 3600000)}h`
-        : `${Math.round(timeoutMs / 60000)} min`;
+      h > 0 && m > 0 ? `${h}h ${m} min` : h > 0 ? `${h}h` : `${totalMins} min`;
     session.idleTimer = setTimeout(() => {
       if (session.ws) {
         sendMessage(session.ws, {

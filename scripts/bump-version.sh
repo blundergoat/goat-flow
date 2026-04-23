@@ -2,7 +2,8 @@
 # bump-version.sh
 #
 # Purpose:
-#   Bump the goat-flow version across all files that embed it.
+#   Bump the goat-flow version across all files that embed it,
+#   then sync installed mirrors so preflight passes without manual fixups.
 #
 # Usage:
 #   bash scripts/bump-version.sh <patch|minor|major>
@@ -10,12 +11,15 @@
 #
 # Updated files:
 #   - package.json + package-lock.json (via npm version --no-git-tag-version)
-#   - CLAUDE.md header
+#   - Instruction file headers (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md)
+#   - .goat-flow/config.yaml version field
 #   - workflow/manifest.json
 #   - workflow/skills/*/SKILL.md frontmatter (7 templates)
+#   - workflow/skills/reference/ (shared skill reference docs)
 #   - test/fixtures/skill-with-references/SKILL.md
 #   - docs/audit-and-quality.md sample output
-#   - workflow/skills/reference/skill-quality-testing/deployment.md checklist
+#   - Installed skill mirrors (.claude/skills/, .agents/skills/, .github/skills/ via manifest)
+#   - Installed reference docs (.goat-flow/skill-reference/)
 #
 # Exit:
 #   0 on success, non-zero on validation failure.
@@ -65,8 +69,15 @@ update_file() {
   fi
 }
 
-# CLAUDE.md header
-update_file "CLAUDE.md"
+# ── Source files (version string replacement) ──────────────────────────
+
+# Instruction file headers
+for ifile in CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md; do
+  update_file "$ifile"
+done
+
+# Config version field
+update_file ".goat-flow/config.yaml"
 
 # Workflow manifest
 update_file "workflow/manifest.json"
@@ -77,9 +88,60 @@ for skill_md in workflow/skills/*/SKILL.md; do
 done
 update_file "test/fixtures/skill-with-references/SKILL.md"
 
-# Docs and reference
-update_file "docs/audit-and-quality.md"
+# Shared reference docs
 update_file "workflow/skills/reference/skill-quality-testing/deployment.md"
 
+# Docs
+update_file "docs/audit-and-quality.md"
+
+# ── Installed mirrors (copy from workflow templates) ───────────────────
+
 echo ""
-echo "Done. Verify with: node scripts/check-versions.mjs"
+echo "Syncing installed mirrors..."
+
+MANIFEST_PATH="workflow/manifest.json"
+
+manifest_skill_roots() {
+  node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const roots = [
+  ...new Set(
+    Object.values(manifest.agents || {})
+      .map((a) => (typeof a.skills_dir === "string" ? a.skills_dir.replace(/\/$/, "") : ""))
+      .filter(Boolean),
+  ),
+];
+for (const r of roots) console.log(r);
+NODE
+}
+
+manifest_skill_names() {
+  node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+for (const s of manifest.skills?.canonical || []) console.log(s);
+NODE
+}
+
+# Sync skill SKILL.md files to each installed mirror
+while IFS= read -r skill_root; do
+  if [[ ! -d "$skill_root" ]]; then continue; fi
+  while IFS= read -r skill_name; do
+    src="workflow/skills/${skill_name}/SKILL.md"
+    dst="${skill_root}/${skill_name}/SKILL.md"
+    if [[ -f "$src" ]] && [[ -f "$dst" ]]; then
+      cp "$src" "$dst"
+    fi
+  done < <(manifest_skill_names)
+  echo "  ✓ ${skill_root}/*/SKILL.md"
+done < <(manifest_skill_roots)
+
+# Sync shared reference docs
+if [[ -d ".goat-flow/skill-reference" ]]; then
+  cp -r workflow/skills/reference/* .goat-flow/skill-reference/
+  echo "  ✓ .goat-flow/skill-reference/"
+fi
+
+echo ""
+echo "Done. Verify with: npm run check-versions"
