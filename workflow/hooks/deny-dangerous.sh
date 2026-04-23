@@ -318,6 +318,11 @@ run_self_test() {
   run_case "cat quoted home env" "$(printf 'cat \"$HOME/.env\"')" 2
   # shellcheck disable=SC2016
   run_case "cat quoted gcloud adc" "$(printf 'cat \"$HOME/.config/gcloud/application_default_credentials.json\"')" 2
+  # npm token delete/revoke must block; safe npm commands must pass.
+  run_case "npm token delete" "npm token delete abc123" 2
+  run_case "npm token revoke" "npm token revoke abc123" 2
+  run_case "npm token list" "npm token list" 0
+  run_case "npm install" "npm install lodash" 0
   # Code-search for env-related strings must still pass (no .env path touch).
   run_case "grep env src" "grep env src/" 0
   run_case "rg dotenv" "rg dotenv src/" 0
@@ -674,6 +679,11 @@ check_segment() {
   # 16. Destructive database commands via CLI tools
   if [[ "$cmd_lower" =~ (mysql|psql|sqlite3|mongosh)[[:space:]].*(-e|--command|--eval)[[:space:]]+.*(drop[[:space:]]+(database|table|schema)|truncate[[:space:]]+table) ]]; then
     block "Destructive database command (DROP/TRUNCATE). Run manually with verification."
+  fi
+
+  # 17. npm token delete/revoke (irreversible credential destruction)
+  if [[ "$cmd_lower" =~ npm[[:space:]]+token[[:space:]]+(delete|revoke) ]]; then
+    block "npm token delete/revoke is irreversible. Manage tokens manually via the npm website."
   fi
 
   # --- CUSTOMIZE: Add project-specific blocks below --------------------------
