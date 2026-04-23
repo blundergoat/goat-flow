@@ -8,7 +8,7 @@
 import { parseArgs } from "node:util";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import type { CLIOptions, AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport } from "./audit/types.js";
 
@@ -801,10 +801,22 @@ async function main(): Promise<void> {
   await dispatchCommand(options);
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+/** True when this module is the CLI entry point, including when launched
+ *  through a symlink like `node_modules/.bin/goat-flow`. */
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return (
+      realpathSync(resolve(entry)) ===
+      realpathSync(fileURLToPath(import.meta.url))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   main().catch((err: unknown) => {
     if (err instanceof CLIError) {
       console.error(err.message);

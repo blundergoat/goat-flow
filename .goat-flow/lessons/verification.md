@@ -625,3 +625,17 @@ last_reviewed: 2026-04-24
 **Prevention:**
 1. After any edit to `workflow/manifest.json`, immediately check whether `workflow/manifest-snapshots/v<current-version>.json` needs the same change. The current-version snapshot is a live mirror, not a historical record.
 2. When grepping for stale references, do not dismiss snapshot hits without checking the version number. Only snapshots for OLDER versions are frozen history.
+
+---
+
+## Lesson: Test suite must exercise the published invocation path
+
+**Status:** active | **Created:** 2026-04-24
+
+**What happened:** Commit 918ca3e wrapped the bare `main().catch(...)` call in an `import.meta.url` guard to prevent side effects on import. The guard used `resolve(process.argv[1]) === fileURLToPath(import.meta.url)`, which silently fails when the CLI is invoked through a symlink (the standard npm/npx path). All 359 tests passed because every test imports CLI functions directly or shells out via `node dist/cli/cli.js` — no test invoked the binary through a symlink, which is how every real consumer runs it.
+
+**Root cause:** The test suite verified internal function behavior but never exercised the actual entry-point guard through the `.bin/` symlink path that `npx` uses. The refactor commit was titled "update goat-critique documentation," making it easy to overlook a CLI entry-point change during review.
+
+**Prevention:**
+1. `test/integration/main-guard.test.ts` now tests the CLI via a temp-dir symlink — the exact path that broke. This test would have caught the regression.
+2. When modifying the entry-point guard or anything that controls whether `main()` runs, verify via symlink invocation, not just direct `node dist/cli/cli.js`.
