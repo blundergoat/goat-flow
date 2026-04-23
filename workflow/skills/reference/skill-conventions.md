@@ -24,7 +24,7 @@ last_reviewed: YYYY-MM-DD
 ## Lesson: [Title]
 **Created:** YYYY-MM-DD
 **What happened:** [description]
-**Evidence:** `file:line` - [what was found] (required for code-specific lessons; omit for behavioral lessons where file:line evidence doesn't apply)
+**Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
 **Prevention:** [rule to prevent recurrence]
 ```
 
@@ -40,7 +40,7 @@ last_reviewed: YYYY-MM-DD
 **hallucination-risk:** high
 **Symptoms:** [what breaks]
 **Why it happens:** [root cause]
-**Evidence:** `file:line` - [what was found]
+**Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 **Prevention:** [rule to prevent recurrence]
 ```
 
@@ -101,6 +101,14 @@ When working from a plan or milestone file:
 - If you completed a task 3 steps ago and forgot to tick it - go tick it NOW before continuing
 
 On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
+
+## Presenting Findings
+
+When summarising tasks, findings, or recommendations for user review, use this format per item:
+
+- **Summary:** what's affected (one line)
+- **Problem:** what's wrong (one line)
+- **Solution:** what to do (one line)
 
 ## Milestone Retrospective (goat-plan)
 

@@ -64,7 +64,7 @@ src/dashboard/
 
 - **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/decisions/` capture specific design decisions.
 - **Cross-references are fragile.** 60+ markdown files with dense internal linking. File renames require repo-wide grep.
-- **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file:line references.
+- **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file-path + semantic-anchor references (per ADR-024).
 
 ## Hot Path / Cold Path
 

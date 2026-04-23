@@ -38,13 +38,13 @@ For each backtick-wrapped path or hook path:
 - For registered hook scripts, verify the file exists and has execute permissions
 - Verify the instruction file version header matches the goat-flow release version
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
-- For auto-seeded footgun entries, spot-check that each cited `file:line` actually shows the described trap. If the line is unrelated (a closing brace, an import, a comment), fix the reference or remove the line number
+- For auto-seeded footgun entries, spot-check that each cited semantic anchor actually resolves to the described trap. If the anchor doesn't match (wrong function, outdated string), fix the reference
 
 ## Evidence verification
 
 After generating footguns and the instruction file, re-verify the evidence:
 
-1. **File:line citations:** For every `file:line` citation in generated footguns and in the instruction file's BAD/GOOD examples, re-read the cited line. If it doesn't show the described content, fix the citation or remove the line number. This catches auto-seeding errors where git history evidence doesn't match current code.
+1. **Semantic-anchor citations:** For every semantic anchor in generated footguns and in the instruction file's BAD/GOOD examples, grep for the cited anchor. If it doesn't resolve to the described content, fix the citation. This catches auto-seeding errors where git history evidence doesn't match current code.
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 

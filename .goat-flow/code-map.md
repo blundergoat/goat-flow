@@ -160,7 +160,7 @@ skill-reference/           # Shared skill doctrine (committed, install-copied fr
     deployment.md          # Skip-testing rationalisations, deployment checklist, STOP rule
 
 decisions/                 # ADRs (committed)
-footguns/                  # Architectural traps with file:line evidence (committed)
+footguns/                  # Architectural traps with semantic-anchor evidence (committed)
 lessons/                   # Behavioural mistake records (committed)
 
 tasks/                     # Milestone files (gitignored, local working state)

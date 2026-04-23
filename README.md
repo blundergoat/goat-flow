@@ -176,7 +176,7 @@ Every major source in the harness engineering field (Hashimoto, Fowler/Böckeler
 
 | Concern | Question | What GOAT Flow checks |
 |---------|----------|----------------------|
-| **Context** | Is the agent's context accurate, lean, and useful? | Instruction file line count vs target, router table path resolution, footgun file:line evidence freshness, architecture doc existence (10+ lines) |
+| **Context** | Is the agent's context accurate, lean, and useful? | Instruction file line count vs target, router table path resolution, footgun semantic-anchor evidence freshness, architecture doc existence (10+ lines) |
 | **Constraints** | Do deterministic rules catch failures before the LLM runs? | Deny patterns cover secrets and dangerous commands, Ask First boundary count |
 | **Verification** | Can the agent verify its work, and does failure feed back? | Test command configured, hook registrations in sync with hook files, commit guidance present |
 | **Recovery** | Can the agent resume after crash or interruption? | Milestone file count in `.goat-flow/tasks/`, session log count in `.goat-flow/logs/sessions/` |

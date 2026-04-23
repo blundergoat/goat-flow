@@ -48,7 +48,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 - Is the instruction file specific to this project's stack and domain, or generic boilerplate?
 - Are the BAD/GOOD examples drawn from real project incidents or template fill?
 - Does the architecture doc describe the current system accurately? Numeric claims (check counts, file counts, skill counts) are the most common drift.
-- Do footgun entries cite file:line evidence that still matches the current code?
+- Do footgun entries cite semantic-anchor evidence (function name, unique string, `(search: "pattern")`) that still resolves in the current code?
 - Does the architecture doc have substantive content, not just headings?
 
 ### 2. Constraints
@@ -88,7 +88,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 - Are footgun and lesson entries from real incidents, or synthetic?
 - Are entries recent? A project with no entries in the last 90 days has a feedback loop problem.
 - Are active/resolved statuses accurate? An "active" footgun describing fixed behavior is stale.
-- Do file:line references in entries still match the current code?
+- Do semantic-anchor references in entries still resolve in the current code?
 
 ---
 

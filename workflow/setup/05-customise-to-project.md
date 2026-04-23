@@ -23,7 +23,7 @@ If existing `settings.json` notification hooks reference legacy task-state files
 ## Footguns - find real traps in the code
 
 **Quality standard:** Every footgun entry MUST include:
-1. A `file:line` or file-path citation
+1. A file-path citation with a grep-friendly semantic anchor (function name, unique string, or `(search: "pattern")`) per ADR-024
 2. A non-obvious failure mode (what goes wrong and why it's not obvious)
 
 **Reject these as footguns:**
