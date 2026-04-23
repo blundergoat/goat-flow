@@ -13,14 +13,14 @@ Quality is not automated checks. It generates a prompt that walks an agent throu
 1. **Ground yourself** - run the project's validation commands, save the output
 2. **Pre-check** - structural pass/fail on skills, instruction file, router table
 3. **Setup quality** - was the harness adapted to this project or left as boilerplate?
-4. **Skill testing** - try each of the 7 skills on real code (read-only mode enforced)
+4. **Skill assessment** - evaluate each skill's structure and coherence; live invocation if context allows
 5. **System assessment** - is the execution loop useful or ceremony? Are 7 skills the right number? Is the dispatcher worth the routing step?
 6. **Contradictions and false paths** - find stale references, dead concepts, conflicting docs
 7. **Skill template integrity** - version tags, truncation detection, depth coherence
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
-**Time and cost:** A full assessment runs 7 skill invocations (`goat-critique` alone may spawn sub-agents). Expect 30-60 minutes and moderate token usage.
+**Time and cost:** A full assessment evaluates all 7 skills (file analysis by default; live invocation when context allows). Expect 15-60 minutes depending on depth, with moderate token usage.
 
 ## Persisting quality reports
 

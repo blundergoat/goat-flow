@@ -128,7 +128,7 @@ For onboarding ("I'm new to this project"), use investigate mode - covers stack 
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, defaults to inline/read-only output, and only writes files in `.goat-flow/tasks/` when the user explicitly asks for file creation.
+Milestone planner and manager. It breaks work into testing-gated milestones, routing through four modes based on scope and user signals: Named-File Update (user references an existing file), Read-Only Analysis (analysis signals detected), Inline-Then-Write (Hotfix/Small Feature), or File-Write (default at Standard+ complexity). Files are written to `.goat-flow/tasks/` in File-Write and Named-File Update modes; Read-Only Analysis never writes.
 
 ```mermaid
 flowchart TD
@@ -138,16 +138,16 @@ flowchart TD
         P1["Phase 1: Break into milestones\nArchetypes: Prove It Works → Make It Real\n→ Make It Solid → Make It Shine"]
     end
 
-    P1 -->|"CHECKPOINT"| P2["Phase 2: Present inline plan\nor write milestone files if requested"]
+    P1 -->|"CHECKPOINT"| P2["Phase 2: Output per mode\n(inline, file-write, or read-only)"]
     P2 -->|"CHECKPOINT"| P3["Phase 3: Between milestones\nRun testing gate\nCapture learnings\nUpdate next milestone"]
     P3 -->|"CHECKPOINT"| Next{"Next milestone?"}
     Next -->|Yes| P3
     Next -->|No| Close["Complete"]
 ```
 
-**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Each milestone has kill criteria, assumption tracking, and a testing gate before the next begins. Read-only/analysis mode is available at any complexity level, and inline output is the default until file creation is explicitly approved.
+**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Each milestone has kill criteria, assumption tracking, and a testing gate before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
 
-**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST NOT write milestone files unless the user explicitly asks for them.
+**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST pick exactly one mode in Step 0 and stay in it — cross-mode drift is the failure the mode-picker exists to prevent.
 
 ---
 
