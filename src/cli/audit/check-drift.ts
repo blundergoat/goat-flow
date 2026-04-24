@@ -277,6 +277,45 @@ function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
   }
 }
 
+/** Compare installed hook scripts against their workflow templates. */
+function compareHooks(
+  fs: ReadonlyFS,
+  templateRoot: string,
+  findings: DriftFinding[],
+): number {
+  let checked = 0;
+  const manifest = loadManifest();
+  for (const [, agent] of Object.entries(manifest.agents)) {
+    if (!agent.hooks_dir || !agent.hooks) continue;
+    if (!fs.exists(agent.hooks_dir)) continue;
+    for (const hookFile of agent.hooks) {
+      const templateRel = `workflow/hooks/${hookFile}`;
+      const template = readTemplate(templateRoot, templateRel);
+      if (template === null) continue;
+      const installedRel = `${agent.hooks_dir}${hookFile}`;
+      checked++;
+      if (!fs.exists(installedRel)) {
+        findings.push({
+          kind: "missing",
+          path: installedRel,
+          message: `hook template ${templateRel} has no installed copy at ${installedRel}`,
+        });
+        continue;
+      }
+      const installed = fs.readFile(installedRel);
+      if (installed === null) continue;
+      if (installed.trimEnd() !== template.trimEnd()) {
+        findings.push({
+          kind: "content",
+          path: installedRel,
+          message: `hook template (${templateRel}) and installed copy (${installedRel}) differ`,
+        });
+      }
+    }
+  }
+  return checked;
+}
+
 /** Run all drift comparisons and return a consolidated report. */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
   const { fs } = options;
@@ -285,6 +324,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   let checked = 0;
   checked += compareSkills(fs, templateRoot, findings);
   checked += compareSharedFiles(fs, templateRoot, findings);
+  checked += compareHooks(fs, templateRoot, findings);
   findOrphans(fs, findings);
   return {
     status: findings.length === 0 ? "pass" : "fail",

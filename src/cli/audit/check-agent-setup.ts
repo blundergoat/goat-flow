@@ -4,11 +4,13 @@
  * All checks require --agent and skip in aggregate mode (except orphaned-artifacts detection).
  */
 import { execFileSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import type { ReadonlyFS } from "../types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import { getTemplatePath } from "../paths.js";
 
 const VERIFIED_ON = "2026-04-18";
 
@@ -302,6 +304,33 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/** Compare installed deny hook content against the canonical template. */
+function checkHookVersion(ctx: AuditContext): AuditFailure | null {
+  const templatePath = getTemplatePath("workflow/hooks/deny-dangerous.sh");
+  if (!existsSync(templatePath)) return null;
+  let templateContent: string;
+  try {
+    templateContent = readFileSync(templatePath, "utf-8");
+  } catch {
+    return null;
+  }
+  for (const af of ctx.agents) {
+    if (!af.agent.hooksDir) continue;
+    const denyRelPath = join(af.agent.hooksDir, "deny-dangerous.sh");
+    const installed = ctx.fs.readFile(denyRelPath);
+    if (installed === null) continue;
+    if (installed.trimEnd() !== templateContent.trimEnd()) {
+      return {
+        check: "Agent deny mechanism",
+        message: `deny-dangerous.sh for ${af.agent.id} differs from the current goat-flow template (v${AUDIT_VERSION})`,
+        evidence: `${af.agent.hooksDir}/deny-dangerous.sh`,
+        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} setup --agent ${af.agent.id}\` to update the hook to the latest version.`,
+      };
+    }
+  }
+  return null;
+}
+
 /** Run each deny hook self-test when the script is present. */
 function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
@@ -347,6 +376,7 @@ const agentDenyMechanism: BuildCheck = {
       checkDenyHookPresent(ctx) ??
       checkHookSyntax(ctx) ??
       checkDenyPatterns(ctx) ??
+      checkHookVersion(ctx) ??
       checkHookSelfTest(ctx)
     );
   },

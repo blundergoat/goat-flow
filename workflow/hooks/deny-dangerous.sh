@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # deny-dangerous.sh - PreToolUse hook: blocks dangerous commands before execution
+# goat-flow-hook-version: 1.2.5
 # =============================================================================
 # Event:  PreToolUse / equivalent pre-command hook for the current runtime
 # Match:  Bash tool calls
