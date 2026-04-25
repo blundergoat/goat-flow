@@ -24,16 +24,17 @@ npx goat-flow audit . --format json        # JSON output for CI
 npx goat-flow audit . --output report.json # Write to file
 ```
 
-### `goat-flow quality [path] --agent <id>`
+### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. The prompt tells the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored); prose findings come back in the agent's reply, the JSON does not.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt tells the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored); prose findings come back in the agent's reply, the JSON does not.
 
 ```bash
 npx goat-flow quality . --agent claude         # Quality prompt for Claude
+npx goat-flow quality . --agent claude --mode harness
 npx goat-flow quality . --agent codex          # Quality prompt for Codex
 ```
 
-The agent derives the date/time from its shell and generates a 5-character lowercase-alphanumeric random suffix so parallel runs do not collide. If prior same-agent quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
+The agent derives the date/time from its shell and generates a 5-character lowercase-alphanumeric random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
 ### `goat-flow quality history [--agent <id>] [--all] [--format json]`
 
@@ -113,6 +114,7 @@ Common tasks and the commands to run:
 | Check if my project is ready | `npx goat-flow audit .` |
 | Check harness completeness | `npx goat-flow audit . --harness` |
 | Get a quality prompt | `npx goat-flow quality . --agent claude` |
+| Get a harness quality prompt | `npx goat-flow quality . --agent claude --mode harness` |
 | Review quality trend history | `npx goat-flow quality history --agent claude` |
 | Compare two saved quality runs | `npx goat-flow quality diff --agent claude` |
 | Set up a new project | `npx goat-flow setup . --agent claude` |

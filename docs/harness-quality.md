@@ -1,12 +1,12 @@
 # AI Harness Quality Assessment
 
-`npx goat-flow quality . --agent claude` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an LLM to try the system on real code and judge whether the content is actually useful for this project.
+`npx goat-flow quality . --agent claude --mode harness` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an LLM to try the system on real code and judge whether the content is actually useful for this project.
 
 | Mode | Command | Question |
 |------|---------|----------|
 | Build | `npx goat-flow audit .` | Is it installed correctly? |
 | Harness | `npx goat-flow audit . --harness` | Is the harness structurally complete? |
-| **Quality** | **`npx goat-flow quality . --agent X`** | **Does this make sense to a fresh agent?** |
+| **Quality** | **`npx goat-flow quality . --agent X --mode harness`** | **Does this make sense to a fresh agent?** |
 
 Quality is not automated checks. It generates a prompt that walks an agent through a 7-part evaluation:
 
@@ -24,10 +24,10 @@ Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality mar
 
 ## Persisting quality reports
 
-`npx goat-flow quality . --agent X` composes a prompt that instructs the agent to save its final JSON report directly to `.goat-flow/logs/quality/` - a gitignored path. No separate capture step: the agent owns the write, and `history` / `diff` read whatever the agent saved.
+`npx goat-flow quality . --agent X --mode harness` composes a prompt that instructs the agent to save its final JSON report directly to `.goat-flow/logs/quality/` - a gitignored path. No separate capture step: the agent owns the write, and `history` / `diff` read whatever the agent saved.
 
 ```bash
-npx goat-flow quality . --agent claude    # Agent writes .goat-flow/logs/quality/<...>.json itself
+npx goat-flow quality . --agent claude --mode harness
 npx goat-flow quality history --agent claude
 npx goat-flow quality diff --agent claude
 ```
