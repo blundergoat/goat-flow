@@ -560,7 +560,17 @@ export function createDashboardRouteHandlers(
     }
 
     const projectPath = safeResolvePath(url.searchParams.get("path"));
+    const selectedProjectPath = safeResolvePath(url.searchParams.get("target"));
     const agent = agentParam as AgentId;
+    const modeParam = url.searchParams.get("mode");
+    const qualityMode = parseQualityModeParam(modeParam) ?? "agent-setup";
+
+    if (modeParam && !VALID_QUALITY_MODES.has(modeParam)) {
+      jsonResponse(res, 400, {
+        error: `quality mode must be one of: ${QUALITY_MODES.join(", ")}`,
+      });
+      return true;
+    }
 
     try {
       requireProjectDirectory(projectPath);
@@ -583,13 +593,15 @@ export function createDashboardRouteHandlers(
       const priorReport = getLatestQualityHistoryEntry(
         history.entries,
         agent,
-        "agent-setup",
+        qualityMode,
       );
       const result = composeQuality({
         agent,
         projectPath,
         auditReport,
         priorReport,
+        qualityMode,
+        selectedProjectPath,
       });
       jsonResponse(res, 200, result);
     } catch (err) {

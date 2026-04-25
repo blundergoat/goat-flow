@@ -526,6 +526,19 @@ describe("dashboard /api/quality", () => {
     assert.equal(res.status, 400);
   });
 
+  it("returns mode-specific quality prompts", async () => {
+    const { res, body } = await fetchJson(
+      `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&mode=skills`,
+    );
+    assert.equal(res.status, 200);
+
+    const data = expectRecord(body, "Quality mode response");
+    assert.equal(data.command, "quality");
+    assert.equal(data.agent, "claude");
+    assert.match(String(data.prompt), /Skill Suite Quality Assessment/);
+    assert.match(String(data.prompt), /"quality_mode": "skills"/);
+  });
+
   for (const agent of getKnownAgentIds()) {
     it(`generates quality output for ${agent}`, async () => {
       const { res, body } = await fetchJson(

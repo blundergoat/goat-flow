@@ -44,12 +44,17 @@ describe("quality subcommand parsing", () => {
     );
   });
 
-  it("rejects --mode outside quality history and diff", () => {
-    assert.throws(
-      () =>
-        parseCLIArgs(["quality", ".", "--agent", "claude", "--mode", "skills"]),
-      /only valid for quality history and quality diff/i,
-    );
+  it("parses prompt mode for mode-specific quality prompts", () => {
+    const parsed = parseCLIArgs([
+      "quality",
+      ".",
+      "--agent",
+      "claude",
+      "--mode",
+      "skills",
+    ]);
+    assert.equal(parsed.qualitySubcommand, "prompt");
+    assert.equal(parsed.qualityMode, "skills");
   });
 
   it("rejects --all on non-quality commands", () => {

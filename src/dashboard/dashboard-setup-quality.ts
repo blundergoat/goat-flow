@@ -106,7 +106,7 @@ function dashboardQualityModes(
       id: "process",
       label: "GOAT Flow Process",
       desc: "Review framework artifacts, instructions, references, hooks, and workflow policy.",
-      source: "preset",
+      source: "api",
       presetId: "quality-check-goatflow",
       targetScope:
         "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation",
@@ -123,7 +123,7 @@ function dashboardQualityModes(
       id: "harness",
       label: "Harness Engineering",
       desc: "Assess context, constraints, verification, recovery, and feedback-loop quality.",
-      source: "registry",
+      source: "api",
       targetScope:
         "selected target project harness, interpreted from the controlling workspace",
       prompt: dashboardHarnessQualityPrompt(),
@@ -132,7 +132,7 @@ function dashboardQualityModes(
       id: "skills",
       label: "Skills",
       desc: "Pressure-test goat-flow skills with the RED/GREEN/REFACTOR quality protocol.",
-      source: "preset",
+      source: "api",
       presetId: "skill-quality-test",
       targetScope:
         "controlling goat-flow workspace skills and shared references",
@@ -376,33 +376,19 @@ async function dashboardGenerateQuality(
   ctx.qualityResult = null;
   ctx.qualityCopyLabel = "Copy";
   const requestModeId = ctx.selectedQualityModeId;
-  const requestProjectPath = ctx.projectPath;
+  const requestMode = dashboardSelectedQualityModeMeta(ctx);
+  const requestProjectPath = requestMode
+    ? dashboardQualityReportProjectPath(ctx, requestMode)
+    : ctx.projectPath;
+  const requestSelectedProjectPath = ctx.projectPath;
   const requestAgent = ctx.qualityAgent;
   const isCurrentRequest = (): boolean =>
     ctx.selectedQualityModeId === requestModeId &&
-    ctx.projectPath === requestProjectPath &&
+    ctx.projectPath === requestSelectedProjectPath &&
     ctx.qualityAgent === requestAgent;
-  const mode = dashboardSelectedQualityModeMeta(ctx);
-  if (mode && mode.source !== "api") {
-    const prompt = dashboardBuildQualityModePrompt(ctx, mode);
-    if (!prompt) {
-      ctx.showToast(`${mode.label} prompt is unavailable`, true);
-      ctx.qualityLoading = false;
-      return;
-    }
-    ctx.qualityResult = {
-      command: "quality",
-      agent: ctx.qualityAgent,
-      auditStatus: "unavailable",
-      auditSummary: `${mode.label}: ${mode.desc}`,
-      prompt,
-    };
-    ctx.qualityLoading = false;
-    return;
-  }
   try {
     const res = await fetch(
-      `/api/quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}`,
+      `/api/quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=${encodeURIComponent(requestModeId)}&target=${encodeURIComponent(requestSelectedProjectPath)}`,
     );
     const payload = readRecord(await res.json(), "Quality response");
     if (!isCurrentRequest()) return;

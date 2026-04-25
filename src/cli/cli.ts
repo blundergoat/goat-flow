@@ -51,7 +51,7 @@ Arguments:
 Flags:
   --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: ${validAgentList()}
-  --mode <mode>     Quality history/diff mode: ${QUALITY_MODES.join(", ")}
+  --mode <mode>     Quality prompt/history/diff mode: ${QUALITY_MODES.join(", ")}
   --all             Quality history: lift the default 20-run limit
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
@@ -70,6 +70,7 @@ Examples:
   goat-flow audit . --format json      JSON output for CI
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
+  goat-flow quality . --agent claude --mode skills
   goat-flow quality history --agent claude
   goat-flow quality history --agent codex --mode skills
   goat-flow quality diff --agent claude --mode agent-setup
@@ -360,10 +361,12 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   if (
     command === "quality" &&
     values.mode !== undefined &&
-    !["history", "diff"].includes(qualityPositionals.qualitySubcommand)
+    !["prompt", "history", "diff"].includes(
+      qualityPositionals.qualitySubcommand,
+    )
   ) {
     throw new CLIError(
-      "--mode is only valid for quality history and quality diff.",
+      "--mode is only valid for quality prompt, quality history, and quality diff.",
       2,
     );
   }
@@ -672,10 +675,11 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   }
 
   const history = loadQualityHistory(options.projectPath);
+  const qualityMode = options.qualityMode ?? "agent-setup";
   const priorReport = getLatestQualityHistoryEntry(
     history.entries,
     options.agent,
-    "agent-setup",
+    qualityMode,
   );
   for (const warning of history.warnings) {
     console.error(warning);
@@ -686,6 +690,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
     projectPath: options.projectPath,
     auditReport,
     priorReport,
+    qualityMode,
   });
 
   if (options.format === "json") {

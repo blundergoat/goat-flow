@@ -542,6 +542,11 @@ describe("preset prompt catalog", () => {
       /Wrote quality report to \$\{projectPath\}\/\.goat-flow\/logs\/quality/,
     );
     assert.match(source, /source: "api"/);
+    assert.doesNotMatch(source, /mode\.source !== "api"/);
+    assert.match(
+      source,
+      /\/api\/quality\?path=.*mode=\$\{encodeURIComponent\(requestModeId\)\}/s,
+    );
     assert.match(source, /Quality mode scope:/);
     assert.match(source, /missing target \.goat-flow files as normal/);
   });

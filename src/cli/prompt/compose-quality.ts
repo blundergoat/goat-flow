@@ -8,13 +8,15 @@ import type { QualityHistoryEntry } from "../quality/history.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { getAgentProfile } from "../agents/registry.js";
 import { getPackageVersion } from "../paths.js";
-import { QUALITY_REPORT_KIND } from "../quality/schema.js";
+import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 
 interface QualityInput {
   agent: AgentId;
   projectPath: string;
   auditReport: AuditReport | null;
   priorReport?: QualityHistoryEntry | null;
+  qualityMode?: QualityMode;
+  selectedProjectPath?: string;
   runDate?: string;
 }
 
@@ -98,6 +100,286 @@ function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
   return 2;
 }
 
+function qualityModeLabel(mode: QualityMode): string {
+  if (mode === "process") return "GOAT Flow Process";
+  if (mode === "harness") return "Harness Engineering";
+  if (mode === "skills") return "Skills";
+  return "Agent Setup Quality";
+}
+
+function qualityModeTargetScope(mode: QualityMode): string {
+  if (mode === "process") {
+    return "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation";
+  }
+  if (mode === "harness") {
+    return "selected target project harness, interpreted from the controlling workspace";
+  }
+  if (mode === "skills") {
+    return "controlling goat-flow workspace skills and shared references";
+  }
+  return "selected project and selected agent installation";
+}
+
+function focusedQualityModePrompt(mode: Exclude<QualityMode, "agent-setup">) {
+  if (mode === "process") {
+    return [
+      "GOAT Flow Process Quality Assessment",
+      "",
+      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+      "",
+      "Assess the goat-flow framework process in the controlling workspace: instruction files, .goat-flow/config.yaml, .goat-flow/architecture.md, .goat-flow/code-map.md, .goat-flow/skill-reference/, workflow/setup/, workflow/manifest.json, installed skill mirrors, hooks, quality prompt modes, and validation scripts.",
+      "",
+      "Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; node --import tsx src/cli/cli.ts audit . --check-drift --format json; bash scripts/preflight-checks.sh. Command output wins over prose.",
+      "",
+      "Use grep-first retrieval for .goat-flow/footguns/, .goat-flow/lessons/, and .goat-flow/decisions/. Do not broad-load those directories.",
+      "",
+      "Output sections: Pre-check Results; Findings ordered by severity; What works; What is weak or ceremonial; Contradictions and false paths; Top 5 improvements. Each finding must include severity, action type, exact file or semantic-anchor evidence, why it matters, and a verification command that would prove the fix. End with What was not verified.",
+    ].join("\n");
+  }
+
+  if (mode === "skills") {
+    return [
+      "Skill Suite Quality Assessment",
+      "",
+      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-critique, /goat-review, or any other goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+      "",
+      "Assess all seven goat-flow skills: /goat, /goat-debug, /goat-plan, /goat-review, /goat-critique, /goat-security, and /goat-qa. Use .goat-flow/skill-reference/skill-quality-testing.md plus the relevant files under .goat-flow/skill-reference/skill-quality-testing/. Read the workflow template SKILL.md files and installed mirrors under .claude/skills/, .agents/skills/, and .github/skills/ where relevant.",
+      "",
+      "Method rule: prefer live skill invocation only when the runner supports it safely. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+      "",
+      "For each skill, output exactly these fields: Method used; Evidence limit; Worked; Failed/confusing; Useless ceremony; RED scenario; GREEN result; minimal REFACTOR; Verification command or grep that would prove the fix. Do not stop after one skill and do not ask which skill.",
+      "",
+      "After the seven sections, output: Cross-skill patterns; Top 5 skill/system improvements with file or semantic-anchor evidence and expected impact; What was not tested. Prioritize actionable improvements over praise.",
+    ].join("\n");
+  }
+
+  return [
+    "AI Harness Engineering Quality Assessment",
+    "",
+    "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+    "",
+    "Assess whether the selected target project's agent harness is actually usable, not only structurally present. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether instructions distinguish the controlling goat-flow workspace from the selected target.",
+    "",
+    "Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts audit . --harness --format json from the controlling workspace when applicable; node --import tsx src/cli/cli.ts stats . --check when the selected target is a goat-flow installation. Command output wins over prose.",
+    "",
+    "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-reference/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
+    "",
+    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix. Treat Workspace Boundary as a qualitative cross-cutting risk, not as a deterministic harness score, unless the audit output explicitly exposes a Workspace Boundary concern.",
+    "",
+    "Do not treat a structural PASS as quality PASS. If a score or check claims completeness, verify what behavior it actually proves.",
+  ].join("\n");
+}
+
+function renderPriorReportContext(
+  priorReport: QualityHistoryEntry | null,
+  qualityMode: QualityMode,
+): string {
+  const lines: string[] = [];
+  lines.push("---");
+  lines.push("");
+  lines.push("## Prior report context");
+  lines.push("");
+  if (priorReport) {
+    const priorHighSeverityCount = priorReport.report.findings.filter(
+      (finding) =>
+        finding.severity === "BLOCKER" || finding.severity === "MAJOR",
+    ).length;
+    const priorTopFindings = [...priorReport.report.findings]
+      .sort((left, right) => {
+        const severityDiff =
+          findingSeverityRank(left.severity) -
+          findingSeverityRank(right.severity);
+        if (severityDiff !== 0) return severityDiff;
+        return left.id.localeCompare(right.id);
+      })
+      .slice(0, 3);
+
+    lines.push(
+      `Latest same-agent report: \`${priorReport.id}\` (${priorReport.report.run_date})`,
+    );
+    lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
+    lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
+    lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
+    lines.push("- Top prior findings by severity:");
+    for (const finding of priorTopFindings) {
+      lines.push(
+        `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${finding.summary}`,
+      );
+    }
+    lines.push("");
+    lines.push(
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
+    );
+  } else {
+    const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;
+    lines.push(
+      `No prior same-agent ${modeText}quality report exists for this project.`,
+    );
+    lines.push(
+      "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
+    );
+  }
+  return lines.join("\n");
+}
+
+function appendFocusedReportContract(
+  lines: string[],
+  input: {
+    agent: AgentId;
+    projectPath: string;
+    auditStatus: QualityPayload["auditStatus"];
+    qualityMode: QualityMode;
+    priorReport: QualityHistoryEntry | null;
+    runDate: string;
+  },
+): void {
+  lines.push("---");
+  lines.push("");
+  lines.push("### Write the JSON report");
+  lines.push("");
+  lines.push(
+    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected, no other writes are permitted.",
+  );
+  lines.push("");
+  lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
+  lines.push("");
+  lines.push("```bash");
+  lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"');
+  lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
+  lines.push(
+    `FILE=".goat-flow/logs/quality/\${STAMP}-${input.agent}-\${RAND}.json"`,
+  );
+  lines.push("mkdir -p .goat-flow/logs/quality");
+  lines.push("# (then write the JSON below to $FILE)");
+  lines.push("```");
+  lines.push("");
+  lines.push("**JSON body shape:**");
+  lines.push("");
+  lines.push("```json");
+  lines.push("{");
+  lines.push(`  "report_kind": ${jsonString(QUALITY_REPORT_KIND)},`);
+  lines.push(`  "goat_flow_version": ${jsonString(getPackageVersion())},`);
+  lines.push(`  "agent": ${jsonString(input.agent)},`);
+  lines.push(`  "project_path": ${jsonString(input.projectPath)},`);
+  lines.push(`  "run_date": ${jsonString(input.runDate)},`);
+  lines.push(`  "audit_status": ${jsonString(input.auditStatus)},`);
+  lines.push('  "scope": "framework-self | consumer",');
+  lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
+  lines.push(`  "quality_mode": ${jsonString(input.qualityMode)},`);
+  lines.push('  "scores": {');
+  lines.push(
+    '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
+  );
+  lines.push(
+    '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
+  );
+  lines.push("  },");
+  lines.push('  "findings": [');
+  lines.push(
+    `    { "type": "framework_flaw", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${input.priorReport ? '"new"' : "null"} }`,
+  );
+  lines.push("  ]");
+  lines.push("}");
+  lines.push("```");
+  lines.push("");
+  lines.push("JSON rules:");
+  lines.push(
+    "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
+  );
+  lines.push(
+    "- Allowed `type` values: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
+  );
+  lines.push("- Allowed `severity` values: `BLOCKER`, `MAJOR`, `MINOR`.");
+  lines.push(
+    "- `evidence_quality` is REQUIRED on every finding. Allowed values: `OBSERVED` or `INFERRED`.",
+  );
+  lines.push(
+    "- `evidence_method` is REQUIRED on every finding. Allowed values: `runtime-probe`, `static-analysis`, or `mixed`.",
+  );
+  lines.push(
+    `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
+  );
+  if (input.priorReport) {
+    lines.push(
+      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`.',
+    );
+  } else {
+    lines.push(
+      "- `delta_tag` must be `null` or omitted when no prior report context exists.",
+    );
+  }
+  lines.push("- Do NOT include an `id` field.");
+  lines.push("- Do NOT include extra top-level keys or extra finding keys.");
+  lines.push("");
+  lines.push("**Validate before confirming.** After writing the file, run:");
+  lines.push("");
+  lines.push("```bash");
+  lines.push(
+    'goat-flow quality validate "$FILE"   # or: node --import tsx src/cli/cli.ts quality validate "$FILE"',
+  );
+  lines.push('ls -la "$FILE"');
+  lines.push("```");
+  lines.push("");
+  lines.push(
+    "**End of response:** After validate passes, confirm in prose with a single line: `Wrote quality report to .goat-flow/logs/quality/<your-filename>.json`. Do not include the JSON inline in your reply.",
+  );
+}
+
+function composeFocusedQuality(
+  input: QualityInput,
+  qualityMode: Exclude<QualityMode, "agent-setup">,
+): QualityPayload {
+  const {
+    agent,
+    projectPath,
+    auditReport,
+    priorReport = null,
+    selectedProjectPath,
+    runDate = formatLocalDate(),
+  } = input;
+  const profile = getAgentProfile(agent);
+  const auditStatus: QualityPayload["auditStatus"] = auditReport
+    ? auditReport.status
+    : "unavailable";
+  const label = qualityModeLabel(qualityMode);
+  const lines: string[] = [];
+
+  lines.push(`# GOAT Flow ${label} Assessment - ${profile.name}`);
+  lines.push("");
+  lines.push(focusedQualityModePrompt(qualityMode));
+  lines.push("");
+  lines.push("Quality mode scope:");
+  lines.push(`- Mode: ${label}`);
+  lines.push(`- Project path: \`${projectPath}\``);
+  if (selectedProjectPath && selectedProjectPath !== projectPath) {
+    lines.push(`- Selected target project: \`${selectedProjectPath}\``);
+  }
+  lines.push(`- Scope rule: ${qualityModeTargetScope(qualityMode)}`);
+  lines.push(`- Selected quality target agent: ${agent}`);
+  lines.push(
+    "- Keep this assessment read-only unless the user explicitly asks for edits.",
+  );
+  lines.push("");
+  lines.push(renderPriorReportContext(priorReport, qualityMode));
+  lines.push("");
+  appendFocusedReportContract(lines, {
+    agent,
+    projectPath,
+    auditStatus,
+    qualityMode,
+    priorReport,
+    runDate,
+  });
+
+  return {
+    command: "quality",
+    agent,
+    auditStatus,
+    auditSummary: `${label}: ${qualityModeTargetScope(qualityMode)}`,
+    prompt: lines.join("\n"),
+  };
+}
+
 /** Compose the quality review prompt. */
 // eslint-disable-next-line complexity -- prompt assembly branches on audit availability and split hook-config surfaces
 export function composeQuality(input: QualityInput): QualityPayload {
@@ -106,8 +388,14 @@ export function composeQuality(input: QualityInput): QualityPayload {
     projectPath,
     auditReport,
     priorReport = null,
+    qualityMode = "agent-setup",
     runDate = formatLocalDate(),
   } = input;
+
+  if (qualityMode !== "agent-setup") {
+    return composeFocusedQuality(input, qualityMode);
+  }
+
   const profile = getAgentProfile(agent);
   const agentLabel = profile.name;
   const skillsDir = profile.skillsDir;
@@ -261,47 +549,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   }
   lines.push("");
 
-  lines.push("---");
-  lines.push("");
-  lines.push("## Prior report context");
-  lines.push("");
-  if (priorReport) {
-    const priorHighSeverityCount = priorReport.report.findings.filter(
-      (finding) =>
-        finding.severity === "BLOCKER" || finding.severity === "MAJOR",
-    ).length;
-    const priorTopFindings = [...priorReport.report.findings]
-      .sort((left, right) => {
-        const severityDiff =
-          findingSeverityRank(left.severity) -
-          findingSeverityRank(right.severity);
-        if (severityDiff !== 0) return severityDiff;
-        return left.id.localeCompare(right.id);
-      })
-      .slice(0, 3);
-
-    lines.push(
-      `Latest same-agent report: \`${priorReport.id}\` (${priorReport.report.run_date})`,
-    );
-    lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
-    lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
-    lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
-    lines.push("- Top prior findings by severity:");
-    for (const finding of priorTopFindings) {
-      lines.push(
-        `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${finding.summary}`,
-      );
-    }
-    lines.push("");
-    lines.push(
-      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
-    );
-  } else {
-    lines.push("No prior same-agent quality report exists for this project.");
-    lines.push(
-      "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
-    );
-  }
+  lines.push(renderPriorReportContext(priorReport, qualityMode));
   lines.push("");
 
   // Step 0 - Ground yourself (CLI version: audit already injected)
@@ -767,7 +1015,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push(`  "audit_status": ${jsonString(auditStatus)},`);
   lines.push('  "scope": "framework-self | consumer",');
   lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
-  lines.push('  "quality_mode": "agent-setup",');
+  lines.push(`  "quality_mode": ${jsonString(qualityMode)},`);
   lines.push('  "scores": {');
   lines.push(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -810,7 +1058,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`). The Rating bands section above is the rubric - future readers use this version tag to trace which band anchors produced your scores.`,
   );
   lines.push(
-    '- `quality_mode` is REQUIRED for new reports generated from this prompt. Use `"agent-setup"` for this Agent Setup Quality assessment.',
+    `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(qualityMode)}\` for this Agent Setup Quality assessment.`,
   );
   lines.push(
     "- `line` must be a positive integer OR `null`. Never `0`. For file-wide findings with no specific line, use `null`.",

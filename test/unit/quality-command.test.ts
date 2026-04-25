@@ -247,6 +247,31 @@ describe("quality prompt content", () => {
     );
   });
 
+  it("generates mode-specific skills prompts with a mode-aware JSON contract", () => {
+    const result = composeQuality({
+      agent: "claude",
+      projectPath: "/tmp/test-project",
+      auditReport: null,
+      qualityMode: "skills",
+      runDate: "2026-04-25",
+    });
+
+    assert.match(result.prompt, /Skill Suite Quality Assessment/);
+    assert.match(result.prompt, /Assess all seven goat-flow skills/);
+    assert.match(result.prompt, /"quality_mode": "skills"/);
+    assert.match(
+      result.prompt,
+      /No prior same-agent skills quality report exists/,
+    );
+    const parsed = parseQualityReport(
+      JSON.parse(extractExampleJson(result.prompt)),
+    );
+    assert.ok(
+      parsed.ok,
+      `skills-mode JSON example must parse: ${parsed.ok ? "" : parsed.error}`,
+    );
+  });
+
   it("defaults run_date from local calendar getters, not UTC ISO date", () => {
     const RealDate = Date;
     class FakeDate extends RealDate {
@@ -605,5 +630,29 @@ describe("quality CLI output contract", () => {
       payload.prompt,
       /# GOAT Flow Quality Assessment - Claude Code/,
     );
+  });
+
+  it("threads --mode through prompt generation", () => {
+    const root = makeTempProject();
+    const result = runCLI(root, [
+      "quality",
+      ".",
+      "--agent",
+      "claude",
+      "--mode",
+      "harness",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      prompt: string;
+    };
+    assert.match(
+      payload.prompt,
+      /AI Harness Engineering Quality Assessment/,
+    );
+    assert.match(payload.prompt, /"quality_mode": "harness"/);
   });
 });
