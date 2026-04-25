@@ -29,7 +29,7 @@ interface DashboardSetupQualityContext {
   setupGenerating: boolean;
   setupOutputs: Record<string, string>;
   qualityAgent: RunnerId;
-  qualityMode: string;
+  selectedQualityModeId: string;
   qualityLoading: boolean;
   qualityResult: QualityResult | null;
   qualityCopyLabel: string;
@@ -96,8 +96,8 @@ function dashboardQualityModes(
     },
     {
       id: "agent-setup",
-      label: "Coding Agent Setup",
-      desc: "Generate the existing setup-quality assessment prompt for the selected agent.",
+      label: "Agent Setup Quality",
+      desc: "Generate a read-only setup-quality assessment prompt for the selected agent installation.",
       source: "api",
       targetScope: "selected project and selected agent installation",
     },
@@ -124,19 +124,20 @@ function dashboardQualityModes(
   ];
 }
 
-function dashboardQualityModeMeta(
+function dashboardSelectedQualityModeMeta(
   ctx: DashboardSetupQualityContext,
 ): QualityModeOption | null {
   return (
-    dashboardQualityModes(ctx).find((mode) => mode.id === ctx.qualityMode) ??
-    null
+    dashboardQualityModes(ctx).find(
+      (mode) => mode.id === ctx.selectedQualityModeId,
+    ) ?? null
   );
 }
 
 function dashboardQualityLaunchLabel(
   ctx: DashboardSetupQualityContext,
 ): string {
-  const mode = dashboardQualityModeMeta(ctx);
+  const mode = dashboardSelectedQualityModeMeta(ctx);
   const modeLabel = mode
     ? mode.presetId
       ? (dashboardQualityModePreset(ctx, mode.presetId)?.name ?? mode.label)
@@ -275,7 +276,7 @@ async function dashboardGenerateQuality(
   ctx.qualityLoading = true;
   ctx.qualityResult = null;
   ctx.qualityCopyLabel = "Copy";
-  const mode = dashboardQualityModeMeta(ctx);
+  const mode = dashboardSelectedQualityModeMeta(ctx);
   if (mode && mode.source !== "api") {
     const prompt = dashboardBuildQualityModePrompt(ctx, mode);
     if (!prompt) {

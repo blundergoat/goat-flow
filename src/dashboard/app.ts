@@ -201,7 +201,7 @@ function app() {
 
     // --- Quality state ---
     qualityAgent: defaultRunner,
-    qualityMode: "agent-setup",
+    selectedQualityModeId: "agent-setup",
     qualityLoading: false,
     qualityResult: null as QualityResult | null,
     qualityCopyLabel: "Copy",
@@ -359,9 +359,9 @@ function app() {
     get qualityModes(): QualityModeOption[] {
       return dashboardQualityModes(this);
     },
-    /** Return the active quality mode option. */
-    get qualityModeMeta(): QualityModeOption | null {
-      return dashboardQualityModeMeta(this);
+    /** Return the selected quality mode option. */
+    get selectedQualityModeMeta(): QualityModeOption | null {
+      return dashboardSelectedQualityModeMeta(this);
     },
     /** Return the label to use for quality-mode terminal sessions. */
     qualityLaunchLabel(): string {
@@ -501,7 +501,7 @@ function app() {
           void this.generateQualityHistory();
         }
       });
-      self.$watch("qualityMode", () => {
+      self.$watch("selectedQualityModeId", () => {
         if (this.activeView === "quality") {
           void this.generateQuality();
         }

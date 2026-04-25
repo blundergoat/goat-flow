@@ -13,7 +13,12 @@
     auditAgeLabel() {
       if (!lastAuditTime) return 'just now';
       const mins = Math.max(0, Math.floor((Date.now() - new Date(lastAuditTime).getTime()) / 60000));
-      return mins <= 1 ? 'just now' : `${mins} min ago`;
+      if (mins <= 1) return 'just now';
+      if (mins < 60) return `${mins} mins ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+      const days = Math.floor(hours / 24);
+      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
     },
     agentScore(agent) {
       if (!agent?.harness) return 0;

@@ -71,9 +71,9 @@
     >
       <template x-for="mode in qualityModes" :key="'quality-mode-' + mode.id">
         <button
-          @click="qualityMode = mode.id"
+          @click="selectedQualityModeId = mode.id"
           class="gf-card"
-          :style="qualityMode === mode.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}"
+          :style="selectedQualityModeId === mode.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}"
           style="padding: 11px 12px; text-align: left"
         >
           <div
@@ -489,7 +489,7 @@
             </span>
             <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
               <span
-                x-text="qualityModeMeta ? qualityModeMeta.targetScope : 'Runner prompt for qualitative review, not deterministic checks.'"
+                x-text="selectedQualityModeMeta ? selectedQualityModeMeta.targetScope : 'Runner prompt for qualitative review, not deterministic checks.'"
               ></span>
             </div>
           </div>
