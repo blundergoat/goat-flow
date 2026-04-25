@@ -1,8 +1,9 @@
-# AGENTS.md - v1.2.5 (2026-04-23)
+# AGENTS.md - v1.3.0 (2026-04-25)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 ## Essential Commands
 ```bash
 bash scripts/preflight-checks.sh
+bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>  # Bump package/docs/templates/mirrors
 bash .codex/hooks/deny-dangerous.sh --self-test  # Codex: verify deny patterns registered (registered hook, not distributable copy)
 node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_reviewed + stale refs
 npm run typecheck                           # Type-check .ts (required by DoD)

@@ -16,6 +16,7 @@
 #   - workflow/manifest.json
 #   - workflow/skills/*/SKILL.md frontmatter (7 templates)
 #   - workflow/skills/reference/ (shared skill reference docs)
+#   - Hook templates and installed hook mirrors
 #   - test/fixtures/skill-with-references/SKILL.md
 #   - docs/audit-and-quality.md sample output
 #   - Installed skill mirrors (.claude/skills/, .agents/skills/, .github/skills/ via manifest)
@@ -91,6 +92,12 @@ update_file "test/fixtures/skill-with-references/SKILL.md"
 # Shared reference docs
 update_file "workflow/skills/reference/skill-quality-testing/deployment.md"
 
+# Hook templates and local distributable copy
+for hook_sh in workflow/hooks/*.sh; do
+  update_file "$hook_sh"
+done
+update_file "scripts/deny-dangerous.sh"
+
 # Docs
 update_file "docs/audit-and-quality.md"
 
@@ -124,6 +131,21 @@ for (const s of manifest.skills?.canonical || []) console.log(s);
 NODE
 }
 
+manifest_deny_hooks() {
+  node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const hooks = [
+  ...new Set(
+    Object.values(manifest.agents || {})
+      .map((a) => (typeof a.deny_hook === "string" ? a.deny_hook : ""))
+      .filter(Boolean),
+  ),
+];
+for (const h of hooks) console.log(h);
+NODE
+}
+
 # Sync skill SKILL.md files to each installed mirror
 while IFS= read -r skill_root; do
   if [[ ! -d "$skill_root" ]]; then continue; fi
@@ -136,6 +158,14 @@ while IFS= read -r skill_root; do
   done < <(manifest_skill_names)
   echo "  ✓ ${skill_root}/*/SKILL.md"
 done < <(manifest_skill_roots)
+
+# Sync deny hook template to each installed hook mirror
+while IFS= read -r hook_dst; do
+  if [[ -f "$hook_dst" ]]; then
+    cp workflow/hooks/deny-dangerous.sh "$hook_dst"
+    echo "  ✓ ${hook_dst}"
+  fi
+done < <(manifest_deny_hooks)
 
 # Sync shared reference docs
 if [[ -d ".goat-flow/skill-reference" ]]; then

@@ -1,4 +1,4 @@
-# GEMINI.md - v1.2.5 (2026-04-23)
+# GEMINI.md - v1.3.0 (2026-04-25)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 ## Essential Commands
 
@@ -8,6 +8,7 @@ bash -n scripts/*.sh scripts/maintenance/*.sh                                   
 bash .gemini/hooks/deny-dangerous.sh --self-test  # Verify deny-hook runtime behaviour
 npm run typecheck                                   # Type-check .ts (required by DoD)
 bash scripts/preflight-checks.sh         # Full preflight gate
+bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>  # Bump package/docs/templates/mirrors
 npm test                                          # Run test suite
 node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_reviewed + stale refs
 ```

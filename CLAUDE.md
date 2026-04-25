@@ -1,4 +1,4 @@
-# CLAUDE.md - v1.2.5 (2026-04-23)
+# CLAUDE.md - v1.3.0 (2026-04-25)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 ## Essential Commands
 
@@ -7,6 +7,7 @@ shellcheck scripts/*.sh scripts/maintenance/*.sh                                
 bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
 bash .claude/hooks/deny-dangerous.sh --self-test  # Verify deny-hook runtime behaviour
 bash scripts/preflight-checks.sh         # Full preflight gate
+bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>  # Bump package/docs/templates/mirrors
 npm run typecheck                                 # Type-check .ts (required by DoD)
 npm test                                          # Run test suite
 node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_reviewed + stale refs
