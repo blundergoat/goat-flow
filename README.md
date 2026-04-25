@@ -2,7 +2,7 @@
 
 **A dashboard for auditing, configuring, and running your AI coding agents.**
 
-One command opens a local web UI where you can audit your project's agent harness, set up new agents, browse a prompt library, and launch terminal sessions — all from one place. Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
+One command opens a local web UI where you can audit your project's agent harness, set up new agents, browse a prompt library, and launch terminal sessions - all from one place. Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 
@@ -16,7 +16,7 @@ npx @blundergoat/goat-flow@latest dashboard .
 
 ### Home
 
-Live audit results for every supported agent. Per-agent cards show pass/fail across two scopes (GOAT Flow Setup, Agent Setup) with actionable fix hints. An AI Harness section scores each agent across five concerns — Context, Constraints, Verification, Recovery, and Feedback Loop — so you can see exactly where your setup is strong and where it's weak. "What to do next" action cards surface the highest-priority gaps. Re-audit after changes without leaving the page.
+Live audit results for every supported agent. Per-agent cards show pass/fail across two scopes (GOAT Flow Setup, Agent Setup) with actionable fix hints. An AI Harness section scores each agent across five concerns - Context, Constraints, Verification, Recovery, and Feedback Loop - so you can see exactly where your setup is strong and where it's weak. "What to do next" action cards surface the highest-priority gaps. Re-audit after changes without leaving the page.
 
 ### Setup
 
@@ -30,7 +30,7 @@ Prompts include structured workflows like pre-walk-through notes with targeted t
 
 ### Workspace
 
-Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY — run Claude, Codex, Gemini, or Copilot directly in the browser.
+Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY - run Claude, Codex, Gemini, or Copilot directly in the browser.
 
 ### Projects
 
@@ -78,7 +78,7 @@ Requires Node.js 20+.
 npx @blundergoat/goat-flow@latest dashboard .
 ```
 
-No install required. Opens a local web UI against your current directory. Fresh projects show failing audits by design — that's the baseline the setup fills in.
+No install required. Opens a local web UI against your current directory. Fresh projects show failing audits by design - that's the baseline the setup fills in.
 
 ### 2. Run setup from the dashboard
 

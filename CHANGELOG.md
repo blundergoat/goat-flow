@@ -23,12 +23,12 @@ Plan completion protocol, hook version enforcement, deny-hook hardening, dashboa
 
 ## v1.2.5 - 2026-04-24
 
-CLI silently exited without running when invoked through a symlink — which is every `npx goat-flow`, `./node_modules/.bin/goat-flow`, and npm `scripts` invocation. Fixed the main-module guard and added a regression test.
+CLI silently exited without running when invoked through a symlink - which is every `npx goat-flow`, `./node_modules/.bin/goat-flow`, and npm `scripts` invocation. Fixed the main-module guard and added a regression test.
 
 - **fix: CLI no-op via symlink** - The ESM main-module guard compared `resolve(process.argv[1])` against `fileURLToPath(import.meta.url)`. `path.resolve()` does not follow symlinks, but Node's ESM loader resolves symlinks for `import.meta.url` by default. When the CLI was launched through the `node_modules/.bin/goat-flow` symlink (the standard npm/npx path), the two sides never matched, `main()` never ran, and the process exited 0 with zero output. The fix wraps both sides in `fs.realpathSync()` via an `isMainModule()` helper, with a try/catch for synthetic `argv[1]` values. Introduced in 918ca3e (v1.2.4).
 - **regression test** - `test/integration/main-guard.test.ts` creates a temp-dir symlink to `dist/cli/cli.js` and verifies `--version` produces output through both the symlink and the real path. This is the exact invocation path that broke.
 - **footgun** - New `.goat-flow/footguns/cli.md`: "ESM main-module guard breaks under symlinks" documents the structural trap and prevention rules.
-- **lesson** - `.goat-flow/lessons/verification.md`: "Test suite must exercise the published invocation path" — all 359 tests passed while the CLI was broken for every real consumer, because no test went through the `.bin/` symlink.
+- **lesson** - `.goat-flow/lessons/verification.md`: "Test suite must exercise the published invocation path" - all 359 tests passed while the CLI was broken for every real consumer, because no test went through the `.bin/` symlink.
 
 ## v1.2.4 - 2026-04-23
 

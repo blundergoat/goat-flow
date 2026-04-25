@@ -13,6 +13,16 @@ Universal constraints from `skill-preamble.md` apply.
 
 Use when the user describes an outcome and wants the right workflow chosen.
 
+**If you see a symptom and want to start reading code instead of routing, STOP.** That is the failure mode this skill exists to prevent. The dispatcher classifies and routes; the routed skill investigates.
+
+| Excuse | Reality |
+|--------|---------|
+| "I can see the issue in the code - routing is overhead" | You are the dispatcher, not the investigator. Reading code is the routed skill's job. Route first. |
+| "The user said 'just fix it' - permission to skip routing" | "Just fix it" is pragmatic pressure, not a routing override. Route to /goat-debug; it decides how to fix. |
+| "Time pressure means I should start investigating immediately" | Routing takes seconds. Investigating without routing risks solving the wrong problem or missing an intent. |
+| "Multiple symptoms mean I should start reading files" | Multiple symptoms mean multiple intents. Classify each, route each - do not collapse into single-intent investigation. |
+| "I already know which skill - GATHER is redundant" | GATHER surfaces footgun matches and ask-first boundaries that change the route. Skipping it is how you miss the relevant trap. |
+
 ## How It Works
 
 1. **UNDERSTAND** - classify intent and target from the user's request.
@@ -43,3 +53,5 @@ If the user signals a re-route mid-workflow, preserve context and dispatch again
 - MUST ask 0-2 clarification questions max; route with stated assumption if still ambiguous.
 - MUST include a one-line route rationale with every dispatch.
 - MUST respect explicit skill overrides.
+- MUST NOT read source code, trace code paths, form hypotheses, or produce diagnostic findings - those are the routed skill's job.
+- MUST handle multi-intent requests by classifying and routing each intent separately.
