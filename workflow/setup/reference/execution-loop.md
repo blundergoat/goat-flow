@@ -19,7 +19,7 @@ c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
      - Mode transitions must be explicit when they happen.
      - Debug mode keeps the D2→D3 human-review gate.
    - VERIFY: continuous test loop with escalation.
-     - Before presenting findings, re-read every `file:line` cited as evidence.
+     - Before presenting live findings, re-read every `file:line` cited as evidence; durable learning-loop artifacts use semantic anchors, not line numbers.
      - If evidence cannot be re-read, mark it UNVERIFIED.
      - **Rename sweep:** after any rename or move, grep old names across all files. Zero remaining references required.
      - **Loop detection:** If you've edited the same file 5+ times in one session without tests passing, STOP. Present what's failing and ask for a different approach.

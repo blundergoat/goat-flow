@@ -779,10 +779,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push('  "findings": [');
   lines.push("    {");
   lines.push(
-    '      "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": 12,',
+    '      "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,',
   );
   lines.push(
-    `      "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${priorReport ? '"new"' : "null"}`,
+    `      "summary": "One-line finding summary", "detail": "Why it matters; include a semantic anchor when the evidence should survive as a durable learning-loop artifact.", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${priorReport ? '"new"' : "null"}`,
   );
   lines.push("    }");
   lines.push("  ]");
@@ -814,6 +814,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push(
     "- `line` must be a positive integer OR `null`. Never `0`. For file-wide findings with no specific line, use `null`.",
+  );
+  lines.push(
+    "- Live review findings may cite `file` + `line` after re-reading that line. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
   );
   if (priorReport) {
     lines.push(

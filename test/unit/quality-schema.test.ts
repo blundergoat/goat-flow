@@ -17,6 +17,9 @@ function makeRawReport() {
     project_path: "/tmp/quality-project",
     run_date: "2026-04-18",
     audit_status: "pass",
+    scope: "framework-self",
+    rubric_version: "1.2.3",
+    quality_mode: "agent-setup",
     scores: {
       setup: {
         total: 75,
@@ -42,6 +45,7 @@ function makeRawReport() {
         summary: "Architecture doc drifts from the implemented command surface",
         detail: "The command list omits a shipped quality subcommand.",
         evidence_quality: "OBSERVED",
+        evidence_method: "static-analysis",
         delta_tag: null,
       },
     ],
@@ -57,12 +61,30 @@ describe("parseQualityReport", () => {
     assert.equal(parsed.report.findings[0]!.delta_tag, null);
   });
 
-  it("accepts v1 reports (no evidence_method) and defaults to static-analysis", () => {
+  it("rejects current reports that omit required provenance fields", () => {
+    const report = makeRawReport() as Record<string, unknown>;
+    delete report.quality_mode;
+    const parsed = parseQualityReport(report);
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /quality_mode is required/i);
+  });
+
+  it("accepts legacy reports through the relaxed history parse path", () => {
     // M17-6 backward-compat: existing reports under .goat-flow/logs/quality/
-    // pre-date the evidence_method field; they must still load cleanly.
-    const parsed = parseQualityReport(makeRawReport());
+    // pre-date the provenance fields; they must still load cleanly.
+    const legacy = makeRawReport() as Record<string, unknown>;
+    delete legacy.scope;
+    delete legacy.rubric_version;
+    delete legacy.quality_mode;
+    const findings = legacy.findings as Record<string, unknown>[];
+    delete findings[0]!.evidence_method;
+    const parsed = parseQualityReport(legacy, { requireCurrentFields: false });
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
+    assert.equal(parsed.report.scope, undefined);
+    assert.equal(parsed.report.rubric_version, undefined);
+    assert.equal(parsed.report.quality_mode, undefined);
     assert.equal(parsed.report.findings[0]!.evidence_method, "static-analysis");
   });
 
@@ -78,6 +100,7 @@ describe("parseQualityReport", () => {
     if (!parsed.ok) return;
     assert.equal(parsed.report.scope, "framework-self");
     assert.equal(parsed.report.rubric_version, "1.2.3");
+    assert.equal(parsed.report.quality_mode, "agent-setup");
     assert.equal(parsed.report.findings[0]!.evidence_method, "runtime-probe");
   });
 
@@ -103,6 +126,19 @@ describe("parseQualityReport", () => {
     assert.equal(parsed.ok, false);
     if (parsed.ok) return;
     assert.match(parsed.error, /must be one of: framework-self, consumer/i);
+  });
+
+  it("rejects invalid quality modes", () => {
+    const parsed = parseQualityReport({
+      ...makeRawReport(),
+      quality_mode: "deep-dive",
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(
+      parsed.error,
+      /must be one of: process, agent-setup, harness, skills/i,
+    );
   });
 
   it("rejects unknown top-level keys", () => {

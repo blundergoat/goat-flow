@@ -22,7 +22,8 @@ Order findings by severity, not by file or discovery order.
 
 ## Evidence Standard
 
-- Every finding MUST include file evidence - either `file:line` when the specific line demonstrates the issue, or `file` when the trap is file-level. Path-only evidence is valid when a line number would be fabricated.
+- Every live review finding MUST include file evidence - use `file:line` when the specific line demonstrates the issue, or `file` when the trap is file-level. Path-only evidence is valid when a line number would be fabricated.
+- Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited `file:line` to confirm accuracy
 - Tag evidence quality: **OBSERVED** (directly verified in code) vs **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing)
@@ -40,7 +41,7 @@ Before any completion, fix, or "passing" claim:
 2. **Run** it fresh in this session (not recalled, not from a prior turn, not paraphrased).
 3. **Read** the full output, including exit code.
 4. **Verify** the output demonstrates the specific claim, not an adjacent one.
-5. **Cite** `file:line` for code claims, or the literal pass/fail summary line for command claims.
+5. **Cite** `file:line` for live code claims, semantic anchors for durable learning-loop artifacts, or the literal pass/fail summary line for command claims.
 
 The red-flags name what NOT to claim; this gate names HOW to substantiate a claim. If you cannot run the proof in this session, mark the claim **UNVERIFIED** and state what evidence is missing. Never substitute "should work", "probably fine", "looks good", or a confidence score.
 

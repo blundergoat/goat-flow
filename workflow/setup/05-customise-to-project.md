@@ -10,9 +10,9 @@ If existing documentation surfaces exist (e.g., `docs/footguns.md`, `docs/lesson
 
 All learning loop surfaces use canonical paths: `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/`. No path overrides in config.yaml.
 
-## Check compaction hooks for stale paths
+## Check recovery references for stale paths
 
-If existing `settings.json` notification hooks reference legacy task-state files or other stale paths, update them to `.goat-flow/tasks/` or `.goat-flow/logs/sessions/`. Stale hook paths cause broken context recovery after compaction.
+If existing instruction files, settings, or local docs reference legacy task-state files or other stale recovery paths, update them to `.goat-flow/tasks/` or `.goat-flow/logs/sessions/`. Recovery uses milestone tracking plus optional local session logs; do not add notification hooks for recovery.
 
 ## First: resume project context
 
@@ -104,7 +104,7 @@ Examples:
 - [ ] Every `## Footgun:` entry begins with `**Status:**` (active | mitigated | resolved)
 - [ ] `.goat-flow/patterns.md` exists
 - [ ] If `docs/` surfaces exist, they are referenced (not duplicated) in `.goat-flow/`
-- [ ] Compaction hooks reference current paths (not legacy task-state files)
+- [ ] Recovery references use current paths (not legacy task-state files)
 - [ ] If legacy task-state files exist, they are reported in the session log
 - [ ] architecture.md mentions at least 2 real components by name
 - [ ] glossary.md has at least 3 project-specific terms

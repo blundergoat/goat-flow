@@ -111,6 +111,10 @@ export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
 
 type ParseResult<T> = { ok: true; report: T } | { ok: false; error: string };
 
+interface QualityReportParseOptions {
+  requireCurrentFields?: boolean;
+}
+
 /** Check whether a value is a record. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -353,6 +357,7 @@ function parseFinding(
   raw: unknown,
   index: number,
   allowId: boolean,
+  options: QualityReportParseOptions,
 ):
   | { ok: true; finding: QualityFinding | SavedQualityFinding }
   | { ok: false; error: string } {
@@ -420,9 +425,18 @@ function parseFinding(
   );
   if (!evidenceQuality.ok) return evidenceQuality;
 
-  // evidence_method: optional on v1 reports, defaulted to "static-analysis".
-  // Required on v2+ emissions (compose-quality.ts enforces at prompt level).
   let evidenceMethod: QualityEvidenceMethod = "static-analysis";
+  if (
+    options.requireCurrentFields === true &&
+    !Object.hasOwn(raw, "evidence_method")
+  ) {
+    return {
+      ok: false,
+      error: `${path}.evidence_method is required for current quality reports`,
+    };
+  }
+  // evidence_method: optional on legacy reports, defaulted to "static-analysis".
+  // Required on current emissions by quality validate.
   if (Object.hasOwn(raw, "evidence_method")) {
     const parsedMethod = expectEnumValue(
       raw.evidence_method,
@@ -477,6 +491,7 @@ function parseFinding(
 function parseReportInternal(
   raw: unknown,
   allowFindingId: boolean,
+  options: QualityReportParseOptions = {},
 ): ParseResult<QualityReport | SavedQualityReport> {
   if (!isRecord(raw)) {
     return { ok: false, error: "quality report must be an object" };
@@ -537,8 +552,14 @@ function parseReportInternal(
   );
   if (!auditStatus.ok) return auditStatus;
 
-  // scope: optional on v1, enum-validated when present.
   let scope: QualityScope | undefined;
+  if (options.requireCurrentFields === true && !Object.hasOwn(raw, "scope")) {
+    return {
+      ok: false,
+      error: "report.scope is required for current quality reports",
+    };
+  }
+  // scope: optional on legacy reports, enum-validated when present.
   if (Object.hasOwn(raw, "scope")) {
     const parsedScope = expectEnumValue(
       raw.scope,
@@ -549,8 +570,17 @@ function parseReportInternal(
     scope = parsedScope.value;
   }
 
-  // rubric_version: optional on v1, non-empty string when present.
   let rubricVersion: string | undefined;
+  if (
+    options.requireCurrentFields === true &&
+    !Object.hasOwn(raw, "rubric_version")
+  ) {
+    return {
+      ok: false,
+      error: "report.rubric_version is required for current quality reports",
+    };
+  }
+  // rubric_version: optional on legacy reports, non-empty string when present.
   if (Object.hasOwn(raw, "rubric_version")) {
     const parsedRubric = expectNonEmptyString(
       raw.rubric_version,
@@ -560,8 +590,17 @@ function parseReportInternal(
     rubricVersion = parsedRubric.value;
   }
 
-  // quality_mode: optional on legacy reports, enum-validated when present.
   let qualityMode: QualityMode | undefined;
+  if (
+    options.requireCurrentFields === true &&
+    !Object.hasOwn(raw, "quality_mode")
+  ) {
+    return {
+      ok: false,
+      error: "report.quality_mode is required for current quality reports",
+    };
+  }
+  // quality_mode: optional on legacy reports, enum-validated when present.
   if (Object.hasOwn(raw, "quality_mode")) {
     const parsedQualityMode = expectEnumValue(
       raw.quality_mode,
@@ -580,7 +619,7 @@ function parseReportInternal(
 
   const findings: Array<QualityFinding | SavedQualityFinding> = [];
   for (const [index, item] of raw.findings.entries()) {
-    const parsedFinding = parseFinding(item, index, allowFindingId);
+    const parsedFinding = parseFinding(item, index, allowFindingId, options);
     if (!parsedFinding.ok) return parsedFinding;
     findings.push(parsedFinding.finding);
   }
@@ -618,8 +657,11 @@ function parseReportInternal(
 }
 
 /** Parse the quality report. */
-export function parseQualityReport(raw: unknown): ParseResult<QualityReport> {
-  const result = parseReportInternal(raw, false);
+export function parseQualityReport(
+  raw: unknown,
+  options: QualityReportParseOptions = { requireCurrentFields: true },
+): ParseResult<QualityReport> {
+  const result = parseReportInternal(raw, false, options);
   if (!result.ok) return result;
   return { ok: true, report: result.report };
 }
@@ -627,8 +669,9 @@ export function parseQualityReport(raw: unknown): ParseResult<QualityReport> {
 /** Parse the saved quality report. */
 export function parseSavedQualityReport(
   raw: unknown,
+  options: QualityReportParseOptions = {},
 ): ParseResult<SavedQualityReport> {
-  const result = parseReportInternal(raw, true);
+  const result = parseReportInternal(raw, true, options);
   if (!result.ok) return result;
   return { ok: true, report: result.report as SavedQualityReport };
 }

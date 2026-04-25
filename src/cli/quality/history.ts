@@ -179,7 +179,9 @@ export function loadQualityHistory(projectPath: string): {
       );
       continue;
     }
-    const parsedReport = parseQualityReport(raw);
+    const parsedReport = parseQualityReport(raw, {
+      requireCurrentFields: false,
+    });
     if (!parsedReport.ok) {
       warnings.push(
         `Skipping malformed quality history file ${filename}: ${parsedReport.error}`,

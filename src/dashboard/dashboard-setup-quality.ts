@@ -87,7 +87,7 @@ function dashboardHarnessQualityPrompt(): string {
     "",
     "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-reference/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
     "",
-    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each concern (Context, Constraints, Verification, Recovery, Feedback Loop, Workspace Boundary), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
+    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix. Treat Workspace Boundary as a qualitative cross-cutting risk, not as a deterministic harness score, unless the audit output explicitly exposes a Workspace Boundary concern.",
     "",
     "Do not treat a structural PASS as quality PASS. If a score or check claims completeness, verify what behavior it actually proves.",
   ].join("\n");
@@ -172,6 +172,7 @@ function dashboardQualityReportLogPrompt(
   const agentJson = JSON.stringify(agent);
   const projectPathJson = JSON.stringify(projectPath);
   const modeJson = JSON.stringify(mode.id);
+  const versionJson = JSON.stringify(window.__GOAT_FLOW_VERSION__ ?? "unknown");
   return [
     "Quality report log:",
     "- Write the final machine-readable report to `.goat-flow/logs/quality/`. This path is gitignored and expected; do not write the JSON inline only.",
@@ -187,13 +188,13 @@ function dashboardQualityReportLogPrompt(
     "```json",
     "{",
     '  "report_kind": "goat-flow-quality-report",',
-    '  "goat_flow_version": "1.3.0",',
+    `  "goat_flow_version": ${versionJson},`,
     `  "agent": ${agentJson},`,
     `  "project_path": ${projectPathJson},`,
     '  "run_date": "YYYY-MM-DD",',
     '  "audit_status": "pass | fail | unavailable",',
     '  "scope": "framework-self | consumer",',
-    '  "rubric_version": "1.3.0",',
+    `  "rubric_version": ${versionJson},`,
     `  "quality_mode": ${modeJson},`,
     '  "scores": {',
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -208,6 +209,7 @@ function dashboardQualityReportLogPrompt(
     "- Allowed finding types: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
     "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
     '- Use `delta_tag: "new"` unless the finding materially matches prior quality history for this same agent/mode; then use `persisted`.',
+    "- Live review findings may cite `file` + `line` after re-reading that line. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
     '- Validate before confirming: `node --import tsx src/cli/cli.ts quality validate "$FILE"`.',
     '- Verify the file exists and is non-zero: `ls -la "$FILE"`.',
     `- End your response with: \`Wrote quality report to .goat-flow/logs/quality/<filename>.json\`.`,
