@@ -101,32 +101,19 @@ const milestoneTracking: HarnessCheck = {
     const checked = progress.reduce((sum, item) => sum + item.checked, 0);
     const total = progress.reduce((sum, item) => sum + item.total, 0);
     const percent = total === 0 ? 0 : Math.round((checked / total) * 100);
-    const claimedCompleteButOpen = progress.filter(
-      (item) => item.status === "complete" && item.checked < item.total,
+    const zeroProgress = progress.filter(
+      (item) => item.total > 0 && item.checked === 0,
     );
-    if (claimedCompleteButOpen.length > 0) {
-      return fail(
-        [
-          `${checked}/${total} checkboxes complete (${percent}%) across ${mdFiles.length} milestone files${extraNote}`,
-          `Milestones marked complete still have open checkboxes: ${claimedCompleteButOpen.map((item) => item.path).join(", ")}`,
-        ],
-        ["Finish or untick complete status on milestones with open tasks"],
-        [
-          "Update milestone status to in-progress/testing-gate, or tick every completed task before marking the milestone complete.",
-        ],
+    const findings = [
+      `${checked}/${total} checkboxes complete (${percent}%) across ${mdFiles.length} milestone files${extraNote}`,
+      "Task checkbox completion is informational only; .goat-flow/tasks/ is gitignored local working state and unchecked items may be intentionally skipped.",
+    ];
+    if (zeroProgress.length > 0) {
+      findings.push(
+        `${zeroProgress.length} milestone files are at 0%: ${zeroProgress.map((item) => item.path).join(", ")}`,
       );
     }
-    const zeroProgress = progress.filter(
-      (item) =>
-        item.total > 0 && item.checked === 0 && item.status !== "complete",
-    ).length;
-    const zeroNote =
-      zeroProgress > 0
-        ? `; ${zeroProgress} planned/in-progress milestone files are at 0% (valid local work state)`
-        : "";
-    return pass([
-      `${checked}/${total} checkboxes complete (${percent}%) across ${mdFiles.length} milestone files${extraNote}${zeroNote}`,
-    ]);
+    return pass(findings);
   },
 };
 

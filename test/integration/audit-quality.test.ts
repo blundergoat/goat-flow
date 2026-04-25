@@ -11,6 +11,7 @@ import type { AuditConcernKey } from "../../src/cli/audit/types.js";
 import {
   makeCtx,
   makeSharedFacts,
+  stubFS,
   stubAgentFacts,
 } from "../fixtures/projects/index.js";
 
@@ -167,5 +168,54 @@ describe("zero-entry fresh install", () => {
       "pass",
       `feedback_loop should pass: ${JSON.stringify(feedbackLoop)}`,
     );
+  });
+});
+
+describe("harness scoring honesty", () => {
+  it("treats milestone checkbox completion as informational local state", () => {
+    const check = HARNESS_CHECKS.find((c) => c.id === "milestone-tracking");
+    assert.ok(check, "milestone-tracking check must exist");
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => path === ".goat-flow/tasks",
+        listDir: (path) => (path === ".goat-flow/tasks" ? ["M01-demo.md"] : []),
+        readFile: (path) =>
+          path === ".goat-flow/tasks/M01-demo.md"
+            ? [
+                "# M01 Demo",
+                "**Status:** in-progress",
+                "## Tasks",
+                "- [ ] Add feature",
+                "- [ ] Verify feature",
+                "## Exit Criteria",
+                "- [ ] Feature works",
+              ].join("\n")
+            : null,
+      }),
+    });
+
+    const result = check.run(ctx);
+    assert.equal(result.status, "pass");
+    assert.match(result.findings.join("\n"), /at 0%/);
+    assert.match(result.findings.join("\n"), /informational only/);
+  });
+
+  it("does not report perfect feedback-loop health when stale learning-loop refs exist", () => {
+    const check = HARNESS_CHECKS.find((c) => c.id === "feedback-loop-active");
+    assert.ok(check, "feedback-loop-active check must exist");
+    const shared = makeSharedFacts();
+    shared.footguns.staleRefs = ["missing-footgun-ref.md"];
+    shared.lessons.staleRefs = ["missing-lesson-ref.md"];
+    const result = check.run(
+      makeCtx({
+        facts: {
+          ...makeCtx().facts,
+          shared,
+        },
+      }),
+    );
+
+    assert.equal(result.status, "fail");
+    assert.match(result.findings.join("\n"), /2 stale file reference/);
   });
 });

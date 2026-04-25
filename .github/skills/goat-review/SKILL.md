@@ -25,11 +25,11 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 - If user already says "quick", "PR", or "full", confirm and continue.
 - If arriving from the dispatcher with depth already chosen, skip the depth question.
 - If vague, ask one follow-up covering: which files, what concerns you, diff / PR / audit.
-- Auto-detect scope: (1) explicit input, (2) staged changes, (3) unstaged changes, (4) PR-style when HEAD is on a non-default branch with commits ahead of `origin/main`, (5) git diff.
+- Auto-detect scope: (1) explicit input, (2) staged changes, (3) unstaged changes, (4) PR-style when HEAD is on a non-default branch with commits ahead of the detected review base, (5) git diff.
 
 **PR mode (prefer PR link):** when the user picks PR, first ask for the PR URL or number rather than the base branch - it collapses base, head, description, and linked issues into one input. Prompt: "PR URL or number? (e.g. `#123` or `https://github.com/owner/repo/pull/123`) - or say 'local' if the branch isn't pushed." If the user supplies a PR reference and `gh` is available (see preamble External Context Sources), resolve it with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body` and source the diff via `gh pr diff <ref>`. Record the PR URL and base SHA in Review Integrity's Size line. The description/linked issues are treated as spec context, not as findings.
 
-**PR mode (branch vs base, fallback):** when no PR link is supplied or `gh` is unavailable, ask: "Base branch? (default: `main`. Current: `$(git branch --show-current)`. I'll `git fetch origin <base>` first so the review is against the latest upstream tip.)" Then run `git fetch origin <base> --quiet` (best-effort; do not fail the review if offline or the remote is unreachable). Source the diff via `git diff origin/<base>...HEAD` (three-dot merge-base; matches what GitHub/GitLab PR UIs show). If the fetch fails or `origin/<base>` is not resolvable, fall back to local `<base>` and record `base-fetch-failed` as a degradation flag in Review Integrity so the reader knows the comparison was against stale local state. Record the resolved base and its short SHA in Review Integrity's Size line.
+**PR mode (branch vs base, fallback):** when no PR link is supplied or `gh` is unavailable, resolve the base before diffing: (1) use an explicit user-provided base, (2) otherwise detect the remote default branch from `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`) or `git remote show origin`, (3) otherwise ask: "Base branch? (detected: none. Current: `$(git branch --show-current)`. I'll `git fetch origin <base>` first so the review is against the latest upstream tip.)", (4) if discovery fails and the user cannot provide a base, use `main` only as a last-resort fallback and record `base-detection-failed`. Then run `git fetch origin <base> --quiet` (best-effort; do not fail the review if offline or the remote is unreachable). Source the diff via `git diff origin/<base>...HEAD` (three-dot merge-base; matches what GitHub/GitLab PR UIs show). If the fetch fails or `origin/<base>` is not resolvable, fall back to local `<base>` and record `base-fetch-failed` as a degradation flag in Review Integrity so the reader knows the comparison was against stale local state. Record the resolved base and its short SHA in Review Integrity's Size line.
 
 **Size sizing (before Pass 1):** measure the diff. If it exceeds **20 files OR 3000 changed lines**, propose chunking by file group and ask. If the user proceeds un-chunked, record as `large-diff-unchunked` for Review Integrity.
 
@@ -103,7 +103,7 @@ Check each finding with targeted grep-first retrieval against `.goat-flow/footgu
 
 **BLOCKING GATE:** Present findings using Output Format below, then pause for human to drill in.
 
-**DoD gate:** (1) tests/lint pass (2) no broken cross-references (3) no unapproved boundary changes (4) grep old pattern after renames.
+**Review DoD gate:** for reporting-only review, verify findings, cross-references, and scope boundaries; do not imply the reviewer must run implementation tests/lint or rename greps unless those checks are directly needed to verify a finding. If the user asks to implement fixes after review, switch to the instruction file's implementation DoD.
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to every surfaced finding - each `file:line` must be re-read fresh in this session before presentation; downgrade any finding whose evidence cannot be re-verified to UNVERIFIED.
 
@@ -131,7 +131,7 @@ List:
 - **Files opened in Pass 2:** count / total in diff. List paths that were read diff-only.
 - **Evidence tags:** N OBSERVED / M INFERRED across findings.
 - **Size:** lines changed, files changed. If chunked, state which group was reviewed and which are pending.
-- **Degradation flags** (any that apply): `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `base-fetch-failed` (PR mode only).
+- **Degradation flags** (any that apply): `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `base-detection-failed` (PR mode only), `base-fetch-failed` (PR mode only).
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 Never leave this section empty. "confident - no degradation flags" is the minimum.

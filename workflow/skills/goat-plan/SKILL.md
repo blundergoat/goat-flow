@@ -67,22 +67,13 @@ Do not drop a spike, intake, or kill criteria to satisfy milestone count, deadli
   - Automated: which test commands must pass
   - Manual: what a human must check
   - Acceptance: who signs off (developer self-check, QA review, or stakeholder demo)
+- **Mid-implementation proof** - for milestones expected to touch 3+ files or run longer than 30-60 minutes, name one focused command, reproduction, or smoke check to run before switching modules or after a bounded edit batch
 - **Kill criteria** - What would make us stop at this milestone rather than continue
 - **Depends on** - Which milestone must complete first
 
 ### Task quality rules
 
-Good tasks:
-- `[ ] Add /api/export endpoint returning CSV for a single report`
-- `[ ] Spike: benchmark memory usage under load - target: under 2GB RSS`
-- `[ ] Add background task processor with 5-minute timeout and status tracking`
-
-Bad tasks:
-- `[ ] Set up the backend` - too vague, what specifically?
-- `[ ] Make it work` - not a task, it's a wish
-- `[ ] Research options` - open-ended with no exit criteria
-
-Each task should be completable in a single coding session. If it's bigger, split it.
+Good tasks are concrete actions with a target or exit criterion. Bad tasks are vague wishes like "set up backend", "make it work", or open-ended "research options". Each task should fit one coding session; split it if bigger.
 
 ### Assumption tracking
 
@@ -170,6 +161,7 @@ After Phase 1 approval, write each milestone to `.goat-flow/tasks/<active>/` as 
 **Automated:** Run integration tests filtered to the changed module
 **Manual:** Trigger the API call, verify response, check error handling path
 **Acceptance:** Developer self-check - demo to self before proceeding to M02
+**Mid-implementation proof:** After client + retry wiring, run the focused API smoke command before adding UI/status work
 ```
 
 **CHECKPOINT:** "Milestone files written to `.goat-flow/tasks/<active>/`. Ready to start implementation."
@@ -224,7 +216,7 @@ The plan is NOT complete until the human explicitly approves.
 - MUST pick exactly one Step 0 mode (Named-File Update / Read-Only Analysis / Inline-Then-Write / File-Write) and stay in that mode through Phase 2. Cross-mode drift is the failure this skill's mode-picker exists to prevent.
 - MUST check for existing milestone files before creating new ones
 - MUST default to Mode 1 (Named-File Update) when the user names an existing milestone file and the target is unambiguous - no re-prompting
-- MUST include a testing gate on every milestone - no milestone ships without verification
+- MUST include a testing gate on every milestone and a mid-implementation proof checkpoint for long or multi-module milestones
 - MUST re-read and potentially update the next milestone after completing each one
 - MUST check kill criteria between milestones - a triggered criterion is a BLOCKING GATE
 - MUST tick assumption checkboxes with evidence when validated or invalidated

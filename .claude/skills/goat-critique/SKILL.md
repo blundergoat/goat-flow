@@ -90,6 +90,8 @@ Execute in this order:
 
 **1. Scan Agent C output for context leaks.** Before any other Phase 2 work, grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Any match = CONTEXT LEAK; discard Agent C's findings and re-spawn with stricter isolation. This layers on top of Agent C's self-policing directive, not replaces it.
 
+**1b. Check sub-agent completeness.** Before trusting any critique, verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. If a sub-agent is incomplete, re-spawn once with the missing fields named; if the runner cannot verify or re-spawn, record `sub-agent completeness limited` in the synthesis.
+
 **2. Classify each finding** as consensus / split / unique:
 - **Consensus** - same finding raised by ≥2 agents, severity within ±1 level
 - **Split** - same finding raised by ≥2 agents, but severity differs by ≥2 levels, or one agent explicitly rejects what another flags as blocking (e.g., rates LOW/N/A while another rates CRITICAL/HIGH). Silence on a finding does not constitute a dismiss; treat the silent agent's omission as a Unique finding instead.

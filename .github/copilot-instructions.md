@@ -14,10 +14,7 @@ node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_r
 ```
 ## Truth Order
 
-1. User's explicit instruction (this session)
-2. Instruction file (`.github/copilot-instructions.md`)
-3. Architecture (`.goat-flow/architecture.md`)
-4. Skills / templates (on-demand context)
+User instruction > `.github/copilot-instructions.md` > `.goat-flow/architecture.md` > on-demand skills/templates.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
@@ -29,26 +26,11 @@ BAD:  "The CLI has 20 audit checks" (guessed without reading)
 GOOD: Read src/cli/audit/check-goat-flow.ts → 13 setup checks, check-agent-setup.ts → 4 agent checks (17 total)
 ```
 
-**SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
-
-| Complexity | Typical read budget | Typical turn budget |
-|------------|-------------|-------------|
-| Hotfix | 2 reads | 3 turns |
-| Standard Feature | 4 reads | 10 turns |
-| System Change | 6 reads | 20 turns |
-| Infrastructure | 8 reads | 25 turns |
-
-Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
+**SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Over budget = checkpoint and re-classify; competent review may need broader coverage.
 
 **ACT** - MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 
-| Mode | Behaviour |
-|------|-----------|
-| Plan | Produce artefact only. File writes (e.g. milestone files) only on explicit approval. Exit on LGTM |
-| Implement | Edit in 2-3 turns. 4th read without writing = checkpoint or re-scope |
-| Explain | Walkthrough only. No changes unless asked |
-| Debug | Diagnosis with file:line first. Fixes after human reviews |
-| Review | Investigate first. Never blindly apply suggestions |
+Modes: Plan = artifact only unless writes approved; Implement = edit in 2-3 turns, 4th read without writing means checkpoint; Explain = no changes unless asked; Debug = diagnosis with file:line before fixes; Review = investigate first, never blindly apply suggestions.
 
 **VERIFY** - MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end.
 
@@ -64,23 +46,11 @@ Over budget = checkpoint and re-classify before continuing. Complexity-class bud
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 **Learning loop** (update before DoD if VERIFY caught a failure or you corrected course):
-- `.goat-flow/lessons/<category>.md` - behavioural mistake. `## Lesson: <name>` + `**Created:** YYYY-MM-DD`.
-- `.goat-flow/footguns/<category>.md` - cross-doc architectural trap with file evidence. `## Footgun: <name>` + `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`.
-- `.goat-flow/decisions/` - significant technical decision with context/rationale.
-- `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` - optional continuity note written on `/compact` when no active milestone file exists; skip otherwise.
+- Lesson → `.goat-flow/lessons/<category>.md`; footgun → `.goat-flow/footguns/<category>.md`; decision → `.goat-flow/decisions/`; optional `/compact` continuity note → `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md`.
 
 ## Artifact Routing
 
-When asked to add, create, or update a goat-flow artifact, route to the correct location - not runtime code:
-
-| User says | Create/update in | NOT |
-|-----------|-----------------|-----|
-| "add a footgun" | `.goat-flow/footguns/<category>.md` | Runtime code, logging, UI warnings, tests |
-| "add a lesson" | `.goat-flow/lessons/<category>.md` | Runtime code, code comments |
-| "add a decision" | `.goat-flow/decisions/ADR-NNN.md` | Inline code comments |
-| "add a pattern" | `.goat-flow/patterns.md` | - |
-
-Before editing, read the target directory's `README.md` for required format. These are documentation artifacts - never interpret them as requests for runtime code changes unless the user explicitly asks for code too.
+When asked to add/update a goat-flow artifact, route to docs, not runtime code: footgun → `.goat-flow/footguns/<category>.md`; lesson → `.goat-flow/lessons/<category>.md`; decision → `.goat-flow/decisions/ADR-NNN.md`; pattern → `.goat-flow/patterns.md`. Read the target directory `README.md` first.
 
 ## Autonomy Tiers
 
@@ -124,9 +94,6 @@ MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh,
 
 ## Copilot-Specific
 
-- Use Copilot's built-in agents: `explore`, `task`, `general-purpose`, `code-review`. Use `/fleet` only when the user explicitly wants parallel work or the subtasks are genuinely independent. (List reflects Copilot CLI at goat-flow v1.2.2 publish; re-check against your installed Copilot CLI's own docs before relying on exact names.)
-- Treat `.github/hooks/hooks.json` and `.github/hooks/deny-dangerous.sh` as first-class runtime guardrails; verify after touching them.
-- `.github/agents/` is intentionally out of scope in this repo's Wave 6 support model.
-- Security-sensitive surfaces (review carefully when touched): `.github/copilot-instructions.md`, `.github/hooks/**`, `.github/skills/**`, `.copilotignore`.
-- If a template or third-party snippet lands in `.github/**`, verify it does not quietly broaden permissions or exfiltration paths.
-- If a task touches CI/CD, hooks, prompts, or skills, prefer `goat-security` or `goat-review` over generic implementation shortcuts.
+- Use Copilot built-ins (`explore`, `task`, `general-purpose`, `code-review`) when appropriate; use `/fleet` only for explicit or genuinely independent parallel work.
+- Treat `.github/hooks/hooks.json`, `.github/hooks/deny-dangerous.sh`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them.
+- `.github/agents/` is intentionally out of scope; CI/CD, hooks, prompts, or skills work should prefer `goat-security` or `goat-review`.

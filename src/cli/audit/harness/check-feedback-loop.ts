@@ -71,13 +71,21 @@ const feedbackLoopActive: HarnessCheck = {
       );
     }
 
-    // Report stale references (informational, not a failure)
     const footgunStale = ctx.facts.shared.footguns.staleRefs;
     const lessonStale = ctx.facts.shared.lessons.staleRefs;
     const totalStale = footgunStale.length + lessonStale.length;
     if (totalStale > 0) {
       findings.push(
         `${totalStale} stale file reference(s) in learning loop entries`,
+      );
+      return fail(
+        findings,
+        [
+          "Fix stale footgun/lesson file references or remove local-path markup",
+        ],
+        [
+          "Run `node --import tsx src/cli/cli.ts stats . --check`, then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
+        ],
       );
     }
     return pass(findings);

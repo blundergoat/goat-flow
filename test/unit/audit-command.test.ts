@@ -834,7 +834,7 @@ describe("recovery harness milestone tracking", () => {
     assert.ok(result.findings.some((f) => f.includes("2/2 checkboxes")));
   });
 
-  it("reports active zero-percent milestones without failing", () => {
+  it("reports active zero-percent milestones as informational local state", () => {
     const result = check.run(
       taskCtx({
         ".goat-flow/tasks/1.3.0/M00-active.md":
@@ -843,9 +843,8 @@ describe("recovery harness milestone tracking", () => {
     );
     assert.equal(result.status, "pass");
     assert.ok(result.findings.some((f) => f.includes("0/2 checkboxes")));
-    assert.ok(
-      result.findings.some((f) => f.includes("valid local work state")),
-    );
+    assert.ok(result.findings.some((f) => f.includes("at 0%")));
+    assert.ok(result.findings.some((f) => f.includes("informational only")));
   });
 
   it("reports active partial milestone progress", () => {
@@ -867,24 +866,19 @@ describe("recovery harness milestone tracking", () => {
       }),
     );
     assert.equal(result.status, "pass");
-    assert.ok(
-      result.findings.some((f) => f.includes("valid local work state")),
-    );
+    assert.ok(result.findings.some((f) => f.includes("at 0%")));
+    assert.ok(result.findings.some((f) => f.includes("informational only")));
   });
 
-  it("fails only when a milestone claims complete with open checkboxes", () => {
+  it("does not fail complete milestones with skipped local checkboxes", () => {
     const result = check.run(
       taskCtx({
         ".goat-flow/tasks/1.3.0/M03-complete.md":
           "**Status:** complete\n\n## Tasks\n- [x] One\n- [ ] Two\n",
       }),
     );
-    assert.equal(result.status, "fail");
-    assert.ok(
-      result.findings.some((f) =>
-        f.includes("marked complete still have open"),
-      ),
-    );
+    assert.equal(result.status, "pass");
+    assert.ok(result.findings.some((f) => f.includes("1/2 checkboxes")));
   });
 });
 

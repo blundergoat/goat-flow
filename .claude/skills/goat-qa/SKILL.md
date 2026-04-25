@@ -91,7 +91,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 **Cross-agent verification:** Suggest the user run verification with a different agent or model. Cross-agent verification catches blind spots that same-agent testing misses.
 
-**BLOCKING GATE:** Present the gap analysis and stop for a human decision. "Here are the testing gaps. Continue to Phase 3 (targeted testing plan), or adjust the analysis first?" Reserve QA flow diagrams for the Phase 3 checkpoint. After the testing plan, suggest `/goat-plan` to add testing tasks to the current milestone.
+**BLOCKING GATE:** Present the gap analysis plus Verification Integrity and stop for a human decision. "Here are the testing gaps. Continue to Phase 3 (targeted testing plan), or adjust the analysis first?" Reserve QA flow diagrams for the Phase 3 checkpoint. After the testing plan, suggest `/goat-plan` to add testing tasks to the current milestone.
 
 ## Phase 3 - Targeted Testing Plan
 
@@ -196,6 +196,11 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->
 | Test Case | Maps to Change | Assessment |
+
+## Verification Integrity
+- Intent spec: [PR/issue/test plan URL or `no-intent-spec`]
+- Assessed by: [agent]
+- Evidence limit: [diff/files read and any unavailable runtime/tool context]
 ```
 
 ### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)

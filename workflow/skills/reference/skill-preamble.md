@@ -128,6 +128,8 @@ After completing the skill, check if this run uncovered anything worth logging:
 - Successful repeatable approach → `## Pattern:` entry in `.goat-flow/patterns.md`
 - Architectural trap with file evidence → `## Footgun:` entry in `.goat-flow/footguns/` category bucket
 
+**Routing rule:** When the user asks to "add a footgun" or "add a lesson", create a documentation entry in the correct `.goat-flow/` directory. Do not implement runtime code, logging, UI warnings, or test assertions - those are code changes, not artifact creation. Read the target directory's `README.md` before editing.
+
 **Bucket file frontmatter.** Every footgun / lesson bucket file starts with:
 
 ```yaml

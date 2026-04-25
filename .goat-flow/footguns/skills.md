@@ -54,18 +54,26 @@ last_reviewed: 2026-04-25
 
 ## Footgun: Review skills can choose the wrong PR base when they hardcode `origin/main`
 
-**Status:** active | **Created:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-04-25 | **Resolved:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `/goat-review` can misclassify PR-style review scope or generate the wrong comparison diff in consumer projects whose real integration branch is not `main`. A consumer quality report on 2026-04-25 found a project comparing feature branches to `origin/deploy` while `/goat-review` defaulted local PR detection and fallback review to `origin/main`/`main`.
+**Original symptoms:** `/goat-review` could misclassify PR-style review scope or generate the wrong comparison diff in consumer projects whose real integration branch is not `main`. A consumer quality report on 2026-04-25 found a project comparing feature branches to `origin/deploy` while `/goat-review` defaulted local PR detection and fallback review to `origin/main`/`main`.
 
-**Why it happens:** The review skill treats a common GitHub default as a universal project invariant. That leaks a goat-flow/framework assumption into consumer repositories, where the correct base may be `deploy`, `develop`, `trunk`, a release branch, or a PR-specific base returned by hosting metadata.
+**Why it happened:** The review skill treated a common GitHub default as a universal project invariant. That leaked a goat-flow/framework assumption into consumer repositories, where the correct base may be `deploy`, `develop`, `trunk`, a release branch, or a PR-specific base returned by hosting metadata.
 
-**Evidence:**
+**Original evidence:**
 - `workflow/skills/goat-review/SKILL.md` (search: `commits ahead of \`origin/main\``) makes PR-style auto-detection depend on `origin/main`.
 - `workflow/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) makes local PR fallback default to `main`.
 - `.claude/skills/goat-review/SKILL.md` (search: `commits ahead of \`origin/main\``) shows the installed Claude mirror has the same behaviour.
 - `.agents/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) shows the installed Codex/agents mirror has the same behaviour.
 - `.github/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) shows the installed GitHub/Copilot mirror has the same behaviour.
+
+**Resolution:** `/goat-review` now resolves PR bases by preference order instead of assuming `main`: PR metadata, explicit user base, remote default-branch discovery, then asking the user. `main` remains only a last-resort fallback with `base-detection-failed` recorded in Review Integrity.
+
+**Resolution evidence:**
+- `workflow/skills/goat-review/SKILL.md` (search: `baseRefName`) prefers PR metadata when a PR URL or number is available.
+- `workflow/skills/goat-review/SKILL.md` (search: `refs/remotes/origin/HEAD`) discovers the remote default branch before asking.
+- `workflow/skills/goat-review/SKILL.md` (search: `base-detection-failed`) records degraded fallback use instead of hiding it.
+- `test/contract/goat-review-base-contract.test.ts` (search: `does not hardcode origin/main`) prevents `origin/main` from returning as the universal review base.
 
 **Prevention:** Review-base selection must be discovered, not assumed. Prefer PR metadata (`gh pr view ... baseRefName`) when available, then an explicit user-provided base, then remote default-branch discovery from `refs/remotes/origin/HEAD` or `git remote show origin`; ask for the base before diffing if discovery fails. Treat `main` only as a last-resort fallback and record a degradation flag when fallback is used.
 

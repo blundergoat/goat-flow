@@ -27,7 +27,7 @@ All of these mean: **test before deploying. No exceptions.**
 
 ## Skill deployment checklist
 
-Every skill MUST pass this checklist before merging. Track each item as a todo in your agent's planning tool - don't work from memory.
+For a new skill or a material behavioural change to an existing skill, this checklist is a release gate before merging. For already-shipped skills where a later audit finds missing TDD evidence, record the gap as hardening debt and do not claim the skill is bulletproof until fresh logs satisfy the checklist. Track each item as a todo in your agent's planning tool - don't work from memory.
 
 **RED phase - write failing test:**
 - [ ] Create pressure scenarios (3+ combined pressures for discipline skills)
