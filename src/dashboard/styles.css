@@ -6,8 +6,10 @@
 /* Every color in the dashboard defined once. Change here, changes everywhere. */
 :root {
   /* Typography */
-  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --font-body:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace;
 
   /* Zinc (neutral) */
   --zinc-950: #0d0d10;
@@ -159,6 +161,47 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+.gf-preset-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.08);
+  white-space: nowrap;
+}
+.gf-preset-badge-good {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+.gf-preset-badge-warn {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+}
+.gf-preset-badge-danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+}
+.gf-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.gf-check-row input {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 :focus-visible {
   outline: 2px solid var(--blue-400);

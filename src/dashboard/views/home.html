@@ -1168,7 +1168,7 @@
         </div>
       </div>
 
-      <!-- healthy (all passing): review + test + security presets -->
+      <!-- healthy (all passing): review + coverage-audit + security presets -->
       <div x-show="priority() === 'healthy'" x-cloak>
         <div
           style="
@@ -1178,7 +1178,7 @@
           "
         >
           <template
-            x-for="p in presets.filter(p => ['review', 'test', 'security'].includes(p.id))"
+            x-for="p in presets.filter(p => ['review', 'test-audit', 'security'].includes(p.id))"
             :key="p.id"
           >
             <button

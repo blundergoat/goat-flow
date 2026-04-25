@@ -167,6 +167,8 @@ interface ServerSessionInfo {
   status: SessionStatus;
   createdAt: string;
   projectPath: string;
+  cwd: string;
+  targetPath: string;
   runner: RunnerId;
   lastInputAt: number;
   age?: number;
@@ -180,6 +182,8 @@ interface LocalSession {
   runner: RunnerId;
   promptLabel: string;
   projectPath: string;
+  cwd: string;
+  targetPath: string;
   startTime: number;
   lastInputTime: number;
   connected: boolean;
@@ -202,6 +206,8 @@ interface SavedSession {
   startTime: number;
   prompt: string;
   agent: RunnerId;
+  cwd: string;
+  targetPath: string;
 }
 
 /** Predefined audit command button shown in the workspace terminal panel. */
@@ -223,6 +229,89 @@ interface Preset {
   desc: string;
   prompt: string;
   cat: string;
+  route?: string;
+  source?: string;
+  globalSafe?: boolean;
+  internalOnly?: boolean;
+  qualityMode?: boolean;
+  requiresGh?: boolean;
+  requiresPrOrIssue?: boolean;
+  requiresLocalDiff?: boolean;
+  requiresUiApp?: boolean;
+  requiresDependencyFiles?: boolean;
+  requiresGoatFlowInstall?: boolean;
+  mayCheckoutBranch?: boolean;
+  requiresCleanWorktree?: boolean;
+  mayWriteFiles?: boolean;
+  artifactRequired?: boolean;
+  bestTargetSurfaces?: string[];
+  fallbackPrompt?: string;
+  costTier?: "low" | "medium" | "high";
+}
+
+/** Compact compatibility badge shown for preset prerequisites and fit. */
+interface PresetBadge {
+  label: string;
+  title: string;
+  tone: "neutral" | "good" | "warn" | "danger";
+}
+
+/** Browser-local custom prompt persisted outside the built-in preset catalog. */
+interface CustomPrompt {
+  id: string;
+  name: string;
+  desc: string;
+  prompt: string;
+  route: string;
+  runnerHint: RunnerId | "any";
+  requiresGh: boolean;
+  requiresPrOrIssue: boolean;
+  requiresLocalDiff: boolean;
+  requiresUiApp: boolean;
+  requiresDependencyFiles: boolean;
+  requiresGoatFlowInstall: boolean;
+  mayCheckoutBranch: boolean;
+  requiresCleanWorktree: boolean;
+  mayWriteFiles: boolean;
+  artifactRequired: boolean;
+  globalSafe: boolean;
+  bestTargetSurfaces: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Editable form state for one browser-local custom prompt. */
+interface CustomPromptDraft {
+  name: string;
+  desc: string;
+  prompt: string;
+  route: string;
+  runnerHint: RunnerId | "any";
+  requiresGh: boolean;
+  requiresPrOrIssue: boolean;
+  requiresLocalDiff: boolean;
+  requiresUiApp: boolean;
+  requiresDependencyFiles: boolean;
+  requiresGoatFlowInstall: boolean;
+  mayCheckoutBranch: boolean;
+  requiresCleanWorktree: boolean;
+  mayWriteFiles: boolean;
+  artifactRequired: boolean;
+  globalSafe: boolean;
+  bestTargetSurfacesText: string;
+  notes: string;
+}
+
+/** One selectable quality-page prompt mode. */
+interface QualityModeOption {
+  id: string;
+  label: string;
+  desc: string;
+  source: "api" | "preset" | "registry";
+  presetId?: string;
+  targetScope: string;
+  prompt?: string;
 }
 
 // ---------------------------------------------------------------------------

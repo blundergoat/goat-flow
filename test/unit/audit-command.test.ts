@@ -792,6 +792,102 @@ describe("optional config calibration", () => {
   });
 });
 
+describe("recovery harness milestone tracking", () => {
+  function taskCtx(files: Record<string, string>): AuditContext {
+    const dirs = new Map<string, Set<string>>();
+    dirs.set(".goat-flow/tasks", new Set());
+    for (const file of Object.keys(files)) {
+      const parts = file.split("/");
+      for (let i = 1; i < parts.length; i++) {
+        const parent = parts.slice(0, i).join("/");
+        const child = parts[i];
+        if (child === undefined) continue;
+        if (!dirs.has(parent)) dirs.set(parent, new Set());
+        dirs.get(parent)!.add(child);
+      }
+    }
+    return makeCtx({
+      fs: stubFS({
+        exists: (path) => path === ".goat-flow/tasks" || path in files,
+        listDir: (path) => [...(dirs.get(path) ?? new Set<string>())],
+        readFile: (path) => files[path] ?? null,
+      }),
+    });
+  }
+
+  const check = HARNESS_CHECKS.find((c) => c.id === "milestone-tracking")!;
+
+  it("passes with an empty tasks directory", () => {
+    const result = check.run(taskCtx({}));
+    assert.equal(result.status, "pass");
+    assert.ok(result.findings.some((f) => f.includes("empty")));
+  });
+
+  it("reports archived complete milestone progress as healthy", () => {
+    const result = check.run(
+      taskCtx({
+        ".goat-flow/tasks/_archived/M01-done.md":
+          "**Status:** complete\n\n## Tasks\n- [x] One\n- [x] Two\n",
+      }),
+    );
+    assert.equal(result.status, "pass");
+    assert.ok(result.findings.some((f) => f.includes("2/2 checkboxes")));
+  });
+
+  it("reports active zero-percent milestones without failing", () => {
+    const result = check.run(
+      taskCtx({
+        ".goat-flow/tasks/1.3.0/M00-active.md":
+          "**Status:** in-progress\n\n## Tasks\n- [ ] One\n- [ ] Two\n",
+      }),
+    );
+    assert.equal(result.status, "pass");
+    assert.ok(result.findings.some((f) => f.includes("0/2 checkboxes")));
+    assert.ok(
+      result.findings.some((f) => f.includes("valid local work state")),
+    );
+  });
+
+  it("reports active partial milestone progress", () => {
+    const result = check.run(
+      taskCtx({
+        ".goat-flow/tasks/1.3.0/M01-partial.md":
+          "**Status:** in-progress\n\n## Tasks\n- [x] One\n- [ ] Two\n",
+      }),
+    );
+    assert.equal(result.status, "pass");
+    assert.ok(result.findings.some((f) => f.includes("1/2 checkboxes")));
+  });
+
+  it("keeps planned-but-not-started milestones intentional", () => {
+    const result = check.run(
+      taskCtx({
+        ".goat-flow/tasks/1.3.0/M02-planned.md":
+          "**Status:** planned\n\n## Tasks\n- [ ] One\n- [ ] Two\n",
+      }),
+    );
+    assert.equal(result.status, "pass");
+    assert.ok(
+      result.findings.some((f) => f.includes("valid local work state")),
+    );
+  });
+
+  it("fails only when a milestone claims complete with open checkboxes", () => {
+    const result = check.run(
+      taskCtx({
+        ".goat-flow/tasks/1.3.0/M03-complete.md":
+          "**Status:** complete\n\n## Tasks\n- [x] One\n- [ ] Two\n",
+      }),
+    );
+    assert.equal(result.status, "fail");
+    assert.ok(
+      result.findings.some((f) =>
+        f.includes("marked complete still have open"),
+      ),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Test 10: quality recommendation howToFix includes actionable path
 // ---------------------------------------------------------------------------

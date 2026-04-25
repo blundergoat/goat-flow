@@ -14,7 +14,7 @@ const DASHBOARD_PRESET_CATALOG_PATHS = [
 ] as const;
 
 /** Dashboard preset definitions injected into the browser shell. */
-interface DashboardPreset {
+interface DashboardPreset extends Record<string, unknown> {
   id: string;
   name: string;
   desc: string;

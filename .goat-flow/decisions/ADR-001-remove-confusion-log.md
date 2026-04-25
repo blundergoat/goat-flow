@@ -8,7 +8,7 @@
 
 The GOAT Flow spec defined three learning loop files:
 - `.goat-flow/lessons/` - agent behavioral mistakes
-- `.goat-flow/footguns/` - architectural traps with file:line evidence
+- `.goat-flow/footguns/` - architectural traps with semantic-anchor evidence
 - `docs/confusion-log.md` - structural navigation confusion
 
 The confusion log was designated create-on-first-use: it would materialise when an agent first experienced genuine structural confusion. After 7+ real implementations across apps, libraries, and script collections, the file was never created on any project. The "first use" never came.

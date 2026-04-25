@@ -331,7 +331,68 @@ function readPreset(value: unknown): Preset | null {
   const prompt = readString(value.prompt);
   const cat = readString(value.cat);
   if (!id || !name || !desc || !prompt || !cat) return null;
-  return { id, name, desc, prompt, cat };
+  const costTier =
+    value.costTier === "low" ||
+    value.costTier === "medium" ||
+    value.costTier === "high"
+      ? value.costTier
+      : undefined;
+  return {
+    id,
+    name,
+    desc,
+    prompt,
+    cat,
+    route: readString(value.route) || undefined,
+    source: readString(value.source) || undefined,
+    globalSafe:
+      typeof value.globalSafe === "boolean" ? value.globalSafe : undefined,
+    internalOnly:
+      typeof value.internalOnly === "boolean" ? value.internalOnly : undefined,
+    qualityMode:
+      typeof value.qualityMode === "boolean" ? value.qualityMode : undefined,
+    requiresGh:
+      typeof value.requiresGh === "boolean" ? value.requiresGh : undefined,
+    requiresPrOrIssue:
+      typeof value.requiresPrOrIssue === "boolean"
+        ? value.requiresPrOrIssue
+        : undefined,
+    requiresLocalDiff:
+      typeof value.requiresLocalDiff === "boolean"
+        ? value.requiresLocalDiff
+        : undefined,
+    requiresUiApp:
+      typeof value.requiresUiApp === "boolean"
+        ? value.requiresUiApp
+        : undefined,
+    requiresDependencyFiles:
+      typeof value.requiresDependencyFiles === "boolean"
+        ? value.requiresDependencyFiles
+        : undefined,
+    requiresGoatFlowInstall:
+      typeof value.requiresGoatFlowInstall === "boolean"
+        ? value.requiresGoatFlowInstall
+        : undefined,
+    mayCheckoutBranch:
+      typeof value.mayCheckoutBranch === "boolean"
+        ? value.mayCheckoutBranch
+        : undefined,
+    requiresCleanWorktree:
+      typeof value.requiresCleanWorktree === "boolean"
+        ? value.requiresCleanWorktree
+        : undefined,
+    mayWriteFiles:
+      typeof value.mayWriteFiles === "boolean"
+        ? value.mayWriteFiles
+        : undefined,
+    artifactRequired:
+      typeof value.artifactRequired === "boolean"
+        ? value.artifactRequired
+        : undefined,
+    bestTargetSurfaces: readStringArray(value.bestTargetSurfaces),
+    fallbackPrompt: readString(value.fallbackPrompt) || undefined,
+    costTier,
+  };
 }
 
 /** Read the preset list injected into the dashboard shell. */
@@ -390,6 +451,8 @@ function readServerSessionInfo(value: unknown): ServerSessionInfo | null {
   const runner = readRunnerId(value.runner);
   const createdAt = readString(value.createdAt);
   const projectPath = readString(value.projectPath);
+  const cwd = readString(value.cwd);
+  const targetPath = readString(value.targetPath);
   if (
     !id ||
     !status ||
@@ -406,6 +469,8 @@ function readServerSessionInfo(value: unknown): ServerSessionInfo | null {
     status,
     createdAt,
     projectPath,
+    cwd: cwd || projectPath,
+    targetPath: targetPath || projectPath,
     runner,
     lastInputAt: value.lastInputAt,
     age: typeof value.age === "number" ? value.age : undefined,

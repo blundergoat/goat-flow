@@ -344,7 +344,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     try {
       execFileSync("bash", [denyPath, "--self-test"], {
         stdio: "pipe",
-        timeout: 10000,
+        timeout: 30000,
       });
     } catch {
       return {

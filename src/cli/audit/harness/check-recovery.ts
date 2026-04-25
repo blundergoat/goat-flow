@@ -9,6 +9,13 @@ import { collectMarkdownFiles } from "./helpers.js";
 
 const VERIFIED_ON = "2026-04-18";
 
+interface MilestoneProgress {
+  path: string;
+  status: string | null;
+  checked: number;
+  total: number;
+}
+
 /** Return the recovery provenance. */
 function recoveryProvenance(
   type: HarnessCheck["type"],
@@ -26,6 +33,22 @@ function recoveryProvenance(
           ? "SHOULD"
           : "BEST_PRACTICE",
     evidence_paths: paths,
+  };
+}
+
+function extractStatus(content: string): string | null {
+  const match = content.match(/^\*\*Status:\*\*\s*([^|\n]+)/im);
+  return match?.[1]?.trim().toLowerCase() ?? null;
+}
+
+function countProgress(path: string, content: string): MilestoneProgress {
+  const checkboxMatches = content.match(/- \[[ xX]\]/g) ?? [];
+  const checkedMatches = content.match(/- \[[xX]\]/g) ?? [];
+  return {
+    path,
+    status: extractStatus(content),
+    checked: checkedMatches.length,
+    total: checkboxMatches.length,
   };
 }
 
@@ -67,19 +90,42 @@ const milestoneTracking: HarnessCheck = {
     if (allMdFiles.length === 0) {
       return pass(["Tasks directory exists (empty - valid for new projects)"]);
     }
-    const checkboxPattern = /- \[[ x]\]/;
-    let withCheckboxes = 0;
+    const progress: MilestoneProgress[] = [];
     for (const f of mdFiles) {
       const content = ctx.fs.readFile(f);
-      if (content && checkboxPattern.test(content)) {
-        withCheckboxes++;
-      }
+      if (content) progress.push(countProgress(f, content));
     }
     const extra = allMdFiles.length - mdFiles.length;
     const extraNote =
       extra > 0 ? ` (${extra} non-milestone .md files ignored)` : "";
+    const checked = progress.reduce((sum, item) => sum + item.checked, 0);
+    const total = progress.reduce((sum, item) => sum + item.total, 0);
+    const percent = total === 0 ? 0 : Math.round((checked / total) * 100);
+    const claimedCompleteButOpen = progress.filter(
+      (item) => item.status === "complete" && item.checked < item.total,
+    );
+    if (claimedCompleteButOpen.length > 0) {
+      return fail(
+        [
+          `${checked}/${total} checkboxes complete (${percent}%) across ${mdFiles.length} milestone files${extraNote}`,
+          `Milestones marked complete still have open checkboxes: ${claimedCompleteButOpen.map((item) => item.path).join(", ")}`,
+        ],
+        ["Finish or untick complete status on milestones with open tasks"],
+        [
+          "Update milestone status to in-progress/testing-gate, or tick every completed task before marking the milestone complete.",
+        ],
+      );
+    }
+    const zeroProgress = progress.filter(
+      (item) =>
+        item.total > 0 && item.checked === 0 && item.status !== "complete",
+    ).length;
+    const zeroNote =
+      zeroProgress > 0
+        ? `; ${zeroProgress} planned/in-progress milestone files are at 0% (valid local work state)`
+        : "";
     return pass([
-      `${withCheckboxes}/${mdFiles.length} milestone files have trackable checkbox items${extraNote}`,
+      `${checked}/${total} checkboxes complete (${percent}%) across ${mdFiles.length} milestone files${extraNote}${zeroNote}`,
     ]);
   },
 };

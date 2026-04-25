@@ -55,7 +55,12 @@ interface TerminalSession {
   id: string;
   status: SessionStatus;
   createdAt: string;
+  /** Selected target project for code evidence and dashboard grouping. */
   projectPath: string;
+  /** Actual PTY working directory where the runner was spawned. */
+  cwd: string;
+  /** Explicit target project path passed to the launched agent. */
+  targetPath: string;
   runner: Runner;
   lastInputAt: number;
   pty: IPty | null;
@@ -167,6 +172,7 @@ export class TerminalManager {
     prompt: string,
     projectPath: string,
     runner: Runner = "claude",
+    options: { targetPath?: string } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
       (s) => s.status !== "terminated",
@@ -185,7 +191,10 @@ export class TerminalManager {
       throw new Error(`${runner} CLI not found. Install it first.`);
     }
 
-    const validatedPath = validateProjectPath(projectPath);
+    const validatedCwd = validateProjectPath(projectPath);
+    const validatedTarget = validateProjectPath(
+      options.targetPath || validatedCwd,
+    );
     const nodePty = await this.loadNodePty();
 
     const id = randomUUID();
@@ -202,12 +211,14 @@ export class TerminalManager {
         : `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
       : `"$GOAT_RUNNER"; exec "$SHELL" -i`;
 
-    console.log(`[terminal] Starting ${runner} session in ${validatedPath}`);
+    console.log(
+      `[terminal] Starting ${runner} session in ${validatedCwd} for target ${validatedTarget}`,
+    );
     const pty = nodePty.spawn(shell, ["-c", shellCmd], {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
-      cwd: validatedPath,
+      cwd: validatedCwd,
       env: {
         ...process.env,
         GOAT_RUNNER: cliPath,
@@ -220,7 +231,9 @@ export class TerminalManager {
       id,
       status: "active",
       createdAt: new Date().toISOString(),
-      projectPath: validatedPath,
+      projectPath: validatedTarget,
+      cwd: validatedCwd,
+      targetPath: validatedTarget,
       runner,
       lastInputAt: Date.now(),
       pty,
@@ -448,6 +461,8 @@ export class TerminalManager {
       status: session.status,
       createdAt: session.createdAt,
       projectPath: session.projectPath,
+      cwd: session.cwd,
+      targetPath: session.targetPath,
       runner: session.runner,
       lastInputAt: session.lastInputAt,
     };

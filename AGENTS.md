@@ -73,6 +73,8 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes - write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rule above: update only when VERIFY caught a failure or you corrected course.
 
+**Codex note:** `goat-critique` depends on delegated sub-agents; in Codex, spawn sub-agents only after explicit user delegation consent.
+
 **Ask First** - before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked (`.github/instructions/` / `AGENTS.md` / none), rollback command.
 
 Boundaries:

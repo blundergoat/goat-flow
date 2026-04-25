@@ -59,11 +59,13 @@ Scan only the categories that fit the repo:
 - secrets/data exposure in logs, errors, artifacts, caches, and prompts
 - dependency/supply chain, install scripts, lockfiles, unpinned actions
 - CI/CD workflows, shell entrypoints, release automation
+- local HTTP/WebSocket/PTY runtime: bind address, Host/Origin checks, session IDs, browser-to-terminal input paths, workspace/cwd boundaries, terminal runner prompts
 - agent surfaces: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.github/instructions/**`, installed skill copies (`.claude/**`, `.agents/**`, `.github/**`), hooks, prompts, templates
 
 For diff/PR mode, bucket changed files explicitly:
 - `.github/workflows/**`, release automation, and other CI/CD files
 - `scripts/**`, shell entrypoints, installers, and maintenance scripts
+- local server/runtime files (`src/cli/server/dashboard*.ts`, `src/cli/server/terminal.ts`, WebSocket handlers, PTY/session bridges, terminal runners)
 - application code (`src/**`, handlers, auth, serializers, query builders)
 - config/docs (`package.json`, lockfiles, Dockerfiles, devcontainer/editor config, docs with URLs or commands)
 - agent surfaces (`AGENTS.md`, `CLAUDE.md`, `.agents/**`, `.claude/**`, `.github/**`, hooks, prompts, templates)

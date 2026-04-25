@@ -176,6 +176,14 @@
                       <span class="mono" x-text="s.runner"></span>
                     </p>
                     <p
+                      x-show="s.cwd && s.cwd !== s.projectPath"
+                      class="gf-text-muted"
+                      style="font-size: 11px; margin: 2px 0 0"
+                    >
+                      cwd
+                      <span class="mono" x-text="displayNameFor(s.cwd)"></span>
+                    </p>
+                    <p
                       style="font-size: 12px; margin: 4px 0 0"
                       :style="{ color: (typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? '#fbbf24' : 'var(--text-muted)' }"
                     >

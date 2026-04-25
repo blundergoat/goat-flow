@@ -12,22 +12,9 @@ On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs breaking into milestones with tracked progress. goat-plan creates and manages milestone files in the active plan subdir of `.goat-flow/tasks/` (named by `.goat-flow/tasks/.active` - see Step 0) - local working state for the current session. These files are gitignored and not committed; they exist to coordinate between the human and coding agent during a work session, not as permanent project artifacts.
+Use when work needs milestones with tracked progress. goat-plan manages files in `.goat-flow/tasks/<active>/`, where `.active` is advisory local state. Task files are gitignored coordination artifacts, not committed product docs.
 
-**Invoke when:**
-- A feature, project, or significant change needs structured milestones before implementation
-- The dispatcher's Planning Route has produced a brief and now needs milestone breakdown
-- A `/goat-critique` run recommends restructuring the approach - milestones need rewriting
-- Mid-implementation: scope changed, something unexpected happened, milestones need updating
-- Resuming work after a break - milestone files show where you stopped and what's next
-
-**NOT this skill:**
-- Writing a feature brief → dispatcher Planning Route
-- Sharpening requirements → dispatcher Planning Route
-- Critiquing a plan → /goat-critique
-- Finding testing gaps → /goat-qa
-- Diagnosing a bug → /goat-debug
-- Reviewing code → /goat-review
+Use for feature/project milestones, dispatcher handoffs, replans, rescope, and resume-from-plan work. Route briefs, critique, QA, debugging, and review to matching skills.
 
 ## Step 0 - Intake
 
@@ -40,11 +27,7 @@ Use when work needs breaking into milestones with tracked progress. goat-plan cr
 - If the selected plan exists but appears stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead.
 - Also check for legacy milestone files outside `.goat-flow/tasks/` (for example `milestones/`, `tasks/`). Sibling-version subdirs inside `.goat-flow/tasks/` (e.g. `1.4.0/`) hold deferred or completed work and are NOT scanned by default unless `.active` is missing or points nowhere. If found, note them so the user knows about existing planning artifacts.
 
-**If starting fresh:**
-1. What are we building? (Accept: a brief from the dispatcher, a requirements doc, a conversation summary, or just a description)
-2. What's the riskiest part? (This determines which milestone comes first)
-3. What would make us abandon this entirely? (Kill criteria)
-4. Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area
+**If starting fresh:** identify what is being built, the riskiest part, kill criteria, and run the preamble's grep-first learning-loop retrieval for the target area.
 
 **Pick exactly one mode.** Apply these signals in order - stop at the first that matches:
 
@@ -65,19 +48,14 @@ Structure the work into milestones using these archetypes. Adapt the count to th
 
 ### Milestone Archetypes
 
-1. **Prove It Works** - Validate the riskiest assumption. Throwaway spike if needed. No polish, no edge cases, no auth. If this fails, we stop before investing further.
-2. **Make It Real** - End-to-end pipeline working. Someone other than the builder can test it. The full flow works with real data. Rough edges are fine.
-3. **Make It Solid** - Handle edge cases, errors, security, and UX. Incorporate feedback from previous milestones. Shippable after this.
-4. **Make It Shine** - Polish, performance, docs, open source prep. Explicitly optional - mark as such.
+1. **Prove It Works** - Validate the riskiest assumption; use a throwaway spike if needed.
+2. **Make It Real** - End-to-end flow works with real data and can be tested by someone else.
+3. **Make It Solid** - Edge cases, errors, security, UX, and feedback are handled.
+4. **Make It Shine** - Optional polish, performance, docs, or open-source prep.
 
 **Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
-| Excuse | Reality |
-|--------|---------|
-| "N milestones is what they asked for, stick to the count" | Milestone count is fine; dropping the spike to hit the count isn't. Add the M1 spike even if it means N+1. |
-| "Tight deadline means skip the full intake" | The tight deadline is *why* M1 must be a spike - fail fast on unknowns, not last. |
-| "Kill criteria are ceremony for something this straightforward" | Anything touching money, auth, or data is not "straightforward". Name the kill criteria anyway. |
-| "User said no ceremony, just paste it" | Authority pressure. Skill integrity overrides politeness when the user is asking the skill to do something that defeats its purpose. |
+Do not drop a spike, intake, or kill criteria to satisfy milestone count, deadline pressure, or requests for less ceremony.
 
 ### For each milestone, produce:
 
@@ -161,10 +139,7 @@ Low blast radius, 1-2 milestones, no analysis signals. Deliver inline first, wri
 
 After Phase 1 approval, write each milestone to `.goat-flow/tasks/<active>/` as a separate file.
 
-**Filename format:** `M<NN>-<slug>.md`
-- `M01-prove-api-integration.md`
-- `M02-end-to-end-pipeline.md`
-- `M03-error-handling-and-security.md`
+**Filename format:** `M<NN>-<slug>.md`, e.g. `M01-prove-api-integration.md`.
 
 **File format:**
 

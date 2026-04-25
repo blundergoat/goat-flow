@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3.0 - 2026-04-25
+
+Plan completion protocol, hook version enforcement, deny-hook hardening, and README rewrite. 56 files changed.
+
+- **goat-plan Phase 4 - Plan Complete** - New formal completion protocol requiring both an AI verification gate (every milestone complete, every task ticked, every exit criterion evidenced, every testing gate passed with proof from the current session, every assumption validated) and a blocking human verification gate (agent presents all files changed, all milestones, and evidence for each exit criterion, then waits for explicit approval). Agents MUST NOT include self-destruct instructions in plan artifacts or delete/archive plan files without human approval. Plan Completion Protocol also added to `skill-conventions.md` as shared doctrine.
+- **Hook version comparison audit** - New `checkHookVersion` in `check-agent-setup.ts` compares each installed `deny-dangerous.sh` against the canonical `workflow/hooks/deny-dangerous.sh` template. Mismatches fail the audit with a fix command pointing at the correct `setup --agent` invocation. `goat-flow-hook-version` header added to hook files for traceability.
+- **Hook drift detection** - `check-drift.ts` now compares hook files (not just skills and shared docs). Reads agent hook paths from `manifest.json` and compares against `workflow/hooks/` templates. Missing or divergent hooks surface as drift findings.
+- **Deny hook hardening** - No-space redirect detection: `echo foo>.env`, `echo foo>>.env`, `echo foo>|.env` now blocked (previously only space-separated redirects were caught). `.env.example` redirect writes also blocked. Escaped `.env`/`.env.example` regex dots to prevent false positives on near-miss filenames (`aenv`, `xenv.local`, `aenv.example`). `npm token delete/revoke` blocked as irreversible credential destruction. Self-test expanded with no-space redirect cases, false-positive near-miss probes, and npm token management cases.
+- **bump-version.sh** - Now syncs hook templates to all installed mirrors (reads hook paths from manifest) and updates hook version headers alongside skill frontmatter.
+- **README rewrite** - Dashboard-first positioning. View-by-view descriptions (Home, Setup, Prompts, Workspace, Projects, Quality) replace the previous execution-loop-first framing. Updated "Getting Started" and feature comparison table.
+- **Learning loop** - New lesson in `verification.md`: deny-dangerous self-test needs no-space redirect and false-positive probes — documents the exact bypass patterns and regex fix.
+
 ## v1.2.5 - 2026-04-24
 
 CLI silently exited without running when invoked through a symlink — which is every `npx goat-flow`, `./node_modules/.bin/goat-flow`, and npm `scripts` invocation. Fixed the main-module guard and added a regression test.

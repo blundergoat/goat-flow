@@ -17,13 +17,19 @@ const RUNNERS = new Set(["claude", "codex", "gemini", "copilot"]);
 describe("decodeTerminalCreateBody", () => {
   it("returns typed body on a valid payload", () => {
     const r = decodeTerminalCreateBody(
-      JSON.stringify({ prompt: "hi", projectPath: "/tmp/a", runner: "codex" }),
+      JSON.stringify({
+        prompt: "hi",
+        projectPath: "/tmp/goat-flow",
+        targetPath: "/tmp/a",
+        runner: "codex",
+      }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.equal(r.value.prompt, "hi");
-    assert.equal(r.value.projectPath, "/tmp/a");
+    assert.equal(r.value.projectPath, "/tmp/goat-flow");
+    assert.equal(r.value.targetPath, "/tmp/a");
     assert.equal(r.value.runner, "codex");
   });
 
@@ -62,6 +68,16 @@ describe("decodeTerminalCreateBody", () => {
     assert.equal(r.ok, false);
     if (r.ok) return;
     assert.equal(r.path, "body.prompt");
+  });
+
+  it("rejects non-string targetPath", () => {
+    const r = decodeTerminalCreateBody(JSON.stringify({ targetPath: 42 }), {
+      validRunners: RUNNERS,
+      defaultRunner: "claude",
+    });
+    assert.equal(r.ok, false);
+    if (r.ok) return;
+    assert.equal(r.path, "body.targetPath");
   });
 });
 

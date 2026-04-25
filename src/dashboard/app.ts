@@ -201,6 +201,7 @@ function app() {
 
     // --- Quality state ---
     qualityAgent: defaultRunner,
+    qualityMode: "agent-setup",
     qualityLoading: false,
     qualityResult: null as QualityResult | null,
     qualityCopyLabel: "Copy",
@@ -246,6 +247,12 @@ function app() {
 
     // --- Launcher state ---
     presets: readInjectedPresets(),
+    customPrompts: [] as CustomPrompt[],
+    showInternalPresets:
+      localStorage.getItem("goat-flow-show-internal") === "true",
+    showCustomPromptEditor: false,
+    editingCustomPromptId: null as string | null,
+    customPromptDraft: dashboardDefaultCustomPromptDraft(),
     presetFilter: "all",
     presetSearch: "",
     presetFavorites: readStoredStringArray("goat-flow-preset-favorites"),
@@ -264,6 +271,14 @@ function app() {
     /** Return the preset category filters. */
     get presetCats(): PresetCategory[] {
       return dashboardPresetCats(this);
+    },
+    /** Compact prerequisite/fit badges for a preset row or detail view. */
+    presetBadges(preset: Preset): PresetBadge[] {
+      return dashboardPresetBadges(preset);
+    },
+    /** Built-in presets plus local browser custom prompts. */
+    get allPresets(): Preset[] {
+      return dashboardAllPresets(this);
     },
     /**
      * Favorites stay pinned to the top unless the user explicitly switches into
@@ -314,6 +329,43 @@ function app() {
     /** Copy a preset prompt after applying runner-specific syntax tweaks. */
     copyPreset(prompt: string) {
       dashboardCopyPreset(this, prompt);
+    },
+    /** Open a blank custom prompt editor. */
+    openNewCustomPrompt() {
+      dashboardOpenNewCustomPrompt(this);
+    },
+    /** Edit the currently selected custom prompt. */
+    editSelectedCustomPrompt() {
+      dashboardOpenEditCustomPrompt(this, this.selectedPreset);
+    },
+    /** Start a new custom prompt from the selected custom prompt. */
+    duplicateSelectedCustomPrompt() {
+      dashboardDuplicateCustomPrompt(this, this.selectedPreset);
+    },
+    /** Save the custom prompt editor draft. */
+    saveCustomPrompt() {
+      dashboardSaveCustomPrompt(this);
+    },
+    /** Delete the selected custom prompt after confirmation. */
+    deleteSelectedCustomPrompt() {
+      dashboardDeleteSelectedCustomPrompt(this);
+    },
+    /** Cancel custom prompt editing without changing persisted prompts. */
+    cancelCustomPromptEdit() {
+      this.showCustomPromptEditor = false;
+      this.editingCustomPromptId = null;
+    },
+    /** Return quality-page prompt modes. */
+    get qualityModes(): QualityModeOption[] {
+      return dashboardQualityModes(this);
+    },
+    /** Return the active quality mode option. */
+    get qualityModeMeta(): QualityModeOption | null {
+      return dashboardQualityModeMeta(this);
+    },
+    /** Return the label to use for quality-mode terminal sessions. */
+    qualityLaunchLabel(): string {
+      return dashboardQualityLaunchLabel(this);
     },
     /** Send text to the active terminal session and focus it. */
     sendToTerminal(
@@ -445,6 +497,14 @@ function app() {
           void this.generateQualityHistory();
         }
       });
+      self.$watch("qualityMode", () => {
+        if (this.activeView === "quality") {
+          void this.generateQuality();
+        }
+      });
+      self.$watch("showInternalPresets", (v: boolean) => {
+        localStorage.setItem("goat-flow-show-internal", String(v));
+      });
       self.$watch("sessionsCollapsed", (v: boolean) => {
         localStorage.setItem("gf-sessions-collapsed", String(v));
       });
@@ -466,6 +526,7 @@ function app() {
       });
       updateTitle();
       document.documentElement.classList.toggle("dark", this.darkMode);
+      dashboardLoadCustomPrompts(this);
       void this._loadSavedDashboardState().then(() => {
         if (this.projectsList.length > 0) void this.auditAllProjects();
       });
@@ -760,11 +821,20 @@ function app() {
       {
         promptLabel = null,
         presetId = null,
-      }: { promptLabel?: string | null; presetId?: string | null } = {},
+        cwdPath = null,
+        targetPath = null,
+      }: {
+        promptLabel?: string | null;
+        presetId?: string | null;
+        cwdPath?: string | null;
+        targetPath?: string | null;
+      } = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
         promptLabel,
         presetId,
+        cwdPath,
+        targetPath,
       });
     },
     /** Bind a browser xterm instance to a backend PTY session. */

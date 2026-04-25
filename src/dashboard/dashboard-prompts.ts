@@ -10,11 +10,14 @@ type RenderedPresetEntry =
 
 interface DashboardPromptsContext {
   presets: Preset[];
+  customPrompts: CustomPrompt[];
+  showInternalPresets: boolean;
   presetFilter: string;
   presetSearch: string;
   presetFavorites: string[];
   selectedPreset: Preset | null;
   activeRunner: RunnerId;
+  allPresets: Preset[];
   flatPresetOrder: string[];
   presetsByCategory: Array<{ id: string; label: string; items: Preset[] }>;
   filteredPresets: Preset[];
@@ -58,7 +61,7 @@ function dashboardSelectPresetByOffset(
         : order.length - 1
       : (currentIdx + delta + order.length) % order.length;
   const nextId = order[nextIdx];
-  const next = ctx.presets.find((p) => p.id === nextId);
+  const next = dashboardAllPresets(ctx).find((p) => p.id === nextId);
   if (!next) return;
   ctx.selectedPreset = next;
   requestAnimationFrame(() => {
@@ -67,11 +70,27 @@ function dashboardSelectPresetByOffset(
   });
 }
 
+/** Built-in presets plus local custom prompts, without mutating the shipped JSON. */
+function dashboardAllPresets(ctx: DashboardPromptsContext): Preset[] {
+  return [
+    ...ctx.presets,
+    ...ctx.customPrompts.map((custom) => dashboardCustomPromptToPreset(custom)),
+  ];
+}
+
+/** Presets visible in normal browsing; internal quality prompts require opt-in. */
+function dashboardBrowsablePresets(ctx: DashboardPromptsContext): Preset[] {
+  const list = dashboardAllPresets(ctx);
+  return ctx.showInternalPresets
+    ? list
+    : list.filter((p) => !p.internalOnly && !p.qualityMode);
+}
+
 /** Return the preset category filters. */
 function dashboardPresetCats(ctx: DashboardPromptsContext): PresetCategory[] {
   const cats = new Map<string, string>();
-  const labelOverrides: Record<string, string> = { qa: "QA" };
-  for (const p of ctx.presets) {
+  const labelOverrides: Record<string, string> = { custom: "Custom", qa: "QA" };
+  for (const p of dashboardBrowsablePresets(ctx)) {
     if (!cats.has(p.cat)) {
       cats.set(
         p.cat,
@@ -86,19 +105,100 @@ function dashboardPresetCats(ctx: DashboardPromptsContext): PresetCategory[] {
   ];
 }
 
+/** Return compact prerequisite/fit badges for one preset. */
+function dashboardPresetBadges(preset: Preset): PresetBadge[] {
+  const badges: PresetBadge[] = [];
+  if (preset.internalOnly) {
+    badges.push({
+      label: "Internal",
+      title: "Intended for goat-flow framework maintenance",
+      tone: "danger",
+    });
+  }
+  if (preset.qualityMode) {
+    badges.push({
+      label: "Quality",
+      title: "Quality or skill-assessment workflow",
+      tone: "neutral",
+    });
+  }
+  if (preset.requiresPrOrIssue) {
+    badges.push({
+      label: "Needs PR",
+      title: "Requires a PR, issue, branch, or pasted diff context",
+      tone: "warn",
+    });
+  }
+  if (preset.requiresGh) {
+    badges.push({
+      label: "Needs gh",
+      title:
+        "Uses GitHub CLI when available; prompt must provide fallback context otherwise",
+      tone: "warn",
+    });
+  }
+  if (preset.mayCheckoutBranch) {
+    badges.push({
+      label: "May checkout",
+      title: "May ask to checkout a branch after clean-worktree confirmation",
+      tone: "warn",
+    });
+  }
+  if (preset.requiresCleanWorktree) {
+    badges.push({
+      label: "Clean worktree",
+      title:
+        "Requires a clean worktree or explicit user approval before checkout",
+      tone: "warn",
+    });
+  }
+  if (preset.mayWriteFiles) {
+    badges.push({
+      label: "May write",
+      title: "May write files only with prompt or user approval",
+      tone: "danger",
+    });
+  }
+  if (preset.requiresUiApp) {
+    badges.push({
+      label: "UI workflow",
+      title: "Best suited to app/UI testing",
+      tone: "neutral",
+    });
+  }
+  const surfaces = new Set(preset.bestTargetSurfaces ?? []);
+  if (surfaces.has("library") || surfaces.has("api")) {
+    badges.push({
+      label: "Library/API friendly",
+      title: "Suitable for libraries, APIs, or non-UI projects",
+      tone: "good",
+    });
+  }
+  if (preset.globalSafe) {
+    badges.push({
+      label: "Global safe",
+      title:
+        "Can run against external target projects without goat-flow installed",
+      tone: "good",
+    });
+  }
+  return badges;
+}
+
 /**
  * Favorites stay pinned to the top unless the user explicitly switches into
  * the favorites-only filter, which keeps mixed browsing fast on large lists.
  */
 function dashboardFilteredPresets(ctx: DashboardPromptsContext): Preset[] {
   let list: Preset[];
+  const browsable = dashboardBrowsablePresets(ctx);
   if (ctx.presetFilter === "favorites") {
-    list = ctx.presets.filter((p) => ctx.presetFavorites.includes(p.id));
+    list = browsable.filter((p) => ctx.presetFavorites.includes(p.id));
   } else {
     list =
       ctx.presetFilter === "all"
-        ? ctx.presets
-        : ctx.presets.filter((p) => p.cat === ctx.presetFilter);
+        ? browsable
+        : browsable.filter((p) => p.cat === ctx.presetFilter);
   }
   if (ctx.presetSearch.trim()) {
     const q = ctx.presetSearch.toLowerCase();
@@ -125,10 +225,11 @@ function dashboardPresetsByCategory(
   const cats = dashboardPresetCats(ctx).filter(
     (c) => c.id !== "all" && c.id !== "favorites",
   );
+  const browsable = dashboardBrowsablePresets(ctx);
   return cats.map((cat) => ({
     id: cat.id,
     label: cat.label,
-    items: ctx.presets.filter((p) => p.cat === cat.id),
+    items: browsable.filter((p) => p.cat === cat.id),
   }));
 }
 

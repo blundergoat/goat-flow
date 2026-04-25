@@ -14,7 +14,7 @@
       </div>
       <div class="gf-text-muted" style="font-size: 13px">
         Separate deterministic baseline state from historical quality trends,
-        then run a focused quality-assessment prompt.
+        then run a focused quality-assessment prompt by mode.
       </div>
     </div>
 
@@ -57,6 +57,35 @@
               x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct + '%'; })()"
             ></span>
           </div>
+        </button>
+      </template>
+    </div>
+
+    <div
+      style="
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+      "
+    >
+      <template x-for="mode in qualityModes" :key="'quality-mode-' + mode.id">
+        <button
+          @click="qualityMode = mode.id"
+          class="gf-card"
+          :style="qualityMode === mode.id ? { borderColor: 'var(--accent-border)', background: 'rgba(74,222,128,0.04)' } : {}"
+          style="padding: 11px 12px; text-align: left"
+        >
+          <div
+            class="gf-text-primary"
+            style="font-size: 13px; font-weight: 600"
+            x-text="mode.label"
+          ></div>
+          <div
+            class="gf-text-muted"
+            style="font-size: 11px; line-height: 1.35; margin-top: 4px"
+            x-text="mode.desc"
+          ></div>
         </button>
       </template>
     </div>
@@ -459,7 +488,9 @@
               Quality prompt
             </span>
             <div class="gf-text-muted" style="font-size: 12px; margin-top: 2px">
-              Runner prompt for qualitative review, not deterministic checks.
+              <span
+                x-text="qualityModeMeta ? qualityModeMeta.targetScope : 'Runner prompt for qualitative review, not deterministic checks.'"
+              ></span>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 8px">
@@ -495,7 +526,7 @@
               "
             >
               <button
-                @click="launchPreset(qualityResult.prompt, activeRunner, 'Quality ' + activeRunner); activeView = 'workspace'"
+                @click="launchPreset(qualityResult.prompt, activeRunner, qualityLaunchLabel()); activeView = 'workspace'"
                 :disabled="launching || serverSessions.length >= 10"
                 :title="serverSessions.length >= 10 ? 'Session limit reached (10/10). End one to launch another.' : 'Launch in a new Runner session.'"
                 class="gf-btn-terminal-cta"
@@ -528,8 +559,8 @@
                     class="gf-text-secondary"
                     style="font-weight: 500"
                   ></span>
-                  in reporting-only assessment mode to inspect setup quality and
-                  report findings with evidence.
+                  in the selected quality mode and report findings with
+                  evidence.
                 </span>
               </template>
               <template x-if="terminalSessionId && !terminalEnded">

@@ -65,6 +65,23 @@
       "
     >
       <button
+        @click="openNewCustomPrompt()"
+        class="gf-btn gf-btn-sm gf-btn-primary"
+      >
+        New Custom
+      </button>
+      <label
+        class="gf-btn gf-btn-sm"
+        style="display: inline-flex; align-items: center; gap: 6px"
+      >
+        <input
+          type="checkbox"
+          x-model="showInternalPresets"
+          style="width: 13px; height: 13px"
+        />
+        <span>Internal</span>
+      </label>
+      <button
         class="gf-btn gf-btn-sm"
         :style="presetFilter === 'favorites' ? { background: 'var(--accent-bg)', borderColor: 'var(--accent-border)', color: 'var(--accent)' } : {}"
         @click="presetFilter = 'favorites'"
@@ -81,9 +98,188 @@
                 color: { all: '#4ade80', debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#f472b6', security: '#f87171' }[cat.id] || 'var(--text-primary)',
                 borderColor: { all: 'rgba(74,222,128,0.3)', debug: 'rgba(96,165,250,0.3)', review: 'rgba(45,212,191,0.3)', plan: 'rgba(251,191,36,0.3)', critique: 'rgba(167,139,250,0.3)', qa: 'rgba(244,114,182,0.3)', security: 'rgba(248,113,113,0.3)' }[cat.id] || 'var(--border-default)' }
             : {}"
-          x-text="cat.id === 'all' ? `All ${presets.length}` : `${cat.label} ${(presets.filter(p => p.cat === cat.id).length)}`"
+          x-text="cat.id === 'all' ? `All ${allPresets.filter(p => showInternalPresets || (!p.internalOnly && !p.qualityMode)).length}` : `${cat.label} ${(allPresets.filter(p => p.cat === cat.id && (showInternalPresets || (!p.internalOnly && !p.qualityMode))).length)}`"
         ></button>
       </template>
+    </div>
+
+    <div
+      x-show="showCustomPromptEditor"
+      x-cloak
+      class="gf-card"
+      style="padding: 14px 16px; margin-bottom: 14px"
+    >
+      <div
+        style="
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 10px;
+        "
+      >
+        <label style="display: flex; flex-direction: column; gap: 5px">
+          <span class="section-label">Name</span>
+          <input
+            x-model="customPromptDraft.name"
+            class="gf-input"
+            placeholder="Custom review prompt"
+          />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 5px">
+          <span class="section-label">Route</span>
+          <select x-model="customPromptDraft.route" class="gf-input">
+            <option value="direct">direct</option>
+            <option value="goat">goat</option>
+            <option value="goat-debug">goat-debug</option>
+            <option value="goat-review">goat-review</option>
+            <option value="goat-qa">goat-qa</option>
+            <option value="goat-plan">goat-plan</option>
+            <option value="goat-critique">goat-critique</option>
+            <option value="goat-security">goat-security</option>
+          </select>
+        </label>
+      </div>
+
+      <label
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          margin-top: 10px;
+        "
+      >
+        <span class="section-label">Description</span>
+        <input
+          x-model="customPromptDraft.desc"
+          class="gf-input"
+          placeholder="Short note shown in the prompt list"
+        />
+      </label>
+
+      <label
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          margin-top: 10px;
+        "
+      >
+        <span class="section-label">Prompt</span>
+        <textarea
+          x-model="customPromptDraft.prompt"
+          class="gf-input"
+          style="
+            width: 100%;
+            min-height: 118px;
+            padding: 10px 12px;
+            resize: vertical;
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+          "
+          placeholder="/goat-review review the selected target project..."
+        ></textarea>
+      </label>
+
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px 12px;
+          margin-top: 12px;
+        "
+      >
+        <label class="gf-check-row">
+          <input type="checkbox" x-model="customPromptDraft.requiresGh" />
+          <span>Requires gh</span>
+        </label>
+        <label class="gf-check-row">
+          <input
+            type="checkbox"
+            x-model="customPromptDraft.requiresPrOrIssue"
+          />
+          <span>Needs PR</span>
+        </label>
+        <label class="gf-check-row">
+          <input
+            type="checkbox"
+            x-model="customPromptDraft.requiresLocalDiff"
+          />
+          <span>Needs diff</span>
+        </label>
+        <label class="gf-check-row">
+          <input type="checkbox" x-model="customPromptDraft.requiresUiApp" />
+          <span>UI workflow</span>
+        </label>
+        <label class="gf-check-row">
+          <input
+            type="checkbox"
+            x-model="customPromptDraft.requiresDependencyFiles"
+          />
+          <span>Dependency files</span>
+        </label>
+        <label class="gf-check-row">
+          <input
+            type="checkbox"
+            x-model="customPromptDraft.requiresGoatFlowInstall"
+          />
+          <span>GOAT install</span>
+        </label>
+        <label class="gf-check-row">
+          <input
+            type="checkbox"
+            x-model="customPromptDraft.mayCheckoutBranch"
+          />
+          <span>May checkout</span>
+        </label>
+        <label class="gf-check-row">
+          <input type="checkbox" x-model="customPromptDraft.mayWriteFiles" />
+          <span>May write</span>
+        </label>
+      </div>
+
+      <div
+        style="
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 10px;
+          margin-top: 12px;
+        "
+      >
+        <label style="display: flex; flex-direction: column; gap: 5px">
+          <span class="section-label">Target surfaces</span>
+          <input
+            x-model="customPromptDraft.bestTargetSurfacesText"
+            class="gf-input"
+            placeholder="repo, library, api"
+          />
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 5px">
+          <span class="section-label">Notes</span>
+          <input
+            x-model="customPromptDraft.notes"
+            class="gf-input"
+            placeholder="Fallbacks or launch notes"
+          />
+        </label>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 12px;
+        "
+      >
+        <button @click="cancelCustomPromptEdit()" class="gf-btn gf-btn-md">
+          Cancel
+        </button>
+        <button
+          @click="saveCustomPrompt()"
+          class="gf-btn gf-btn-md gf-btn-primary"
+        >
+          Save Custom Prompt
+        </button>
+      </div>
     </div>
 
     <div
@@ -153,7 +349,14 @@
                 "
                 x-text="p.desc"
               ></p>
-              <div style="display: flex; align-items: center; gap: 6px">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  flex-wrap: wrap;
+                "
+              >
                 <span
                   class="gf-text-secondary"
                   style="
@@ -170,6 +373,16 @@
                   style="font-size: 10px"
                   x-text="p.cat"
                 ></span>
+                <template
+                  x-for="badge in presetBadges(p).slice(0, 3)"
+                  :key="p.id + '-' + badge.label"
+                >
+                  <span
+                    :class="'gf-preset-badge gf-preset-badge-' + badge.tone"
+                    :title="badge.title"
+                    x-text="badge.label"
+                  ></span>
+                </template>
               </div>
             </div>
           </div>
@@ -199,6 +412,28 @@
               >
                 <span x-text="copied ? 'Copied' : 'Copy'"></span>
               </button>
+              <template x-if="selectedPreset.source === 'custom'">
+                <div style="display: flex; gap: 6px">
+                  <button
+                    @click="editSelectedCustomPrompt()"
+                    class="gf-btn gf-btn-md"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    @click="duplicateSelectedCustomPrompt()"
+                    class="gf-btn gf-btn-md"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    @click="deleteSelectedCustomPrompt()"
+                    class="gf-btn gf-btn-md"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </template>
               <div style="flex: 1"></div>
               <button
                 @click="launchPreset(extraContext.trim() ? selectedPreset.prompt + '\n\n' + extraContext.trim() : selectedPreset.prompt, activeRunner, selectedPreset.name)"
@@ -253,6 +488,16 @@
                     "
                     x-text="selectedPreset.cat"
                   ></span>
+                  <template
+                    x-for="badge in presetBadges(selectedPreset)"
+                    :key="selectedPreset.id + '-' + badge.label"
+                  >
+                    <span
+                      :class="'gf-preset-badge gf-preset-badge-' + badge.tone"
+                      :title="badge.title"
+                      x-text="badge.label"
+                    ></span>
+                  </template>
                 </div>
               </div>
               <button

@@ -28,6 +28,7 @@ interface DashboardSetupQualityContext {
   setupGenerating: boolean;
   setupOutputs: Record<string, string>;
   qualityAgent: RunnerId;
+  qualityMode: string;
   qualityLoading: boolean;
   qualityResult: QualityResult | null;
   qualityCopyLabel: string;
@@ -35,9 +36,109 @@ interface DashboardSetupQualityContext {
   qualityHistoryRows: QualityHistoryRow[];
   qualityHistoryLatest: QualityHistoryLatest | null;
   qualityHistoryWarnings: string[];
+  presets: Preset[];
   showToast(msg: string, isError?: boolean): void;
   copyText(text: string): void;
   generateQualityHistory(): Promise<void>;
+}
+
+function dashboardQualityModePreset(
+  ctx: DashboardSetupQualityContext,
+  presetId: string,
+): Preset | null {
+  return ctx.presets.find((preset) => preset.id === presetId) ?? null;
+}
+
+function dashboardQualityModes(
+  ctx: DashboardSetupQualityContext,
+): QualityModeOption[] {
+  const qualityCheck = dashboardQualityModePreset(
+    ctx,
+    "quality-check-goatflow",
+  );
+  const skillQuality = dashboardQualityModePreset(ctx, "skill-quality-test");
+  return [
+    {
+      id: "process",
+      label: "GOAT Flow Process",
+      desc: "Review framework artifacts, instructions, references, hooks, and workflow policy.",
+      source: "preset",
+      presetId: "quality-check-goatflow",
+      targetScope:
+        "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation",
+      prompt: qualityCheck?.prompt,
+    },
+    {
+      id: "agent-setup",
+      label: "Coding Agent Setup",
+      desc: "Generate the existing setup-quality assessment prompt for the selected agent.",
+      source: "api",
+      targetScope: "selected project and selected agent installation",
+    },
+    {
+      id: "harness",
+      label: "Harness Engineering",
+      desc: "Assess context, constraints, verification, recovery, and feedback-loop quality.",
+      source: "registry",
+      targetScope:
+        "selected target project harness, interpreted from the controlling workspace",
+      prompt:
+        "/goat-review audit AI harness engineering factors for the selected target project. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether agent-facing instructions distinguish the controlling goat-flow workspace from the selected target. Read-only: report findings with file evidence; do not modify files.",
+    },
+    {
+      id: "skills",
+      label: "Skills",
+      desc: "Pressure-test goat-flow skills with the RED/GREEN/REFACTOR quality protocol.",
+      source: "preset",
+      presetId: "skill-quality-test",
+      targetScope:
+        "controlling goat-flow workspace skills and shared references",
+      prompt: skillQuality?.prompt,
+    },
+  ];
+}
+
+function dashboardQualityModeMeta(
+  ctx: DashboardSetupQualityContext,
+): QualityModeOption | null {
+  return (
+    dashboardQualityModes(ctx).find((mode) => mode.id === ctx.qualityMode) ??
+    null
+  );
+}
+
+function dashboardQualityLaunchLabel(
+  ctx: DashboardSetupQualityContext,
+): string {
+  const mode = dashboardQualityModeMeta(ctx);
+  if (mode?.presetId) {
+    return (
+      dashboardQualityModePreset(ctx, mode.presetId)?.name ??
+      `Quality ${mode.label}`
+    );
+  }
+  return mode ? `Quality ${mode.label}` : `Quality ${ctx.qualityAgent}`;
+}
+
+function dashboardBuildQualityModePrompt(
+  ctx: DashboardSetupQualityContext,
+  mode: QualityModeOption,
+): string {
+  const prompt = mode.prompt?.trim();
+  if (!prompt) {
+    return "";
+  }
+  return [
+    prompt,
+    "",
+    "Quality mode scope:",
+    `- Mode: ${mode.label}`,
+    `- Controlling goat-flow workspace: ${window.__GOAT_FLOW_DEFAULT_PATH__ ?? "."}`,
+    `- Selected target project: ${ctx.projectPath}`,
+    `- Scope rule: ${mode.targetScope}`,
+    "- Treat missing target .goat-flow files as normal unless this mode explicitly audits a goat-flow installation.",
+    "- Keep this assessment read-only unless the user explicitly asks for edits.",
+  ].join("\n");
 }
 
 /** Detect the selected project's stack and existing GOAT Flow setup state. */
@@ -149,6 +250,24 @@ async function dashboardGenerateQuality(
   ctx.qualityLoading = true;
   ctx.qualityResult = null;
   ctx.qualityCopyLabel = "Copy";
+  const mode = dashboardQualityModeMeta(ctx);
+  if (mode && mode.source !== "api") {
+    const prompt = dashboardBuildQualityModePrompt(ctx, mode);
+    if (!prompt) {
+      ctx.showToast(`${mode.label} prompt is unavailable`, true);
+      ctx.qualityLoading = false;
+      return;
+    }
+    ctx.qualityResult = {
+      command: "quality",
+      agent: ctx.qualityAgent,
+      auditStatus: "unavailable",
+      auditSummary: `${mode.label}: ${mode.desc}`,
+      prompt,
+    };
+    ctx.qualityLoading = false;
+    return;
+  }
   try {
     const res = await fetch(
       `/api/quality?path=${encodeURIComponent(ctx.projectPath)}&agent=${encodeURIComponent(ctx.qualityAgent)}`,

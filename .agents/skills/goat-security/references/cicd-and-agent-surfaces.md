@@ -19,6 +19,14 @@ Use this pack for GitHub Actions, shell scripts, hooks, prompts, instruction fil
 - installers that overwrite tracked config silently
 - verification scripts that claim success without checking exit codes
 
+## Local server and PTY red flags
+
+- local HTTP servers binding wider than localhost without an explicit trust model
+- missing Host or Origin validation on browser and WebSocket requests
+- predictable or absent session IDs on terminal, WebSocket, or PTY channels
+- browser-controlled input reaching shell, PTY, or terminal runners without confirmation and workspace scoping
+- cwd/workspace boundaries that allow one project session to read or execute in another project
+
 ## Agent-surface red flags
 
 - malicious or over-permissive instructions in `AGENTS.md`, prompt files, or skill files
@@ -31,6 +39,7 @@ Use this pack for GitHub Actions, shell scripts, hooks, prompts, instruction fil
 - least-privilege workflow permissions
 - pinned action versions or digests
 - hooks that fail closed on dangerous commands
+- local servers restricted to localhost with checked WebSocket/session provenance
 - instruction files that clearly separate trusted repo policy from untrusted artifact content
 
 ## Review shorthand

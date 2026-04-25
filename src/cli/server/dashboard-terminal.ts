@@ -155,11 +155,12 @@ export function createDashboardTerminalHandlers(
         jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
         return true;
       }
-      const { prompt, projectPath, runner } = decoded.value;
+      const { prompt, projectPath, targetPath, runner } = decoded.value;
       const result = await manager.create(
         prompt,
         projectPath || absDefault,
         runner,
+        { targetPath: targetPath || projectPath || absDefault },
       );
       jsonResponse(res, 200, result);
     } catch (err) {

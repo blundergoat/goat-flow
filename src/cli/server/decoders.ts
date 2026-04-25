@@ -22,6 +22,7 @@ type DecodeResult<T> =
 interface TerminalCreateBody {
   prompt: string;
   projectPath: string;
+  targetPath: string;
   runner: Runner;
 }
 
@@ -83,6 +84,19 @@ function decodeStringArrayField(
   return { ok: true, value: values };
 }
 
+/** Decode one optional string field from a JSON object. */
+function decodeOptionalStringField(
+  raw: Record<string, unknown>,
+  key: "prompt" | "projectPath" | "targetPath",
+): DecodeResult<string> {
+  if (!Object.hasOwn(raw, key)) {
+    return { ok: true, value: "" };
+  }
+  return typeof raw[key] === "string"
+    ? { ok: true, value: raw[key] }
+    : err(`body.${key}`, "must be a string");
+}
+
 /** Decode POST /api/terminal/create body.
  *  Applies the `runner` fallback to the given default when absent or unknown -
  *  preserves existing server behaviour where a missing/bad runner was tolerated. */
@@ -96,22 +110,17 @@ export function decodeTerminalCreateBody(
   if (!isRecord(raw)) return err("body", "must be a JSON object");
 
   // prompt: optional string; empty string allowed (opens an idle shell).
-  let prompt = "";
-  if (Object.hasOwn(raw, "prompt")) {
-    if (typeof raw.prompt !== "string") {
-      return err("body.prompt", "must be a string");
-    }
-    prompt = raw.prompt;
-  }
+  const prompt = decodeOptionalStringField(raw, "prompt");
+  if (!prompt.ok) return prompt;
 
   // projectPath: optional string.
-  let projectPath = "";
-  if (Object.hasOwn(raw, "projectPath")) {
-    if (typeof raw.projectPath !== "string") {
-      return err("body.projectPath", "must be a string");
-    }
-    projectPath = raw.projectPath;
-  }
+  const projectPath = decodeOptionalStringField(raw, "projectPath");
+  if (!projectPath.ok) return projectPath;
+
+  // targetPath: optional string. When present, the runner cwd can differ from
+  // the selected project being analysed.
+  const targetPath = decodeOptionalStringField(raw, "targetPath");
+  if (!targetPath.ok) return targetPath;
 
   // runner: optional string; fall back to default when absent or unknown.
   let runner: AgentId = options.defaultRunner;
@@ -123,7 +132,15 @@ export function decodeTerminalCreateBody(
     // error to avoid breaking frontends that send legacy/stale values.
   }
 
-  return { ok: true, value: { prompt, projectPath, runner } };
+  return {
+    ok: true,
+    value: {
+      prompt: prompt.value,
+      projectPath: projectPath.value,
+      targetPath: targetPath.value,
+      runner,
+    },
+  };
 }
 
 /** Decode POST /api/projects/list body. */

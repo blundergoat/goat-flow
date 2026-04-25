@@ -27,7 +27,12 @@ export interface SessionInfo {
   id: string;
   status: SessionStatus;
   createdAt: string;
+  /** Selected target project for code evidence and dashboard grouping. */
   projectPath: string;
+  /** Actual PTY working directory where the runner was spawned. */
+  cwd: string;
+  /** Explicit target project path passed to the launched agent. */
+  targetPath: string;
   runner: Runner;
   /** Epoch milliseconds of last user input (for idle duration calculation) */
   lastInputAt: number;

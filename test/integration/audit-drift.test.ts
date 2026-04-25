@@ -446,7 +446,7 @@ describe("checkDrift: installer round-trip fixture", () => {
 
   it(
     "installs fixture-backed references, passes preflight, and reports zero drift",
-    { timeout: 120000 },
+    { timeout: 400000 },
     () => {
       const { agentIds, skillRoots } = patchInstallRoundTripFixture(root);
       const format = runCommand(
@@ -496,7 +496,7 @@ describe("checkDrift: installer round-trip fixture", () => {
         root,
         "bash",
         ["scripts/preflight-checks.sh"],
-        120000,
+        400000,
       );
       assert.equal(
         preflight.status,

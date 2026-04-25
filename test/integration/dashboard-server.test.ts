@@ -207,6 +207,7 @@ describe("dashboard HTML", () => {
     assert.match(html, /\/assets\/dashboard-readers\.js/);
     assert.match(html, /\/assets\/dashboard-setup-quality\.js/);
     assert.match(html, /\/assets\/dashboard-projects\.js/);
+    assert.match(html, /\/assets\/dashboard-custom-prompts\.js/);
     assert.match(html, /\/assets\/dashboard-prompts\.js/);
     assert.match(html, /\/assets\/dashboard-terminal\.js/);
     assert.match(html, /\/assets\/app\.js/);
@@ -250,6 +251,15 @@ describe("dashboard assets", () => {
     assert.match(body, /function dashboardFilteredPresets\(/);
   });
 
+  it("GET /assets/dashboard-custom-prompts.js returns JavaScript", async () => {
+    const res = await fetch(`${baseUrl}/assets/dashboard-custom-prompts.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+
+    const body = await res.text();
+    assert.match(body, /function dashboardSaveCustomPrompt\(/);
+  });
+
   it("GET /assets/dashboard-terminal.js returns JavaScript", async () => {
     const res = await fetch(`${baseUrl}/assets/dashboard-terminal.js`);
     assert.equal(res.status, 200);
@@ -282,6 +292,10 @@ describe("dashboard assets", () => {
     const body = (await res.json()) as unknown;
     assert.ok(Array.isArray(body));
     assert.ok(body.length > 0);
+    const first = body[0] as Record<string, unknown>;
+    assert.equal(typeof first.route, "string");
+    assert.equal(typeof first.globalSafe, "boolean");
+    assert.ok(Array.isArray(first.bestTargetSurfaces));
   });
 
   it("rejects path traversal asset requests", async () => {

@@ -275,6 +275,10 @@ run_self_test() {
   # Quoted alternation inside read-only commands must not trip pipe-to-shell detection.
   run_case "rg quoted alternation" "rg -n 'shellcheck|bash -n|npm test' CLAUDE.md" 0
   run_case "rg double-quoted alternation" 'rg -n "foo|bar" CLAUDE.md' 0
+  run_case "rg quoted semicolon" 'rg "; rm -rf /" src/' 0
+  run_case "rg quoted and-chain" 'rg "&& rm -rf /" src/' 0
+  run_case "semicolon chained rm" 'true; rm -rf /' 2
+  run_case "and chained rm" 'true && rm -rf /' 2
   # Safe sh -c / bash -c wrappers around read-only commands should pass; dangerous ones still block.
   run_case "xargs sh -c safe" "xargs -I {} sh -c 'echo {}'" 0
   run_case "bash -c safe" 'bash -c "echo hello"' 0
@@ -707,7 +711,75 @@ check_segment() {
 # --- Command Chaining Split ---------------------------------------------------
 # Split on &&, ||, and ; so chained commands are each checked independently.
 # Without this, "safe-cmd && rm -rf /" bypasses detection.
-IFS=$'\n' read -r -d '' -a segments < <(echo "$COMMAND" | sed 's/&&/\n/g; s/||/\n/g; s/;/\n/g' && printf '\0') || true
+split_command_segments() {
+  local input="$1"
+  local -a split_segments=()
+  local current=""
+  local char=""
+  local next=""
+  local in_single=0
+  local in_double=0
+  local escaped=0
+  local i=0
+
+  for ((i = 0; i < ${#input}; i++)); do
+    char="${input:i:1}"
+
+    if [[ "$escaped" -eq 1 ]]; then
+      current+="$char"
+      escaped=0
+      continue
+    fi
+
+    if [[ "$in_double" -eq 1 && "$char" == "\\" ]]; then
+      current+="$char"
+      escaped=1
+      continue
+    fi
+
+    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        in_double=0
+      else
+        in_double=1
+      fi
+      current+="$char"
+      continue
+    fi
+
+    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      if [[ "$in_single" -eq 1 ]]; then
+        in_single=0
+      else
+        in_single=1
+      fi
+      current+="$char"
+      continue
+    fi
+
+    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 ]]; then
+      next="${input:i+1:1}"
+      if [[ "$char$next" == "&&" || "$char$next" == "||" ]]; then
+        split_segments+=("$current")
+        current=""
+        i=$((i + 1))
+        continue
+      fi
+      if [[ "$char" == ";" ]]; then
+        split_segments+=("$current")
+        current=""
+        continue
+      fi
+    fi
+
+    current+="$char"
+  done
+
+  split_segments+=("$current")
+  printf '%s\0' "${split_segments[@]}"
+}
+
+mapfile -d '' -t segments < <(split_command_segments "$COMMAND")
 
 for segment in "${segments[@]}"; do
   segment=$(echo "$segment" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
