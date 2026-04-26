@@ -48,7 +48,7 @@ The dashboard is the interface. Underneath, GOAT Flow installs a harness that ma
 |---|---|
 | **Execution Loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code, shipping without checks |
 | **Skills** (seven `/goat-*` commands + dispatcher) | Free-form prompting that drifts mid-task |
-| **Enforcement Hooks** (`deny-dangerous.sh`) | `rm -rf`, force-push, secret file access |
+| **Enforcement Hooks** (`deny-dangerous.sh`) | `rm -rf`, all git push, secret file access |
 | **Learning Loop** (footguns, lessons, decisions) | Same mistake recurring next session |
 | **Autonomy Tiers** (Always / Ask First / Never) | Agent overreach, missed approvals |
 

@@ -95,7 +95,7 @@
       "name": "What is the difference between a system prompt and a harness?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A system prompt is a suggestion the model can ignore under pressure. A harness enforces rules structurally at the tool layer, where the model cannot bypass them. A deny hook that blocks 'git push --force' is a guarantee; the same rule in a markdown file is guidance."
+        "text": "A system prompt is a suggestion the model can ignore under pressure. A harness enforces rules structurally at the tool layer, where the model cannot bypass them. A deny hook that blocks 'git push' is a guarantee; the same rule in a markdown file is guidance."
       }
     },
     {
@@ -847,7 +847,7 @@
 
   <ul>
     <li><strong>Context</strong> - hot-path router with cold-path domain docs. READ → SCOPE → ACT → VERIFY execution loop enforced in every instruction file.</li>
-    <li><strong>Constraints</strong> - <code>deny-dangerous</code> hook blocks destructive commands at the tool-call layer. Covers <code>rm -rf</code>, force-push, secret reads, subshell escapes, and database truncation.</li>
+    <li><strong>Constraints</strong> - <code>deny-dangerous</code> hook blocks destructive commands at the tool-call layer. Covers <code>rm -rf</code>, all git push, secret reads, subshell escapes, and database truncation.</li>
     <li><strong>Verification</strong> - post-action hooks, typecheck/lint gates, and structured skills with built-in stopping points before the agent moves on.</li>
     <li><strong>Recovery</strong> - milestone files with trackable checkboxes, session logs, and compaction-safe artefacts the agent reads on resume.</li>
     <li><strong>Feedback loop</strong> - <code>footguns/</code>, <code>lessons/</code>, and <code>decisions/</code> directories with semantic-anchor evidence. Every mistake becomes next session's context.</li>

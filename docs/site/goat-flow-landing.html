@@ -85,7 +85,7 @@
       "name": "How does goat-flow prevent AI agents from making dangerous changes?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches destructive filesystem commands like rm -rf, force-pushes, secret file reads, subshell escapes, and database truncation. These are hardcoded boundaries the model cannot bypass through prompt manipulation."
+        "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches destructive filesystem commands like rm -rf, all git push, secret file reads, subshell escapes, and database truncation. These are hardcoded boundaries the model cannot bypass through prompt manipulation."
       }
     },
     {
@@ -854,7 +854,7 @@
         <div class="piece-num">03 / Hooks</div>
         <h3>Safety nets that can't be skipped</h3>
         <p>
-          Pre-action guards block dangerous commands before they run. Post-action guards catch silent breakage after. <code style="font-size: 12.5px; color: var(--accent);">deny-dangerous</code> ships by default, blocking destructive filesystem commands, force-push, secret exfiltration, and risky subshells.
+          Pre-action guards block dangerous commands before they run. Post-action guards catch silent breakage after. <code style="font-size: 12.5px; color: var(--accent);">deny-dangerous</code> ships by default, blocking destructive filesystem commands, all git push, secret exfiltration, and risky subshells.
         </p>
         <div class="sub">.goat-flow/hooks/</div>
       </div>
@@ -985,7 +985,7 @@
       <div class="hook-copy">
         <h3>Ships with sensible defaults</h3>
         <p>
-          <code style="color: var(--accent); font-size: 13.5px;">deny-dangerous</code> catches the patterns agents hit most often when they go off-script: destructive filesystem commands, force-pushes, secret file reads, subshell escapes, and database truncation.
+          <code style="color: var(--accent); font-size: 13.5px;">deny-dangerous</code> catches the patterns agents hit most often when they go off-script: destructive filesystem commands, all git push, secret file reads, subshell escapes, and database truncation.
         </p>
         <h3 style="margin-top: 24px;">Extend with your own</h3>
         <p>
@@ -1000,7 +1000,7 @@
         </div>
         <div class="hook-block-body">
           <div class="hook-pattern"><span class="x">✗</span><span class="pat">rm -rf</span><span class="note">destructive</span></div>
-          <div class="hook-pattern"><span class="x">✗</span><span class="pat">git push --force</span><span class="note">history rewrite</span></div>
+          <div class="hook-pattern"><span class="x">✗</span><span class="pat">git push</span><span class="note">all pushes blocked</span></div>
           <div class="hook-pattern"><span class="x">✗</span><span class="pat">cat .env</span><span class="note">secret read</span></div>
           <div class="hook-pattern"><span class="x">✗</span><span class="pat">curl | sh</span><span class="note">exfiltration</span></div>
           <div class="hook-pattern"><span class="x">✗</span><span class="pat">eval, bash -c</span><span class="note">subshell escape</span></div>
