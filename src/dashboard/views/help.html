@@ -126,10 +126,12 @@
             style="font-size: 14px; line-height: 1.7; margin: 0"
           >
             Every serious practitioner has converged on the same insight: the
-            LLM is commodity, the scaffolding around it isn't. Files it can
-            read, commands it can run, rules it must obey, memory it keeps
-            across sessions. That's the harness. goat-flow gives you one,
-            opinionated, out of the box.
+            LLM is commodity, the scaffolding around it isn't. LangChain moved
+            their coding agent from Top 30 to Top 5 on Terminal Bench 2.0
+            without changing the model — only the harness. Files it can read,
+            commands it can run, rules it must obey, memory it keeps across
+            sessions. That's the harness. goat-flow gives you one, opinionated,
+            out of the box.
           </p>
         </div>
 
@@ -992,9 +994,9 @@
             style="font-size: 14px; margin-top: 16px; line-height: 1.65"
           >
             Sources: Mitchell Hashimoto, Birgitta Böckeler (martinfowler.com),
-            Anthropic engineering, and HumanLayer. goat-flow synthesises these
-            into a working system with strong defaults, rather than a framework
-            you have to assemble yourself.
+            Anthropic engineering, HumanLayer, and LangChain. goat-flow
+            synthesises these into a working system with strong defaults, rather
+            than a framework you have to assemble yourself.
           </p>
         </section>
 
@@ -1027,7 +1029,7 @@
             class="gf-text-muted"
             style="font-size: 15px; max-width: 640px; margin: 0 0 18px"
           >
-            Where to go next. Home is the usual starting point.
+            Each view has a specific job. Home is the usual starting point.
           </p>
 
           <div class="gf-card" style="overflow: hidden; padding: 0">
@@ -1035,7 +1037,7 @@
               x-for="(link, idx) in [
                 { view: 'home', label: 'Home', desc: 'Health overview, agent cards, and the audit status strip' },
                 { view: 'setup', label: 'Setup', desc: 'Generate and run a setup prompt for a specific agent' },
-                { view: 'quality', label: 'Quality', desc: 'Agent-driven quality assessment for the selected agent' },
+                { view: 'quality', label: 'Quality', desc: 'Agent-driven quality assessment across four modes: installation, process, harness, and skills' },
                 { view: 'prompts', label: 'Prompts', desc: 'Ready-made prompts for the functional goat-flow skills' },
                 { view: 'workspace', label: 'Workspace', desc: 'Terminal sessions and running prompts in one view' },
                 { view: 'projects', label: 'Projects', desc: 'Switch between project directories for auditing' }
