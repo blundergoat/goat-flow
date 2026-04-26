@@ -117,6 +117,8 @@ export interface BucketFreshness {
   maxEntryDate: string | null;
   /** File content size in bytes. Used by `goat-flow stats --check` for bucket-size warnings. */
   sizeBytes: number;
+  /** Total line count of the bucket file. */
+  lineCount: number;
 }
 
 /** Facts shared across all agents (project-wide files and directories) */

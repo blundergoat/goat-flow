@@ -240,8 +240,19 @@
       if (!summary || summary.status === 'unavailable') return 'no learning-loop files';
       const stale = summary.staleCount || 0;
       const oversized = summary.oversizedCount || 0;
-      if (stale === 0 && oversized === 0) return summary.recordCount + ' records, 0 stale';
-      return stale + ' stale, ' + oversized + ' oversized';
+      const parts = [summary.footgunCount + ' footguns', summary.lessonCount + ' lessons'];
+      if (stale > 0) parts.push(stale + ' stale');
+      if (oversized > 0) parts.push(oversized + ' oversized');
+      if (summary.invalidLineRefCount > 0) parts.push(summary.invalidLineRefCount + ' bad refs');
+      return parts.join(', ');
+    },
+    learningOldest() {
+      const summary = this.learningSummary();
+      return summary?.oldestLastReviewed || null;
+    },
+    learningTopBuckets() {
+      const summary = this.learningSummary();
+      return summary?.topBucketsNeedingAction || [];
     },
     qualityLatestDate() {
       if (!homeQualityLatest?.date) return null;

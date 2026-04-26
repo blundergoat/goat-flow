@@ -173,22 +173,67 @@ function buildDashboardLearningLoopSummary(
     const check = checkStats(stats);
     const staleCount = check.findings.filter(
       (finding) =>
-        finding.rule === "stale-last-reviewed" ||
-        finding.rule === "stale-ref" ||
-        finding.rule === "invalid-line-ref",
+        finding.rule === "stale-last-reviewed" || finding.rule === "stale-ref",
+    ).length;
+    const invalidLineRefCount = check.findings.filter(
+      (finding) => finding.rule === "invalid-line-ref",
     ).length;
     const oversizedCount = check.findings.filter(
       (finding) => finding.rule === "bucket-size",
     ).length;
     const recordCount =
       stats.footguns.totalEntries + stats.lessons.totalEntries;
+
+    const allBuckets = [...stats.footguns.buckets, ...stats.lessons.buckets];
+    const reviewed = allBuckets
+      .filter((b) => b.lastReviewed !== null)
+      .sort((a, b) => (a.lastReviewed! < b.lastReviewed! ? -1 : 1));
+    const oldestLastReviewed = reviewed[0]?.lastReviewed ?? null;
+
+    const topBucketsNeedingAction = allBuckets
+      .filter(
+        (b) =>
+          b.staleRefs.length > 0 ||
+          b.invalidLineRefs.length > 0 ||
+          b.sizeBytes > 40_000,
+      )
+      .sort(
+        (a, b) =>
+          b.staleRefs.length +
+          b.invalidLineRefs.length -
+          (a.staleRefs.length + a.invalidLineRefs.length),
+      )
+      .slice(0, 3)
+      .map((b) => ({
+        path: b.path,
+        reason: [
+          b.staleRefs.length > 0 ? `${b.staleRefs.length} stale refs` : "",
+          b.invalidLineRefs.length > 0
+            ? `${b.invalidLineRefs.length} invalid line refs`
+            : "",
+          b.sizeBytes > 40_000 ? `${Math.round(b.sizeBytes / 1024)}KB` : "",
+        ]
+          .filter(Boolean)
+          .join(", "),
+      }));
+
     const status =
       !shared.footguns.exists && !shared.lessons.exists
         ? "unavailable"
         : staleCount > 2 || oversizedCount > 0
           ? "needs-review"
           : "fresh";
-    return { recordCount, staleCount, oversizedCount, status };
+    return {
+      recordCount,
+      footgunCount: stats.footguns.totalEntries,
+      lessonCount: stats.lessons.totalEntries,
+      staleCount,
+      invalidLineRefCount,
+      oversizedCount,
+      oldestLastReviewed,
+      topBucketsNeedingAction,
+      status,
+    };
   } catch {
     return null;
   }

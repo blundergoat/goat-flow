@@ -698,5 +698,30 @@
     "bestTargetSurfaces": ["repo", "library", "api", "cli", "ui"],
     "fallbackPrompt": "",
     "costTier": "high"
+  },
+  {
+    "id": "browser-debug",
+    "name": "Debug UI in Browser",
+    "desc": "Diagnose a browser-visible bug using browser-use for live evidence",
+    "prompt": "/goat-debug diagnose a UI bug using browser evidence. Check browser-use is available (`command -v browser-use`), then ask me for the URL and what's broken. Open the page, capture state and a screenshot, then read the relevant source files and write hypotheses. Use browser evidence to confirm or eliminate each hypothesis - don't guess from code alone. Stop at D2 with the diagnosis and browser evidence before proposing a fix.",
+    "cat": "debug",
+    "route": "goat-debug",
+    "source": "goat-flow-catalog",
+    "globalSafe": false,
+    "internalOnly": false,
+    "qualityMode": false,
+    "requiresGh": false,
+    "requiresPrOrIssue": false,
+    "requiresLocalDiff": false,
+    "requiresUiApp": true,
+    "requiresDependencyFiles": false,
+    "requiresGoatFlowInstall": false,
+    "mayCheckoutBranch": false,
+    "requiresCleanWorktree": false,
+    "mayWriteFiles": false,
+    "artifactRequired": false,
+    "bestTargetSurfaces": ["ui"],
+    "fallbackPrompt": "No browser-use CLI detected. Install it first (see https://github.com/browser-use/browser-use), then retry. Or use /goat-debug without browser evidence and inspect manually.",
+    "costTier": "low"
   }
 ]

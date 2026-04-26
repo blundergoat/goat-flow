@@ -147,8 +147,13 @@ export interface DashboardReport {
   };
   learningLoop: {
     recordCount: number;
+    footgunCount: number;
+    lessonCount: number;
     staleCount: number;
+    invalidLineRefCount: number;
     oversizedCount: number;
+    oldestLastReviewed: string | null;
+    topBucketsNeedingAction: { path: string; reason: string }[];
     status: "fresh" | "needs-review" | "unavailable";
   } | null;
   recentLessons: {

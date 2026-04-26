@@ -564,6 +564,8 @@ function buildBucketFreshness(
     invalidLineRefs,
     maxEntryDate,
     sizeBytes: Buffer.byteLength(entry.content, "utf8"),
+    lineCount:
+      entry.content.split("\n").length - (entry.content.endsWith("\n") ? 1 : 0),
   };
 }
 
