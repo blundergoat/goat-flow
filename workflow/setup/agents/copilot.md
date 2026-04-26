@@ -7,6 +7,7 @@
 | Resource | Path |
 |----------|------|
 | Instruction file | `.github/copilot-instructions.md` |
+| Commit instructions | `.github/git-commit-instructions.md` |
 | Skills directory | `.github/skills/` |
 | Hooks config | `.github/hooks/hooks.json` |
 | Hooks directory | `.github/hooks/` |
@@ -14,7 +15,7 @@
 
 ## Owns
 
-`.github/copilot-instructions.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`.
+`.github/copilot-instructions.md`, `.github/git-commit-instructions.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`.
 
 ## Hands off
 
@@ -30,6 +31,7 @@ Copilot runs on a standalone hot-path instruction file, not an overlay. `.github
 - It MUST contain Truth Order, Execution Loop (READ → SCOPE → ACT → VERIFY), Definition of Done, Router Table, and Autonomy Tiers - the same hot-path sections as CLAUDE.md / AGENTS.md / GEMINI.md.
 - Add a **Copilot-Specific** section at the end for runtime specifics: built-in agents (`explore`, `task`, `general-purpose`, `code-review`), `/fleet` usage, `.github/hooks/hooks.json` guardrails, and `.copilotignore` hygiene.
 - Do NOT defer to AGENTS.md; Copilot is a peer, not an overlay consumer.
+- When `.github/` exists, commit guidance MUST live at `.github/git-commit-instructions.md`. Treat that file as part of the Copilot install; `goat-flow audit --agent copilot` fails without it.
 
 ### Hooks
 
@@ -54,6 +56,7 @@ After completing step 03 (skills):
 ### Verification
 
 - `.github/copilot-instructions.md` exists and stays under the 150-line hard limit (120 target)
+- `.github/git-commit-instructions.md` exists
 - `.github/copilot-instructions.md` contains Truth Order, Execution Loop, Definition of Done, Router Table, and Autonomy Tiers as level-2 headings
 - `.github/skills/` contains the 7 canonical goat-flow skills
 - `.github/hooks/hooks.json` registers `.github/hooks/deny-dangerous.sh`

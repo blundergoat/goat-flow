@@ -66,6 +66,37 @@ function extractDecisionsFacts(
   return { dirExists, fileCount, path, hasRealContent };
 }
 
+/** Resolve the project-local commit guidance location. */
+function extractGitCommitInstructionFacts(
+  fs: ReadonlyFS,
+): SharedFacts["gitCommitInstructions"] {
+  const githubPath = ".github/git-commit-instructions.md";
+  const fallbackPaths = [
+    ".github/instructions/git-commit.md",
+    "docs/coding-standards/git-commit.md",
+  ];
+  const githubDirExists = fs.exists(".github");
+  const githubPathExists = fs.exists(githubPath);
+  const misplacedPaths = fallbackPaths.filter((path) => fs.exists(path));
+
+  if (githubDirExists) {
+    return {
+      exists: githubPathExists,
+      path: githubPathExists ? githubPath : null,
+      requiredPath: githubPath,
+      misplacedPaths: githubPathExists ? [] : misplacedPaths,
+    };
+  }
+
+  const fallbackPath = fallbackPaths.find((path) => fs.exists(path)) ?? null;
+  return {
+    exists: githubPathExists || fallbackPath !== null,
+    path: githubPathExists ? githubPath : fallbackPath,
+    requiredPath: fallbackPath ?? githubPath,
+    misplacedPaths: [],
+  };
+}
+
 /** Extract project-wide shared facts from docs, CI, and config files. */
 export function extractSharedFacts(
   fs: ReadonlyFS,
@@ -99,12 +130,7 @@ export function extractSharedFacts(
     // changelog removed - project-level concern, not AI workflow.
     decisions: extractDecisionsFacts(fs, configState.config.decisions.path),
     localInstructions,
-    gitCommitInstructions: {
-      exists:
-        fs.exists(".github/git-commit-instructions.md") ||
-        fs.exists(".github/instructions/git-commit.md") ||
-        fs.exists("docs/coding-standards/git-commit.md"),
-    },
+    gitCommitInstructions: extractGitCommitInstructionFacts(fs),
     localInstructionsLineCount: countLocalInstructionLines(localInstructions),
   };
 }

@@ -247,7 +247,12 @@ export function makeSharedFacts(): ProjectFacts["shared"] {
       localFileSizes: [],
       path: "",
     },
-    gitCommitInstructions: { exists: false },
+    gitCommitInstructions: {
+      exists: false,
+      path: null,
+      requiredPath: ".github/git-commit-instructions.md",
+      misplacedPaths: [],
+    },
     localInstructionsLineCount: 0,
   };
 }

@@ -198,7 +198,12 @@ export interface SharedFacts {
     localFileSizes: Array<{ path: string; lines: number }>;
     path: string;
   };
-  gitCommitInstructions: { exists: boolean };
+  gitCommitInstructions: {
+    exists: boolean;
+    path: string | null;
+    requiredPath: string;
+    misplacedPaths: string[];
+  };
   /** Total line count across canonical local-instruction files. */
   localInstructionsLineCount: number;
 }

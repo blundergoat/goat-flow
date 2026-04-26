@@ -100,7 +100,7 @@ Verification loops are consistently reported as the single highest-impact harnes
 
 - `test-runner-configured` - informational (always passes). Reports whether `toolchain.test` is set in `config.yaml`, or notes that project-local / instruction-file commands are the source of truth. Missing `toolchain.test` is explicitly treated as valid.
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
-- `commit-guidance` - commit guidance is present (instruction file contains commit conventions or a local git-commit guidance doc exists, such as `docs/coding-standards/git-commit.md`)
+- `commit-guidance` - commit guidance is present. When `.github/` exists, the guidance must live at `.github/git-commit-instructions.md`; otherwise a local git-commit guidance doc can satisfy the check.
 - `post-turn-hook-integrity` - informational (always passes). If a post-turn hook exists, reports whether it runs validation and whether it exits 0 unconditionally (advisory mode)
 
 **Not checked here:** lint command presence (no longer required - treated as project-local), Ask First quality, verification effectiveness. goat-flow core does not ship a post-turn hook - the integrity check only reports on project-specific hooks if present.

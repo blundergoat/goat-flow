@@ -101,6 +101,68 @@ describe("harness howToFix", () => {
   });
 });
 
+describe("commit-guidance harness check", () => {
+  const commitGuidanceCheck = HARNESS_CHECKS.find(
+    (c) => c.id === "commit-guidance",
+  );
+
+  it("passes when commit guidance is in the .github canonical path", () => {
+    assert.ok(commitGuidanceCheck, "commit-guidance check must exist");
+    const shared = makeSharedFacts();
+    shared.gitCommitInstructions = {
+      exists: true,
+      path: ".github/git-commit-instructions.md",
+      requiredPath: ".github/git-commit-instructions.md",
+      misplacedPaths: [],
+    };
+
+    const result = commitGuidanceCheck.run(
+      makeCtx({
+        facts: {
+          ...makeCtx().facts,
+          shared,
+        },
+      }),
+    );
+
+    assert.equal(result.status, "pass");
+    assert.match(
+      result.findings.join("\n"),
+      /\.github\/git-commit-instructions\.md/,
+    );
+  });
+
+  it("fails when a .github project keeps commit guidance only in docs", () => {
+    assert.ok(commitGuidanceCheck, "commit-guidance check must exist");
+    const shared = makeSharedFacts();
+    shared.gitCommitInstructions = {
+      exists: false,
+      path: null,
+      requiredPath: ".github/git-commit-instructions.md",
+      misplacedPaths: ["docs/coding-standards/git-commit.md"],
+    };
+
+    const result = commitGuidanceCheck.run(
+      makeCtx({
+        facts: {
+          ...makeCtx().facts,
+          shared,
+        },
+      }),
+    );
+
+    assert.equal(result.status, "fail");
+    assert.match(
+      result.findings.join("\n"),
+      /belongs at \.github\/git-commit-instructions\.md/,
+    );
+    assert.match(
+      result.howToFix?.join("\n") ?? "",
+      /docs\/coding-standards\/git-commit\.md/,
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Deny hook registration check
 // ---------------------------------------------------------------------------

@@ -39,7 +39,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
-| `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; without `--agent`, this also detects orphaned agent artifacts whose instruction file was removed |
+| `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; Copilot additionally requires `.github/git-commit-instructions.md` when `.github/` exists. Without `--agent`, this also detects orphaned agent artifacts and incomplete Copilot installs |
 | `agent-skills` | Agent skills | The selected agent has every canonical skill file, each installed skill declares the current `goat-flow-skill-version`, and no deprecated skill directories remain |
 | `agent-settings` | Agent settings | The selected agent's settings file parses as valid JSON or TOML |
 | `agent-deny-dangerous` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, and `deny-dangerous.sh --self-test` passes when the hook script exists |
@@ -65,7 +65,7 @@ Aggregate-mode nuance:
 | Constraints | `deny-hook-registered` | `integrity` | A deny hook that exists on disk is registered in the correct pre-tool hook slot |
 | Verification | `test-runner-configured` | `metric` | Reports whether `toolchain.test` is configured; missing structured test config is still a pass |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
-| Verification | `commit-guidance` | `advisory` | Commit guidance exists in the instruction surface or a supporting commit-guidance document |
+| Verification | `commit-guidance` | `advisory` | Commit guidance exists at `.github/git-commit-instructions.md` when `.github/` exists, or in a supporting commit-guidance document otherwise |
 | Verification | `post-turn-hook-integrity` | `metric` | Reports whether any post-turn hook runs validation and whether it swallows failures |
 | Recovery | `milestone-tracking` | `integrity` | `.goat-flow/tasks/` exists and milestone files can report checkbox coverage |
 | Recovery | `session-logs` | `integrity` | `.goat-flow/logs/sessions/` exists |

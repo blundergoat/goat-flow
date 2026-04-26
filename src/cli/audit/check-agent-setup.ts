@@ -66,6 +66,29 @@ function checkInstructionPresent(ctx: AuditContext): AuditFailure | null {
   };
 }
 
+/** Check whether Copilot's required commit instruction bridge is installed. */
+function checkCopilotCommitInstructionsPresent(
+  ctx: AuditContext,
+): AuditFailure | null {
+  if (ctx.agentFilter !== null && ctx.agentFilter !== "copilot") return null;
+  if (!ctx.fs.exists(".github")) return null;
+  const copilotInstruction =
+    ctx.structure.agents.copilot?.instruction_file ??
+    ".github/copilot-instructions.md";
+  if (ctx.agentFilter === null && !ctx.fs.exists(copilotInstruction)) {
+    return null;
+  }
+  if (ctx.fs.exists(".github/git-commit-instructions.md")) return null;
+  return {
+    check: "Agent instruction file",
+    message:
+      "Missing: copilot (.github/git-commit-instructions.md required when .github/ exists)",
+    evidence: ".github/git-commit-instructions.md",
+    howToFix:
+      "Create .github/git-commit-instructions.md with the project's commit rules, then rerun `goat-flow audit --agent copilot`.",
+  };
+}
+
 /** Check for agent artifacts that remain after their instruction file was removed. */
 function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
   if (!ctx.config.exists) return null;
@@ -92,11 +115,20 @@ const agentInstruction: BuildCheck = {
   provenance: specProvenance([
     "workflow/manifest.json",
     ".goat-flow/architecture.md",
+    "workflow/setup/agents/copilot.md",
+    ".github/git-commit-instructions.md",
   ]),
   /** Run the Agent instruction file check. */
   run: (ctx) => {
-    if (ctx.agentFilter) return checkInstructionPresent(ctx);
-    return checkOrphanedArtifacts(ctx);
+    if (ctx.agentFilter) {
+      return (
+        checkInstructionPresent(ctx) ??
+        checkCopilotCommitInstructionsPresent(ctx)
+      );
+    }
+    return (
+      checkOrphanedArtifacts(ctx) ?? checkCopilotCommitInstructionsPresent(ctx)
+    );
   },
 };
 

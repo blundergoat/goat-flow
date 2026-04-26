@@ -1,5 +1,9 @@
 # Git Commit Conventions
 
+Canonical repo commit instructions live in `.github/git-commit-instructions.md`
+because this project has a `.github/` directory. Keep this file as a docs
+mirror only.
+
 ## Commit Message Format
 
 ```

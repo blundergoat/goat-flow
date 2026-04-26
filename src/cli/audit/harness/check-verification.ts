@@ -101,19 +101,29 @@ const commitGuidance: HarnessCheck = {
   type: "advisory",
   provenance: verificationProvenance("advisory", [
     "docs/harness-audit.md",
-    "docs/coding-standards/git-commit.md",
+    ".github/git-commit-instructions.md",
   ]),
   /** Run the Commit guidance present check. */
   run: (ctx) => {
-    if (ctx.facts.shared.gitCommitInstructions.exists) {
-      return pass(["Commit guidance found"]);
+    const guidance = ctx.facts.shared.gitCommitInstructions;
+    if (guidance.exists) {
+      return pass([`Commit guidance found at ${guidance.path}`]);
+    }
+    if (guidance.misplacedPaths.length > 0) {
+      return fail(
+        [
+          `Commit guidance belongs at ${guidance.requiredPath} when .github/ exists`,
+        ],
+        [`Move commit conventions to ${guidance.requiredPath}`],
+        [
+          `Create ${guidance.requiredPath} and move or copy the content from ${guidance.misplacedPaths.join(", ")}.`,
+        ],
+      );
     }
     return fail(
       ["No commit guidance detected"],
-      ["Add commit conventions to instruction file or .github/instructions/"],
-      [
-        "Add commit conventions to the instruction file or create .github/instructions/git-commit.md.",
-      ],
+      [`Add commit conventions to ${guidance.requiredPath}`],
+      [`Create ${guidance.requiredPath} with this project's commit rules.`],
     );
   },
 };

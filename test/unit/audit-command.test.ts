@@ -280,7 +280,12 @@ function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
           localFileSizes: [],
           path: "",
         },
-        gitCommitInstructions: { exists: false },
+        gitCommitInstructions: {
+          exists: false,
+          path: null,
+          requiredPath: ".github/git-commit-instructions.md",
+          misplacedPaths: [],
+        },
         localInstructionsLineCount: 0,
       },
     } as ProjectFacts,
@@ -435,6 +440,68 @@ describe("audit fails on missing footguns directory", () => {
       result!.message.includes("footguns"),
       `Failure should mention missing dir: ${result!.message}`,
     );
+  });
+});
+
+describe("copilot install requires GitHub commit instructions", () => {
+  it("agent-instruction fails when .github exists without .github/git-commit-instructions.md", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
+    const result = check.run(
+      makeCtx({
+        agentFilter: "copilot",
+        agents: [stubAgentFacts({ agent: PROFILES.copilot })],
+        fs: stubFS({
+          exists: (path: string) =>
+            path !== ".github/git-commit-instructions.md",
+        }),
+      }),
+    );
+
+    assert.notEqual(result, null);
+    assert.equal(result!.check, "Agent instruction file");
+    assert.equal(result!.evidence, ".github/git-commit-instructions.md");
+    assert.match(result!.message, /required when \.github\/ exists/);
+  });
+
+  it("agent-instruction does not require the bridge when .github is absent", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
+    const result = check.run(
+      makeCtx({
+        agentFilter: "copilot",
+        agents: [stubAgentFacts({ agent: PROFILES.copilot })],
+        fs: stubFS({
+          exists: (path: string) =>
+            path !== ".github" && path !== ".github/git-commit-instructions.md",
+        }),
+      }),
+    );
+
+    assert.equal(result, null);
+  });
+
+  it("aggregate agent-instruction fails for an incomplete Copilot install", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
+    const result = check.run(
+      makeCtx({
+        agentFilter: null,
+        agents: [stubAgentFacts({ agent: PROFILES.copilot })],
+        structure: {
+          ...STUB_STRUCTURE,
+          agents: {
+            copilot: {
+              instruction_file: ".github/copilot-instructions.md",
+            },
+          },
+        },
+        fs: stubFS({
+          exists: (path: string) =>
+            path !== ".github/git-commit-instructions.md",
+        }),
+      }),
+    );
+
+    assert.notEqual(result, null);
+    assert.equal(result!.evidence, ".github/git-commit-instructions.md");
   });
 });
 
