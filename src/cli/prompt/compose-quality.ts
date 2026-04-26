@@ -121,8 +121,14 @@ function qualityModeTargetScope(mode: QualityMode): string {
   return "selected project and selected agent installation";
 }
 
-function focusedQualityModePrompt(mode: Exclude<QualityMode, "agent-setup">) {
+function focusedQualityModePrompt(
+  mode: Exclude<QualityMode, "agent-setup">,
+  agent?: AgentId,
+) {
   if (mode === "process") {
+    const agentAuditCmd = agent
+      ? `node --import tsx src/cli/cli.ts audit . --agent ${agent} --harness --check-drift --format json`
+      : "node --import tsx src/cli/cli.ts audit . --check-drift --format json";
     return [
       "GOAT Flow Process Quality Assessment",
       "",
@@ -130,7 +136,7 @@ function focusedQualityModePrompt(mode: Exclude<QualityMode, "agent-setup">) {
       "",
       "Assess the goat-flow framework process in the controlling workspace: instruction files, .goat-flow/config.yaml, .goat-flow/architecture.md, .goat-flow/code-map.md, .goat-flow/skill-reference/, workflow/setup/, workflow/manifest.json, installed skill mirrors, hooks, quality prompt modes, and validation scripts.",
       "",
-      "Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; node --import tsx src/cli/cli.ts audit . --check-drift --format json; bash scripts/preflight-checks.sh. Command output wins over prose.",
+      `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; ${agentAuditCmd}; bash scripts/preflight-checks.sh. Command output wins over prose.`,
       "",
       "Use grep-first retrieval for .goat-flow/footguns/, .goat-flow/lessons/, and .goat-flow/decisions/. Do not broad-load those directories.",
       "",
@@ -349,7 +355,7 @@ function composeFocusedQuality(
 
   lines.push(`# GOAT Flow ${label} Assessment - ${profile.name}`);
   lines.push("");
-  lines.push(focusedQualityModePrompt(qualityMode));
+  lines.push(focusedQualityModePrompt(qualityMode, agent));
   lines.push("");
   lines.push("Quality mode scope:");
   lines.push(`- Mode: ${label}`);
@@ -517,7 +523,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "**Design notes** (do NOT flag these as findings - they are intentional):",
   );
   lines.push(
-    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them."',
+    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them." When evaluating skills, do NOT flag writes to these gitignored paths as a design flaw or missing no-write escape hatch - a skill writing to `.goat-flow/logs/` or `.goat-flow/tasks/` is normal working-state behavior, not a write-safety violation.',
   );
   lines.push(
     "- `.goat-flow/tasks/.active` is an advisory local pointer, not a setup invariant. Missing `.active`, or `.active` naming a missing subdir, is normal local churn when work completes, users switch projects, or a project does not use goat-flow task files. Do NOT report this by itself as a setup-quality finding; evaluate whether `/goat` and `/goat-plan` handle the fallback gracefully.",
