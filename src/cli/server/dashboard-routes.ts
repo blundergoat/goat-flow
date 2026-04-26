@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { isPackagedInstall } from "../paths.js";
 import { classifyProjectState } from "../classify-state.js";
+import { loadConfig } from "../config/reader.js";
 import { runAudit } from "../audit/audit.js";
 import type { AuditReport } from "../audit/types.js";
 import {
@@ -18,6 +19,7 @@ import {
 } from "../agents/registry.js";
 import { detectAgents as detectConfiguredAgents } from "../detect/agents.js";
 import { createFS } from "../facts/fs.js";
+import { extractSharedFacts } from "../facts/shared/index.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
 import type { AgentId } from "../types.js";
 import { loadDashboardAsset } from "./dashboard-assets.js";
@@ -25,6 +27,7 @@ import { buildSetupDetectPayload, isProjectDirectory } from "./setup-detect.js";
 import type { DashboardReport } from "./types.js";
 import type { QualityMode } from "../quality/schema.js";
 import { QUALITY_MODES } from "../quality/schema.js";
+import { buildStatsReport, checkStats } from "../stats/stats.js";
 
 const KNOWN_AGENT_IDS = getKnownAgentIds();
 const KNOWN_AGENT_LIST = KNOWN_AGENT_IDS.join(", ");
@@ -60,6 +63,13 @@ interface LatestQualitySummary {
   minorCount: number;
   evidenceMethods: string[];
   scope: string | null;
+}
+
+interface RecentLessonSummary {
+  title: string;
+  created: string | null;
+  path: string;
+  order: number;
 }
 
 type JsonResponder = (
@@ -147,31 +157,178 @@ function getDashboardLatestQualityEntry(
   );
 }
 
+/** Return compact learning-loop health for Home without exposing the full stats report. */
+function buildDashboardLearningLoopSummary(
+  projectPath: string,
+): DashboardReport["learningLoop"] {
+  try {
+    const fs = createFS(projectPath);
+    const configState = loadConfig(projectPath, fs);
+    const shared = extractSharedFacts(fs, configState);
+    const stats = buildStatsReport({
+      footguns: shared.footguns,
+      lessons: shared.lessons,
+    });
+    const check = checkStats(stats);
+    const staleCount = check.findings.filter(
+      (finding) =>
+        finding.rule === "stale-last-reviewed" ||
+        finding.rule === "stale-ref" ||
+        finding.rule === "invalid-line-ref",
+    ).length;
+    const oversizedCount = check.findings.filter(
+      (finding) => finding.rule === "bucket-size",
+    ).length;
+    const recordCount =
+      stats.footguns.totalEntries + stats.lessons.totalEntries;
+    const status =
+      !shared.footguns.exists && !shared.lessons.exists
+        ? "unavailable"
+        : staleCount > 2 || oversizedCount > 0
+          ? "needs-review"
+          : "fresh";
+    return { recordCount, staleCount, oversizedCount, status };
+  } catch {
+    return null;
+  }
+}
+
+/** List markdown lesson buckets that can contribute Home lesson rows. */
+function listLessonBuckets(lessonsDir: string): string[] {
+  try {
+    return readdirSync(lessonsDir)
+      .filter(
+        (filename) => filename.endsWith(".md") && filename !== "README.md",
+      )
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Return the created date inside one lesson section, if present. */
+function parseLessonCreated(section: string): string | null {
+  return section.match(/\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
+}
+
+/** Read lesson headings from one bucket file. */
+function readLessonBucketEntries(
+  lessonsDir: string,
+  filename: string,
+  startOrder: number,
+): RecentLessonSummary[] {
+  let content: string;
+  try {
+    content = readFileSync(join(lessonsDir, filename), "utf-8");
+  } catch {
+    return [];
+  }
+
+  return Array.from(content.matchAll(/^## Lesson:\s+(.+)$/gm)).flatMap(
+    (heading, index, headings) => {
+      const title = heading[1]?.trim();
+      if (!title) return [];
+      const start = heading.index;
+      const nextHeading = headings[index + 1];
+      const end =
+        nextHeading === undefined ? content.length : nextHeading.index;
+      const section = content.slice(start, end);
+      return [
+        {
+          title,
+          created: parseLessonCreated(section),
+          path: `.goat-flow/lessons/${filename}`,
+          order: startOrder + index,
+        },
+      ];
+    },
+  );
+}
+
+/** Sort latest lessons first, with file order as the fallback. */
+function sortRecentLessons(
+  lessons: RecentLessonSummary[],
+): RecentLessonSummary[] {
+  return lessons.sort((a, b) => {
+    if (a.created !== b.created) {
+      if (a.created === null) return 1;
+      if (b.created === null) return -1;
+      return b.created.localeCompare(a.created);
+    }
+    return b.order - a.order;
+  });
+}
+
+/** Read recent lesson headings for the compact Home panel. */
+function readRecentLessons(
+  projectPath: string,
+): DashboardReport["recentLessons"] {
+  const lessonsDir = join(projectPath, ".goat-flow", "lessons");
+  const filenames = listLessonBuckets(lessonsDir);
+
+  const lessons: RecentLessonSummary[] = [];
+  for (const filename of filenames) {
+    lessons.push(
+      ...readLessonBucketEntries(lessonsDir, filename, lessons.length),
+    );
+  }
+
+  const total = lessons.length;
+  return sortRecentLessons(lessons)
+    .slice(0, 4)
+    .map((lesson, index) => ({
+      id: `L-${String(total - index).padStart(3, "0")}`,
+      title: lesson.title,
+      created: lesson.created,
+      path: lesson.path,
+    }));
+}
+
+/** Enrich a dashboard report with compact Home-only learning-loop context. */
+function enrichDashboardReport(
+  report: DashboardReport,
+  projectPath: string,
+): DashboardReport {
+  return {
+    ...report,
+    learningLoop: buildDashboardLearningLoopSummary(projectPath),
+    recentLessons: readRecentLessons(projectPath),
+  };
+}
+
 /** Build the dashboard API payload from aggregate and per-agent audit results. */
 function buildDashboardReport(
   auditRpt: AuditReport,
   perAgentAudits: { id: string; audit: AuditReport }[],
+  projectPath: string,
 ): DashboardReport {
-  return {
-    agentScores: perAgentAudits.map((pa) => {
-      const agentId = pa.id as AgentId;
-      return {
-        id: pa.id,
-        name: AGENT_PROFILE_MAP[agentId].name,
-        agent: pa.audit.scopes.agent,
-        harness: pa.audit.scopes.harness,
-        concerns: pa.audit.concerns,
-      };
-    }),
-    status: auditRpt.status,
-    scopes: {
-      setup: auditRpt.scopes.setup,
-      agent: auditRpt.scopes.agent,
-      ...(auditRpt.scopes.harness ? { harness: auditRpt.scopes.harness } : {}),
+  return enrichDashboardReport(
+    {
+      agentScores: perAgentAudits.map((pa) => {
+        const agentId = pa.id as AgentId;
+        return {
+          id: pa.id,
+          name: AGENT_PROFILE_MAP[agentId].name,
+          agent: pa.audit.scopes.agent,
+          harness: pa.audit.scopes.harness,
+          concerns: pa.audit.concerns,
+        };
+      }),
+      status: auditRpt.status,
+      scopes: {
+        setup: auditRpt.scopes.setup,
+        agent: auditRpt.scopes.agent,
+        ...(auditRpt.scopes.harness
+          ? { harness: auditRpt.scopes.harness }
+          : {}),
+      },
+      overall: auditRpt.overall,
+      learningLoop: null,
+      recentLessons: [],
+      target: auditRpt.target,
     },
-    overall: auditRpt.overall,
-    target: auditRpt.target,
-  };
+    projectPath,
+  );
 }
 
 const AUDIT_CACHE_FILE = "audit-cache.json";
@@ -449,8 +606,9 @@ export function createDashboardRouteHandlers(
       if (!fresh && isCacheEligible(agentFilter, harness)) {
         const cached = readAuditCache(projectPath, packageVersion);
         if (cached) {
+          const report = enrichDashboardReport(cached.report, projectPath);
           jsonResponse(res, 200, {
-            ...cached.report,
+            ...report,
             cached: true,
             cachedAt: cached.cachedAt,
           });
@@ -461,7 +619,11 @@ export function createDashboardRouteHandlers(
       const fs = createFS(projectPath);
       const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
       const perAgentAudits = collectPerAgentAudits(fs, projectPath, harness);
-      const report = buildDashboardReport(auditRpt, perAgentAudits);
+      const report = buildDashboardReport(
+        auditRpt,
+        perAgentAudits,
+        projectPath,
+      );
 
       if (isCacheEligible(agentFilter, harness)) {
         writeAuditCache(projectPath, packageVersion, report);

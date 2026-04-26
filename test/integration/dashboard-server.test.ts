@@ -140,6 +140,45 @@ function assertDashboardReport(value: unknown): Record<string, unknown> {
     /^(pass|fail)$/,
     "Dashboard report overall.status should be pass/fail",
   );
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(report, "learningLoop"),
+    "Dashboard report should include learningLoop",
+  );
+  if (report.learningLoop !== null) {
+    const learningLoop = expectRecord(
+      report.learningLoop,
+      "Dashboard report learningLoop",
+    );
+    assert.equal(typeof learningLoop.recordCount, "number");
+    assert.equal(typeof learningLoop.staleCount, "number");
+    assert.equal(typeof learningLoop.oversizedCount, "number");
+    assert.match(
+      String(learningLoop.status),
+      /^(fresh|needs-review|unavailable)$/,
+      "Dashboard report learningLoop.status should be valid",
+    );
+  }
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(report, "recentLessons"),
+    "Dashboard report should include recentLessons",
+  );
+  assert.ok(
+    Array.isArray(report.recentLessons),
+    "Dashboard report recentLessons should be an array",
+  );
+  for (const [index, lesson] of (report.recentLessons as unknown[]).entries()) {
+    const entry = expectRecord(
+      lesson,
+      `Dashboard report recentLessons[${index}]`,
+    );
+    assert.equal(typeof entry.id, "string");
+    assert.equal(typeof entry.title, "string");
+    assert.equal(typeof entry.path, "string");
+    assert.ok(
+      entry.created === null || typeof entry.created === "string",
+      `Dashboard report recentLessons[${index}].created should be string or null`,
+    );
+  }
   return report;
 }
 
@@ -212,6 +251,11 @@ describe("dashboard HTML", () => {
     assert.match(html, /\/assets\/dashboard-prompts\.js/);
     assert.match(html, /\/assets\/dashboard-terminal\.js/);
     assert.match(html, /\/assets\/app\.js/);
+    assert.equal(
+      html.match(/x-show="activeView === 'home'"/g)?.length ?? 0,
+      1,
+      "dashboard HTML should contain exactly one Home view root",
+    );
   });
 });
 

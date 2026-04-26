@@ -176,20 +176,6 @@ function app() {
     isSessionBoundLocally(id: string): boolean {
       return this.sessions.some((s) => s.id === id);
     },
-    terminalAuditActions: [
-      {
-        id: "audit-setup",
-        label: "Audit Setup",
-        command: "npx goat-flow audit .",
-        description: "Run the build checks for the current workspace.",
-      },
-      {
-        id: "audit-harness",
-        label: "Audit Harness",
-        command: "npx goat-flow audit . --harness",
-        description: "Run AI harness completeness checks.",
-      },
-    ] as AuditAction[],
 
     // --- Projects state ---
     projectsList: [] as ProjectEntry[],
@@ -209,6 +195,8 @@ function app() {
     qualityHistoryRows: [] as QualityHistoryRow[],
     qualityHistoryLatest: null as QualityHistoryLatest | null,
     qualityHistoryWarnings: [] as string[],
+    homeQualityLoading: false,
+    homeQualityLatest: null as QualityHistoryLatest | null,
 
     /** Resolve the current display name for one supported agent id. */
     agentName(agentId: RunnerId): string {
@@ -382,11 +370,6 @@ function app() {
     async sendToProjectTarget(prompt: string, target: ServerSessionInfo) {
       await dashboardSendToProjectTarget(this, prompt, target);
     },
-    /** Run a predefined audit command in the workspace terminal. */
-    async runTerminalAuditCommand(action: AuditAction | null) {
-      await dashboardRunTerminalAuditCommand(this, action);
-    },
-
     // --- Init ---
     init() {
       const self = this as typeof this & AlpineMagics<typeof this>;
@@ -478,8 +461,16 @@ function app() {
           clearInterval(this._workspacePoll);
           this._workspacePoll = null;
         }
-        if (v === "projects" || v === "workspace" || v === "prompts") {
+        if (
+          v === "home" ||
+          v === "projects" ||
+          v === "workspace" ||
+          v === "prompts"
+        ) {
           void this.updateSessionCount();
+        }
+        if (v === "home") {
+          void this.generateHomeQualitySummary();
         }
         if (v === "workspace") {
           this._workspacePoll = setInterval(() => {
@@ -499,6 +490,11 @@ function app() {
         if (this.activeView === "quality") {
           void this.generateQuality();
           void this.generateQualityHistory();
+        }
+      });
+      self.$watch("activeRunner", () => {
+        if (this.activeView === "home") {
+          void this.generateHomeQualitySummary();
         }
       });
       self.$watch("selectedQualityModeId", () => {
@@ -526,6 +522,9 @@ function app() {
           if (this.activeView === "quality") {
             void this.generateQuality();
             void this.generateQualityHistory();
+          }
+          if (this.activeView === "home") {
+            void this.generateHomeQualitySummary();
           }
         }
       });
@@ -634,6 +633,9 @@ function app() {
         this.report = readDashboardReport(payload);
         this.auditCached = cached;
         this.lastAuditTime = cachedAt ? new Date(cachedAt) : new Date();
+        if (this.activeView === "home") {
+          void this.generateHomeQualitySummary();
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(
@@ -710,6 +712,34 @@ function app() {
     /** Load persisted quality-history rows for the selected project and agent. */
     async generateQualityHistory() {
       await dashboardGenerateQualityHistory(this);
+    },
+    /** Load the latest quality-history summary for the Home rollup. */
+    async generateHomeQualitySummary() {
+      this.homeQualityLoading = true;
+      this.homeQualityLatest = null;
+      const requestProjectPath = this.projectPath;
+      const requestAgent = this.activeRunner;
+      const isCurrentRequest = (): boolean =>
+        this.projectPath === requestProjectPath &&
+        this.activeRunner === requestAgent;
+      try {
+        const res = await fetch(
+          `/api/quality/history?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&limit=1`,
+        );
+        const payload = readRecord(await res.json(), "Home quality response");
+        if (!isCurrentRequest()) return;
+        const error = readErrorMessage(payload);
+        if (error) {
+          this.showToast(error, true);
+        } else {
+          this.homeQualityLatest = readQualityHistoryLatest(payload.latest);
+        }
+      } catch (err) {
+        if (!isCurrentRequest()) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.showToast(msg || "Home quality loading failed", true);
+      }
+      if (isCurrentRequest()) this.homeQualityLoading = false;
     },
     /** Copy the current quality prompt to the clipboard. */
     copyQuality() {
@@ -902,7 +932,6 @@ function app() {
     },
 
     // -- Computed Properties --
-    auditDetailScope: null as string | null,
     auditDetailAgent: null as string | null,
     // -- Helpers --
     formatTimeAgo(date: string | Date | null): string {
@@ -913,6 +942,19 @@ function app() {
       if (m < 60) return `${m}m ago`;
       const h = Math.floor(m / 60);
       if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
+    },
+    formatAuditAge(date: string | Date | null): string {
+      if (!date) return "just now";
+      const s = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(date).getTime()) / 1000),
+      );
+      if (s < 60) return "just now";
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 72) return `${h}h ago`;
       return `${Math.floor(h / 24)}d ago`;
     },
   };

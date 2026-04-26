@@ -92,7 +92,22 @@ interface DashboardClientReport {
   status: AuditStatus;
   scopes: DashboardClientScopes;
   overall: { status: AuditStatus };
+  learningLoop: {
+    recordCount: number;
+    staleCount: number;
+    oversizedCount: number;
+    status: "fresh" | "needs-review" | "unavailable";
+  } | null;
+  recentLessons: RecentLesson[];
   target: string;
+}
+
+/** Compact lesson row shown on the Home page. */
+interface RecentLesson {
+  id: string;
+  title: string;
+  created: string | null;
+  path: string;
 }
 
 /** Supported agent metadata injected into the dashboard shell. */
@@ -208,14 +223,6 @@ interface SavedSession {
   agent: RunnerId;
   cwd: string;
   targetPath: string;
-}
-
-/** Predefined audit command button shown in the workspace terminal panel. */
-interface AuditAction {
-  id: string;
-  label: string;
-  command: string;
-  description: string;
 }
 
 // ---------------------------------------------------------------------------

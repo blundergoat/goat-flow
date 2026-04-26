@@ -255,6 +255,43 @@ function readAgentScore(value: unknown): AgentScore | null {
   };
 }
 
+/** Read compact learning-loop health from the audit payload. */
+function readLearningLoopSummary(
+  value: unknown,
+): DashboardClientReport["learningLoop"] {
+  if (!isRecord(value)) return null;
+  const status = readString(value.status);
+  if (
+    !["fresh", "needs-review", "unavailable"].includes(status) ||
+    typeof value.recordCount !== "number" ||
+    typeof value.staleCount !== "number" ||
+    typeof value.oversizedCount !== "number"
+  ) {
+    return null;
+  }
+  return {
+    recordCount: value.recordCount,
+    staleCount: value.staleCount,
+    oversizedCount: value.oversizedCount,
+    status: status as "fresh" | "needs-review" | "unavailable",
+  };
+}
+
+/** Read one recent lesson row from the audit payload. */
+function readRecentLesson(value: unknown): RecentLesson | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const title = readString(value.title);
+  const path = readString(value.path);
+  if (!id || !title || !path) return null;
+  return {
+    id,
+    title,
+    path,
+    created: readString(value.created) || null,
+  };
+}
+
 /** Read the full dashboard report from raw payload data. */
 function readDashboardReport(value: unknown): DashboardClientReport {
   const payload = readRecord(value, "Audit response");
@@ -290,6 +327,12 @@ function readDashboardReport(value: unknown): DashboardClientReport {
         : {}),
     },
     overall: { status: overallStatus },
+    learningLoop: readLearningLoopSummary(payload.learningLoop),
+    recentLessons: Array.isArray(payload.recentLessons)
+      ? payload.recentLessons
+          .map((lesson) => readRecentLesson(lesson))
+          .filter((lesson): lesson is RecentLesson => lesson !== null)
+      : [],
     target: readString(payload.target),
   };
 }

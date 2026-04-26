@@ -1,839 +1,907 @@
-<!-- ═══ Home View ═══ -->
 <div
+  class="home-scroll"
   x-show="activeView === 'home'"
   x-cloak
-  style="height: calc(100vh - 3.5rem); overflow-y: auto"
+>
+<div
+  class="home-page"
   x-data="{
     concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
-    concernLabels: { context: 'Context', constraints: 'Constraints', verification: 'Verification', recovery: 'Recovery', feedback_loop: 'Feedback' },
-    setupScope() { return report?.scopes?.setup || { checks: [], status: 'fail' }; },
-    setupTotal() { return (this.setupScope().checks || []).length; },
-    setupPassed() { return (this.setupScope().checks || []).filter(c => c.status === 'pass').length; },
-    setupFailed() { return this.setupScope().status !== 'pass'; },
-    auditAgeLabel() {
-      if (!lastAuditTime) return 'just now';
-      const mins = Math.max(0, Math.floor((Date.now() - new Date(lastAuditTime).getTime()) / 60000));
-      if (mins <= 1) return 'just now';
-      if (mins < 60) return `${mins} mins ago`;
-      const hours = Math.floor(mins / 60);
-      if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-      const days = Math.floor(hours / 24);
-      return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+    concernLabels: {
+      context: 'Context',
+      constraints: 'Constraints',
+      verification: 'Verification',
+      recovery: 'Recovery',
+      feedback_loop: 'Feedback'
     },
-    agentScore(agent) {
-      if (!agent?.harness) return 0;
-      const total = agent.harness.checks.length;
-      return total ? Math.round((agent.harness.checks.filter(c => c.status === 'pass').length / total) * 100) : 0;
+    setupScope() { return report?.scopes?.setup || { status: 'fail', checks: [] }; },
+    setupChecks() { return this.setupScope().checks || []; },
+    setupTotal() { return this.setupChecks().length; },
+    setupPassed() { return this.setupChecks().filter((check) => check.status === 'pass').length; },
+    setupComplete() { return this.setupTotal() > 0 && this.setupPassed() === this.setupTotal(); },
+    setupPartial() { return this.setupPassed() > 0 && !this.setupComplete(); },
+    setupMissing() { return this.setupPassed() === 0; },
+    showPreviewAgents() { return this.agentScores().length === 0; },
+    activeSessions() { return currentProjectSessions.filter((session) => session.status === 'active'); },
+    primarySession() { return this.activeSessions()[0] || null; },
+    sessionLabel(session) {
+      if (!session) return 'session';
+      const local = sessions.find((item) => item.id === session.id);
+      return local?.promptLabel || session.projectName || 'session';
     },
-    grade(score) { if (score >= 90) return 'A'; if (score >= 80) return 'B'; if (score >= 70) return 'C'; if (score >= 60) return 'D'; return 'F'; },
-    recCount(agent) {
-      if (!agent?.concerns) return 0;
-      return this.concernKeys.reduce((n, key) => n + (agent.concerns[key]?.recommendations?.length || 0), 0);
+    sessionAge(session) {
+      if (!session) return '0m';
+      const seconds = typeof session.age === 'number'
+        ? session.age
+        : Math.max(0, Math.floor((Date.now() - new Date(session.createdAt).getTime()) / 1000));
+      const minutes = Math.max(0, Math.floor(seconds / 60));
+      const hours = Math.floor(minutes / 60);
+      if (hours > 0) return hours + 'h ' + (minutes % 60) + 'm';
+      return minutes + 'm';
     },
-    concernScore(agent, key) {
-      if (agent?.concerns?.[key] && typeof agent.concerns[key].score === 'number') return agent.concerns[key].score;
-      const score = this.agentScore(agent);
-      return score >= 90 ? 100 : score >= 70 ? 75 : score >= 50 ? 50 : 0;
-    },
-    concernBarColor(score) { return score >= 80 ? '#4ade80' : score >= 70 ? '#fbbf24' : '#f87171'; },
-    passingAgents() {
-      return (report?.agentScores || []).filter(a => this.grade(this.agentScore(a)) === 'A').length;
-    },
-    projectGaps() {
-      const failed = new Set();
-      for (const agent of (report?.agentScores || [])) {
-        if (!agent?.concerns) continue;
-        for (const key of this.concernKeys) {
-          if ((agent.concerns[key]?.score || 0) < 80) failed.add(key);
-        }
-      }
-      return Array.from(failed).map((key) => this.concernLabels[key] || key);
-    },
-    expandedAgent: null,
-    runSetupNow() {
-      if (terminalAvailable) {
-        launchInTerminal(`goat-flow setup . --agent ${activeRunner}`, activeRunner, { promptLabel: 'Run setup' });
+    openSession(session) {
+      if (!session) return;
+      if (isSessionBoundLocally(session.id)) {
+        activeSessionId = session.id;
         activeView = 'workspace';
         workspacePanel = 'terminal';
         return;
       }
-      activeView = 'setup';
-      detectStack();
+      openServerSession(session);
+    },
+    endPrimarySession() {
+      const session = this.primarySession();
+      if (session) endServerSession(session.id);
+    },
+    auditAgeHours() {
+      if (!lastAuditTime) return 0;
+      return Math.max(0, Math.floor((Date.now() - new Date(lastAuditTime).getTime()) / 3600000));
+    },
+    auditAgeText() {
+      const prefix = auditCached ? 'cached - ' : 'audited ';
+      return prefix + formatAuditAge(lastAuditTime);
+    },
+    auditStale() { return Boolean(auditCached && this.auditAgeHours() > 24); },
+    agentScores() { return report?.agentScores || []; },
+    agentColumnCount() { return Math.min(Math.max(this.homeAgents().length, 1), 4); },
+    homeAgents() {
+      if (!this.showPreviewAgents()) return this.agentScores();
+      return supportedAgents.map((agent) => ({ preview: true, id: agent.id, name: agent.name }));
+    },
+    agentDisplayName(agent) { return agent?.name || agent?.id || 'Agent'; },
+    agentScore(agent) {
+      if (agent?.preview) return null;
+      const harnessChecks = agent?.harness?.checks || [];
+      if (harnessChecks.length > 0) {
+        const passed = harnessChecks.filter((check) => check.status === 'pass').length;
+        return Math.round((passed / harnessChecks.length) * 100);
+      }
+      const agentChecks = agent?.agent?.checks || [];
+      if (agentChecks.length > 0) {
+        const passed = agentChecks.filter((check) => check.status === 'pass').length;
+        return Math.round((passed / agentChecks.length) * 100);
+      }
+      return null;
+    },
+    gradeFor(score) {
+      if (score === null || Number.isNaN(score)) return '-';
+      if (score >= 90) return 'A';
+      if (score >= 80) return 'B';
+      if (score >= 70) return 'C';
+      if (score >= 60) return 'D';
+      return 'F';
+    },
+    toneForScore(score) {
+      if (score === null || Number.isNaN(score)) return 'na';
+      if (score >= 80) return 'ok';
+      if (score >= 70) return 'warn';
+      return 'bad';
+    },
+    agentCardClass(agent) {
+      if (agent?.preview) return 'disabled';
+      const tone = this.toneForScore(this.agentScore(agent));
+      return tone === 'ok' ? '' : tone;
+    },
+    concern(agent, key) { return agent?.concerns?.[key] || { status: 'fail', score: 0, findings: [], recommendations: [], howToFix: [] }; },
+    concernScore(agent, key) {
+      if (agent?.preview) return null;
+      const item = this.concern(agent, key);
+      if (typeof item.score === 'number') return Math.round(item.score);
+      return item.status === 'pass' ? 100 : 0;
+    },
+    concernWidth(agent, key) {
+      const score = this.concernScore(agent, key);
+      return score === null ? '0%' : Math.max(6, score) + '%';
+    },
+    concernPctText(agent, key) {
+      const score = this.concernScore(agent, key);
+      return score === null ? '-' : String(score);
+    },
+    concernToneClass(agent, key) { return this.toneForScore(this.concernScore(agent, key)); },
+    recommendationSummary(agent) {
+      if (agent?.preview) return 'Skills, hooks, instruction file';
+      const recs = Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.recommendations || []).length, 0);
+      const integrity = this.integrityFailCount(agent);
+      if (recs === 0 && integrity === 0) return 'All checks passing';
+      if (integrity > 0) return integrity + ' integrity issue' + (integrity === 1 ? '' : 's');
+      return recs + ' recommendation' + (recs === 1 ? '' : 's');
+    },
+    integrityFailCount(agent) {
+      return Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.integrityFail || 0), 0);
+    },
+    setupCheckPass(id) { return this.setupChecks().some((check) => check.id === id && check.status === 'pass'); },
+    allAgentsPassCheck(id) {
+      const agents = this.agentScores();
+      return agents.length > 0 && agents.every((agent) =>
+        (agent.agent?.checks || []).some((check) => check.id === id && check.status === 'pass')
+      );
+    },
+    installChecks() {
+      const selectedAgentName = agentName(activeRunner);
+      return [
+        { label: selectedAgentName + ' instruction file present', ok: this.allAgentsPassCheck('agent-instruction') },
+        { label: 'Skills installed and current', ok: this.allAgentsPassCheck('agent-skills') },
+        { label: 'deny-dangerous hook enabled', ok: this.allAgentsPassCheck('agent-deny-dangerous') },
+        { label: 'Footguns and lessons tracked', ok: this.setupCheckPass('footguns') && this.setupCheckPass('lessons') },
+        { label: 'Verification gates configured', ok: this.setupCheckPass('config-parses') && this.setupCheckPass('config-version') && this.allAgentsPassCheck('agent-settings') }
+      ];
+    },
+    installCheckIcon(check) { return check.ok ? '&#10003;' : '&#10005;'; },
+    installPillTone() {
+      if (this.setupComplete()) return 'ok';
+      return this.setupPartial() ? 'warn' : 'bad';
+    },
+    installPillValue() {
+      if (this.setupComplete()) return 'Passing';
+      return this.setupPartial() ? 'Partial' : 'Not installed';
+    },
+    installPillDetail() {
+      if (this.setupTotal() === 0) return 'audit components';
+      return this.setupPassed() + ' of ' + this.setupTotal() + ' components';
+    },
+    harnessAverage() {
+      const scores = this.agentScores().map((agent) => this.agentScore(agent)).filter((score) => score !== null && !Number.isNaN(score));
+      if (scores.length === 0) return null;
+      return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
+    },
+    ringTone() { return this.toneForScore(this.harnessAverage()); },
+    ringColor() {
+      const tone = this.ringTone();
+      if (tone === 'ok') return '#22c55e';
+      if (tone === 'warn') return '#f59e0b';
+      if (tone === 'bad') return '#ef4444';
+      return 'rgba(148, 163, 184, 0.25)';
+    },
+    ringStyle() {
+      const value = this.harnessAverage();
+      return { '--ring-color': this.ringColor(), '--ring-value': value === null ? '0%' : value + '%' };
+    },
+    ringLabel() {
+      if (this.setupMissing()) return 'AFTER SETUP';
+      return 'HARNESS AVG';
+    },
+    ringNumber() {
+      const value = this.harnessAverage();
+      if (this.setupMissing()) return 'N/A';
+      return value === null ? '--' : String(value);
+    },
+    ringShowPct() {
+      return this.harnessAverage() !== null && !this.setupMissing();
+    },
+    atAGrade() { return this.agentScores().filter((agent) => this.agentScore(agent) >= 90).length; },
+    widestGap() {
+      const agents = this.agentScores();
+      if (agents.length === 0) return 'pending';
+      const gaps = this.concernKeys.map((key) => {
+        const values = agents.map((agent) => this.concernScore(agent, key)).filter((score) => score !== null);
+        const avg = values.length === 0 ? 0 : values.reduce((total, score) => total + score, 0) / values.length;
+        return { key, avg };
+      }).sort((a, b) => a.avg - b.avg);
+      const gap = gaps[0];
+      return gap && gap.avg < 90 ? this.concernLabels[gap.key] : 'none';
+    },
+    sectionMeta() {
+      if (this.showPreviewAgents()) return 'preview - audit will populate after install';
+      const total = this.agentScores().length;
+      const gap = this.widestGap();
+      const gapText = gap !== 'none' && gap !== 'pending' ? ' - widest gap is ' + gap : '';
+      return this.atAGrade() + ' of ' + total + ' at A' + gapText + ' - click for details';
+    },
+    harnessPillTone() {
+      if (this.setupMissing() || this.agentScores().length === 0) return 'na';
+      return this.toneForScore(this.harnessAverage());
+    },
+    harnessPillValue() {
+      if (this.setupMissing()) return 'N/A';
+      const avg = this.harnessAverage();
+      if (avg === null) return 'N/A';
+      return avg >= 90 ? 'Passing' : 'Needs work';
+    },
+    harnessPillDetail() {
+      if (this.setupMissing()) return 'setup required first';
+      const total = this.agentScores().length;
+      if (total === 0) return 'run audit after setup';
+      const gap = this.widestGap();
+      const gapText = gap !== 'none' && gap !== 'pending' ? ' - ' + gap + ' low' : '';
+      return this.atAGrade() + ' of ' + total + ' agents at A' + gapText;
+    },
+    learningSummary() { return report?.learningLoop || null; },
+    learningPillTone() {
+      if (this.setupMissing()) return 'na';
+      const summary = this.learningSummary();
+      if (!summary || summary.status === 'unavailable') return 'na';
+      return summary.status === 'fresh' ? 'ok' : 'warn';
+    },
+    learningPillValue() {
+      if (this.setupMissing()) return 'N/A';
+      const summary = this.learningSummary();
+      if (!summary || summary.status === 'unavailable') return 'N/A';
+      return summary.status === 'fresh' ? 'Fresh' : 'Needs review';
+    },
+    learningPillDetail() {
+      if (this.setupMissing()) return 'created by setup';
+      const summary = this.learningSummary();
+      if (!summary || summary.status === 'unavailable') return 'no learning-loop files';
+      const stale = summary.staleCount || 0;
+      const oversized = summary.oversizedCount || 0;
+      if (stale === 0 && oversized === 0) return summary.recordCount + ' records, 0 stale';
+      return stale + ' stale, ' + oversized + ' oversized';
+    },
+    qualityLatestDate() {
+      if (!homeQualityLatest?.date) return null;
+      const time = homeQualityLatest.time || '0000';
+      const hour = time.slice(0, 2) || '00';
+      const minute = time.slice(2, 4) || '00';
+      return new Date(homeQualityLatest.date + 'T' + hour + ':' + minute + ':00');
+    },
+    qualityPillTone() {
+      if (this.setupMissing()) return 'na';
+      if (homeQualityLoading) return 'na';
+      if (!homeQualityLatest) return 'warn';
+      if (homeQualityLatest.blockerCount > 0) return 'bad';
+      if (homeQualityLatest.majorCount > 0) return 'warn';
+      return 'ok';
+    },
+    qualityPillValue() {
+      if (this.setupMissing()) return 'N/A';
+      if (homeQualityLoading) return 'Loading';
+      if (!homeQualityLatest) return 'N/A';
+      if (homeQualityLatest.blockerCount > 0) return 'Blockers';
+      if (homeQualityLatest.majorCount > 0) return 'Stale';
+      return 'Recent';
+    },
+    qualityPillDetail() {
+      if (this.setupMissing()) return 'run after setup';
+      if (homeQualityLoading) return '--';
+      if (!homeQualityLatest) return 'no saved assessment';
+      const date = this.qualityLatestDate();
+      const age = date ? formatAuditAge(date) : 'recently';
+      if (homeQualityLatest.blockerCount > 0) return age + ', ' + homeQualityLatest.blockerCount + ' blocker' + (homeQualityLatest.blockerCount === 1 ? '' : 's');
+      if (homeQualityLatest.majorCount > 0) return age + ', ' + homeQualityLatest.majorCount + ' major';
+      return age + ', 0 blockers';
+    },
+    nextPriority() {
+      if (!this.setupComplete()) return 'setup';
+      const harnessFail = this.agentScores().some((agent) =>
+        agent.agent?.status === 'fail' || agent.harness?.status === 'fail' || this.integrityFailCount(agent) > 0
+      );
+      if (harnessFail) return 'harness';
+      const concernFail = this.agentScores().some((agent) =>
+        Object.values(agent.concerns || {}).some((item) => item?.status === 'fail')
+      );
+      const qualityFail = Boolean((homeQualityLatest?.blockerCount || 0) > 0 || (homeQualityLatest?.majorCount || 0) > 0);
+      if (concernFail || qualityFail || !homeQualityLatest) return 'completeness';
+      return 'healthy';
+    },
+    nextEyebrow() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') return this.setupPartial() ? 'FIX FIRST' : 'GET STARTED';
+      if (priority === 'harness') return 'FIX FIRST';
+      if (priority === 'completeness') return 'RECOMMENDED';
+      return 'NEXT ACTION';
+    },
+    nextTitle() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') return this.setupPartial() ? 'Finish goat-flow setup' : 'Install goat-flow for ' + agentName(activeRunner);
+      if (priority === 'harness') return 'Fix the failing harness checks';
+      if (priority === 'completeness') return 'Run a fresh quality assessment';
+      return 'Run a skill or pick up active session';
+    },
+    nextDetail() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') {
+        if (this.setupPartial()) return 'This project has ' + this.setupPassed() + ' of ' + this.setupTotal() + ' setup components. Finish setup before trusting harness and quality signals.';
+        return 'Creates config, skills, hooks, lessons, and instruction files for this project.';
+      }
+      if (priority === 'harness') return 'Use the current audit findings to repair instruction, skill, and integrity gaps.';
+      if (priority === 'completeness') return 'Refresh quality history and turn the largest stale findings into concrete next work.';
+      return 'The Home checks are healthy. Use the review preset to inspect the next implementation change.';
+    },
+    nextActionCommand() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') return '$ npx goat-flow setup . --agent ' + activeRunner;
+      if (priority === 'harness') return '$ npx goat-flow audit . --harness --agent ' + activeRunner;
+      if (priority === 'completeness') return '$ npx goat-flow quality . --agent ' + activeRunner;
+      return null;
+    },
+    nextPrimaryLabel() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') return this.setupPartial() ? 'Fix with ' + agentName(activeRunner) : (terminalAvailable ? 'Run with ' + agentName(activeRunner) : 'Open Setup');
+      if (priority === 'harness') return 'Fix with ' + agentName(activeRunner);
+      if (priority === 'completeness') return 'Run assessment';
+      return '/goat-review';
+    },
+    nextSecondaryLabel() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') return 'Setup wizard';
+      if (priority === 'harness') return 'Open Setup';
+      if (priority === 'completeness') return 'Skip for now';
+      return 'Open Workspace';
+    },
+    runPrimaryAction() {
+      const priority = this.nextPriority();
+      if (priority === 'setup') {
+        if (terminalAvailable) {
+          launchInTerminal('goat-flow setup . --agent ' + activeRunner, activeRunner, { promptLabel: 'Run setup', cwdPath: projectPath, targetPath: projectPath });
+          activeView = 'workspace';
+          workspacePanel = 'terminal';
+          return;
+        }
+        activeView = 'setup';
+        detectStack();
+        return;
+      }
+      if (priority === 'harness') {
+        launchPreset(this.harnessFixPrompt(), activeRunner, 'Harness fix ' + agentName(activeRunner));
+        activeView = 'workspace';
+        workspacePanel = 'terminal';
+        return;
+      }
+      if (priority === 'completeness') {
+        qualityAgent = activeRunner;
+        activeView = 'quality';
+        generateQuality();
+        generateQualityHistory();
+        return;
+      }
+      const preset = presets.find((item) => item.id === 'review');
+      if (preset) launchPreset(preset.prompt, activeRunner, preset.label, { presetId: preset.id });
+      else launchInTerminal('/goat-review', activeRunner, { promptLabel: '/goat-review', cwdPath: projectPath, targetPath: projectPath });
+      activeView = 'workspace';
+      workspacePanel = 'terminal';
+    },
+    runSecondaryAction() {
+      const priority = this.nextPriority();
+      if (priority === 'setup' || priority === 'harness') {
+        activeView = 'setup';
+        detectStack();
+        return;
+      }
+      if (priority === 'completeness') {
+        showToast('Skipped for now');
+        return;
+      }
+      activeView = 'workspace';
+      workspacePanel = 'terminal';
+    },
+    recentLessons() {
+      if (this.setupMissing()) return [];
+      return report?.recentLessons || [];
+    },
+    formatConcernSummary(agent, key) {
+      const item = this.concern(agent, key);
+      const findings = item.findings || [];
+      if (item.status === 'pass') return 'No active findings';
+      if (findings.length > 0) return findings[0];
+      return 'Concern needs attention';
+    },
+    formatConcernFix(agent, key) {
+      const item = this.concern(agent, key);
+      const rec = (item.recommendations || [])[0];
+      const fix = (item.howToFix || [])[0];
+      if (rec && fix) return rec + ' Fix: ' + fix;
+      return rec || fix || 'No fix detail supplied';
+    },
+    detailList(agent, scope) {
+      return (agent?.[scope]?.checks || []).map((check) => ({
+        id: check.id,
+        name: check.name,
+        status: check.status,
+        detail: check.failure?.message || check.failure?.howToFix || ''
+      }));
+    },
+    setupFixPrompt() {
+      return [
+        '/goat-plan implement goat-flow setup fixes for ' + activeRunner,
+        '',
+        'Context:',
+        '- Project: ' + projectPath,
+        '- Active agent: ' + activeRunner,
+        '- Dashboard setup checks are failing.',
+        '- Run or repair the equivalent of: goat-flow setup . --agent ' + activeRunner,
+        '',
+        'Goal:',
+        'Make the setup audit pass for this project and active agent.',
+        '',
+        'Constraints:',
+        '- Read existing project instructions before edits.',
+        '- Do not overwrite user changes.',
+        '- Keep edits scoped to goat-flow setup artifacts unless a broken reference requires a small fix.',
+        '- After changes, run the relevant validation checks and report exact commands/output.'
+      ].join('\n');
+    },
+    harnessFixPrompt() {
+      const scores = this.agentScores();
+      const agent = scores.find((item) => item.id === activeRunner) || scores[0];
+      const findings = [];
+      if (agent) {
+        for (const [key, concern] of Object.entries(agent.concerns || {})) {
+          if (concern.status === 'fail') findings.push(key + ': ' + ((concern.findings || []).slice(0, 2).join('; ') || 'check failed'));
+        }
+      }
+      return [
+        '/goat-plan fix goat-flow harness findings for ' + activeRunner,
+        '',
+        'Context:',
+        '- Project: ' + projectPath,
+        '- Active agent: ' + activeRunner,
+        '- Latest audit age: ' + this.auditAgeText(),
+        '- Findings:',
+        findings.length ? findings.map((item) => '  - ' + item).join('\n') : '  - Re-run audit and inspect failing harness checks.',
+        '',
+        'Goal:',
+        'Repair the failing goat-flow harness checks while preserving existing project behaviour.',
+        '',
+        'Constraints:',
+        '- Read relevant instruction, skill, lesson, footgun, and pattern files before edits.',
+        '- Keep changes minimal and evidence-backed.',
+        '- Do not invent incidents, lessons, or footgun evidence.',
+        '- Update the milestone/checklist only for tasks actually completed.',
+        '- Verify with the dashboard audit/typecheck commands and paste exact pass/fail output.'
+      ].join('\n');
+    },
+    qualityFixPrompt() {
+      const latest = homeQualityLatest;
+      const summary = latest ? (latest.blockerCount || 0) + ' blockers, ' + (latest.majorCount || 0) + ' major, ' + (latest.minorCount || 0) + ' minor' : 'no saved quality summary';
+      return [
+        '/goat-plan address goat-flow quality gaps for ' + activeRunner,
+        '',
+        'Context:',
+        '- Project: ' + projectPath,
+        '- Active agent: ' + activeRunner,
+        '- Latest quality summary: ' + summary,
+        '',
+        'Goal:',
+        'Run or refresh the quality assessment, then turn the highest-priority findings into actionable fixes.',
+        '',
+        'Constraints:',
+        '- Start by reading the relevant milestone/task file and project instructions.',
+        '- Fix blockers before major/minor issues.',
+        '- Do not broaden scope without checkpointing.',
+        '- Verify with the commands tied to the changed files and report exact output.'
+      ].join('\n');
     }
   }"
 >
-  <div style="max-width: 1060px; margin: 0 auto; padding: 14px 28px 24px">
-    <div
-      x-show="!report"
-      class="gf-card"
-      style="padding: 26px; text-align: center"
+  <div class="home-empty" x-show="!report">
+    <div class="home-empty-mark">GF</div>
+    <h2>No audit results yet</h2>
+    <p>
+      Run an audit to populate setup status, agent health, learning-loop
+      freshness, and the next action for this project.
+    </p>
+    <button
+      class="gf-btn gf-btn-primary gf-btn-md home-primary"
+      @click="runAudit()"
+      :disabled="auditing"
     >
-      <p class="gf-text-muted" style="margin-bottom: 10px">
-        No audit results yet
-      </p>
+      <span x-text="auditing ? 'Running...' : 'Run Audit'"></span>
+    </button>
+  </div>
+
+  <div x-show="report">
+    <div class="sessions-strip" x-show="activeSessions().length > 0">
+      <div class="sessions-strip-main">
+        <span class="sessions-dot"></span>
+        <span
+          class="session-count"
+          x-text="activeSessions().length + ' active session' + (activeSessions().length === 1 ? '' : 's')"
+        ></span>
+        <span
+          class="session-meta"
+          x-show="primarySession()"
+          x-text="agentName(primarySession()?.runner || activeRunner) + ' - ' + sessionLabel(primarySession()) + ' - ' + sessionAge(primarySession())"
+        ></span>
+      </div>
+      <span class="spacer"></span>
       <button
-        @click="runAudit(true)"
-        :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-audit"
+        class="gf-btn gf-btn-secondary gf-btn-sm"
+        @click="openSession(primarySession())"
       >
-        <span x-text="auditing ? 'Auditing...' : 'Run audit'"></span>
+        Resume
+      </button>
+      <button
+        class="gf-btn gf-btn-danger gf-btn-sm"
+        @click="endPrimarySession()"
+        x-show="primarySession()"
+      >
+        End
       </button>
     </div>
 
-    <div x-show="report">
-      <div
-        class="gf-card"
-        style="
-          padding: 14px 18px;
-          margin-bottom: 12px;
-          border-color: rgba(148, 163, 184, 0.2);
-        "
-      >
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-          "
-        >
-          <div
-            style="display: flex; align-items: center; gap: 10px; min-width: 0"
-          >
+    <section class="rollup" :class="{ stale: auditStale() }">
+      <div class="rollup-top">
+        <div>
+          <div class="rollup-kicker" x-show="setupMissing()">
+            Home readiness
+          </div>
+          <div class="rollup-heading">
+            <h1
+              class="rollup-name"
+              x-text="setupMissing() ? 'Install goat-flow for this project' : projectName"
+            ></h1>
             <span
-              style="
-                width: 9px;
-                height: 9px;
-                border-radius: 999px;
-                flex-shrink: 0;
-              "
-              :style="{ background: setupFailed() ? '#f87171' : '#4ade80' }"
-            ></span>
-            <span
-              class="gf-text-primary"
-              style="font-size: 15px; font-weight: 600"
-              x-text="projectName"
-            ></span>
-            <span class="gf-text-muted">·</span>
-            <span
-              style="font-size: 14px; font-weight: 500"
-              :style="{ color: setupFailed() ? '#f87171' : '#4ade80' }"
-              x-text="setupFailed() ? 'Not installed' : 'All clear'"
-            ></span>
-            <span class="gf-text-muted">·</span>
-            <span
-              class="gf-text-muted"
-              style="font-size: 13px"
-              x-show="setupFailed()"
-              x-text="`${setupPassed()} of ${setupTotal()} checks passing`"
-            ></span>
-            <span
-              class="gf-text-muted"
-              style="font-size: 13px"
-              x-show="!setupFailed()"
-              x-text="(auditCached ? 'cached · ' : '') + `audited ${auditAgeLabel()}`"
+              class="rollup-meta"
+              x-show="!setupMissing()"
+              :class="{ warn: auditStale() }"
+              x-text="auditAgeText()"
             ></span>
           </div>
+          <p
+            class="rollup-subtitle"
+            x-show="setupMissing()"
+            x-text="'One guided setup unlocks agent health, lessons, and quality tracking.'"
+          ></p>
+        </div>
+        <div class="rollup-actions">
+          <span
+            class="rollup-meta"
+            x-show="setupMissing()"
+            :class="{ warn: auditStale() }"
+            x-text="auditAgeText()"
+          ></span>
           <button
+            class="gf-btn gf-btn-secondary gf-btn-sm"
+            :class="{ 'btn-warn': auditStale() }"
             @click="runAudit(true)"
             :disabled="auditing"
-            class="gf-btn gf-btn-md"
           >
-            <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
+            <span
+              x-text="auditing ? 'Auditing...' : (auditStale() ? 'Re-audit now' : 'Re-audit')"
+            ></span>
           </button>
         </div>
       </div>
 
-      <div
-        x-show="setupFailed()"
-        class="gf-card"
-        style="
-          padding: 16px 18px;
-          margin-bottom: 12px;
-          border-color: rgba(248, 113, 113, 0.25);
-        "
-      >
-        <div
-          class="gf-text-primary"
-          style="font-size: 16px; font-weight: 600; margin-bottom: 6px"
-        >
-          Install goat-flow on this project
+      <div class="pills">
+        <div class="pill" :class="installPillTone()">
+          <div class="pill-head">
+            <span class="pill-dot" :class="installPillTone()"></span>
+            <span class="pill-label">INSTALL</span>
+          </div>
+          <div
+            class="pill-value"
+            :class="installPillTone()"
+            x-text="installPillValue()"
+          ></div>
+          <div class="pill-detail" x-text="installPillDetail()"></div>
         </div>
-        <div class="gf-text-muted" style="font-size: 14px; margin-bottom: 10px">
-          <span
-            x-text="`${setupTotal() - setupPassed()} of ${setupTotal()} components are missing.`"
-          ></span>
-          Setup creates instruction files, skills, and hooks adapted to your
-          project.
+
+        <div class="pill" :class="harnessPillTone()">
+          <div class="pill-head">
+            <span class="pill-dot" :class="harnessPillTone()"></span>
+            <span class="pill-label">HARNESS</span>
+          </div>
+          <div
+            class="pill-value"
+            :class="harnessPillTone()"
+            x-text="harnessPillValue()"
+          ></div>
+          <div class="pill-detail" x-text="harnessPillDetail()"></div>
         </div>
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-bottom: 10px;
-          "
-        >
-          <button
-            @click="runSetupNow()"
-            class="gf-btn gf-btn-md gf-btn-primary"
-          >
-            Run setup with agent
-          </button>
-          <button
-            @click="activeView = 'setup'; detectStack()"
-            class="gf-btn gf-btn-md gf-btn-ghost"
-          >
-            or use the setup wizard →
-          </button>
+
+        <div class="pill" :class="learningPillTone()">
+          <div class="pill-head">
+            <span class="pill-dot" :class="learningPillTone()"></span>
+            <span class="pill-label">LEARNING LOOP</span>
+          </div>
+          <div
+            class="pill-value"
+            :class="learningPillTone()"
+            x-text="learningPillValue()"
+          ></div>
+          <div class="pill-detail" x-text="learningPillDetail()"></div>
         </div>
+
+        <div class="pill" :class="qualityPillTone()">
+          <div class="pill-head">
+            <span class="pill-dot" :class="qualityPillTone()"></span>
+            <span class="pill-label">QUALITY</span>
+          </div>
+          <div
+            class="pill-value"
+            :class="qualityPillTone()"
+            x-text="qualityPillValue()"
+          ></div>
+          <div class="pill-detail" x-text="qualityPillDetail()"></div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="next-action"
+      :class="nextPriority() === 'healthy' ? 'priority-ok' : (nextPriority() === 'completeness' ? 'priority-warn' : 'priority-bad')"
+    >
+      <div class="next-action-body">
+        <div class="next-action-eyebrow" x-text="nextEyebrow()"></div>
+        <h2 class="next-action-title" x-text="nextTitle()"></h2>
+        <p class="next-action-detail" x-text="nextDetail()"></p>
         <div
-          class="gf-text-secondary"
-          style="
-            font-family: var(--font-mono);
-            font-size: 12px;
-            border: 1px solid var(--border-subtle);
-            border-radius: 6px;
-            padding: 8px 10px;
-            background: rgba(2, 6, 23, 0.35);
-          "
-          x-text="'$ goat-flow setup . --agent ' + activeRunner"
+          class="next-action-cmd"
+          x-show="nextActionCommand()"
+          x-text="nextActionCommand()"
         ></div>
       </div>
-
-      <div
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin: 8px 2px 8px;
-        "
-      >
-        <div class="gf-text-primary" style="font-size: 18px; font-weight: 600">
-          AI Harness
-        </div>
-        <div
-          class="gf-text-muted"
-          style="font-size: 12px"
-          x-show="!setupFailed()"
-          x-text="`${passingAgents()} of ${(report?.agentScores || []).length} agents passing at A grade`"
-        ></div>
-        <div
-          class="gf-text-muted"
-          style="font-size: 12px"
-          x-show="setupFailed()"
+      <div class="next-action-cta">
+        <button
+          class="gf-btn gf-btn-secondary gf-btn-md"
+          @click="runSecondaryAction()"
         >
-          Scores reflect current install state - will improve after setup
-        </div>
+          <span x-text="nextSecondaryLabel()"></span>
+        </button>
+        <button
+          class="gf-btn gf-btn-primary gf-btn-md home-primary"
+          @click="runPrimaryAction()"
+        >
+          <span x-text="nextPrimaryLabel()"></span>
+        </button>
       </div>
+    </section>
 
-      <div
-        style="
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          margin-bottom: 12px;
-        "
-      >
-        <template
-          x-for="agent in (report?.agentScores || [])"
-          :key="'home-agent-' + agent.id"
+    <div class="section-head">
+      <span
+        class="section-title"
+        x-text="showPreviewAgents() ? 'What you get after setup' : 'AI harness health'"
+      ></span>
+      <span class="section-meta" x-text="sectionMeta()"></span>
+    </div>
+
+    <section
+      class="agent-grid"
+      :style="{ '--agent-columns': String(agentColumnCount()) }"
+    >
+      <template x-for="agent in homeAgents()" :key="agent.id">
+        <article
+          class="agent-card"
+          :class="[agentCardClass(agent), { 'agent-card-selected': !agent.preview && auditDetailAgent === agent.id }]"
         >
           <div
-            class="gf-card"
-            style="
-              padding: 14px 14px 12px;
-              cursor: pointer;
-              transition: border-color 0.15s;
-            "
-            :style="{ borderColor: expandedAgent === agent.id ? '#4ade80' : '' }"
-            @click="expandedAgent = (expandedAgent === agent.id ? null : agent.id)"
+            class="agent-card-button"
+            role="button"
+            tabindex="0"
+            :aria-expanded="String(!agent.preview && auditDetailAgent === agent.id)"
+            :aria-controls="'detail-' + agent.id"
+            @click="if (!agent.preview) auditDetailAgent = auditDetailAgent === agent.id ? null : agent.id"
+            @keydown.enter="if (!agent.preview) auditDetailAgent = auditDetailAgent === agent.id ? null : agent.id"
+            @keydown.space.prevent="if (!agent.preview) auditDetailAgent = auditDetailAgent === agent.id ? null : agent.id"
           >
-            <div
-              style="
-                display: flex;
-                align-items: baseline;
-                justify-content: space-between;
-                margin-bottom: 2px;
-              "
-            >
-              <div
-                class="gf-text-primary"
-                style="font-size: 14px; font-weight: 500"
-                x-text="agent.name"
-              ></div>
-              <div style="display: flex; align-items: baseline; gap: 6px">
-                <span
-                  style="font-size: 18px; font-weight: 500"
-                  :style="{ color: concernBarColor(agentScore(agent)) }"
-                  x-text="grade(agentScore(agent))"
-                ></span>
-                <span
-                  style="font-size: 13px"
-                  class="gf-text-muted"
-                  x-text="agentScore(agent) + '%'"
-                ></span>
-              </div>
-            </div>
-            <div
-              class="gf-text-muted"
-              style="font-size: 12px; margin-bottom: 8px"
-            >
+            <div class="agent-card-head">
+              <span class="agent-name" x-text="agentDisplayName(agent)"></span>
               <span
-                x-text="`${recCount(agent)} recommendation${recCount(agent) === 1 ? '' : 's'}`"
-              ></span>
-            </div>
-            <template
-              x-for="key in concernKeys"
-              :key="'home-agent-' + agent.id + '-' + key"
-            >
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                  margin-bottom: 4px;
-                "
+                class="agent-grade"
+                :class="toneForScore(agentScore(agent))"
               >
                 <span
-                  class="gf-text-muted"
-                  style="font-size: 11px; width: 62px; text-align: right"
-                  x-text="concernLabels[key]"
+                  class="grade-letter"
+                  x-text="gradeFor(agentScore(agent))"
                 ></span>
+                <span
+                  class="grade-pct"
+                  :class="toneForScore(agentScore(agent))"
+                  x-text="agentScore(agent) === null ? 'preview' : agentScore(agent) + '%'"
+                ></span>
+              </span>
+            </div>
+            <div
+              class="agent-summary"
+              x-text="recommendationSummary(agent)"
+            ></div>
+
+            <div class="concern-list">
+              <template x-for="key in concernKeys" :key="key">
                 <div
-                  style="
-                    flex: 1;
-                    height: 5px;
-                    border-radius: 999px;
-                    background: rgba(148, 163, 184, 0.22);
-                    overflow: hidden;
-                  "
+                  class="concern-row"
+                  :aria-label="concernLabels[key] + ' ' + concernPctText(agent, key) + '%'"
                 >
-                  <div
-                    style="height: 100%; border-radius: 999px"
-                    :style="{ width: concernScore(agent, key) + '%', background: concernBarColor(concernScore(agent, key)) }"
-                  ></div>
+                  <span
+                    class="concern-label"
+                    x-text="concernLabels[key]"
+                  ></span>
+                  <div class="concern-bar">
+                    <div
+                      class="concern-fill"
+                      :class="concernToneClass(agent, key)"
+                      :style="{ width: concernWidth(agent, key) }"
+                    ></div>
+                  </div>
+                  <span
+                    class="concern-pct"
+                    :class="concernToneClass(agent, key)"
+                    x-text="concernPctText(agent, key)"
+                  ></span>
                 </div>
-                <span
-                  style="
-                    font-size: 11px;
-                    font-weight: 600;
-                    width: 35px;
-                    text-align: right;
-                  "
-                  :style="{ color: concernBarColor(concernScore(agent, key)) }"
-                  x-text="concernScore(agent, key) + '%'"
-                ></span>
-              </div>
-            </template>
+              </template>
+            </div>
           </div>
-        </template>
-      </div>
+        </article>
+      </template>
+    </section>
 
-      <!-- Agent detail panel (expands below grid when card clicked) -->
-      <template
-        x-for="agent in (report?.agentScores || [])"
-        :key="'home-detail-' + agent.id"
-      >
-        <template x-if="expandedAgent === agent.id">
-          <div class="gf-card" style="padding: 16px 20px; margin-bottom: 12px">
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 14px;
-              "
-            >
-              <div
-                class="gf-text-primary"
-                style="font-size: 15px; font-weight: 500"
-                x-text="agent.name"
-              ></div>
-              <span
-                class="gf-text-muted"
-                style="font-size: 12px"
-                x-text="'Last audited ' + auditAgeLabel()"
-              ></span>
-            </div>
-
-            <!-- Agent setup checks -->
-            <div
-              x-show="agent.agent?.checks?.length > 0"
-              style="margin-bottom: 14px"
-            >
-              <div
-                class="gf-text-muted"
-                style="
-                  font-size: 10px;
-                  text-transform: uppercase;
-                  letter-spacing: 0.5px;
-                  margin-bottom: 8px;
-                  font-weight: 600;
-                "
-              >
-                Agent Setup
+    <div
+      class="home-detail"
+      x-show="auditDetailAgent && agentScores().length > 0"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 -translate-y-2"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100 translate-y-0"
+      x-transition:leave-end="opacity-0 -translate-y-2"
+      @keydown.escape.window="auditDetailAgent = null"
+      :id="'detail-' + auditDetailAgent"
+    >
+      <template x-if="auditDetailAgent">
+        <template
+          x-for="agent in agentScores().filter(a => a.id === auditDetailAgent)"
+          :key="agent.id"
+        >
+          <div>
+            <div class="detail-header">
+              <div class="detail-header-left">
                 <span
-                  class="gf-text-secondary"
-                  style="margin-left: 4px"
-                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} installed)`"
+                  class="agent-name"
+                  x-text="agentDisplayName(agent)"
                 ></span>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 4px">
-                <template
-                  x-for="(check, idx) in agent.agent.checks"
-                  :key="agent.id + '-det-check-' + idx"
+                <span
+                  class="agent-grade"
+                  :class="toneForScore(agentScore(agent))"
                 >
-                  <div
-                    :style="{ paddingBottom: check.failure ? '10px' : '3px', borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none', marginBottom: check.failure ? '4px' : '0' }"
-                  >
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        font-size: 13px;
-                      "
-                    >
-                      <span
-                        style="
-                          flex-shrink: 0;
-                          font-weight: 600;
-                          width: 14px;
-                          text-align: center;
-                        "
-                        :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
-                        x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
-                      ></span>
-                      <span
-                        class="gf-text-primary"
-                        style="font-weight: 500"
-                        x-text="check.name"
-                      ></span>
+                  <span
+                    class="grade-letter"
+                    x-text="gradeFor(agentScore(agent))"
+                  ></span>
+                  <span
+                    class="grade-pct"
+                    :class="toneForScore(agentScore(agent))"
+                    x-text="agentScore(agent) + '%'"
+                  ></span>
+                </span>
+              </div>
+              <button
+                class="detail-close"
+                @click="auditDetailAgent = null"
+                aria-label="Close detail panel"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="detail-grid">
+              <div class="detail-card">
+                <h4>Agent Setup</h4>
+                <template
+                  x-for="check in detailList(agent, 'agent')"
+                  :key="check.id"
+                >
+                  <div class="detail-row">
+                    <span
+                      class="detail-status"
+                      :class="check.status"
+                      x-text="check.status === 'pass' ? 'OK' : 'Fix'"
+                    ></span>
+                    <div>
+                      <strong x-text="check.name"></strong>
+                      <p x-text="check.detail || 'No detail supplied'"></p>
                     </div>
-                    <template x-if="check.failure">
-                      <div style="margin-left: 22px; margin-top: 2px">
-                        <p
-                          class="gf-text-muted"
-                          style="font-size: 12px; margin: 0"
-                          x-text="check.failure.message"
-                        ></p>
-                        <p
-                          x-show="check.failure.howToFix"
-                          class="gf-text-secondary"
-                          style="font-size: 11px; margin: 3px 0 0"
-                          x-text="'Fix: ' + (check.failure.howToFix || '')"
-                        ></p>
-                      </div>
-                    </template>
+                  </div>
+                </template>
+              </div>
+
+              <div class="detail-card">
+                <h4>Concern Detail</h4>
+                <template x-for="key in concernKeys" :key="key">
+                  <div class="detail-row">
+                    <span
+                      class="detail-status"
+                      :class="concern(agent, key).status"
+                      x-text="concern(agent, key).status === 'pass' ? 'OK' : 'Fix'"
+                    ></span>
+                    <div>
+                      <strong x-text="concernLabels[key]"></strong>
+                      <p x-text="formatConcernSummary(agent, key)"></p>
+                      <p
+                        class="detail-fix"
+                        x-text="formatConcernFix(agent, key)"
+                      ></p>
+                    </div>
                   </div>
                 </template>
               </div>
             </div>
-
-            <!-- Concern sections -->
-            <template x-if="agent.concerns">
-              <div style="display: flex; flex-direction: column; gap: 10px">
-                <template
-                  x-for="ck in concernKeys"
-                  :key="agent.id + '-det-concern-' + ck"
-                >
-                  <div
-                    style="
-                      padding: 12px 0;
-                      border-top: 0.5px solid var(--border-subtle);
-                    "
-                  >
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        margin-bottom: 6px;
-                      "
-                    >
-                      <span
-                        class="gf-text-primary"
-                        style="font-size: 13px; font-weight: 500"
-                        x-text="concernLabels[ck]"
-                      ></span>
-                      <span
-                        style="font-size: 12px; font-weight: 600"
-                        :style="{ color: concernBarColor(agent.concerns[ck]?.score ?? 0) }"
-                        x-text="(agent.concerns[ck]?.score ?? 0) + '%'"
-                      ></span>
-                    </div>
-                    <div
-                      style="
-                        height: 4px;
-                        border-radius: 999px;
-                        background: rgba(148, 163, 184, 0.15);
-                        overflow: hidden;
-                        margin-bottom: 8px;
-                      "
-                    >
-                      <div
-                        style="
-                          height: 100%;
-                          border-radius: 999px;
-                          transition: width 0.3s;
-                        "
-                        :style="{ width: (agent.concerns[ck]?.score ?? 0) + '%', background: concernBarColor(agent.concerns[ck]?.score ?? 0) }"
-                      ></div>
-                    </div>
-
-                    <!-- Findings -->
-                    <template x-if="agent.concerns[ck]?.findings?.length > 0">
-                      <div style="margin-bottom: 6px">
-                        <div
-                          class="gf-text-muted"
-                          style="
-                            font-size: 10px;
-                            text-transform: uppercase;
-                            letter-spacing: 0.5px;
-                            margin-bottom: 4px;
-                            font-weight: 600;
-                          "
-                        >
-                          Findings
-                        </div>
-                        <template
-                          x-for="(finding, fi) in agent.concerns[ck].findings"
-                          :key="agent.id + '-' + ck + '-f-' + fi"
-                        >
-                          <div
-                            style="
-                              display: flex;
-                              align-items: flex-start;
-                              gap: 6px;
-                              font-size: 12px;
-                              margin-bottom: 2px;
-                            "
-                          >
-                            <span
-                              class="gf-text-muted"
-                              style="flex-shrink: 0; line-height: 1.5"
-                              >&#8226;</span
-                            >
-                            <span
-                              class="gf-text-secondary"
-                              style="line-height: 1.5"
-                              x-text="finding"
-                            ></span>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-
-                    <!-- Recommendations -->
-                    <template
-                      x-if="agent.concerns[ck]?.recommendations?.length > 0"
-                    >
-                      <div>
-                        <div
-                          class="gf-text-muted"
-                          style="
-                            font-size: 10px;
-                            text-transform: uppercase;
-                            letter-spacing: 0.5px;
-                            margin-bottom: 4px;
-                            font-weight: 600;
-                          "
-                        >
-                          Recommendations
-                        </div>
-                        <template
-                          x-for="(rec, ri) in agent.concerns[ck].recommendations"
-                          :key="agent.id + '-' + ck + '-r-' + ri"
-                        >
-                          <div style="margin-bottom: 4px">
-                            <div
-                              style="
-                                display: flex;
-                                align-items: flex-start;
-                                gap: 6px;
-                                font-size: 12px;
-                              "
-                            >
-                              <span
-                                style="
-                                  color: #fb923c;
-                                  flex-shrink: 0;
-                                  font-weight: 600;
-                                "
-                                >&#8594;</span
-                              >
-                              <span
-                                class="gf-text-primary"
-                                style="font-weight: 500"
-                                x-text="rec"
-                              ></span>
-                            </div>
-                            <div
-                              x-show="agent.concerns[ck].howToFix?.[ri]"
-                              style="
-                                margin-top: 3px;
-                                margin-left: 18px;
-                                padding: 5px 10px;
-                                border-radius: 4px;
-                                font-size: 11px;
-                                background: var(
-                                  --surface-elevated,
-                                  rgba(39, 39, 42, 0.5)
-                                );
-                              "
-                            >
-                              <span
-                                class="gf-text-muted"
-                                style="font-weight: 600"
-                                >Fix:
-                              </span>
-                              <span
-                                class="gf-text-secondary"
-                                x-text="agent.concerns[ck].howToFix?.[ri]"
-                              ></span>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-
-                    <!-- All clear -->
-                    <div
-                      x-show="!(agent.concerns[ck]?.recommendations?.length > 0) && !(agent.concerns[ck]?.findings?.length > 0)"
-                      class="gf-text-secondary"
-                      style="font-size: 12px"
-                    >
-                      All checks passing for this concern.
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </template>
           </div>
         </template>
       </template>
+    </div>
 
-      <div
-        x-show="setupFailed() && projectGaps().length > 0"
-        class="gf-card"
-        style="padding: 10px 14px; margin-bottom: 10px"
-        x-data="{
-          lowestConcern() {
-            let worst = null;
-            let worstScore = 101;
-            for (const agent of (report?.agentScores || [])) {
-              if (!agent?.concerns) continue;
-              for (const key of concernKeys) {
-                const s = agent.concerns[key]?.score ?? 100;
-                if (s < worstScore) { worstScore = s; worst = key; }
-              }
-            }
-            return worst ? { key: worst, label: concernLabels[worst] || worst, score: worstScore } : null;
-          },
-          missingFiles() {
-            const lc = this.lowestConcern();
-            if (!lc) return '';
-            const missing = [];
-            for (const agent of (report?.agentScores || [])) {
-              if (!agent?.concerns?.[lc.key]?.recommendations) continue;
-              for (const rec of agent.concerns[lc.key].recommendations) {
-                const match = rec.match(/\.(goat-flow\/[^\s,]+)/g);
-                if (match) match.forEach(m => { if (!missing.includes(m)) missing.push(m); });
-              }
-            }
-            return missing.length > 0 ? `missing ${missing.join(', ')}` : '';
-          }
-        }"
-      >
-        <div
-          style="
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            flex-wrap: wrap;
-          "
-        >
-          <span
-            class="gf-text-muted"
-            style="
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            "
+    <section class="lower-row">
+      <article class="panel install-panel">
+        <div class="panel-head">
+          <span class="panel-title">Install state</span>
+          <button
+            class="panel-cta"
+            x-show="!setupMissing()"
+            @click="activeView = 'setup'; detectStack()"
           >
-            Project-level gaps
-          </span>
-          <span
-            class="gf-text-muted"
-            style="font-size: 12px"
-            x-text="`affect all ${(report?.agentScores || []).length} agents`"
-          ></span>
+            Setup
+          </button>
         </div>
-        <div
-          class="gf-text-secondary mono"
-          style="font-size: 12px; margin-top: 4px"
-          x-show="lowestConcern()"
-          x-text="(() => {
-            const lc = lowestConcern();
-            if (!lc) return '';
-            const mf = missingFiles();
-            return `${lc.label} at ${lc.score}%${mf ? ' · ' + mf : ''}`;
-          })()"
-        ></div>
-      </div>
 
-      <div
-        x-data="{
-        showChecks: false,
-        checkDesc: {
-          'Lessons': 'Records behavioural mistakes so agents avoid repeating them',
-          'Footguns': 'Tracks cross-doc traps with file-level evidence to prevent regressions',
-          'Architecture': 'Single source of truth for system structure and boundaries',
-          'Code map': 'Quick-reference index of key files, modules, and entry points',
-          'Glossary': 'Defines project-specific terms so agents use consistent language',
-          'Patterns': 'Captures recurring solutions and idioms for the codebase',
-          'Decisions': 'Stores ADRs so agents understand why choices were made',
-          'Session logs': 'Provides continuity between agent sessions',
-          'Tasks': 'Workspace for plans, milestones, and in-progress work',
-          'Scratchpad': 'Ephemeral workspace for drafts and experiments',
-          'Other required files': 'Additional manifest entries needed for a complete install',
-          'Config file': 'Central YAML config that controls GOAT Flow behaviour',
-          'Config version': 'Ensures config schema matches the installed CLI version',
-        }
-      }"
-      >
-        <button
-          @click="showChecks = !showChecks"
-          class="gf-card"
-          style="
-            padding: 10px 14px;
-            width: 100%;
-            text-align: left;
-            cursor: pointer;
-          "
-        >
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 10px;
-            "
-          >
-            <div style="display: flex; align-items: center; gap: 8px">
-              <span
-                class="gf-text-muted"
-                style="font-size: 12px"
-                x-text="`Install state · ${setupPassed()} of ${setupTotal()} components installed`"
-              ></span>
-              <svg
-                :style="{ transform: showChecks ? 'rotate(180deg)' : '' }"
-                style="
-                  width: 12px;
-                  height: 12px;
-                  color: var(--text-muted);
-                  transition: transform 0.2s;
-                "
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </div>
-            <span
-              style="font-size: 14px; font-weight: 600"
-              :style="{ color: setupFailed() ? '#f87171' : '#4ade80' }"
-              x-text="setupFailed() ? 'Setup incomplete' : 'Ready'"
-            ></span>
-          </div>
-        </button>
-        <div
-          x-show="showChecks"
-          x-cloak
-          class="gf-card"
-          style="
-            padding: 14px 18px;
-            margin-top: -1px;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-          "
-        >
-          <div style="display: flex; flex-direction: column; gap: 4px">
-            <template
-              x-for="(check, idx) in (setupScope().checks || [])"
-              :key="'home-install-check-' + idx"
-            >
-              <div
-                :style="{
-                  paddingBottom: check.failure ? '10px' : '3px',
-                  borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none',
-                  marginBottom: check.failure ? '4px' : '0'
-                }"
-              >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    font-size: 13px;
-                  "
-                >
-                  <span
-                    style="
-                      flex-shrink: 0;
-                      font-weight: 600;
-                      width: 14px;
-                      text-align: center;
-                    "
-                    :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
-                    x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
-                  ></span>
-                  <span
-                    class="gf-text-primary"
-                    style="font-weight: 500"
-                    x-text="check.name"
-                  ></span>
-                  <span
-                    class="gf-text-muted"
-                    style="font-size: 12px; margin-left: 2px"
-                    x-show="checkDesc[check.name]"
-                    x-text="'- ' + (checkDesc[check.name] || '')"
-                  ></span>
-                </div>
-                <template x-if="check.failure">
-                  <div style="margin-left: 22px; margin-top: 2px">
-                    <p
-                      class="gf-text-muted"
-                      style="font-size: 12px; margin: 0"
-                      x-text="check.failure.message"
-                    ></p>
-                    <p
-                      x-show="check.failure.howToFix"
-                      class="gf-text-secondary"
-                      style="font-size: 11px; margin: 3px 0 0"
-                      x-text="'Fix: ' + (check.failure.howToFix || '')"
-                    ></p>
-                  </div>
-                </template>
+        <div class="install-body">
+          <div class="install-checks">
+            <template x-for="check in installChecks()" :key="check.label">
+              <div class="install-check" :class="{ dim: !check.ok }">
+                <span
+                  class="install-check-icon"
+                  :class="{ ok: check.ok, bad: !check.ok }"
+                  x-html="installCheckIcon(check)"
+                ></span>
+                <span x-text="check.label"></span>
               </div>
             </template>
           </div>
+
+          <div class="ring-wrap">
+            <div class="ring-chart" :style="ringStyle()">
+              <span class="ring-value" :style="{ color: ringColor() }">
+                <span x-text="ringNumber()"></span
+                ><span class="ring-pct" x-show="ringShowPct()">%</span>
+              </span>
+            </div>
+            <span class="ring-label" x-text="ringLabel()"></span>
+          </div>
         </div>
-      </div>
-    </div>
+      </article>
+
+      <article class="panel lessons-panel">
+        <div class="panel-head">
+          <span class="panel-title">Recent lessons</span>
+        </div>
+
+        <div class="lesson-list" x-show="recentLessons().length > 0">
+          <template
+            x-for="lesson in recentLessons()"
+            :key="lesson.id + lesson.path"
+          >
+            <div class="lesson-row">
+              <span class="lesson-id" x-text="lesson.id"></span>
+              <div class="lesson-text">
+                <strong x-text="lesson.title"></strong>
+                <span x-text="lesson.created || lesson.path"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="loop-na" x-show="recentLessons().length === 0">
+          <div class="loop-na-mark">NA</div>
+          <p
+            x-text="setupMissing() ? 'No learning-loop records yet.' : 'Lessons appear here as agents log them.'"
+          ></p>
+        </div>
+      </article>
+    </section>
 
     <div
       class="gf-footer"
-      style="text-align: center; font-size: 11px; padding: 14px 0"
+      style="text-align: center; font-size: 11px; padding: 12px 0"
     >
       Built by
       <a
@@ -842,1236 +910,9 @@
         class="gf-footer-link"
         >BlunderGOAT</a
       >
-      · <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
+      ·
+      <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
     </div>
   </div>
 </div>
-<!-- ═══ Home View ═══ -->
-<div
-  x-show="activeView === 'home'"
-  x-cloak
-  style="height: calc(100vh - 3.5rem); overflow-y: auto"
->
-  <div style="max-width: 1060px; margin: 0 auto; padding: 12px 28px 24px">
-    <!-- Recommended actions -->
-    <div
-      x-show="report"
-      x-cloak
-      x-data="{
-        hasSetupFail() { return report?.scopes?.setup?.status === 'fail'; },
-        hasHarnessFail() { return (report?.agentScores || []).some(a => a.agent?.status === 'fail'); },
-        hasQualityGaps() {
-          const agents = report?.agentScores || [];
-          if (agents.length === 0) return false;
-          return agents.some(a => a.concerns && Object.values(a.concerns).some(c => c.status === 'fail'));
-        },
-        integrityFailTotal() {
-          let n = 0;
-          for (const a of (report?.agentScores || [])) {
-            if (!a.concerns) continue;
-            for (const ck of Object.keys(a.concerns)) n += (a.concerns[ck].integrityFail || 0);
-          }
-          return n;
-        },
-        advisoryFailTotal() {
-          let n = 0;
-          for (const a of (report?.agentScores || [])) {
-            if (!a.concerns) continue;
-            for (const ck of Object.keys(a.concerns)) n += (a.concerns[ck].advisoryFail || 0);
-          }
-          return n;
-        },
-        priority() {
-          if (this.hasSetupFail()) return 'setup';
-          if (this.hasHarnessFail()) return 'harness';
-          if (this.hasQualityGaps()) return 'completeness';
-          return 'healthy';
-        },
-        heading() {
-          if (this.priority() === 'completeness') {
-            const i = this.integrityFailTotal();
-            const a = this.advisoryFailTotal();
-            return `Workflow quality: ${i} integrity issue${i !== 1 ? 's' : ''}, ${a} advisory improvement${a !== 1 ? 's' : ''}`;
-          }
-          const h = { setup: 'Setup needs attention', harness: 'Agent harness needs fixing', healthy: 'Recommended actions' };
-          return h[this.priority()] || 'Recommended actions';
-        },
-        subtext() {
-          const s = {
-            setup: 'Setup checks are failing - fix these before running quality prompts.',
-            harness: 'Agent harness checks are failing - resolve these to unblock concern checks.',
-            completeness: 'Integrity issues are install drift (must fix). Advisory items are best practice - fix or add the check id to harness.acknowledge in .goat-flow/config.yaml.',
-            healthy: 'All checks passing - these are your highest-leverage next actions.'
-          };
-          return s[this.priority()] || '';
-        },
-        setupFixPrompt() {
-          const failures = report?.scopes?.setup?.failures || [];
-          if (failures.length === 0) return '/goat fix setup issues';
-          let num = 1;
-          const lines = failures.map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See setup step for this check.'}`).join('\n');
-          return `Fix these ${failures.length} setup failures:\n\n` + lines + '\n\nTarget: all setup checks passing.';
-        },
-        harnessFixPrompt() {
-          const sections = [];
-          for (const a of (report?.agentScores || [])) {
-            if (a.agent?.status !== 'fail') continue;
-            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : a.id === 'gemini' ? 'Gemini CLI' : 'Copilot CLI';
-            let num = 1;
-            const fails = (a.agent.failures || []).map(f => `${num++}. **${f.check}** - ${f.message}\n   Fix: ${f.howToFix || 'See harness documentation for this check.'}`).join('\n');
-            sections.push(`**${label}:**\n${fails}`);
-          }
-          const totalChecks = (report?.agentScores || []).reduce((n, a) => Math.max(n, a.agent?.checks?.length || 0), 0);
-          return `Fix these agent setup check failures:\n\n` + sections.join('\n\n') + `\n\nTarget: all ${totalChecks} agent setup checks passing for each agent.`;
-        },
-        qualityFixPrompt() {
-          const sections = [];
-          for (const a of (report?.agentScores || [])) {
-            if (!a.harness) continue;
-            const label = a.id === 'claude' ? 'Claude Code' : a.id === 'codex' ? 'Codex' : a.id === 'gemini' ? 'Gemini CLI' : 'Copilot CLI';
-            const integrity = [];
-            const advisory = [];
-            for (const check of (a.harness.checks || [])) {
-              if (check.status !== 'fail' || check.acknowledged) continue;
-              if (check.type === 'integrity') integrity.push(check);
-              else if (check.type === 'advisory') advisory.push(check);
-            }
-            if (integrity.length === 0 && advisory.length === 0) continue;
-            const lines = [`**${label}:**`];
-            let n = 1;
-            if (integrity.length > 0) {
-              lines.push(`*Integrity (drift from install - must fix):*`);
-              for (const c of integrity) {
-                lines.push(`${n++}. **${c.name}** - ${c.failure?.message || ''}`);
-                if (c.failure?.howToFix) lines.push(`   Fix: ${c.failure.howToFix}`);
-                lines.push(`   Verify: \`npx goat-flow audit . --harness\` shows \`${c.id}\` passing`);
-              }
-            }
-            if (advisory.length > 0) {
-              lines.push(`*Advisory (best practice - fix or acknowledge):*`);
-              for (const c of advisory) {
-                lines.push(`${n++}. **${c.name}** - ${c.failure?.message || ''}`);
-                if (c.failure?.howToFix) lines.push(`   Fix: ${c.failure.howToFix}`);
-                lines.push(`   Or silence: add \`${c.id}\` to \`harness.acknowledge\` in \`.goat-flow/config.yaml\``);
-                lines.push(`   Verify: \`npx goat-flow audit . --harness\` shows \`${c.id}\` passing or acknowledged`);
-              }
-            }
-            sections.push(lines.join('\n'));
-          }
-          if (sections.length === 0) return '/goat audit harness';
-          return `Fix these harness check failures:\n\n` + sections.join('\n\n') + '\n\nTarget: all integrity checks passing, all advisory checks passing or acknowledged.';
-        }
-      }"
-      style="margin-bottom: 20px"
-    >
-      <!-- Heading -->
-      <div
-        class="gf-text-primary"
-        style="font-size: 20px; font-weight: 600; margin-bottom: 4px"
-        x-text="heading()"
-      ></div>
-      <div
-        class="gf-text-muted"
-        style="font-size: 12px; margin-bottom: 10px"
-        x-text="subtext()"
-      ></div>
-
-      <!-- setup priority: setup-view button + agent-fix button -->
-      <div x-show="priority() === 'setup'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-          "
-        >
-          <button
-            @click="activeView = 'setup'; detectStack()"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              border-color: #166534;
-            "
-          >
-            <span
-              class="gf-play-icon"
-              style="color: #4ade80; border-color: #166534"
-            >
-              <svg
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title" style="color: #4ade80">
-                Fix in Setup
-              </div>
-              <div class="gf-action-desc">Open Setup</div>
-            </div>
-          </button>
-          <button
-            @click="launchPreset(setupFixPrompt(), activeRunner, 'Setup fix ' + activeRunner); workspacePanel = 'terminal'"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
-          >
-            <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title">Fix with agent</div>
-              <div class="gf-action-desc">Send fix prompt to terminal</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- harness priority: setup-view button + agent-fix button -->
-      <div x-show="priority() === 'harness'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-          "
-        >
-          <button
-            @click="activeView = 'setup'; detectStack()"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              border-color: #166534;
-            "
-          >
-            <span
-              class="gf-play-icon"
-              style="color: #4ade80; border-color: #166534"
-            >
-              <svg
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title" style="color: #4ade80">
-                Fix harness in setup
-              </div>
-              <div class="gf-action-desc">Open Setup</div>
-            </div>
-          </button>
-          <button
-            @click="launchPreset(harnessFixPrompt(), activeRunner, 'Harness fix ' + activeRunner); workspacePanel = 'terminal'"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
-          >
-            <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title">Fix harness with agent</div>
-              <div class="gf-action-desc">Send fix prompt to terminal</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- completeness gaps: agent fix button -->
-      <div x-show="priority() === 'completeness'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-          "
-        >
-          <button
-            @click="launchPreset(qualityFixPrompt(), activeRunner, 'Quality fix ' + activeRunner); workspacePanel = 'terminal'"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              border-color: #166534;
-            "
-          >
-            <span
-              class="gf-play-icon"
-              style="color: #4ade80; border-color: #166534"
-            >
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title" style="color: #4ade80">
-                Fix harness with agent
-              </div>
-              <div class="gf-action-desc">Send fix prompt to terminal</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- healthy (all passing): review + coverage-audit + security presets -->
-      <div x-show="priority() === 'healthy'" x-cloak>
-        <div
-          style="
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-          "
-        >
-          <template
-            x-for="p in presets.filter(p => ['review', 'test-audit', 'security'].includes(p.id))"
-            :key="p.id"
-          >
-            <button
-              @click="launchPreset(p.prompt, activeRunner, p.name, { presetId: p.id }); workspacePanel = 'terminal'"
-              class="gf-action-btn"
-              style="
-                text-align: left;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-              "
-            >
-              <span class="gf-play-icon">
-                <svg
-                  width="12"
-                  height="12"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                  />
-                </svg>
-              </span>
-              <div style="flex: 1; min-width: 0">
-                <div class="gf-action-title" x-text="p.name"></div>
-                <div class="gf-action-desc" x-text="p.desc"></div>
-              </div>
-            </button>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <!-- Terminal audit commands -->
-    <div x-show="report && terminalAvailable" style="margin-bottom: 16px">
-      <div class="gf-text-muted" style="font-size: 12px; margin-bottom: 8px">
-        Run audit commands in the workspace terminal.
-      </div>
-      <div
-        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px"
-      >
-        <template
-          x-for="action in terminalAuditActions"
-          :key="'home-audit-' + action.id"
-        >
-          <button
-            @click="runTerminalAuditCommand(action)"
-            :title="action.description"
-            class="gf-action-btn"
-            style="
-              text-align: left;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            "
-          >
-            <span class="gf-play-icon">
-              <svg
-                width="12"
-                height="12"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"
-                />
-              </svg>
-            </span>
-            <div style="flex: 1; min-width: 0">
-              <div class="gf-action-title" x-text="action.command"></div>
-              <div class="gf-action-desc" x-text="action.description"></div>
-            </div>
-          </button>
-        </template>
-      </div>
-    </div>
-
-    <!-- No audit data -->
-    <div
-      x-show="!report"
-      class="gf-surface"
-      style="
-        border-radius: 8px;
-        padding: 24px;
-        text-align: center;
-        margin-bottom: 20px;
-      "
-    >
-      <p class="gf-text-muted" style="font-size: 13px; margin-bottom: 12px">
-        No audit results yet
-      </p>
-      <button
-        @click="runAudit(true)"
-        :disabled="auditing"
-        class="gf-btn gf-btn-md gf-btn-audit"
-      >
-        <span x-text="auditing ? 'Auditing...' : 'Run Audit'"></span>
-      </button>
-    </div>
-
-    <!-- GOAT Flow Setup -->
-    <div x-show="report" style="margin-bottom: 12px">
-      <div
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 10px;
-        "
-      >
-        <button
-          @click="runAudit(true)"
-          :disabled="auditing"
-          class="gf-btn gf-btn-md gf-btn-audit"
-          style="margin-left: auto"
-        >
-          <span x-text="auditing ? 'Auditing...' : 'Re-audit'"></span>
-        </button>
-      </div>
-      <button
-        @click="auditDetailScope = (auditDetailScope === 'setup' ? null : 'setup'); auditDetailAgent = null"
-        class="gf-card gf-card-clickable"
-        style="
-          padding: 16px 24px;
-          cursor: pointer;
-          transition: border-color 0.1s;
-          width: 100%;
-          text-align: left;
-        "
-        :style="{ borderColor: auditDetailScope === 'setup' ? '#4ade80' : '' }"
-      >
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          "
-        >
-          <div>
-            <span
-              class="gf-text-primary"
-              style="font-size: 16px; font-weight: 600"
-              >GOAT Flow Setup</span
-            >
-            <span
-              class="gf-text-secondary"
-              style="font-size: 12px; margin-left: 12px"
-              x-text="`${(report?.scopes?.setup?.checks || []).filter(c => c.status === 'pass').length}/${(report?.scopes?.setup?.checks || []).length} installed`"
-            ></span>
-          </div>
-          <span
-            style="
-              font-size: 13px;
-              font-weight: 600;
-              padding: 2px 8px;
-              border-radius: 4px;
-            "
-            :style="{
-              background: report?.scopes?.setup?.status === 'pass' ? '#14532d' : '#7f1d1d',
-              color: report?.scopes?.setup?.status === 'pass' ? '#4ade80' : '#f87171',
-            }"
-            x-text="report?.scopes?.setup?.status === 'pass' ? 'INSTALLED' : 'NOT INSTALLED'"
-          ></span>
-        </div>
-      </button>
-    </div>
-
-    <!-- Setup detail panel (inline, toggled by clicking Setup card) -->
-    <template x-if="auditDetailScope === 'setup' && report?.scopes?.setup">
-      <div
-        style="margin-bottom: 16px"
-        x-data="{
-          benefits: {
-            'lessons':        'Agents learn from past mistakes and don\'t repeat them',
-            'footguns':       'Known traps are surfaced before agents hit them',
-            'architecture':   'Agents understand how your system fits together',
-            'code-map':       'Agents find the right files without guessing',
-            'glossary':       'Agents use your project\'s terminology correctly',
-            'patterns':       'Proven approaches are reused instead of reinvented',
-            'decisions':      'Agents know why past choices were made',
-            'session-logs':   'Work survives context compaction and session crashes',
-            'tasks':          'Progress is tracked and resumable between sessions',
-            'other-files':    'Skill preamble, conventions, and config are in place',
-            'config-parses':  'goat-flow knows your project\'s toolchain and agents',
-            'config-version': 'Config matches the current goat-flow release',
-          }
-        }"
-      >
-        <!-- Capabilities summary when fully installed -->
-        <template x-if="report.scopes.setup.status === 'pass'">
-          <div
-            class="gf-card"
-            style="
-              border-radius: 8px;
-              padding: 14px 20px;
-              margin-bottom: 12px;
-              border-color: #14532d;
-            "
-          >
-            <div
-              style="
-                display: flex;
-                flex-wrap: wrap;
-                gap: 12px 24px;
-                font-size: 12px;
-              "
-            >
-              <span class="gf-text-secondary"
-                ><span style="color: #4ade80; margin-right: 4px">&#9679;</span>
-                Context-aware AI</span
-              >
-              <span class="gf-text-secondary"
-                ><span style="color: #4ade80; margin-right: 4px">&#9679;</span>
-                Safe execution guardrails</span
-              >
-              <span class="gf-text-secondary"
-                ><span style="color: #4ade80; margin-right: 4px">&#9679;</span>
-                Self-verifying outputs</span
-              >
-              <span class="gf-text-secondary"
-                ><span style="color: #4ade80; margin-right: 4px">&#9679;</span>
-                Learns from mistakes</span
-              >
-            </div>
-          </div>
-        </template>
-        <!-- Single setup CTA when checks are failing -->
-        <template x-if="report.scopes.setup.status === 'fail'">
-          <div
-            class="gf-card"
-            style="
-              border-radius: 8px;
-              padding: 14px 20px;
-              margin-bottom: 12px;
-              border-color: #7f1d1d;
-            "
-          >
-            <p
-              class="gf-text-primary"
-              style="font-size: 13px; font-weight: 500; margin: 0 0 6px 0"
-            >
-              Fix everything in one step
-            </p>
-            <p
-              class="gf-text-secondary"
-              style="font-size: 12px; line-height: 1.5; margin: 0 0 10px 0"
-            >
-              Run the setup prompt through your agent. It creates all missing
-              files with real content adapted to your project.
-            </p>
-            <code
-              class="gf-text-secondary"
-              style="
-                font-size: 12px;
-                background: rgba(255, 255, 255, 0.05);
-                padding: 4px 8px;
-                border-radius: 4px;
-              "
-              >goat-flow setup . --agent claude</code
-            >
-          </div>
-        </template>
-        <div class="gf-card" style="border-radius: 8px; padding: 16px 20px">
-          <h3
-            class="gf-text-muted"
-            style="
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-              margin-bottom: 12px;
-            "
-          >
-            Checks
-            <span
-              class="gf-text-secondary"
-              style="margin-left: 4px"
-              x-text="`(${report.scopes.setup.checks.filter(c => c.status === 'pass').length}/${report.scopes.setup.checks.length} installed)`"
-            ></span>
-          </h3>
-          <div style="display: flex; flex-direction: column; gap: 4px">
-            <template
-              x-for="(check, idx) in report.scopes.setup.checks"
-              :key="'home-setup-check-' + idx"
-            >
-              <div
-                :style="{
-                  paddingBottom: check.failure ? '12px' : '4px',
-                  borderBottom: check.failure ? '0.5px solid #2a2a2e' : 'none',
-                  marginBottom: check.failure ? '4px' : '0'
-                }"
-              >
-                <div
-                  style="
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    font-size: 13px;
-                  "
-                >
-                  <span
-                    style="
-                      flex-shrink: 0;
-                      font-weight: 600;
-                      width: 14px;
-                      text-align: center;
-                    "
-                    :style="{ color: check.status === 'pass' ? '#4ade80' : '#f87171' }"
-                    x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
-                  ></span>
-                  <div>
-                    <span
-                      class="gf-text-primary"
-                      style="font-weight: 500"
-                      x-text="check.name"
-                    ></span>
-                    <template x-if="benefits[check.id]">
-                      <span
-                        class="gf-text-muted"
-                        style="font-size: 12px; margin-left: 6px"
-                        x-text="'- ' + benefits[check.id]"
-                      ></span>
-                    </template>
-                  </div>
-                </div>
-                <template x-if="check.failure">
-                  <div style="margin-left: 22px">
-                    <p
-                      class="gf-text-muted"
-                      style="font-size: 12px; margin-top: 2px"
-                      x-text="check.failure.message"
-                    ></p>
-                  </div>
-                </template>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- AI Harness Completeness (human-friendly score cards) -->
-    <div
-      x-show="report?.agentScores?.length > 0"
-      style="margin-bottom: 4px"
-      x-data="{
-        concernMeta: {
-          context:       { label: 'Context',       subtitle: 'Is the agent\'s map accurate and lean?' },
-          constraints:   { label: 'Constraints',   subtitle: 'Do deterministic rules catch failures before the LLM runs?' },
-          verification:  { label: 'Verification',  subtitle: 'Can the agent verify its own work honestly?' },
-          recovery:      { label: 'Recovery',      subtitle: 'Can the agent resume after crash or compaction?' },
-          feedback_loop: { label: 'Feedback Loop', subtitle: 'Is the harness getting smarter from failures?' }
-        },
-        concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
-        statusColor(s) { return s === 'pass' ? 'var(--green-400)' : 'var(--red-400)' },
-        scoreColor(score) { return score >= 80 ? 'var(--green-400)' : score >= 70 ? 'var(--yellow-400, #facc15)' : score >= 60 ? 'var(--orange-400, #fb923c)' : 'var(--red-400)' },
-        scoreBg(score) { return score >= 80 ? 'var(--green-900, #14532d)' : score >= 70 ? 'var(--yellow-900, #713f12)' : score >= 60 ? 'var(--orange-900, #7c2d12)' : 'var(--red-900, #7f1d1d)' },
-        agentScore(agent) { if (!agent.harness) return null; const t = agent.harness.checks.length; return t ? Math.round(agent.harness.checks.filter(c => c.status === 'pass').length / t * 100) : null; },
-        recommendationSummary(agent) {
-          if (!agent?.concerns) {
-            return `${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} checks`;
-          }
-          const recs = this.concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0);
-          return recs === 0 ? 'All checks passing' : `${recs} recommendation${recs !== 1 ? 's' : ''}`;
-        },
-        concernSummary(c) {
-          const recs = c.recommendations?.length || 0;
-          const ack = c.advisoryAcknowledged || 0;
-          if (recs > 0 && ack > 0) return `${recs} recommendation${recs !== 1 ? 's' : ''} · ${ack} advisory acknowledged`;
-          if (recs > 0) return `${recs} recommendation${recs !== 1 ? 's' : ''}`;
-          if (ack > 0) return `${ack} advisory acknowledged`;
-          return 'All checks passing';
-        },
-        concernProgress(c) {
-          const total = (c.integrityPass || 0) + (c.integrityFail || 0) + (c.advisoryPass || 0) + (c.advisoryFail || 0) + (c.advisoryAcknowledged || 0);
-          const satisfied = (c.integrityPass || 0) + (c.advisoryPass || 0) + (c.advisoryAcknowledged || 0);
-          const metricSuffix = c.metrics > 0 ? ` · ${c.metrics} signal${c.metrics !== 1 ? 's' : ''}` : '';
-          return total > 0
-            ? `${satisfied}/${total} scored checks satisfied${metricSuffix}`
-            : metricSuffix
-              ? metricSuffix.slice(3)
-              : 'No scored checks';
-        },
-        concernStatusText(status) { return status === 'pass' ? 'Healthy' : 'Needs work'; },
-        toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
-        checkDescriptions: {
-          'agent-instruction': 'The agent has a project-specific instruction file',
-          'agent-skills': 'All 7 goat-flow skills are installed with matching versions',
-          'agent-settings': 'Agent settings file parses correctly',
-          'agent-deny-dangerous': 'Deny hook blocks destructive commands before they run'
-        }
-      }"
-    >
-      <div
-        class="gf-text-primary"
-        style="font-size: 20px; font-weight: 600; margin-bottom: 10px"
-      >
-        AI Harness
-      </div>
-
-      <!-- Agent cards (entire card is clickable, mini-bars are purely visual) -->
-      <div
-        style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px"
-      >
-        <template
-          x-for="agent in (report?.agentScores || [])"
-          :key="'harness-' + agent.id"
-        >
-          <button
-            @click="auditDetailAgent = (auditDetailAgent === agent.id ? null : agent.id); auditDetailScope = null"
-            class="gf-card"
-            style="
-              padding: 16px 18px;
-              cursor: pointer;
-              transition: border-color 0.15s;
-              text-align: left;
-            "
-            :style="{ borderColor: auditDetailAgent === agent.id ? 'var(--green-400)' : '' }"
-          >
-            <!-- Name + status -->
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 2px;
-              "
-            >
-              <span
-                class="gf-text-primary"
-                style="font-size: 15px; font-weight: 600"
-                x-text="agent.name"
-              ></span>
-              <div
-                x-show="agentScore(agent) !== null"
-                style="display: flex; align-items: baseline; gap: 4px"
-              >
-                <span
-                  style="font-size: 20px; font-weight: 700"
-                  :style="{ color: scoreColor(agentScore(agent)) }"
-                  x-text="toGrade(agentScore(agent))"
-                ></span>
-                <span
-                  style="font-size: 12px; font-weight: 600"
-                  :style="{ color: scoreColor(agentScore(agent)) }"
-                  x-text="agentScore(agent) + '%'"
-                ></span>
-              </div>
-            </div>
-            <!-- Check summary -->
-            <div
-              class="gf-text-muted"
-              style="font-size: 11px; margin-bottom: 10px"
-              x-text="recommendationSummary(agent)"
-            ></div>
-            <!-- Concern score bars -->
-            <template x-if="agent.concerns">
-              <div style="display: flex; flex-direction: column; gap: 8px">
-                <template
-                  x-for="ck in concernKeys"
-                  :key="agent.id + '-score-' + ck"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      align-items: center;
-                      gap: 8px;
-                      padding: 1px 0;
-                    "
-                  >
-                    <span
-                      class="gf-text-muted"
-                      style="
-                        font-size: 10px;
-                        width: 74px;
-                        flex-shrink: 0;
-                        text-align: right;
-                      "
-                      x-text="concernMeta[ck].label"
-                    ></span>
-                    <div
-                      style="
-                        flex: 1;
-                        height: 4px;
-                        background: var(--surface-elevated, #27272a);
-                        border-radius: 2px;
-                        overflow: hidden;
-                      "
-                    >
-                      <div
-                        style="
-                          height: 100%;
-                          border-radius: 2px;
-                          transition: width 0.3s;
-                        "
-                        :style="{ width: agent.concerns[ck].score + '%', background: scoreColor(agent.concerns[ck].score) }"
-                      ></div>
-                    </div>
-                    <span
-                      style="
-                        font-size: 10px;
-                        font-weight: 600;
-                        width: 32px;
-                        flex-shrink: 0;
-                        text-align: right;
-                      "
-                      :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                      x-text="agent.concerns[ck].score + '%'"
-                    ></span>
-                  </div>
-                </template>
-              </div>
-            </template>
-          </button>
-        </template>
-      </div>
-
-      <!-- Agent detail panel (shows ALL 5 concerns when card clicked) -->
-      <template
-        x-for="agent in (report?.agentScores || [])"
-        :key="'home-detail-' + agent.id"
-      >
-        <template x-if="auditDetailAgent === agent.id">
-          <div
-            style="
-              margin-top: 16px;
-              border-top: 0.5px solid var(--border-subtle);
-              padding-top: 16px;
-            "
-          >
-            <!-- Agent header -->
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 16px;
-              "
-            >
-              <div
-                class="gf-text-primary"
-                style="font-size: 18px; font-weight: 500"
-                x-text="agent.name"
-              ></div>
-              <template x-if="lastAuditTime">
-                <span
-                  class="gf-text-muted"
-                  style="font-size: 12px"
-                  x-text="'Last audited ' + formatTimeAgo(lastAuditTime)"
-                ></span>
-              </template>
-            </div>
-
-            <!-- Agent setup checks -->
-            <div
-              class="gf-card"
-              style="
-                border-radius: 8px;
-                padding: 16px 20px;
-                margin-bottom: 16px;
-              "
-            >
-              <h3
-                class="gf-text-muted"
-                style="
-                  font-size: 11px;
-                  text-transform: uppercase;
-                  letter-spacing: 0.5px;
-                  margin-bottom: 12px;
-                "
-              >
-                Agent Setup
-                <span
-                  class="gf-text-secondary"
-                  style="margin-left: 4px"
-                  x-text="`(${agent.agent.checks.filter(c => c.status === 'pass').length}/${agent.agent.checks.length} installed)`"
-                ></span>
-              </h3>
-              <div style="display: flex; flex-direction: column; gap: 4px">
-                <template
-                  x-for="(check, idx) in agent.agent.checks"
-                  :key="agent.id + '-home-check-' + idx"
-                >
-                  <div
-                    :style="{
-                      paddingBottom: check.failure ? '12px' : '4px',
-                      borderBottom: check.failure ? '0.5px solid var(--border-subtle)' : 'none',
-                      marginBottom: check.failure ? '4px' : '0'
-                    }"
-                  >
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        font-size: 13px;
-                      "
-                    >
-                      <span
-                        style="
-                          flex-shrink: 0;
-                          font-weight: 600;
-                          width: 14px;
-                          text-align: center;
-                        "
-                        :style="{ color: check.status === 'pass' ? 'var(--green-400)' : 'var(--red-400)' }"
-                        x-html="check.status === 'pass' ? '&#10003;' : '&#10005;'"
-                      ></span>
-                      <div>
-                        <span
-                          class="gf-text-primary"
-                          style="font-weight: 500"
-                          x-text="check.name"
-                        ></span>
-                        <template x-if="checkDescriptions[check.id]">
-                          <span
-                            class="gf-text-muted"
-                            style="font-size: 12px; margin-left: 6px"
-                            x-text="'- ' + checkDescriptions[check.id]"
-                          ></span>
-                        </template>
-                      </div>
-                    </div>
-                    <template x-if="check.failure">
-                      <div style="margin-left: 22px">
-                        <p
-                          class="gf-text-muted"
-                          style="font-size: 12px; margin-top: 2px"
-                          x-text="check.failure.message"
-                        ></p>
-                      </div>
-                    </template>
-                  </div>
-                </template>
-              </div>
-            </div>
-
-            <!-- All 5 concern sections stacked -->
-            <template x-if="agent.concerns">
-              <div>
-                <template
-                  x-for="ck in concernKeys"
-                  :key="agent.id + '-home-det-' + ck"
-                >
-                  <div
-                    class="gf-card"
-                    style="
-                      border-radius: 8px;
-                      padding: 16px 20px;
-                      margin-bottom: 10px;
-                    "
-                  >
-                    <div style="margin-bottom: 14px">
-                      <div
-                        style="
-                          display: flex;
-                          align-items: flex-start;
-                          justify-content: space-between;
-                          gap: 12px;
-                        "
-                      >
-                        <div style="flex: 1; min-width: 0">
-                          <span
-                            class="gf-text-primary"
-                            style="font-size: 14px; font-weight: 600"
-                            x-text="concernMeta[ck].label"
-                          ></span>
-                          <p
-                            class="gf-text-muted"
-                            style="font-size: 11px; margin-top: 2px"
-                            x-text="concernMeta[ck].subtitle"
-                          ></p>
-                        </div>
-                        <span
-                          style="
-                            display: inline-flex;
-                            align-items: center;
-                            flex-shrink: 0;
-                          "
-                        >
-                          <span
-                            style="
-                              font-size: 12px;
-                              font-weight: 700;
-                              padding: 4px 10px;
-                              border-radius: 4px;
-                              letter-spacing: 0.4px;
-                            "
-                            :style="{
-                              background: agent.concerns[ck].status === 'pass' ? 'var(--green-900, #14532d)' : 'var(--red-900, #7f1d1d)',
-                              color: statusColor(agent.concerns[ck].status)
-                            }"
-                            x-text="concernStatusText(agent.concerns[ck].status)"
-                          ></span>
-                        </span>
-                      </div>
-                      <div
-                        style="
-                          display: flex;
-                          align-items: center;
-                          gap: 10px;
-                          margin-top: 10px;
-                        "
-                      >
-                        <div
-                          style="
-                            flex: 1;
-                            height: 5px;
-                            background: var(--surface-elevated, #27272a);
-                            border-radius: 999px;
-                            overflow: hidden;
-                          "
-                        >
-                          <div
-                            style="
-                              height: 100%;
-                              border-radius: 999px;
-                              transition: width 0.3s;
-                            "
-                            :style="{ width: agent.concerns[ck].score + '%', background: scoreColor(agent.concerns[ck].score) }"
-                          ></div>
-                        </div>
-                        <span
-                          style="
-                            font-size: 12px;
-                            font-weight: 700;
-                            width: 40px;
-                            flex-shrink: 0;
-                            text-align: right;
-                          "
-                          :style="{ color: scoreColor(agent.concerns[ck].score) }"
-                          x-text="agent.concerns[ck].score + '%'"
-                        ></span>
-                      </div>
-                      <p
-                        class="gf-text-muted"
-                        style="font-size: 11px; margin-top: 6px"
-                        x-text="concernSummary(agent.concerns[ck]) + ' · ' + concernProgress(agent.concerns[ck])"
-                      ></p>
-                    </div>
-
-                    <!-- Findings -->
-                    <div
-                      x-show="agent.concerns[ck].findings.length > 0"
-                      style="margin-bottom: 10px"
-                    >
-                      <div
-                        class="gf-text-muted"
-                        style="
-                          font-size: 10px;
-                          text-transform: uppercase;
-                          letter-spacing: 0.5px;
-                          margin-bottom: 5px;
-                          font-weight: 600;
-                        "
-                      >
-                        Findings
-                      </div>
-                      <div
-                        style="display: flex; flex-direction: column; gap: 2px"
-                      >
-                        <template
-                          x-for="(finding, fi) in agent.concerns[ck].findings"
-                          :key="agent.id + '-' + ck + '-hf-' + fi"
-                        >
-                          <div
-                            style="
-                              display: flex;
-                              align-items: flex-start;
-                              gap: 6px;
-                              font-size: 12px;
-                            "
-                          >
-                            <span
-                              class="gf-text-muted"
-                              style="flex-shrink: 0; line-height: 1.5"
-                              >&#8226;</span
-                            >
-                            <span
-                              class="gf-text-secondary"
-                              style="line-height: 1.5"
-                              x-text="finding"
-                            ></span>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-
-                    <!-- Recommendations -->
-                    <div x-show="agent.concerns[ck].recommendations.length > 0">
-                      <div
-                        class="gf-text-muted"
-                        style="
-                          font-size: 10px;
-                          text-transform: uppercase;
-                          letter-spacing: 0.5px;
-                          margin-bottom: 5px;
-                          font-weight: 600;
-                        "
-                      >
-                        Recommendations
-                      </div>
-                      <div
-                        style="display: flex; flex-direction: column; gap: 6px"
-                      >
-                        <template
-                          x-for="(rec, ri) in agent.concerns[ck].recommendations"
-                          :key="agent.id + '-' + ck + '-hr-' + ri"
-                        >
-                          <div>
-                            <div
-                              style="
-                                display: flex;
-                                align-items: flex-start;
-                                gap: 6px;
-                                font-size: 12px;
-                              "
-                            >
-                              <span
-                                style="
-                                  color: var(--orange-400);
-                                  flex-shrink: 0;
-                                  font-weight: 600;
-                                "
-                                >&#8594;</span
-                              >
-                              <span
-                                class="gf-text-primary"
-                                style="font-weight: 500"
-                                x-text="rec"
-                              ></span>
-                            </div>
-                            <div
-                              x-show="agent.concerns[ck].howToFix?.[ri]"
-                              class="gf-bg-elevated"
-                              style="
-                                margin-top: 4px;
-                                margin-left: 18px;
-                                padding: 6px 10px;
-                                border-radius: 4px;
-                                font-size: 11px;
-                              "
-                            >
-                              <span
-                                class="gf-text-muted"
-                                style="font-weight: 600"
-                                >Fix:
-                              </span>
-                              <span
-                                class="gf-text-secondary"
-                                x-text="agent.concerns[ck].howToFix?.[ri]"
-                              ></span>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-
-                    <!-- All clear for this concern -->
-                    <div
-                      x-show="agent.concerns[ck].recommendations.length === 0"
-                      style="font-size: 12px; padding: 6px 0"
-                      class="gf-text-secondary"
-                    >
-                      All checks passing for this concern.
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </template>
-          </div>
-        </template>
-      </template>
-    </div>
-
-    <!-- Footer -->
-    <div
-      class="gf-footer"
-      style="text-align: center; font-size: 11px; padding: 16px 0 8px"
-    >
-      Built by
-      <a
-        href="https://www.blundergoat.com"
-        target="_blank"
-        class="gf-footer-link"
-        >BlunderGOAT</a
-      >
-      · <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
-    </div>
-  </div>
 </div>

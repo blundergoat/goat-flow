@@ -6,7 +6,7 @@ Launch: `npx goat-flow dashboard .` (or `npx goat-flow dashboard . --dev` for li
 
 ### Home
 
-Overview landing page. Shows "What to do next" action cards based on your latest audit results, per-agent status indicators, and quick-launch buttons for the setup view and terminal. Full audit results render inline on this page: each scope (GOAT Flow Setup, Agent Setup, AI Harness Completeness) shows pass/fail status and can be expanded for details, with per-agent cards and actionable fix instructions. Run a new audit or re-audit after changes without leaving the page. When all agents pass audit, the action cards are replaced with a success banner.
+Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
 
 ### Quality
 

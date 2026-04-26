@@ -145,6 +145,18 @@ export interface DashboardReport {
   overall: {
     status: string;
   };
+  learningLoop: {
+    recordCount: number;
+    staleCount: number;
+    oversizedCount: number;
+    status: "fresh" | "needs-review" | "unavailable";
+  } | null;
+  recentLessons: {
+    id: string;
+    title: string;
+    created: string | null;
+    path: string;
+  }[];
   // Metadata
   target: string;
 }

@@ -175,27 +175,6 @@ async function dashboardSendToProjectTarget(
   await deliver(0);
 }
 
-/** Run a predefined audit command in the workspace terminal. */
-async function dashboardRunTerminalAuditCommand(
-  ctx: DashboardTerminalContext,
-  action: AuditAction | null,
-): Promise<void> {
-  if (!action?.command) return;
-  ctx.activeView = "workspace";
-  ctx.workspacePanel = "terminal";
-  if (ctx.terminalSessionId && !ctx.terminalEnded) {
-    if (ctx.sendToTerminal(action.command, { adapt: false })) {
-      ctx.showToast(`Sent ${action.command} to terminal`);
-    }
-    return;
-  }
-  await ctx.launchInTerminal(action.command, ctx.activeRunner, {
-    promptLabel: action.label,
-    cwdPath: ctx.projectPath,
-    targetPath: ctx.projectPath,
-  });
-}
-
 /** Refresh terminal feature availability from the health endpoint. */
 async function dashboardCheckTerminalAvailable(
   ctx: DashboardTerminalContext,

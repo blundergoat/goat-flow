@@ -4,7 +4,7 @@
   x-cloak
   style="height: calc(100vh - 3.5rem); overflow-y: auto"
   x-data="{
-    sections: ['concepts','audit','skills','hooks','learning-loop','execution-loop','further-reading','quicklinks'],
+    sections: ['concepts','audit','skills','hooks','learning-loop','execution-loop','five-concerns','quicklinks'],
     activeToc: 'concepts',
     onScroll(e) {
       const root = e.target;
@@ -287,8 +287,9 @@
                 class="gf-text-muted"
                 style="font-size: 13px; margin: 0; line-height: 1.55"
               >
-                Four kinds of records that turn every session's mistakes into
-                next session's context. Footguns, lessons, decisions, logs.
+                Durable records and local continuity notes that turn recurring
+                mistakes into next-session context. Footguns, lessons,
+                decisions, patterns.
               </p>
               <span
                 style="
@@ -366,8 +367,8 @@
                 class="gf-text-muted"
                 style="font-size: 13px; margin: 0; line-height: 1.55"
               >
-                Required files, config, skills, instruction files, preamble,
-                conventions.
+                Required directories, config, architecture docs, learning-loop
+                folders, shared references.
               </p>
             </div>
             <div class="gf-card" style="padding: 16px 18px">
@@ -421,8 +422,8 @@
                 style="font-size: 13px; margin: 0; line-height: 1.55"
               >
                 With <span class="mono gf-text-primary">--harness</span>:
-                integrity checks across 5 concerns (context, constraints,
-                verification, recovery, feedback loop).
+                integrity, advisory, and metric checks across 5 concerns
+                (context, constraints, verification, recovery, feedback loop).
               </p>
             </div>
           </div>
@@ -594,7 +595,8 @@
           >
             Hooks fire before or after agent actions. One ships by default:
             <span class="mono gf-text-primary">deny-dangerous</span>. Projects
-            can add their own alongside it, and all hooks run in parallel.
+            can add their own where their runner supports it; the audit checks
+            that hook files and registrations stay in sync.
           </p>
 
           <div class="gf-card" style="padding: 16px 18px">
@@ -613,9 +615,10 @@
                 Blocks destructive filesystem commands, force-push variants,
                 <span class="mono gf-text-primary">.env</span> file reads,
                 secret exfiltration,
-                <span class="mono gf-text-primary">eval</span> and
-                <span class="mono gf-text-primary">bash -c</span> subshells,
-                database <span class="mono gf-text-primary">DROP</span>/<span
+                <span class="mono gf-text-primary">eval</span> and dangerous
+                commands hidden inside
+                <span class="mono gf-text-primary">bash -c</span>, database
+                <span class="mono gf-text-primary">DROP</span>/<span
                   class="mono gf-text-primary"
                   >TRUNCATE</span
                 >, file truncation, and recursive command substitution.
@@ -630,10 +633,10 @@
             ></div>
             <p class="gf-text-muted" style="font-size: 13px; margin: 0">
               <span class="gf-text-primary">Add your own.</span> Linters, custom
-              validators, format-on-save, project-specific rules. Drop them in
-              alongside
-              <span class="mono gf-text-primary">deny-dangerous</span> and they
-              register automatically.
+              validators, format-on-save, project-specific rules. Register them
+              in the agent's hook config alongside
+              <span class="mono gf-text-primary">deny-dangerous</span> so the
+              audit can verify the wiring.
             </p>
           </div>
         </section>
@@ -668,9 +671,10 @@
             style="font-size: 15px; max-width: 640px; margin: 0 0 18px"
           >
             Agents forget everything between runs. The learning loop gives them
-            four kinds of persistent records so the same mistake doesn't happen
-            twice. It's the compounding bet of the whole system: every session
-            that hits a problem makes the next session a little harder to trip.
+            durable project records, with local session notes as recovery
+            context, so the same mistake doesn't happen twice. It's the
+            compounding bet of the whole system: every session that hits a
+            problem makes the next session a little harder to trip.
           </p>
 
           <div
@@ -685,7 +689,8 @@
                 { name: 'Footguns', desc: 'Architectural traps with semantic-anchor evidence. Stops the agent hitting the same code landmine twice.', path: '.goat-flow/footguns/' },
                 { name: 'Lessons', desc: 'Behavioural mistakes the agent made. Logged so the same error pattern is recognised and avoided.', path: '.goat-flow/lessons/' },
                 { name: 'Decisions', desc: 'Architecture Decision Records. Captures why a choice was made so future agents don\'t reverse it.', path: '.goat-flow/decisions/' },
-                { name: 'Session logs', desc: 'End-of-session summaries. Provides continuity between work sessions across agents.', path: '.goat-flow/logs/sessions/' }
+                { name: 'Patterns', desc: 'Successful repeatable approaches worth reusing. Keeps proven workflows close to the agent.', path: '.goat-flow/patterns.md' },
+                { name: 'Session logs', desc: 'Checkout-local continuity notes for compaction or resume. Useful context, not committed project knowledge.', path: '.goat-flow/logs/sessions/' }
               ]"
               :key="rec.name"
             >
@@ -957,8 +962,8 @@
                 { label: 'Context', desc: 'Give the agent a map, not a 1,000-page manual. Concise instructions, the right files, progress notes across sessions.' },
                 { label: 'Constraints', desc: 'Deterministic rules that steer before the agent acts. Linters, deny-hooks, permissions, required sections.' },
                 { label: 'Verification', desc: 'Structural checks the agent runs to prove its own work. Tests, typecheck, post-action hooks, back-pressure.' },
-                { label: 'Recovery', desc: 'Session durability and restart paths. Checkpoint/resume, compaction handlers, milestone checkboxes, loop detection.' },
-                { label: 'Feedback loop', desc: 'Capture every mistake as persistent context so the next session does not repeat it. Footguns, lessons, decisions, logs.' }
+                { label: 'Recovery', desc: 'Session durability and restart paths. Milestone checkboxes, local session notes, checkpoint/resume habits, loop detection.' },
+                { label: 'Feedback loop', desc: 'Capture recurring mistakes and useful decisions as persistent context so the next session does not repeat them. Footguns, lessons, decisions, patterns.' }
               ]"
               :key="item.label"
             >
@@ -1032,7 +1037,7 @@
                 { view: 'home', label: 'Home', desc: 'Health overview, agent cards, and the audit status strip' },
                 { view: 'setup', label: 'Setup', desc: 'Generate and run a setup prompt for a specific agent' },
                 { view: 'quality', label: 'Quality', desc: 'Agent-driven quality assessment for the selected agent' },
-                { view: 'prompts', label: 'Prompts', desc: 'Ready-made prompts for every installed skill' },
+                { view: 'prompts', label: 'Prompts', desc: 'Ready-made prompts for the functional goat-flow skills' },
                 { view: 'workspace', label: 'Workspace', desc: 'Terminal sessions and running prompts in one view' },
                 { view: 'projects', label: 'Projects', desc: 'Switch between project directories for auditing' }
               ]"

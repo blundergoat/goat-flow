@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-04-25
+last_reviewed: 2026-04-26
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -241,6 +241,17 @@ last_reviewed: 2026-04-25
 **Root cause:** I treated the focused behavioral test as the first verification result for a new test file without running the repo formatter gate first.
 
 **Prevention:** After adding or editing TypeScript tests, run `npx prettier --write <changed test files>` before claiming focused test verification. Keep the formatter check in the same verification bundle as the focused test so style failures are corrected before milestone boxes are ticked.
+
+---
+## Lesson: Shell metacharacters in verification searches can corrupt source files
+
+**Status:** active | **Created:** 2026-04-26
+
+**What happened:** During M05b verification, a malformed `rg` command accidentally left a literal `>` outside the quoted search pattern. The shell interpreted it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. The mistake was caught by `wc -l`, `git diff`, and the dashboard HTML regression before final verification, then the Home template was restored.
+
+**Root cause:** The search pattern contained HTML text (`pill-label">`) and the command was assembled too casually. A read-only verification command stopped being read-only because the shell parsed the stray `>` before `rg` ever ran.
+
+**Prevention:** Quote every search pattern containing `<`, `>`, `|`, or quotes as a single shell argument, or pass it via a safer command form. After any complex shell search over generated/HTML-heavy files, run `git diff --stat` or `wc -l` on touched files before continuing verification.
 
 ---
 ## Lesson: Dashboard asset tests can read stale dist copies

@@ -177,6 +177,7 @@ async function dashboardLoadSavedDashboardState(
   let savedPaths: string[] = [];
   let savedFavorites: string[] = [];
   let savedProjectTitles: Record<string, string> = {};
+  let loadedFromServer = false;
   try {
     const res = await fetch("/api/projects/list");
     const payload = readRecord(await res.json(), "Dashboard state response");
@@ -189,15 +190,24 @@ async function dashboardLoadSavedDashboardState(
       savedFavorites = favorites;
     }
     savedProjectTitles = readStringMap(payload.projectTitles);
+    loadedFromServer = true;
   } catch {
     /* server unavailable */
   }
   ctx.projectTitles = savedProjectTitles;
-  if (savedPaths.length === 0) {
-    savedPaths = readStoredStringArray("goat-flow-projects");
+  const localPaths = readStoredStringArray("goat-flow-projects");
+  const localFavorites = readStoredStringArray("goat-flow-preset-favorites");
+  if (savedPaths.length === 0 && localPaths.length > 0) {
+    savedPaths = localPaths;
   }
-  if (savedFavorites.length === 0) {
-    savedFavorites = readStoredStringArray("goat-flow-preset-favorites");
+  if (savedFavorites.length === 0 && localFavorites.length > 0) {
+    savedFavorites = localFavorites;
+  }
+  if (!loadedFromServer && localPaths.length > savedPaths.length) {
+    savedPaths = localPaths;
+  }
+  if (!loadedFromServer && localFavorites.length > savedFavorites.length) {
+    savedFavorites = localFavorites;
   }
   const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
   if (launchPath && !savedPaths.includes(launchPath)) {
@@ -228,7 +238,9 @@ function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paths, favorites, projectTitles }),
-  }).catch(() => {});
+  }).catch((err) => {
+    console.warn("[goat-flow] Failed to persist dashboard state:", err);
+  });
 }
 
 /** Begin editing the current project's title. */
