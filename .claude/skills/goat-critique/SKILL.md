@@ -24,17 +24,19 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 - Simple factual question → answer directly
 - Trivial artifact (hotfix, single-file change) → use goat-review instead. If it is not worth 3 agents and 5 phases, do not use goat-critique.
 
-**Explicit invocation is binding.** These "NOT this skill" signals apply only to dispatcher routing and ambiguous intent. When the user explicitly types `/goat-critique`, all 5 phases run - no triviality bypass, no phase skipping, no "quick mode." Explicit invocation is explicit consent to the full critique protocol AND consent to spawn delegated sub-agents. Do NOT ask the user for permission to spawn agents when they have already invoked `/goat-critique` - that is the permission. Exception: on Codex, confirm delegation consent once before spawning, even on direct invocation — Codex's runtime requires explicit user delegation consent regardless of skill invocation. If scope feels wrong, raise it after synthesis, not by shortening execution.
+**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs all 5 phases and is consent to the full protocol and delegated sub-agents. Do NOT ask again. Dispatcher ambiguity rules do not override direct invocation; raise scope concerns after synthesis.
+
+**Report-only by default.** `$goat-critique make X shorter` means critique/plan only; `make X shorter` means implementation; `$goat-critique ... then apply it` means critique first, apply only after the Phase 5 gate. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted or told no changes, freeze writes; use only read-only status/diff checks until the user explicitly asks for cleanup, revert, or apply.
 
 ## Step 0 - Intake
 
-goat-critique runs in one mode: full delegated, 5 phases, three sub-agents. If the work does not justify that, use `/goat-review` instead. See `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` for the rationale.
+goat-critique runs in one mode: full delegated, 5 phases, three sub-agents. See `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` for the rationale.
 
 **Intake checklist:**
 - Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
 - Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`; record explicit misses instead of broad-loading buckets.
-- Delegation consent: explicit `/goat-critique` invocation is consent to spawn sub-agents. Do NOT ask again. Proceed directly to Phase 1 after intake checklist items (artifact confirmation, rubric selection, footgun/lesson retrieval). If the skill is chained from another goat-* skill, follow the active runtime's local delegation rule before spawning; Codex requires explicit user delegation consent.
+- Delegation consent: explicit `$goat-critique` or `/goat-critique` invocation is consent to spawn sub-agents. Do NOT ask again. Proceed directly to Phase 1 after intake checklist items (artifact confirmation, rubric selection, footgun/lesson retrieval). If the skill is chained from another goat-* skill, follow the active runtime's local delegation rule before spawning.
 - Skill-chained entry: skip intake confirmation, use caller context, then satisfy the delegation consent rule above before Phase 1 - still run footgun/lesson retrieval and rubric selection. Skill-chaining does not unlock a quick variant; all 5 phases still run.
 
 ## Phase 1 - Generate Competing Critiques
@@ -89,7 +91,7 @@ Each sub-agent MUST return:
 
 Execute in this order:
 
-**1. Scan Agent C output for context leaks.** Before any other Phase 2 work, grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Any match = CONTEXT LEAK; discard Agent C's findings and re-spawn with stricter isolation. This layers on top of Agent C's self-policing directive, not replaces it.
+**1. Scan Agent C output for context leaks.** Before any other Phase 2 work, grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Any match = CONTEXT LEAK; discard Agent C's findings and re-spawn with stricter isolation.
 
 **1b. Check sub-agent completeness.** Before trusting any critique, verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. If a sub-agent is incomplete, re-spawn once with the missing fields named; if the runner cannot verify or re-spawn, record `sub-agent completeness limited` in the synthesis.
 
@@ -184,7 +186,7 @@ List these as "What Wasn't Critiqued." This section must never be empty - if eve
 "Done. Options: (A) apply recommendations to the artifact, (B) dig deeper into [name top unresolved area], (C) re-run with different framing, (D) close - you apply manually. Default: D."
 After critique of a plan, suggest `/goat-plan` to update milestones based on recommendations.
 
-Recommendations are never auto-applied. The human gate is the default close.
+Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes. The human gate is the default close.
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to every synthesised finding - sub-agent reports are inputs to verify, not evidence to launder. Re-read each surviving finding's `file:line` or artifact section reference in this session before inclusion. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
 

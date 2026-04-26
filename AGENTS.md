@@ -87,7 +87,7 @@ Before editing, read the target directory's `README.md` for required format. The
 
 **Always:** Read any file, run validation scripts, edit within declared scope, add Codex artifacts. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes - write one when `/compact` fires without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) follow the conditional rule above: update only when VERIFY caught a failure or you corrected course.
 
-**Codex note:** `goat-critique` depends on delegated sub-agents; in Codex, spawn sub-agents only after explicit user delegation consent.
+**Codex note:** `goat-critique` depends on delegated sub-agents; direct `$goat-critique` or `/goat-critique` invocation is explicit delegation consent. Ask only when `goat-critique` is auto-routed or chained without a direct user request.
 
 **Ask First** - before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked (`.github/instructions/` / `AGENTS.md` / none), rollback command.
 
@@ -104,7 +104,7 @@ Boundaries:
 - Adding, removing, or renaming files
 - Changes spanning 3+ docs/scripts
 
-**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit unless asked, push, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`).
+**Never:** Delete docs without replacement, invent incidents or evidence, edit secrets, commit unless asked, push, run destructive git commands, claim verification passed without running it. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`). If interrupted or told no changes, freeze writes; run only read-only status/diff checks until the user explicitly asks for cleanup, revert, or apply.
 
 ## Definition of Done
 MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references introduced (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames

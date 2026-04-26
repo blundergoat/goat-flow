@@ -42,6 +42,9 @@ e) Autonomy Tiers: Always / Ask First / Never
      2. Delete, move, or overwrite 5+ files in one operation without
         first listing targets (ls/find/echo glob) and getting explicit
         confirmation. Bulk deletes are irreversible for untracked files.
+     3. Continue file edits after the user interrupts or says no changes.
+        Freeze writes; run only read-only status/diff checks until the
+        user explicitly asks for cleanup, revert, or apply.
    - Adapt Ask First boundaries for THIS project's specific risks
    - Include Ask First checklist. Choose SHORT or FULL form:
      SHORT (2 questions - recommended for most projects):

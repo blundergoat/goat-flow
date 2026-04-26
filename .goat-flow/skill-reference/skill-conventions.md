@@ -150,6 +150,10 @@ When a skill fails mid-execution (context limit, sub-agent dies, tool error):
 | User wants restart | Re-run from Step 0 |
 | User wants to skip | Document skip reason in output, proceed to closing |
 
+## Interrupt Freeze Protocol
+
+If the user interrupts, says "stop", "don't change anything", "no changes", or otherwise rejects file edits, freeze writes immediately. Only run read-only status or diff checks needed to report current state. Do not revert, clean up, archive, delete, or patch files unless the user explicitly asks for that action after the freeze.
+
 ## Autonomy Awareness
 
 Before proposing actions that change files, check the instruction file's Ask First

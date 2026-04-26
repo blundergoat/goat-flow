@@ -99,7 +99,7 @@ Before editing, read the target directory's `README.md` for required format. The
 
 Boundaries: `.goat-flow/architecture.md`, `.goat-flow/skill-reference/**`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `workflow/setup/**`, `workflow/skills/**`, `workflow/manifest.json` (canonical agent inventory), `src/cli/server/terminal.ts` (PTY runtime), `src/cli/server/dashboard.ts` (local HTTP/WS server), `.github/workflows/**`, `.github/actions/**`, `.github/hooks/**`, `.github/skills/**`, `.github/copilot-instructions.md`, `.claude/**`, `.codex/**`, `.gemini/**`, `.agents/skills/`, renaming/moving files, 3+ doc file changes.
 
-**Never:** Delete docs without replacement. Modify secrets/.env. Push. Commit unless asked. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`)
+**Never:** Delete docs without replacement. Modify secrets/.env. Push. Commit unless asked. Change security config. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`). If interrupted or told no changes, freeze writes; run only read-only status/diff checks until the user explicitly asks for cleanup, revert, or apply.
 
 ## Definition of Done
 

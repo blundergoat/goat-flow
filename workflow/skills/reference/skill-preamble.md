@@ -9,6 +9,10 @@ also read `skill-conventions.md`.
 
 When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write: skills with write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) gate on explicit approval. Resume the loop at ACT when the skill's first blocking gate releases.
 
+## Report-Only Skill Contract
+
+`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may produce findings, plans, recommendations, and required gitignored logs or snapshots, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement the changes.
+
 ## Severity Scale
 
 SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
