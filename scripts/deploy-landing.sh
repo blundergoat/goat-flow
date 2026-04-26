@@ -4,7 +4,7 @@ set -euo pipefail
 BUCKET="goat-flow.com"
 REGION="us-east-1"
 DOMAIN="goat-flow.com"
-HTML_SOURCE="docs/goat-flow-landing.html"
+SITE_DIR="docs/site"
 
 echo "=== goat-flow.com Landing Page Deployment ==="
 echo "Bucket: $BUCKET | Region: $REGION | Domain: $DOMAIN"
@@ -267,11 +267,21 @@ echo "  Bucket policy applied."
 # -------------------------------------------------------------------
 # Step 9: Upload content
 # -------------------------------------------------------------------
-echo "[8/9] Uploading landing page..."
-aws s3 cp "$HTML_SOURCE" "s3://${BUCKET}/index.html" \
+echo "[8/9] Uploading site content..."
+aws s3 cp "${SITE_DIR}/goat-flow-landing.html" "s3://${BUCKET}/index.html" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "max-age=3600"
 echo "  Uploaded index.html"
+
+aws s3 cp "${SITE_DIR}/goat-flow-harness-engineering.html" "s3://${BUCKET}/what-is-harness-engineering" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "max-age=3600"
+echo "  Uploaded what-is-harness-engineering"
+
+aws s3 cp "${SITE_DIR}/goat-flow-og.jpg" "s3://${BUCKET}/goat-flow-og.jpg" \
+  --content-type "image/jpeg" \
+  --cache-control "max-age=86400"
+echo "  Uploaded goat-flow-og.jpg"
 
 # -------------------------------------------------------------------
 # Step 9b: Invalidate CloudFront cache (so re-runs pick up changes)
