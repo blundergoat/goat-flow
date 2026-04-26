@@ -154,14 +154,14 @@ const denyBlocksDangerous: HarnessCheck = {
     const fixes: string[] = [];
     let anyFail = false;
     for (const af of ctx.agents) {
-      const { denyBlocksRmRf, denyBlocksForcePush, denyBlocksChmod } = af.hooks;
-      if (denyBlocksRmRf && denyBlocksForcePush && denyBlocksChmod) {
-        findings.push(`${af.agent.id}: deny blocks rm -rf, force-push, chmod`);
+      const { denyBlocksRmRf, denyBlocksGitPush, denyBlocksChmod } = af.hooks;
+      if (denyBlocksRmRf && denyBlocksGitPush && denyBlocksChmod) {
+        findings.push(`${af.agent.id}: deny blocks rm -rf, git-push, chmod`);
       } else {
         anyFail = true;
         const missing: string[] = [];
         if (!denyBlocksRmRf) missing.push("rm -rf");
-        if (!denyBlocksForcePush) missing.push("force-push");
+        if (!denyBlocksGitPush) missing.push("git-push");
         if (!denyBlocksChmod) missing.push("chmod");
         findings.push(
           `${af.agent.id}: deny missing coverage for ${missing.join(", ")}`,

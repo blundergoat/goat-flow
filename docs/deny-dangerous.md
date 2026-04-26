@@ -24,8 +24,7 @@ The exact mechanism depends on the agent runtime.
 The shipped template is intended to block or prompt on the common high-risk command classes:
 
 - unscoped `rm -rf`
-- direct push to protected branches
-- force push
+- all git push (ADR-025)
 - `chmod 777`
 - pipe-to-shell and pipe-to-interpreter patterns like `curl | bash`
 - `.env` / `.env.*` access, except read-only `.env.example` inspection

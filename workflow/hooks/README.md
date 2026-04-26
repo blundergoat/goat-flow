@@ -6,7 +6,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 
 | Script | Event | Required? | Purpose |
 |--------|-------|-----------|---------|
-| `deny-dangerous.sh` | PreToolUse | Required | Blocks rm -rf, git push main, force push, chmod 777, pipe-to-shell, .env edits, --no-verify |
+| `deny-dangerous.sh` | PreToolUse | Required | Blocks rm -rf, all git push (ADR-025), chmod 777, pipe-to-shell, .env edits, --no-verify |
 
 ## Agent Event Name Mapping
 

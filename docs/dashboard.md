@@ -24,6 +24,16 @@ Multi-project browser. Lists all registered project paths with their latest audi
 
 Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal` -- the last one is project-scoped and only appears when one or more active sessions exist for the current project (a picker is shown when multiple). Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
 
+Good default presets to start with:
+
+- `Debug UI in Browser` routes to `/goat-debug` and diagnoses browser-visible bugs with live browser evidence. It checks for `browser-use`, asks for the URL and symptom, captures page state and screenshots, then maps the evidence back to source before proposing a fix.
+- `Fix Bug` runs `/goat-debug` from diagnosis through a minimal fix and post-fix verification.
+- `Review Uncommitted` runs `/goat-review` as a pre-commit gate for MUST-level findings only.
+- `Pre Walk-Through with Draft Targeted Testing` turns a PR and issue into reviewer questions plus targeted local UI test tasks.
+- `Test Plan vs Code Changes` compares a proposed test plan against the actual diff and calls out coverage gaps.
+- `Break Into Milestones` turns a feature brief into testable `/goat-plan` milestones.
+- `Security Assessment` runs a full `/goat-security` threat assessment across the repo, runtime surface, and dependencies.
+
 ### Workspace
 
 Split layout focused on terminal work. The left **Sessions rail** lists all running terminal sessions (up to 10) grouped by current project first then other projects, with single-click session switching, runner/age/idle/detached indicators, inline-confirm `End`, an `End all` footer, and a `+ New session` shortcut that jumps to Prompts. The right pane is the active xterm.js terminal. The rail uses `x-transition` on collapse/expand.

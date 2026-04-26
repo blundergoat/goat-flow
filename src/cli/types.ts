@@ -266,7 +266,7 @@ export interface AgentFacts {
     denyUsesJq: boolean;
     denyHandlesChaining: boolean;
     denyBlocksRmRf: boolean;
-    denyBlocksForcePush: boolean;
+    denyBlocksGitPush: boolean;
     denyBlocksChmod: boolean;
     denyBlocksPipeToShell: boolean;
     denyBlocksCloudDestructive: boolean;

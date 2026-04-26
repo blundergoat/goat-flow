@@ -147,7 +147,7 @@ function stubAgentFacts(overrides: Partial<AgentFacts> = {}): AgentFacts {
       denyUsesJq: false,
       denyHandlesChaining: false,
       denyBlocksRmRf: true,
-      denyBlocksForcePush: true,
+      denyBlocksGitPush: true,
       denyBlocksChmod: true,
       denyBlocksPipeToShell: false,
       denyBlocksCloudDestructive: false,
