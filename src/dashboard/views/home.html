@@ -240,7 +240,11 @@
       if (!summary || summary.status === 'unavailable') return 'no learning-loop files';
       const stale = summary.staleCount || 0;
       const oversized = summary.oversizedCount || 0;
-      const parts = [summary.footgunCount + ' footguns', summary.lessonCount + ' lessons'];
+      const fg = typeof summary.footgunCount === 'number' ? summary.footgunCount : null;
+      const ls = typeof summary.lessonCount === 'number' ? summary.lessonCount : null;
+      const parts = fg !== null && ls !== null
+        ? [fg + ' footguns', ls + ' lessons']
+        : [summary.recordCount + ' records'];
       if (stale > 0) parts.push(stale + ' stale');
       if (oversized > 0) parts.push(oversized + ' oversized');
       if (summary.invalidLineRefCount > 0) parts.push(summary.invalidLineRefCount + ' bad refs');

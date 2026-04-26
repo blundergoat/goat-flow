@@ -414,6 +414,15 @@ export function runAudit(
   options: AuditOptions,
 ): AuditReport {
   const ctx = buildAuditContext(fs, projectPath, options);
+  return runAuditFromContext(ctx, fs, projectPath, options);
+}
+
+function runAuditFromContext(
+  ctx: AuditContext,
+  fs: ReadonlyFS,
+  projectPath: string,
+  options: AuditOptions,
+): AuditReport {
   validateRegisteredCheckProvenance(ctx.fs);
   const { setup: setupScope, agent: agentScope } = runBuildChecks(ctx);
   const harness = options.harness ? computeHarness(ctx) : null;
@@ -437,4 +446,69 @@ export function runAudit(
     content,
     overall: { status },
   };
+}
+
+/**
+ * Run aggregate + per-agent audits sharing a single config/structure/provenance pass.
+ * Eliminates the N+1 pattern where each per-agent audit re-parses config and facts.
+ */
+export function runAuditBatch(
+  fs: ReadonlyFS,
+  projectPath: string,
+  options: AuditOptions,
+  agentIds: AgentId[],
+): {
+  aggregate: AuditReport;
+  perAgent: { id: string; audit: AuditReport }[];
+} {
+  const configState = loadConfig(projectPath, fs);
+  const structure = buildProjectStructure();
+  validateRegisteredCheckProvenance(fs);
+
+  const aggregateFacts = extractProjectFacts(fs, {
+    agentFilter: options.agentFilter,
+    projectPath,
+    configState,
+  });
+  const aggregateCtx: AuditContext = {
+    projectPath,
+    facts: aggregateFacts,
+    config: configState,
+    fs,
+    structure,
+    agents: aggregateFacts.agents,
+    agentFilter: options.agentFilter,
+  };
+  const aggregate = runAuditFromContext(aggregateCtx, fs, projectPath, options);
+
+  const perAgent: { id: string; audit: AuditReport }[] = [];
+  for (const agentId of agentIds) {
+    try {
+      const agentFacts = extractProjectFacts(fs, {
+        agentFilter: agentId,
+        projectPath,
+        configState,
+      });
+      const agentCtx: AuditContext = {
+        projectPath,
+        facts: agentFacts,
+        config: configState,
+        fs,
+        structure,
+        agents: agentFacts.agents,
+        agentFilter: agentId,
+      };
+      perAgent.push({
+        id: agentId,
+        audit: runAuditFromContext(agentCtx, fs, projectPath, {
+          ...options,
+          agentFilter: agentId,
+        }),
+      });
+    } catch {
+      /* skip agents that fail to audit */
+    }
+  }
+
+  return { aggregate, perAgent };
 }

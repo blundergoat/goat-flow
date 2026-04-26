@@ -78,6 +78,9 @@
         "references/dependency-and-supply-chain.md",
         "references/cicd-and-agent-surfaces.md",
         "references/project-policy-template.md"
+      ],
+      "goat-debug": [
+        "references/browser-use.md"
       ]
     },
     "stale_names": [

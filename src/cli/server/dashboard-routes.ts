@@ -11,7 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { isPackagedInstall } from "../paths.js";
 import { classifyProjectState } from "../classify-state.js";
 import { loadConfig } from "../config/reader.js";
-import { runAudit } from "../audit/audit.js";
+import { runAudit, runAuditBatch } from "../audit/audit.js";
 import type { AuditReport } from "../audit/types.js";
 import {
   getAgentProfileMap,
@@ -637,26 +637,6 @@ export function createDashboardRouteHandlers(
     return !agentFilter && harness && isPackagedInstall();
   }
 
-  function collectPerAgentAudits(
-    fs: ReturnType<typeof createFS>,
-    projectPath: string,
-    harness: boolean,
-  ): { id: string; audit: AuditReport }[] {
-    const configAgents = detectConfiguredAgents(fs).map((agent) => agent.id);
-    const results: { id: string; audit: AuditReport }[] = [];
-    for (const agentId of configAgents) {
-      try {
-        results.push({
-          id: agentId,
-          audit: runAudit(fs, projectPath, { agentFilter: agentId, harness }),
-        });
-      } catch {
-        /* skip agents that fail to audit */
-      }
-    }
-    return results;
-  }
-
   /** Run both evaluation systems and return a typed DashboardReport. */
   function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
@@ -687,11 +667,18 @@ export function createDashboardRouteHandlers(
       }
 
       const fs = createFS(projectPath);
-      const auditRpt = runAudit(fs, projectPath, { agentFilter, harness });
-      const perAgentAudits = collectPerAgentAudits(fs, projectPath, harness);
+      const configAgents = detectConfiguredAgents(fs).map(
+        (a) => a.id as AgentId,
+      );
+      const batch = runAuditBatch(
+        fs,
+        projectPath,
+        { agentFilter, harness },
+        configAgents,
+      );
       const report = buildDashboardReport(
-        auditRpt,
-        perAgentAudits,
+        batch.aggregate,
+        batch.perAgent,
         projectPath,
       );
 
