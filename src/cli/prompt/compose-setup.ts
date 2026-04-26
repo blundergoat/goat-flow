@@ -10,6 +10,14 @@ import { PROFILES } from "../detect/agents.js";
 import { getTemplatePath, getCliCommand } from "../paths.js";
 import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
+import { resolve } from "node:path";
+
+/** Return `.` when projectRoot is the cwd, otherwise the absolute path. */
+function targetArg(projectRoot: string): string {
+  return resolve(projectRoot) === resolve(process.cwd())
+    ? "."
+    : resolve(projectRoot);
+}
 
 // ----------------------------------------------------------------
 // Setup-step references
@@ -80,7 +88,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("**Next step (recommended):**");
   lines.push(
-    `- Run \`goat-flow audit . --harness\` for AI harness completeness checks across 5 concerns (context, constraints, verification, recovery, feedback loop). Pass/fail integrity gate - CI-safe.`,
+    `- Run \`goat-flow audit ${targetArg(facts.root)} --harness\` for AI harness completeness checks across 5 concerns (context, constraints, verification, recovery, feedback loop). Pass/fail integrity gate - CI-safe.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");
@@ -101,7 +109,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
 function renderAuditFail(
   auditReport: AuditReport,
-  _facts: ProjectFacts,
+  facts: ProjectFacts,
   agentId: AgentId,
 ): string {
   const profile = PROFILES[agentId];
@@ -137,9 +145,11 @@ function renderAuditFail(
   }
 
   lines.push(`**Target: audit passes with zero failures.**`);
-  lines.push(`Re-run: \`${getCliCommand()} audit . --agent ${agentId}\``);
   lines.push(
-    `If audit fails, run \`${getCliCommand()} setup . --agent ${agentId}\` for fix instructions. Repeat until audit passes (max 3 cycles).`,
+    `Re-run: \`${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId}\``,
+  );
+  lines.push(
+    `If audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for fix instructions. Repeat until audit passes (max 3 cycles).`,
   );
 
   return lines.join("\n");
@@ -150,7 +160,7 @@ function renderAuditFail(
 // ----------------------------------------------------------------
 
 function renderUpgradeRedirect(
-  _facts: ProjectFacts,
+  facts: ProjectFacts,
   agentId: AgentId,
   state: "v0.9" | "outdated",
   detectedVersion?: string,
@@ -171,7 +181,7 @@ function renderUpgradeRedirect(
     lines.push("## Step 1 - Install files");
     lines.push("");
     lines.push(
-      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} . --agent ${agentId}\``,
+      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
     );
     lines.push("");
     lines.push(
@@ -193,7 +203,7 @@ function renderUpgradeRedirect(
     lines.push("## Step 1 - Install current files");
     lines.push("");
     lines.push(
-      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} . --agent ${agentId}\``,
+      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
     );
     lines.push("");
     lines.push(
@@ -219,12 +229,12 @@ function renderUpgradeRedirect(
   lines.push(`## ${state === "outdated" ? "Step 3" : "Step 4"} - Verify`);
   lines.push("");
   lines.push(
-    `**Audit:** Run \`${getCliCommand()} audit . --agent ${agentId}\``,
+    `**Audit:** Run \`${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId}\``,
   );
   lines.push("");
   lines.push("**Target: audit passes with zero failures.**");
   lines.push(
-    `If audit fails, run \`${getCliCommand()} setup . --agent ${agentId}\` for remaining fix instructions. Repeat until audit passes (max 3 cycles).`,
+    `If audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining fix instructions. Repeat until audit passes (max 3 cycles).`,
   );
 
   return lines.join("\n");
@@ -244,7 +254,7 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
   lines.push("");
   if (agentFacts) {
     lines.push(
-      `This project has setup issues - it needs a full setup pass. Run \`${getCliCommand()} audit .\` after fixing to verify.`,
+      `This project has setup issues - it needs a full setup pass. Run \`${getCliCommand()} audit ${targetArg(facts.root)}\` after fixing to verify.`,
     );
   } else {
     lines.push(
@@ -261,7 +271,7 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
   lines.push("## Step 1 - Install files");
   lines.push("");
   lines.push(
-    `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} . --agent ${agentId}\``,
+    `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
   );
   lines.push("");
   lines.push(
@@ -300,12 +310,12 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
   lines.push("");
 
   lines.push(
-    `**Audit:** Run \`${getCliCommand()} audit . --agent ${agentId}\``,
+    `**Audit:** Run \`${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId}\``,
   );
   lines.push("");
   lines.push("**Target: audit passes with zero failures.**");
   lines.push(
-    `If audit fails, run \`${getCliCommand()} setup . --agent ${agentId}\` for remaining fix instructions. Repeat until audit passes (max 3 cycles).`,
+    `If audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining fix instructions. Repeat until audit passes (max 3 cycles).`,
   );
 
   return lines.join("\n");

@@ -320,10 +320,12 @@ function runBuildChecks(ctx: AuditContext): {
   const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
   for (const check of BUILD_CHECKS) {
     const failure = check.run(ctx);
+    const skipped =
+      failure === null && check.scope === "agent" && !ctx.agentFilter;
     scopeChecks[check.scope].push({
       id: check.id,
       name: check.name,
-      status: failure ? "fail" : "pass",
+      status: skipped ? "skipped" : failure ? "fail" : "pass",
       provenance: check.provenance,
       failure: failure ?? undefined,
     });

@@ -1296,7 +1296,7 @@ describe("composeSetup routing", () => {
         output,
         /2 hook scripts \(deny, post-turn\) in \.codex\/hooks\//,
       );
-      assert.match(output, /Run `goat-flow audit \. --harness`/);
+      assert.match(output, /Run `goat-flow audit .+ --harness`/);
       assert.ok(
         !output.includes("scanner"),
         `audit-pass output should not regress to scanner wording: ${output}`,
@@ -1380,7 +1380,7 @@ describe("composeSetup routing", () => {
       assert.match(output, /See Step 03 \(install skills\)/);
       assert.match(
         output,
-        /Re-run: `node .*dist\/cli\/cli\.js audit \. --agent codex`/,
+        /Re-run: `node .*dist\/cli\/cli\.js audit .+ --agent codex`/,
       );
     } finally {
       await project.cleanup();

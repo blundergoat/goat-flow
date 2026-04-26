@@ -26,7 +26,7 @@ export interface AuditFailure {
 export interface CheckResult {
   id: string;
   name: string;
-  status: "pass" | "fail";
+  status: "pass" | "fail" | "skipped";
   provenance: CheckEvidence;
   failure?: AuditFailure;
   /** Harness-check classification; absent for build checks. */

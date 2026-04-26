@@ -1804,7 +1804,9 @@ body {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .detail-close:hover {
   background: var(--neutral-bg);

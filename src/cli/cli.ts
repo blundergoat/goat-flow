@@ -264,15 +264,15 @@ function parseQualityPositionals(positionals: string[]): {
   }
 
   if (first === "history") {
-    if (second !== undefined || rest.length > 0) {
+    if (rest.length > 0) {
       throw new CLIError(
-        "quality history does not accept positional arguments.",
+        "quality history accepts at most one positional project path.",
         2,
       );
     }
     return {
       qualitySubcommand: "history",
-      projectPath: resolve("."),
+      projectPath: second !== undefined ? resolve(second) : resolve("."),
       qualityDiffPair: null,
       qualityValidatePath: null,
     };
@@ -399,30 +399,49 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   const { classifyProjectState } = await import("./classify-state.js");
 
   const fs = createFS(options.projectPath);
-  const result = classifyProjectState(fs);
+  const result = classifyProjectState(fs, options.agent ?? undefined);
 
   if (options.format === "json") {
-    process.stdout.write(
-      JSON.stringify({ path: options.projectPath, ...result }, null, 2) + "\n",
+    writeOutput(
+      options,
+      JSON.stringify(
+        { path: options.projectPath, ...result, version: PACKAGE_VERSION },
+        null,
+        2,
+      ),
     );
     return;
   }
 
+  if (options.format === "markdown") {
+    const lines = [
+      `**Path:** ${options.projectPath}`,
+      `**State:** ${result.state}`,
+      `**Action:** ${result.action}`,
+      `**Details:** ${result.details}`,
+    ];
+    writeOutput(options, lines.join("\n"));
+    return;
+  }
+
   const stateColors: Record<string, string> = {
-    bare: "\x1b[90m", // gray
-    partial: "\x1b[33m", // yellow
-    "v0.9": "\x1b[31m", // red
-    outdated: "\x1b[36m", // cyan
-    current: "\x1b[32m", // green
-    error: "\x1b[31m", // red
+    bare: "\x1b[90m",
+    partial: "\x1b[33m",
+    "v0.9": "\x1b[31m",
+    outdated: "\x1b[36m",
+    current: "\x1b[32m",
+    error: "\x1b[31m",
   };
   const reset = "\x1b[0m";
   const color = stateColors[result.state] || "";
 
-  console.log(`  Path:    ${options.projectPath}`);
-  console.log(`  State:   ${color}${result.state}${reset}`);
-  console.log(`  Action:  ${result.action}`);
-  console.log(`  Details: ${result.details}`);
+  const rendered = [
+    `  Path:    ${options.projectPath}`,
+    `  State:   ${color}${result.state}${reset}`,
+    `  Action:  ${result.action}`,
+    `  Details: ${result.details}`,
+  ].join("\n");
+  writeOutput(options, rendered);
 }
 
 /** Pick the agent list for setup output from the CLI override or extracted facts. */
@@ -460,12 +479,13 @@ async function handleSetupCommand(
     writeMultiAgentSyncBanner(true);
   }
 
+  const parts: string[] = [];
   for (const agentId of agentIds) {
     const output = composeSetup(auditReport, facts, agentId);
-    if (output) {
-      process.stdout.write(output + "\n");
-      if (agentIds.length > 1) process.stdout.write("\n---\n\n");
-    }
+    if (output) parts.push(output);
+  }
+  if (parts.length > 0) {
+    writeOutput(options, parts.join("\n\n---\n\n"));
   }
 }
 
@@ -745,28 +765,32 @@ async function handleManifestCommand(options: ParsedCLI): Promise<void> {
 
   if (options.check) {
     const report = checkManifest();
+    let rendered: string;
     if (options.format === "json") {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      rendered = JSON.stringify(report, null, 2);
     } else {
+      const lines: string[] = [];
       if (report.status === "pass") {
-        console.log("Manifest check: PASS");
+        lines.push("Manifest check: PASS");
       } else {
-        console.log("Manifest check: FAIL");
+        lines.push("Manifest check: FAIL");
         for (const f of report.findings) {
-          console.log(`  - [${f.rule}] ${f.message}`);
+          lines.push(`  - [${f.rule}] ${f.message}`);
         }
       }
+      rendered = lines.join("\n");
     }
+    writeOutput(options, rendered);
     if (report.status === "fail") process.exitCode = 1;
     return;
   }
 
   const manifest = loadManifest();
   if (options.format === "json") {
-    process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
+    writeOutput(options, JSON.stringify(manifest, null, 2));
     return;
   }
-  process.stdout.write(renderManifestMarkdown(manifest) + "\n");
+  writeOutput(options, renderManifestMarkdown(manifest));
 }
 
 /** Run the default `setup` command pipeline: facts + audit + compose. */

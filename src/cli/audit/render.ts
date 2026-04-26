@@ -19,8 +19,9 @@ const DIM = "\x1b[2m";
 const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
 
-/** Render a colored pass-or-fail badge for terminal output. */
-function statusBadge(status: "pass" | "fail"): string {
+/** Render a colored status badge for terminal output. */
+function statusBadge(status: "pass" | "fail" | "skipped"): string {
+  if (status === "skipped") return `${YELLOW}SKIP${RESET}`;
   return status === "pass" ? `${GREEN}PASS${RESET}` : `${RED}FAIL${RESET}`;
 }
 

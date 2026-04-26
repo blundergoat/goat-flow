@@ -8,6 +8,7 @@ import type { QualityHistoryEntry } from "../quality/history.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { getAgentProfile } from "../agents/registry.js";
 import { getPackageVersion } from "../paths.js";
+import { resolve } from "node:path";
 import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 
 interface QualityInput {
@@ -247,9 +248,11 @@ function appendFocusedReportContract(
   lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"');
   lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
   lines.push(
-    `FILE=".goat-flow/logs/quality/\${STAMP}-${input.agent}-\${RAND}.json"`,
+    `FILE="${resolve(input.projectPath, ".goat-flow/logs/quality")}/\${STAMP}-${input.agent}-\${RAND}.json"`,
   );
-  lines.push("mkdir -p .goat-flow/logs/quality");
+  lines.push(
+    `mkdir -p "${resolve(input.projectPath, ".goat-flow/logs/quality")}"`,
+  );
   lines.push("# (then write the JSON below to $FILE)");
   lines.push("```");
   lines.push("");
@@ -998,8 +1001,10 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("```bash");
   lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"      # e.g. 2026-04-19-1430');
   lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
-  lines.push(`FILE=".goat-flow/logs/quality/\${STAMP}-${agent}-\${RAND}.json"`);
-  lines.push("mkdir -p .goat-flow/logs/quality");
+  lines.push(
+    `FILE="${resolve(projectPath, ".goat-flow/logs/quality")}/\${STAMP}-${agent}-\${RAND}.json"`,
+  );
+  lines.push(`mkdir -p "${resolve(projectPath, ".goat-flow/logs/quality")}"`);
   lines.push("# (then write the JSON below to $FILE)");
   lines.push("```");
   lines.push("");
