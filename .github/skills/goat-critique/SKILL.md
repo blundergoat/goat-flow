@@ -24,7 +24,7 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 - Simple factual question → answer directly
 - Trivial artifact (hotfix, single-file change) → use goat-review instead. If it is not worth 3 agents and 5 phases, do not use goat-critique.
 
-**Explicit invocation is binding.** These "NOT this skill" signals apply only to dispatcher routing and ambiguous intent. When the user explicitly invokes `$goat-critique` or `/goat-critique`, all 5 phases run - no triviality bypass, no phase skipping, no "quick mode." Direct invocation is explicit consent to the full critique protocol AND consent to spawn delegated sub-agents. Do NOT ask the user for permission to spawn agents when they have directly invoked the skill - that is the permission. If scope feels wrong, raise it after synthesis, not by shortening execution.
+**Explicit invocation is binding.** These "NOT this skill" signals apply only to dispatcher routing and ambiguous intent. When the user explicitly types `/goat-critique`, all 5 phases run - no triviality bypass, no phase skipping, no "quick mode." Explicit invocation is explicit consent to the full critique protocol AND consent to spawn delegated sub-agents. Do NOT ask the user for permission to spawn agents when they have already invoked `/goat-critique` - that is the permission. Exception: on Codex, confirm delegation consent once before spawning, even on direct invocation — Codex's runtime requires explicit user delegation consent regardless of skill invocation. If scope feels wrong, raise it after synthesis, not by shortening execution.
 
 ## Step 0 - Intake
 
@@ -34,7 +34,7 @@ goat-critique runs in one mode: full delegated, 5 phases, three sub-agents. If t
 - Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
 - Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`; record explicit misses instead of broad-loading buckets.
-- Delegation consent: explicit `$goat-critique` or `/goat-critique` invocation is consent to spawn sub-agents. Do NOT ask again. Proceed directly to Phase 1 after intake checklist items (artifact confirmation, rubric selection, footgun/lesson retrieval). If the skill is chained from another goat-* skill, follow the active runtime's local delegation rule before spawning.
+- Delegation consent: explicit `/goat-critique` invocation is consent to spawn sub-agents. Do NOT ask again. Proceed directly to Phase 1 after intake checklist items (artifact confirmation, rubric selection, footgun/lesson retrieval). If the skill is chained from another goat-* skill, follow the active runtime's local delegation rule before spawning; Codex requires explicit user delegation consent.
 - Skill-chained entry: skip intake confirmation, use caller context, then satisfy the delegation consent rule above before Phase 1 - still run footgun/lesson retrieval and rubric selection. Skill-chaining does not unlock a quick variant; all 5 phases still run.
 
 ## Phase 1 - Generate Competing Critiques
