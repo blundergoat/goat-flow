@@ -175,6 +175,11 @@ export interface BuildCheck {
   name: string;
   scope: AuditScopeName;
   provenance: CheckEvidence;
+  /** Optional context-specific provenance when one check covers per-agent rules. */
+  provenanceFor?: (
+    ctx: AuditContext,
+    failure: AuditFailure | null,
+  ) => CheckEvidence;
   run: (ctx: AuditContext) => AuditFailure | null;
 }
 

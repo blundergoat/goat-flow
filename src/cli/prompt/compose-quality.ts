@@ -132,7 +132,7 @@ function focusedQualityModePrompt(
     return [
       "GOAT Flow Process Quality Assessment",
       "",
-      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
       "",
       "Assess the goat-flow framework process in the controlling workspace: instruction files, .goat-flow/config.yaml, .goat-flow/architecture.md, .goat-flow/code-map.md, .goat-flow/skill-reference/, workflow/setup/, workflow/manifest.json, installed skill mirrors, hooks, quality prompt modes, and validation scripts.",
       "",
@@ -148,7 +148,7 @@ function focusedQualityModePrompt(
     return [
       "Skill Suite Quality Assessment",
       "",
-      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-critique, /goat-review, or any other goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+      "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-critique, /goat-review, or any other goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
       "",
       "Assess all seven goat-flow skills: /goat, /goat-debug, /goat-plan, /goat-review, /goat-critique, /goat-security, and /goat-qa. Use .goat-flow/skill-reference/skill-quality-testing.md plus the relevant files under .goat-flow/skill-reference/skill-quality-testing/. Read the workflow template SKILL.md files and installed mirrors under .claude/skills/, .agents/skills/, and .github/skills/ where relevant.",
       "",
@@ -163,7 +163,7 @@ function focusedQualityModePrompt(
   return [
     "AI Harness Engineering Quality Assessment",
     "",
-    "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write only normal gitignored reporting artifacts if the runner requires them.",
+    "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
     "",
     "Assess whether the selected target project's agent harness is actually usable, not only structurally present. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether instructions distinguish the controlling goat-flow workspace from the selected target.",
     "",
@@ -177,6 +177,45 @@ function focusedQualityModePrompt(
   ].join("\n");
 }
 
+const WRITE_POLICY_MARKERS = ["write", "no-write", "read-only"] as const;
+const LOCAL_ARTIFACT_MARKERS = [
+  "gitignored",
+  "local artifact",
+  "local-state",
+  ".goat-flow/logs",
+  ".goat-flow/tasks",
+  "critique snapshot",
+  "scratchpad",
+  "quality report",
+  "session log",
+  "task-local",
+] as const;
+
+function includesAnyMarker(text: string, markers: readonly string[]): boolean {
+  return markers.some((marker) => text.includes(marker));
+}
+
+/** Return true for legacy prior findings that conflict with the current
+ * reporting-only contract, where gitignored local artifacts are not findings. */
+function isSupersededLocalArtifactWriteFinding(
+  finding: QualityHistoryEntry["report"]["findings"][number],
+): boolean {
+  const text = `${finding.summary} ${finding.detail}`.toLowerCase();
+  const referencesWritePolicy = includesAnyMarker(text, WRITE_POLICY_MARKERS);
+  const referencesLocalArtifact = includesAnyMarker(
+    text,
+    LOCAL_ARTIFACT_MARKERS,
+  );
+  return referencesWritePolicy && referencesLocalArtifact;
+}
+
+function renderPriorFindingSummary(summary: string): string {
+  return summary.replace(
+    /\bstrict no-write\b/gi,
+    "tracked-file write restriction",
+  );
+}
+
 function renderPriorReportContext(
   priorReport: QualityHistoryEntry | null,
   qualityMode: QualityMode,
@@ -187,11 +226,16 @@ function renderPriorReportContext(
   lines.push("## Prior report context");
   lines.push("");
   if (priorReport) {
-    const priorHighSeverityCount = priorReport.report.findings.filter(
+    const currentContractFindings = priorReport.report.findings.filter(
+      (finding) => !isSupersededLocalArtifactWriteFinding(finding),
+    );
+    const omittedPriorFindingCount =
+      priorReport.report.findings.length - currentContractFindings.length;
+    const priorHighSeverityCount = currentContractFindings.filter(
       (finding) =>
         finding.severity === "BLOCKER" || finding.severity === "MAJOR",
     ).length;
-    const priorTopFindings = [...priorReport.report.findings]
+    const priorTopFindings = [...currentContractFindings]
       .sort((left, right) => {
         const severityDiff =
           findingSeverityRank(left.severity) -
@@ -207,11 +251,20 @@ function renderPriorReportContext(
     lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
     lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
     lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
-    lines.push("- Top prior findings by severity:");
-    for (const finding of priorTopFindings) {
+    if (omittedPriorFindingCount > 0) {
       lines.push(
-        `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${finding.summary}`,
+        `- Omitted ${omittedPriorFindingCount} prior local-artifact write finding(s) that conflict with the current contract: gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes.`,
       );
+    }
+    lines.push("- Top prior findings by severity:");
+    if (priorTopFindings.length === 0) {
+      lines.push("  - none after applying the current local-artifact contract");
+    } else {
+      for (const finding of priorTopFindings) {
+        lines.push(
+          `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${renderPriorFindingSummary(finding.summary)}`,
+        );
+      }
     }
     lines.push("");
     lines.push(
@@ -245,7 +298,7 @@ function appendFocusedReportContract(
   lines.push("### Write the JSON report");
   lines.push("");
   lines.push(
-    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected, no other writes are permitted.",
+    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
   );
   lines.push("");
   lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
@@ -439,7 +492,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
+    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
   );
   lines.push("");
 
@@ -452,7 +505,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored local/build/reporting paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine when they are part of normal validation or reporting. If a skill probe tries to modify tracked files or implement code, stop and report that as a finding.",
   );
   lines.push(
-    "- **Mode vocabulary matters.** `reporting-only` means no committed-file changes and no implementation; gitignored logs, critique snapshots, scratchpad notes, and task checkbox updates are still compatible with reporting-only work. `strict no-write` means no writes except paths explicitly named by the prompt. Do not label allowed gitignored reporting/local-state writes as read-only violations.",
+    "- **Mode vocabulary matters.** `reporting-only`, `read-only`, `no-write`, and `no implementation` mean no committed-file changes and no implementation in this assessment. Gitignored logs, critique snapshots, scratchpad notes, quality reports, and task checkbox updates are local workflow artifacts; they do not count as writes for this contract. Do not label allowed gitignored reporting/local-state artifacts as read-only violations.",
   );
   lines.push(
     "- **No mutation commands.** When testing toolchain commands, use `--check`, `--dry-run`, or read-only flags. Use `format:check` not `format`. Use `eslint` not `eslint --fix`. If unsure, run the tool with `--help` first to find the read-only flag.",
@@ -523,7 +576,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "**Design notes** (do NOT flag these as findings - they are intentional):",
   );
   lines.push(
-    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them." When evaluating skills, do NOT flag writes to these gitignored paths as a design flaw or missing no-write escape hatch - a skill writing to `.goat-flow/logs/` or `.goat-flow/tasks/` is normal working-state behavior, not a write-safety violation.',
+    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them." When evaluating skills, do NOT flag writes to these gitignored paths as a design flaw or write-safety violation - a skill writing to `.goat-flow/logs/` or `.goat-flow/tasks/` is normal working-state behavior.',
   );
   lines.push(
     "- `.goat-flow/tasks/.active` is an advisory local pointer, not a setup invariant. Missing `.active`, or `.active` naming a missing subdir, is normal local churn when work completes, users switch projects, or a project does not use goat-flow task files. Do NOT report this by itself as a setup-quality finding; evaluate whether `/goat` and `/goat-plan` handle the fallback gracefully.",
@@ -748,7 +801,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "4. **`/goat-review`** - review a real source file for quality issues",
   );
   lines.push(
-    "5. **`/goat-critique`** - critique one of the other probe outputs in reporting-only / no-implementation mode (e.g., goat-plan breakdown or goat-security assessment). Gitignored critique logs are allowed; judge whether it attempts to implement recommendations or modify tracked files.",
+    "5. **`/goat-critique`** - critique one of the other probe outputs in reporting-only / no-implementation mode (e.g., goat-plan breakdown or goat-security assessment). Gitignored critique logs are normal local workflow artifacts and do not count as writes; judge whether it attempts to implement recommendations or modify tracked files.",
   );
   lines.push(
     "6. **`/goat-security`** - threat-model one real component (auth, API, hooks, config, or whatever is riskiest) without making changes",
@@ -982,7 +1035,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("### Write the JSON report");
   lines.push("");
   lines.push(
-    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected, no other writes are permitted.",
+    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
   );
   lines.push("");
   lines.push(

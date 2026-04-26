@@ -9,7 +9,8 @@ bash .claude/hooks/deny-dangerous.sh --self-test  # Verify deny-hook runtime beh
 bash scripts/preflight-checks.sh         # Full preflight gate
 bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>  # Bump package/docs/templates/mirrors
 npm run typecheck                                 # Type-check .ts (required by DoD)
-npm test                                          # Run test suite
+npm test                                          # Run fast test suite (excludes slow integration/dashboard)
+npm run test:full                                 # Run fast + slow suites before release-sensitive changes
 node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_reviewed + stale refs
 ```
 ## Truth Order

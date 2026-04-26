@@ -9,7 +9,8 @@ node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_r
 npm run typecheck                           # Type-check .ts (required by DoD)
 bash -n scripts/*.sh scripts/maintenance/*.sh
 shellcheck scripts/*.sh scripts/maintenance/*.sh
-npm test                                    # Run test suite
+npm test                                    # Run fast test suite (excludes slow integration/dashboard)
+npm run test:full                          # Run fast + slow suites before release-sensitive changes
 ```
 ## Truth Order
 

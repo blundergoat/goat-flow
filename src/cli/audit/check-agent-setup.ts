@@ -36,6 +36,10 @@ function incidentProvenance(paths: string[]): CheckEvidence {
   };
 }
 
+function uniquePaths(paths: string[]): string[] {
+  return Array.from(new Set(paths));
+}
+
 // === 1. Agent Instruction ===
 
 /** Returns true if agent-specific artifacts (hooks dir or settings file) exist. */
@@ -108,6 +112,29 @@ function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
   };
 }
 
+/** Return agent-specific provenance for the broad instruction-file check. */
+function agentInstructionProvenance(
+  ctx: AuditContext,
+  failure: AuditFailure | null,
+): CheckEvidence {
+  const paths = ["workflow/manifest.json", ".goat-flow/architecture.md"];
+  const failedAgentId = failure?.message.match(/\b([a-z]+) \([^)]+\)/)?.[1];
+  const agentId = ctx.agentFilter ?? failedAgentId;
+  const profile = agentId ? ctx.structure.agents[agentId] : undefined;
+  if (profile?.instruction_file) paths.push(profile.instruction_file);
+  if (
+    agentId === "copilot" ||
+    failure?.evidence === ".github/git-commit-instructions.md"
+  ) {
+    paths.push(
+      "workflow/setup/agents/copilot.md",
+      ".github/copilot-instructions.md",
+      ".github/git-commit-instructions.md",
+    );
+  }
+  return specProvenance(uniquePaths(paths));
+}
+
 const agentInstruction: BuildCheck = {
   id: "agent-instruction",
   name: "Agent instruction file",
@@ -115,9 +142,8 @@ const agentInstruction: BuildCheck = {
   provenance: specProvenance([
     "workflow/manifest.json",
     ".goat-flow/architecture.md",
-    "workflow/setup/agents/copilot.md",
-    ".github/git-commit-instructions.md",
   ]),
+  provenanceFor: agentInstructionProvenance,
   /** Run the Agent instruction file check. */
   run: (ctx) => {
     if (ctx.agentFilter) {

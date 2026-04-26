@@ -211,7 +211,7 @@ last_reviewed: 2026-04-26
 
 **Root cause:** The agent applied generic quality-report assumptions without first checking goat-flow's persistence tiers and local-state semantics. It judged stale local pointers and gitignored continuity writes as setup defects instead of asking whether the skill handles them gracefully and whether committed state changes.
 
-**Prevention:** Before reporting findings about `.goat-flow/tasks/`, `.goat-flow/logs/`, scratchpad files, or other gitignored state, classify the artifact as committed knowledge vs local session state. For local state, review behavior and fallback handling, not existence alone. Use "reporting-only" or "no implementation" when gitignored logs/checkpoints are allowed; reserve "strict no-write" for prompts that explicitly forbid all writes except a named artifact.
+**Prevention:** Before reporting findings about `.goat-flow/tasks/`, `.goat-flow/logs/`, scratchpad files, or other gitignored state, classify the artifact as committed knowledge vs local session state. For local state, review behavior and fallback handling, not existence alone. In goat-flow quality reviews, "read-only", "reporting-only", "no-write", and "no implementation" mean no committed-file changes and no implementation; gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes.
 
 ---
 ## Lesson: "Add a footgun" means a documentation entry, not runtime code

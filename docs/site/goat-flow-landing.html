@@ -37,13 +37,66 @@
     "priceCurrency": "USD"
   },
   "url": "https://goat-flow.com",
+  "downloadUrl": "https://www.npmjs.com/package/@blundergoat/goat-flow",
+  "installUrl": "https://www.npmjs.com/package/@blundergoat/goat-flow",
   "author": {
     "@type": "Organization",
     "name": "BlunderGOAT",
     "url": "https://www.blundergoat.com"
   },
   "softwareRequirements": "Node.js",
-  "keywords": "AI coding agent, harness engineering, Claude Code, Codex, Gemini CLI, Copilot CLI"
+  "keywords": "AI coding agent, harness engineering, Claude Code, Codex, Gemini CLI, Copilot CLI, AI guardrails, agent safety, agent memory",
+  "featureList": "CLI audit system, structured slash-command skills, pre/post-action hooks, persistent learning loop, multi-agent harness scoring, deny-dangerous safety hook",
+  "isAccessibleForFree": true,
+  "license": "https://github.com/blundergoat/goat-flow/blob/main/LICENSE"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is harness engineering for AI coding agents?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Harness engineering is the practice of wrapping AI coding agents with guardrails, structured workflows, and persistent memory so they operate safely and reliably. A harness controls what files the agent can read, what commands it can run, what rules it must obey, and what it remembers across sessions."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What AI coding agents does goat-flow support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "goat-flow supports Claude Code, Codex, Gemini CLI, and Copilot CLI. It provides agent-specific instruction files and scores each agent's harness completeness across five concerns: context, constraints, verification, recovery, and feedback loop."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install goat-flow?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Run npx @blundergoat/goat-flow@latest dashboard to set up goat-flow on any project. Then run npx @blundergoat/goat-flow@latest audit --harness to verify your harness configuration. No global install required."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does goat-flow prevent AI agents from making dangerous changes?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches destructive filesystem commands like rm -rf, force-pushes, secret file reads, subshell escapes, and database truncation. These are hardcoded boundaries the model cannot bypass through prompt manipulation."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the goat-flow learning loop?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The learning loop captures every mistake as persistent context so the next session avoids it. It includes footguns (architectural traps with evidence), lessons (behavioural mistakes to avoid), decisions (Architecture Decision Records), and session logs for continuity across agents and sessions."
+      }
+    }
+  ]
 }
 </script>
 
@@ -613,7 +666,7 @@
 <body>
 
 <!-- ========== NAV ========== -->
-<nav class="nav">
+<nav class="nav" aria-label="Main navigation">
   <div class="nav-inner">
     <a href="#" class="logo">
       <span class="logo-mark">🐐</span>
@@ -623,12 +676,13 @@
       <a href="#pieces">Features</a>
       <a href="#skills">Skills</a>
       <a href="#why">Why</a>
-      <a href="#concerns">Background</a>
+      <a href="/what-is-harness-engineering">Guide</a>
       <a href="#install" class="nav-cta">Get started</a>
     </div>
   </div>
 </nav>
 
+<main>
 <!-- ========== HERO ========== -->
 <section class="hero">
   <div class="hero-glow"></div>
@@ -738,7 +792,7 @@
   <div class="container">
     <div class="narrative-card">
       <div class="eyebrow eyebrow-muted">Why harness engineering?</div>
-      <h2>The model isn't the product. The harness is.</h2>
+      <h2>Agents don't need better prompts.<br />They need better control systems.</h2>
       <p>
         Files it can read. Commands it can run. Rules it must obey. Memory it keeps across sessions. That's the harness - and it matters more than which model you pick. goat-flow gives you one, opinionated, out of the box.
       </p>
@@ -1060,6 +1114,8 @@
     </div>
   </div>
 </section>
+
+</main>
 
 <!-- ========== FOOTER ========== -->
 <footer>

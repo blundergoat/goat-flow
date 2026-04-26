@@ -354,6 +354,8 @@ describe("preset prompt catalog", () => {
     const preset = byId("skill-quality-test");
     assert.doesNotMatch(preset.prompt, /^\/goat-/);
     assert.match(preset.prompt, /Do not use \/goat-critique/);
+    assert.match(preset.prompt, /do not count as writes/);
+    assert.doesNotMatch(preset.prompt, /strict no-write/);
     assert.match(preset.prompt, /all seven goat-flow skills/);
     assert.doesNotMatch(preset.prompt, /Ask me which skill/i);
     assert.match(
@@ -394,6 +396,8 @@ describe("preset prompt catalog", () => {
     assert.doesNotMatch(preset.prompt, /^\/goat-/);
     assert.match(preset.prompt, /GOAT Flow Process Quality Assessment/);
     assert.match(preset.prompt, /Do not use \/goat-review/);
+    assert.match(preset.prompt, /do not count as writes/);
+    assert.doesNotMatch(preset.prompt, /strict no-write/);
     assert.match(preset.prompt, /Pre-check Results/);
     assert.match(preset.prompt, /Top 5 improvements/);
     assert.match(preset.prompt, /verification command/);

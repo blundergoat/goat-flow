@@ -86,7 +86,7 @@ function dashboardGlobalLaunchContext(
       ? "goat-plan global mode: keep plans inline; do not create target .goat-flow/tasks unless the user explicitly approves writes."
       : preset?.route === "goat-critique" &&
           /^\/goat-critique\b/.test(presetPrompt)
-        ? "goat-critique global mode: clarify any delegated-critique log or artifact writes before running them; do not write critique logs in the selected target by default."
+        ? "goat-critique global mode: keep gitignored critique logs/artifacts in the controlling workspace; do not write goat-flow logs in the selected target unless the user explicitly makes that target the controlling workspace."
         : "";
   return [
     "GOAT Flow target context:",

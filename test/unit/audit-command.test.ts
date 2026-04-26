@@ -444,6 +444,59 @@ describe("audit fails on missing footguns directory", () => {
 });
 
 describe("copilot install requires GitHub commit instructions", () => {
+  it("agent-instruction provenance follows the selected agent", () => {
+    for (const [agent, instructionFile] of [
+      ["claude", "CLAUDE.md"],
+      ["gemini", "GEMINI.md"],
+    ] as const) {
+      const report = runAudit(createFS(PROJECT_ROOT), PROJECT_ROOT, {
+        agentFilter: agent,
+        harness: false,
+        checkDrift: false,
+      });
+      const result = report.scopes.agent.checks.find(
+        (check) => check.id === "agent-instruction",
+      )!;
+      assert.ok(result.provenance.evidence_paths?.includes(instructionFile));
+      assert.ok(
+        !result.provenance.evidence_paths?.includes(
+          "workflow/setup/agents/copilot.md",
+        ),
+      );
+      assert.ok(
+        !result.provenance.evidence_paths?.includes(
+          ".github/git-commit-instructions.md",
+        ),
+      );
+    }
+  });
+
+  it("agent-instruction provenance keeps Copilot bridge evidence for Copilot", () => {
+    const report = runAudit(createFS(PROJECT_ROOT), PROJECT_ROOT, {
+      agentFilter: "copilot",
+      harness: false,
+      checkDrift: false,
+    });
+    const result = report.scopes.agent.checks.find(
+      (check) => check.id === "agent-instruction",
+    )!;
+    assert.ok(
+      result.provenance.evidence_paths?.includes(
+        "workflow/setup/agents/copilot.md",
+      ),
+    );
+    assert.ok(
+      result.provenance.evidence_paths?.includes(
+        ".github/copilot-instructions.md",
+      ),
+    );
+    assert.ok(
+      result.provenance.evidence_paths?.includes(
+        ".github/git-commit-instructions.md",
+      ),
+    );
+  });
+
   it("agent-instruction fails when .github exists without .github/git-commit-instructions.md", () => {
     const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
     const result = check.run(

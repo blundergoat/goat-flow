@@ -146,8 +146,12 @@ describe("quality prompt content", () => {
       "Should explicitly carve out gitignored build directories as permitted writes",
     );
     assert.ok(
-      result.prompt.includes("strict no-write"),
-      "Should distinguish reporting-only from strict no-write mode",
+      result.prompt.includes("do not count as writes"),
+      "Should say gitignored local workflow artifacts do not count as writes",
+    );
+    assert.ok(
+      !result.prompt.includes("strict no-write"),
+      "Should not revive a strict no-write vocabulary that misclassifies gitignored logs",
     );
     assert.ok(
       !result.prompt.includes("milestone task files"),
@@ -363,6 +367,32 @@ describe("quality prompt content", () => {
             evidence_quality: "OBSERVED",
             delta_tag: "new",
           },
+          {
+            id: "skill_flaw:agents-skills-goat-critique-skill-md:131",
+            type: "skill_flaw",
+            severity: "MAJOR",
+            file: ".agents/skills/goat-critique/SKILL.md",
+            line: 131,
+            summary:
+              "goat-critique unconditionally persists critique snapshots with no strict no-write branch.",
+            detail:
+              "The finding treats gitignored critique logs as a write violation.",
+            evidence_quality: "OBSERVED",
+            delta_tag: "new",
+          },
+          {
+            id: "framework_flaw:src-cli-prompt-compose-quality-ts:700",
+            type: "framework_flaw",
+            severity: "MAJOR",
+            file: "src/cli/prompt/compose-quality.ts",
+            line: 700,
+            summary:
+              "Tracked-file edit violates strict no-write assessment mode.",
+            detail:
+              "The agent modified src/cli/prompt/compose-quality.ts during reporting-only assessment.",
+            evidence_quality: "OBSERVED",
+            delta_tag: "new",
+          },
         ],
       },
     };
@@ -380,6 +410,20 @@ describe("quality prompt content", () => {
         "Latest same-agent report: `2026-04-15-1000-claude-bbbbb` (2026-04-15)",
       ),
       "Should surface prior-report identity and date",
+    );
+    assert.ok(
+      result.prompt.includes("Omitted 1 prior local-artifact write finding(s)"),
+      "Should not carry forward old gitignored-log write findings",
+    );
+    assert.ok(
+      !result.prompt.includes("strict no-write"),
+      "Should not leak stale strict no-write wording from prior reports into new prompts",
+    );
+    assert.ok(
+      result.prompt.includes(
+        "Tracked-file edit violates tracked-file write restriction assessment mode.",
+      ),
+      "Should keep real tracked-file write findings while neutralizing stale wording",
     );
     assert.ok(
       result.prompt.includes("Do NOT emit `resolved` in current findings"),
