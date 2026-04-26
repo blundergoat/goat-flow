@@ -322,7 +322,10 @@ function runBuildChecks(ctx: AuditContext): {
     const failure = check.run(ctx);
     const provenance = check.provenanceFor?.(ctx, failure) ?? check.provenance;
     const skipped =
-      failure === null && check.scope === "agent" && !ctx.agentFilter;
+      failure === null &&
+      check.scope === "agent" &&
+      !ctx.agentFilter &&
+      !check.supportsAggregate;
     scopeChecks[check.scope].push({
       id: check.id,
       name: check.name,

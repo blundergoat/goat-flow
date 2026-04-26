@@ -180,6 +180,8 @@ export interface BuildCheck {
     ctx: AuditContext,
     failure: AuditFailure | null,
   ) => CheckEvidence;
+  /** True when an agent-scope check runs meaningful logic in aggregate mode. */
+  supportsAggregate?: boolean;
   run: (ctx: AuditContext) => AuditFailure | null;
 }
 

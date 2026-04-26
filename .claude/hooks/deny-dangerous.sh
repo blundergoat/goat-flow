@@ -261,6 +261,9 @@ run_self_test() {
   run_case "push branch containing deploy word" "git push origin deploy-script-cleanup" 2
   run_case "bare git push" "git push" 2
   run_case "push with upstream" "git push -u origin my-branch" 2
+  run_case "env prefix git push" "GIT_SSH_COMMAND=foo git push origin feature/x" 2
+  run_case "env command git push" "env FOO=1 git push origin main" 2
+  run_case "multi env prefix push" "GIT_SSH=x GIT_AUTHOR=y git push" 2
   # Unsafe rm command should still block.
   run_case "rm unsafe" "rm -rf /" 2
   run_case "rm unsafe separated flags" "rm -r -f /" 2
@@ -577,8 +580,15 @@ check_segment() {
   fi
 
   # 3. All git push (agents must never push; the user pushes manually)
+  #    Also catches env-prefix patterns: FOO=1 git push, env GIT_SSH=x git push
   local cmd_lower="${cmd,,}"
-  if [[ "$cmd_lower" =~ ^[[:space:]]*git[[:space:]]+push([[:space:]]|$) ]]; then
+  local cmd_for_push="$cmd_lower"
+  cmd_for_push="${cmd_for_push#"${cmd_for_push%%[![:space:]]*}"}"
+  [[ "$cmd_for_push" =~ ^env[[:space:]] ]] && cmd_for_push="${cmd_for_push#env}" && cmd_for_push="${cmd_for_push#"${cmd_for_push%%[![:space:]]*}"}"
+  while [[ "$cmd_for_push" =~ ^[a-zA-Z_][a-zA-Z0-9_]*=[^[:space:]]*[[:space:]] ]]; do
+    cmd_for_push="${cmd_for_push#"${BASH_REMATCH[0]}"}"
+  done
+  if [[ "$cmd_for_push" =~ ^git[[:space:]]+push([[:space:]]|$) ]]; then
     block "git push is not allowed. Ask the user to push manually."
   fi
 

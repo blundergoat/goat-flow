@@ -139,6 +139,7 @@ const agentInstruction: BuildCheck = {
   id: "agent-instruction",
   name: "Agent instruction file",
   scope: "agent",
+  supportsAggregate: true,
   provenance: specProvenance([
     "workflow/manifest.json",
     ".goat-flow/architecture.md",
