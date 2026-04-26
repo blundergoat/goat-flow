@@ -283,6 +283,11 @@ aws s3 cp "${SITE_DIR}/goat-flow-og.jpg" "s3://${BUCKET}/goat-flow-og.jpg" \
   --cache-control "max-age=86400"
 echo "  Uploaded goat-flow-og.jpg"
 
+aws s3 cp "${SITE_DIR}/harness-engineering-og.jpg" "s3://${BUCKET}/harness-engineering-og.jpg" \
+  --content-type "image/jpeg" \
+  --cache-control "max-age=86400"
+echo "  Uploaded harness-engineering-og.jpg"
+
 # -------------------------------------------------------------------
 # Step 9b: Invalidate CloudFront cache (so re-runs pick up changes)
 # -------------------------------------------------------------------
