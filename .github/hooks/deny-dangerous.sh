@@ -586,7 +586,7 @@ check_segment() {
   cmd_for_push="${cmd_for_push#"${cmd_for_push%%[![:space:]]*}"}"
   [[ "$cmd_for_push" =~ ^env[[:space:]] ]] && cmd_for_push="${cmd_for_push#env}" && cmd_for_push="${cmd_for_push#"${cmd_for_push%%[![:space:]]*}"}"
   while [[ "$cmd_for_push" =~ ^[a-zA-Z_][a-zA-Z0-9_]*=[^[:space:]]*[[:space:]] ]]; do
-    cmd_for_push="${cmd_for_push#${BASH_REMATCH[0]}}"
+    cmd_for_push="${cmd_for_push#"${BASH_REMATCH[0]}"}"
   done
   if [[ "$cmd_for_push" =~ ^git[[:space:]]+push([[:space:]]|$) ]]; then
     block "git push is not allowed. Ask the user to push manually."
