@@ -64,24 +64,11 @@ Over budget = checkpoint and re-classify before continuing. Complexity-class bud
 - Two corrections on same approach = MUST rewind
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
-**Learning loop** (update before DoD if VERIFY caught a failure or you corrected course):
-- `.goat-flow/lessons/<category>.md` - behavioural mistake. `## Lesson: <name>` + `**Created:** YYYY-MM-DD`.
-- `.goat-flow/footguns/<category>.md` - cross-doc architectural trap with file evidence. `## Footgun: <name>` + `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`.
-- `.goat-flow/decisions/` - significant technical decision with context/rationale.
-- `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md` - optional continuity note written on `/compact` when no active milestone file exists; skip otherwise.
+If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`, significant technical decisions go in `.goat-flow/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Artifact Routing
 
-When asked to add, create, or update a goat-flow artifact, route to the correct location - not runtime code:
-
-| User says | Create/update in | NOT |
-|-----------|-----------------|-----|
-| "add a footgun" | `.goat-flow/footguns/<category>.md` | Runtime code, logging, UI warnings, tests |
-| "add a lesson" | `.goat-flow/lessons/<category>.md` | Runtime code, code comments |
-| "add a decision" | `.goat-flow/decisions/ADR-NNN.md` | Inline code comments |
-| "add a pattern" | `.goat-flow/patterns.md` | - |
-
-Before editing, read the target directory's `README.md` for required format. These are documentation artifacts - never interpret them as requests for runtime code changes unless the user explicitly asks for code too.
+When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/footguns/<category>.md`; lessons -> `.goat-flow/lessons/<category>.md`; decisions -> `.goat-flow/decisions/ADR-NNN.md`; patterns -> `.goat-flow/patterns.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
 
 ## Autonomy Tiers
 
