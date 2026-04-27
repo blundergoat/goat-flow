@@ -195,6 +195,7 @@ function app() {
     qualityHistoryRows: [] as QualityHistoryRow[],
     qualityHistoryLatest: null as QualityHistoryLatest | null,
     qualityHistoryWarnings: [] as string[],
+    _qualityHistoryTimer: null as ReturnType<typeof setTimeout> | null,
     homeQualityLoading: false,
     homeQualityLatest: null as QualityHistoryLatest | null,
 
@@ -479,7 +480,7 @@ function app() {
         }
         if (v === "quality") {
           void this.generateQuality();
-          void this.generateQualityHistory();
+          this.scheduleQualityHistory();
         }
         if (v === "setup") {
           void this.detectStack();
@@ -489,7 +490,7 @@ function app() {
       self.$watch("qualityAgent", () => {
         if (this.activeView === "quality") {
           void this.generateQuality();
-          void this.generateQualityHistory();
+          this.scheduleQualityHistory();
         }
       });
       self.$watch("activeRunner", () => {
@@ -500,7 +501,7 @@ function app() {
       self.$watch("selectedQualityModeId", () => {
         if (this.activeView === "quality") {
           void this.generateQuality();
-          void this.generateQualityHistory();
+          this.scheduleQualityHistory();
         }
       });
       self.$watch("showInternalPresets", (v: boolean) => {
@@ -521,7 +522,7 @@ function app() {
           void this.updateSessionCount();
           if (this.activeView === "quality") {
             void this.generateQuality();
-            void this.generateQualityHistory();
+            this.scheduleQualityHistory();
           }
           if (this.activeView === "home") {
             void this.generateHomeQualitySummary();
@@ -712,6 +713,10 @@ function app() {
     /** Load persisted quality-history rows for the selected project and agent. */
     async generateQualityHistory() {
       await dashboardGenerateQualityHistory(this);
+    },
+    /** Load quality history after first prompt paint. */
+    scheduleQualityHistory() {
+      dashboardScheduleQualityHistory(this);
     },
     /** Load the latest quality-history summary for the Home rollup. */
     async generateHomeQualitySummary() {

@@ -17,6 +17,7 @@ import {
   buildQualityHistoryRows,
   getLatestQualityHistoryEntry,
   loadQualityHistory,
+  loadQualityHistoryWindow,
   renderQualityDiffText,
   selectQualityHistoryEntries,
 } from "../../src/cli/quality/history.js";
@@ -160,6 +161,53 @@ describe("buildQualityHistoryRows", () => {
     assert.equal(
       getLatestQualityHistoryEntry(history.entries, "claude", "harness")?.id,
       "2026-04-29-1100-claude-eeeee",
+    );
+  });
+});
+
+describe("loadQualityHistoryWindow", () => {
+  it("loads only enough matching rows for dashboard deltas", () => {
+    const root = makeTempProject();
+    installFixture(root, FIXTURE_IDS.april01);
+    installFixture(root, FIXTURE_IDS.april15);
+    installFixture(root, FIXTURE_IDS.april29);
+    writeFileSync(
+      join(
+        root,
+        ".goat-flow",
+        "logs",
+        "quality",
+        "2026-03-01-0800-claude-zzzzz.json",
+      ),
+      "{\n",
+      "utf-8",
+    );
+
+    const history = loadQualityHistoryWindow(root, {
+      agent: "claude",
+      qualityMode: "agent-setup",
+      limit: 2,
+    });
+    assert.equal(
+      history.warnings.length,
+      0,
+      "older files outside the requested window should not be parsed",
+    );
+    assert.deepEqual(
+      history.entries.map((entry) => entry.id),
+      [FIXTURE_IDS.april29, FIXTURE_IDS.april15, FIXTURE_IDS.april01],
+      "limit=2 should load two displayed rows plus one prior row for deltas",
+    );
+    assert.deepEqual(
+      buildQualityHistoryRows(history.entries, {
+        agent: "claude",
+        qualityMode: "agent-setup",
+        limit: 2,
+      }).map((row) => [row.id, row.setupDelta]),
+      [
+        [FIXTURE_IDS.april29, 5],
+        [FIXTURE_IDS.april15, 10],
+      ],
     );
   });
 });

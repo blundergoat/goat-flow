@@ -862,9 +862,13 @@ export function createDashboardRouteHandlers(
 
     try {
       requireProjectDirectory(projectPath);
-      const { buildQualityHistoryRows, loadQualityHistory } =
+      const { buildQualityHistoryRows, loadQualityHistoryWindow } =
         await import("../quality/history.js");
-      const history = loadQualityHistory(projectPath);
+      const history = loadQualityHistoryWindow(projectPath, {
+        agent,
+        limit,
+        qualityMode,
+      });
       const rows = buildQualityHistoryRows(history.entries, {
         agent,
         limit,

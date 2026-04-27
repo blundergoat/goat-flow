@@ -19,6 +19,8 @@ const DEFAULT_EXISTING_ARTIFACTS: ExistingArtifacts = {
   config: false,
 };
 
+const QUALITY_HISTORY_LOAD_DELAY_MS = 50;
+
 interface DashboardSetupQualityContext {
   projectPath: string;
   supportedAgents: SupportedAgent[];
@@ -37,6 +39,7 @@ interface DashboardSetupQualityContext {
   qualityHistoryRows: QualityHistoryRow[];
   qualityHistoryLatest: QualityHistoryLatest | null;
   qualityHistoryWarnings: string[];
+  _qualityHistoryTimer: ReturnType<typeof setTimeout> | null;
   presets: Preset[];
   showToast(msg: string, isError?: boolean): void;
   copyText(text: string): void;
@@ -395,7 +398,6 @@ async function dashboardGenerateQuality(
       ctx.showToast(error, true);
     } else {
       ctx.qualityResult = readQualityResult(payload);
-      void ctx.generateQualityHistory();
     }
   } catch (err) {
     if (!isCurrentRequest()) return;
@@ -410,9 +412,6 @@ async function dashboardGenerateQualityHistory(
   ctx: DashboardSetupQualityContext,
 ): Promise<void> {
   ctx.qualityHistoryLoading = true;
-  ctx.qualityHistoryRows = [];
-  ctx.qualityHistoryLatest = null;
-  ctx.qualityHistoryWarnings = [];
   const requestModeId = ctx.selectedQualityModeId;
   const requestMode = dashboardSelectedQualityModeMeta(ctx);
   const requestProjectPath = requestMode
@@ -448,6 +447,19 @@ async function dashboardGenerateQualityHistory(
     ctx.showToast(msg || "Quality history loading failed", true);
   }
   if (isCurrentRequest()) ctx.qualityHistoryLoading = false;
+}
+
+/** Schedule quality-history loading after the prompt path gets a paint. */
+function dashboardScheduleQualityHistory(
+  ctx: DashboardSetupQualityContext,
+): void {
+  if (ctx._qualityHistoryTimer !== null) {
+    clearTimeout(ctx._qualityHistoryTimer);
+  }
+  ctx._qualityHistoryTimer = setTimeout(() => {
+    ctx._qualityHistoryTimer = null;
+    void ctx.generateQualityHistory();
+  }, QUALITY_HISTORY_LOAD_DELAY_MS);
 }
 
 /** Copy the current quality prompt to the clipboard. */

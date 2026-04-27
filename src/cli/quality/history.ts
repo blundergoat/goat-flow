@@ -158,6 +158,51 @@ function getQualityLogsDir(projectPath: string): string {
   return join(projectPath, ".goat-flow", "logs", "quality");
 }
 
+/** Return quality JSON filenames in descending recency order. */
+function listHistoryFilenamesDesc(dir: string): string[] {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .reverse();
+}
+
+/** Parse a filename only if it belongs to the requested agent. */
+function parseAgentHistoryFilename(
+  filename: string,
+  agent: AgentId,
+): { date: string; time: string; agent: AgentId; randomId: string } | null {
+  const parsedName = parseHistoryFilename(filename);
+  if (!parsedName) return null;
+  return parsedName.agent === agent ? parsedName : null;
+}
+
+/** Try to append one parsed history entry to a limited dashboard window. */
+function appendMatchingHistoryEntry(
+  entries: QualityHistoryEntry[],
+  warnings: string[],
+  options: {
+    dir: string;
+    filename: string;
+    agent: AgentId;
+    qualityMode: QualityMode | null;
+  },
+): boolean {
+  const parsedName = parseAgentHistoryFilename(options.filename, options.agent);
+  if (!parsedName) return false;
+
+  const { entry, warning } = tryParseHistoryFile(
+    options.dir,
+    options.filename,
+    parsedName,
+  );
+  if (warning) warnings.push(warning);
+  if (!entry) return false;
+  if (!matchesQualityMode(entry, options.qualityMode)) return false;
+
+  entries.push(entry);
+  return true;
+}
+
 /** Load the quality history. */
 export function loadQualityHistory(projectPath: string): {
   entries: QualityHistoryEntry[];
@@ -214,6 +259,48 @@ export function loadQualityHistory(projectPath: string): {
   }
 
   entries.sort(compareEntriesDesc);
+  return { entries, warnings };
+}
+
+/**
+ * Load only the newest dashboard-sized quality-history window. For selected
+ * agent tables, one extra matching entry is parsed so the oldest displayed row
+ * can still calculate its delta without parsing the whole history directory.
+ */
+export function loadQualityHistoryWindow(
+  projectPath: string,
+  options: {
+    agent: AgentId | null;
+    limit: number | null;
+    qualityMode?: QualityMode | null;
+  },
+): {
+  entries: QualityHistoryEntry[];
+  warnings: string[];
+} {
+  if (options.limit === null || options.agent === null) {
+    return loadQualityHistory(projectPath);
+  }
+
+  const dir = getQualityLogsDir(projectPath);
+  if (!existsSync(dir)) return { entries: [], warnings: [] };
+
+  const qualityMode = options.qualityMode ?? null;
+  const entries: QualityHistoryEntry[] = [];
+  const warnings: string[] = [];
+  const targetEntryCount = options.limit + 1;
+  const filenames = listHistoryFilenamesDesc(dir);
+
+  for (const filename of filenames) {
+    const appended = appendMatchingHistoryEntry(entries, warnings, {
+      dir,
+      filename,
+      agent: options.agent,
+      qualityMode,
+    });
+    if (appended && entries.length >= targetEntryCount) break;
+  }
+
   return { entries, warnings };
 }
 
@@ -291,15 +378,11 @@ export function findLatestQualityReport(
   if (!existsSync(dir)) return { entry: null, warnings: [] };
 
   const warnings: string[] = [];
-  const filenames = readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
-    .sort()
-    .reverse();
+  const filenames = listHistoryFilenamesDesc(dir);
 
   for (const filename of filenames) {
-    const parsedName = parseHistoryFilename(filename);
+    const parsedName = parseAgentHistoryFilename(filename, agent);
     if (!parsedName) continue;
-    if (parsedName.agent !== agent) continue;
 
     const { entry, warning } = tryParseHistoryFile(dir, filename, parsedName);
     if (warning) warnings.push(warning);
