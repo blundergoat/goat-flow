@@ -14,7 +14,7 @@ const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
  * - `src/auth.ts:42` (backtick-wrapped with line number)
  * - `src/auth.ts:42-50` (backtick-wrapped with line range)
  * - (lines 866-880) or (line 52) (prose-style)
- * Line numbers are optional historical context only when paired with a semantic anchor.
+ * Line numbers are discouraged per ADR-024; flagged for cleanup when found alongside a semantic anchor.
  * File paths alone remain valid evidence.
  */
 const EVIDENCE_PATTERN =
@@ -300,7 +300,10 @@ function getLineRefDiagnostic(
   ) {
     return ref;
   }
-  return hasSemanticAnchor ? null : `${ref} (missing semantic anchor)`;
+  if (!hasSemanticAnchor) return `${ref} (missing semantic anchor)`;
+  return lineNumbers.length > 0
+    ? `${ref} (line ref redundant, semantic anchor exists)`
+    : null;
 }
 
 /** Check referenced `file:line` evidence for stale footgun paths and ADR-024 compliance. */
