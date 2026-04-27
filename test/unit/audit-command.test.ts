@@ -1035,6 +1035,37 @@ describe("harness check howToFix", () => {
       `Findings should mention architecture.md: ${result.findings.join(", ")}`,
     );
   });
+
+  it("feedback-loop-active remediation uses the public stats command", () => {
+    const check = HARNESS_CHECKS.find((c) => c.id === "feedback-loop-active")!;
+    const baseFacts = makeCtx().facts;
+    const ctx = makeCtx({
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          footguns: {
+            ...baseFacts.shared.footguns,
+            staleRefs: [".goat-flow/footguns/hooks.md (search: `missing`)"],
+          },
+        },
+      },
+    });
+    const result = check.run(ctx);
+    assert.equal(result.status, "fail");
+    assert.ok(
+      result.howToFix?.some((fix) =>
+        fix.includes("npx goat-flow stats . --check"),
+      ),
+      `howToFix should use public CLI: ${result.howToFix?.join(", ") ?? ""}`,
+    );
+    assert.ok(
+      !result.howToFix?.some((fix) =>
+        fix.includes("node --import tsx src/cli/cli.ts stats"),
+      ),
+      `howToFix should not use source-mode CLI: ${result.howToFix?.join(", ") ?? ""}`,
+    );
+  });
 });
 
 describe("agent deny hook template comparison", () => {
