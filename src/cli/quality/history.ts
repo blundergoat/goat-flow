@@ -427,9 +427,14 @@ export function buildQualityHistoryRows(
     qualityMode: options.qualityMode ?? null,
   });
   const rows = filtered.map((entry, index) => {
+    const entryMode = entryQualityMode(entry);
     const previousSameAgent = filtered
       .slice(index + 1)
-      .find((candidate) => candidate.agent === entry.agent);
+      .find(
+        (candidate) =>
+          candidate.agent === entry.agent &&
+          entryQualityMode(candidate) === entryMode,
+      );
     const previousSetup = previousSameAgent?.report.scores.setup.total ?? null;
     return {
       id: entry.id,

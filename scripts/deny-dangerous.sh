@@ -320,6 +320,13 @@ run_self_test() {
   run_case "multi-escaped git push" 'gi\t push origin main' 2
   run_case "part-quoted git push" 'g"it" push origin main' 2
   run_case "pipe env git push" "echo x | env GIT_SSH=y git push" 2
+  run_case "sudo git push" "sudo git push origin main" 2
+  run_case "sudo -u root git push" "sudo -u root git push origin main" 2
+  run_case "sudo -E git push" "sudo -E git push origin main" 2
+  run_case "sudo -- git push" "sudo -- git push origin main" 2
+  run_case "env -S git push" "env -S 'git push origin main'" 2
+  run_case "env --split-string git push" "env --split-string 'git push origin main'" 2
+  run_case "env --split-string= git push" "env --split-string='git push origin main'" 2
   run_case "if then git push" "if true; then git push origin main; fi" 2
   run_case "if condition git push" "if git push origin main; then echo pushed; fi" 2
   run_case "case arm git push" "case x in x) git push origin main ;; esac" 2
@@ -859,6 +866,12 @@ normalize_env_prefix() {
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    if [[ "$c" =~ ^(-[sS]|--split-string)(=|[[:space:]]+) ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      if [[ "$c" == \'* ]]; then c="${c#\'}"; c="${c%\'}"; fi
+      if [[ "$c" == \"* ]]; then c="${c#\"}"; c="${c%\"}"; fi
+      break
+    fi
     if [[ "$c" =~ ^--[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
@@ -903,6 +916,38 @@ normalize_time_prefix() {
     break
   done
 
+  printf '%s' "$c"
+}
+
+normalize_sudo_prefix() {
+  local c="$1"
+  while true; do
+    c="${c#"${c%%[![:space:]]*}"}"
+    if [[ "$c" =~ ^-[ugCDRTp][[:space:]]+[^[:space:]]+[[:space:]]* ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
+    if [[ "$c" =~ ^-[ugCDRTp][^[:space:]-]+[[:space:]]* ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
+    if [[ "$c" =~ ^--(user|group|close-from|chdir|role|type|other-user|prompt|command-timeout|preserve-env)=[^[:space:]]*[[:space:]]* ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
+    if [[ "$c" =~ ^-[AbeEHhiKknPSsV]+[[:space:]]* ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
+    if [[ "$c" =~ ^--(askpass|background|bell|edit|preserve-env|set-home|help|login|list|remove-timestamp|reset-timestamp|non-interactive|stdin|shell|validate|version)[[:space:]]* ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
+    if [[ "$c" =~ ^--[[:space:]]+ ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+    fi
+    break
+  done
   printf '%s' "$c"
 }
 
@@ -977,6 +1022,12 @@ normalize_command_candidate() {
       if [[ "$c" =~ ^(-n[[:space:]]+[^[:space:]]+|--adjustment(=|[[:space:]]+)[^[:space:]]+|-[0-9]+)[[:space:]]+ ]]; then
         c="${c#"${BASH_REMATCH[0]}"}"
       fi
+      continue
+    fi
+    if [[ "$base" == "sudo" ]]; then
+      c="${c#"$word"}"
+      c="${c#"${c%%[![:space:]]*}"}"
+      c=$(normalize_sudo_prefix "$c")
       continue
     fi
     if stripped=$(strip_one_assignment_prefix "$c"); then
