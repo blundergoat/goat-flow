@@ -619,6 +619,51 @@ describe("dashboard /api/quality", () => {
     assert.match(String(data.prompt), /"quality_mode": "skills"/);
   });
 
+  it("reuses cached quality audits unless fresh=true is requested", async () => {
+    let selfTestCalls = 0;
+    childProcess.execFileSync = ((file, args, options) => {
+      if (Array.isArray(args) && args.includes("--self-test")) {
+        selfTestCalls += 1;
+      }
+      return originalExecFileSync(file, args, options);
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+
+    try {
+      const first = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&fresh=true`,
+      );
+      assert.equal(first.res.status, 200);
+      const firstCallCount = selfTestCalls;
+      assert.ok(
+        firstCallCount > 0,
+        "fresh quality request should run at least one deny hook self-test",
+      );
+
+      const second = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude`,
+      );
+      assert.equal(second.res.status, 200);
+      assert.equal(
+        selfTestCalls,
+        firstCallCount,
+        "cached quality request should not rerun deny hook self-tests",
+      );
+
+      const third = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&fresh=true`,
+      );
+      assert.equal(third.res.status, 200);
+      assert.ok(
+        selfTestCalls > firstCallCount,
+        "fresh=true should bypass the quality-audit cache",
+      );
+    } finally {
+      childProcess.execFileSync = originalExecFileSync;
+      syncBuiltinESMExports();
+    }
+  });
+
   for (const agent of getKnownAgentIds()) {
     it(`generates quality output for ${agent}`, async () => {
       const { res, body } = await fetchJson(

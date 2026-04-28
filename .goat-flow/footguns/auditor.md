@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-04-27
+last_reviewed: 2026-04-29
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -34,6 +34,26 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `src/cli/audit/check-content-quality.ts` and `src/cli/audit/check-factual-claims.ts` exist because structural correctness alone did not catch cold-path truth drift.
 
 **Prevention:** Keep structural audit and content-truth checks separate and explicit. Never treat a build PASS as proof that docs, ADRs, or prompts are semantically current.
+
+---
+
+## Footgun: Quality prompt generation pays full per-agent audit cost on every load
+
+**Status:** active | **Created:** 2026-04-29 | **Evidence:** ACTUAL_MEASURED
+
+The dashboard quality page can feel slow even when quality-history loading and prompt composition are effectively free. The hot path is the live per-agent harness audit that runs before the prompt is composed.
+
+**Why it happens:** `handleQualityRequest` always calls `runAudit(fs, projectPath, { agentFilter: agent, harness: true })` before reading prior quality history or composing the prompt. On this repo, current-session timings measured `/api/quality` at about 379 ms and `/api/quality/history` at about 5 ms. Timing the route internals directly showed `runAudit` at about 160 ms, `findLatestQualityReport` at about 0 ms, and `composeQuality` at about 1 ms. Unlike the Home summary route, the quality route intentionally keeps full deny-hook/runtime evidence instead of downgrading to presence-only checks.
+
+**Evidence:**
+- `src/cli/server/dashboard-routes.ts` (search: `handleQualityRequest`) - runs `runAudit(fs, projectPath, { agentFilter: agent, harness: true })` before `findLatestQualityReport(...)` and `composeQuality(...)`.
+- `src/dashboard/dashboard-setup-quality.ts` (search: `/api/quality?path=`) - entering the quality view or changing agent/mode always fetches `/api/quality`.
+- `src/cli/server/dashboard-routes.ts` (search: `denyMechanismEvidenceLevel: "present-only"`) - the summary-only evidence downgrade exists on `/api/audit`, not on `/api/quality`.
+
+**Prevention:**
+1. Profile `/api/quality` before touching history parsing or prompt rendering; those are easy suspects and were not the bottleneck here.
+2. If faster initial paint matters more than live audit grounding, split the route into cheap cached context plus an explicit "refresh full audit evidence" action.
+3. If the full audit contract must stay on page load, add short-lived caching around `runAudit` keyed by project path + agent instead of weakening the deep verification path by accident.
 
 ---
 
