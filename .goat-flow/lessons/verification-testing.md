@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-04-27
+last_reviewed: 2026-04-29
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -364,3 +364,25 @@ last_reviewed: 2026-04-27
 **Root cause:** I reused a familiar root file path without checking the isolated fixture filesystem. The stats extractor validates refs against the temp repo, not the real goat-flow checkout.
 
 **Prevention:** In temp-repo stats fixtures, cite a file the fixture creates when asserting line-reference behavior. For this path, `.goat-flow/footguns/hooks.md` is created by the fixture and can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+
+---
+## Lesson: Shared npm build scripts must avoid shell builtins on Windows
+
+**Status:** active | **Created:** 2026-04-29
+
+**What happened:** `npm run dashboard` failed on Windows during `build:dashboard` with `The syntax of the command is incorrect.` even though Git's Unix tools were available on `PATH`. Reproducing the subcommand under `cmd.exe` showed `mkdir -p dist/dashboard` failing before the later copy steps ran.
+
+**Root cause:** npm uses `cmd.exe` by default on Windows when `script-shell` is unset. Mixed shell chains are only partially portable in that setup: external GNU helpers such as `rm`, `cp`, and `chmod` may resolve from Git for Windows, but `cmd` still intercepts builtins like `mkdir` and applies Windows syntax rules.
+
+**Prevention:** For shared npm scripts that create, remove, or copy files, prefer `node:fs` or an explicit cross-platform helper instead of raw `rm -rf`, `mkdir -p`, `cp`, or `chmod` in `package.json`. Evidence anchors: `package.json` (search: `require('node:fs').rmSync`), reproduction command `cmd /d /c "mkdir -p dist/dashboard"` -> `The syntax of the command is incorrect.`
+
+---
+## Lesson: Dashboard audit-route fixes need route-scoped verification, not the full server suite
+
+**Status:** active | **Created:** 2026-04-29
+
+**What happened:** While fixing the Home page's multi-minute `Auditing...` stall, the first focused verification tried to use the entire `test/integration/dashboard-server.test.ts` suite as the gate. That suite still includes endpoints whose deeper behavior is intentionally slower than the Home summary path, so the broad run timed out before producing a useful pass/fail signal for the changed route.
+
+**Root cause:** I used a verification scope wider than the code change. The fix only changed `/api/audit` summary behavior, but the suite also exercises other dashboard routes whose latency profile is different. That diluted the signal and made the timeout look like uncertainty in the changed path.
+
+**Prevention:** For dashboard audit-path fixes, verify the exact `/api/audit` contract first: run the `/api/audit`-only test slice and a direct localhost fetch against `serveDashboard()`. Use the broader dashboard suite only as a follow-up check when the slower routes are relevant to the change. Evidence anchors: `test/integration/dashboard-server.test.ts` (search: `describe("dashboard /api/audit"`), `test/integration/quality-constraint-isolation.test.ts` (search: `dashboard home audit refresh`), `src/cli/server/dashboard-routes.ts` (search: `denyMechanismEvidenceLevel`).

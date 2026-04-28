@@ -5,6 +5,7 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { resolve } from "node:path";
 import {
   getAgentProfileMap,
@@ -27,6 +28,10 @@ const LEGACY_PROJECTS_LIST_PATH = resolve(
   "dashboard-projects.json",
 );
 const MISSING_PATH = resolve(PROJECT_PATH, "definitely-missing-dashboard-path");
+const require = createRequire(import.meta.url);
+const childProcess =
+  require("node:child_process") as typeof import("node:child_process");
+const originalExecFileSync = childProcess.execFileSync;
 
 let server: { port: number; close: () => Promise<void> } | undefined;
 let baseUrl = "";
@@ -214,6 +219,8 @@ before(async () => {
 
 after(async () => {
   try {
+    childProcess.execFileSync = originalExecFileSync;
+    syncBuiltinESMExports();
     if (server) {
       await withTimeout(server.close(), 5000, "dashboard server shutdown");
     }
@@ -405,6 +412,35 @@ describe("dashboard /api/audit", () => {
       assert.ok(Array.isArray(entry.findings));
       assert.ok(Array.isArray(entry.recommendations));
       assert.ok(Array.isArray(entry.howToFix));
+    }
+  });
+
+  it("with quality=true avoids deny hook self-tests during dashboard summary loads", async () => {
+    let selfTestCalls = 0;
+    childProcess.execFileSync = ((file, args, options) => {
+      if (Array.isArray(args) && args.includes("--self-test")) {
+        selfTestCalls += 1;
+        throw new Error(
+          "dashboard summary should not run deny hook self-tests",
+        );
+      }
+      return originalExecFileSync(file, args, options);
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+
+    try {
+      const { res } = await fetchJson(
+        `/api/audit?path=${encodeURIComponent(PROJECT_PATH)}&quality=true`,
+      );
+      assert.equal(res.status, 200);
+      assert.equal(
+        selfTestCalls,
+        0,
+        "dashboard summary should not run deny hook self-tests",
+      );
+    } finally {
+      childProcess.execFileSync = originalExecFileSync;
+      syncBuiltinESMExports();
     }
   });
 

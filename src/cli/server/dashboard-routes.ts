@@ -672,7 +672,15 @@ export function createDashboardRouteHandlers(
       const batch = runAuditBatch(
         fs,
         projectPath,
-        { agentFilter, harness },
+        {
+          agentFilter,
+          harness,
+          // Summary cards only need to know whether the deny mechanism is
+          // installed. Explicit per-agent audits and quality flows still run the
+          // slower runtime self-test.
+          denyMechanismEvidenceLevel:
+            agentFilter === null ? "present-only" : "full",
+        },
         configAgents,
       );
       const report = buildDashboardReport(

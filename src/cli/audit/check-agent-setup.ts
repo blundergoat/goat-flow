@@ -429,6 +429,9 @@ const agentDenyMechanism: BuildCheck = {
   /** Run the Agent deny mechanism check. */
   run: (ctx) => {
     if (!ctx.agentFilter) return null;
+    if (ctx.denyMechanismEvidenceLevel === "present-only") {
+      return checkDenyHookPresent(ctx);
+    }
     // Order the checks from cheapest/static to most expensive/runtime so we stop on
     // the clearest failure before attempting shell execution.
     return (
