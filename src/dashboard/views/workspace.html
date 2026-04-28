@@ -372,7 +372,9 @@
                 :title="serverSessions.length >= serverMaxSessions ? 'Session limit reached. End one to launch another.' : 'Open terminal'"
                 class="gf-btn gf-btn-md gf-btn-audit"
               >
-                <span x-text="launching ? 'Launching terminal...' : 'Open terminal'"></span>
+                <span
+                  x-text="launching ? 'Launching terminal...' : 'Open terminal'"
+                ></span>
               </button>
             </div>
           </div>

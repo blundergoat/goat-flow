@@ -92,9 +92,11 @@ export function pickWindowsRunnerPath(
 ): string | null {
   const cleaned = Array.from(
     new Set(
-      candidates.map((candidate) => candidate.trim()).filter((candidate) => {
-        return candidate.length > 0;
-      }),
+      candidates
+        .map((candidate) => candidate.trim())
+        .filter((candidate) => {
+          return candidate.length > 0;
+        }),
     ),
   );
   if (cleaned.length === 0) return null;

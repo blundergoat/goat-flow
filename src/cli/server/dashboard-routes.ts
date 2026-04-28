@@ -685,17 +685,17 @@ export function createDashboardRouteHandlers(
     return !agentFilter && harness && isPackagedInstall();
   }
 
+  function parseAgentFilter(param: string | null): AgentId | null {
+    return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
+  }
+
   /** Run both evaluation systems and return a typed DashboardReport. */
   function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
 
     const projectPath = safeResolvePath(url.searchParams.get("path"));
     const harness = url.searchParams.get("quality") === "true";
-    const agentParam = url.searchParams.get("agent");
-    const agentFilter =
-      agentParam && VALID_AGENTS.has(agentParam)
-        ? (agentParam as AgentId)
-        : null;
+    const agentFilter = parseAgentFilter(url.searchParams.get("agent"));
     const fresh = url.searchParams.get("fresh") === "true";
 
     try {

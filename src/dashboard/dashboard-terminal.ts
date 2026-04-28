@@ -333,7 +333,9 @@ async function dashboardLoadXterm(
 }
 
 /** Warm xterm.js in the background so the first launch does less visible work. */
-async function dashboardWarmXterm(ctx: DashboardTerminalContext): Promise<void> {
+async function dashboardWarmXterm(
+  ctx: DashboardTerminalContext,
+): Promise<void> {
   if (!ctx.terminalAvailable || ctx._xtermLoaded) return;
   try {
     await ctx.loadXterm();
