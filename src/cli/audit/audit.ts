@@ -39,6 +39,8 @@ interface AuditOptions {
   checkDrift?: boolean;
   /** Optional cold-path content lint (M05). Defaults to false when omitted. */
   checkContent?: boolean;
+  /** Optional summary-mode downgrade for expensive deny-hook runtime validation. */
+  denyMechanismEvidenceLevel?: "full" | "present-only";
 }
 
 /** Combine content-quality + factual-claim + snapshot-claim findings into a ContentReport. */
@@ -361,6 +363,7 @@ function buildAuditContext(
     structure,
     agents: facts.agents,
     agentFilter: options.agentFilter,
+    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
   };
 }
 
@@ -482,6 +485,7 @@ export function runAuditBatch(
     structure,
     agents: aggregateFacts.agents,
     agentFilter: options.agentFilter,
+    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
   };
   const aggregate = runAuditFromContext(aggregateCtx, fs, projectPath, options);
 
@@ -501,6 +505,7 @@ export function runAuditBatch(
         structure,
         agents: agentFacts.agents,
         agentFilter: agentId,
+        denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
       };
       perAgent.push({
         id: agentId,

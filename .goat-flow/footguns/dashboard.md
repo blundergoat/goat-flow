@@ -1,6 +1,6 @@
 ---
 category: dashboard
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-29
 ---
 
 ## Footgun: Project-browser modal is reachable only via header-span click, not from the add-project flow
@@ -43,6 +43,27 @@ last_reviewed: 2026-04-26
 2. Known collision-prone names to avoid: `ring`, `shadow`, `blur`, `inset`, `container`, `table`, `hidden`, `visible`, `fixed`, `absolute`, `relative`, `block`, `flex`, `grid`, `border`, `outline`, `accent`, `columns`.
 3. When an element has unexpected visual artifacts (hairlines, shadows, outlines) that don't appear in your CSS, check the browser's computed styles for Tailwind-generated rules on the same class name.
 4. When `border: none` / `box-shadow: none` doesn't fix a visual artifact, the property you're overriding may not be the one causing it - inspect computed styles to find the actual property.
+
+---
+
+## Footgun: Native Windows terminal sessions need both a Windows shell plan and a Windows runner shim
+
+**Status:** active | **Created:** 2026-04-29 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** The Workspace view reports `File not found` when `Open terminal` is clicked on native Windows, even though the same runner works in WSL or a regular Windows shell. `/api/health` may also under-report available runners because the extensionless npm wrapper is found before the runnable Windows shim.
+
+**Evidence:**
+- `src/cli/server/terminal.ts` (search: `buildTerminalSpawnSpec`) now branches the PTY launch by platform and uses `powershell.exe` on `win32` instead of assuming a POSIX shell.
+- `src/cli/server/terminal.ts` (search: `pickWindowsRunnerPath`) ranks `where` results so `.exe` / `.cmd` / `.bat` shims win over extensionless npm wrapper files.
+- `test/smoke/dashboard-endpoints.test.ts` (search: `builds a Windows PTY launch that keeps PowerShell open`) pins the Windows shell contract.
+- `test/smoke/dashboard-endpoints.test.ts` (search: `prefers runnable Windows shims over POSIX npm wrappers`) pins the Windows runner-selection contract.
+
+**Why it happens:** Native Windows and POSIX need different launch mechanics, but npm installs both kinds of runner wrapper in the same global bin directory. If terminal code assumes `/bin/bash`, native Windows cannot spawn the shell. If runner discovery trusts the first `where <runner>` hit, it can choose the extensionless POSIX wrapper instead of the runnable `.cmd` shim. Fixing only one half still leaves the feature broken.
+
+**Prevention:**
+1. Keep Windows shell selection and Windows runner-path selection in the same change set; touching only one is a partial fix.
+2. When editing dashboard terminal launch behavior, verify both `buildTerminalSpawnSpec` and `pickWindowsRunnerPath`, then run a native Windows `TerminalManager.create("", ".", "<runner>")` repro.
+3. Preserve host-independent tests that exercise both `win32` and POSIX spawn specs, even when working from a non-Windows machine.
 
 ---
 

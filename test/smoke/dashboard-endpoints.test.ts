@@ -6,7 +6,10 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import {
+  buildTerminalSpawnSpec,
+  pickWindowsRunnerPath,
   TerminalManager,
   validateProjectPath,
 } from "../../src/cli/server/terminal.js";
@@ -144,10 +147,79 @@ describe("terminal exports", () => {
       () => validateProjectPath("/definitely/missing/goat-flow/project"),
       /Invalid project path: does not exist/,
     );
+    const currentFilePath = fileURLToPath(import.meta.url);
     assert.throws(
-      () => validateProjectPath(new URL(import.meta.url).pathname),
+      () => validateProjectPath(currentFilePath),
       /Invalid project path: not a directory/,
     );
+  });
+
+  it("prefers runnable Windows shims over POSIX npm wrappers", () => {
+    assert.equal(
+      pickWindowsRunnerPath([
+        "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex",
+        "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex.cmd",
+        "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex.ps1",
+      ]),
+      "C:\\Users\\thatm\\AppData\\Roaming\\npm\\codex.cmd",
+    );
+  });
+
+  it("builds a Windows PTY launch that keeps PowerShell open after the runner exits", () => {
+    const spec = buildTerminalSpawnSpec(
+      "copilot",
+      "C:\\Users\\thatm\\AppData\\Roaming\\npm\\copilot.cmd",
+      "review this",
+      {},
+      "win32",
+    );
+
+    assert.equal(spec.shell, "powershell.exe");
+    assert.deepStrictEqual(spec.args.slice(0, 3), [
+      "-NoLogo",
+      "-NoExit",
+      "-Command",
+    ]);
+    assert.match(spec.args[3] ?? "", /GOAT_RUNNER/);
+    assert.equal(spec.env.GOAT_PROMPT, "review this");
+    assert.equal(spec.env.GOAT_PROMPT_FLAG, "-i");
+    assert.equal(spec.env.GOAT_PROMPT_PRESENT, "1");
+  });
+
+  it("builds a POSIX PTY launch that returns to the interactive shell", () => {
+    const spec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "",
+      { SHELL: "/bin/zsh" },
+      "linux",
+    );
+
+    assert.equal(spec.shell, "/bin/zsh");
+    assert.deepStrictEqual(spec.args, [
+      "-c",
+      '"$GOAT_RUNNER"; exec "$SHELL" -i',
+    ]);
+    assert.equal(spec.env.GOAT_PROMPT_PRESENT, "0");
+    assert.equal(spec.env.SHELL, "/bin/zsh");
+  });
+
+  it("preserves prompt flags for POSIX runners that require them", () => {
+    const spec = buildTerminalSpawnSpec(
+      "gemini",
+      "/usr/local/bin/gemini",
+      "audit target",
+      { SHELL: "/bin/bash" },
+      "darwin",
+    );
+
+    assert.equal(spec.shell, "/bin/bash");
+    assert.deepStrictEqual(spec.args, [
+      "-c",
+      '"$GOAT_RUNNER" -i "$GOAT_PROMPT"; exec "$SHELL" -i',
+    ]);
+    assert.equal(spec.env.GOAT_PROMPT_FLAG, "-i");
+    assert.equal(spec.env.GOAT_PROMPT_PRESENT, "1");
   });
 
   it("sends a typed error and closes when attaching to a missing session", () => {

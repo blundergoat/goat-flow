@@ -1,7 +1,7 @@
 ---
 name: goat-plan
 description: "Use when starting a non-trivial implementation that needs structured task breakdown with progress tracking."
-goat-flow-skill-version: "1.3.0"
+goat-flow-skill-version: "1.3.1"
 ---
 # /goat-plan
 

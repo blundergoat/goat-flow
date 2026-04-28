@@ -1,7 +1,7 @@
 ---
 name: goat-critique
 description: "Use when a decision or analysis needs multi-lens critique to surface blind spots before shipping."
-goat-flow-skill-version: "1.3.0"
+goat-flow-skill-version: "1.3.1"
 ---
 # /goat-critique
 

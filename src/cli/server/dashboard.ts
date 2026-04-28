@@ -193,7 +193,7 @@ export function serveDashboard(
         () => Promise.resolve(handleAuditRequest(url, res)),
         () => Promise.resolve(handleSetupDetectRequest(url, res)),
         () => handleSetupRequest(url, res),
-        () => handleQualityRequest(url, res),
+        () => Promise.resolve(handleQualityRequest(url, res)),
         () => handleQualityHistoryRequest(url, res),
 
         () => Promise.resolve(handleBrowseRequest(url, res)),

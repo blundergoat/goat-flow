@@ -381,6 +381,9 @@ function app() {
         document.documentElement.classList.toggle("dark", v);
       });
       self.$watch("activeView", (v: string) => {
+        if (v === "workspace" && this.terminalAvailable) {
+          void this.loadXterm().catch(() => {});
+        }
         if (v !== "workspace" || !this.activeSessionId) return;
         const refs = this._terminalRefs[this.activeSessionId];
         const xterm = refs?.xterm;

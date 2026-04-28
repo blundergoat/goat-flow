@@ -3,7 +3,7 @@
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  */
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import { statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
@@ -46,6 +46,14 @@ const RUNNER_PROMPT_FLAG: Record<Runner, string | null> = {
   gemini: "-i",
   copilot: "-i",
 };
+const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
+  ".exe",
+  ".cmd",
+  ".bat",
+  ".com",
+  ".ps1",
+] as const;
+const WINDOWS_TERMINAL_SHELL = "powershell.exe";
 
 /** Maximum output to buffer while a session is detached (characters). */
 const DETACH_BUFFER_LIMIT = 512 * 1024; // 512KB
@@ -72,8 +80,112 @@ interface TerminalSession {
   detachBufferSize: number;
 }
 
+interface TerminalSpawnSpec {
+  shell: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+}
+
+/** Pick the most runnable Windows runner path from a `where` result set. */
+export function pickWindowsRunnerPath(
+  candidates: readonly string[],
+): string | null {
+  const cleaned = Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.trim())
+        .filter((candidate) => {
+          return candidate.length > 0;
+        }),
+    ),
+  );
+  if (cleaned.length === 0) return null;
+
+  const rank = (candidate: string): number => {
+    const ext = extname(candidate).toLowerCase();
+    const index = WINDOWS_RUNNER_EXTENSION_PRIORITY.indexOf(
+      ext as (typeof WINDOWS_RUNNER_EXTENSION_PRIORITY)[number],
+    );
+    return index === -1 ? WINDOWS_RUNNER_EXTENSION_PRIORITY.length : index;
+  };
+
+  cleaned.sort((left, right) => rank(left) - rank(right));
+  return cleaned[0] ?? null;
+}
+
+/** Build the PTY shell invocation that keeps a usable terminal open per OS. */
+export function buildTerminalSpawnSpec(
+  runner: Runner,
+  cliPath: string,
+  prompt: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+): TerminalSpawnSpec {
+  const flag = RUNNER_PROMPT_FLAG[runner];
+  const hasPrompt = prompt.length > 0;
+  const env: NodeJS.ProcessEnv = {
+    ...environment,
+    GOAT_RUNNER: cliPath,
+    GOAT_PROMPT: prompt,
+    GOAT_PROMPT_FLAG: flag ?? "",
+    GOAT_PROMPT_PRESENT: hasPrompt ? "1" : "0",
+  };
+
+  if (platform === "win32") {
+    return {
+      shell: WINDOWS_TERMINAL_SHELL,
+      args: [
+        "-NoLogo",
+        "-NoExit",
+        "-Command",
+        "if ($env:GOAT_PROMPT_PRESENT -eq '1') { if ($env:GOAT_PROMPT_FLAG) { & $env:GOAT_RUNNER $env:GOAT_PROMPT_FLAG $env:GOAT_PROMPT } else { & $env:GOAT_RUNNER $env:GOAT_PROMPT } } else { & $env:GOAT_RUNNER }",
+      ],
+      env,
+    };
+  }
+
+  const shell = environment.SHELL || "/bin/bash";
+  const shellCmd = hasPrompt
+    ? flag
+      ? `"$GOAT_RUNNER" ${flag} "$GOAT_PROMPT"; exec "$SHELL" -i`
+      : `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
+    : `"$GOAT_RUNNER"; exec "$SHELL" -i`;
+
+  return {
+    shell,
+    args: ["-c", shellCmd],
+    env: {
+      ...env,
+      SHELL: shell,
+    },
+  };
+}
+
 /** Resolve the absolute path to a CLI binary. Returns null if not found. */
 function resolveCLIPath(name: string): string | null {
+  if (process.platform === "win32") {
+    try {
+      const candidates = execFileSync("where", [name], {
+        encoding: "utf-8",
+        timeout: 5000,
+      })
+        .split(/\r?\n/)
+        .map((candidate) => candidate.trim())
+        .filter(Boolean);
+      const preferred = pickWindowsRunnerPath(candidates);
+      if (preferred) return preferred;
+    } catch {
+      /* fall through to direct probe */
+    }
+
+    try {
+      execFileSync(name, ["--version"], { stdio: "ignore", timeout: 5000 });
+      return name;
+    } catch {
+      return null;
+    }
+  }
+
   try {
     execFileSync(name, ["--version"], { stdio: "ignore", timeout: 5000 });
     try {
@@ -198,33 +310,17 @@ export class TerminalManager {
     const nodePty = await this.loadNodePty();
 
     const id = randomUUID();
-
-    // Wrap the runner in a login-ish shell so the PTY remains interactive after
-    // the CLI exits - user can keep typing shell commands. Runner path and prompt
-    // are passed via env vars (not interpolated into the command string) to avoid
-    // shell-injection from user-controlled prompt text.
-    const shell = process.env.SHELL || "/bin/bash";
-    const flag = RUNNER_PROMPT_FLAG[runner];
-    const shellCmd = prompt
-      ? flag
-        ? `"$GOAT_RUNNER" ${flag} "$GOAT_PROMPT"; exec "$SHELL" -i`
-        : `"$GOAT_RUNNER" "$GOAT_PROMPT"; exec "$SHELL" -i`
-      : `"$GOAT_RUNNER"; exec "$SHELL" -i`;
+    const spawnSpec = buildTerminalSpawnSpec(runner, cliPath, prompt);
 
     console.log(
       `[terminal] Starting ${runner} session in ${validatedCwd} for target ${validatedTarget}`,
     );
-    const pty = nodePty.spawn(shell, ["-c", shellCmd], {
+    const pty = nodePty.spawn(spawnSpec.shell, spawnSpec.args, {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
       cwd: validatedCwd,
-      env: {
-        ...process.env,
-        GOAT_RUNNER: cliPath,
-        GOAT_PROMPT: prompt,
-        SHELL: shell,
-      },
+      env: spawnSpec.env,
     });
 
     const session: TerminalSession = {

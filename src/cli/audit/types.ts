@@ -165,6 +165,8 @@ export interface AuditContext {
   structure: ProjectStructure;
   agents: AgentFacts[];
   agentFilter: AgentId | null;
+  /** Optional downgrade for expensive per-agent summary checks used by dashboard home load. */
+  denyMechanismEvidenceLevel?: "full" | "present-only";
 }
 
 export type AuditScopeName = "setup" | "agent";

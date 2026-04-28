@@ -5,7 +5,9 @@
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import {
   getAgentProfileMap,
   getKnownAgentIds,
@@ -27,6 +29,10 @@ const LEGACY_PROJECTS_LIST_PATH = resolve(
   "dashboard-projects.json",
 );
 const MISSING_PATH = resolve(PROJECT_PATH, "definitely-missing-dashboard-path");
+const require = createRequire(import.meta.url);
+const childProcess =
+  require("node:child_process") as typeof import("node:child_process");
+const originalExecFileSync = childProcess.execFileSync;
 
 let server: { port: number; close: () => Promise<void> } | undefined;
 let baseUrl = "";
@@ -214,6 +220,8 @@ before(async () => {
 
 after(async () => {
   try {
+    childProcess.execFileSync = originalExecFileSync;
+    syncBuiltinESMExports();
     if (server) {
       await withTimeout(server.close(), 5000, "dashboard server shutdown");
     }
@@ -408,6 +416,35 @@ describe("dashboard /api/audit", () => {
     }
   });
 
+  it("with quality=true avoids deny hook self-tests during dashboard summary loads", async () => {
+    let selfTestCalls = 0;
+    childProcess.execFileSync = ((file, args, options) => {
+      if (Array.isArray(args) && args.includes("--self-test")) {
+        selfTestCalls += 1;
+        throw new Error(
+          "dashboard summary should not run deny hook self-tests",
+        );
+      }
+      return originalExecFileSync(file, args, options);
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+
+    try {
+      const { res } = await fetchJson(
+        `/api/audit?path=${encodeURIComponent(PROJECT_PATH)}&quality=true`,
+      );
+      assert.equal(res.status, 200);
+      assert.equal(
+        selfTestCalls,
+        0,
+        "dashboard summary should not run deny hook self-tests",
+      );
+    } finally {
+      childProcess.execFileSync = originalExecFileSync;
+      syncBuiltinESMExports();
+    }
+  });
+
   it("returns 500 with JSON for a nonexistent project path", async () => {
     const { res, body } = await fetchJson(
       `/api/audit?path=${encodeURIComponent(MISSING_PATH)}`,
@@ -581,6 +618,41 @@ describe("dashboard /api/quality", () => {
     assert.equal(data.agent, "claude");
     assert.match(String(data.prompt), /Skill Suite Quality Assessment/);
     assert.match(String(data.prompt), /"quality_mode": "skills"/);
+  });
+
+  it("reuses cached quality audits unless fresh=true is requested", async () => {
+    const runTimedQualityRequest = async (
+      suffix: string,
+    ): Promise<{ ms: number; body: Record<string, unknown> }> => {
+      const t0 = performance.now();
+      const { res, body } = await fetchJson(
+        `/api/quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude${suffix}`,
+      );
+      const ms = performance.now() - t0;
+      assert.equal(res.status, 200);
+      return { ms, body: expectRecord(body, "Quality cache response") };
+    };
+
+    const first = await runTimedQualityRequest("&fresh=true");
+    const second = await runTimedQualityRequest("");
+    const third = await runTimedQualityRequest("&fresh=true");
+
+    assert.equal(first.body.command, "quality");
+    assert.equal(second.body.command, "quality");
+    assert.equal(third.body.command, "quality");
+    assert.equal(first.body.agent, "claude");
+    assert.equal(second.body.agent, "claude");
+    assert.equal(third.body.agent, "claude");
+    assert.equal(first.body.prompt, second.body.prompt);
+    assert.equal(first.body.prompt, third.body.prompt);
+    assert.ok(
+      second.ms <= Math.max(20, first.ms / 3),
+      `cached quality request should be materially faster than a fresh audit (fresh=${Math.round(first.ms)}ms cached=${Math.round(second.ms)}ms)`,
+    );
+    assert.ok(
+      second.ms <= Math.max(20, third.ms / 3),
+      `fresh=true should bypass the cache and stay materially slower than the cached request (fresh=${Math.round(third.ms)}ms cached=${Math.round(second.ms)}ms)`,
+    );
   });
 
   for (const agent of getKnownAgentIds()) {

@@ -1,7 +1,19 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-04-27
+last_reviewed: 2026-04-29
 ---
+
+## Lesson: Commit subjects paraphrased the diff with weak verbs
+
+**Created:** 2026-04-29
+
+**What happened:** Audit of the last 10 commit messages on `dev` (HEAD `0366419`..`82db04b`, 2026-04-25..2026-04-29) showed 7 of 10 subjects led with *enhance, improve, streamline,* or *clarify* and carried no body. Examples: `feat(deny-dangerous): enhance command checks for combined shell flags and git push scenarios`, `refactor(docs): streamline artifact routing instructions and enhance clarity`, `refactor(docs): enhance clarity in artifact routing and learning loop instructions` (back-to-back, near-identical wording on different content). Reading the message in isolation - without the diff - told a future bisector or release-notes drafter nothing about what actually changed.
+
+**Root cause:** The agent was generating commit subjects by paraphrasing the diff in abstract verbs ("the change makes X better") instead of naming the concrete edit ("replace shell-specific build steps with Node fs calls"). The prior `.github/git-commit-instructions.md` listed format rules and a "what not to commit" list but did not name the failure mode or show a bad-vs-good rewrite, so the rules were easy to satisfy on paper while still emitting low-information subjects. One outlier commit (`4e0ec5d fix(dashboard): speed up home audit load on Windows`) carried a concrete subject + bulleted body and stood out as the gold standard.
+
+**Why it matters:** Commit messages are the only artifact a future maintainer reads when running `git log`, `git bisect`, or assembling a CHANGELOG. Subjects built from *enhance/improve/streamline/clarify* force every reader to open the diff to learn what shipped, defeating the purpose of structured commits. The synonym churn ("streamline... enhance clarity" two commits in a row) is also a tell that the agent was rewording rather than describing.
+
+**Prevention:** `.github/git-commit-instructions.md` (and its mirror `docs/coding-standards/git-commit.md`) now (a) ban the weak-verb list explicitly, (b) prescribe concrete verbs (*add, remove, replace, rename, fix, deny, gate, harden, cache*), (c) require a body whenever the subject names more than one axis or has a non-obvious motivation, and (d) include three bad→good rewrites built from the actual recent log so the agent has an imitable pattern, not just abstract rules. The gold-standard `4e0ec5d` body is reproduced inline as the body template (search: "speed up home audit load on Windows" in `.github/git-commit-instructions.md`).
 
 ## Lesson: Retrieval terms must name the concrete failure class
 

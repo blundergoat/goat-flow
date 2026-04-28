@@ -1,6 +1,6 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-04-27
+last_reviewed: 2026-04-29
 ---
 
 ## Lesson: When a mockup exists, match it element-for-element
@@ -83,5 +83,17 @@ last_reviewed: 2026-04-27
 - `.goat-flow/skill-reference/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
 
 **Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use && browser-use doctor` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
+
+---
+
+## Lesson: Do not use error-colored toasts for expected loading states
+
+**Created:** 2026-04-29
+
+**What happened:** While making the Workspace terminal launch feel more responsive, the first UX pass added a toast saying `Launching Terminal...` even though launch was a normal expected action and the button itself already changed to `Launching terminal...`. Because dashboard toasts use the same channel for failures, that extra message read like an alert rather than helpful progress feedback.
+
+**Root cause:** The implementation reached for an existing feedback mechanism without checking whether the state was exceptional or already visible in the primary control. A toast is appropriate when the user needs asynchronous feedback they might otherwise miss; it is poor UX when the user just clicked the exact button whose label already reflects the loading state.
+
+**Prevention:** For expected in-place loading, prefer inline state on the initiating control first: disable the button, change its label, or show a local spinner. Reserve toast messages, especially error-colored or alert-styled ones, for outcomes that are exceptional, backgrounded, or detached from the control the user is watching. Evidence anchors: `src/dashboard/views/workspace.html` (search: `Launching terminal...`), `src/dashboard/dashboard-terminal.ts` (search: `xterm.js load failed`).
 
 ---

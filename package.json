@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "CLI auditor, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
   "author": {
     "name": "Matthew Hansen",
@@ -38,8 +38,8 @@
     ]
   },
   "scripts": {
-    "build": "rm -rf dist/ && tsc && chmod +x dist/cli/cli.js && npm run build:dashboard",
-    "build:dashboard": "tsc -p tsconfig.dashboard.json && mkdir -p dist/dashboard && cp src/dashboard/index.html src/dashboard/styles.css src/dashboard/preset-prompts.json dist/dashboard/ && rm -rf dist/dashboard/views && cp -r src/dashboard/views dist/dashboard/views",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build:dashboard": "tsc -p tsconfig.dashboard.json && node -e \"const { cpSync, mkdirSync, rmSync } = require('node:fs'); mkdirSync('dist/dashboard', { recursive: true }); for (const file of ['index.html', 'styles.css', 'preset-prompts.json']) cpSync('src/dashboard/' + file, 'dist/dashboard/' + file); rmSync('dist/dashboard/views', { recursive: true, force: true }); cpSync('src/dashboard/views', 'dist/dashboard/views', { recursive: true });\"",
     "test": "npm run test:fast",
     "test:fast": "node --import tsx --test $(find test -name '*.test.ts' ! -path 'test/integration/audit-drift.test.ts' ! -path 'test/integration/dashboard-server.test.ts' ! -path 'test/integration/quality-constraint-isolation.test.ts' ! -path 'test/performance/*.test.ts' | sort)",
     "test:slow": "npm run build && node --import tsx --test test/integration/audit-drift.test.ts test/integration/dashboard-server.test.ts test/integration/quality-constraint-isolation.test.ts",

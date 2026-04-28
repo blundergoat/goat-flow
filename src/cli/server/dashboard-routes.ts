@@ -21,7 +21,11 @@ import {
 import { detectAgents as detectConfiguredAgents } from "../detect/agents.js";
 import { createFS } from "../facts/fs.js";
 import { extractSharedFacts } from "../facts/shared/index.js";
-import type { QualityHistoryEntry } from "../quality/history.js";
+import {
+  findLatestQualityReport,
+  type QualityHistoryEntry,
+} from "../quality/history.js";
+import { composeQuality } from "../prompt/compose-quality.js";
 import type { AgentId } from "../types.js";
 import { loadDashboardAsset } from "./dashboard-assets.js";
 import { buildSetupDetectPayload, isProjectDirectory } from "./setup-detect.js";
@@ -332,6 +336,7 @@ function readRecentLessons(
 }
 
 const ENRICHMENT_TTL_MS = 60_000;
+const QUALITY_AUDIT_TTL_MS = 10_000;
 const enrichmentCache = new Map<
   string,
   {
@@ -469,6 +474,13 @@ function writeAuditCache(
   }
 }
 
+function buildQualityAuditCacheKey(
+  projectPath: string,
+  agent: AgentId,
+): string {
+  return `${projectPath}\n${agent}`;
+}
+
 /** Build the non-terminal dashboard route handlers for one server instance. */
 export function createDashboardRouteHandlers(
   deps: DashboardRouteDependencies,
@@ -478,7 +490,7 @@ export function createDashboardRouteHandlers(
   handleAuditRequest: (url: URL, res: ServerResponse) => boolean;
   handleSetupDetectRequest: (url: URL, res: ServerResponse) => boolean;
   handleSetupRequest: (url: URL, res: ServerResponse) => Promise<boolean>;
-  handleQualityRequest: (url: URL, res: ServerResponse) => Promise<boolean>;
+  handleQualityRequest: (url: URL, res: ServerResponse) => boolean;
   handleQualityHistoryRequest: (
     url: URL,
     res: ServerResponse,
@@ -511,6 +523,41 @@ export function createDashboardRouteHandlers(
     ".goat-flow",
     "dashboard-projects.json",
   );
+  const qualityAuditCache = new Map<
+    string,
+    {
+      report: AuditReport;
+      cachedAt: number;
+    }
+  >();
+
+  function readQualityAuditCache(
+    projectPath: string,
+    agent: AgentId,
+    fresh: boolean,
+  ): AuditReport | null {
+    if (fresh) return null;
+    const cached = qualityAuditCache.get(
+      buildQualityAuditCacheKey(projectPath, agent),
+    );
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt >= QUALITY_AUDIT_TTL_MS) {
+      qualityAuditCache.delete(buildQualityAuditCacheKey(projectPath, agent));
+      return null;
+    }
+    return cached.report;
+  }
+
+  function writeQualityAuditCache(
+    projectPath: string,
+    agent: AgentId,
+    report: AuditReport,
+  ): void {
+    qualityAuditCache.set(buildQualityAuditCacheKey(projectPath, agent), {
+      report,
+      cachedAt: Date.now(),
+    });
+  }
 
   /** Resolve a user-supplied path to an absolute path. */
   function safeResolvePath(raw: string | null): string {
@@ -638,17 +685,17 @@ export function createDashboardRouteHandlers(
     return !agentFilter && harness && isPackagedInstall();
   }
 
+  function parseAgentFilter(param: string | null): AgentId | null {
+    return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
+  }
+
   /** Run both evaluation systems and return a typed DashboardReport. */
   function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
 
     const projectPath = safeResolvePath(url.searchParams.get("path"));
     const harness = url.searchParams.get("quality") === "true";
-    const agentParam = url.searchParams.get("agent");
-    const agentFilter =
-      agentParam && VALID_AGENTS.has(agentParam)
-        ? (agentParam as AgentId)
-        : null;
+    const agentFilter = parseAgentFilter(url.searchParams.get("agent"));
     const fresh = url.searchParams.get("fresh") === "true";
 
     try {
@@ -672,7 +719,15 @@ export function createDashboardRouteHandlers(
       const batch = runAuditBatch(
         fs,
         projectPath,
-        { agentFilter, harness },
+        {
+          agentFilter,
+          harness,
+          // Summary cards only need to know whether the deny mechanism is
+          // installed. Explicit per-agent audits and quality flows still run the
+          // slower runtime self-test.
+          denyMechanismEvidenceLevel:
+            agentFilter === null ? "present-only" : "full",
+        },
         configAgents,
       );
       const report = buildDashboardReport(
@@ -762,11 +817,28 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
+  function getOrRunQualityAudit(
+    projectPath: string,
+    agent: AgentId,
+    fresh: boolean,
+  ): AuditReport | null {
+    const cached = readQualityAuditCache(projectPath, agent, fresh);
+    if (cached !== null) return cached;
+    try {
+      const fs = createFS(projectPath);
+      const report = runAudit(fs, projectPath, {
+        agentFilter: agent,
+        harness: true,
+      });
+      writeQualityAuditCache(projectPath, agent, report);
+      return report;
+    } catch {
+      return null;
+    }
+  }
+
   /** Generate a quality-assessment prompt for a selected agent and return it to the dashboard. */
-  async function handleQualityRequest(
-    url: URL,
-    res: ServerResponse,
-  ): Promise<boolean> {
+  function handleQualityRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/quality") return false;
 
     const agentParam = url.searchParams.get("agent");
@@ -782,6 +854,7 @@ export function createDashboardRouteHandlers(
     const agent = agentParam as AgentId;
     const modeParam = url.searchParams.get("mode");
     const qualityMode = parseQualityModeParam(modeParam) ?? "agent-setup";
+    const fresh = url.searchParams.get("fresh") === "true";
 
     if (modeParam && !VALID_QUALITY_MODES.has(modeParam)) {
       jsonResponse(res, 400, {
@@ -792,20 +865,7 @@ export function createDashboardRouteHandlers(
 
     try {
       requireProjectDirectory(projectPath);
-      const { composeQuality } = await import("../prompt/compose-quality.js");
-      const { findLatestQualityReport } = await import("../quality/history.js");
-
-      let auditReport: AuditReport | null = null;
-      try {
-        const fs = createFS(projectPath);
-        auditReport = runAudit(fs, projectPath, {
-          agentFilter: agent,
-          harness: true,
-        });
-      } catch {
-        /* audit failure is fine - quality prompt generates with degraded context */
-      }
-
+      const auditReport = getOrRunQualityAudit(projectPath, agent, fresh);
       const { entry: priorReport } = findLatestQualityReport(
         projectPath,
         agent,

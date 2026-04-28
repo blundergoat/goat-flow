@@ -6,6 +6,7 @@
 const TERMINAL_REFIT_RETRY_DELAY_MS = 50;
 const TERMINAL_REFIT_MAX_ATTEMPTS = 20;
 const TERMINAL_INITIAL_FIT_DELAYS_MS = [50, 200, 500] as const;
+let xtermLoadPromise: Promise<void> | null = null;
 
 interface DashboardTerminalContext {
   projectPath: string;
@@ -198,6 +199,9 @@ async function dashboardCheckTerminalAvailable(
           : 480;
       const [firstRunner] = ctx.availableRunners;
       if (firstRunner) ctx.activeRunner = firstRunner;
+      if (ctx.terminalAvailable && ctx.activeView === "workspace") {
+        void dashboardWarmXterm(ctx);
+      }
     }
   } catch {
     ctx.terminalAvailable = false;
@@ -271,51 +275,73 @@ async function dashboardLoadXterm(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
   if (ctx._xtermLoaded) return;
-  await new Promise<void>((resolve, reject) => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href =
-      "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css";
-    document.head.appendChild(link);
-    // The fit addon patches the global Terminal constructor, so xterm itself
-    // has to finish loading before the addon script is appended.
-    const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js";
-    /** Handle script load failures. */
-    script.onerror = () => {
-      reject(new Error("xterm.js load failed"));
-    };
-    const timer = setTimeout(() => {
-      reject(new Error("xterm.js load timeout"));
-    }, 5000);
-    /** Handle successful script loads. */
-    script.onload = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    document.head.appendChild(script);
-  });
-  await new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js";
-    const timer = setTimeout(() => {
-      reject(new Error("fit addon load timeout"));
-    }, 5000);
-    /** Handle successful script loads. */
-    script.onload = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    /** Handle script load failures. */
-    script.onerror = () => {
-      reject(new Error("fit addon load failed"));
-    };
-    document.head.appendChild(script);
-  });
-  getXtermConstructors();
-  ctx._xtermLoaded = true;
+  if (!xtermLoadPromise) {
+    xtermLoadPromise = (async () => {
+      await new Promise<void>((resolve, reject) => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href =
+          "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css";
+        document.head.appendChild(link);
+        // The fit addon patches the global Terminal constructor, so xterm itself
+        // has to finish loading before the addon script is appended.
+        const script = document.createElement("script");
+        script.src =
+          "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js";
+        /** Handle script load failures. */
+        script.onerror = () => {
+          reject(new Error("xterm.js load failed"));
+        };
+        const timer = setTimeout(() => {
+          reject(new Error("xterm.js load timeout"));
+        }, 5000);
+        /** Handle successful script loads. */
+        script.onload = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        document.head.appendChild(script);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src =
+          "https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js";
+        const timer = setTimeout(() => {
+          reject(new Error("fit addon load timeout"));
+        }, 5000);
+        /** Handle successful script loads. */
+        script.onload = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        /** Handle script load failures. */
+        script.onerror = () => {
+          reject(new Error("fit addon load failed"));
+        };
+        document.head.appendChild(script);
+      });
+      getXtermConstructors();
+    })();
+  }
+  try {
+    await xtermLoadPromise;
+    ctx._xtermLoaded = true;
+  } catch (err) {
+    xtermLoadPromise = null;
+    throw err;
+  }
+}
+
+/** Warm xterm.js in the background so the first launch does less visible work. */
+async function dashboardWarmXterm(
+  ctx: DashboardTerminalContext,
+): Promise<void> {
+  if (!ctx.terminalAvailable || ctx._xtermLoaded) return;
+  try {
+    await ctx.loadXterm();
+  } catch {
+    // Surface load failures only on explicit launch.
+  }
 }
 
 /** Launch a preset prompt in the selected runner. */
@@ -520,11 +546,11 @@ async function dashboardLaunchInTerminal(
     ctx.showMaxSessionsModal = true;
     return;
   }
+  let createdSessionId: string | null = null;
   ctx.launching = true;
   try {
     const self = ctx as DashboardTerminalContext &
       AlpineMagics<DashboardTerminalContext>;
-    await ctx.loadXterm();
     const selectedTargetPath = targetPath || ctx.projectPath;
     const controllingCwd = cwdPath || selectedTargetPath;
     const res = await fetch("/api/terminal/create", {
@@ -559,15 +585,31 @@ async function dashboardLaunchInTerminal(
       age: "",
       presetId,
     };
+    createdSessionId = session.id;
     ctx.sessions.push(session);
     ctx._terminalRefs[session.id] = {};
     ctx.activeSessionId = session.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
     await self.$nextTick();
+    await ctx.loadXterm();
     ctx.connectTerminal(session.id, wsUrl);
     void ctx.updateSessionCount();
   } catch (err) {
+    if (createdSessionId) {
+      const failedSessionId = createdSessionId;
+      const refs = ctx._terminalRefs[failedSessionId];
+      if (refs?.cleanup) refs.cleanup();
+      Reflect.deleteProperty(ctx._terminalRefs, failedSessionId);
+      ctx.sessions = ctx.sessions.filter((s) => s.id !== failedSessionId);
+      if (ctx.activeSessionId === failedSessionId) {
+        ctx.activeSessionId = ctx.sessions[0]?.id || null;
+      }
+      fetch(`/api/terminal/${failedSessionId}`, { method: "DELETE" }).catch(
+        () => {},
+      );
+      void ctx.updateSessionCount();
+    }
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("Maximum") || msg.includes("concurrent")) {
       ctx.showMaxSessionsModal = true;
