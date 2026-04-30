@@ -41,10 +41,10 @@ interface PatternRule {
  *    rarely false-positive on historical prose; vague-term does. */
 type ScanMode = "full" | "restricted";
 
-/** Target scope for full content-quality checks: truth-bearing prose.
- *  Learning-loop buckets (footguns/lessons) are resolved separately at scan
- *  time and get restricted-mode treatment - see LEARNING_LOOP_DIRS. */
-const QUALITY_TARGETS = [
+/** Static target scope for full content-quality checks: truth-bearing prose.
+ *  Learning-loop buckets (footguns/lessons) and ADR files are resolved
+ *  separately at scan time - see LEARNING_LOOP_DIRS and listDecisionMarkdown. */
+const STATIC_QUALITY_TARGETS = [
   // Hot-path instruction files
   "CLAUDE.md",
   "AGENTS.md",
@@ -67,31 +67,9 @@ const QUALITY_TARGETS = [
   "docs/cli.md",
   "docs/skills.md",
   "docs/audit-and-quality.md",
-  // ADRs
+  // ADR index. ADR-NNN files are discovered dynamically so new decisions do
+  // not fall out of content-quality coverage.
   ".goat-flow/decisions/README.md",
-  ".goat-flow/decisions/ADR-001-remove-confusion-log.md",
-  ".goat-flow/decisions/ADR-002-replace-preflight-with-security-skill.md",
-  ".goat-flow/decisions/ADR-003-reference-based-setup-prompts.md",
-  ".goat-flow/decisions/ADR-004-config-file-and-directory-learning-loop.md",
-  ".goat-flow/decisions/ADR-005-no-implementation-skill.md",
-  ".goat-flow/decisions/ADR-006-autonomous-skill-mode.md",
-  ".goat-flow/decisions/ADR-007-extract-skill-conventions.md",
-  ".goat-flow/decisions/ADR-008-instruction-budget-constraint.md",
-  ".goat-flow/decisions/ADR-009-skill-consolidation.md",
-  ".goat-flow/decisions/ADR-010-setup-file-ownership.md",
-  ".goat-flow/decisions/ADR-011-critique-mob-core-features.md",
-  ".goat-flow/decisions/ADR-012-quality-checks-expansion.md",
-  ".goat-flow/decisions/ADR-013-remove-scanner-system.md",
-  ".goat-flow/decisions/ADR-014-optional-project-calibration-config.md",
-  ".goat-flow/decisions/ADR-015-remove-stop-lint-from-core.md",
-  ".goat-flow/decisions/ADR-016-cold-path-truth-maintenance.md",
-  ".goat-flow/decisions/ADR-017-active-plan-marker.md",
-  ".goat-flow/decisions/ADR-018-no-goat-verify-skill.md",
-  ".goat-flow/decisions/ADR-019-rename-sbao-to-critique-and-test-to-qa.md",
-  ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
-  ".goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md",
-  ".goat-flow/decisions/ADR-022-agent-authority-canonical-source.md",
-  ".goat-flow/decisions/ADR-023-reference-pack-budget-tiers.md",
   // Setup templates
   "workflow/setup/01-system-overview.md",
   "workflow/setup/02-instruction-file.md",
@@ -112,6 +90,8 @@ const QUALITY_TARGETS = [
   "workflow/setup/reference/scratchpad-readme.md",
   "workflow/setup/reference/tasks-readme.md",
 ] as const;
+
+const DECISIONS_DIR = ".goat-flow/decisions/";
 
 /** Learning-loop buckets. Scanned in restricted mode (no vague-term checks)
  *  because the Symptoms/Why/Evidence sections describe past incidents and
@@ -349,17 +329,30 @@ export function scanContentQuality(
   return findings;
 }
 
+/** List current ADR files. */
+function listDecisionMarkdown(ctx: AuditContext): string[] {
+  if (!ctx.fs.exists(DECISIONS_DIR)) return [];
+  return ctx.fs
+    .listDir(DECISIONS_DIR)
+    .filter((name) => /^ADR-\d{3}-.+\.md$/.test(name))
+    .sort()
+    .map((name) => `${DECISIONS_DIR}${name}`);
+}
+
 /** Full list of target paths, including every installed skill SKILL.md. */
-function resolveTargets(): string[] {
-  const targets: string[] = [...QUALITY_TARGETS];
+function resolveTargets(ctx: AuditContext): string[] {
+  const targets = new Set<string>([
+    ...STATIC_QUALITY_TARGETS,
+    ...listDecisionMarkdown(ctx),
+  ]);
   for (const agentDir of getInstalledSkillRoots()) {
     for (const name of SKILL_NAMES) {
       for (const relativeFile of getSkillFiles(name)) {
-        targets.push(`${agentDir}/${name}/${relativeFile}`);
+        targets.add(`${agentDir}/${name}/${relativeFile}`);
       }
     }
   }
-  return targets;
+  return [...targets];
 }
 
 /** List `<dir>/*.md` entries, excluding README.md. Used to pick up learning-loop
@@ -379,7 +372,7 @@ export function runContentQualityChecks(ctx: AuditContext): {
 } {
   const findings: ContentFinding[] = [];
   let filesScanned = 0;
-  for (const rel of resolveTargets()) {
+  for (const rel of resolveTargets(ctx)) {
     if (!ctx.fs.exists(rel)) continue;
     const text = ctx.fs.readFile(rel);
     if (text === null) continue;

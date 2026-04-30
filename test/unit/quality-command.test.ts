@@ -431,6 +431,12 @@ describe("quality prompt content", () => {
     );
     assert.ok(
       result.prompt.includes(
+        "Set top-level `prior_report_id` to `2026-04-15-1000-claude-bbbbb`",
+      ),
+      "Should make delta_tag baseline explicit",
+    );
+    assert.ok(
+      result.prompt.includes(
         '`delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`.',
       ),
       "Should tighten the JSON contract when prior history exists",
@@ -515,6 +521,11 @@ describe("quality prompt JSON example parses through schema", () => {
       /"delta_tag":\s*null/,
       "no-prior-report example must use delta_tag: null",
     );
+    assert.match(
+      json,
+      /"prior_report_id":\s*null/,
+      "no-prior-report example must include prior_report_id: null",
+    );
     const parsed = parseQualityReport(JSON.parse(json));
     assert.ok(
       parsed.ok,
@@ -568,6 +579,11 @@ describe("quality prompt JSON example parses through schema", () => {
       json,
       /"delta_tag":\s*"new"/,
       'with-prior-report example must use delta_tag: "new"',
+    );
+    assert.match(
+      json,
+      /"prior_report_id":\s*"2026-04-15-1000-claude-bbbbb"/,
+      "with-prior-report example must name the delta baseline",
     );
     const parsed = parseQualityReport(JSON.parse(json));
     assert.ok(

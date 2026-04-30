@@ -53,12 +53,12 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 2. Constraints
 
-**Audit checks:** deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell.
+**Audit checks:** deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings.
 
 **Quality evaluates:**
 - Are Ask First boundaries specific to real risk areas in this codebase, or generic placeholders?
 - Does the deny hook pass its self-test (`deny-dangerous.sh --self-test`)?
-- Does config.yaml's toolchain section reflect real project commands? If a command is scoped narrower than the full tool, is that intentional?
+- Does `.goat-flow/config.yaml` stay lean and accurate for this project? Optional project-calibration fields such as `toolchain` are valid only when they reflect real commands; their absence is not a setup gap.
 - Are there static analysis tools in the project's package manifest that aren't registered as constraints?
 
 ### 3. Verification

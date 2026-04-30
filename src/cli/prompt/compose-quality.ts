@@ -275,6 +275,9 @@ function renderPriorReportContext(
     lines.push(
       'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
     );
+    lines.push(
+      `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,
+    );
   } else {
     const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;
     lines.push(
@@ -282,6 +285,9 @@ function renderPriorReportContext(
     );
     lines.push(
       "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
+    );
+    lines.push(
+      "Set top-level `prior_report_id` to `null` because no prior same-agent report context was provided.",
     );
   }
   return lines.join("\n");
@@ -332,6 +338,9 @@ function appendFocusedReportContract(
   lines.push('  "scope": "framework-self | consumer",');
   lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
   lines.push(`  "quality_mode": ${jsonString(input.qualityMode)},`);
+  lines.push(
+    `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
+  );
   lines.push('  "scores": {');
   lines.push(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -363,7 +372,13 @@ function appendFocusedReportContract(
     "- `evidence_method` is REQUIRED on every finding. Allowed values: `runtime-probe`, `static-analysis`, or `mixed`.",
   );
   lines.push(
+    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command`, `evidence_exit_code`, `evidence_summary`, `evidence_warning_count`, and `evidence_excerpt`. Keep these single-line and concise; do not paste raw terminal blocks.",
+  );
+  lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
+  );
+  lines.push(
+    `- \`prior_report_id\` must be ${input.priorReport ? `\`${input.priorReport.id}\`` : "`null`"} for this run. This makes \`delta_tag\` traceable to the same-agent baseline.`,
   );
   if (input.priorReport) {
     lines.push(
@@ -375,7 +390,9 @@ function appendFocusedReportContract(
     );
   }
   lines.push("- Do NOT include an `id` field.");
-  lines.push("- Do NOT include extra top-level keys or extra finding keys.");
+  lines.push(
+    "- Do NOT include extra top-level keys or extra finding keys outside this contract.",
+  );
   lines.push("");
   lines.push("**Validate before confirming.** After writing the file, run:");
   lines.push("");
@@ -1088,6 +1105,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push('  "scope": "framework-self | consumer",');
   lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
   lines.push(`  "quality_mode": ${jsonString(qualityMode)},`);
+  lines.push(
+    `  "prior_report_id": ${priorReport ? jsonString(priorReport.id) : "null"},`,
+  );
   lines.push('  "scores": {');
   lines.push(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -1124,6 +1144,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "- `evidence_method` is REQUIRED on every finding (schema v2, 2026-04-19+). Allowed values: `runtime-probe` (you invoked commands/tools to verify - e.g. `npx eslint`, `bash <hook>`), `static-analysis` (you read files only), `mixed` (both methods for this specific finding). A finding labelled `OBSERVED` via `static-analysis` can still miss runtime-only defects; labelling the method honestly lets cross-report triangulation flag methodology gaps.",
   );
   lines.push(
+    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command` (the command), `evidence_exit_code` (integer), `evidence_summary` (literal pass/fail or warning summary), `evidence_warning_count` (integer), and `evidence_excerpt` (short single-line excerpt). Do not paste raw terminal blocks into JSON.",
+  );
+  lines.push(
     '- `scope` is REQUIRED at top level. Set `framework-self` if you detect this is the goat-flow repo itself (heuristic: `package.json` contains `"name": "@blundergoat/goat-flow"`). Otherwise set `consumer`.',
   );
   lines.push(
@@ -1131,6 +1154,9 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(qualityMode)}\` for this ${qualityModeLabel(qualityMode)} assessment.`,
+  );
+  lines.push(
+    `- \`prior_report_id\` must be ${priorReport ? `\`${priorReport.id}\`` : "`null`"} for this run. This makes \`delta_tag\` traceable to the same-agent baseline and prevents readers from treating \`new\` as newly introduced without a diff.`,
   );
   lines.push(
     "- `line` must be a positive integer OR `null`. Never `0`. For file-wide findings with no specific line, use `null`.",
@@ -1151,7 +1177,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     "- Do NOT include an `id` field. The CLI attaches positional finding ids deterministically when the report is loaded.",
   );
   lines.push(
-    "- Do NOT include extra top-level keys or extra finding keys. Unknown keys are rejected.",
+    "- Do NOT include extra top-level keys or extra finding keys outside this contract. Unknown keys are rejected.",
   );
   lines.push(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",

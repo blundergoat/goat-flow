@@ -78,6 +78,13 @@ export interface QualityFinding {
   /** How the finding was observed. Present on v2+ reports (2026-04-19+).
    *  Absent on v1 reports, defaulted to "static-analysis" at parse time. */
   evidence_method: QualityEvidenceMethod;
+  /** Optional compact command provenance for runtime-probe or mixed evidence.
+   *  These fields are intentionally summaries, not raw terminal transcripts. */
+  evidence_command?: string;
+  evidence_exit_code?: number;
+  evidence_summary?: string;
+  evidence_warning_count?: number;
+  evidence_excerpt?: string;
   delta_tag: QualityDeltaTag | null;
 }
 
@@ -101,6 +108,9 @@ export interface QualityReport {
   /** Optional: the quality workflow that produced the report.
    *  Absent on legacy reports, which are treated as agent-setup history. */
   quality_mode?: QualityMode;
+  /** Optional: the previous same-agent report used for delta_tag comparison.
+   *  Null or absent means no prior report context was available. */
+  prior_report_id?: string | null;
   scores: QualityScores;
   findings: QualityFinding[];
 }
@@ -191,6 +201,29 @@ function expectNullablePositiveInteger(
   if (value === null) return { ok: true, value: null };
   if (!Number.isInteger(value) || Number(value) <= 0) {
     return { ok: false, error: `${path} must be a positive integer or null` };
+  }
+  return { ok: true, value: Number(value) };
+}
+
+/** Expect optional non-empty string. */
+function expectOptionalNonEmptyString(
+  value: unknown,
+  path: string,
+): { ok: true; value: string | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  const parsed = expectNonEmptyString(value, path);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value };
+}
+
+/** Expect optional non-negative integer. */
+function expectOptionalNonNegativeInteger(
+  value: unknown,
+  path: string,
+): { ok: true; value: number | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!Number.isInteger(value) || Number(value) < 0) {
+    return { ok: false, error: `${path} must be a non-negative integer` };
   }
   return { ok: true, value: Number(value) };
 }
@@ -374,6 +407,11 @@ function parseFinding(
         "detail",
         "evidence_quality",
         "evidence_method",
+        "evidence_command",
+        "evidence_exit_code",
+        "evidence_summary",
+        "evidence_warning_count",
+        "evidence_excerpt",
         "delta_tag",
       ]
     : [
@@ -385,6 +423,11 @@ function parseFinding(
         "detail",
         "evidence_quality",
         "evidence_method",
+        "evidence_command",
+        "evidence_exit_code",
+        "evidence_summary",
+        "evidence_warning_count",
+        "evidence_excerpt",
         "delta_tag",
       ];
   const unknownKeyError = rejectUnknownKeys(raw, allowedKeys, path);
@@ -447,6 +490,32 @@ function parseFinding(
     evidenceMethod = parsedMethod.value;
   }
 
+  const evidenceCommand = expectOptionalNonEmptyString(
+    raw.evidence_command,
+    `${path}.evidence_command`,
+  );
+  if (!evidenceCommand.ok) return evidenceCommand;
+  const evidenceExitCode = expectOptionalNonNegativeInteger(
+    raw.evidence_exit_code,
+    `${path}.evidence_exit_code`,
+  );
+  if (!evidenceExitCode.ok) return evidenceExitCode;
+  const evidenceSummary = expectOptionalNonEmptyString(
+    raw.evidence_summary,
+    `${path}.evidence_summary`,
+  );
+  if (!evidenceSummary.ok) return evidenceSummary;
+  const evidenceWarningCount = expectOptionalNonNegativeInteger(
+    raw.evidence_warning_count,
+    `${path}.evidence_warning_count`,
+  );
+  if (!evidenceWarningCount.ok) return evidenceWarningCount;
+  const evidenceExcerpt = expectOptionalNonEmptyString(
+    raw.evidence_excerpt,
+    `${path}.evidence_excerpt`,
+  );
+  if (!evidenceExcerpt.ok) return evidenceExcerpt;
+
   const deltaTagRaw = Object.hasOwn(raw, "delta_tag") ? raw.delta_tag : null;
   let deltaTag: QualityDeltaTag | null = null;
   if (deltaTagRaw !== null) {
@@ -468,6 +537,21 @@ function parseFinding(
     detail: detail.value,
     evidence_quality: evidenceQuality.value,
     evidence_method: evidenceMethod,
+    ...(evidenceCommand.value !== undefined
+      ? { evidence_command: evidenceCommand.value }
+      : {}),
+    ...(evidenceExitCode.value !== undefined
+      ? { evidence_exit_code: evidenceExitCode.value }
+      : {}),
+    ...(evidenceSummary.value !== undefined
+      ? { evidence_summary: evidenceSummary.value }
+      : {}),
+    ...(evidenceWarningCount.value !== undefined
+      ? { evidence_warning_count: evidenceWarningCount.value }
+      : {}),
+    ...(evidenceExcerpt.value !== undefined
+      ? { evidence_excerpt: evidenceExcerpt.value }
+      : {}),
     delta_tag: deltaTag,
   };
 
@@ -508,6 +592,7 @@ function parseReportInternal(
       "scope",
       "rubric_version",
       "quality_mode",
+      "prior_report_id",
       "scores",
       "findings",
     ],
@@ -611,6 +696,16 @@ function parseReportInternal(
     qualityMode = parsedQualityMode.value;
   }
 
+  let priorReportId: string | null | undefined;
+  if (Object.hasOwn(raw, "prior_report_id")) {
+    const parsedPriorReportId = expectNullableString(
+      raw.prior_report_id,
+      "report.prior_report_id",
+    );
+    if (!parsedPriorReportId.ok) return parsedPriorReportId;
+    priorReportId = parsedPriorReportId.value;
+  }
+
   const scores = parseScores(raw.scores, "report.scores");
   if (!scores.ok) return scores;
   if (!Array.isArray(raw.findings)) {
@@ -634,6 +729,7 @@ function parseReportInternal(
     ...(scope !== undefined ? { scope } : {}),
     ...(rubricVersion !== undefined ? { rubric_version: rubricVersion } : {}),
     ...(qualityMode !== undefined ? { quality_mode: qualityMode } : {}),
+    ...(priorReportId !== undefined ? { prior_report_id: priorReportId } : {}),
     scores: scores.scores,
   };
 

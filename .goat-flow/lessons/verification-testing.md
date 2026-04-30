@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-04-29
+last_reviewed: 2026-04-30
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -346,3 +346,13 @@ last_reviewed: 2026-04-29
 **Prevention:** For shared npm scripts that create, remove, or copy files, prefer `node:fs` or an explicit cross-platform helper instead of raw `rm -rf`, `mkdir -p`, `cp`, or `chmod` in `package.json`. Evidence anchors: `package.json` (search: `require('node:fs').rmSync`), reproduction command `cmd /d /c "mkdir -p dist/dashboard"` -> `The syntax of the command is incorrect.`
 
 ---
+
+## Lesson: Format touched TypeScript tests before repo-wide preflight
+
+**Status:** active | **Created:** 2026-04-30
+
+**What happened:** While implementing quality-assessment follow-ups, focused tests and `npm run typecheck` passed, but the first `bash scripts/preflight-checks.sh` run failed at Prettier with `2 unformatted files`. Running `npm run format` touched only the new/edited TypeScript test files, and the fresh preflight rerun passed.
+
+**Root cause:** I treated focused tests plus typecheck as enough before the repo-wide gate even though new TypeScript test assertions had not been formatter-normalized. Preflight records formatter failure before later gates, so fixing format after a failed preflight requires a clean rerun to produce valid final evidence.
+
+**Prevention:** After editing TypeScript tests or prompt/schema fixtures, run `npm run format` or `npm run format:check` before `bash scripts/preflight-checks.sh`. If preflight fails at Prettier, format, inspect the diff, and rerun preflight from scratch before claiming the final gate. Evidence anchors: `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `test/unit/quality-schema.test.ts` (search: `evidence_warning_count`).

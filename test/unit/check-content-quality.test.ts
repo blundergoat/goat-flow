@@ -11,7 +11,11 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { scanContentQuality } from "../../src/cli/audit/check-content-quality.js";
+import {
+  runContentQualityChecks,
+  scanContentQuality,
+} from "../../src/cli/audit/check-content-quality.js";
+import { makeCtx, stubFS } from "../fixtures/projects/index.js";
 
 describe("scanContentQuality: vague terms", () => {
   it("flags 'properly' as INFO", () => {
@@ -273,6 +277,43 @@ describe("scanContentQuality: legacy execution loop (M19-9a)", () => {
       findings.filter((f) => f.rule.startsWith("legacy-execution-loop")).length,
       0,
       "fenced-code-block guard must keep the detector silent",
+    );
+  });
+});
+
+describe("runContentQualityChecks: target discovery", () => {
+  it("discovers current ADR files instead of relying on a hard-coded ADR list", () => {
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) =>
+          path === ".goat-flow/decisions/" ||
+          path === ".goat-flow/decisions/ADR-025-block-all-git-push.md",
+        listDir: (path) =>
+          path === ".goat-flow/decisions/"
+            ? [
+                "README.md",
+                "ADR-023-reference-pack-budget-tiers.md",
+                "ADR-024-semantic-anchors-over-line-numbers.md",
+                "ADR-025-block-all-git-push.md",
+              ]
+            : [],
+        readFile: (path) =>
+          path === ".goat-flow/decisions/ADR-025-block-all-git-push.md"
+            ? "Follow best practices when blocking pushes."
+            : null,
+      }),
+    });
+
+    const result = runContentQualityChecks(ctx);
+
+    assert.ok(
+      result.findings.some(
+        (finding) =>
+          finding.path ===
+            ".goat-flow/decisions/ADR-025-block-all-git-push.md" &&
+          finding.rule === "generic-best-practices",
+      ),
+      "new ADR files must be scanned without updating a manual target list",
     );
   });
 });

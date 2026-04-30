@@ -92,16 +92,31 @@ describe("parseQualityReport", () => {
     const report = makeRawReport();
     const parsed = parseQualityReport({
       ...report,
+      prior_report_id: "2026-04-15-1000-claude-bbbbb",
       scope: "framework-self",
       rubric_version: "1.2.3",
-      findings: [{ ...report.findings[0], evidence_method: "runtime-probe" }],
+      findings: [
+        {
+          ...report.findings[0],
+          evidence_method: "runtime-probe",
+          evidence_command: "node --import tsx src/cli/cli.ts stats . --check",
+          evidence_exit_code: 0,
+          evidence_summary: '"status": "pass"',
+          evidence_warning_count: 25,
+          evidence_excerpt:
+            "decision-metadata warnings for ADR-001 through ADR-025",
+        },
+      ],
     });
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
     assert.equal(parsed.report.scope, "framework-self");
     assert.equal(parsed.report.rubric_version, "1.2.3");
     assert.equal(parsed.report.quality_mode, "agent-setup");
+    assert.equal(parsed.report.prior_report_id, "2026-04-15-1000-claude-bbbbb");
     assert.equal(parsed.report.findings[0]!.evidence_method, "runtime-probe");
+    assert.equal(parsed.report.findings[0]!.evidence_exit_code, 0);
+    assert.equal(parsed.report.findings[0]!.evidence_warning_count, 25);
   });
 
   it("rejects invalid evidence_method values", () => {
@@ -116,6 +131,23 @@ describe("parseQualityReport", () => {
       parsed.error,
       /must be one of: runtime-probe, static-analysis, mixed/i,
     );
+  });
+
+  it("rejects invalid compact runtime evidence values", () => {
+    const report = makeRawReport();
+    const parsed = parseQualityReport({
+      ...report,
+      findings: [
+        {
+          ...report.findings[0],
+          evidence_method: "runtime-probe",
+          evidence_exit_code: -1,
+        },
+      ],
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /evidence_exit_code.*non-negative integer/i);
   });
 
   it("rejects invalid scope values", () => {
