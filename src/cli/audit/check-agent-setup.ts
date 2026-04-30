@@ -184,7 +184,7 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
     message: `Missing skill files: ${missing.join(", ")}`,
     evidence: missing[0],
     howToFix:
-      "Re-install skills from workflow/skills/ by running `goat-flow setup` or copying the skill template into the agent's skills directory.",
+      "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
   };
 }
 
@@ -207,7 +207,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
       message: `Missing goat-flow-skill-version: ${noVersion.join(", ")}`,
       evidence: noVersion[0],
       howToFix:
-        "Re-install skills from workflow/skills/ by running `goat-flow setup` or copying the skill template into the agent's skills directory.",
+        "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
     };
   }
   if (mismatch.length > 0) {
@@ -216,7 +216,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
       message: `Version mismatch (expected ${AUDIT_VERSION}): ${mismatch.join(", ")}`,
       evidence: mismatch[0],
       howToFix:
-        "Re-install skills from workflow/skills/ by running `goat-flow setup` or copying the skill template into the agent's skills directory.",
+        "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
     };
   }
   return null;
@@ -383,7 +383,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
         check: "Agent deny mechanism",
         message: `deny-dangerous.sh for ${af.agent.id} differs from the current goat-flow template (v${AUDIT_VERSION})`,
         evidence: denyRelPath,
-        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} setup --agent ${af.agent.id}\` to update the hook to the latest version.`,
+        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${af.agent.id}\` to update the hook to the latest version.`,
       };
     }
   }

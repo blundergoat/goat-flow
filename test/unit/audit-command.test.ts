@@ -1535,6 +1535,11 @@ describe("composeSetup routing", () => {
         /Do NOT copy customization templates \(architecture, footguns, code-map\) verbatim\./,
       );
       assert.match(output, /## Step 1 - Install files/);
+      assert.match(
+        output,
+        /npx @blundergoat\/goat-flow@latest install .* --agent codex/,
+      );
+      assert.match(output, /does not require an agent/);
       assert.match(output, /## Step 2 - Create project-specific content/);
       assert.match(output, /## Step 3 - Verify/);
       assert.match(output, /workflow\/setup\/agents\/codex\.md/);
@@ -1581,7 +1586,10 @@ describe("composeSetup routing", () => {
 
       assert.ok(output, "composeSetup should return upgrade guidance");
       assert.match(output, /# GOAT Flow Upgrade - Codex/);
-      assert.match(output, /workflow\/install-goat-flow\.sh/);
+      assert.match(
+        output,
+        /npx @blundergoat\/goat-flow@latest install .* --agent codex/,
+      );
       assert.match(output, /workflow\/setup\/02-instruction-file\.md/);
       assert.ok(!output.includes(retiredOutdatedGuide), output);
     } finally {
@@ -1608,7 +1616,10 @@ describe("composeSetup routing", () => {
 
       assert.ok(output, "composeSetup should return migration guidance");
       assert.match(output, /# GOAT Flow Migration - Codex/);
-      assert.match(output, /workflow\/install-goat-flow\.sh/);
+      assert.match(
+        output,
+        /npx @blundergoat\/goat-flow@latest install .* --agent codex/,
+      );
       assert.match(output, /Remove legacy surfaces manually/);
       assert.match(output, /workflow\/setup\/02-instruction-file\.md/);
       assert.ok(!output.includes(retiredMigrationScript), output);

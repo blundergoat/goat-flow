@@ -20,17 +20,17 @@ describe("scan command removed", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: no-arg defaults to audit
+// Test 2: no-arg opens menu; path shorthand still audits
 // ---------------------------------------------------------------------------
-describe("default command is audit", () => {
-  it("defaults to audit when no command is given", () => {
+describe("default command is menu", () => {
+  it("keeps path-only shorthand as audit", () => {
     const parsed = parseCLIArgs(["."]);
-    assert.equal(parsed.command, "audit", "Default command should be audit");
+    assert.equal(parsed.command, "audit", "Path shorthand should audit");
   });
 
-  it("defaults to audit with no args at all", () => {
+  it("opens the menu with no args at all", () => {
     const parsed = parseCLIArgs([]);
-    assert.equal(parsed.command, "audit", "Empty args should default to audit");
+    assert.equal(parsed.command, "menu", "Empty args should open menu");
   });
 });
 
@@ -114,5 +114,25 @@ describe("backwards compatibility", () => {
     const parsed = parseCLIArgs(["setup", ".", "--agent", "codex"]);
     assert.equal(parsed.command, "setup");
     assert.equal(parsed.agent, "codex");
+  });
+
+  it("install command parses deterministic setup flags", () => {
+    const parsed = parseCLIArgs([
+      "install",
+      ".",
+      "--agent",
+      "codex",
+      "--force",
+    ]);
+    assert.equal(parsed.command, "install");
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.force, true);
+  });
+
+  it("setup --apply parses as deterministic setup", () => {
+    const parsed = parseCLIArgs(["setup", ".", "--agent", "codex", "--apply"]);
+    assert.equal(parsed.command, "setup");
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.apply, true);
   });
 });

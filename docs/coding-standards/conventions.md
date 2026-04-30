@@ -61,6 +61,7 @@ bash scripts/preflight-checks.sh         # Full preflight gate
 # CLI commands (after build)
 npx goat-flow audit .                        # Validate setup correctness
 npx goat-flow audit . --harness              # AI harness completeness checks
+npx goat-flow install . --agent claude       # Copy/update system files
 npx goat-flow setup --agent claude           # Generate setup prompt
 npx goat-flow quality . --agent claude       # Generate quality-assessment prompt
 ```

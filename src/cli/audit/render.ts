@@ -143,7 +143,7 @@ function renderTextContentFindings(
   }
 }
 
-/** Map a skill-dir path prefix to an install-goat-flow.sh --agent target.
+/** Map a skill-dir path prefix to a goat-flow install --agent target.
  *  Returns null when the path doesn't match a known satellite-agent dir. */
 function pathToAgentLabel(path: string): string | null {
   if (path.startsWith(".agents/skills/")) return "codex";
@@ -180,7 +180,7 @@ function renderTextDriftFindings(drift: DriftReport, lines: string[]): void {
   if (staleAgents.size > 0) {
     const agentList = [...staleAgents].sort().join(" / ");
     lines.push(
-      `  ${DIM}Multi-agent drift: run \`install-goat-flow.sh . --agent ${agentList}\` to migrate the remaining agent(s).${RESET}`,
+      `  ${DIM}Multi-agent drift: run \`goat-flow install . --agent <agent>\` for each stale agent (${agentList}).${RESET}`,
     );
   }
 }

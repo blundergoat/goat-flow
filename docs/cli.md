@@ -2,9 +2,19 @@
 
 ## Commands
 
+### `goat-flow`
+
+Open an interactive menu. This is the default when the CLI is run with no arguments.
+
+```bash
+npx @blundergoat/goat-flow@latest
+```
+
+The menu can start the dashboard, copy/update goat-flow system files, generate a setup prompt, audit the current project, or show project status.
+
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (16 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Default command when run without arguments.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (16 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status.
 
 | Flag | Description |
 |------|-------------|
@@ -86,7 +96,21 @@ Supported agent ids are read from `workflow/manifest.json` via `src/cli/agents/r
 ```bash
 npx goat-flow setup --agent claude    # Claude setup/upgrade prompt
 npx goat-flow setup --agent codex     # Codex setup/upgrade prompt
+npx goat-flow setup . --agent claude --apply
 ```
+
+Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only when existing settings and `.goat-flow/config.yaml` should be overwritten.
+
+### `goat-flow install [path] --agent <id> [--force]`
+
+Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Existing settings and config are skipped unless `--force` is passed.
+
+```bash
+npx @blundergoat/goat-flow@latest install . --agent claude
+npx @blundergoat/goat-flow@latest install . --agent codex --force
+```
+
+The installer does not create project-specific content such as the instruction file, architecture, code map, glossary, patterns, footguns, or lessons. Run `goat-flow setup . --agent <id>` afterward for the guided prompt that creates or refreshes those surfaces.
 
 ### `goat-flow status [path]`
 
@@ -113,11 +137,12 @@ Common tasks and the commands to run:
 |--------------|---------|
 | Check if my project is ready | `npx goat-flow audit .` |
 | Check harness completeness | `npx goat-flow audit . --harness` |
+| Copy/update system files | `npx goat-flow install . --agent claude` |
 | Get a quality prompt | `npx goat-flow quality . --agent claude` |
 | Get a harness quality prompt | `npx goat-flow quality . --agent claude --mode harness` |
 | Review quality trend history | `npx goat-flow quality history --agent claude` |
 | Compare two saved quality runs | `npx goat-flow quality diff --agent claude` |
-| Set up a new project | `npx goat-flow setup . --agent claude` |
+| Generate a setup prompt | `npx goat-flow setup . --agent claude` |
 | Use this in CI | `npx goat-flow audit . --format json` |
 | Open the dashboard | `npx goat-flow dashboard .` |
 
@@ -133,9 +158,11 @@ npx goat-flow audit . --format json --output report.json
 ```bash
 # 1. See where your project stands
 npx goat-flow audit .
-# 2. Generate a setup prompt for your agent
+# 2. Copy deterministic system files
+npx goat-flow install . --agent claude
+# 3. Generate a setup prompt for project-specific files
 npx goat-flow setup . --agent claude
-# 3. Open the dashboard for guided setup
+# 4. Open the dashboard for guided setup
 npx goat-flow dashboard .
 ```
 

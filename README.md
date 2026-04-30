@@ -2,17 +2,28 @@
 
 **A dashboard for auditing, configuring, and running your AI coding agents.**
 
-One command opens a local web UI where you can audit your project's agent harness, set up new agents, browse a prompt library, and launch terminal sessions - all from one place. Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
+One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 
 ```bash
-npx @blundergoat/goat-flow@latest dashboard .
+npx @blundergoat/goat-flow@latest
 ```
 
-![Dashboard](docs/assets/dashboard-preview.png)
+```text
+goat-flow
+
+What do you want to do?
+  1. Start dashboard
+  2. Install/update goat-flow files
+  3. Generate setup prompt
+  4. Audit current project
+  5. Show project status
+```
 
 ## Dashboard views
+
+![Dashboard](docs/assets/dashboard-preview.png)
 
 ### Home
 
@@ -72,29 +83,43 @@ Use an instruction file for rules the agent should *remember*. Use GOAT Flow for
 
 Requires Node.js 20+.
 
-### 1. Launch the dashboard
+### 1. Start with the menu
 
 ```bash
-npx @blundergoat/goat-flow@latest dashboard .
+npx @blundergoat/goat-flow@latest
 ```
 
-No install required. Opens a local web UI against your current directory. Fresh projects show failing audits by design - that's the baseline the setup fills in.
+No install required. Choose dashboard, deterministic install/update, setup prompt generation, audit, or status from the menu.
 
-### 2. Run setup from the dashboard
+### 2. Install/update system files
 
-Click **Setup**, pick your agent (Claude, Codex, Gemini, or Copilot), and launch the generated prompt in an integrated terminal. The agent configures your project end-to-end.
+For a brand new project, copy the goat-flow system files first. This step is deterministic and does not require an agent:
 
-Or from the CLI:
+```bash
+npx @blundergoat/goat-flow@latest install . --agent claude
+```
+
+Use `--force` only when you want to overwrite existing settings and `.goat-flow/config.yaml`.
+
+### 3. Generate the setup prompt
+
+The installer copies shared system files. The setup prompt still creates or refreshes project-specific content such as the instruction file, architecture, code map, and real project footguns/lessons.
 
 ```bash
 npx @blundergoat/goat-flow@latest setup . --agent claude
 ```
 
-### 3. Re-audit
+Equivalent deterministic setup/update command:
+
+```bash
+npx @blundergoat/goat-flow@latest setup . --agent claude --apply
+```
+
+### 4. Re-audit
 
 Back on the Home view, click **Re-audit**. All checks should pass. The AI Harness cards now show scores across the five concerns.
 
-### 4. Use a prompt
+### 5. Use a prompt
 
 Open the **Prompts** view, pick a workflow (code review, bug diagnosis, UI debugging with browser evidence, security assessment, test planning), and launch it in a terminal session. Each prompt invokes a structured `/goat-*` skill with phases and human gates.
 
@@ -122,6 +147,7 @@ npx goat-flow dashboard .                  # Launch the dashboard
 npx goat-flow audit .                      # Run audit (pass/fail output)
 npx goat-flow audit . --harness            # Add AI harness scoring
 npx goat-flow audit . --format json        # JSON output for CI
+npx goat-flow install . --agent claude     # Copy/update system files
 npx goat-flow setup . --agent claude       # Generate setup prompt
 npx goat-flow quality . --agent claude     # Generate quality-assessment prompt
 npx goat-flow status .                     # Project state (bare/partial/v0.9/v1.0/v1.1)
@@ -150,7 +176,7 @@ See [docs/audit-and-quality.md](docs/audit-and-quality.md) for the full framewor
 goat-flow installs without a C++ toolchain as of v1.2.4. If you need the dashboard's embedded terminal, you'll also need `node-pty` to compile. Install build tools (`sudo apt install build-essential python3` on Debian/Ubuntu, `xcode-select --install` on macOS), then run `npm rebuild node-pty`. If using pnpm: `pnpm approve-builds` (select node-pty). To skip the native build entirely: `npm install @blundergoat/goat-flow --omit=optional`.
 
 **Audit fails on a fresh project?**
-Expected. Open the dashboard Setup view or run `npx @blundergoat/goat-flow@latest setup . --agent claude`.
+Expected. Run `npx @blundergoat/goat-flow@latest install . --agent claude`, then generate the setup prompt with `npx @blundergoat/goat-flow@latest setup . --agent claude`.
 
 **Audit still fails after setup?**
 Re-run `npx @blundergoat/goat-flow@latest audit . --verbose` to see which check failed. The `howToFix` hint on each failure points at the missing file or config key.

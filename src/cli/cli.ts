@@ -9,11 +9,13 @@ import { parseArgs } from "node:util";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import type { CLIOptions, AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport } from "./audit/types.js";
 import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
 
-import { getPackageVersion } from "./paths.js";
+import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getKnownAgentIds } from "./agents/registry.js";
 
 /** Current package version used in --version output */
@@ -38,9 +40,11 @@ Usage:
   goat-flow [command] [project-path] [flags]
 
 Commands:
+  menu              Interactive command picker (default when run with no args)
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
   quality           Agent-driven quality prompt plus history/diff surfaces
   setup             Generate setup prompt (adapts to project state)
+  install           Deterministically copy/update goat-flow system files
   status            Show project state (bare/partial/v0.9/outdated/current)
   dashboard         Launch browser dashboard with audit, setup, and terminal
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
@@ -57,6 +61,8 @@ Flags:
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
+  --apply           Setup: copy/update deterministic system files instead of generating a prompt
+  --force           Install/setup --apply: overwrite settings and config files
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes
@@ -64,10 +70,13 @@ Flags:
   --version, -v     Show version
 
 Examples:
+  goat-flow                            Open the interactive menu
   goat-flow .                          Audit current directory
   goat-flow audit . --harness          Audit with AI harness completeness checks
   goat-flow audit . --agent claude     Audit scoped to Claude
   goat-flow audit . --format json      JSON output for CI
+  goat-flow install . --agent claude   Copy/update goat-flow system files
+  goat-flow setup . --agent claude --apply
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
   goat-flow quality . --agent claude --mode skills
@@ -91,7 +100,9 @@ function printVersion(): void {
 
 /** Supported CLI subcommand names */
 type Command =
+  | "menu"
   | "setup"
+  | "install"
   | "dashboard"
   | "info"
   | "status"
@@ -102,9 +113,29 @@ type Command =
 
 type QualitySubcommand = "prompt" | "history" | "diff" | "validate";
 
+interface ParsedArgValues {
+  format?: string;
+  agent?: string;
+  mode?: string;
+  verbose?: boolean;
+  output?: string;
+  all?: boolean;
+  harness?: boolean;
+  "check-drift"?: boolean;
+  "check-content"?: boolean;
+  check?: boolean;
+  apply?: boolean;
+  force?: boolean;
+  dev?: boolean;
+  help?: boolean;
+  version?: boolean;
+}
+
 /** List of recognized CLI subcommands */
 const COMMANDS: Command[] = [
+  "menu",
   "setup",
+  "install",
   "dashboard",
   "info",
   "status",
@@ -164,6 +195,8 @@ export interface ParsedCLI extends CLIOptions {
   checkDrift: boolean;
   checkContent: boolean;
   check: boolean;
+  apply: boolean;
+  force: boolean;
   qualitySubcommand: QualitySubcommand;
   qualityDiffPair: string | null;
   qualityValidatePath: string | null;
@@ -171,12 +204,15 @@ export interface ParsedCLI extends CLIOptions {
   all: boolean;
 }
 
-/** Parse the positional subcommand from raw CLI args, defaulting to `audit`. */
+/** Parse the positional subcommand from raw CLI args. Empty argv opens the menu. */
 function parseCommand(argv: string[]): {
   command: Command;
   filteredArgs: string[];
 } {
   const filteredArgs = [...argv];
+  if (filteredArgs.length === 0) {
+    return { command: "menu", filteredArgs };
+  }
   const first = filteredArgs[0];
   if (first !== undefined && Object.hasOwn(REMOVED_COMMANDS, first)) {
     const message = REMOVED_COMMANDS[first];
@@ -316,6 +352,75 @@ function parseQualityPositionals(positionals: string[]): {
   };
 }
 
+/** Return the project path and quality-specific positionals for a command. */
+function parseCommandPositionals(
+  command: Command,
+  positionals: string[],
+): ReturnType<typeof parseQualityPositionals> {
+  if (command === "quality") return parseQualityPositionals(positionals);
+  return {
+    qualitySubcommand: "prompt",
+    projectPath: resolve(positionals[0] ?? "."),
+    qualityDiffPair: null,
+    qualityValidatePath: null,
+  };
+}
+
+/** Validate flags shared across commands. */
+function validateCommonFlags(command: Command, values: ParsedArgValues): void {
+  if (command !== "quality" && values.all === true) {
+    throw new CLIError("--all is only valid for the quality command.", 2);
+  }
+  if (command !== "quality" && values.mode !== undefined) {
+    throw new CLIError("--mode is only valid for the quality command.", 2);
+  }
+}
+
+/** Validate deterministic install/setup flags. */
+function validateInstallFlags(command: Command, values: ParsedArgValues): void {
+  if (command !== "setup" && values.apply === true) {
+    throw new CLIError("--apply is only valid for the setup command.", 2);
+  }
+  if (
+    values.force === true &&
+    !(command === "install" || (command === "setup" && values.apply === true))
+  ) {
+    throw new CLIError(
+      "--force is only valid for install or setup --apply.",
+      2,
+    );
+  }
+}
+
+/** Validate quality mode flags against the selected quality subcommand. */
+function validateQualityFlags(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+): void {
+  if (
+    command === "quality" &&
+    values.mode !== undefined &&
+    !["prompt", "history", "diff"].includes(qualitySubcommand)
+  ) {
+    throw new CLIError(
+      "--mode is only valid for quality prompt, quality history, and quality diff.",
+      2,
+    );
+  }
+}
+
+/** Validate flag combinations after strict parseArgs accepts their shapes. */
+function validateFlagCombinations(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+): void {
+  validateCommonFlags(command, values);
+  validateInstallFlags(command, values);
+  validateQualityFlags(command, values, qualitySubcommand);
+}
+
 /** Parse raw CLI argv into a structured ParsedCLI options object */
 export function parseCLIArgs(argv: string[]): ParsedCLI {
   const { command, filteredArgs } = parseCommand(argv);
@@ -334,6 +439,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       "check-drift": { type: "boolean", default: false },
       "check-content": { type: "boolean", default: false },
       check: { type: "boolean", default: false },
+      apply: { type: "boolean", default: false },
+      force: { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -342,55 +449,190 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     strict: true,
   });
 
-  const qualityPositionals =
-    command === "quality"
-      ? parseQualityPositionals(positionals)
-      : {
-          qualitySubcommand: "prompt" as QualitySubcommand,
-          projectPath: resolve(positionals[0] ?? "."),
-          qualityDiffPair: null,
-          qualityValidatePath: null,
-        };
-
-  if (command !== "quality" && values.all === true) {
-    throw new CLIError("--all is only valid for the quality command.", 2);
-  }
-  if (command !== "quality" && values.mode !== undefined) {
-    throw new CLIError("--mode is only valid for the quality command.", 2);
-  }
-  if (
-    command === "quality" &&
-    values.mode !== undefined &&
-    !["prompt", "history", "diff"].includes(
-      qualityPositionals.qualitySubcommand,
-    )
-  ) {
-    throw new CLIError(
-      "--mode is only valid for quality prompt, quality history, and quality diff.",
-      2,
-    );
-  }
+  const parsedValues = values as ParsedArgValues;
+  const qualityPositionals = parseCommandPositionals(command, positionals);
+  validateFlagCombinations(
+    command,
+    parsedValues,
+    qualityPositionals.qualitySubcommand,
+  );
 
   return {
     command,
     projectPath: qualityPositionals.projectPath,
-    format: parseFormatArg(values.format),
-    agent: parseAgentArg(values.agent),
-    verbose: values.verbose === true,
-    output: resolveOutputPath(values.output, qualityPositionals.projectPath),
-    harness: values.harness === true,
-    checkDrift: values["check-drift"] === true,
-    checkContent: values["check-content"] === true,
-    check: values.check === true,
+    format: parseFormatArg(parsedValues.format),
+    agent: parseAgentArg(parsedValues.agent),
+    verbose: parsedValues.verbose === true,
+    output: resolveOutputPath(
+      parsedValues.output,
+      qualityPositionals.projectPath,
+    ),
+    harness: parsedValues.harness === true,
+    checkDrift: parsedValues["check-drift"] === true,
+    checkContent: parsedValues["check-content"] === true,
+    check: parsedValues.check === true,
+    apply: parsedValues.apply === true,
+    force: parsedValues.force === true,
     qualitySubcommand: qualityPositionals.qualitySubcommand,
     qualityDiffPair: qualityPositionals.qualityDiffPair,
     qualityValidatePath: qualityPositionals.qualityValidatePath,
-    qualityMode: parseQualityModeArg(values.mode),
-    all: values.all === true,
-    dev: values.dev === true,
-    help: values.help === true,
-    version: values.version === true,
+    qualityMode: parseQualityModeArg(parsedValues.mode),
+    all: parsedValues.all === true,
+    dev: parsedValues.dev === true,
+    help: parsedValues.help === true,
+    version: parsedValues.version === true,
   };
+}
+
+interface MenuAction {
+  key: string;
+  label: string;
+  command: "dashboard" | "install" | "setup" | "audit" | "status";
+  needsAgent: boolean;
+}
+
+const MENU_ACTIONS: MenuAction[] = [
+  {
+    key: "1",
+    label: "Start dashboard",
+    command: "dashboard",
+    needsAgent: false,
+  },
+  {
+    key: "2",
+    label: "Install/update goat-flow files",
+    command: "install",
+    needsAgent: true,
+  },
+  {
+    key: "3",
+    label: "Generate setup prompt",
+    command: "setup",
+    needsAgent: true,
+  },
+  {
+    key: "4",
+    label: "Audit current project",
+    command: "audit",
+    needsAgent: false,
+  },
+  {
+    key: "5",
+    label: "Show project status",
+    command: "status",
+    needsAgent: false,
+  },
+];
+
+/** Render the no-args command picker. */
+function renderMenuText(): string {
+  const lines = [
+    "goat-flow",
+    "",
+    "What do you want to do?",
+    ...MENU_ACTIONS.map((action) => `  ${action.key}. ${action.label}`),
+    "",
+    "Run a command directly any time, for example:",
+    "  goat-flow dashboard .",
+    "  goat-flow install . --agent codex",
+    "  goat-flow audit . --harness",
+  ];
+  return lines.join("\n");
+}
+
+/** Return true when the process can safely ask questions. */
+function canPrompt(): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+}
+
+/** Find a menu action by number or case-insensitive label prefix. */
+function findMenuAction(input: string): MenuAction | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+  return (
+    MENU_ACTIONS.find(
+      (action) =>
+        action.key === normalized ||
+        action.label.toLowerCase().startsWith(normalized),
+    ) ?? null
+  );
+}
+
+/** Ask for a project path, defaulting to the current working directory. */
+async function promptProjectPath(
+  rl: ReturnType<typeof createInterface>,
+): Promise<string> {
+  const answer = await rl.question("Project path [.] ");
+  return resolve(answer.trim() || ".");
+}
+
+/** Ask for one supported agent id. */
+async function promptAgent(
+  rl: ReturnType<typeof createInterface>,
+): Promise<AgentId> {
+  const agents = validAgents();
+  for (;;) {
+    const answer = await rl.question(`Agent (${agents.join("/")}) `);
+    const selected = answer.trim();
+    if (agents.includes(selected as AgentId)) return selected as AgentId;
+    console.log(`Use one of: ${agents.join(", ")}`);
+  }
+}
+
+/** Ask whether install should overwrite settings/config. */
+async function promptForce(
+  rl: ReturnType<typeof createInterface>,
+): Promise<boolean> {
+  const answer = await rl.question(
+    "Overwrite existing settings/config? [y/N] ",
+  );
+  return /^y(?:es)?$/iu.test(answer.trim());
+}
+
+/** Read all menu answers and build the command options to run. */
+async function promptMenuCommand(
+  options: ParsedCLI,
+  rl: ReturnType<typeof createInterface>,
+): Promise<ParsedCLI> {
+  console.log(renderMenuText());
+  const choice = await rl.question("\nChoice [1] ");
+  const action = findMenuAction(choice || "1");
+  if (!action) {
+    throw new CLIError("Unknown menu choice.", 2);
+  }
+
+  const projectPath = await promptProjectPath(rl);
+  const agent = action.needsAgent ? await promptAgent(rl) : options.agent;
+  const force = action.command === "install" ? await promptForce(rl) : false;
+
+  return {
+    ...options,
+    command: action.command,
+    projectPath,
+    agent,
+    force,
+    apply: false,
+  };
+}
+
+/** Handle the interactive no-args command picker. */
+async function handleMenuCommand(options: ParsedCLI): Promise<void> {
+  if (!canPrompt() || options.output !== null) {
+    writeOutput(options, renderMenuText());
+    return;
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  let nextOptions: ParsedCLI;
+  try {
+    nextOptions = await promptMenuCommand(options, rl);
+  } finally {
+    rl.close();
+  }
+  await dispatchCommand(nextOptions);
 }
 
 /** Handle the status command: classify and display project adoption state */
@@ -486,6 +728,37 @@ async function handleSetupCommand(
   }
   if (parts.length > 0) {
     writeOutput(options, parts.join("\n\n---\n\n"));
+  }
+}
+
+/** Handle deterministic install/update by delegating to the packaged installer. */
+function handleInstallCommand(options: ParsedCLI): void {
+  if (!options.agent) {
+    throw new CLIError(
+      `install requires --agent. Use one of: ${validAgentFlags()}`,
+      2,
+    );
+  }
+  if (options.output !== null) {
+    throw new CLIError("--output is not supported for install.", 2);
+  }
+
+  const scriptPath = getTemplatePath("workflow/install-goat-flow.sh");
+  const args = [scriptPath, options.projectPath, "--agent", options.agent];
+  if (options.force) args.push("--force");
+
+  const result = spawnSync("bash", args, { stdio: "inherit" });
+  if (result.error) {
+    throw new CLIError(
+      `Could not run installer with bash: ${result.error.message}`,
+      1,
+    );
+  }
+  if (result.signal) {
+    throw new CLIError(`Installer terminated by signal ${result.signal}`, 1);
+  }
+  if (result.status !== 0) {
+    process.exitCode = result.status ?? 1;
   }
 }
 
@@ -813,23 +1086,38 @@ async function runSetupPipeline(options: ParsedCLI): Promise<void> {
   await handleSetupCommand(options, auditReport, facts);
 }
 
+/** Launch the web dashboard. */
+async function runDashboardCommand(options: ParsedCLI): Promise<void> {
+  const { serveDashboard } = await import("./server/dashboard.js");
+  await serveDashboard({
+    projectPath: options.projectPath,
+    dev: options.dev,
+  });
+}
+
+const COMMAND_HANDLERS: Partial<
+  Record<Command, (options: ParsedCLI) => Promise<void> | void>
+> = {
+  menu: handleMenuCommand,
+  install: handleInstallCommand,
+  audit: handleAuditCommand,
+  quality: handleQualityCommand,
+  manifest: handleManifestCommand,
+  stats: handleStatsCommand,
+  status: handleStatusCommand,
+  dashboard: runDashboardCommand,
+  info: handleInfoCommand,
+};
+
 /** Dispatch one parsed CLI command to its handler. */
 export async function dispatchCommand(options: ParsedCLI): Promise<void> {
-  if (options.command === "audit") return handleAuditCommand(options);
-  if (options.command === "quality") return handleQualityCommand(options);
-  if (options.command === "manifest") return handleManifestCommand(options);
-  if (options.command === "stats") return handleStatsCommand(options);
-  if (options.command === "status") return handleStatusCommand(options);
-  if (options.command === "dashboard") {
-    const { serveDashboard } = await import("./server/dashboard.js");
-    await serveDashboard({
-      projectPath: options.projectPath,
-      dev: options.dev,
-    });
+  const handler = COMMAND_HANDLERS[options.command];
+  if (handler) {
+    await handler(options);
     return;
   }
-  if (options.command === "info") {
-    handleInfoCommand(options);
+  if (options.apply) {
+    handleInstallCommand(options);
     return;
   }
   // Remaining command: setup (uses audit + facts to compose setup guidance).
@@ -846,7 +1134,7 @@ async function main(): Promise<void> {
 
   const rawArgs = process.argv.slice(2);
 
-  // Preserve the documented CLI contract: empty argv defaults to `audit`.
+  // Empty argv opens the menu; path-only argv still uses the audit shorthand.
   const options = parseCLIArgs(rawArgs);
 
   if (options.help) {

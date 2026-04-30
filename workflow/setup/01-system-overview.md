@@ -14,8 +14,7 @@ If `.goat-flow/config.yaml` exists and its version matches the current goat-flow
 If the version is older, there is no maintained in-place upgrade guide. Refresh the current agent files, then continue through the current numbered setup flow:
 - Run the current install script first:
   ```bash
-  bash "$(npm -g root)/@blundergoat/goat-flow/workflow/install-goat-flow.sh" . --agent {agent}
-  # or locate via: node -e "require.resolve('@blundergoat/goat-flow')" | xargs dirname
+  npx @blundergoat/goat-flow@latest install . --agent {agent}
   ```
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
 - If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/lessons/`, `.goat-flow/footguns/`, or `.goat-flow/decisions/` before removing them. Session logs are local continuity only.

@@ -19,6 +19,11 @@ function targetArg(projectRoot: string): string {
     : resolve(projectRoot);
 }
 
+/** Public one-command installer users can run from any project. */
+function installCommand(projectRoot: string, agentId: AgentId): string {
+  return `npx @blundergoat/goat-flow@latest install ${targetArg(projectRoot)} --agent ${agentId}`;
+}
+
 // ----------------------------------------------------------------
 // Setup-step references
 // ----------------------------------------------------------------
@@ -180,9 +185,7 @@ function renderUpgradeRedirect(
 
     lines.push("## Step 1 - Install files");
     lines.push("");
-    lines.push(
-      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
-    );
+    lines.push(`Run: \`${installCommand(facts.root, agentId)}\``);
     lines.push("");
     lines.push(
       "This refreshes skills, hooks, settings, and reference files to the current version.",
@@ -202,9 +205,7 @@ function renderUpgradeRedirect(
 
     lines.push("## Step 1 - Install current files");
     lines.push("");
-    lines.push(
-      `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
-    );
+    lines.push(`Run: \`${installCommand(facts.root, agentId)}\``);
     lines.push("");
     lines.push(
       `This installs the ${loadManifest().facts.skills.total} canonical skills, hooks, settings, and reference files.`,
@@ -270,12 +271,10 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("## Step 1 - Install files");
   lines.push("");
-  lines.push(
-    `Run: \`bash ${getTemplatePath("workflow/install-goat-flow.sh")} ${targetArg(facts.root)} --agent ${agentId}\``,
-  );
+  lines.push(`Run: \`${installCommand(facts.root, agentId)}\``);
   lines.push("");
   lines.push(
-    "This installs skills, hooks, settings, and reference files. Verify it completes with zero errors.",
+    "This deterministically copies skills, hooks, settings, and reference files. It does not require an agent. Verify it completes with zero errors.",
   );
   lines.push("");
 
