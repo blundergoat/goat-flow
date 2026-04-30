@@ -431,10 +431,10 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
-    assert.equal(verdict.warnings.length, 2);
+    assert.equal(verdict.warnings.length, 0);
   });
 
-  it("warns without failing when optional ADR metadata is missing", () => {
+  it("passes when optional ADR metadata is missing", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":

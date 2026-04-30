@@ -67,7 +67,7 @@ describe("build check IDs", () => {
 // Quality checks cover all 5 concerns
 // ---------------------------------------------------------------------------
 describe("harness check concern coverage", () => {
-  it("harness checks cover all 5 concerns", () => {
+  it("harness checks cover all 6 concerns", () => {
     const concerns = new Set(HARNESS_CHECKS.map((c) => c.concern));
     assert.ok(concerns.has("context"), "Should have context checks");
     assert.ok(concerns.has("constraints"), "Should have constraints checks");
@@ -76,6 +76,10 @@ describe("harness check concern coverage", () => {
     assert.ok(
       concerns.has("feedback_loop"),
       "Should have feedback_loop checks",
+    );
+    assert.ok(
+      concerns.has("workspace_boundary"),
+      "Should have workspace_boundary checks",
     );
   });
 });

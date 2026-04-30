@@ -1055,7 +1055,7 @@ describe("optional config calibration", () => {
         }),
       }),
     );
-    assert.equal(result.status, "pass");
+    assert.equal(result.status, "fail");
     assert.ok(
       result.findings.some((f) => f.includes("toolchain.test")),
       `Findings should explain optional toolchain semantics: ${result.findings.join(", ")}`,
@@ -1266,13 +1266,13 @@ describe("M01 harness check type tagging", () => {
     }
   });
 
-  it("matches the locked M01 distribution (9 integrity, 5 advisory, 2 metric)", () => {
+  it("matches the locked distribution (9 integrity, 6 advisory, 3 metric)", () => {
     const byType = { integrity: 0, advisory: 0, metric: 0 } as Record<
       string,
       number
     >;
     for (const check of HARNESS_CHECKS) byType[check.type]!++;
-    assert.deepStrictEqual(byType, { integrity: 9, advisory: 5, metric: 2 });
+    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 3 });
   });
 
   it("known-integrity ids are tagged integrity", () => {
