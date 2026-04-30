@@ -54,7 +54,7 @@ interface AuditOptions {
 }
 
 /** Synchronous profiler seam used by dashboard development benchmarks. */
-export interface AuditProfiler {
+interface AuditProfiler {
   span<T>(name: string, fn: () => T): T;
 }
 
@@ -506,32 +506,21 @@ function runAuditFromContext(
   options: AuditOptions,
 ): AuditReport {
   const profileScope = options.profileScope ?? "single";
-  span(options.profile, `${profileScope} provenance validation`, () =>
-    validateRegisteredCheckProvenance(ctx.fs),
-  );
+  validateProvenanceWithProfile(ctx, options, profileScope);
   const { setup: setupScope, agent: agentScope } = span(
     options.profile,
     `${profileScope} build checks`,
     () => runBuildChecks(ctx),
   );
-  const harness = options.harness
-    ? span(options.profile, `${profileScope} harness checks`, () =>
-        computeHarness(ctx),
-      )
-    : null;
-  const driftEnabled =
-    options.checkDrift === true ||
-    (options.skipAutoDrift !== true && shouldAutoRunDrift(ctx));
-  const drift = driftEnabled
-    ? span(options.profile, `${profileScope} drift`, () =>
-        checkDrift({ fs, projectPath }),
-      )
-    : null;
-  const content = options.checkContent
-    ? span(options.profile, `${profileScope} content checks`, () =>
-        computeContent(ctx),
-      )
-    : null;
+  const harness = computeHarnessWithProfile(ctx, options, profileScope);
+  const drift = computeDriftWithProfile(
+    ctx,
+    fs,
+    projectPath,
+    options,
+    profileScope,
+  );
+  const content = computeContentWithProfile(ctx, options, profileScope);
   const status = overallStatus(setupScope, agentScope, harness, drift, content);
 
   return {
@@ -549,6 +538,59 @@ function runAuditFromContext(
     content,
     overall: { status },
   };
+}
+
+function validateProvenanceWithProfile(
+  ctx: AuditContext,
+  options: AuditOptions,
+  profileScope: string,
+): void {
+  span(options.profile, `${profileScope} provenance validation`, () => {
+    validateRegisteredCheckProvenance(ctx.fs);
+  });
+}
+
+function computeHarnessWithProfile(
+  ctx: AuditContext,
+  options: AuditOptions,
+  profileScope: string,
+): ReturnType<typeof computeHarness> | null {
+  if (!options.harness) return null;
+  return span(options.profile, `${profileScope} harness checks`, () =>
+    computeHarness(ctx),
+  );
+}
+
+function shouldRunDriftCheck(
+  ctx: AuditContext,
+  options: AuditOptions,
+): boolean {
+  if (options.checkDrift === true) return true;
+  return options.skipAutoDrift !== true && shouldAutoRunDrift(ctx);
+}
+
+function computeDriftWithProfile(
+  ctx: AuditContext,
+  fs: ReadonlyFS,
+  projectPath: string,
+  options: AuditOptions,
+  profileScope: string,
+): ReturnType<typeof checkDrift> | null {
+  if (!shouldRunDriftCheck(ctx, options)) return null;
+  return span(options.profile, `${profileScope} drift`, () =>
+    checkDrift({ fs, projectPath }),
+  );
+}
+
+function computeContentWithProfile(
+  ctx: AuditContext,
+  options: AuditOptions,
+  profileScope: string,
+): ContentReport | null {
+  if (!options.checkContent) return null;
+  return span(options.profile, `${profileScope} content checks`, () =>
+    computeContent(ctx),
+  );
 }
 
 /**
@@ -571,9 +613,9 @@ export function runAuditBatch(
   const structure = span(options.profile, "project structure", () =>
     buildProjectStructure(),
   );
-  span(options.profile, "provenance validation", () =>
-    validateRegisteredCheckProvenance(fs),
-  );
+  span(options.profile, "provenance validation", () => {
+    validateRegisteredCheckProvenance(fs);
+  });
 
   const batchFacts = span(options.profile, "aggregate facts", () =>
     extractProjectFacts(fs, {

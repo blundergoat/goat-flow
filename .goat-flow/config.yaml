@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.3.1"
+version: "1.3.2"
 
 # ── Project Setup ───────────────────────────────
 agents:

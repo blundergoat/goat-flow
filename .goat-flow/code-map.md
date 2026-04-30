@@ -110,6 +110,7 @@ npm-publish.sh             # Wrapper: npm publish sanity checks
 preflight-checks.sh        # Pre-commit/CI gate: lint, typecheck, cross-ref checks
 prettier-check.sh          # Wrapper: prettier --check (lint)
 prettier.sh                # Wrapper: prettier --write (format)
+profile-dashboard-audit.mjs # Benchmark/profiling helper for dashboard audit fresh/cache paths
 run-cli.sh                 # Wrapper: run the local CLI via node
 setup-initial.sh           # First-time project scaffolding
 start-dev.sh               # Wrapper: start dashboard in dev mode

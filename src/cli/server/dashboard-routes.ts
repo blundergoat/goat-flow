@@ -401,6 +401,7 @@ function readRecentLessons(
 const ENRICHMENT_TTL_MS = 60_000;
 const QUALITY_AUDIT_TTL_MS = 10_000;
 const DIRECTORY_SIGNATURE_FILE_LIMIT = 500;
+const DIRECTORY_SIGNATURE_IGNORES = new Set([".git", "node_modules", "dist"]);
 const enrichmentCache = new Map<
   string,
   {
@@ -423,6 +424,44 @@ function hashExistingFile(projectPath: string, relativePath: string): string {
   }
 }
 
+function readSignatureStat(
+  projectPath: string,
+  relativePath: string,
+): ReturnType<typeof statSync> | null {
+  try {
+    return statSync(join(projectPath, relativePath));
+  } catch {
+    return null;
+  }
+}
+
+function appendDirectorySignatureEntry(
+  projectPath: string,
+  relativeDir: string,
+  name: string,
+  entries: string[],
+): void {
+  if (DIRECTORY_SIGNATURE_IGNORES.has(name)) return;
+
+  const relativePath = join(relativeDir, name);
+  const stat = readSignatureStat(projectPath, relativePath);
+  if (!stat) {
+    entries.push(`${relativePath}:missing`);
+    return;
+  }
+  if (stat.isDirectory()) {
+    readDirectorySignatureEntries(projectPath, relativePath, entries);
+    return;
+  }
+  if (!stat.isFile()) return;
+  entries.push(
+    `${relativePath}:${stat.size}:${stat.mtimeMs}:${hashExistingFile(
+      projectPath,
+      relativePath,
+    )}`,
+  );
+}
+
 function readDirectorySignatureEntries(
   projectPath: string,
   relativeDir: string,
@@ -442,29 +481,7 @@ function readDirectorySignatureEntries(
       entries.push(`${relativeDir}:truncated`);
       return;
     }
-    if (name === ".git" || name === "node_modules" || name === "dist") {
-      continue;
-    }
-    const relativePath = join(relativeDir, name);
-    const absolutePath = join(projectPath, relativePath);
-    let stat;
-    try {
-      stat = statSync(absolutePath);
-    } catch {
-      entries.push(`${relativePath}:missing`);
-      continue;
-    }
-    if (stat.isDirectory()) {
-      readDirectorySignatureEntries(projectPath, relativePath, entries);
-      continue;
-    }
-    if (!stat.isFile()) continue;
-    entries.push(
-      `${relativePath}:${stat.size}:${stat.mtimeMs}:${hashExistingFile(
-        projectPath,
-        relativePath,
-      )}`,
-    );
+    appendDirectorySignatureEntry(projectPath, relativeDir, name, entries);
   }
 }
 
@@ -597,6 +614,14 @@ function buildDashboardReport(
 
 const AUDIT_CACHE_FILE = "audit-cache.json";
 
+interface AuditCacheEnvelope {
+  packageVersion: string;
+  configVersion: string;
+  cachedAt: string;
+  signature: string;
+  report: DashboardReport;
+}
+
 function readConfigVersion(projectPath: string): string | null {
   try {
     const raw = readFileSync(
@@ -610,6 +635,43 @@ function readConfigVersion(projectPath: string): string | null {
   }
 }
 
+function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
+  if (typeof value !== "object" || value === null) return false;
+  const envelope = value as Record<string, unknown>;
+  return (
+    typeof envelope.packageVersion === "string" &&
+    typeof envelope.configVersion === "string" &&
+    typeof envelope.cachedAt === "string" &&
+    typeof envelope.signature === "string" &&
+    typeof envelope.report === "object" &&
+    envelope.report !== null
+  );
+}
+
+function parseAuditCacheEnvelope(raw: string): AuditCacheEnvelope | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return isAuditCacheEnvelope(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function auditCacheMatches(
+  envelope: AuditCacheEnvelope,
+  projectPath: string,
+  packageVersion: string,
+  signature: string,
+): boolean {
+  const configVersion = readConfigVersion(projectPath);
+  return (
+    envelope.packageVersion === packageVersion &&
+    envelope.signature === signature &&
+    configVersion !== null &&
+    envelope.configVersion === configVersion
+  );
+}
+
 function readAuditCache(
   projectPath: string,
   packageVersion: string,
@@ -620,21 +682,13 @@ function readAuditCache(
       join(projectPath, ".goat-flow", AUDIT_CACHE_FILE),
       "utf-8",
     );
-    const envelope = JSON.parse(raw) as Record<string, unknown>;
-    if (
-      typeof envelope.packageVersion !== "string" ||
-      typeof envelope.configVersion !== "string" ||
-      typeof envelope.cachedAt !== "string" ||
-      typeof envelope.signature !== "string" ||
-      !envelope.report
-    )
+    const envelope = parseAuditCacheEnvelope(raw);
+    if (!envelope) return null;
+    if (!auditCacheMatches(envelope, projectPath, packageVersion, signature)) {
       return null;
-    if (envelope.packageVersion !== packageVersion) return null;
-    if (envelope.signature !== signature) return null;
-    const configVersion = readConfigVersion(projectPath);
-    if (!configVersion || envelope.configVersion !== configVersion) return null;
+    }
     return {
-      report: envelope.report as DashboardReport,
+      report: envelope.report,
       cachedAt: envelope.cachedAt,
     };
   } catch {
@@ -970,14 +1024,14 @@ export function createDashboardRouteHandlers(
       );
 
       if (isCacheEligible(agentFilter, harness)) {
-        profiler.span("cache write", () =>
+        profiler.span("cache write", () => {
           writeAuditCache(
             projectPath,
             packageVersion,
             auditCacheSignature ?? "",
             report,
-          ),
-        );
+          );
+        });
       }
 
       jsonResponse(

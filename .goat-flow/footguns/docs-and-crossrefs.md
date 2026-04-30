@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-04-27
+last_reviewed: 2026-04-30
 ---
 
 ## Footgun: Cross-reference fragility across docs
@@ -66,6 +66,26 @@ last_reviewed: 2026-04-27
 2. Extend path-integrity checks to cover code-map, glossary canonical-file paths, and convention claims
 3. Consider auto-generating audit docs from check code to prevent drift permanently
 4. Change Step 01 early-stop rule (`workflow/setup/01-system-overview.md` (search: `## State check`)) to require content-drift checks, not just structural audit pass
+
+---
+
+## Footgun: Version bump checks do not cover synthetic project config strings
+
+**Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** `bash scripts/bump-version.sh <version>` and `npm run check-versions` both pass, but helper scripts or integration fixtures can still create synthetic `.goat-flow/config.yaml` files with the previous release version.
+
+**Why it happens:** The bump script intentionally updates a curated list of release surfaces, and `check-versions.mjs` verifies skill/template/reference frontmatter. Synthetic project builders that embed a config file as an inline string are outside both surfaces unless they are manually grepped.
+
+**Evidence:** During the v1.3.2 M07 release gate, `npm run check-versions` printed `All template and reference versions match 1.3.2`, but `rg -n "1\\.3\\.1" ... scripts/profile-dashboard-audit.mjs test` still found current-version strings in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.test.ts` (search: `makeDashboardCacheProject`).
+
+**Structural anchors:**
+- `scripts/bump-version.sh` (search: `# ── Source files (version string replacement)`) lists the curated surfaces the bump workflow edits.
+- `scripts/check-versions.mjs` (search: `goat-flow-reference-version`) verifies skill and reference frontmatter, not arbitrary embedded config stubs.
+- `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) creates a synthetic `.goat-flow/config.yaml` for profiler runs.
+- `test/integration/dashboard-server.test.ts` (search: `makeDashboardCacheProject`) creates a dashboard-cache fixture project with an embedded config string.
+
+**Prevention:** After every release bump, run a targeted stale-version grep across scripts and tests, not just `npm run check-versions`: `rg -n "<old-version>" scripts test package.json package-lock.json .goat-flow/config.yaml workflow .agents .goat-flow/skill-reference`.
 
 ---
 

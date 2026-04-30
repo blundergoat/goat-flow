@@ -237,7 +237,7 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
 
   writeFileSync(
     join(root, ".goat-flow", "config.yaml"),
-    `version: "1.3.1"\nagents:\n${agents.map((agent) => `  - ${agent}`).join("\n")}\n`,
+    `version: "1.3.2"\nagents:\n${agents.map((agent) => `  - ${agent}`).join("\n")}\n`,
   );
   writeFileSync(
     join(root, "package.json"),

@@ -356,6 +356,31 @@ describe("goat-flow stats --check", () => {
     assert.ok(finding!.message.includes(".goat-flow/scratchpad/"));
   });
 
+  it("keeps custom decisions README advisory while legacy notes fail validation", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {},
+      decisions: {
+        "README.md":
+          "# Custom Decisions\n\nThis project keeps local ADR guidance.\n",
+        "legacy-note.md": "# Legacy note\n\nTemporary implementation notes.\n",
+      },
+    });
+    const verdict = checkStats(report);
+
+    assert.equal(verdict.status, "fail");
+    assert.equal(verdict.warnings.length, 0);
+    assert.ok(
+      verdict.findings.some(
+        (f) =>
+          f.rule === "decision-filename" &&
+          f.file.endsWith("legacy-note.md") &&
+          f.message.includes(".goat-flow/tasks/"),
+      ),
+      "expected legacy decision note to fail with routing guidance",
+    );
+  });
+
   it("fails when a valid ADR filename is missing required structure", () => {
     const report = loadReport({
       footguns: {},

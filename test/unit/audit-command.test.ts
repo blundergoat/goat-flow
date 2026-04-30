@@ -542,6 +542,30 @@ describe("M03 batch fact reuse", () => {
       assert.equal(entry.audit.target, PROJECT_ROOT);
     }
   });
+
+  it("runs dashboard-summary batch audits without stack detection or stack access", () => {
+    const { profile, names } = createSpanRecorder();
+    const batch = runAuditBatch(
+      createFS(PROJECT_ROOT),
+      PROJECT_ROOT,
+      {
+        agentFilter: null,
+        harness: true,
+        denyMechanismEvidenceLevel: "present-only",
+        factProfile: "dashboard-summary",
+        profile,
+      },
+      ["claude", "codex", "copilot"],
+    );
+
+    assert.equal(countSpan(names, "aggregate facts"), 1);
+    assert.equal(countSpan(names, "detectStack"), 0);
+    assert.equal(batch.aggregate.target, PROJECT_ROOT);
+    assert.deepEqual(
+      batch.perAgent.map((entry) => entry.id),
+      ["claude", "codex", "copilot"],
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

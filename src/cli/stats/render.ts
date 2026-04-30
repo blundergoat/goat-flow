@@ -160,20 +160,32 @@ function markdownSection(name: string, section: BucketSection): string {
 
 /** Render a `--check` verdict as text suitable for CI logs. */
 export function renderStatsCheckText(check: StatsCheckReport): string {
-  const warningSuffix =
-    check.warnings.length > 0
-      ? ` (${check.warnings.length} warning${check.warnings.length === 1 ? "" : "s"})`
-      : "";
-  if (check.status === "pass") {
-    if (check.warnings.length === 0) return "stats --check: PASS\n";
-    return [
-      `stats --check: PASS${warningSuffix}`,
-      ...check.warnings.map((w) => `  - [${w.rule}] ${w.message}`),
-      "",
-    ].join("\n");
-  }
+  if (check.status === "pass") return renderStatsCheckPass(check);
+  return renderStatsCheckFailure(check);
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function warningSuffix(check: StatsCheckReport): string {
+  return check.warnings.length > 0
+    ? ` (${plural(check.warnings.length, "warning")})`
+    : "";
+}
+
+function renderStatsCheckPass(check: StatsCheckReport): string {
+  if (check.warnings.length === 0) return "stats --check: PASS\n";
+  return [
+    `stats --check: PASS${warningSuffix(check)}`,
+    ...check.warnings.map((w) => `  - [${w.rule}] ${w.message}`),
+    "",
+  ].join("\n");
+}
+
+function renderStatsCheckFailure(check: StatsCheckReport): string {
   const lines = [
-    `stats --check: FAIL (${check.findings.length} finding${check.findings.length === 1 ? "" : "s"}${check.warnings.length > 0 ? `, ${check.warnings.length} warning${check.warnings.length === 1 ? "" : "s"}` : ""})`,
+    `stats --check: FAIL (${plural(check.findings.length, "finding")}${check.warnings.length > 0 ? `, ${plural(check.warnings.length, "warning")}` : ""})`,
   ];
   for (const f of check.findings) {
     lines.push(`  - [${f.rule}] ${f.message}`);

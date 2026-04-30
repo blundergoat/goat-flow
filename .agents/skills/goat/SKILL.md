@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.3.1"
+goat-flow-skill-version: "1.3.2"
 ---
 # /goat
 

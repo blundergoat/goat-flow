@@ -208,6 +208,27 @@ async function writeProjectFile(
   await writeFile(fullPath, content);
 }
 
+function runGit(root: string, args: string[]): string {
+  return childProcess.execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf-8",
+  });
+}
+
+function commitDashboardCacheProject(root: string): void {
+  runGit(root, ["init"]);
+  runGit(root, ["add", "."]);
+  runGit(root, [
+    "-c",
+    "user.name=goat-flow-test",
+    "-c",
+    "user.email=goat-flow-test@example.invalid",
+    "commit",
+    "-m",
+    "baseline",
+  ]);
+}
+
 async function makeDashboardCacheProject(): Promise<{
   root: string;
   cleanup: () => Promise<void>;
@@ -215,8 +236,13 @@ async function makeDashboardCacheProject(): Promise<{
   const root = await mkdtemp(join(tmpdir(), "goat-flow-cache-tests-"));
   await writeProjectFile(
     root,
+    ".goat-flow/.gitignore",
+    "*\n!.gitignore\n!config.yaml\n!footguns/\n!footguns/**\n!lessons/\n!lessons/**\n",
+  );
+  await writeProjectFile(
+    root,
     ".goat-flow/config.yaml",
-    'version: "1.3.1"\nagents:\n  - codex\n',
+    'version: "1.3.2"\nagents:\n  - codex\n',
   );
   await writeProjectFile(root, ".goat-flow/footguns/README.md", "# Footguns\n");
   await writeProjectFile(root, ".goat-flow/lessons/README.md", "# Lessons\n");
@@ -760,6 +786,40 @@ describe("dashboard /api/audit", () => {
 
     const error = expectRecord(body, "Audit error");
     assert.equal(typeof error.error, "string");
+  });
+
+  it("keeps the dashboard audit cache as a gitignored local artifact", async () => {
+    const project = await makeDashboardCacheProject();
+    const originalPackagedMode = process.env.GOAT_FLOW_PACKAGED_MODE;
+    const originalProfileEnv = process.env.GOAT_FLOW_AUDIT_PROFILE;
+    process.env.GOAT_FLOW_PACKAGED_MODE = "1";
+    process.env.GOAT_FLOW_AUDIT_PROFILE = "1";
+    try {
+      commitDashboardCacheProject(project.root);
+
+      const fresh = await fetchProfiledAudit(project.root, "&fresh=true");
+      assert.equal(fresh.body.cached, false);
+      assert.equal((await fetchProfiledAudit(project.root)).body.cached, true);
+
+      const status = runGit(project.root, [
+        "status",
+        "--short",
+        "--untracked-files=all",
+      ]);
+      assert.equal(status, "");
+    } finally {
+      if (originalPackagedMode === undefined) {
+        delete process.env.GOAT_FLOW_PACKAGED_MODE;
+      } else {
+        process.env.GOAT_FLOW_PACKAGED_MODE = originalPackagedMode;
+      }
+      if (originalProfileEnv === undefined) {
+        delete process.env.GOAT_FLOW_AUDIT_PROFILE;
+      } else {
+        process.env.GOAT_FLOW_AUDIT_PROFILE = originalProfileEnv;
+      }
+      await project.cleanup();
+    }
   });
 });
 

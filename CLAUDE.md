@@ -1,4 +1,4 @@
-# CLAUDE.md - v1.3.1 (2026-04-25)
+# CLAUDE.md - v1.3.2 (2026-04-25)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 ## Essential Commands
 

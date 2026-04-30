@@ -243,43 +243,62 @@ function collectDecisionWarnings(files: DecisionFileSummary[]): StatsWarning[] {
   return warnings;
 }
 
+function decisionFilenameFinding(file: DecisionFileSummary): StatsFinding {
+  return {
+    file: file.path,
+    rule: "decision-filename",
+    message: `${file.path}: decision records must be named ADR-NNN-kebab-case-title.md. ${ROUTING_HINT}`,
+  };
+}
+
+function hasDecisionTradeoffSection(content: string): boolean {
+  return (
+    hasHeading(content, "Consequences") ||
+    hasHeading(content, "Failure Mode Comparison") ||
+    hasHeading(content, "Reversibility")
+  );
+}
+
+function missingDecisionStructure(content: string): string[] {
+  const missing: string[] = [];
+  if (!/^\*\*Status:\*\*/m.test(content)) missing.push("**Status:**");
+  if (!/^\*\*Date:\*\*/m.test(content)) missing.push("**Date:**");
+  if (!hasHeading(content, "Context")) missing.push("## Context");
+  if (!hasHeading(content, "Decision")) missing.push("## Decision");
+  if (!hasDecisionTradeoffSection(content)) {
+    missing.push(
+      "## Consequences or ## Failure Mode Comparison or ## Reversibility",
+    );
+  }
+  return missing;
+}
+
+function decisionStructureFinding(
+  file: DecisionFileSummary,
+  missing: string[],
+): StatsFinding {
+  return {
+    file: file.path,
+    rule: "decision-structure",
+    message: `${file.path}: malformed ADR is missing ${missing.join(", ")}. ${ROUTING_HINT}`,
+  };
+}
+
+function collectDecisionFileFinding(
+  file: DecisionFileSummary,
+): StatsFinding | null {
+  if (file.filename === "README.md") return null;
+  if (!ADR_FILENAME.test(file.filename)) return decisionFilenameFinding(file);
+
+  const missing = missingDecisionStructure(file.content ?? "");
+  return missing.length > 0 ? decisionStructureFinding(file, missing) : null;
+}
+
 function collectDecisionFindings(section: DecisionsSection): StatsFinding[] {
   if (!section.exists) return [];
-  const findings: StatsFinding[] = [];
-  for (const file of section.files) {
-    if (file.filename === "README.md") continue;
-    if (!ADR_FILENAME.test(file.filename)) {
-      findings.push({
-        file: file.path,
-        rule: "decision-filename",
-        message: `${file.path}: decision records must be named ADR-NNN-kebab-case-title.md. ${ROUTING_HINT}`,
-      });
-      continue;
-    }
-    const content = file.content ?? "";
-    const missing: string[] = [];
-    if (!/^\*\*Status:\*\*/m.test(content)) missing.push("**Status:**");
-    if (!/^\*\*Date:\*\*/m.test(content)) missing.push("**Date:**");
-    if (!hasHeading(content, "Context")) missing.push("## Context");
-    if (!hasHeading(content, "Decision")) missing.push("## Decision");
-    if (
-      !hasHeading(content, "Consequences") &&
-      !hasHeading(content, "Failure Mode Comparison") &&
-      !hasHeading(content, "Reversibility")
-    ) {
-      missing.push(
-        "## Consequences or ## Failure Mode Comparison or ## Reversibility",
-      );
-    }
-    if (missing.length > 0) {
-      findings.push({
-        file: file.path,
-        rule: "decision-structure",
-        message: `${file.path}: malformed ADR is missing ${missing.join(", ")}. ${ROUTING_HINT}`,
-      });
-    }
-  }
-  return findings;
+  return section.files.flatMap(
+    (file) => collectDecisionFileFinding(file) ?? [],
+  );
 }
 
 /** Run the `--check` verdict against an already-built stats report. */

@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "CLI auditor, dashboard, and setup generator for GOAT Flow AI coding agent workflows",
   "author": {
     "name": "Matthew Hansen",
@@ -26,6 +26,7 @@
     "dist",
     "!dist/**/*.map",
     "docs/skills",
+    "scripts/profile-dashboard-audit.mjs",
     "scripts/warn-node-pty.mjs",
     "workflow"
   ],
@@ -54,6 +55,7 @@
     "audit:json": "node dist/cli/cli.js audit . --format json",
     "dev": "tsc && npm run build:dashboard && node dist/cli/cli.js dashboard . --dev",
     "dashboard": "npm run build && node dist/cli/cli.js dashboard .",
+    "profile:dashboard-audit": "node scripts/profile-dashboard-audit.mjs",
     "preflight": "bash scripts/preflight-checks.sh",
     "check-versions": "node scripts/check-versions.mjs",
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\"",
