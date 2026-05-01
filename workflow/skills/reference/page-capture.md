@@ -114,7 +114,7 @@ After all pages processed, write `<output_dir>/index.md`:
 
 | # | Page | Status | Record |
 |---|------|--------|--------|
-| 1 | <title> | ok / failed | [<slug>.md](./<slug>.md) |
+| 1 | <title> | ok / failed | `./<slug>.md` |
 
 ## Failures
 
@@ -157,7 +157,7 @@ One MD file per page:
 **Load verification:** text / selector / network-idle / time (INFERRED)
 **Console errors:** <count>
 
-![<page title>](./screenshots/<slug>.png)
+`./screenshots/<slug>.png`
 
 ## Notes
 
