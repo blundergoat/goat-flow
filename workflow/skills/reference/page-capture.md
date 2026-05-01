@@ -26,7 +26,20 @@ Batch page capture requires Playwright. Playwright is a browser automation libra
 
 Check if these tools are callable: `browser_navigate`, `browser_screenshot`, `browser_snapshot`, `browser_evaluate`, `browser_resize`, `browser_wait_for`, `browser_console_messages`, `browser_network_requests`. If available, use them directly - the per-page loop in Step 2 maps to these tool calls.
 
-**Tier 2 - Python Playwright** (good: works for any coding agent that can run shell commands)
+**Tier 2 - Project-local Playwright** (good: carries project config, fixtures, and browser version expectations)
+
+Check if the project has Playwright installed as a dependency:
+
+```bash
+node -e "require.resolve('@playwright/test')" 2>/dev/null && echo "ok"
+# or:
+npm ls @playwright/test playwright --depth=0
+npx playwright --version
+```
+
+For JS/TS projects, prefer this tier over the Python wrapper - project-local Playwright may carry storage-state conventions, browser version pins, or test fixtures that the generic Python path won't have. The agent writes a Node.js capture script and executes it.
+
+**Tier 3 - Python Playwright** (good: works for any coding agent that can run shell commands)
 
 ```bash
 browser-use-python -c "from playwright.sync_api import sync_playwright; print('ok')"
@@ -38,22 +51,15 @@ python -m playwright --version
 
 The agent writes a Python capture script using `playwright.sync_api`, executes it, and reads the output. See "Writing a capture script" below.
 
-**Tier 3 - Node Playwright** (good: if the project already has it as a dependency)
-
-```bash
-npx playwright --version
-# or check package.json for @playwright/test or playwright
-```
-
-The agent writes a Node.js capture script instead of Python. Same evidence requirements.
-
-**Tier 4 - browser-use CLI** (acceptable: less control, missing console/network capture)
+**Tier 4 - browser-use CLI** (downgrade: less control, missing console/network capture)
 
 ```bash
 command -v browser-use && browser-use doctor
 ```
 
-Use `browser-use open`, `browser-use screenshot`, `browser-use state`. This path cannot capture console errors or wait for specific selectors - mark captures with `Console errors: not captured (browser-use CLI)` and note reduced evidence quality in the index.
+Only use browser-use for batch capture if no Playwright path (MCP, Node, or Python) is available AND the user explicitly accepts the downgrade. Ask: "No Playwright path found. Use browser-use CLI instead? Console error capture will be unavailable." Do not silently fall back.
+
+Use `browser-use open`, `browser-use screenshot`, `browser-use state`. This path cannot capture console errors - mark captures with `Console errors: not captured (browser-use CLI)` and note reduced evidence quality in the index.
 
 **Tier 5 - Manual fallback** (last resort: human provides evidence)
 
