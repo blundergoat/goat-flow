@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.3.2"
+goat-flow-reference-version: "1.3.3"
 ---
 # goat-security reference: CI/CD and agent surfaces
 
