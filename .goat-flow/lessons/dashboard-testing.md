@@ -1,6 +1,18 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-04-29
+last_reviewed: 2026-05-01
+---
+
+## Lesson: Dashboard readers must preserve fields used by score logic
+
+**Status:** active | **Created:** 2026-05-01
+
+**What happened:** The Home, Quality, and Setup pages showed every harness concern at 100 and "All checks passing", but still showed each agent at 94%. The API payload correctly marked `test-runner-configured` as a failing `metric` check, which should not lower dashboard percentages.
+
+**Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. The view code filtered `check.type !== 'metric'`, but missing `type` made every metric look scoreable.
+
+**Prevention:** When dashboard views derive percentages from API fields, add a browser-reader regression that proves the reader preserves those fields. Browser evidence must check both summary cards and concern rows because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `value.type === "metric"`), `test/unit/dashboard-readers.test.ts` (search: `metric failures do not lower UI scores`).
+
 ---
 
 ## Lesson: VM helper tests need same-realm assertions

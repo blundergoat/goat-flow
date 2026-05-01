@@ -1,6 +1,6 @@
 ---
 category: dashboard
-last_reviewed: 2026-04-29
+last_reviewed: 2026-05-01
 ---
 
 ## Footgun: Project-browser modal is reachable only via header-span click, not from the add-project flow
@@ -64,6 +64,27 @@ last_reviewed: 2026-04-29
 1. Keep Windows shell selection and Windows runner-path selection in the same change set; touching only one is a partial fix.
 2. When editing dashboard terminal launch behavior, verify both `buildTerminalSpawnSpec` and `pickWindowsRunnerPath`, then run a native Windows `TerminalManager.create("", ".", "<runner>")` repro.
 3. Preserve host-independent tests that exercise both `win32` and POSIX spawn specs, even when working from a non-Windows machine.
+
+---
+
+## Footgun: Dashboard reader decoders can erase score-critical API fields
+
+**Status:** active | **Created:** 2026-05-01 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** The dashboard can show every harness concern at 100 and "All checks passing", while the same agent card still shows a lower percentage such as 94%. The API payload is correct, but the browser-side decoded object has lost the field needed by the view's scoring expression.
+
+**Evidence:**
+- `src/dashboard/dashboard-readers.ts` (search: `function readAuditCheck`) decodes `/api/audit` checks before the views score them.
+- `src/dashboard/views/home.html` (search: `check.type !== 'metric'`) excludes metric checks from Home percentages; Setup and Quality use the same `c.type !== 'metric'` pattern.
+- `src/cli/server/types.ts` (search: `type?: HarnessCheckType`) now records the wire contract so `type` is preserved across the server/dashboard boundary.
+- `test/unit/dashboard-readers.test.ts` (search: `metric failures do not lower UI scores`) pins the 94% regression: a failing `metric` check must remain visible as a metric but not lower the rendered score.
+
+**Why it happens:** Dashboard views run from classic browser scripts and score the already-decoded browser model, not the raw API JSON. Backend scoring and API typing can be correct while a browser reader silently drops a discriminant such as `type`, collapsing `metric` into "ordinary non-passing check" from the view's perspective.
+
+**Prevention:**
+1. When a dashboard view branches or scores on an API field, verify the matching `readDashboardReport` / helper decoder preserves that field.
+2. Pair backend scoring changes with a browser-reader regression, especially for discriminants such as `type`, `status`, `concern`, and `id`.
+3. Browser-verify the built `dist/` dashboard and compare it with `/api/audit` output; source-only tests can miss packaged reader drift.
 
 ---
 

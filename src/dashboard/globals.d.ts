@@ -4,6 +4,7 @@
  */
 
 type AuditStatus = "pass" | "fail";
+type AuditCheckType = "integrity" | "advisory" | "metric";
 /** Dashboard-local runner union. Keep this aligned with `src/cli/types.ts`.
  *  Importing CLI types here causes the dashboard build to emit `src/cli/types.js`
  *  back into the source tree, which then poisons lint/format/drift gates. */
@@ -44,6 +45,7 @@ interface AuditCheck {
   name: string;
   status: AuditStatus;
   provenance: AuditCheckProvenance;
+  type?: AuditCheckType;
   failure?: AuditFailure;
 }
 

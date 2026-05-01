@@ -155,6 +155,13 @@ function readAuditCheck(value: unknown): AuditCheck | null {
         : {}),
     },
   };
+  if (
+    value.type === "integrity" ||
+    value.type === "advisory" ||
+    value.type === "metric"
+  ) {
+    check.type = value.type;
+  }
   const failure = readAuditFailure(value.failure);
   if (failure) check.failure = failure;
   return check;

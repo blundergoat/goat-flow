@@ -3,6 +3,7 @@
  * Both the HTTP/WebSocket server and the frontend rely on these discriminated unions staying in sync.
  */
 import type { CheckEvidence } from "../audit/provenance-types.js";
+import type { HarnessCheckType } from "../audit/types.js";
 import type { AgentId } from "../types.js";
 /** Messages sent from the browser terminal to the WebSocket server. */
 export type ClientMessage =
@@ -60,6 +61,7 @@ export interface DashboardReport {
         id: string;
         name: string;
         status: string;
+        type?: HarnessCheckType;
         provenance: CheckEvidence;
         failure?: {
           check: string;
@@ -82,6 +84,7 @@ export interface DashboardReport {
         id: string;
         name: string;
         status: string;
+        type?: HarnessCheckType;
         provenance: CheckEvidence;
         failure?: {
           check: string;
