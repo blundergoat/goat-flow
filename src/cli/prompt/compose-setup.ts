@@ -91,9 +91,9 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
     lines.push("");
   }
 
-  lines.push("**Next step (recommended):**");
+  lines.push("**Run now:**");
   lines.push(
-    `- Run \`goat-flow audit ${targetArg(facts.root)} --harness\` for AI harness completeness checks across 5 concerns (context, constraints, verification, recovery, feedback loop). Pass/fail integrity gate - CI-safe.`,
+    `Run \`goat-flow audit ${targetArg(facts.root)} --harness\` and report the per-concern scores. This is the harness verification gate — do not skip it.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");

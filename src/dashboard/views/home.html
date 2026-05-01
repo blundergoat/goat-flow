@@ -2,14 +2,13 @@
   <div
     class="home-page"
     x-data="{
-    concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop', 'workspace_boundary'],
+    concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
     concernLabels: {
       context: 'Context',
       constraints: 'Constraints',
       verification: 'Verification',
       recovery: 'Recovery',
-      feedback_loop: 'Feedback',
-      workspace_boundary: 'Boundary'
+      feedback_loop: 'Feedback'
     },
     setupScope() { return report?.scopes?.setup || { status: 'fail', checks: [] }; },
     setupChecks() { return this.setupScope().checks || []; },
@@ -70,8 +69,10 @@
       if (agent?.preview) return null;
       const harnessChecks = agent?.harness?.checks || [];
       if (harnessChecks.length > 0) {
-        const passed = harnessChecks.filter((check) => check.status === 'pass').length;
-        return Math.round((passed / harnessChecks.length) * 100);
+        const scored = harnessChecks.filter((check) => check.type !== 'metric');
+        if (scored.length === 0) return 100;
+        const passed = scored.filter((check) => check.status === 'pass').length;
+        return Math.round((passed / scored.length) * 100);
       }
       const agentChecks = agent?.agent?.checks || [];
       if (agentChecks.length > 0) {

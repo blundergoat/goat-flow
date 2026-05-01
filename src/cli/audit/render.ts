@@ -52,7 +52,6 @@ const CONCERN_LABELS: Record<AuditConcernKey, string> = {
   verification: "Verification",
   recovery: "Recovery",
   feedback_loop: "Feedback Loop",
-  workspace_boundary: "Workspace Boundary",
 };
 
 /** Render the full audit report in the terminal text format. */

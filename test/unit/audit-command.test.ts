@@ -863,7 +863,6 @@ describe("audit --harness", () => {
       "verification",
       "recovery",
       "feedback_loop",
-      "workspace_boundary",
     ] as const) {
       assert.ok(
         report.concerns![key] !== undefined,
@@ -951,7 +950,6 @@ describe("audit JSON contract", () => {
       "verification",
       "recovery",
       "feedback_loop",
-      "workspace_boundary",
     ] as const) {
       const c = report.concerns![key];
       assert.ok(
@@ -1266,13 +1264,13 @@ describe("M01 harness check type tagging", () => {
     }
   });
 
-  it("matches the locked distribution (9 integrity, 6 advisory, 3 metric)", () => {
+  it("matches the locked distribution (9 integrity, 6 advisory, 2 metric)", () => {
     const byType = { integrity: 0, advisory: 0, metric: 0 } as Record<
       string,
       number
     >;
     for (const check of HARNESS_CHECKS) byType[check.type]!++;
-    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 3 });
+    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 2 });
   });
 
   it("known-integrity ids are tagged integrity", () => {

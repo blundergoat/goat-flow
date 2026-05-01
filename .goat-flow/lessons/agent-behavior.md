@@ -3,6 +3,20 @@ category: agent-behavior
 last_reviewed: 2026-05-01
 ---
 
+## Lesson: Agent ignored explicit "next step" command in pasted output
+
+**Created:** 2026-05-01
+
+**What happened:** User pasted goat-flow setup output that included a clearly labeled "Next step (recommended): Run `goat-flow audit . --harness`" section. The agent read the output, confirmed the dashboard was fixed, and reported success — without running the recommended command. The user had to explicitly ask "did you run this?" before the agent executed it. The command would have been the first end-to-end verification that the harness concern removal actually worked in practice.
+
+**Root cause:** The agent treated the pasted output as informational context rather than an implicit instruction. It confirmed the text looked correct ("5 concerns, no Boundary") but never executed the verification step that the output itself prescribed. This is a verification gap: claiming success based on reading text rather than running the command that proves it.
+
+**Why it matters:** "Next step (recommended)" in CLI output exists precisely because the preceding command cannot fully verify the system on its own. Skipping it means the agent declared victory on a structural change (removing a harness concern) without the end-to-end proof that the change worked. The user caught it; in a less attentive session the gap would have shipped silently.
+
+**Prevention:** When pasted output contains a "next step", "recommended", or "run this" command, treat it as an implicit instruction and execute it immediately. This is especially critical after structural changes where the command is the verification gate. Reading output is not running it.
+
+---
+
 ## Lesson: Commit subjects paraphrased the diff with weak verbs
 
 **Created:** 2026-04-29

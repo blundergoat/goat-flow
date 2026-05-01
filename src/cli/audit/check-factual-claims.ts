@@ -22,7 +22,6 @@ import { CONSTRAINTS_CHECKS } from "./harness/check-constraints.js";
 import { VERIFICATION_CHECKS } from "./harness/check-verification.js";
 import { RECOVERY_CHECKS } from "./harness/check-recovery.js";
 import { FEEDBACK_LOOP_CHECKS } from "./harness/check-feedback-loop.js";
-import { WORKSPACE_BOUNDARY_CHECKS } from "./harness/check-workspace-boundary.js";
 import { loadManifest } from "../manifest/manifest.js";
 
 export const FACTUAL_CLAIMS_EVIDENCE: CheckEvidence = {
@@ -110,7 +109,6 @@ const CONCERN_SIZES: Record<string, number> = {
   verification: VERIFICATION_CHECKS.length,
   recovery: RECOVERY_CHECKS.length,
   feedback_loop: FEEDBACK_LOOP_CHECKS.length,
-  workspace_boundary: WORKSPACE_BOUNDARY_CHECKS.length,
 };
 
 /** Normalise a doc-style concern label ("Feedback Loop", "Feedback-Loop",
@@ -127,7 +125,7 @@ function concernActualFor(raw: string): number | undefined {
 /** Alternation fragment shared by concern patterns. Kept in sync with the five
  *  concern arrays imported above. */
 const CONCERN_ALTERNATION =
-  "Context|Constraints|Verification|Recovery|Feedback[\\s-]?Loop|Workspace[\\s-]?Boundary";
+  "Context|Constraints|Verification|Recovery|Feedback[\\s-]?Loop";
 
 /** Per-concern drift patterns. All three patterns catch drift in current or
  *  M18-2-updated doc prose; the sample-output one scans fenced blocks because

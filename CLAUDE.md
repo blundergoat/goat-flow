@@ -1,5 +1,7 @@
 # CLAUDE.md - v1.3.2 (2026-04-25)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
+
+This repo is the goat-flow controlling workspace. When the dashboard or CLI operates on a selected target project, commands like `audit` and `quality` run against that target - not this repo. Keep the two contexts separate: framework code lives here, project-specific harness content lives in the target.
 ## Essential Commands
 
 ```bash

@@ -73,7 +73,6 @@ function renderAuditSummary(report: AuditReport): string {
       "verification",
       "recovery",
       "feedback_loop",
-      "workspace_boundary",
     ];
     lines.push("");
     lines.push(
@@ -177,7 +176,7 @@ function focusedQualityModePrompt(
     "",
     "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-reference/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
     "",
-    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop, Workspace Boundary), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
+    "Output sections: Harness Scorecard; Findings ordered by severity; Concern-by-concern analysis; False positive and false negative risks; Top 5 improvements; What was not verified. For each deterministic harness concern (Context, Constraints, Verification, Recovery, Feedback Loop), state what works, what fails or is weak, exact file or semantic-anchor evidence, and a verification command that would prove the fix.",
     "",
     "Do not treat a structural PASS as quality PASS. If a score or check claims completeness, verify what behavior it actually proves.",
   ].join("\n");

@@ -345,7 +345,6 @@ export function computeHarness(ctx: AuditContext): {
     verification: emptyConcern(),
     recovery: emptyConcern(),
     feedback_loop: emptyConcern(),
-    workspace_boundary: emptyConcern(),
   };
   const counts: Record<AuditConcernKey, { total: number; passing: number }> = {
     context: { total: 0, passing: 0 },
@@ -353,7 +352,6 @@ export function computeHarness(ctx: AuditContext): {
     verification: { total: 0, passing: 0 },
     recovery: { total: 0, passing: 0 },
     feedback_loop: { total: 0, passing: 0 },
-    workspace_boundary: { total: 0, passing: 0 },
   };
 
   for (const check of HARNESS_CHECKS) {

@@ -11,10 +11,9 @@
 Quality is not automated checks. It generates a prompt that asks an agent to assess whether the harness is actually usable, not just structurally present. The evaluation covers:
 
 1. **Ground yourself** - run the project's validation commands (`audit --harness`, `stats --check`), save the output
-2. **Concern-by-concern analysis** - for each of the 6 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop, Workspace Boundary), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
+2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
 3. **False positive and false negative risks** - identify where a structural PASS hides a real gap, and where a FAIL is misleading
-4. **Workspace Boundary** - evaluate whether instructions distinguish the controlling goat-flow workspace from the selected target (qualitative, not a scored concern)
-5. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
+4. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
@@ -36,7 +35,7 @@ Saved reports live locally under `.goat-flow/logs/quality/` as validated `.json`
 
 ## What the quality assessment evaluates beyond audit
 
-The audit checks whether files exist, paths resolve, and patterns are registered. The quality assessment goes deeper into the same 6 concerns by assessing content quality - things that require reading comprehension, not just file checks.
+The audit checks whether files exist, paths resolve, and patterns are registered. The quality assessment goes deeper into the same 5 concerns by assessing content quality - things that require reading comprehension, not just file checks.
 
 ### 1. Context
 
@@ -87,15 +86,6 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 - Are entries recent? A project with no entries in the last 90 days has a feedback loop problem.
 - Are active/resolved statuses accurate? An "active" footgun describing fixed behavior is stale.
 - Do semantic-anchor references in entries still resolve in the current code?
-
-### 6. Workspace Boundary
-
-**Audit checks:** instruction file contains workspace boundary guidance, dashboard terminal separates workspace and target paths (informational).
-
-**Quality evaluates:**
-- Does the instruction file distinguish the controlling goat-flow workspace from the selected target project?
-- When launched from the dashboard, does `audit .` point at the correct project?
-- Are terminal sessions scoped to the target project, not the controlling workspace?
 
 ---
 

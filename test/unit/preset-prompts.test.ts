@@ -531,10 +531,6 @@ describe("preset prompt catalog", () => {
     assert.match(source, /"quality_mode"/);
     assert.match(source, /__GOAT_FLOW_VERSION__/);
     assert.doesNotMatch(source, /"goat_flow_version": "1\.3\.0"/);
-    assert.match(
-      source,
-      /Workspace Boundary as a qualitative cross-cutting risk/,
-    );
     assert.match(source, /mode=\$\{encodeURIComponent\(requestModeId\)\}/);
     assert.match(source, /isCurrentRequest/);
     assert.match(source, /Report owner project_path for this mode/);

@@ -58,17 +58,16 @@ Checks are grouped by **scope**:
 
 ### Harness mode (`--harness`)
 
-Adds 16 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - never affects status).
+Adds 17 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - never affects status).
 
-Harness checks are grouped by **concern** -- the six things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
+Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
-**harness scope** (AI Harness Completeness) - 18 checks across 6 concerns:
-- **Context** (4) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present (advisory)
+**harness scope** (AI Harness Completeness) - 17 checks across 5 concerns:
+- **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance (advisory)
 - **Constraints** (4) - deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings
 - **Verification** (4) - test runner configured, hooks in sync, commit guidance, post-turn hook integrity
 - **Recovery** (2) - milestone tracking, session logs
 - **Feedback Loop** (2) - feedback loop directories exist, decisions tracked
-- **Workspace Boundary** (2) - boundary guidance present, boundary path separation
 
 Sample harness output:
 
@@ -83,7 +82,7 @@ Agent Setup:              PASS
   Hooks:                  claude:deny installed, codex:deny installed, gemini:deny installed, copilot:deny installed
 
 AI Harness Completeness:  PASS
-  Context:                PASS (4/4)
+  Context:                PASS (5/5)
   Constraints:            FAIL (3/4) - pipe-to-shell not blocked for codex
   Verification:           PASS (4/4)
   Recovery:               PASS (2/2)

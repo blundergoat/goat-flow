@@ -49,12 +49,12 @@
           >
             <span
               style="color: var(--accent); font-size: 18px; font-weight: 600"
-              x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return '-'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'F'; })()"
+              x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return '-'; const scored = s.harness.checks.filter(c => c.type !== 'metric'); const pct = scored.length ? Math.round((scored.filter(c => c.status === 'pass').length / scored.length) * 100) : 0; return pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'F'; })()"
             ></span>
             <span
               class="gf-text-muted"
               style="font-size: 13px"
-              x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const t = s.harness.checks.length; const pct = t ? Math.round((s.harness.checks.filter(c => c.status === 'pass').length / t) * 100) : 0; return pct + '%'; })()"
+              x-text="(() => { const s = report?.agentScores?.find(a => a.id === agent.id); if (!s?.harness) return 'Not audited'; const scored = s.harness.checks.filter(c => c.type !== 'metric'); const pct = scored.length ? Math.round((scored.filter(c => c.status === 'pass').length / scored.length) * 100) : 0; return pct + '%'; })()"
             ></span>
           </div>
         </button>
@@ -111,12 +111,11 @@
               constraints:   { label: 'Constraints' },
               verification:  { label: 'Verification' },
               recovery:      { label: 'Recovery' },
-              feedback_loop: { label: 'Feedback Loop' },
-              workspace_boundary: { label: 'Workspace Boundary' }
+              feedback_loop: { label: 'Feedback Loop' }
             },
-            concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop', 'workspace_boundary'],
+            concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
             scoreColor(score) { return score >= 80 ? 'var(--green-400)' : score >= 70 ? '#facc15' : score >= 60 ? '#fb923c' : '#f87171' },
-            agentScore(agent) { if (!agent?.harness) return null; const t = agent.harness.checks.length; return t ? Math.round(agent.harness.checks.filter(c => c.status === 'pass').length / t * 100) : null; },
+            agentScore(agent) { if (!agent?.harness) return null; const scored = agent.harness.checks.filter(c => c.type !== 'metric'); return scored.length ? Math.round(scored.filter(c => c.status === 'pass').length / scored.length * 100) : null; },
             toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
             get selectedAgent() {
               return report?.agentScores?.find(a => a.id === qualityAgent) || null;

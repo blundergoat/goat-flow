@@ -1,8 +1,8 @@
-# AI Harness Engineering - The Six Harness Concerns
+# AI Harness Engineering - The Five Harness Concerns
 
-Harness engineering is the practice of shaping what an AI coding agent sees, what it may do, how its work is checked, how state survives failure, how recurring mistakes become structural fixes, and how workspace boundaries are enforced. The model is not the product. The harness around it is.
+Harness engineering is the practice of shaping what an AI coding agent sees, what it may do, how its work is checked, how state survives failure, and how recurring mistakes become structural fixes. The model is not the product. The harness around it is.
 
-goat-flow organises its audit surface around six concerns. Every harness check belongs to exactly one. Each concern has a conceptual definition, a set of failure modes, and a concrete goat-flow approach. This doc defines the concepts; the check inventory with per-concern IDs and semantics lives in [harness-audit.md](harness-audit.md).
+goat-flow organises its audit surface around five concerns. Every harness check belongs to exactly one. Each concern has a conceptual definition, a set of failure modes, and a concrete goat-flow approach. This doc defines the concepts; the check inventory with per-concern IDs and semantics lives in [harness-audit.md](harness-audit.md).
 
 | Concern | One-line definition | Primary failure mode |
 |:--------|:--------------------|:---------------------|
@@ -11,7 +11,6 @@ goat-flow organises its audit surface around six concerns. Every harness check b
 | Verification | How work is checked after the agent acts | Silent regressions, unverified claims |
 | Recovery | How state survives failure | Lost plot after compaction, crash, or resume |
 | Feedback | How recurring mistakes become permanent fixes | Same bug, different day |
-| Workspace Boundary | How controlling and target workspaces are kept separate | Audit/commands run against wrong project |
 
 ---
 
@@ -92,19 +91,11 @@ The failure mode is logging mistakes in a lessons file and then forgetting they 
 
 ---
 
-## 6. Workspace Boundary
-
-When goat-flow manages one project from a controlling workspace (the goat-flow installation) and operates on a different target project, the agent must know which directory is which. Workspace boundary failures are silent and high-impact: `audit .` runs against the wrong repo, test commands execute in the wrong tree, and findings reference files the target doesn't have.
-
-**What it protects against:** running validation commands against the controlling workspace instead of the selected target; writing files into the wrong project; confusing framework-internal paths with target-project paths.
-
-**goat-flow approach:** instruction files should contain explicit workspace boundary guidance. The dashboard terminal model separates `cwd` (controlling workspace) from `targetPath` (selected project). Quality prompt launch context includes target-scoping text.
-
 ---
 
 ## Further reading
 
-The harness engineering field is emerging. These are the primary sources behind the 6-concern model:
+The harness engineering field is emerging. These are the primary sources behind the 5-concern model:
 
 - Mitchell Hashimoto, "My AI Adoption Journey" (Feb 2026) - coined "harness engineering," established the core principle
 - OpenAI, "Harness engineering: leveraging Codex in an agent-first world" (Feb 2026) - most detailed case study of building a fully agent-generated product
