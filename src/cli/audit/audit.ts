@@ -159,13 +159,13 @@ function buildProjectStructure(): ProjectStructure {
   };
 }
 
-/** Build an audit scope from its checks, excluding acknowledged advisory failures. */
+/** Build an audit scope from its checks, excluding acknowledged advisory and metric failures. */
 function buildScope(
   checks: CheckResult[],
   summary: Record<string, string>,
 ): AuditScope {
   const failures = checks.flatMap((c) =>
-    c.failure && !c.acknowledged ? [c.failure] : [],
+    c.failure && !c.acknowledged && c.type !== "metric" ? [c.failure] : [],
   );
   return {
     status: failures.length === 0 ? "pass" : "fail",

@@ -506,6 +506,10 @@ function buildAuditCacheSignature(
 ): string {
   const contentFiles = [
     ".goat-flow/config.yaml",
+    ".goat-flow/architecture.md",
+    ".goat-flow/code-map.md",
+    ".goat-flow/glossary.md",
+    ".goat-flow/patterns.md",
     "CLAUDE.md",
     "AGENTS.md",
     "GEMINI.md",
@@ -525,6 +529,7 @@ function buildAuditCacheSignature(
     ".agents/skills",
     ".gemini/skills",
     ".github/skills",
+    ".goat-flow/decisions",
     ".goat-flow/footguns",
     ".goat-flow/lessons",
     ".goat-flow/skill-reference",
