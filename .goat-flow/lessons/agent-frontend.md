@@ -1,6 +1,20 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-04-29
+last_reviewed: 2026-05-01
+---
+
+## Lesson: Dashboard audit cache survives code changes because signature doesn't cover compiled JS
+
+**Created:** 2026-05-01
+
+**What happened:** After fixing `buildScope` in `src/cli/audit/audit.ts` to exclude metric failures from harness scope status, rebuilding (`npm run build`), and reloading the dashboard, the dashboard still showed 94% and stale FAIL results. The audit cache at `.goat-flow/audit-cache.json` was keyed on config, instruction files, and learning-loop directories - not on the compiled audit code itself. The `Re-audit` button hit the cache and returned the pre-fix result.
+
+**Root cause:** `buildAuditCacheSignature` in `src/cli/server/dashboard-routes.ts` (search: `buildAuditCacheSignature`) hashes project content files but not the package version or compiled code. In packaged installs, the package version changes on upgrade and invalidates the cache. In dev mode (running from source via `tsx`), the package version stays the same across code changes, so the cache signature doesn't change when audit logic changes.
+
+**Why it matters:** During development, every audit logic change (new checks, scoring fixes, concern removal) produces stale dashboard results until the cache file is manually deleted. The developer sees the old result and concludes the fix didn't work.
+
+**Prevention:** After changing audit logic during development, delete `.goat-flow/audit-cache.json` before re-testing via the dashboard. For packaged installs this is a non-issue because the package version bumps between releases.
+
 ---
 
 ## Lesson: When a mockup exists, match it element-for-element
