@@ -1,6 +1,6 @@
 ---
 category: auditor-and-rubric
-last_reviewed: 2026-04-30
+last_reviewed: 2026-05-01
 ---
 
 ## Lesson: Rubric changes require fixture expectation sync

@@ -1,9 +1,8 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
- * 5 deterministic checks (instruction size, execution loop, doc paths,
- * instruction sections, workspace boundary guidance). Content-quality
- * judgments (e.g. footgun evidence currency) live in the `quality`
- * assessment prompt, not here.
+ * 4 deterministic checks (instruction size, execution loop, doc paths,
+ * instruction sections). Content-quality judgments (e.g. footgun evidence
+ * currency) live in the `quality` assessment prompt, not here.
  */
 import type { AuditContext, HarnessCheck } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
@@ -307,79 +306,9 @@ const instructionSectionsPresent: HarnessCheck = {
   },
 };
 
-const BOUNDARY_PATTERNS = [
-  /\bcontrolling workspace\b/iu,
-  /\bselected target\b/iu,
-  /\btarget project\b/iu,
-  /\bworkspace boundary\b/iu,
-  /\btarget workspace\b/iu,
-];
-
-function hasBoundaryGuidance(content: string): boolean {
-  return BOUNDARY_PATTERNS.some((pattern) => pattern.test(content));
-}
-
-const boundaryGuidancePresent: HarnessCheck = {
-  id: "boundary-guidance-present",
-  name: "Workspace boundary guidance",
-  concern: "context",
-  type: "advisory",
-  provenance: contextProvenance("advisory", [
-    "docs/harness-audit.md",
-    "docs/audit-and-quality.md",
-    ".goat-flow/architecture.md",
-    "CLAUDE.md",
-    "AGENTS.md",
-    "GEMINI.md",
-    ".github/copilot-instructions.md",
-  ]),
-  /** Run the Workspace boundary guidance check. */
-  run: (ctx) => {
-    const findings: string[] = [];
-    const missing: Array<{ agentId: string; file: string }> = [];
-
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists || !af.instruction.content) {
-        findings.push(`${af.agent.id}: no instruction file to check`);
-        missing.push({
-          agentId: af.agent.id,
-          file: af.agent.instructionFile,
-        });
-        continue;
-      }
-
-      if (hasBoundaryGuidance(af.instruction.content)) {
-        findings.push(`${af.agent.id}: workspace boundary guidance present`);
-      } else {
-        findings.push(
-          `${af.agent.id}: instruction file has no workspace boundary guidance`,
-        );
-        missing.push({
-          agentId: af.agent.id,
-          file: af.agent.instructionFile,
-        });
-      }
-    }
-
-    if (missing.length === 0) return pass(findings);
-
-    const missingList = missing
-      .map(({ agentId, file }) => `${agentId} (${file})`)
-      .join(", ");
-    return fail(
-      findings,
-      [`Add workspace boundary guidance to ${missingList}`],
-      [
-        "Add a short instruction explaining the difference between the goat-flow controlling workspace and the selected target project to every audited agent instruction file.",
-      ],
-    );
-  },
-};
-
 export const CONTEXT_CHECKS: HarnessCheck[] = [
   instructionLineCount,
   executionLoopPresent,
   docPathsResolve,
   instructionSectionsPresent,
-  boundaryGuidancePresent,
 ];

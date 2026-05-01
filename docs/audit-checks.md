@@ -1,9 +1,9 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently registers **34 deterministic checks**:
+`npx goat-flow audit` currently registers **33 deterministic checks**:
 
 - **17 build checks**: 13 setup-scope checks plus 4 agent-scope checks
-- **17 harness checks**: additional checks enabled by `--harness`
+- **16 harness checks**: additional checks enabled by `--harness`
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
 
@@ -78,6 +78,6 @@ Aggregate-mode nuance:
 |---------|-----------------|-------|
 | `npx goat-flow audit .` | 13 setup + 4 agent = 17 build checks | Structural install gate only |
 | `npx goat-flow audit . --agent <id>` | Same 17 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx goat-flow audit . --harness` | 17 build + 17 harness = 34 checks | Adds harness completeness, still deterministic |
+| `npx goat-flow audit . --harness` | 17 build + 16 harness = 33 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.

@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx goat-flow audit . --harness` adds 17 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
+`npx goat-flow audit . --harness` adds 16 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -45,10 +45,10 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 1.2.0 keeps provenance JSON-only on purpose. Terminal and markdown renderers stay focused on status + remediation; if you need the justification trail for a check, inspect the per-check `provenance` object in JSON output.
 
-### The 17 checks by type
+### The 16 checks by type
 
 - **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
-- **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`, `boundary-guidance-present`
+- **advisory (5):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`
 - **metric (2):** `test-runner-configured`, `post-turn-hook-integrity`
 
 ---
@@ -59,13 +59,12 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 The agent can only work with what it sees. Stale router paths, missing execution loops, and oversized instruction files all degrade performance. The audit checks structural wiring only; use `quality` to assess whether the content is actually useful for this project.
 
-**Context checks (5):**
+**Context checks (4):**
 
 - `instruction-line-count` - each configured agent's instruction file is within the configured hard limit (`line-limits.limit` in `config.yaml`)
 - `execution-loop-present` - instruction file contains at least 2 of the 4 READ / SCOPE / ACT / VERIFY keywords
 - `doc-paths-resolve` - router-table paths, architecture.md backtick paths, and backtick paths in a small set of doc files (`CONTRIBUTING.md`, `.goat-flow/code-map.md`, `docs/cli.md`, `docs/audit-and-quality.md`) all resolve to real files on disk
 - `instruction-sections-present` - instruction file carries the hot-path contract headings (Truth Order, Execution Loop, Definition of Done, Router Table); advisory - skeleton overlays that defer to a shared instruction file will fail this check
-- `boundary-guidance-present` - every audited agent's instruction file contains workspace boundary language (e.g., "controlling workspace", "selected target", "target project")
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 
