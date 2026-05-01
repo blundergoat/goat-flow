@@ -33,7 +33,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 If depth is pre-decided, proceed. Otherwise confirm quick vs full, or auto-detect from available input.
 If vague, ask about: goal, symptom/error message, area involved.
 
-**Quick path:** diagnose and report; **full path:** run D1–D4.
+**Quick path:** diagnose and report; **full path:** run D1–D1.5–D2–D3–D4.
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` and `.goat-flow/lessons/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load either bucket.
 
 **Browser evidence detection:** Does the request reference a URL, local HTML page, localhost route, screenshot, UI element, visual rendering issue, browser DevTools output, or browser console/network symptom? If yes, read `.goat-flow/skill-reference/browser-use.md` for browser evidence tools. Check with `command -v browser-use && browser-use doctor`. If not installed, offer to install it (`pip install browser-use`) and wait for the user's response - never install it without approval or silently fall back. If the user declines or installation fails, use the manual fallback in the reference.
@@ -50,6 +50,29 @@ After reading the primary file, write 2-3 hypotheses spanning at least 2 of: Dat
 **UI-visible bugs:** After writing hypotheses, use browser evidence to confirm or eliminate UI-related hypotheses. Follow the workflow in `.goat-flow/skill-reference/browser-use.md`. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file:line`.
 
 **Can't reproduce after 5 file reads?** Log what you checked, suggest logging additions, ask for more context.
+
+### D1.5 - Minimise
+
+**Goal:** Reduce the failing input/scenario to the smallest reproducible case.
+
+**Procedure:**
+1. Identify variables in the reproduction (input data, config, environment, sequence of actions)
+2. Binary-search each variable while preserving the failure
+3. Stop when removing any single variable masks the symptom
+
+**Output:** Minimal failing case (literal command, input, or steps), removed variables list (proves they don't matter), updated hypothesis set (categories ruled out by minimisation).
+
+**Optional bisect path:** If the failure is a regression from a known-good ref, run `git bisect` with the repro as predicate — binary search across commits instead of inputs.
+
+**Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
+
+| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
+|---|---|---|---|
+| **HIGH** likelihood | 1st | 2nd | 3rd |
+| **MEDIUM** likelihood | 2nd | 3rd | 4th |
+| **LOW** likelihood | 3rd | 4th | Skip |
+
+Test cheap-and-likely first. Skip expensive-and-unlikely until cheap options are eliminated.
 
 ### D2 - Diagnosis
 
@@ -112,7 +135,7 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 Diagnose and investigate modes produce different artifacts. Use the block that matches the mode you actually ran.
 
-### Diagnose mode (D1–D4)
+### Diagnose mode (D1–D1.5–D2–D3–D4)
 
 ```markdown
 ## TL;DR       <!-- 1 sentence: root cause + confidence -->

@@ -27,6 +27,17 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 
 **NOT this skill:** Running tests, "test this", "test X" → just run them (action request, not gap analysis). Debugging test failures → /goat-debug. Code quality → /goat-review. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route. Verifying a bug fix → /goat-debug. Verifying a diff/PR before merge → /goat-review. Certifying that work is complete → the Proof Gate in `skill-preamble.md`, applied by whoever makes the claim.
 
+## Coverage Depth
+
+Canonical vocabulary for classifying test coverage. Used by Standard mode (Phase 2), Audit mode (A3), and cross-skill references.
+
+| Level | Meaning | Example |
+|-------|---------|---------|
+| NONE | No matching test file or manual plan | New module with zero tests |
+| STRUCTURAL | Tests exist but only import/construct/snapshot — no behaviour assertion | `expect(component).toBeDefined()` |
+| PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested | Login success tested, invalid-credentials path missing |
+| BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage | Asserts return value, DB side-effect, and thrown error |
+
 ## Step 0 - Intake
 
 **Mode detection - confirm, don't silently decide:**
@@ -43,7 +54,7 @@ Confirm: "Running [mode] on [scope]. Correct?"
 
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md`, and `.goat-flow/decisions/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load any bucket.
 
-**PR / issue link (strongly encouraged):** if the change is tied to a GitHub PR or issue, ask for the URL or number before Phase 1 - stated acceptance criteria are the benchmark gap analysis maps against, so without them "must test vs safe to skip" is inferred from code shape alone. If `gh` is available (see preamble External Context Sources), resolve it with `gh pr view <ref> --json title,body,url` or `gh issue view <ref> --json title,body,url`, plus `gh pr diff <ref>` for PR mode. Treat the description and any linked issues as the intent spec - gaps surface against both the code and that intent. If `gh` is missing or the user declines, note `no-intent-spec` in Verification Integrity so the reader knows gaps were derived from code shape only.
+**PR / issue link (strongly encouraged):** if the change is tied to a GitHub PR or issue, ask for the URL or number before Phase 1 - stated acceptance criteria are the benchmark gap analysis maps against, so without them "must test vs safe to skip" is inferred from code shape alone. If `gh` is available (see preamble External Context Sources), resolve it with `gh pr view <ref> --json title,body,url` or `gh issue view <ref> --json title,body,url`, plus `gh pr diff <ref>` for PR mode. Treat the description and any linked issues as the intent spec - gaps surface against both the code and that intent. If `gh` is missing or the user declines, note `no-intent-spec` in Verification Integrity so the reader knows gaps were derived from code shape only. When `no-intent-spec`, degrade `safe to skip` confidence: label skips as `Safe to skip (code-shape only — no acceptance criteria assessed)` and do not mark CRITICAL/HIGH areas as safe to skip without both intent and coverage evidence.
 
 If arriving from the dispatcher with context already gathered, confirm and proceed.
 
@@ -83,11 +94,18 @@ Classify each change:
 Compare risk vs coverage in both directions:
 - If a test plan exists, map cases to CRITICAL/HIGH changes and check reverse coverage.
 - If no plan exists, map changed files to automated tests and flag explicit behavior gaps.
+- For each changed file, read the matched test file (if any) and classify using Coverage Depth. If tests are unavailable, record `tests not read` in Verification Integrity.
 - Classify gaps as:
   - **Undertested risk**
   - **Misaligned effort**
 
 For CRITICAL items with no coverage, annotate why: new path / missed coverage on existing path / hard-to-test.
+
+**Intent vs Reality Diff (when intent spec exists):** If a PR, issue, test plan, or user-provided acceptance criteria is available, add:
+
+| Expected Behaviour | Observed Code Behaviour | Gap | Risk |
+
+Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
 **Cross-agent verification:** Suggest the user run verification with a different agent or model. Cross-agent verification catches blind spots that same-agent testing misses.
 
@@ -121,7 +139,11 @@ Declare the audit boundary explicitly. Supported shapes:
 - A module (e.g. `src/cli/quality/`) - the module's entry point and direct callees.
 - A risk class (e.g. "everything touching auth tokens") - files you would need to read to verify the claim.
 
-If unsure, ask the user before A2.
+If unsure, ask the user before A1.5.
+
+### A1.5 - Scope-Size Gate
+
+Inventory the approximate file count in the declared boundary before deep analysis. If the area contains more files than can be read at full depth within budget, present a ranked slice prioritising load-bearing and interface-boundary files, and ask the user which slice to analyse. Proceed to A2 only after scope is confirmed manageable.
 
 ### A2 - Inventory and Risk Ranking
 
@@ -144,7 +166,7 @@ For each in-scope file:
 2. If yes, read the test. Does it assert behaviour (outputs, side effects, error paths) or only construct the unit?
 3. Flag mock-heavy tests (everything mocked = behaviour untested) and integration-only blind spots (suite skips when the external service is unavailable).
 
-Record coverage as `NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL`.
+Record coverage using the Coverage Depth vocabulary above.
 
 ### A4 - Gap Report
 
@@ -158,7 +180,7 @@ Rank gaps by `Risk × (1 - CoverageLevel)` descending. Output:
 
 ## Regression Guard Mode
 
-After a bug fix: define 1-2 invariants, assess coverage of each invariant, then hand off recommended guard tests to the coding agent.
+Post-verification regression guard planning. Assumes the fix is already verified (by /goat-debug, human sign-off, or PR check). Cite the prior verification source. Define 1-2 invariants, assess coverage of each, then hand off recommended guard tests to the coding agent. This mode does NOT verify the fix itself — that is /goat-debug's domain (ADR-018).
 
 ## Constraints
 
@@ -176,7 +198,7 @@ After a bug fix: define 1-2 invariants, assess coverage of each invariant, then 
 - Audit mode: MUST classify every in-scope file by role (load-bearing, interface, glue, UI, support), not by recency; MUST NOT read a diff or ask for one
 - Audit mode: MUST include a risk-ranked gap report with blocking-gap / high-value-addition / defer tiers
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).
-- Regression guard: MUST state invariants as human-readable sentences
+- Regression guard: MUST state invariants as human-readable sentences; MUST cite prior fix-verification source; MUST NOT verify the fix itself (ADR-018)
 
 ## Output Format
 
@@ -192,15 +214,21 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 
 ## Gap Analysis
 ### Undertested Risks  <!-- CRITICAL/HIGH changes with no or partial test coverage -->
-| Code Change | Risk | Covered By | Gap |
+| Code Change | Risk | Coverage Depth | Covered By | Gap |
 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->
 | Test Case | Maps to Change | Assessment |
 
 ## Verification Integrity
 - Intent spec: [PR/issue/test plan URL or `no-intent-spec`]
+- Tests read: [list]
+- Tests not read / unavailable: [list or `none`]
+- Commands discovered: [test/lint commands found]
+- Commands run: `none` (goat-qa does not execute tests)
+- Runtime execution by others: [who ran what, or `none observed`]
+- Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
+- Analysis confidence: [HIGH | MEDIUM | LOW] — [rationale]
 - Assessed by: [agent]
-- Evidence limit: [diff/files read and any unavailable runtime/tool context]
 ```
 
 ### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)
@@ -217,7 +245,8 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Testing by: [who executes]
 - Doer-verifier separation: [FULL / PARTIAL / NONE]
 
-## Regression Guards  <!-- only if fixing a bug -->
+## Regression Guards  <!-- post-verification only; cite prior fix-verification source -->
+| Invariant | Current Coverage | Recommended Guard | Owner |
 ## Flow Diagram  <!-- only on request -->
 ```
 
@@ -243,7 +272,13 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 ### Defer  <!-- LOW-risk or well-covered -->
 
 ## Verification Integrity
-
+- Intent spec: [audit scope rationale or `no-intent-spec`]
+- Tests read: [list]
+- Tests not read / unavailable: [list or `none`]
+- Commands discovered: [test/lint commands found]
+- Commands run: `none` (goat-qa does not execute tests)
+- Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
+- Analysis confidence: [HIGH | MEDIUM | LOW] — [rationale]
 - Assessed by: [agent]
 - Would-be testers: [who executes once gaps are filled]
 

@@ -115,6 +115,8 @@ When summarising tasks, findings, or recommendations for user review, use this f
 
 ## Milestone Retrospective (goat-plan)
 
+**Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | human-verification-pending | complete`
+
 When a milestone completes, run the per-milestone AI verification gate then the human verification gate (BLOCKING - see goat-plan Phase 3). After human approval:
 
 1. Record what was learned.
@@ -126,7 +128,7 @@ Write a session log entry for each completed milestone sequence.
 
 ### Plan Completion Protocol
 
-When all milestones reach `complete`, the plan enters Phase 4 (see goat-plan SKILL.md). The agent must:
+When all milestones reach `complete` or `human-verification-pending`, the plan enters Phase 4 (see goat-plan SKILL.md). The agent must:
 
 1. Run the AI Verification Gate - confirm every task ticked, every exit criterion evidenced, every testing gate passed with proof from this session.
 2. Present the Human Verification Gate - **BLOCKING GATE**. List all files changed, all milestones and their status, and evidence for each exit criterion. Wait for explicit human approval.

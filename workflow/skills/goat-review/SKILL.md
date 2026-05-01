@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.3.3"
+goat-flow-skill-version: "1.4.0"
 ---
 # /goat-review
 
@@ -39,6 +39,19 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 
+### Review Scope Snapshot (mandatory)
+
+Before Pass 1, record the exact review surface:
+
+- **Source:** staged | unstaged | PR | branch diff | explicit path list
+- **Base/Head:** `<branch-or-sha>` / `<branch-or-sha>` (or n/a)
+- **Uncommitted included:** yes | no | n/a
+- **Size:** `<files>` files, `<changed-lines>` changed lines
+- **Chunking:** no | proposed | accepted | skipped-by-user
+- **Scope degradation:** `<flags or "none">`
+
+If any value is undetermined, write `unknown` and add a degradation flag.
+
 ## Diff Review (Quick) - Two-Pass Discipline
 
 The review runs two sequential passes. This is a deliberate reading discipline, not a doer-verifier split: you are the reviewer throughout, Pass 2 is the source of truth, and findings are only surfaced after Pass 2.
@@ -63,16 +76,19 @@ Write raw suspicions with `file:line` drawn from the diff. Do NOT verify, confir
 Now read full files for context. For each Pass-1 suspicion:
 
 - **Try to DISPROVE it** (negative verification). Re-read the `file:line`, look for a guard, an upstream check, a framework mitigation, or a contract that removes the risk.
-- Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**. Drop REFUTED.
+- **Blast Radius Rule:** if a suspicion involves a contract change (signature, payload shape, exported type, event shape, error channel, status code), MUST execute `rg -n '<symbol>' -t ts -t js -t py -t php -t go -t rust` to locate external call-sites before resolving. Verify at least one consumer. If skipped, stays UNRESOLVED and gets `coverage-degraded`.
+- Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**.
+- **Refutation Ledger:** REFUTED suspicions are not silently dropped. Write a ledger to `.goat-flow/scratchpad/goat-review-refutations.<random>.txt`. Each entry: original suspicion (verbatim), refuting evidence (`file:line`), one-sentence rationale. Refuted suspicions do not appear in final output; the ledger is the audit trail.
 - Add findings that only became visible with file context (integration breakage, call-site contract mismatch, regression in a sibling file).
 - Re-verify every `file:line` reference exists before writing the final output.
 
+Full Excuse/Reality table: `.goat-flow/skill-reference/review-examples.md`. Key entries:
+
 | Excuse | Reality |
 |--------|---------|
-| "Trusted author wrote it, Pass 2 will just refute everything - skip it" | In-group trust has historically produced the worst misses in auth/signing/rate-limit code. Open the files. |
-| "CI is green, so boundary and signing edges are already covered" | CI tests what was thought of. Review looks for what wasn't. Green CI raises, not answers, the Pass-2 question. |
-| "Tight window + demo tomorrow - MAY-only cosmetic pass is proportionate" | An incomplete review merged into a demo window is worse than a `coverage-degraded` conclusion returned on time. |
-| "Findings would be zero anyway, so Review Integrity is paperwork" | Review Integrity IS the zero-findings signal. `files-not-opened` tells the reader you stopped early. |
+| "Skip Pass 2 / CI is green / zero findings anyway" | Trust, CI, and empty results don't replace opening files. See full table. |
+| "The symbol is unique enough that grep is overkill" | The bug is in the consumer, not the emitter. Run the grep. |
+| "Refuted suspicions are noise - logging them wastes tokens" | The ledger is the integrity surface. Without it, REFUTED is indistinguishable from "didn't bother to check." |
 
 ### Severity + Action Tagging
 
@@ -91,6 +107,8 @@ Every surfaced finding gets two orthogonal tags:
 | pre-existing | bug exists in unchanged code (see separation below) |
 
 Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
+
+**Proof Capsule:** every finding includes a proof class per `skill-preamble.md` Proof Classification: `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. MUST/correctness-SHOULD should prefer RUNTIME or CONTRACT-GREP. NOT-REPRODUCED adds `not-reproduced-findings` to Review Integrity.
 
 ### Pre-existing Separation
 
@@ -131,7 +149,9 @@ List:
 - **Files opened in Pass 2:** count / total in diff. List paths that were read diff-only.
 - **Evidence tags:** N OBSERVED / M INFERRED across findings.
 - **Size:** lines changed, files changed. If chunked, state which group was reviewed and which are pending. In PR mode, include the resolved base, source annotation such as `configured-base=<base>` when applicable, and short SHA.
-- **Degradation flags** (any that apply): `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `configured-base-unresolved=<base>` (PR mode only), `base-detection-failed` (PR mode only), `base-fetch-failed` (PR mode only).
+- **Scope snapshot:** source=`<source>`, base=`<base>`, head=`<head>`, uncommitted=`<yes|no|n/a>`, chunking=`<state>`
+- **Refutations logged:** `<N>` (see `.goat-flow/scratchpad/goat-review-refutations.<random>.txt`)
+- **Degradation flags** (any that apply): `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-failed`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 Never leave this section empty. "confident - no degradation flags" is the minimum.
@@ -148,6 +168,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - Pre-existing issues ARE in scope
 
 **Both modes:**
+- MUST run external call-site grep for any contract-change suspicion before resolving (Blast Radius Rule); flag `coverage-degraded` if skipped
 - MUST tag every surfaced finding with `[SEVERITY:ACTION]`
 - MUST check each finding with targeted grep-first retrieval against `.goat-flow/footguns/`; omit the tag when no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order
@@ -169,8 +190,10 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 ## TL;DR  <!-- what was reviewed, found, matters most -->
 
 ## Review Integrity
+- Scope snapshot: source=<source>, base=<base>, head=<head>, uncommitted=<yes|no|n/a>, chunking=<state>
 - Files opened in Pass 2: <k>/<n>  (diff-only: <list or "none">)
 - Evidence: <N> OBSERVED / <M> INFERRED
+- Refutations logged: <N>
 - Size: <files> files, <lines> lines  (chunked: <group or "no">)
 - Degradation flags: <list or "none">
 - Conclusion: <confident | coverage-degraded | high-inference | partial>
@@ -178,7 +201,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 ## Findings
 
 ### MUST
-- [MUST:patch] **[title]** `file:line` - [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED
+- [MUST:patch] **[title]** `file:line` - [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
 - [MUST:needs-decision] **[title]** `file:line` - [desc] | ...
 
 ### SHOULD

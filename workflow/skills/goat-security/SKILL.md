@@ -34,6 +34,7 @@ Use when assessing security posture before release, after auth/input/storage cha
   - `references/cicd-and-agent-surfaces.md`
   - `references/project-policy-template.md` is a setup template, not a scan reference - skip during reviews.
 - **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
+- **Threat Model Snapshot:** Output assets, trust boundaries, attacker types, and critical surfaces as an explicit artifact before scanning.
 
 ## Quick Scan Path
 
@@ -142,6 +143,10 @@ Run a narrow specialist cross-check when any of these are true:
 
 Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. When the active runner requires explicit consent before delegated sub-agents, request that consent before invoking `/goat-critique`; otherwise keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
 
+### Phase 5.5 - Exploit Chaining
+
+For CONFIRMED findings, identify chains where two or more issues combine into higher-severity exploits. Re-rank if a chain promotes Low + Low to Critical. Single synthesis step, not full chaining methodology.
+
 ### Phase 6 - Self-Check and Proof Gate
 
 Re-read `file:line` for Critical/High. Does the code or config still match the finding? Is the scenario realistic? Remove failures.
@@ -151,6 +156,10 @@ Re-read `file:line` for Critical/High. Does the code or config still match the f
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file:line` re-read in this session, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
 
 If `PROBABLE > CONFIRMED`, request approval for `/goat-critique` cross-examination before closing. If approval is unavailable, close with those clusters marked PROBABLE and list the evidence needed to promote or kill each one.
+
+### Persist Gate
+
+This review produced findings S-01..S-NN that downstream artifacts may cite. Prompt: "Persist to `.goat-flow/logs/security/<date>-<artifact>.md`?" User confirms before writing. Not auto-persist.
 
 ## Compliance Mode
 
@@ -176,6 +185,7 @@ For compliance checks, present gaps as: non-compliant, partially compliant, or n
 ## Review Mode / Provenance / Scope
 ## Threat Surface / Risky Buckets
 ## CONFIRMED / PROBABLE / THEORETICAL
+## Attack Path Summary (top 3 chained paths, e.g. "External PR → CI injection → secrets exfiltration")
 ## False Positives Removed / Positive Observations
 ## What I Didn't Check / Proof-of-Fix Tests
 ```

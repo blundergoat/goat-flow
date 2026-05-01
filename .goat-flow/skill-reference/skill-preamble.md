@@ -34,14 +34,25 @@ Order findings by severity, not by file or discovery order.
 - Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited `file:line` to confirm accuracy
-- Tag evidence quality: **OBSERVED** (directly verified in code) vs **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing)
-- If you cannot re-read the cited evidence before responding, mark the claim **UNVERIFIED**
+- Tag evidence quality: **OBSERVED** (directly verified in code) | **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing) | **UNVERIFIED** (cannot re-read cited evidence) | **HUMAN-PENDING: \<what needs checking\>** (requires manual verification the agent cannot perform)
+- When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Before citing a function or symbol name, verify it exists with a repo search
 - Before citing a CLI flag, verify it with `--help` or the command's docs
 - Before citing a config key, read the actual config file first
 - On completion claims, the 5 hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
 
+## Proof Classification
+
+Every finding or claim carries a proof-class tag:
+
+- **RUNTIME** — verified by executing code or a command in this session
+- **CONTRACT-GREP** — verified by searching for callers, consumers, or references
+- **STATIC** — verified by reading code structure without execution
+- **NOT-REPRODUCED** — attempted verification but could not reproduce the issue
+
 ## Proof Gate
+
+Mid-implementation proof MUST name a specific command or smoke check. "Verified implicitly" or "completed implicitly" is not valid proof.
 
 Before any completion, fix, or "passing" claim:
 

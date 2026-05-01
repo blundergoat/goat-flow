@@ -61,18 +61,23 @@ Do not drop a spike, intake, or kill criteria to satisfy milestone count, deadli
 
 ### For each milestone, produce:
 
-- **Objective** - 1-2 sentences: what this milestone proves or delivers
-- **Tasks** - Checkboxes. Ordered by dependency. Each task is a concrete action, not a vague goal.
-- **Assumptions to validate** - What must be proven true during this milestone (not tasks - beliefs about the system)
-- **Exit criteria** - Testable, binary pass/fail. Not "performance is acceptable" - instead "p95 latency under 500ms"
-- **Testing gate** - What must be verified before starting the next milestone:
-  - Automated: which test commands must pass
-  - Manual: what a human must check
-  - Acceptance: who signs off (developer self-check, QA review, or stakeholder demo)
-- **Mid-implementation proof** - for milestones expected to touch 3+ files or run longer than 30-60 minutes, name one focused command, reproduction, or smoke check to run before switching modules or after a bounded edit batch
-- **Kill criteria** - What would make us stop at this milestone rather than continue
-- **Depends on** - Which milestone must complete first
-- **Read first** - Files the implementing agent should read before starting this milestone
+Objective, Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first. Full field descriptions and worked examples: `.goat-flow/skill-reference/plan-templates/milestone-examples.md`.
+
+### Risk-weighted task ordering
+
+Tag every task within a milestone:
+
+- **[RISKY]** — Unknowns, integrations, unproven assumptions. Includes spikes.
+- **[CORE]** — Essential logic without unknowns. The bulk of most milestones.
+- **[SAFE]** — Straightforward, well-understood. Documentation, polish, cosmetic.
+
+**Ordering rule:** All [RISKY] first, then [CORE], then [SAFE] within each milestone.
+
+**Structural check:** If a milestone has no [RISKY] tasks but contains uncertainty, the plan is wrong and the milestone must be revised.
+
+### DDT layer in testing gates
+
+Every milestone testing gate includes a Static / Contract Check section that must pass before behavioural tests run. Detect target language from project structure (composer.json -> PHP, tsconfig.json -> TypeScript) and include the appropriate checks. Per-language details: `.goat-flow/skill-reference/ddt-layer/<language>.md`.
 
 ### Quality rules
 
@@ -82,17 +87,7 @@ Good tasks are concrete actions with a target or exit criterion. Bad tasks are v
 
 ### Assumption tracking
 
-Assumptions are not tasks - they're beliefs about the system that affect the plan:
-
-```markdown
-## Assumptions
-- [x] Background job queue handles 500-item batches (benchmarked in M1)
-- [ ] File upload endpoint accepts multipart form data (untested)
-- [x] Database migration runs without downtime (spike confirmed in M1)
-- [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
-```
-
-When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
+Assumptions are beliefs about the system, not tasks. Tick with evidence when validated. If invalidated, update the plan immediately. See `.goat-flow/skill-reference/plan-templates/milestone-examples.md` for format and examples.
 
 **BLOCKING GATE:** Present all milestones. "Approve milestones and start implementing, or adjust?"
 
@@ -141,11 +136,18 @@ Low blast radius, 1-2 milestones, no analysis signals. Deliver inline first, wri
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
-After Phase 1 approval, write each milestone to `.goat-flow/tasks/<active>/` as a separate file.
+After Phase 1 approval, run SBAO before writing milestone files:
+
+- **2.1 Generate** — Produce N independent plan approaches (default 3) without cross-contamination.
+- **2.2 Rank** — Evaluate each against shared criteria: simplicity, blast radius, risk profile, time-to-first-value.
+- **2.3 Synthesise** — Combine strongest elements into the prime plan.
+- **2.4 Capture dissent** — Archive rejected approaches + reasoning as ADR-shaped records with re-evaluation conditions. Write to `.goat-flow/decisions/sbao-<feature>-<date>.md`. Format: `.goat-flow/skill-reference/plan-templates/milestone-examples.md` § SBAO Decision Record Format.
+
+Then write each milestone to `.goat-flow/tasks/<active>/` as a separate file.
 
 **Filename format:** `M<NN>-<slug>.md`, e.g. `M01-prove-api-integration.md`.
 
-**File format:** use existing milestone structure: title, Status, Objective, Depends on, Kill criteria, Read first, Assumptions, Tasks, Exit Criteria, Testing Gate, Mid-implementation proof.
+**File format:** use existing milestone structure: title, Status, Objective, Depends on, Kill criteria, Read first, Assumptions, Tasks (risk-tagged), Exit Criteria, Testing Gate (static/contract + automated + manual + acceptance), Mid-implementation proof.
 
 **CHECKPOINT:** "Milestone files written to `.goat-flow/tasks/<active>/`. Ready to start implementation."
 
