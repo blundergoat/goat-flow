@@ -97,8 +97,8 @@ Adapt to the project's needs (SPA navigation, framework wait conditions, auth fl
 
 **Storage state by tier:**
 - Tier 1 (MCP): context-level configuration, tool-dependent
-- Tier 2 (Python): `browser.new_context(storage_state="path/to/state.json")`
-- Tier 3 (Node): `browser.newContext({ storageState: "path/to/state.json" })`
+- Tier 2 (Node): `browser.newContext({ storageState: "path/to/state.json" })`
+- Tier 3 (Python): `browser.new_context(storage_state="path/to/state.json")`
 - Tier 4 (browser-use): `browser-use --profile <name>` if supported by version
 
 ## Project Reference Pattern
