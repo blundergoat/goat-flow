@@ -30,8 +30,8 @@ last_reviewed: 2026-05-02
 **Why it happens:** Skill files are authored in the goat-flow framework repo where `.goat-flow/decisions/ADR-*.md` files exist. When skills are installed into consumer projects via `goat-flow setup`, the SKILL.md files are copied but the decisions directory contains only the consumer's own ADRs (if any), not goat-flow framework decisions. ADR citations in skill text become dangling references.
 
 **Evidence:**
-- `workflow/skills/goat-critique/SKILL.md` (search: `ADR-021`) — excuse/reality table references ADR-021 (full-mode-only decision) which exists only in the framework repo
-- `workflow/skills/goat-qa/SKILL.md` (search: `ADR-018`) — regression guard mode and constraints reference ADR-018 (no standalone verify skill) which exists only in the framework repo
+- `workflow/skills/goat-critique/SKILL.md` (search: `Quick mode was tried and removed`) — excuse/reality table originally cited ADR-021; ADR reference removed in v1.4.0, rule is now self-contained
+- `workflow/skills/goat-qa/SKILL.md` (search: `goat-debug's domain`) — regression guard mode originally cited ADR-018; ADR reference removed in v1.4.0, rule is now self-contained
 - All 4 mirrors (`.claude/skills/`, `.agents/skills/`, `.github/skills/`, `workflow/skills/`) carry the same references since skills are byte-identical across mirrors
 
 **Prevention:**
