@@ -87,7 +87,7 @@ Each sub-agent MUST return 3-7 findings, each with: title, severity, evidence (f
 
 Execute in this order:
 
-**1. Context leak scan.** Grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Any match = CONTEXT LEAK; discard and re-spawn with stricter isolation.
+**1. Context leak scan.** Grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references that do NOT appear in the input artifact Agent C received — quoting terms from the artifact is expected, not a leak. Any match that cannot be traced to the artifact text = CONTEXT LEAK; discard and re-spawn with stricter isolation.
 
 **1b. Completeness gate.** Verify each sub-agent returned required fields (see Constraints). Incomplete → re-spawn once.
 
@@ -188,7 +188,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.
 - MUST enforce max 5 tool calls per sub-agent.
-- MUST Scan Agent C output for context leaks before any other Phase 2 work. Any match = CONTEXT LEAK; discard and re-spawn.
+- MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
 - MUST Check sub-agent completeness: verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
