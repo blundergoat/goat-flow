@@ -247,9 +247,7 @@ async function dashboardEndAllSessions(
           .map((session) => readServerSessionInfo(session))
           .filter((session): session is ServerSessionInfo => session !== null)
       : [];
-    const inactive = sessions.filter(
-      (session) => session.status !== "active",
-    );
+    const inactive = sessions.filter((session) => session.status !== "active");
     const activeIds = new Set(
       sessions
         .filter((session) => session.status === "active")
@@ -258,25 +256,34 @@ async function dashboardEndAllSessions(
     for (const session of inactive) {
       await fetch(`/api/terminal/${session.id}`, { method: "DELETE" });
     }
+    const keptRefs: typeof ctx._terminalRefs = {};
     for (const id of Object.keys(ctx._terminalRefs)) {
-      if (activeIds.has(id)) continue;
-      const refs = ctx._terminalRefs[id];
-      if (refs?.cleanup) refs.cleanup();
-      delete ctx._terminalRefs[id];
+      if (activeIds.has(id)) {
+        const active = ctx._terminalRefs[id];
+        if (active) keptRefs[id] = active;
+      } else {
+        const refs = ctx._terminalRefs[id];
+        if (refs?.cleanup) refs.cleanup();
+      }
     }
+    ctx._terminalRefs = keptRefs;
+    const keptProjects: typeof ctx._projectSessions = {};
     for (const key of Object.keys(ctx._projectSessions)) {
       const kept = (ctx._projectSessions[key] ?? []).filter((s) =>
         activeIds.has(s.sessionId),
       );
-      if (kept.length > 0) ctx._projectSessions[key] = kept;
-      else delete ctx._projectSessions[key];
+      if (kept.length > 0) keptProjects[key] = kept;
     }
+    ctx._projectSessions = keptProjects;
     ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
     if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
       ctx.activeSessionId = null;
     }
     for (const [presetId, state] of Object.entries(ctx.promptRunStates)) {
-      if (state === "running" && !ctx.sessions.some((s) => s.presetId === presetId)) {
+      if (
+        state === "running" &&
+        !ctx.sessions.some((s) => s.presetId === presetId)
+      ) {
         ctx.promptRunStates[presetId] = "pass";
       }
     }

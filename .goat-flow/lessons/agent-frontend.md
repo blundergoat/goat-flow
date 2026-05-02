@@ -93,10 +93,10 @@ last_reviewed: 2026-05-01
 **Why this matters:** Saying "there is no browser" when a project-specific browser tool exists creates false constraints and wastes the user's time. It also undermines the purpose of local skill references: they are there to encode exactly this kind of workflow knowledge.
 
 **Evidence:**
-- `.goat-flow/skill-reference/browser-use.md` (search: `command -v browser-use && browser-use doctor`) documents the availability check.
+- `.goat-flow/skill-reference/browser-use.md` (search: `command -v browser-use || command -v browser-use-python`) documents the availability check.
 - `.goat-flow/skill-reference/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
 
-**Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use && browser-use doctor` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
+**Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use || command -v browser-use-python` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
 
 ---
 
