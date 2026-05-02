@@ -26,13 +26,13 @@ export interface StatsReport {
   decisions?: DecisionsSection;
 }
 
-export interface DecisionFileSummary {
+interface DecisionFileSummary {
   path: string;
   filename: string;
   content: string | null;
 }
 
-export interface StatsWarning {
+interface StatsWarning {
   file: string;
   rule: "decision-metadata";
   message: string;
@@ -46,7 +46,7 @@ export interface DecisionsSection {
 }
 
 /** One actionable problem surfaced by `goat-flow stats --check`. */
-export interface StatsFinding {
+interface StatsFinding {
   file: string;
   rule:
     | "missing-last-reviewed"

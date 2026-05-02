@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.0 - 2026-05-02
+
+Cross-rater skill quality audit, skill hardening, deny-dangerous security fixes, structural reorg, dispatcher rewrite, and v1.3.3 features rolled in.
+
+- **Cross-rater skill quality audit** - Three independent raters (Claude, Codex, Gemini) scored all 6 skills on a 10-axis rubric. Average improved from 76/100 to 87/100. All 6 skills now have Excuse/Reality tables grounded in real incidents.
+- **Skill hardening** - goat-review gained Proof Capsule (4-class classification), Refutation Ledger, Blast Radius Rule, Ship Verdict, Step 0.5 Intent Reconstruction, and Pass 3 Cross-Model Refuter. goat-debug gained Debug Integrity and D1.5 Minimise. goat-security gained Security Assessment Integrity, Phase 5.5 Exploit Chaining, and Persist Gate. goat-critique gained Phase 5.5 meta-audit, Phase 5.6 outcome capture, and integration hooks. goat-qa gained A1.5 Scope-Size Gate, Verification Integrity with OBSERVED/INFERRED/UNVERIFIED tagging, and Coverage Depth vocabulary.
+- **Deny-dangerous security fixes** - `rm_is_safely_scoped` hardened against trailing-slash bypass (`rm -rf src/`), multi-path bypass (`rm -rf src/old /`), and tilde-path bypass (`rm -rf ~/.ssh`). Restored accidentally-removed `sudo` prefix stripping and `env -S`/`--split-string` parsing for git-push enforcement. 18 new self-test cases across all 6 hook copies.
+- **goat-critique context leak scan** - Scan now only flags references absent from the input artifact, preventing false positives when critiquing goat-flow itself.
+- **Browser-use installer** - Added `browser-use` CLI wrapper alongside `browser-use-python` so `browser-use doctor` and subcommands work after install.
+- **Dashboard session pruning** - `dashboardEndAllSessions` now prunes `_projectActiveSession` alongside other session structures, preventing stale mappings to deleted sessions.
+- **Structural reorg** - Patterns directory split into 5 categorised buckets. 5 skill-specific reference packs relocated from shared `skill-reference/` to per-skill `references/` subdirectories. DDT layer removed (ADR-027).
+- **Dispatcher rewrite** - Route Snapshot output contract, multi-intent decomposition, GATHER checklist, no-inspect constraint, degraded-routing fallback. ADR-023 amended.
+- **Page-capture shared reference** - New `page-capture.md` for batch Playwright MCP capture. Wired into installer, drift checks, preflight sync, and content-quality audit.
+- **Project-stack detection** - Separated test frameworks from app frameworks. Added 30+ framework/language/deploy/formatter signals. Fixed Jinja false-positive. Added Docker Compose V2 filenames.
+- **Dashboard** - Workspace sidebar collapse, harness percentage parity (metric checks excluded from scores), aggregate boundary scoring, path-only task intake guard, ISSUE.md auto-creation in goat-plan, configurable goat-review local PR base.
+- **Quality-report evidence** - `prior_report_id` for delta tracking, `delta_tag` validation, per-finding evidence fields.
+- **Release propagation** - Package/config/manifest, skill mirrors, shared references, security reference packs, fixtures, hooks, and instruction files bumped to 1.4.0. Backfilled v1.3.1 and v1.3.2 manifest snapshots.
+
 ## v1.3.2 - 2026-05-01
 
 Release-readiness hardening for decision records, dashboard audit performance, harness model alignment, and quality-report evidence.

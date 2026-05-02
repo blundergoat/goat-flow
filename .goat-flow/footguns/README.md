@@ -3,6 +3,7 @@
 **Traps in the code itself.** A footgun exists whether or not an agent triggers it - it's a property of how the codebase is structured. Example: "renaming one doc breaks 5 others because of dense cross-referencing." The trap is in the architecture, not in what the agent did.
 
 If the agent did something wrong → `.goat-flow/lessons/` instead.
+If a proven approach should be reused → `.goat-flow/patterns/` instead.
 
 **"Add a footgun" = create/update an entry here.** Not runtime code, not console diagnostics, not test assertions, not UI warnings. A footgun is a documentation artifact. If the user also wants a code change, they will ask for it separately.
 

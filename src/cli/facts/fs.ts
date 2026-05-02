@@ -198,7 +198,7 @@ export function createFS(rootPath: string): ReadonlyFS {
     return resolve(root, p);
   }
 
-  // Request-scoped caches — discarded when the FS instance is discarded.
+  // Request-scoped caches - discarded when the FS instance is discarded.
   const contentCache = new Map<string, string | null>();
   const existsCache = new Map<string, boolean>();
   const listDirCache = new Map<string, string[]>();

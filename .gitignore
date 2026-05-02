@@ -3,6 +3,7 @@
 out
 inbox
 _temp
+*.diff
 
 # AI working folders (track skills/hooks/settings, ignore session data)
 .claude/projects/
@@ -10,7 +11,7 @@ _temp
 .claude/settings.local.json
 .codex/settings.local.toml
 .cursor/
-.grok/
+
 
 # Repo-local tooling (preflight helpers)
 .tools/

@@ -16,7 +16,7 @@
  */
 
 /** Where a check's norm came from. */
-export type ProvenanceSource =
+type ProvenanceSource =
   | "spec" // upstream specification (Claude Code hook spec, SDK docs)
   | "vendor_docs" // official vendor docs (Anthropic prompt engineering docs)
   | "paper" // research paper with a URL
@@ -30,7 +30,7 @@ export type ProvenanceSource =
  *  - SHOULD: violation is a WARN finding; fails the scope.
  *  - BEST_PRACTICE: violation is an INFO finding; logged but does not fail.
  */
-export type NormativeLevel = "MUST" | "SHOULD" | "BEST_PRACTICE";
+type NormativeLevel = "MUST" | "SHOULD" | "BEST_PRACTICE";
 
 /** Evidence metadata for an audit check. Co-located with the check definition. */
 export interface CheckEvidence {

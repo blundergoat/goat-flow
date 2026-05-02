@@ -49,7 +49,7 @@ export type DenyMechanism =
   | { type: "both"; settingsPath: string; scriptPath: string };
 
 /** Hook event file names specific to each agent runtime */
-export interface HookEvents {
+interface HookEvents {
   preTool: string;
   // Null when the runtime exposes no post-turn hook event.
   postTurn: string | null;

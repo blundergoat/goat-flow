@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Use when diagnosing a bug, unexpected behaviour, or system failure that needs structured investigation."
-goat-flow-skill-version: "1.3.2"
+goat-flow-skill-version: "1.4.0"
 ---
 # /goat-debug
 
@@ -33,23 +33,48 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 If depth is pre-decided, proceed. Otherwise confirm quick vs full, or auto-detect from available input.
 If vague, ask about: goal, symptom/error message, area involved.
 
-**Quick path:** diagnose and report; **full path:** run D1–D4.
+**Quick path:** diagnose and report; **full path:** run D1–D1.5–D2–D3–D4.
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` and `.goat-flow/lessons/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load either bucket.
 
-**Browser evidence detection:** Does the request reference a URL, local HTML page, localhost route, screenshot, UI element, visual rendering issue, browser DevTools output, or browser console/network symptom? If yes, read `.goat-flow/skill-reference/browser-use.md` for browser evidence tools. Check with `command -v browser-use && browser-use doctor`. If not installed, offer to install it (`pip install browser-use`) and wait for the user's response - never install it without approval or silently fall back. If the user declines or installation fails, use the manual fallback in the reference.
+**Browser evidence detection:** Does the request reference a URL, local HTML page, localhost route, screenshot, UI element, visual rendering issue, browser DevTools output, or browser console/network symptom? If yes, read `.goat-flow/skill-reference/browser-use.md` for browser evidence tools. Check with `command -v browser-use || command -v browser-use-python`. If not installed, offer to install it (`pip install browser-use` or `scripts/install-browser-tools.sh`) and wait for the user's response - never install it without approval or silently fall back. If the user declines or installation fails, use the manual fallback in the reference.
 
 
 ## Diagnose Mode
 
 ### D1 - Investigate (no fixes)
 
-After reading the primary file, write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis. After tracing, mark each: CONFIRMED / ELIMINATED / UNRESOLVED with `file:line` evidence.
+After reading the primary file, declare a scope snapshot: symptom boundary (what is failing), affected components (files/modules/services involved), and read estimate (how many files you expect to read). This scopes the investigation before hypotheses anchor it.
+
+Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis. After tracing, mark each: CONFIRMED / ELIMINATED / UNRESOLVED with `file:line` evidence.
 
 **Multi-component failures** (CI → build → deploy, request → middleware → handler → DB, etc.): instrument each boundary before proposing any fix. For each component boundary, log what data enters and what exits, run once to gather evidence showing WHERE the chain breaks, THEN investigate the specific failing component. Do not guess the failing layer.
 
 **UI-visible bugs:** After writing hypotheses, use browser evidence to confirm or eliminate UI-related hypotheses. Follow the workflow in `.goat-flow/skill-reference/browser-use.md`. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file:line`.
 
 **Can't reproduce after 5 file reads?** Log what you checked, suggest logging additions, ask for more context.
+
+### D1.5 - Minimise
+
+**Goal:** Reduce the failing input/scenario to the smallest reproducible case.
+
+**Procedure:**
+1. Identify variables in the reproduction (input data, config, environment, sequence of actions)
+2. Binary-search each variable while preserving the failure
+3. Stop when removing any single variable masks the symptom
+
+**Output:** Minimal failing case (literal command, input, or steps), removed variables list (proves they don't matter), updated hypothesis set (categories ruled out by minimisation).
+
+**Optional bisect path:** If the failure is a regression from a known-good ref, run `git bisect` with the repro as predicate - binary search across commits instead of inputs.
+
+**Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
+
+| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
+|---|---|---|---|
+| **HIGH** likelihood | 1st | 2nd | 3rd |
+| **MEDIUM** likelihood | 2nd | 3rd | 4th |
+| **LOW** likelihood | 3rd | 4th | Skip |
+
+Test cheap-and-likely first. Skip expensive-and-unlikely until cheap options are eliminated.
 
 ### D2 - Diagnosis
 
@@ -76,6 +101,18 @@ Rerun the **original reproduction** from D2 - a code change is not a fix until t
 **UI bugs:** Rerun the original browser reproduction post-fix. Capture screenshot/state showing the symptom is gone. Follow `.goat-flow/skill-reference/browser-use.md`.
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to the "fixed" claim - rerun the original repro, cite the literal output, and downgrade to **UNVERIFIED** if the session cannot execute the proof.
+
+## Debug Integrity
+
+Every diagnose-mode report ends with this section. It tells the reader how much of the investigation is grounded.
+
+- **Files read:** count
+- **Hypotheses tested:** count (CONFIRMED + ELIMINATED + UNRESOLVED)
+- **Categories covered:** which of Data/Logic/Timing/Environment/Configuration were tested
+- **Reproduction attempted:** yes / no / partial
+- **Confidence basis:** N OBSERVED / M INFERRED
+- **Footgun retrieval:** hit (cite entry) / miss / skip
+- **What I Didn't Check:** files, paths, or components deliberately skipped with one-line reason each
 
 ## Investigate Mode
 
@@ -107,20 +144,31 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - MUST check recurrence against footguns + lessons
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
+- MUST run D1.5 minimisation before presenting D2 diagnosis unless reproduction is already minimal
+- MUST include Debug Integrity section in every diagnose-mode report
 
 ## Output Format
 
 Diagnose and investigate modes produce different artifacts. Use the block that matches the mode you actually ran.
 
-### Diagnose mode (D1–D4)
+### Diagnose mode (D1–D1.5–D2–D3–D4)
 
 ```markdown
 ## TL;DR       <!-- 1 sentence: root cause + confidence -->
 ## Hypotheses  <!-- table: #, Hypothesis, Category, Status, Evidence (file:line) -->
+## Minimal Failing Case  <!-- from D1.5: minimal input, removed variables, hypothesis ranking -->
 ## Root Cause  <!-- Confidence + Location (file:line) + Description -->
 ## Reproduction Steps  <!-- numbered, with Expected vs Actual -->
 ## Fix Plan    <!-- only if human approved D3 -->
 ## UI Evidence  <!-- optional: only when browser evidence was captured -->
+## Debug Integrity
+- Files read: [N]
+- Hypotheses tested: [N] (CONFIRMED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
+- Categories covered: [list]
+- Reproduction attempted: [yes/no/partial]
+- Confidence basis: [N] OBSERVED / [M] INFERRED
+- Footgun retrieval: [hit/miss/skip]
+- What I Didn't Check: [files/paths skipped + reason]
 ```
 
 ### Investigate mode (I1–I3)

@@ -449,6 +449,7 @@ describe("preset prompt catalog", () => {
       source,
       /git -C \$\{dashboardShellQuote\(ctx\.projectPath\)\} status/,
     );
+    assert.match(source, /treat bare task paths as read-only context/);
 
     const adapt = (prompt: string, runner: string): string =>
       runner === "codex" ? prompt.replace(/^\/goat\b/, "$goat") : prompt;

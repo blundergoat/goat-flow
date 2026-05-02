@@ -21,7 +21,7 @@ Users also don't typically want all 3 agents set up at once. A Claude setup that
 
 **All other project files** (`.github/instructions/`, `docs/`, `src/`, config files, scripts, etc.):
 - Never edit, never delete.
-- Reference them from the instruction file's Router Table and `.goat-flow/patterns.md`.
+- Reference them from the instruction file's Router Table and `.goat-flow/patterns/`.
 
 **Exception for upgrades:** Older goat-flow versions (v0.9) have files outside `.goat-flow/` (e.g., `docs/footguns.md`, `tasks/`). These can be migrated during an upgrade -- moved, not deleted without migration.
 

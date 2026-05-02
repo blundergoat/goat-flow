@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # deny-dangerous.sh - PreToolUse hook: blocks dangerous commands before execution
-# goat-flow-hook-version: 1.3.2
+# goat-flow-hook-version: 1.4.0
 # =============================================================================
 # Event:  PreToolUse / equivalent pre-command hook for the current runtime
 # Match:  Bash tool calls
@@ -351,6 +351,29 @@ run_self_test() {
   run_case "rm scoped separated flags" "rm -r -f ./node_modules" 0
   run_case "rm scoped uppercase recursive" "rm -Rf ./node_modules" 0
   run_case "rm scoped tmp build" "rm -rf /tmp/build-goat-flow" 0
+  run_case "rm bare node_modules" "rm -rf node_modules" 0
+  run_case "rm bare dist" "rm -rf dist" 0
+  run_case "rm subdirectory path" "rm -rf src/old-module" 0
+  run_case "rm bare src blocked" "rm -rf src" 2
+  run_case "rm bare workflow blocked" "rm -rf workflow" 2
+  run_case "rm bare docs blocked" "rm -rf docs" 2
+  run_case "rm bare test blocked" "rm -rf test" 2
+  run_case "rm dotslash src blocked" "rm -rf ./src" 2
+  run_case "rm dotslash docs blocked" "rm -rf ./docs" 2
+  run_case "rm dotslash workflow blocked" "rm -rf ./workflow" 2
+  run_case "rm dotslash node_modules allowed" "rm -rf ./node_modules" 0
+  run_case "rm dotslash subdir allowed" "rm -rf ./src/old-module" 0
+  run_case "rm trailing slash src blocked" "rm -rf src/" 2
+  run_case "rm trailing slash .github blocked" "rm -rf .github/" 2
+  run_case "rm trailing slash .goat-flow blocked" "rm -rf .goat-flow/" 2
+  run_case "rm trailing slash dotslash src blocked" "rm -rf ./src/" 2
+  run_case "rm trailing slash node_modules allowed" "rm -rf node_modules/" 0
+  run_case "rm trailing slash subdir allowed" "rm -rf src/old-module/" 0
+  run_case "rm multi-path safe blocked" "rm -rf src/old /" 2
+  run_case "rm multi-path mixed blocked" "rm -rf node_modules /" 2
+  run_case "rm multi-path both safe" "rm -rf src/old src/new" 0
+  run_case "rm tilde ssh blocked" "rm -rf ~/.ssh" 2
+  run_case "rm tilde home blocked" "rm -rf ~/Documents" 2
   run_case "chmod recursive 777" "chmod -R 777 ." 2
   run_case "chmod leading zero 777" "chmod 0777 file" 2
   # False-positive cases: read-only commands containing dangerous literals as data.
@@ -619,7 +642,26 @@ rm_has_recursive_force() {
 
 rm_is_safely_scoped() {
   local c="$1"
-  [[ "$c" =~ ^[[:space:]]*rm([[:space:]]+--?[[:alnum:]-]+)*[[:space:]]+(\./[a-zA-Z][^[:space:]]*|[a-zA-Z][^[:space:]]*|/tmp/build-[a-zA-Z0-9._-][^[:space:]]*)[[:space:]]*$ ]]
+  # Extract target paths: strip "rm" + flags, trim whitespace.
+  local targets_str
+  targets_str="$(echo "$c" | sed 's/^[[:space:]]*rm\([[:space:]]\+--\?[[:alnum:]-]\+\)*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+  [[ -z "$targets_str" ]] && return 1
+  # Check each target independently — one unsafe path fails the whole command.
+  local target
+  for target in $targets_str; do
+    target="${target#./}"
+    target="${target%/}"
+    [[ -z "$target" ]] && return 1
+    [[ "$target" =~ ^/tmp/build-[a-zA-Z0-9._-] ]] && continue
+    [[ "$target" == /* ]] && return 1
+    [[ "$target" == "~"* ]] && return 1
+    case "$target" in
+      node_modules|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo) continue ;;
+    esac
+    [[ "$target" == */* ]] && continue
+    return 1
+  done
+  return 0
 }
 
 

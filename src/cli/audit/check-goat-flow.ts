@@ -33,7 +33,7 @@ const NAMED_PATHS = new Set([
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
-  ".goat-flow/patterns.md",
+  ".goat-flow/patterns/README.md",
   ".goat-flow/decisions/",
   ".goat-flow/decisions/README.md",
   ".goat-flow/logs/sessions/",
@@ -174,12 +174,13 @@ const patterns: BuildCheck = {
   ]),
   /** Run the Patterns check. */
   run: (ctx) => {
-    if (ctx.fs.exists(".goat-flow/patterns.md")) return null;
+    if (ctx.fs.exists(".goat-flow/patterns/README.md")) return null;
     return {
       check: "Patterns",
-      message: "Missing: .goat-flow/patterns.md",
-      evidence: ".goat-flow/patterns.md",
-      howToFix: "Create .goat-flow/patterns.md by running `goat-flow setup`.",
+      message: "Missing: .goat-flow/patterns/README.md",
+      evidence: ".goat-flow/patterns/README.md",
+      howToFix:
+        "Create .goat-flow/patterns/ directory by running `goat-flow setup`.",
     };
   },
 };

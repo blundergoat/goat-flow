@@ -1,6 +1,6 @@
 ---
 category: auditor-and-rubric
-last_reviewed: 2026-04-30
+last_reviewed: 2026-05-01
 ---
 
 ## Lesson: Rubric changes require fixture expectation sync
@@ -63,6 +63,20 @@ Embedding an unindented shell heredoc directly inside a GitHub Actions `run: |` 
 
 ---
 
+## Lesson: Audit checks must not encourage machine-specific content in shared files
+
+**Created:** 2026-05-01
+
+**What happened:** The `boundary-guidance-present` audit check encouraged adding `## Workspace Boundary` sections with hardcoded absolute paths (e.g., `/home/hxdev/projects/feature/healthkit`) to version-controlled instruction files. In the first real deployment (Healthkit), the paths were wrong for every other developer (different WSL usernames) and for 2 of 3 checkouts on the same machine (the repo lives at `feature/`, `deploy/`, and `basedata/` paths). The audit check nudged users toward content that was guaranteed to go stale.
+
+**Root cause:** The check validated the *presence* of boundary language without considering that satisfying it required environment-specific state. Any audit check whose remedy produces machine-specific content in shared files will create the same problem.
+
+**Resolution:** Kept the check but made its remediation path-agnostic (ADR-026). The workspace boundary concept remains useful in committed instruction files when phrased generically, and runtime prompts still compute current paths dynamically in `compose-quality.ts`.
+
+**Pattern:** Before adding an audit check, ask: "Can the user satisfy this check with content that is correct across all environments and checkouts?" If the answer is no, redesign the check or its remediation so it encourages portable guidance instead of shared machine-specific state.
+
+---
+
 ## Lesson: Advisory warnings with no enforcement path train users to ignore output
 
 **Created:** 2026-04-30
@@ -73,4 +87,4 @@ Embedding an unindented shell heredoc directly inside a GitHub Actions `run: |` 
 
 **Resolution:** Removed the `collectDecisionWarnings` function. The decisions README still recommends Author(s) and Ticket/Context, but their absence no longer produces per-run noise. If enforcement is later desired, it should be a finding (gate-bearing) with a migration path, not a warning.
 
-**Pattern:** Advisory warnings must have an enforcement timeline or be removed. A warning that fires on 100% of the corpus with no path to resolution is not a safety net — it is noise that erodes trust in the tool.
+**Pattern:** Advisory warnings must have an enforcement timeline or be removed. A warning that fires on 100% of the corpus with no path to resolution is not a safety net - it is noise that erodes trust in the tool.

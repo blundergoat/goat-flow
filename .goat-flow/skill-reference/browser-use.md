@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.3.2"
+goat-flow-reference-version: "1.4.0"
 ---
 # Browser Evidence Reference
 
@@ -7,17 +7,17 @@ Last verified against: browser-use v0.2.x (2026-04-26)
 
 Use this when a task involves a URL, local HTML file, localhost page, screenshot request, browser-visible behavior, visual rendering issue, browser DevTools output, or browser console/network symptom.
 
-`browser-use` is the default observation probe for agents: quick rendered state, screenshots, and simple interaction evidence. Playwright remains the better tool for durable automated browser tests, CI assertions, cross-browser coverage, and regression suites.
+`browser-use` is the default observation probe for agents: quick rendered state, screenshots, and simple interaction evidence. Playwright remains the better tool for durable automated browser tests, CI assertions, cross-browser coverage, and regression suites. For batch page capture (visit N pages, screenshot each, emit structured MD records), use `page-capture.md` instead.
 
 ## Availability Check
 
 Before first use in a session, verify the tool is installed:
 
 ```bash
-command -v browser-use && browser-use doctor
+command -v browser-use || command -v browser-use-python
 ```
 
-If missing, offer to install: "browser-use is not installed. Want me to install it (`pip install browser-use`)? Or I can work from manual evidence (screenshots, DevTools output) instead." Never install it without approval. If the user approves, run `pip install browser-use` and then `browser-use doctor` to verify. If the user declines or installation fails, use the manual fallback section below.
+If found, run `browser-use doctor` (or `browser-use-python -c "import browser_use; print('ok')"` for the venv wrapper). If missing, offer to install: "browser-use is not installed. Want me to install it (`pip install browser-use` or `scripts/install-browser-tools.sh`)? Or I can work from manual evidence (screenshots, DevTools output) instead." Never install it without approval. If the user declines or installation fails, use the manual fallback section below.
 
 ## Observation Workflow
 

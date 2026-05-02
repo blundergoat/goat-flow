@@ -125,6 +125,12 @@ function mergeSkills(value: unknown, merged: GoatFlowConfig): void {
   if (install === "all" || Array.isArray(install)) {
     merged.skills.install = install as string[] | "all";
   }
+  const goatReview = value["goat-review"];
+  if (!isRecord(goatReview)) return;
+  const localPrBase = goatReview.local_pr_base;
+  if (typeof localPrBase === "string" && localPrBase.trim().length > 0) {
+    merged.skills["goat-review"] = { localPrBase: localPrBase.trim() };
+  }
 }
 
 /** Normalize one raw command list into a filtered string array. */
@@ -443,14 +449,34 @@ function validateSkillsField(
   errors: ValidationIssue[],
 ): void {
   validateObjectField(raw, "skills", errors, (value) => {
-    if (!("install" in value)) return;
-    const { install } = value;
-    if (install !== "all" && !Array.isArray(install)) {
-      pushError(errors, "skills.install", 'must be "all" or an array');
-      return;
+    if ("install" in value) {
+      const { install } = value;
+      if (install !== "all" && !Array.isArray(install)) {
+        pushError(errors, "skills.install", 'must be "all" or an array');
+      } else if (Array.isArray(install)) {
+        validateSkillInstallList(install, errors);
+      }
     }
-    if (Array.isArray(install)) {
-      validateSkillInstallList(install, errors);
+
+    if ("goat-review" in value) {
+      const goatReview = value["goat-review"];
+      if (!isRecord(goatReview)) {
+        pushError(errors, "skills.goat-review", "must be an object");
+        return;
+      }
+      if ("local_pr_base" in goatReview) {
+        const localPrBase = goatReview.local_pr_base;
+        if (
+          typeof localPrBase !== "string" ||
+          localPrBase.trim().length === 0
+        ) {
+          pushError(
+            errors,
+            "skills.goat-review.local_pr_base",
+            "must be a non-empty string",
+          );
+        }
+      }
     }
   });
 }

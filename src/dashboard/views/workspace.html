@@ -110,196 +110,334 @@
     </div>
 
     <div
+      :style="{ gridTemplateColumns: sessionsCollapsed ? '52px minmax(0, 1fr)' : 'minmax(0, 15rem) minmax(0, 1fr)' }"
       style="
         display: grid;
-        grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
         gap: 12px;
         flex: 1;
         min-height: 0;
+        transition: grid-template-columns 200ms ease;
       "
     >
       <!-- Left rail -->
       <div
-        style="display: flex; flex-direction: column; gap: 12px; min-height: 0"
+        :style="{ padding: sessionsCollapsed ? '8px 6px' : '0 12px 0 0' }"
+        style="
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          min-width: 0;
+          height: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
+          border-right: 1px solid var(--border-subtle);
+          background: var(--surface-base);
+          transition:
+            padding 200ms ease,
+            background 150ms ease;
+        "
       >
         <div
-          style="display: flex; flex-direction: column; min-height: 0; flex: 1"
-        >
-          <div class="section-label" style="margin-bottom: 8px">
-            Active <span x-text="allSessions().length"></span>
-          </div>
-          <div
-            class="scrollbar"
-            style="
-              display: flex;
-              flex-direction: column;
-              gap: 6px;
-              overflow-y: auto;
-              padding-right: 4px;
-              flex: 1;
-            "
-          >
-            <template x-for="s in allSessions()" :key="'ws-s-' + s.id">
-              <div
-                @click="openSession(s)"
-                class="gf-card"
-                :style="{
-                  padding: '10px 12px',
-                  cursor: 'pointer',
-                  borderColor: s.id === activeSessionId ? 'var(--accent-border)' : ((typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'rgba(245,158,11,0.35)' : undefined),
-                  background: s.id === activeSessionId ? 'rgba(74,222,128,0.04)' : ((typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'rgba(245,158,11,0.04)' : undefined)
-                }"
-              >
-                <div style="display: flex; gap: 10px; align-items: flex-start">
-                  <span
-                    style="
-                      width: 8px;
-                      height: 8px;
-                      border-radius: 999px;
-                      margin-top: 5px;
-                      flex-shrink: 0;
-                    "
-                    :style="{ background: (typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? '#fbbf24' : (s.status === 'active' ? '#4ade80' : '#9ca3af') }"
-                  ></span>
-                  <div style="min-width: 0; flex: 1">
-                    <div
-                      class="gf-text-primary"
-                      style="font-size: 13px; font-weight: 500"
-                      x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
-                    ></div>
-                    <p
-                      class="gf-text-muted"
-                      style="font-size: 12px; margin: 2px 0 0"
-                    >
-                      <span x-text="s.projectName || projectName"></span>
-                      <span style="color: var(--text-dim)"> · </span>
-                      <span class="mono" x-text="s.runner"></span>
-                    </p>
-                    <p
-                      x-show="s.cwd && s.cwd !== s.projectPath"
-                      class="gf-text-muted"
-                      style="font-size: 11px; margin: 2px 0 0"
-                    >
-                      cwd
-                      <span class="mono" x-text="displayNameFor(s.cwd)"></span>
-                    </p>
-                    <p
-                      style="font-size: 12px; margin: 4px 0 0"
-                      :style="{ color: (typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? '#fbbf24' : 'var(--text-muted)' }"
-                    >
-                      <span
-                        x-text="(typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'Waiting' : 'Running'"
-                      ></span>
-                      <span
-                        class="mono"
-                        style="color: var(--text-dim); margin-left: 5px"
-                        x-text="ageLabel(s)"
-                      ></span>
-                    </p>
-                  </div>
-                  <button
-                    x-show="isSessionBoundLocally(s.id)"
-                    @click.stop="exportSession(s.id)"
-                    class="gf-btn gf-btn-sm"
-                    style="font-size: 11px"
-                  >
-                    Export
-                  </button>
-                  <button
-                    @click.stop="confirmEndSessionId = (confirmEndSessionId === s.id ? null : s.id)"
-                    class="gf-btn gf-btn-sm"
-                    style="font-size: 11px"
-                  >
-                    End
-                  </button>
-                </div>
-                <div
-                  x-show="confirmEndSessionId === s.id"
-                  style="
-                    margin-top: 7px;
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 6px;
-                  "
-                >
-                  <button
-                    @click.stop="endServerSession(s.id); confirmEndSessionId = null"
-                    class="gf-btn gf-btn-sm gf-btn-danger"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    @click.stop="confirmEndSessionId = null"
-                    class="gf-btn gf-btn-sm"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <div
+          id="workspace-session-sidebar-content"
+          x-show="!sessionsCollapsed"
+          x-transition.opacity.duration.150ms
           style="
             display: flex;
             flex-direction: column;
+            gap: 12px;
             min-height: 0;
-            max-height: 180px;
+            flex: 1;
           "
         >
           <div
             style="
               display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
+              flex-direction: column;
+              min-height: 0;
+              flex: 1;
             "
           >
-            <div class="section-label">
-              Recent <span x-text="recentSessions().length"></span>
+            <div class="section-label" style="margin-bottom: 8px">
+              Active <span x-text="allSessions().length"></span>
             </div>
-            <button @click="endAllSessions()" class="gf-btn gf-btn-sm">
-              Clear
-            </button>
+            <div
+              class="scrollbar"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                overflow-y: auto;
+                padding-right: 4px;
+                flex: 1;
+              "
+            >
+              <template x-for="s in allSessions()" :key="'ws-s-' + s.id">
+                <div
+                  @click="openSession(s)"
+                  class="gf-card"
+                  :style="{
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  borderColor: s.id === activeSessionId ? 'var(--accent-border)' : ((typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'rgba(245,158,11,0.35)' : undefined),
+                  background: s.id === activeSessionId ? 'rgba(74,222,128,0.04)' : ((typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'rgba(245,158,11,0.04)' : undefined)
+                }"
+                >
+                  <div
+                    style="display: flex; gap: 10px; align-items: flex-start"
+                  >
+                    <span
+                      style="
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 999px;
+                        margin-top: 5px;
+                        flex-shrink: 0;
+                      "
+                      :style="{ background: (typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? '#fbbf24' : (s.status === 'active' ? '#4ade80' : '#9ca3af') }"
+                    ></span>
+                    <div style="min-width: 0; flex: 1">
+                      <div
+                        class="gf-text-primary"
+                        style="font-size: 13px; font-weight: 500"
+                        x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
+                      ></div>
+                      <p
+                        class="gf-text-muted"
+                        style="font-size: 12px; margin: 2px 0 0"
+                      >
+                        <span x-text="s.projectName || projectName"></span>
+                        <span style="color: var(--text-dim)"> · </span>
+                        <span class="mono" x-text="s.runner"></span>
+                      </p>
+                      <p
+                        x-show="s.cwd && s.cwd !== s.projectPath"
+                        class="gf-text-muted"
+                        style="font-size: 11px; margin: 2px 0 0"
+                      >
+                        cwd
+                        <span
+                          class="mono"
+                          x-text="displayNameFor(s.cwd)"
+                        ></span>
+                      </p>
+                      <p
+                        style="font-size: 12px; margin: 4px 0 0"
+                        :style="{ color: (typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? '#fbbf24' : 'var(--text-muted)' }"
+                      >
+                        <span
+                          x-text="(typeof s.idleDuration === 'number' && idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(idleTimeoutMinutes * 0.85) * 60) ? 'Waiting' : 'Running'"
+                        ></span>
+                        <span
+                          class="mono"
+                          style="color: var(--text-dim); margin-left: 5px"
+                          x-text="ageLabel(s)"
+                        ></span>
+                      </p>
+                    </div>
+                    <button
+                      x-show="isSessionBoundLocally(s.id)"
+                      @click.stop="exportSession(s.id)"
+                      class="gf-btn gf-btn-sm"
+                      style="font-size: 11px"
+                    >
+                      Export
+                    </button>
+                    <button
+                      @click.stop="confirmEndSessionId = (confirmEndSessionId === s.id ? null : s.id)"
+                      class="gf-btn gf-btn-sm"
+                      style="font-size: 11px"
+                    >
+                      End
+                    </button>
+                  </div>
+                  <div
+                    x-show="confirmEndSessionId === s.id"
+                    style="
+                      margin-top: 7px;
+                      display: flex;
+                      justify-content: flex-end;
+                      gap: 6px;
+                    "
+                  >
+                    <button
+                      @click.stop="endServerSession(s.id); confirmEndSessionId = null"
+                      class="gf-btn gf-btn-sm gf-btn-danger"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      @click.stop="confirmEndSessionId = null"
+                      class="gf-btn gf-btn-sm"
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
           </div>
+
           <div
-            class="scrollbar"
             style="
               display: flex;
               flex-direction: column;
-              gap: 6px;
-              overflow-y: auto;
-              padding-right: 4px;
+              min-height: 0;
+              max-height: 180px;
             "
           >
-            <template x-for="s in recentSessions()" :key="'ws-r-' + s.id">
-              <div class="gf-card" style="padding: 8px 10px; opacity: 0.8">
-                <div
-                  class="gf-text-primary"
-                  style="font-size: 13px; font-weight: 500"
-                  x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
-                ></div>
-                <p
-                  class="gf-text-muted"
-                  style="font-size: 12px; margin: 2px 0 0"
-                >
-                  <span x-text="s.projectName || projectName"></span>
-                  <span style="color: var(--text-dim)"> · </span>
-                  <span class="mono" x-text="s.runner"></span>
-                </p>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+              "
+            >
+              <div class="section-label">
+                Recent <span x-text="recentSessions().length"></span>
               </div>
-            </template>
+              <button @click="endAllSessions()" class="gf-btn gf-btn-sm">
+                Clear
+              </button>
+            </div>
+            <div
+              class="scrollbar"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                overflow-y: auto;
+                padding-right: 4px;
+              "
+            >
+              <template x-for="s in recentSessions()" :key="'ws-r-' + s.id">
+                <div class="gf-card" style="padding: 8px 10px; opacity: 0.8">
+                  <div
+                    class="gf-text-primary"
+                    style="font-size: 13px; font-weight: 500"
+                    x-text="sessions.find(x => x.id === s.id)?.promptLabel || 'Terminal session'"
+                  ></div>
+                  <p
+                    class="gf-text-muted"
+                    style="font-size: 12px; margin: 2px 0 0"
+                  >
+                    <span x-text="s.projectName || projectName"></span>
+                    <span style="color: var(--text-dim)"> · </span>
+                    <span class="mono" x-text="s.runner"></span>
+                  </p>
+                </div>
+              </template>
+            </div>
           </div>
+
+          <button
+            @click="activeView = 'prompts'; $nextTick(() => { $refs.presetSearchInput && $refs.presetSearchInput.focus(); })"
+            class="gf-btn gf-btn-md"
+            style="justify-content: center; padding: 10px"
+          >
+            + Launch from prompts
+          </button>
         </div>
 
-        <button
-          @click="activeView = 'prompts'; $nextTick(() => { $refs.presetSearchInput && $refs.presetSearchInput.focus(); })"
-          class="gf-btn gf-btn-md"
-          style="justify-content: center; padding: 10px"
+        <div
+          x-show="sessionsCollapsed"
+          x-transition.opacity.duration.150ms
+          style="
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex: 1;
+            min-height: 0;
+            padding-top: 8px;
+          "
         >
-          + Launch from prompts
-        </button>
+          <span
+            x-show="allSessions().length > 0"
+            class="gf-text-muted mono"
+            style="
+              min-width: 26px;
+              height: 24px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 999px;
+              border: 1px solid var(--border-subtle);
+              background: var(--neutral-bg);
+              font-size: 12px;
+              font-weight: 600;
+            "
+            :title="`${allSessions().length} sessions`"
+            x-text="allSessions().length"
+          ></span>
+        </div>
+
+        <div
+          style="
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 8px;
+            flex-shrink: 0;
+          "
+        >
+          <button
+            @click="sessionsCollapsed = !sessionsCollapsed"
+            class="gf-btn gf-btn-md"
+            type="button"
+            :aria-expanded="(!sessionsCollapsed).toString()"
+            aria-controls="workspace-session-sidebar-content"
+            :title="sessionsCollapsed ? 'Open sidebar' : 'Close sidebar'"
+            :style="{ width: '100%', justifyContent: sessionsCollapsed ? 'center' : 'flex-start', padding: sessionsCollapsed ? '8px 0' : '8px 10px' }"
+          >
+            <span
+              aria-hidden="true"
+              style="
+                display: inline-flex;
+                width: 18px;
+                height: 18px;
+                flex-shrink: 0;
+              "
+            >
+              <svg
+                x-show="!sessionsCollapsed"
+                role="img"
+                aria-hidden="true"
+                xmlns="http://www.w3.org/2000/svg"
+                width="100%"
+                height="100%"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill="currentColor"
+                  fill-rule="evenodd"
+                  d="M9.749 5.244c.309.3.333.773.071 1.1l-.071.079L6.07 10l3.679 3.577c.309.3.333.774.071 1.1l-.071.079a.876.876 0 0 1-1.131.07l-.081-.07-4.286-4.167a.816.816 0 0 1-.071-1.1l.071-.078 4.286-4.167a.875.875 0 0 1 1.212 0zm6 0c.309.3.333.773.071 1.1l-.071.079L12.07 10l3.679 3.577c.309.3.333.774.071 1.1l-.071.079a.876.876 0 0 1-1.131.07l-.081-.07-4.286-4.167a.816.816 0 0 1-.071-1.1l.071-.078 4.286-4.167a.875.875 0 0 1 1.212 0z"
+                ></path>
+              </svg>
+              <svg
+                x-show="sessionsCollapsed"
+                role="img"
+                aria-hidden="true"
+                xmlns="http://www.w3.org/2000/svg"
+                width="100%"
+                height="100%"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill="currentColor"
+                  fill-rule="evenodd"
+                  d="M11.382 5.175l.081.07L15.75 9.41c.309.3.333.773.071 1.1l-.071.078-4.286 4.167a.875.875 0 0 1-1.212 0 .816.816 0 0 1-.071-1.1l.071-.079L13.93 10l-3.679-3.577a.816.816 0 0 1-.071-1.1l.071-.079a.876.876 0 0 1 1.131-.07zm-6 0l.081.07L9.75 9.41c.309.3.333.773.071 1.1l-.071.078-4.286 4.167a.875.875 0 0 1-1.212 0 .816.816 0 0 1-.071-1.1l.071-.079L7.93 10 4.251 6.423a.816.816 0 0 1-.071-1.1l.071-.079a.876.876 0 0 1 1.131-.07z"
+                ></path>
+              </svg>
+            </span>
+            <span
+              x-show="!sessionsCollapsed"
+              x-text="sessionsCollapsed ? 'Open sidebar' : 'Close sidebar'"
+            ></span>
+            <span
+              x-show="sessionsCollapsed"
+              class="sr-only"
+              x-text="sessionsCollapsed ? 'Open sidebar' : 'Close sidebar'"
+            ></span>
+          </button>
+        </div>
       </div>
 
       <!-- Right terminal panel -->

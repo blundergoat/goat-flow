@@ -17,7 +17,7 @@ If existing instruction files, settings, or local docs reference legacy task-sta
 ## First: resume project context
 
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` if they exist
-- Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns.md` already exist
+- Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns/` already exist
 - Merge with what's there - do not replace existing project memory
 
 ## Footguns - find real traps in the code
@@ -73,7 +73,7 @@ Examples:
 
 ## Patterns - capture memory beyond mistakes
 
-- Ensure `.goat-flow/patterns.md` exists. Use it for successful repeatable approaches, not incidents
+- Ensure `.goat-flow/patterns/` directory exists with `README.md`. Use it for successful repeatable approaches, not incidents
 
 ## Architecture and code map - make them real
 
@@ -102,7 +102,7 @@ Examples:
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
 - [ ] Every `.goat-flow/footguns/*.md` and `.goat-flow/lessons/*.md` bucket has `category:` + `last_reviewed:` frontmatter; `node --import tsx src/cli/cli.ts stats . --check` exits 0
 - [ ] Every `## Footgun:` entry begins with `**Status:**` (active | mitigated | resolved)
-- [ ] `.goat-flow/patterns.md` exists
+- [ ] `.goat-flow/patterns/README.md` exists
 - [ ] If `docs/` surfaces exist, they are referenced (not duplicated) in `.goat-flow/`
 - [ ] Recovery references use current paths (not legacy task-state files)
 - [ ] If legacy task-state files exist, they are reported in the session log

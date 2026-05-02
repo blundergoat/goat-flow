@@ -92,7 +92,7 @@ export interface AuditReport {
 
 // === Drift check (M04) ===
 
-export type DriftFindingKind = "content" | "missing" | "orphan" | "deprecated";
+type DriftFindingKind = "content" | "missing" | "orphan" | "deprecated";
 
 export interface DriftFinding {
   kind: DriftFindingKind;

@@ -4,20 +4,35 @@
     { "language": "vue", "packages": ["vue", "nuxt"] },
     { "language": "angular", "packages": ["@angular/core"] },
     { "language": "svelte", "packages": ["svelte", "@sveltejs/kit"] },
+    { "language": "solid", "packages": ["solid-js"] },
     { "language": "express", "packages": ["express"] },
-    { "language": "cypress", "packages": ["cypress"] }
+    { "language": "fastify", "packages": ["fastify"] },
+    { "language": "hono", "packages": ["hono"] },
+    { "language": "nestjs", "packages": ["@nestjs/core"] },
+    { "language": "remix", "packages": ["@remix-run/node", "@remix-run/react"] },
+    { "language": "astro", "packages": ["astro"] }
+  ],
+  "nodeTestFrameworks": [
+    { "name": "cypress", "packages": ["cypress"] },
+    { "name": "playwright", "packages": ["@playwright/test", "playwright"] },
+    { "name": "jest", "packages": ["jest", "ts-jest"] },
+    { "name": "vitest", "packages": ["vitest"] },
+    { "name": "mocha", "packages": ["mocha"] }
   ],
   "extraLanguageSignals": [
     { "language": "blade", "paths": [], "globs": ["**/*.blade.php"] },
     { "language": "twig", "paths": [], "globs": ["**/*.twig"] },
     { "language": "erb", "paths": [], "globs": ["**/*.erb", "**/*.html.erb"] },
-    { "language": "jinja", "paths": [], "globs": ["**/*.jinja2", "**/*.html"] },
+    { "language": "jinja", "paths": [], "globs": ["**/*.jinja2", "**/*.j2"] },
     {
       "language": "swift",
       "paths": ["Package.swift"],
       "globs": ["**/*.xcodeproj", "**/*.swift"]
     },
-    { "language": "blazor", "paths": [], "globs": ["**/*.razor"] }
+    { "language": "blazor", "paths": [], "globs": ["**/*.razor"] },
+    { "language": "dart", "paths": ["pubspec.yaml"], "globs": ["**/*.dart"] },
+    { "language": "kotlin", "paths": [], "globs": ["**/*.kt", "**/*.kts"] },
+    { "language": "elixir", "paths": ["mix.exs"], "globs": ["**/*.ex", "**/*.exs"] }
   ],
   "codeGenSignals": [
     { "tool": "sqlc", "paths": ["sqlc.yaml", "sqlc.yml"], "globs": [] },
@@ -27,45 +42,76 @@
       "tool": "openapi",
       "paths": [],
       "globs": ["**/openapi-generator*", "**/openapi*.yaml"]
-    }
+    },
+    { "tool": "graphql-codegen", "paths": ["codegen.ts", "codegen.yml"], "globs": [] },
+    { "tool": "prisma", "paths": [], "globs": ["**/schema.prisma"] },
+    { "tool": "drizzle", "paths": ["drizzle.config.ts"], "globs": [] }
   ],
   "deploySignals": [
     { "tool": "amplify", "paths": ["amplify.yml", "amplify"], "globs": [] },
     {
       "tool": "docker",
-      "paths": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"],
+      "paths": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yaml", "compose.yml"],
       "globs": []
     },
     { "tool": "fly", "paths": ["fly.toml"], "globs": [] },
     { "tool": "vercel", "paths": ["vercel.json"], "globs": [] },
+    { "tool": "netlify", "paths": ["netlify.toml"], "globs": [] },
+    { "tool": "cloudflare", "paths": ["wrangler.toml", "wrangler.jsonc"], "globs": [] },
+    { "tool": "render", "paths": ["render.yaml"], "globs": [] },
     {
       "tool": "terraform",
       "paths": ["terraform"],
       "globs": ["**/main.tf", "**/*.tf"]
     },
-    { "tool": "packer", "paths": ["packer.json"], "globs": ["**/*.pkr.hcl"] }
+    { "tool": "pulumi", "paths": ["Pulumi.yaml"], "globs": [] },
+    {
+      "tool": "kubernetes",
+      "paths": [],
+      "globs": ["**/k8s/**/*.yaml", "**/kubernetes/**/*.yaml", "**/kustomization.yaml"]
+    },
+    { "tool": "packer", "paths": ["packer.json"], "globs": ["**/*.pkr.hcl"] },
+    { "tool": "aws-cdk", "paths": ["cdk.json"], "globs": [] }
   ],
   "setupFrameworkMarkers": [
     { "name": "Next.js", "files": ["package.json"], "markers": ["\"next\""] },
     { "name": "Nuxt", "files": ["package.json"], "markers": ["\"nuxt\""] },
+    { "name": "Remix", "files": ["package.json"], "markers": ["\"@remix-run/"] },
+    { "name": "Astro", "files": ["package.json"], "markers": ["\"astro\""] },
+    { "name": "Laravel", "files": ["composer.json"], "markers": ["laravel/framework"] },
+    { "name": "Symfony", "files": ["composer.json"], "markers": ["symfony/framework-bundle"] },
+    {
+      "name": "Django",
+      "files": ["requirements.txt", "pyproject.toml"],
+      "markers": ["django"]
+    },
+    {
+      "name": "FastAPI",
+      "files": ["requirements.txt", "pyproject.toml"],
+      "markers": ["fastapi"]
+    },
     {
       "name": "Flask",
       "files": ["requirements.txt", "pyproject.toml"],
       "markers": ["flask"]
     },
+    { "name": "Rails", "files": ["Gemfile"], "markers": ["rails"] },
+    { "name": "Spring Boot", "files": ["pom.xml", "build.gradle", "build.gradle.kts"], "markers": ["spring-boot"] },
     {
       "name": "Actix",
       "files": ["Cargo.toml"],
       "markers": ["actix-web"]
     },
     { "name": "Gin", "files": ["go.mod"], "markers": ["gin-gonic"] },
-    { "name": "Echo", "files": ["go.mod"], "markers": ["labstack/echo"] }
+    { "name": "Echo", "files": ["go.mod"], "markers": ["labstack/echo"] },
+    { "name": "Phoenix", "files": ["mix.exs"], "markers": ["phoenix"] },
+    { "name": "Flutter", "files": ["pubspec.yaml"], "markers": ["flutter"] }
   ],
-  "rootPythonFiles": ["pyproject.toml", "setup.py", "requirements.txt"],
+  "rootPythonFiles": ["pyproject.toml", "setup.py", "requirements.txt", "setup.cfg"],
   "subdirPythonGlobs": ["*/pyproject.toml", "*/requirements.txt"],
   "javaManifestPaths": ["pom.xml", "build.gradle", "build.gradle.kts"],
   "llmEnvFiles": [".env.example", ".env.sample", ".env"],
-  "llmDepFiles": ["requirements.txt", "pyproject.toml", "package.json"],
+  "llmDepFiles": ["requirements.txt", "pyproject.toml", "package.json", "go.mod", "Cargo.toml"],
   "complianceDocs": [
     "README.md",
     ".goat-flow/architecture.md",
@@ -80,6 +126,10 @@
     "go": ["gofmt", "goimports"],
     "bash": ["shfmt"],
     "ruby": ["rubocop"],
-    "java": ["google-java-format", "spotless"]
+    "java": ["google-java-format", "spotless"],
+    "kotlin": ["ktlint", "detekt"],
+    "csharp": ["dotnet-format", "csharpier"],
+    "swift": ["swiftformat"],
+    "dart": ["dart format"]
   }
 }

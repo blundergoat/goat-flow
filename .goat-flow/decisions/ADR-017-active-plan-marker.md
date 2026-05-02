@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-17
+**Updated:** 2026-05-01
 **Supersedes:** -
 **Related:** M03 (`.goat-flow/tasks/1.2.0/M03-active-plan-marker.md`), `lessons/verification.md` "rename-survivor class" cross-reference fragility note.
 
@@ -16,6 +17,8 @@
 Adopt **Option B - marker file `.goat-flow/tasks/.active`**. Format: one-line, content = name of the active subdir relative to `.goat-flow/tasks/` (e.g. `1.2.0`). No trailing slash, no leading dot in the value.
 
 `/goat-plan` owns `.active` lookup. If it exists and names an existing subdir, `/goat-plan` scans only that subdir. If `.active` is missing or names a missing subdir, `/goat-plan` treats that as normal local churn (completed plan, project switch, or no task workflow), lists top-level entries excluding `_archived`, prefers dirs with recent `M*.md` files, and asks the user which is current. `/goat` remains a router only: it classifies planning intent and routes to `/goat-plan` without reading task-state markers.
+
+A referenced task path does not update or override `.active` by itself. If a user mentions `.goat-flow/tasks/<name>` without an explicit action verb, `/goat-plan` treats it as read-only orientation context, may report that `.active` currently points elsewhere, and must ask before switching `.active`, changing milestone status, or implementing code.
 
 The install script (`workflow/install-goat-flow.sh`) writes `.active` automatically when exactly one `X.Y.Z`-named subdir exists at install time; otherwise leaves it for the skill's fallback path.
 

@@ -84,7 +84,7 @@ function dashboardGlobalLaunchContext(
     : "Write behavior: default to read-only analysis; do not write files in the selected target unless the user explicitly asks.";
   const routeLine =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
-      ? "goat-plan global mode: keep plans inline; do not create target .goat-flow/tasks unless the user explicitly approves writes."
+      ? "goat-plan global mode: keep plans inline; treat bare task paths as read-only context; do not create or mutate target .goat-flow/tasks unless the user explicitly approves writes."
       : preset?.route === "goat-critique" &&
           /^\/goat-critique\b/.test(presetPrompt)
         ? "goat-critique global mode: keep gitignored critique logs/artifacts in the controlling workspace; do not write goat-flow logs in the selected target unless the user explicitly makes that target the controlling workspace."
@@ -235,7 +235,7 @@ async function dashboardUpdateSessionCount(
   }
 }
 
-/** End every live terminal session for the current project. */
+/** Clear non-active (terminated/starting) terminal sessions, preserving running ones. */
 async function dashboardEndAllSessions(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
@@ -247,26 +247,67 @@ async function dashboardEndAllSessions(
           .map((session) => readServerSessionInfo(session))
           .filter((session): session is ServerSessionInfo => session !== null)
       : [];
-    for (const session of sessions) {
+    const inactive = sessions.filter((session) => session.status !== "active");
+    const activeIds = new Set(
+      sessions
+        .filter((session) => session.status === "active")
+        .map((session) => session.id),
+    );
+    for (const session of inactive) {
       await fetch(`/api/terminal/${session.id}`, { method: "DELETE" });
     }
+    const keptRefs: typeof ctx._terminalRefs = {};
     for (const id of Object.keys(ctx._terminalRefs)) {
-      const refs = ctx._terminalRefs[id];
-      if (refs?.cleanup) refs.cleanup();
+      if (activeIds.has(id)) {
+        const active = ctx._terminalRefs[id];
+        if (active) keptRefs[id] = active;
+      } else {
+        const refs = ctx._terminalRefs[id];
+        if (refs?.cleanup) refs.cleanup();
+      }
     }
-    ctx._terminalRefs = {};
-    ctx._projectSessions = {};
-    ctx._projectActiveSession = {};
-    ctx.sessions = [];
-    ctx.activeSessionId = null;
+    ctx._terminalRefs = keptRefs;
+    const keptProjects: typeof ctx._projectSessions = {};
+    for (const key of Object.keys(ctx._projectSessions)) {
+      const kept = (ctx._projectSessions[key] ?? []).filter((s) =>
+        activeIds.has(s.sessionId),
+      );
+      if (kept.length > 0) keptProjects[key] = kept;
+    }
+    ctx._projectSessions = keptProjects;
+    for (const key of Object.keys(ctx._projectActiveSession)) {
+      const activeSessionForProject = ctx._projectActiveSession[key];
+      if (activeSessionForProject && !activeIds.has(activeSessionForProject)) {
+        const projectSessions = keptProjects[key];
+        if (projectSessions?.[0]) {
+          ctx._projectActiveSession[key] = projectSessions[0].sessionId;
+        } else {
+          Reflect.deleteProperty(ctx._projectActiveSession, key);
+        }
+      }
+    }
+    ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
+    if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
+      ctx.activeSessionId = null;
+    }
     for (const [presetId, state] of Object.entries(ctx.promptRunStates)) {
-      if (state === "running") ctx.promptRunStates[presetId] = "pass";
+      if (
+        state === "running" &&
+        !ctx.sessions.some((s) => s.presetId === presetId)
+      ) {
+        ctx.promptRunStates[presetId] = "pass";
+      }
     }
     await ctx.updateSessionCount();
-    ctx.showToast("All sessions ended");
+    const count = inactive.length;
+    ctx.showToast(
+      count > 0
+        ? `Cleared ${count} inactive session${count !== 1 ? "s" : ""}`
+        : "No inactive sessions to clear",
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    ctx.showToast("Failed to end sessions: " + msg, true);
+    ctx.showToast("Failed to clear sessions: " + msg, true);
   }
 }
 

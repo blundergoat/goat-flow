@@ -44,6 +44,14 @@ const INSTALLED_BROWSER_USE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-reference/browser-use.md",
 );
+const TEMPLATE_PAGE_CAPTURE = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/reference/page-capture.md",
+);
+const INSTALLED_PAGE_CAPTURE = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-reference/page-capture.md",
+);
 const TEMPLATE_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
   "workflow/skills/reference/skill-quality-testing.md",
@@ -113,6 +121,20 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_BROWSER_USE, INSTALLED_BROWSER_USE),
       0,
       "browser-use.md: template and installed should match",
+    );
+  });
+
+  it("template and installed page-capture.md match", () => {
+    if (
+      !existsSync(TEMPLATE_PAGE_CAPTURE) ||
+      !existsSync(INSTALLED_PAGE_CAPTURE)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_PAGE_CAPTURE, INSTALLED_PAGE_CAPTURE),
+      0,
+      "page-capture.md: template and installed should match",
     );
   });
 

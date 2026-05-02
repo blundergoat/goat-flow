@@ -845,7 +845,7 @@ function app() {
     async updateSessionCount() {
       await dashboardUpdateSessionCount(this);
     },
-    /** End every live terminal session for the current project. */
+    /** Clear non-active (terminated/starting) sessions, preserving running ones. */
     async endAllSessions() {
       await dashboardEndAllSessions(this);
     },

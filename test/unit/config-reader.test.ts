@@ -59,6 +59,64 @@ toolchain:
   });
 });
 
+describe("config merges goat-review skill settings", () => {
+  it("defaults local_pr_base to absent when not configured", () => {
+    const result = loadConfig("/tmp", configFS(null));
+    assert.equal(result.config.skills["goat-review"], undefined);
+  });
+
+  it("parses skills.goat-review.local_pr_base from YAML", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+skills:
+  install: all
+  goat-review:
+    local_pr_base: "deploy"
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    assert.equal(result.config.skills["goat-review"]?.localPrBase, "deploy");
+  });
+
+  it("fails closed when skills.goat-review.local_pr_base is not a string", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+skills:
+  install: all
+  goat-review:
+    local_pr_base: 42
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, false);
+    assert.equal(result.config.skills["goat-review"], undefined);
+    assert.ok(
+      result.errors.some(
+        (error) => error.path === "skills.goat-review.local_pr_base",
+      ),
+      JSON.stringify(result.errors),
+    );
+  });
+
+  it("fails closed when skills.goat-review.local_pr_base is empty", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+skills:
+  install: all
+  goat-review:
+    local_pr_base: "   "
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, false);
+    assert.equal(result.config.skills["goat-review"], undefined);
+    assert.ok(
+      result.errors.some(
+        (error) => error.path === "skills.goat-review.local_pr_base",
+      ),
+      JSON.stringify(result.errors),
+    );
+  });
+});
+
 describe("config validates agent ids against the registry", () => {
   it("errors with the manifest-backed supported-agent list", () => {
     const yaml = `

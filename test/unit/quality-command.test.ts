@@ -195,7 +195,7 @@ describe("quality prompt content", () => {
       "Should reference goat-qa skill",
     );
     assert.ok(
-      result.prompt.includes("ask for a milestone/task breakdown inline"),
+      result.prompt.includes("bare `.goat-flow/tasks/<name>` path"),
       "Should keep goat-plan probe reporting-only without requiring task-file writes",
     );
   });

@@ -1,6 +1,6 @@
 ---
 category: design-decisions
-last_reviewed: 2026-04-27
+last_reviewed: 2026-05-02
 ---
 
 ## Lesson: Doer-verifier is theater in single-agent context
@@ -102,3 +102,14 @@ M13's first draft extended `goat-flow quality` by asking the agent to write a st
 **Prevention:** Before a plan proposes "carve a narrow exception to a contract the prompt enforces", test the inverse: "can the CLI do this instead, after the agent responds?" If yes, move the side effect. If the answer requires restructuring the command flow, do that restructuring - it is cheaper than carrying a prompt contradiction into production, where every future extender has to interpret the exception identically on first-try.
 
 **2026-04-19 amendment - partially superseded:** `goat-flow quality capture` was removed in v1.2.0; the write returned to the prompt by design. The original reasoning held because the hypothetical write could have landed anywhere in the repo. The current contract pins the write to `.goat-flow/logs/quality/*.json` - a gitignored path - so the "committed-state pollution" concern does not apply. `src/cli/prompt/compose-quality.ts` (search: `No tracked-file writes`) still forbids tracked-file writes and allows only this single gitignored path. The general principle still holds for tracked-file writes; the specific ruling against the quality-report write is superseded.
+
+## Lesson: Framework-shipped per-language reference packs don't scale
+**Created:** 2026-05-02
+
+The `ddt-layer/` directory shipped per-language static analysis instructions (php.md, typescript.md) as goat-flow reference packs that the installer copied into every target project. This was wrong at the design level: every project has different languages, linters, and static analysis preferences, and goat-flow can't ship reference files for an unbounded set of toolchains.
+
+**Root cause:** Treating project-specific tool configuration as framework-level doctrine. The DDT layer concept (static checks before behavioural tests) is sound, but the implementation confused "what to check" (framework concern) with "how to check it in PHP/TypeScript/etc." (project concern).
+
+**Decision:** Removed `ddt-layer/` entirely (ADR-027). goat-plan now says "language-appropriate static analysis" and lets the agent detect the toolchain from project structure. Projects that need specific instructions put them in their own instruction file.
+
+**Prevention:** Before adding a reference pack to goat-flow, ask: "does this content vary by target project?" If yes, it belongs in the target project's configuration, not in the framework.

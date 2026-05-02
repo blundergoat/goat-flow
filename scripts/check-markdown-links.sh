@@ -28,12 +28,16 @@ files_with_links=$(find docs/ workflow/setup/ workflow/skills/ .goat-flow/ \
   2>/dev/null | sort)
 
 for file in $files_with_links; do
-  # One grep pass per file: extract lines containing [text](path).
-  # Pipeline filters out fenced code block lines and inline-code examples.
+  # Extract lines with [text](path), excluding lines inside fenced code blocks
+  # and inline-code spans. Two-pass: first strip fenced-block interior lines,
+  # then grep for link patterns.
   # SC2016: single-quoted backtick regex is intentional, not a variable expansion.
   # shellcheck disable=SC2016
-  matches=$(grep -nP '\[[^\]]*\]\([^)]+\)' "$file" 2>/dev/null \
-    | grep -vP '^\d+:\s*(```|~~~)' \
+  matches=$(awk '
+    /^```/ || /^~~~/ { in_fence = !in_fence; next }
+    in_fence { next }
+    /\[[^\]]*\]\([^)]+\)/ { print NR ":" $0 }
+  ' "$file" 2>/dev/null \
     | grep -vP '^\d+:.*`[^`]*\[[^\]]*\]\([^)]+\)[^`]*`' || true)
 
   [[ -z "$matches" ]] && continue

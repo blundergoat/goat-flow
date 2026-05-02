@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.3.2",
+  "version": "1.4.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -9,6 +9,7 @@
     ".goat-flow/tasks/README.md",
     ".goat-flow/logs/quality/README.md",
     ".goat-flow/logs/critiques/README.md",
+    ".goat-flow/logs/security/README.md",
     ".goat-flow/scratchpad/.gitignore",
     ".goat-flow/scratchpad/README.md",
     ".goat-flow/lessons/README.md",
@@ -18,6 +19,7 @@
     ".goat-flow/skill-reference/skill-preamble.md",
     ".goat-flow/skill-reference/skill-conventions.md",
     ".goat-flow/skill-reference/browser-use.md",
+    ".goat-flow/skill-reference/page-capture.md",
     ".goat-flow/skill-reference/skill-quality-testing.md",
     ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
@@ -25,16 +27,18 @@
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
-    ".goat-flow/patterns.md"
+    ".goat-flow/patterns/README.md"
   ],
 
   "required_dirs": [
     ".goat-flow/decisions/",
     ".goat-flow/footguns/",
     ".goat-flow/lessons/",
+    ".goat-flow/patterns/",
     ".goat-flow/logs/sessions/",
     ".goat-flow/logs/quality/",
     ".goat-flow/logs/critiques/",
+    ".goat-flow/logs/security/",
     ".goat-flow/scratchpad/",
     ".goat-flow/skill-reference/",
     ".goat-flow/tasks/"
@@ -47,8 +51,9 @@
     ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed.",
     ".goat-flow/logs/quality/": "Workspace-local, gitignored-by-design quality report history. Saved agent quality reports (JSON) and their captured prose companions (MD); feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. Only README.md is committed.",
     ".goat-flow/logs/critiques/": "Workspace-local, gitignored-by-design critique run history. Phase 3 snapshots from `/goat-critique` runs persisted before the Phase 4 blocking gate so work survives session interruptions. Only README.md is committed.",
+    ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/skill-reference/": "Committed shared cold-path skill doctrine copied from workflow templates. Holds skill-preamble.md, skill-conventions.md, browser-use.md for browser evidence capture, and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023); durable reference state used across sessions, not transient notes.",
+    ".goat-flow/skill-reference/": "Committed shared cold-path skill doctrine copied from workflow templates. Holds skill-preamble.md, skill-conventions.md, browser-use.md for browser evidence capture, page-capture.md for Playwright page-capture usage tiers, and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023); durable reference state used across sessions, not transient notes.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
@@ -71,6 +76,18 @@
       "goat-qa"
     ],
     "references": {
+      "goat-plan": [
+        "references/milestone-examples.md",
+        "references/issue-format.md"
+      ],
+      "goat-critique": [
+        "references/rubric-examples.md",
+        "references/sub-agent-directives.md"
+      ],
+      "goat-review": [
+        "references/examples.md",
+        "references/refuter-spec.md"
+      ],
       "goat-security": [
         "references/common-threats.md",
         "references/auth-authz.md",

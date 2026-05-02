@@ -7,7 +7,8 @@
 !architecture.md
 !code-map.md
 !glossary.md
-!patterns.md
+!patterns/
+!patterns/**
 !security-policy.md
 
 # Committed goat-flow directories
@@ -42,3 +43,8 @@ logs/quality/*.md
 !logs/critiques/
 logs/critiques/*.md
 !logs/critiques/README.md
+# Keep the security-log path and README, but ignore captured reports.
+!logs/security/
+logs/security/*.md
+logs/security/*.json
+!logs/security/README.md

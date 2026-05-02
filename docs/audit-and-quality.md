@@ -39,7 +39,7 @@ Checks are grouped by **scope**:
 - `architecture` - `.goat-flow/architecture.md` exists
 - `code-map` - `.goat-flow/code-map.md` exists
 - `glossary` - `.goat-flow/glossary.md` exists
-- `patterns` - `.goat-flow/patterns.md` exists
+- `patterns` - `.goat-flow/patterns/README.md` exists
 - `decisions` - `.goat-flow/decisions/` directory exists
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists
 - `tasks` - `.goat-flow/tasks/` directory, `.gitignore`, and README exist (local-session state by design)
@@ -63,7 +63,7 @@ Adds 17 checks across the five harness concerns on top of the default build chec
 Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
 **harness scope** (AI Harness Completeness) - 17 checks across 5 concerns:
-- **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance (advisory)
+- **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance present
 - **Constraints** (4) - deny covers secrets, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings
 - **Verification** (4) - test runner configured, hooks in sync, commit guidance, post-turn hook integrity
 - **Recovery** (2) - milestone tracking, session logs
@@ -74,7 +74,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.3.2
+  Config:                 valid, version 1.4.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS

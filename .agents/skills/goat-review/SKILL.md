@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.3.2"
+goat-flow-skill-version: "1.4.0"
 ---
 # /goat-review
 
@@ -27,17 +27,41 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 - If vague, ask one follow-up covering: which files, what concerns you, diff / PR / audit.
 - Auto-detect scope: (1) explicit input, (2) staged changes, (3) unstaged changes, (4) PR-style when HEAD is on a non-default branch with commits ahead of the detected review base, (5) git diff.
 
-**PR mode (prefer PR link):** when the user picks PR, first ask for the PR URL or number rather than the base branch - it collapses base, head, description, and linked issues into one input. Prompt: "PR URL or number? (e.g. `#123` or `https://github.com/owner/repo/pull/123`) - or say 'local' if the branch isn't pushed." If the user supplies a PR reference and `gh` is available (see preamble External Context Sources), resolve it with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body` and source the diff via `gh pr diff <ref>`. Record the PR URL and base SHA in Review Integrity's Size line. The description/linked issues are treated as spec context, not as findings.
+**PR mode (prefer PR link):** ask for PR URL/number first -- it collapses base, head, description, and linked issues into one input. Prompt: "PR URL or number? (e.g. `#123`) -- or say 'local' if the branch isn't pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body`; diff via `gh pr diff <ref>`. Record PR URL and base SHA in Review Integrity.
 
-**PR mode (branch vs base, fallback):** when no PR link is supplied or `gh` is unavailable, resolve the base before diffing: (1) use an explicit user-provided base, (2) otherwise detect the remote default branch from `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`) or `git remote show origin`, (3) otherwise ask: "Base branch? (detected: none. Current: `$(git branch --show-current)`. I'll `git fetch origin <base>` first so the review is against the latest upstream tip.)", (4) if discovery fails and the user cannot provide a base, use `main` only as a last-resort fallback and record `base-detection-failed`. Then run `git fetch origin <base> --quiet` (best-effort; do not fail the review if offline or the remote is unreachable). Source the diff via `git diff origin/<base>...HEAD` (three-dot merge-base; matches what GitHub/GitLab PR UIs show). If the fetch fails or `origin/<base>` is not resolvable, fall back to local `<base>` and record `base-fetch-failed` as a degradation flag in Review Integrity so the reader knows the comparison was against stale local state. Record the resolved base and its short SHA in Review Integrity's Size line.
+**PR mode (base fallback):** when no PR link or `gh` unavailable, resolve base: (1) explicit user base, (2) `.goat-flow/config.yaml` `skills.goat-review.local_pr_base` (record `configured-base=<base>`; if unresolvable record `configured-base-unresolved=<base>` and continue), (3) `git symbolic-ref --short refs/remotes/origin/HEAD` or `git remote show origin`, (4) ask user, (5) last-resort fallback `main` with `base-detection-failed`. Run `git fetch origin <base> --quiet` (best-effort). Diff via `git diff origin/<base>...HEAD` (three-dot merge-base). If fetch fails, fall back to local `<base>` with `base-fetch-failed` flag. Record resolved base, source annotation, and short SHA in Review Integrity.
 
 **Size sizing (before Pass 1):** measure the diff. If it exceeds **20 files OR 3000 changed lines**, propose chunking by file group and ask. If the user proceeds un-chunked, record as `large-diff-unchunked` for Review Integrity.
 
 **Spec source (opt-in):** if `.goat-flow/tasks/.active` exists, read it to find the active plan subdir and scan for a milestone file with `Status: in-progress` or `testing-gate`. If found, offer: "Include Spec Drift check against M[NN] exit criteria?" Default: skip for quick, offer for full. Note the choice in Review Integrity.
 
-**Temporary review artifacts:** If you need to persist a repo diff, scoped diff, grep summary, or similar helper file during review, write it under `.goat-flow/scratchpad/` only. Do not drop ad hoc review artifacts at repo root. Use a filename with a random suffix so concurrent review agents do not collide; prefer `mktemp -p .goat-flow/scratchpad goat-review-<artifact>.XXXXXX.txt` or an equivalent `<base>.<random>.txt` pattern.
+**Temporary review artifacts:** write under `.goat-flow/scratchpad/` only with a random suffix (`goat-review-<artifact>.<random>.txt`). Never write to repo root.
 
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
+
+### Review Scope Snapshot (mandatory)
+
+Before Pass 1, record the exact review surface:
+
+- **Source:** staged | unstaged | PR | branch diff | explicit path list
+- **Base/Head:** `<branch-or-sha>` / `<branch-or-sha>` (or n/a)
+- **Uncommitted included:** yes | no | n/a
+- **Size:** `<files>` files, `<changed-lines>` changed lines
+- **Chunking:** no | proposed | accepted | skipped-by-user
+- **Scope degradation:** `<flags or "none">`
+
+If any value is undetermined, write `unknown` and add a degradation flag.
+
+### Step 0.5 - Intent Reconstruction (mandatory)
+
+Before Pass 1, reconstruct WHY this change exists. Read in priority order: (1) PR description and linked issues via `gh pr view <ref> --json body,title` and `gh issue view <n>`, (2) commit message of HEAD, (3) active milestone exit criteria from `.goat-flow/tasks/.active`. If none exist, flag `intent-unstated` in Review Integrity.
+
+Output three-bullet reconstruction:
+- **Stated intent:** what the change claims to do
+- **Implied intent:** what the diff actually appears to do
+- **Gap:** divergence between stated and implied, or "none"
+
+Pass 1 and Pass 2 anchor to BOTH the diff and the stated intent.
 
 ## Diff Review (Quick) - Two-Pass Discipline
 
@@ -49,12 +73,13 @@ Read the diff **without opening full files**. The point is to see what the diff 
 
 Scan for:
 - **Severity cues:** auth/permission checks, secret handling, SQL/shell/API calls, data mutation, state transitions
-- **Edge-case sweep - 5 meta-categories, specifics bubble up as the diff warrants:**
+- **Edge-case sweep - 6 meta-categories, specifics bubble up as the diff warrants:**
   - *Boundary conditions* - off-by-one, pagination/index bounds, empty collections, integer overflow
   - *Nullish values* - null / undefined / default branches, missing optional fields
   - *Concurrency* - race windows, shared state, concurrent access
   - *Error handling* - timeouts, retries/backoff, silent exception swallowing
   - *Contract changes* - signature, return type, error channel, status code, event shape
+  - *Observability & DDT testability* - complex state transitions, background tasks, retry logic, or async flows without logging, telemetry, or surface-level signals. Ask: "can a human tell if this succeeded or failed without instrumenting it?" If no: `[SHOULD:needs-signal]` or `[MUST:needs-signal]` depending on risk
 
 Write raw suspicions with `file:line` drawn from the diff. Do NOT verify, confirm, or dismiss in this pass. Over-capture is fine; Pass 2 filters.
 
@@ -63,16 +88,19 @@ Write raw suspicions with `file:line` drawn from the diff. Do NOT verify, confir
 Now read full files for context. For each Pass-1 suspicion:
 
 - **Try to DISPROVE it** (negative verification). Re-read the `file:line`, look for a guard, an upstream check, a framework mitigation, or a contract that removes the risk.
-- Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**. Drop REFUTED.
+- **Blast Radius Rule:** if a suspicion involves a contract change (signature, payload shape, exported type, event shape, error channel, status code), MUST execute `rg -n '<symbol>' -t ts -t js -t py -t php -t go -t rust` to locate external call-sites before resolving. Verify at least one consumer. If skipped, stays UNRESOLVED and gets `coverage-degraded`.
+- Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**.
+- **Refutation Ledger:** REFUTED suspicions are not silently dropped. Write a ledger to `.goat-flow/scratchpad/goat-review-refutations.<random>.txt`. Each entry: original suspicion (verbatim), refuting evidence (`file:line`), one-sentence rationale. Refuted suspicions do not appear in final output; the ledger is the audit trail.
 - Add findings that only became visible with file context (integration breakage, call-site contract mismatch, regression in a sibling file).
 - Re-verify every `file:line` reference exists before writing the final output.
 
+Full Excuse/Reality table: `references/examples.md`. Key entries:
+
 | Excuse | Reality |
 |--------|---------|
-| "Trusted author wrote it, Pass 2 will just refute everything - skip it" | In-group trust has historically produced the worst misses in auth/signing/rate-limit code. Open the files. |
-| "CI is green, so boundary and signing edges are already covered" | CI tests what was thought of. Review looks for what wasn't. Green CI raises, not answers, the Pass-2 question. |
-| "Tight window + demo tomorrow - MAY-only cosmetic pass is proportionate" | An incomplete review merged into a demo window is worse than a `coverage-degraded` conclusion returned on time. |
-| "Findings would be zero anyway, so Review Integrity is paperwork" | Review Integrity IS the zero-findings signal. `files-not-opened` tells the reader you stopped early. |
+| "Skip Pass 2 / CI is green / zero findings anyway" | Trust, CI, and empty results don't replace opening files. See full table. |
+| "The symbol is unique enough that grep is overkill" | The bug is in the consumer, not the emitter. Run the grep. |
+| "Refuted suspicions are noise - logging them wastes tokens" | The ledger is the integrity surface. Without it, REFUTED is indistinguishable from "didn't bother to check." |
 
 ### Severity + Action Tagging
 
@@ -89,8 +117,12 @@ Every surfaced finding gets two orthogonal tags:
 | patch | fix direction is unambiguous - a coding agent can apply it |
 | needs-decision | correct fix requires human input (policy, product call, trade-off) |
 | pre-existing | bug exists in unchanged code (see separation below) |
+| intent-mismatch | code is correct but does not match stated intent - needs author confirmation |
+| needs-signal | code is a black box that degrades manual testability - needs emitted signal, log, or observable return value |
 
 Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
+
+**Proof Capsule:** every finding includes a proof class per `skill-preamble.md` Proof Classification: `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. MUST/correctness-SHOULD should prefer RUNTIME or CONTRACT-GREP. NOT-REPRODUCED adds `not-reproduced-findings` to Review Integrity.
 
 ### Pre-existing Separation
 
@@ -101,11 +133,11 @@ Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
 
 Check each finding with targeted grep-first retrieval against `.goat-flow/footguns/`. When a direct match exists, include it. Omit the footgun tag when no direct match is found after the one allowed reword.
 
-**BLOCKING GATE:** Present findings using Output Format below, then pause for human to drill in.
+**BLOCKING GATE:** Present findings using Output Format below, then pause for human to drill in. After the human responds, evaluate Pass 3 auto-trigger conditions before presenting the Ship Verdict — do not skip the refuter when conditions are met.
 
-**Review DoD gate:** for reporting-only review, verify findings, cross-references, and scope boundaries; do not imply the reviewer must run implementation tests/lint or rename greps unless those checks are directly needed to verify a finding. If the user asks to implement fixes after review, switch to the instruction file's implementation DoD.
+**Review DoD gate:** for reporting-only review, verify findings, cross-references, and scope boundaries. Do not imply implementation tests unless directly needed for a finding. If user says "implement", switch to instruction file's implementation DoD.
 
-**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` to every surfaced finding - each `file:line` must be re-read fresh in this session before presentation; downgrade any finding whose evidence cannot be re-verified to UNVERIFIED.
+**Proof Gate:** per `skill-preamble.md` -- re-read each `file:line` fresh before presentation; downgrade unverifiable evidence to UNVERIFIED.
 
 ## Area Audit (Full)
 
@@ -115,23 +147,34 @@ When the target is a codebase area (not a diff). For >20 files, recommend splitt
 
 ## Spec Drift (opt-in)
 
-Only emitted when the Step 0 prompt was accepted and a live milestone file was found. Reads the milestone's **Exit Criteria** and **Assumptions** blocks, then splits output by direction - the two cases surface under different sections and carry different weight:
+Only emitted when Step 0 prompt was accepted and a live milestone was found. Reads the milestone's **Exit Criteria** and **Assumptions**, splits by direction:
 
-- **Exit-criteria drift → advisory, no severity tag.** A criterion is marked `- [x]` (done) in the milestone but the diff does not support it. The *milestone* is stale. Surface under `## Spec Drift` prefixed `[advisory]`. Do NOT tag MUST/SHOULD/MAY - this is milestone hygiene for the human to reconcile, not a code defect.
-- **Assumption invalidation → review finding with severity.** The diff makes a milestone Assumption false. The *plan* is now broken and the human must choose (update the assumption, fix the diff, or abandon). Surface under `## Findings` as `[MUST:needs-decision]`, **not** under `## Spec Drift`.
-- **Open criterion now satisfied → ready-to-tick note.** An open `- [ ]` criterion is now supported by the diff. Surface under `## Spec Drift` prefixed `[ready-to-tick]`. Advisory only - human ticks the milestone file.
+- **Exit-criteria drift** `[advisory]` under `## Spec Drift` -- criterion marked done but diff doesn't support it. No severity tag.
+- **Assumption invalidation** `[MUST:needs-decision]` under `## Findings` -- diff makes an assumption false.
+- **Open criterion satisfied** `[ready-to-tick]` under `## Spec Drift` -- advisory, human ticks milestone.
 
-If no drift, no invalidation, and no ready-to-tick criteria, still emit the section with "No drift detected against M[NN]" so the reader knows the check ran.
+If none detected, emit "No drift detected against M[NN]" so the reader knows the check ran.
+
+## Pass 3 - Cross-Model Refuter (opt-in or auto-triggered)
+
+Triggers when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
+
+**Method:** spawn an opposite-model refuter (`codex exec` from Claude Code, `claude -p` from Codex). Pass the FINDINGS LIST, not the diff. The refuter verifies or challenges findings against the live repo. Full prompt template: `references/refuter-spec.md`.
+
+**Synthesis:** REFUTER-CONFIRMED findings get `[CONFIRMED-CROSS-MODEL]` upgrade. REFUTER-REFUTED move to `## Refuted by Refuter` with reasoning preserved verbatim. REFUTER-UNRESOLVED keep original severity; add `cross-model-unresolved` to Review Integrity. Refuter leads do not become findings unless host verifies via Pass 2 rules.
+
+**Constraints:** MUST NOT run without authenticated opposite runtime (`command -v codex && codex login status` or equivalent). MUST treat REFUTER-REFUTED as advisory. MUST emit `cross-model-refuter-failed` if refuter call errors. Requires cross-model infrastructure; opt-in at Step 0 or auto-triggered by the degradation conditions listed in Pass 3.
 
 ## Review Integrity (confidence signal)
 
-Every review ends with this section. It is the anti-hallucination surface - the reader should be able to tell at a glance how confident the review is.
+Anti-hallucination surface -- tells the reader at a glance how confident the review is.
 
-List:
-- **Files opened in Pass 2:** count / total in diff. List paths that were read diff-only.
-- **Evidence tags:** N OBSERVED / M INFERRED across findings.
-- **Size:** lines changed, files changed. If chunked, state which group was reviewed and which are pending.
-- **Degradation flags** (any that apply): `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `base-detection-failed` (PR mode only), `base-fetch-failed` (PR mode only).
+- **Files opened in Pass 2:** count / total. Paths read diff-only.
+- **Evidence tags:** N OBSERVED / M INFERRED.
+- **Size:** lines changed, files changed, chunking state. PR mode: resolved base, source annotation, short SHA.
+- **Scope snapshot:** source, base, head, uncommitted, chunking.
+- **Refutations logged:** `<N>`
+- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-failed`, `intent-unstated`, `cross-model-refuter-failed`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 Never leave this section empty. "confident - no degradation flags" is the minimum.
@@ -148,6 +191,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - Pre-existing issues ARE in scope
 
 **Both modes:**
+- MUST run external call-site grep for any contract-change suspicion before resolving (Blast Radius Rule); flag `coverage-degraded` if skipped
 - MUST tag every surfaced finding with `[SEVERITY:ACTION]`
 - MUST check each finding with targeted grep-first retrieval against `.goat-flow/footguns/`; omit the tag when no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order
@@ -155,12 +199,13 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines
 - MUST emit Spec Drift only when opt-in triggered; if skipped, log `spec-drift-skipped` in Review Integrity
 - MUST split Spec Drift output by direction: exit-criteria drift as `[advisory]` (no severity tag), assumption invalidation as `[MUST:needs-decision]` under `## Findings`, open-criterion satisfaction as `[ready-to-tick]`
-- MUST store any temporary review artifact files (saved diffs, scoped diffs, grep summaries) under `.goat-flow/scratchpad/` with a random suffix in the filename; never write them to repo root
+- MUST store temporary artifacts under `.goat-flow/scratchpad/` with random suffix
 - MUST attempt to disprove each Pass-1 suspicion during Pass 2
 - MUST group 3+ related findings as systemic patterns
-- MUST NOT make file edits in review or audit mode unless the user says "implement"
-- MUST NOT frame Pass 1/Pass 2 as doer/verifier - same reviewer, structured reading discipline (ADR-005)
-- **Zero-findings HALT:** If Pass 2 produces zero findings across MUST/SHOULD/MAY, do not silently approve. State explicitly what was checked (boundary conditions, null/undefined, concurrency, error handling, contract changes) and why no issues surfaced. Zero findings must be defended, not assumed.
+- MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
+- **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
+- **Ship Verdict rules:** unresolved MUST -> NO. SHOULD-only -> YES WITH CONDITIONS. MAY-only -> YES. INTENT-MISMATCH -> NO until author confirms intent. Review Integrity `coverage-degraded`, `high-inference`, or `partial` -> downgrade verdict one step.
+- **Zero-findings HALT:** If Pass 2 produces zero findings, state what was checked and why no issues surfaced. Zero findings must be defended.
 - Universal constraints from skill-preamble.md apply.
 
 ## Output Format
@@ -169,23 +214,18 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 ## TL;DR  <!-- what was reviewed, found, matters most -->
 
 ## Review Integrity
+- Scope snapshot: source=<source>, base=<base>, head=<head>, uncommitted=<yes|no|n/a>, chunking=<state>
 - Files opened in Pass 2: <k>/<n>  (diff-only: <list or "none">)
 - Evidence: <N> OBSERVED / <M> INFERRED
+- Refutations logged: <N>
 - Size: <files> files, <lines> lines  (chunked: <group or "no">)
 - Degradation flags: <list or "none">
 - Conclusion: <confident | coverage-degraded | high-inference | partial>
 
 ## Findings
 
-### MUST
-- [MUST:patch] **[title]** `file:line` - [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED
-- [MUST:needs-decision] **[title]** `file:line` - [desc] | ...
-
-### SHOULD
-- [SHOULD:patch] ...
-
-### MAY
-- [MAY:patch] ...
+### MUST / SHOULD / MAY
+- [SEVERITY:ACTION] **[title]** `file:line` - [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
 
 ## Spec Drift   <!-- only when opt-in triggered; otherwise omit and log spec-drift-skipped -->
 <!-- advisory-only entries (exit-criteria drift, ready-to-tick); assumption invalidation goes under ## Findings as [MUST:needs-decision] -->
@@ -197,6 +237,16 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 ## Pre-existing Issues  <!-- out-of-scope pre-existing bugs -->
 
 ## Breaking Changes
+
+## Top 5 Risks (cross-tier)
+<!-- Five findings most likely to cause harm if merged, ranked regardless of tier. If <5 total, list all. If zero: "No surfaced risks." -->
+1. [SEVERITY:ACTION] **[title]** `file:line` - one-sentence why
+
+## Ship Verdict
+Decision: **YES** | **YES WITH CONDITIONS** | **NO** | **PARTIAL**
+Reasoning: <2-3 sentences anchored to Top 5 Risks and Review Integrity>
+Conditions to ship: <numbered list, only when YES WITH CONDITIONS>
+Confidence: HIGH | MEDIUM | LOW
 
 ## What's Good
 

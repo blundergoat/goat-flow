@@ -997,6 +997,15 @@ if [[ -f workflow/skills/reference/browser-use.md ]] && [[ -f .goat-flow/skill-r
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/reference/page-capture.md ]] && [[ -f .goat-flow/skill-reference/page-capture.md ]]; then
+    if diff -q workflow/skills/reference/page-capture.md .goat-flow/skill-reference/page-capture.md >/dev/null 2>&1; then
+        pass "page-capture.md: template and installed copy match"
+    else
+        fail "page-capture.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+    fi
+else
+    skip "page-capture.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/reference/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-reference/skill-quality-testing.md ]]; then
     if diff -q workflow/skills/reference/skill-quality-testing.md .goat-flow/skill-reference/skill-quality-testing.md >/dev/null 2>&1; then
         pass "skill-quality-testing.md: template and installed copy match"

@@ -98,6 +98,7 @@ describe("parseQualityReport", () => {
       findings: [
         {
           ...report.findings[0],
+          delta_tag: "new",
           evidence_method: "runtime-probe",
           evidence_command: "node --import tsx src/cli/cli.ts stats . --check",
           evidence_exit_code: 0,
@@ -117,6 +118,18 @@ describe("parseQualityReport", () => {
     assert.equal(parsed.report.findings[0]!.evidence_method, "runtime-probe");
     assert.equal(parsed.report.findings[0]!.evidence_exit_code, 0);
     assert.equal(parsed.report.findings[0]!.evidence_warning_count, 25);
+    assert.equal(parsed.report.findings[0]!.delta_tag, "new");
+  });
+
+  it("rejects null delta_tag when prior_report_id is set", () => {
+    const report = makeRawReport();
+    const parsed = parseQualityReport({
+      ...report,
+      prior_report_id: "2026-04-15-1000-claude-bbbbb",
+    });
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.match(parsed.error, /delta_tag must be "new" or "persisted"/i);
   });
 
   it("rejects invalid evidence_method values", () => {

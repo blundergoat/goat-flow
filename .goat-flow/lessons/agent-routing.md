@@ -1,6 +1,18 @@
 ---
 category: agent-routing
-last_reviewed: 2026-04-27
+last_reviewed: 2026-05-01
+---
+
+## Lesson: Bare task paths are context, not implementation approval
+
+**Created:** 2026-05-01
+
+**What happened:** A user sent only `.goat-flow/tasks/64272_voice-chat`. Codex treated the path as permission to resume goat-plan work, changed `.goat-flow/tasks/.active`, marked task files in progress, and started code implementation. The user had not asked to implement, resume, edit, update, or start a milestone.
+
+**Root cause:** The agent combined the generic "assume implementation" coding default with goat-plan's existing milestone discovery and skipped the blocking gate. The skill also treated named existing plan files as write approval too broadly, so a context path could be misread as a target.
+
+**Prevention:** A bare or ambiguous task path is read-only context. The correct first response is an orientation summary plus a next-action question. `.active` changes, milestone status changes, task checkboxes, and code edits require explicit verbs such as "start", "implement", "resume", "update", or "write". Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Path-only guard runs first`), `workflow/skills/goat/SKILL.md` (search: `Bare or ambiguous task paths are read-only context`), `test/contract/skill-hardening-contracts.test.ts` (search: `path-only task intake`).
+
 ---
 
 ## Lesson: Never override explicit skill invocation with your own judgment about artifact size

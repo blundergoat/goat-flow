@@ -14,7 +14,7 @@
  */
 
 /** Manifest hook event names for one runtime. */
-export interface ManifestHookEvents {
+interface ManifestHookEvents {
   pre_tool: string;
   post_turn: string | null;
 }
@@ -41,7 +41,7 @@ export interface AgentProfile {
 }
 
 /** The existing `skills:` block. M06 does not alter it. */
-export interface SkillsStructure {
+interface SkillsStructure {
   canonical: string[];
   stale_names: string[];
   references?: Record<string, string[]>;
@@ -51,7 +51,7 @@ export interface SkillsStructure {
  *  the canonical list of hot-path headings each agent instruction file must
  *  carry; harness checks build their regex patterns from these labels so the
  *  harness cannot drift from the manifest. */
-export interface ManifestInstructionFile {
+interface ManifestInstructionFile {
   line_target: number;
   line_limit: number;
   required_sections: string[];
@@ -78,7 +78,7 @@ export interface ManifestJson {
 }
 
 /** The `facts:` block as it appears on disk. Only static values. */
-export interface ManifestJsonFacts {
+interface ManifestJsonFacts {
   dashboard_views: string[];
 }
 
@@ -100,13 +100,13 @@ export interface CheckFacts {
 }
 
 /** Resolved dashboard-view facts. Static list validated against disk. */
-export interface DashboardViewFacts {
+interface DashboardViewFacts {
   count: number;
   names: readonly string[];
 }
 
 /** Resolved preset facts derived from the preset catalog JSON length. */
-export interface PresetFacts {
+interface PresetFacts {
   count: number;
 }
 
@@ -157,7 +157,7 @@ export class ManifestValidationError extends Error {
 }
 
 /** One consistency finding produced by `checkManifest()`. */
-export interface ManifestCheckFinding {
+interface ManifestCheckFinding {
   rule: string;
   message: string;
 }

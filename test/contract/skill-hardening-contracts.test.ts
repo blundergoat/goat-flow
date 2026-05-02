@@ -51,6 +51,71 @@ describe("skill hardening contracts", () => {
     );
   });
 
+  it("keeps goat-plan path-only task intake read-only", () => {
+    for (const path of skillPaths("goat-plan")) {
+      const body = read(path);
+      assert.match(body, /Path-only guard runs first/, path);
+      assert.match(body, /Path-Only Intake \/ Read-Only Orientation/, path);
+      assert.match(
+        body,
+        /Do NOT update `\.active`, milestone status fields, task checkboxes, or code/,
+        path,
+      );
+      assert.match(body, /A path alone is not write approval/, path);
+      assert.match(
+        body,
+        /Do NOT mutate `\.goat-flow\/tasks\/\.active`, milestone status, checkboxes, or code/,
+        path,
+      );
+    }
+  });
+
+  it("keeps goat dispatcher from routing bare task paths to implementation", () => {
+    for (const path of skillPaths("goat")) {
+      const body = read(path);
+      assert.match(
+        body,
+        /Bare or ambiguous task paths are read-only context/,
+        path,
+      );
+      assert.match(
+        body,
+        /Do not update `\.active`, milestone status, or code from a path alone/,
+        path,
+      );
+    }
+  });
+
+  it("documents task-path classifier examples", () => {
+    const body = read("docs/skills.md");
+    assert.match(body, /Task path classifier examples/, "missing table");
+    assert.match(
+      body,
+      /`\.goat-flow\/tasks\/64272_voice-chat`\s+\|\s+Read-only orientation; no writes/,
+      "path-only input must be read-only",
+    );
+    assert.match(
+      body,
+      /`\.goat-flow\/tasks\/64272_voice-chat start M01`\s+\|\s+Implementation may start after normal gates/,
+      "start M01 input must allow implementation after gates",
+    );
+    assert.match(
+      body,
+      /`resume \.goat-flow\/tasks\/64272_voice-chat`\s+\|\s+Confirm current milestone unless the plan clearly records one/,
+      "resume input must confirm current milestone",
+    );
+    assert.match(
+      body,
+      /`update M01 in \.goat-flow\/tasks\/64272_voice-chat`\s+\|\s+Update the named milestone file only/,
+      "update M01 input must stay plan-file scoped",
+    );
+    assert.match(
+      body,
+      /`implement M01 from \.goat-flow\/tasks\/64272_voice-chat`\s+\|\s+Code implementation may proceed after reading gates/,
+      "implement M01 input must allow code implementation after gates",
+    );
+  });
+
   it("requires goat-qa Standard-mode gap output to include Verification Integrity", () => {
     for (const path of skillPaths("goat-qa")) {
       const body = read(path);
@@ -125,6 +190,16 @@ describe("skill hardening contracts", () => {
       assert.match(body, /Report-Only Skill Contract/, path);
       assert.match(body, /are report-only by default/, path);
       assert.match(body, /MUST NOT mutate the target artifact/, path);
+      assert.match(
+        body,
+        /a bare or ambiguous task path is context, not a direct planning request/,
+        path,
+      );
+      assert.match(
+        body,
+        /a task path alone must not update `\.active`, milestone status, checkboxes, or code/,
+        path,
+      );
     }
 
     for (const path of [

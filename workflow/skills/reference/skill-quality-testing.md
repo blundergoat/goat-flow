@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.3.2"
+goat-flow-reference-version: "1.4.0"
 ---
 # Skill Quality Testing
 
@@ -7,7 +7,7 @@ Read on full-depth skill-authoring work. Covers how to write, test, and harden a
 
 Companion to `skill-preamble.md` (what every skill loads on every invocation) and `skill-conventions.md` (entry formats, task tracking, recovery - loaded on full-depth work).
 
-The authoring methodology is split across three topical files in the sibling `skill-quality-testing/` directory per ADR-023. Load only the file(s) relevant to the skill type you are authoring - agents should not read all three unless the task genuinely spans review-class work, deployment finalisation, and TDD iteration.
+The authoring methodology is split across three topical files in the sibling `skill-quality-testing/` directory. Load only the file(s) relevant to the skill type you are authoring - agents should not read all three unless the task genuinely spans review-class work, deployment finalisation, and TDD iteration.
 
 ## Which file to load
 
@@ -25,6 +25,5 @@ This applies to NEW skills AND to EDITS of existing skills. Writing a skill befo
 
 ## Cross-references
 
-- `.goat-flow/decisions/ADR-023-reference-pack-budget-tiers.md` - why this file was split from a 3893-word monolith into an index plus three topical files
 - `.goat-flow/skill-reference/skill-preamble.md` - Proof Gate, evidence standard, ceremony level (always-loaded layer)
 - `.goat-flow/skill-reference/skill-conventions.md` - Rationalisation table definition, task tracking, recovery protocols

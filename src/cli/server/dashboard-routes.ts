@@ -509,7 +509,6 @@ function buildAuditCacheSignature(
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
-    ".goat-flow/patterns.md",
     "CLAUDE.md",
     "AGENTS.md",
     "GEMINI.md",
@@ -532,6 +531,7 @@ function buildAuditCacheSignature(
     ".goat-flow/decisions",
     ".goat-flow/footguns",
     ".goat-flow/lessons",
+    ".goat-flow/patterns",
     ".goat-flow/skill-reference",
   ];
   return hashString(

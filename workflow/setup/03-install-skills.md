@@ -34,6 +34,7 @@ Install the full shared reference pack from `workflow/skills/reference/`:
 - `.goat-flow/skill-reference/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
 - `.goat-flow/skill-reference/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
 - `.goat-flow/skill-reference/browser-use.md` from `workflow/skills/reference/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
+- `.goat-flow/skill-reference/page-capture.md` from `workflow/skills/reference/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
 - `.goat-flow/skill-reference/skill-quality-testing.md` from `workflow/skills/reference/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md` from `workflow/skills/reference/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md` from `workflow/skills/reference/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -62,6 +63,7 @@ After installing, verify each SKILL.md frontmatter has the correct `goat-flow-sk
 - [ ] `.goat-flow/skill-reference/skill-preamble.md` exists
 - [ ] `.goat-flow/skill-reference/skill-conventions.md` exists
 - [ ] `.goat-flow/skill-reference/browser-use.md` exists
+- [ ] `.goat-flow/skill-reference/page-capture.md` exists
 - [ ] `.goat-flow/skill-reference/skill-quality-testing.md` exists
 - [ ] `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md` exists

@@ -93,7 +93,7 @@ function renderAuditPass(facts: ProjectFacts, agentId: AgentId): string {
 
   lines.push("**Run now:**");
   lines.push(
-    `Run \`goat-flow audit ${targetArg(facts.root)} --harness\` and report the per-concern scores. This is the harness verification gate — do not skip it.`,
+    `Run \`goat-flow audit ${targetArg(facts.root)} --harness\` and report the per-concern scores. This is the harness verification gate - do not skip it.`,
   );
   lines.push("");
   lines.push("**Maintenance:**");

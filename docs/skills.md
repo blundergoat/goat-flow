@@ -73,7 +73,17 @@ The dispatcher classifies intent conversationally - not by keyword lookup. It as
 | Test gaps, coverage, verification planning | /goat-qa |
 | Critique a plan/assessment | /goat-critique |
 
-**Planning Route:** For planning requests, the dispatcher routes intent only: Hotfix → direct execution; anything larger → `/goat-plan`. `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection. `/goat-plan` defaults to File-Write at Standard+ scope when no analysis signals are present; analysis signals ("break this down for me", "how would you approach") trigger Read-Only Analysis mode instead.
+**Planning Route:** For planning requests, the dispatcher routes intent only: Hotfix → direct execution; anything larger with a clear build/plan verb → `/goat-plan`. Bare or ambiguous task paths are read-only context, not planning or implementation requests. `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection. `/goat-plan` defaults to File-Write at Standard+ scope only when a clear build objective exists; analysis signals ("break this down for me", "how would you approach") trigger Read-Only Analysis mode instead.
+
+**Task path classifier examples:**
+
+| Input | Expected mode |
+|-------|---------------|
+| `.goat-flow/tasks/64272_voice-chat` | Read-only orientation; no writes |
+| `.goat-flow/tasks/64272_voice-chat start M01` | Implementation may start after normal gates |
+| `resume .goat-flow/tasks/64272_voice-chat` | Confirm current milestone unless the plan clearly records one |
+| `update M01 in .goat-flow/tasks/64272_voice-chat` | Update the named milestone file only |
+| `implement M01 from .goat-flow/tasks/64272_voice-chat` | Code implementation may proceed after reading gates |
 
 ---
 
@@ -133,7 +143,7 @@ For onboarding ("I'm new to this project"), use investigate mode - covers stack 
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, routing through four modes based on scope and user signals: Named-File Update (user references an existing file), Read-Only Analysis (analysis signals detected), Inline-Then-Write (Hotfix/Small Feature), or File-Write (default at Standard+ complexity). Files are written to `.goat-flow/tasks/` in File-Write and Named-File Update modes; Read-Only Analysis never writes.
+Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Inline-Then-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/tasks/` only in File-Write and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
 
 ```mermaid
 flowchart TD

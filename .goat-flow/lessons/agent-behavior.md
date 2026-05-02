@@ -7,7 +7,7 @@ last_reviewed: 2026-05-01
 
 **Created:** 2026-05-01
 
-**What happened:** User pasted goat-flow setup output that included a clearly labeled "Next step (recommended): Run `goat-flow audit . --harness`" section. The agent read the output, confirmed the dashboard was fixed, and reported success — without running the recommended command. The user had to explicitly ask "did you run this?" before the agent executed it. The command would have been the first end-to-end verification that the harness concern removal actually worked in practice.
+**What happened:** User pasted goat-flow setup output that included a clearly labeled "Next step (recommended): Run `goat-flow audit . --harness`" section. The agent read the output, confirmed the dashboard was fixed, and reported success - without running the recommended command. The user had to explicitly ask "did you run this?" before the agent executed it. The command would have been the first end-to-end verification that the harness concern removal actually worked in practice.
 
 **Root cause:** The agent treated the pasted output as informational context rather than an implicit instruction. It confirmed the text looked correct ("5 concerns, no Boundary") but never executed the verification step that the output itself prescribed. This is a verification gap: claiming success based on reading text rather than running the command that proves it.
 

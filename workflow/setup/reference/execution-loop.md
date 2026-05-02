@@ -28,10 +28,10 @@ c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
      - DoD verification triggers are conditional, not a separate execution step:
        - VERIFY caught a failure in your code → `.goat-flow/lessons/` entry
        - Human corrected agent behaviour → `.goat-flow/lessons/` entry immediately
-       - Reusable approach worked (twice or crosses boundary) → `.goat-flow/patterns.md` entry
+       - Reusable approach worked (twice or crosses boundary) → `.goat-flow/patterns/` entry
        - Architectural trap with semantic-anchor evidence → `.goat-flow/footguns/` entry
        Log only non-obvious root causes, repeated misses, or boundary-crossing impacts.
-     - **Artifact routing:** "add a footgun" → `.goat-flow/footguns/`, "add a lesson" → `.goat-flow/lessons/`, "add a decision" → `.goat-flow/decisions/`, "add a pattern" → `.goat-flow/patterns.md`. These are documentation artifacts, not runtime code - read the target directory's `README.md` for format.
+     - **Artifact routing:** "add a footgun" → `.goat-flow/footguns/`, "add a lesson" → `.goat-flow/lessons/`, "add a decision" → `.goat-flow/decisions/`, "add a pattern" → `.goat-flow/patterns/`. These are documentation artifacts, not runtime code - read the target directory's `README.md` for format.
 
 d) Artifact Routing: map user requests ("add a footgun/lesson/decision/pattern") to the correct `.goat-flow/` directory. These are documentation artifacts, not runtime code.
 

@@ -48,7 +48,7 @@ Every registered build and harness check now carries machine-readable `provenanc
 ### The 17 checks by type
 
 - **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
-- **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`, `boundary-guidance-present`
+- **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`
 - **metric (2):** `test-runner-configured`, `post-turn-hook-integrity`
 
 ---
@@ -65,7 +65,7 @@ The agent can only work with what it sees. Stale router paths, missing execution
 - `execution-loop-present` - instruction file contains at least 2 of the 4 READ / SCOPE / ACT / VERIFY keywords
 - `doc-paths-resolve` - router-table paths, architecture.md backtick paths, and backtick paths in a small set of doc files (`CONTRIBUTING.md`, `.goat-flow/code-map.md`, `docs/cli.md`, `docs/audit-and-quality.md`) all resolve to real files on disk
 - `instruction-sections-present` - instruction file carries the hot-path contract headings (Truth Order, Execution Loop, Definition of Done, Router Table); advisory - skeleton overlays that defer to a shared instruction file will fail this check
-- `boundary-guidance-present` - at least one configured agent's instruction file contains workspace boundary language (e.g., "controlling workspace", "selected target", "target project")
+- `boundary-guidance-present` - instruction file contains workspace boundary guidance (controlling workspace vs target workspace separation); advisory
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 
@@ -139,4 +139,3 @@ A fresh install with zero footguns and zero lessons is a valid PASS. The audit o
 - `decisions-tracked` - `.goat-flow/decisions/` directory exists. Record count is reported informationally.
 
 **Not checked here:** entry counts, recency (`**Created:**` dates), content accuracy, staleness of semantic-anchor references in footgun entries, whether active/resolved statuses are accurate. All of these are content-quality judgments that belong in `quality`.
-

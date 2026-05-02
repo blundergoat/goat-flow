@@ -39,6 +39,21 @@ describe("goat-review PR base branch contract", () => {
       );
       assert.match(
         body,
+        /skills\.goat-review\.local_pr_base/,
+        `${path} documents configured local PR base`,
+      );
+      assert.match(
+        body,
+        /configured-base=<base>/,
+        `${path} records configured base usage`,
+      );
+      assert.match(
+        body,
+        /configured-base-unresolved=<base>/,
+        `${path} records unresolved configured base degradation`,
+      );
+      assert.match(
+        body,
         /git remote show origin/,
         `${path} documents remote fallback discovery`,
       );

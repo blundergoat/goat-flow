@@ -29,7 +29,7 @@ Separate the subject from the body with a blank line.
 
 Pick the scope from the area that actually changed (`dashboard`, `audit-command`,
 `deny-dangerous`, `learning-loop`, `quality`, `ci`, `version`, …). One scope per
-commit — if scopes diverge, split the commit.
+commit - if scopes diverge, split the commit.
 
 ## Subject-Line Rules (the part agents get wrong)
 
@@ -40,7 +40,7 @@ clarify, update, tweak, polish*. They tell the reader nothing the diff did not.
 fix, deny, allow, gate, skip, harden, cache, invalidate, log, retry*.
 
 **One observable change per subject.** If the subject contains "and", names two
-axes, or starts to read like a release-note paragraph — either split the commit
+axes, or starts to read like a release-note paragraph - either split the commit
 or move the second axis into a bulleted body.
 
 ### Bad → Good rewrites
@@ -64,7 +64,7 @@ Write a body (blank line + bullets) when **any** of these are true:
 - The change has a non-obvious motivation (perf, OS-specific bug, prior incident, compliance).
 - The change is hard to bisect from the subject alone (version bumps, cross-cutting renames).
 
-Body template — name the *why* first, then bullet each axis:
+Body template - name the *why* first, then bullet each axis:
 
 ```
 fix(dashboard): speed up home audit load on Windows
@@ -79,11 +79,11 @@ If the answer to "why now?" is not in the body, the body is incomplete.
 
 ## Before Committing
 
-1. `bash scripts/preflight-checks.sh` — single quality gate. Runs typecheck,
+1. `bash scripts/preflight-checks.sh` - single quality gate. Runs typecheck,
    ESLint, Prettier, fast tests, shellcheck on `scripts/*.sh` and installed
    hook dirs, deny-hook self-tests, version consistency, ADR enforcement,
    doc/code drift, and link integrity. Must pass.
-2. `npm run test:full` — additionally required when changes touch setup,
+2. `npm run test:full` - additionally required when changes touch setup,
    installer, runtime, drift, or dashboard code (preflight runs the fast
    suite only).
 
@@ -105,7 +105,7 @@ If preflight fails, fix the underlying issue. Do not bypass with `--no-verify`.
   `.goat-flow/logs/critiques/*.md` (workspace-local runtime state, gitignored)
 - Files containing secrets or credentials
 
-Committed under `.goat-flow/`: `architecture.md`, `code-map.md`, `patterns.md`,
+Committed under `.goat-flow/`: `architecture.md`, `code-map.md`, `patterns/`,
 `config.yaml`, `decisions/`, `footguns/`, `lessons/`, `skill-reference/`,
 and the `tasks/`, `scratchpad/`, `logs/` directory anchors.
 
@@ -114,4 +114,4 @@ and the `tasks/`, `scratchpad/`, `logs/` directory anchors.
 Use `bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>` to bump
 `package.json`, docs, templates, and mirrors in one step. `AUDIT_VERSION`
 derives from `package.json` automatically. Do not edit `package.json` version
-alone — it will fail the version-consistency preflight gate.
+alone - it will fail the version-consistency preflight gate.

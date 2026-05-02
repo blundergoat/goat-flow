@@ -54,8 +54,14 @@ interface SetupFrameworkMarkerSignal {
   markers: string[];
 }
 
+interface NodeTestFrameworkSignal {
+  name: string;
+  packages: string[];
+}
+
 interface ProjectStackData {
   nodeFrameworks: NodeFrameworkSignal[];
+  nodeTestFrameworks: NodeTestFrameworkSignal[];
   extraLanguageSignals: LanguagePathGlobSignal[];
   codeGenSignals: ToolPathGlobSignal[];
   deploySignals: ToolPathGlobSignal[];
@@ -172,6 +178,27 @@ function readNodeFrameworkSignals(
   });
 }
 
+/** Read Node test framework rows from the project-stack data JSON. */
+function readNodeTestFrameworkSignals(
+  value: unknown,
+  label: string,
+): NodeTestFrameworkSignal[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
+  }
+  return value.map((entry, index) => {
+    if (!isRecord(entry) || typeof entry.name !== "string") {
+      throw new Error(
+        `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,
+      );
+    }
+    return {
+      name: entry.name,
+      packages: readStringArray(entry.packages, `${label}[${index}].packages`),
+    };
+  });
+}
+
 /** Read the formatter map from the project-stack data JSON. */
 function readFormatterMap(value: unknown): Record<string, string[]> {
   if (!isRecord(value)) {
@@ -196,6 +223,10 @@ function loadProjectStackData(): ProjectStackData {
     nodeFrameworks: readNodeFrameworkSignals(
       raw.nodeFrameworks,
       "nodeFrameworks",
+    ),
+    nodeTestFrameworks: readNodeTestFrameworkSignals(
+      raw.nodeTestFrameworks,
+      "nodeTestFrameworks",
     ),
     extraLanguageSignals: readLanguageSignals(
       raw.extraLanguageSignals,

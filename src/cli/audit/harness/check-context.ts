@@ -1,9 +1,8 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
  * 5 deterministic checks (instruction size, execution loop, doc paths,
- * instruction sections, workspace boundary guidance). Content-quality
- * judgments (e.g. footgun evidence currency) live in the `quality`
- * assessment prompt, not here.
+ * instruction sections, boundary guidance). Content-quality judgments (e.g. footgun evidence
+ * currency) live in the `quality` assessment prompt, not here.
  */
 import type { AuditContext, HarnessCheck } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
@@ -16,6 +15,20 @@ import { pass, fail, extractBacktickPaths } from "./helpers.js";
 const EXECUTION_LOOP_LABEL = "Execution Loop";
 
 const VERIFIED_ON = "2026-04-18";
+
+const CONTROLLING_WORKSPACE_PATTERNS = [
+  /\bcontrolling\s+(?:goat-flow\s+)?workspace\b/i,
+  /\bframework\s+workspace\b/i,
+  /\bgoat-flow\s+controlling\s+workspace\b/i,
+];
+
+const TARGET_WORKSPACE_PATTERNS = [
+  /\bselected\s+target\b/i,
+  /\btarget\s+project\b/i,
+  /\bproject-specific\s+(?:harness\s+)?content\b/i,
+];
+
+const BOUNDARY_HEADING_PATTERN = /\bworkspace\s+boundary\b/i;
 
 /** Return the context provenance. */
 function contextProvenance(
@@ -307,51 +320,63 @@ const instructionSectionsPresent: HarnessCheck = {
   },
 };
 
-const BOUNDARY_PATTERNS = [
-  /controlling\s+workspace/i,
-  /selected\s+target/i,
-  /target\s+project/i,
-  /workspace\s+boundary/i,
-];
+/** Return whether instruction text distinguishes controlling workspace from selected target. */
+function boundaryGuidancePresent(content: string): boolean {
+  if (BOUNDARY_HEADING_PATTERN.test(content)) return true;
+  return (
+    CONTROLLING_WORKSPACE_PATTERNS.some((pattern) => pattern.test(content)) &&
+    TARGET_WORKSPACE_PATTERNS.some((pattern) => pattern.test(content))
+  );
+}
 
-const boundaryGuidancePresent: HarnessCheck = {
+const boundaryGuidancePresentCheck: HarnessCheck = {
   id: "boundary-guidance-present",
   name: "Workspace boundary guidance present",
   concern: "context",
   type: "advisory",
   provenance: contextProvenance("advisory", [
     "docs/harness-audit.md",
-    "docs/harness-engineering.md",
+    ".goat-flow/lessons/auditor-and-rubric.md",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "GEMINI.md",
+    ".github/copilot-instructions.md",
   ]),
+  /** Run the Workspace boundary guidance present check. */
   run: (ctx) => {
     const findings: string[] = [];
-    let anyBoundaryGuidance = false;
+    const missing: string[] = [];
+
     for (const af of ctx.agents) {
-      const content = af.instruction.content ?? "";
-      const hasBoundary = BOUNDARY_PATTERNS.some((p) => p.test(content));
-      if (hasBoundary) {
+      if (!af.instruction.exists || !af.instruction.content) {
+        findings.push(`${af.agent.id}: no instruction file to check`);
+        missing.push(`${af.agent.id} (${af.agent.instructionFile})`);
+        continue;
+      }
+      if (boundaryGuidancePresent(af.instruction.content)) {
         findings.push(
-          `${af.agent.id}: instruction file contains workspace boundary guidance`,
+          `${af.agent.id}: instruction file distinguishes controlling workspace from selected target`,
         );
-        anyBoundaryGuidance = true;
       } else {
         findings.push(
           `${af.agent.id}: instruction file has no workspace boundary guidance`,
         );
+        missing.push(`${af.agent.id} (${af.agent.instructionFile})`);
       }
     }
-    if (!anyBoundaryGuidance) {
-      return fail(
-        findings,
-        [
-          "Add workspace boundary guidance to instruction files distinguishing the controlling workspace from the selected target",
-        ],
-        [
-          "Add a section to the instruction file that explains which directory is the goat-flow controlling workspace and which is the selected target project.",
-        ],
-      );
-    }
-    return pass(findings);
+
+    if (missing.length === 0) return pass(findings);
+
+    const missingText = missing.join(", ");
+    return fail(
+      findings,
+      [
+        `Add path-agnostic workspace boundary guidance to every audited agent instruction file missing it: ${missingText}`,
+      ],
+      [
+        `Add wording that distinguishes the controlling goat-flow workspace from the selected target project in ${missingText}; do not hardcode machine-specific absolute paths.`,
+      ],
+    );
   },
 };
 
@@ -360,5 +385,5 @@ export const CONTEXT_CHECKS: HarnessCheck[] = [
   executionLoopPresent,
   docPathsResolve,
   instructionSectionsPresent,
-  boundaryGuidancePresent,
+  boundaryGuidancePresentCheck,
 ];

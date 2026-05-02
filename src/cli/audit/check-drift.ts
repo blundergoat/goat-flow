@@ -144,6 +144,10 @@ const SHARED_FILES: SharedFileSpec[] = [
     template: "workflow/skills/reference/skill-quality-testing/deployment.md",
     installed: ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
   },
+  {
+    template: "workflow/skills/reference/page-capture.md",
+    installed: ".goat-flow/skill-reference/page-capture.md",
+  },
 ];
 
 /** Read a workflow template file relative to the package root. */

@@ -34,19 +34,17 @@ const QUALITY_DELTA_TAGS = ["new", "persisted"] as const;
 const QUALITY_AUDIT_STATUSES = ["pass", "fail", "unavailable"] as const;
 const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
 
-export type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
-export type QualityFindingSeverity =
-  (typeof QUALITY_FINDING_SEVERITIES)[number];
-export type QualityEvidenceQuality =
-  (typeof QUALITY_EVIDENCE_QUALITIES)[number];
-export type QualityEvidenceMethod = (typeof QUALITY_EVIDENCE_METHODS)[number];
-export type QualityScope = (typeof QUALITY_SCOPES)[number];
+type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
+type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
+type QualityEvidenceQuality = (typeof QUALITY_EVIDENCE_QUALITIES)[number];
+type QualityEvidenceMethod = (typeof QUALITY_EVIDENCE_METHODS)[number];
+type QualityScope = (typeof QUALITY_SCOPES)[number];
 export type QualityMode = (typeof QUALITY_MODES)[number];
-export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
-export type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
-export type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
+type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
+type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
+type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
 
-export interface QualitySetupScores {
+interface QualitySetupScores {
   total: number;
   accuracy: QualityAxisScore;
   relevance: QualityAxisScore;
@@ -54,7 +52,7 @@ export interface QualitySetupScores {
   friction: QualityAxisScore;
 }
 
-export interface QualitySystemScores {
+interface QualitySystemScores {
   total: number;
   usefulness: QualityAxisScore;
   signal_to_noise: QualityAxisScore;
@@ -62,7 +60,7 @@ export interface QualitySystemScores {
   learnability: QualityAxisScore;
 }
 
-export interface QualityScores {
+interface QualityScores {
   setup: QualitySetupScores;
   system: QualitySystemScores;
 }
@@ -717,6 +715,16 @@ function parseReportInternal(
     const parsedFinding = parseFinding(item, index, allowFindingId, options);
     if (!parsedFinding.ok) return parsedFinding;
     findings.push(parsedFinding.finding);
+  }
+
+  if (options.requireCurrentFields && typeof priorReportId === "string") {
+    const nullDeltaIndex = findings.findIndex((f) => f.delta_tag === null);
+    if (nullDeltaIndex !== -1) {
+      return {
+        ok: false,
+        error: `findings[${nullDeltaIndex}].delta_tag must be "new" or "persisted" when prior_report_id is set`,
+      };
+    }
   }
 
   const reportBase: Omit<QualityReport, "findings"> = {

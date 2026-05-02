@@ -1,4 +1,4 @@
-# GEMINI.md - v1.3.2 (2026-04-25)
+# GEMINI.md - v1.4.0 (2026-05-02)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 
 This repo is the goat-flow controlling workspace. When the dashboard or CLI operates on a selected target project, commands like `audit` and `quality` run against that target - not this repo. Keep the two contexts separate: framework code lives here, project-specific harness content lives in the target.
@@ -24,7 +24,7 @@ node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_r
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
-**READ** - MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use && browser-use doctor`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns.md`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns/`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
 ```
 BAD:  "The CLI has 20 audit checks" (guessed without reading)
 GOOD: Read src/cli/audit/check-goat-flow.ts → 13 setup checks, check-agent-setup.ts → 4 agent checks (17 total)
@@ -68,7 +68,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 
 ## Artifact Routing
 
-When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/footguns/<category>.md`; lessons -> `.goat-flow/lessons/<category>.md`; decisions -> `.goat-flow/decisions/ADR-NNN.md`; patterns -> `.goat-flow/patterns.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
+When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/footguns/<category>.md`; lessons -> `.goat-flow/lessons/<category>.md`; decisions -> `.goat-flow/decisions/ADR-NNN.md`; patterns -> `.goat-flow/patterns/<category>.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
 
 ## Autonomy Tiers
 
@@ -101,7 +101,7 @@ Context health: compact at 60% util. Noise pruning before compacting. `/clear` b
 | Core docs/config | `.goat-flow/architecture.md`, `.goat-flow/config.yaml`, `docs/` |
 | CLI/dashboard/scripts | `src/cli/`, `src/dashboard/`, `scripts/` |
 | Workflow/skills | `workflow/`, `.agents/skills/` |
-| Shared skill reference | `.goat-flow/skill-reference/`, `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, `.goat-flow/skill-reference/browser-use.md`, `.goat-flow/skill-reference/skill-quality-testing.md`, `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md`, `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md`, `.goat-flow/skill-reference/skill-quality-testing/deployment.md` |
-| Learning loop | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns.md`, `.goat-flow/decisions/` |
+| Shared skill reference | `.goat-flow/skill-reference/`, `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, `.goat-flow/skill-reference/browser-use.md`, `.goat-flow/skill-reference/page-capture.md`, `.goat-flow/skill-reference/skill-quality-testing.md`, `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md`, `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md`, `.goat-flow/skill-reference/skill-quality-testing/deployment.md` |
+| Learning loop | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/` |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
 | Peer instructions | `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` |

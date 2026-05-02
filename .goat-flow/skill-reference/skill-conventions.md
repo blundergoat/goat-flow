@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.3.2"
+goat-flow-reference-version: "1.4.0"
 ---
 # Skill Conventions
 
@@ -14,7 +14,7 @@ Bucket conventions (examples - actual bucket names are project-specific):
 - Lessons: category files like `verification.md`, `workflow.md`, `coordination.md`
 - Footguns: category files like `runtime.md`, `integration.md`, `data-stores.md`
 
-Do not append to a monolithic log or directory README. Route entries to `.goat-flow/lessons/`, `.goat-flow/patterns.md`, or `.goat-flow/footguns/`.
+Do not append to a monolithic log or directory README. Route entries to `.goat-flow/lessons/`, `.goat-flow/patterns/`, or `.goat-flow/footguns/`.
 
 Use the standard entry formats:
 ```markdown
@@ -115,6 +115,8 @@ When summarising tasks, findings, or recommendations for user review, use this f
 
 ## Milestone Retrospective (goat-plan)
 
+**Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | human-verification-pending | complete`
+
 When a milestone completes, run the per-milestone AI verification gate then the human verification gate (BLOCKING - see goat-plan Phase 3). After human approval:
 
 1. Record what was learned.
@@ -126,7 +128,7 @@ Write a session log entry for each completed milestone sequence.
 
 ### Plan Completion Protocol
 
-When all milestones reach `complete`, the plan enters Phase 4 (see goat-plan SKILL.md). The agent must:
+When all milestones reach `complete` or `human-verification-pending`, the plan enters Phase 4 (see goat-plan SKILL.md). The agent must:
 
 1. Run the AI Verification Gate - confirm every task ticked, every exit criterion evidenced, every testing gate passed with proof from this session.
 2. Present the Human Verification Gate - **BLOCKING GATE**. List all files changed, all milestones and their status, and evidence for each exit criterion. Wait for explicit human approval.

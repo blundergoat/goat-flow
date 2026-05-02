@@ -54,11 +54,11 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
-  ".goat-flow/patterns.md",
   // Shared skill doctrine
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
   ".goat-flow/skill-reference/browser-use.md",
+  ".goat-flow/skill-reference/page-capture.md",
   ".goat-flow/skill-reference/skill-quality-testing.md",
   ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
@@ -101,6 +101,7 @@ const DECISIONS_DIR = ".goat-flow/decisions/";
 const LEARNING_LOOP_DIRS = [
   ".goat-flow/footguns/",
   ".goat-flow/lessons/",
+  ".goat-flow/patterns/",
 ] as const;
 
 const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [

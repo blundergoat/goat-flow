@@ -33,7 +33,7 @@ A single 400-word cap is defensible for progressive packs (small, pick-one-of-ma
 
 | Tier | Budget | Applies to |
 |------|--------|-----------|
-| Dispatcher skill | <500 words | `goat/SKILL.md` |
+| Dispatcher skill | ≤555 words | `goat/SKILL.md` |
 | Functional skill | <2500 words | `goat-debug/SKILL.md`, `goat-plan/SKILL.md`, `goat-qa/SKILL.md`, `goat-review/SKILL.md`, `goat-critique/SKILL.md`, `goat-security/SKILL.md` |
 | Always-loaded shared content | <1500 words per file | `skill-preamble.md`, `skill-conventions.md` (loaded by every goat-* skill on invocation) |
 | Progressive reference pack | <3000 words per file | Files under per-skill `references/` subdirs and `.goat-flow/skill-reference/<pack>/` subdirs (loaded only when a skill enters the mode that needs them) |
@@ -74,3 +74,5 @@ The existing `skill-quality-testing.md` file stays at its current path but becom
 - Agents consulting `skill-quality-testing.md` for authoring guidance now read a short index, then load only the topical file their skill type needs (often just one).
 - The budget rule's new home is `deployment.md`. Cross-references that previously pointed at `skill-quality-testing.md` line 416 are forward-compatible because the file still exists (as the index) - but new cross-references should target `deployment.md` directly.
 - Future split work: if any of the three topical files exceeds 3000w, it splits further under the same model. `tdd-iteration.md` is the one to watch - it already sits at ~2800w carrying the bulk of the methodology, and any future content additions should be evaluated for whether they belong in a new topical file instead.
+
+**2026-05-02 amendment:** Dispatcher budget raised from <500 to ≤555. The dispatcher gained a structured Route Snapshot output contract, multi-intent decomposition protocol, GATHER checklist, and contract-test-mandated phrases (Proof Gate, "verification planning") that the original 500w budget didn't anticipate. The file was trimmed from 585w to 552w in the same pass - net reduction despite added features.

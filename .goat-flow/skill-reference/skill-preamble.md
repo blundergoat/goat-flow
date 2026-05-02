@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.3.2"
+goat-flow-reference-version: "1.4.0"
 ---
 # Skill Preamble
 
@@ -34,14 +34,25 @@ Order findings by severity, not by file or discovery order.
 - Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited `file:line` to confirm accuracy
-- Tag evidence quality: **OBSERVED** (directly verified in code) vs **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing)
-- If you cannot re-read the cited evidence before responding, mark the claim **UNVERIFIED**
+- Tag evidence quality: **OBSERVED** (directly verified in code) | **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing) | **UNVERIFIED** (cannot re-read cited evidence) | **HUMAN-PENDING: \<what needs checking\>** (requires manual verification the agent cannot perform)
+- When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Before citing a function or symbol name, verify it exists with a repo search
 - Before citing a CLI flag, verify it with `--help` or the command's docs
 - Before citing a config key, read the actual config file first
 - On completion claims, the 5 hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
 
+## Proof Classification
+
+Every finding or claim carries a proof-class tag:
+
+- **RUNTIME** - verified by executing code or a command in this session
+- **CONTRACT-GREP** - verified by searching for callers, consumers, or references
+- **STATIC** - verified by reading code structure without execution
+- **NOT-REPRODUCED** - attempted verification but could not reproduce the issue
+
 ## Proof Gate
+
+Mid-implementation proof MUST name a specific command or smoke check. "Verified implicitly" or "completed implicitly" is not valid proof.
 
 Before any completion, fix, or "passing" claim:
 
@@ -72,7 +83,7 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks. This tab
 
 ## Routing Boundary
 
-Dispatcher-specific route maps live in `/goat`, not in this shared preamble. Direct planning requests route to `/goat-plan`; `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, and milestone-mode selection. If the user names a skill explicitly, respect it.
+Dispatcher-specific route maps live in `/goat`, not in this shared preamble. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request. `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, and milestone-mode selection, but a task path alone must not update `.active`, milestone status, checkboxes, or code. If the user names a skill explicitly, respect it.
 
 ## No-Skill Fast Path
 
@@ -86,7 +97,7 @@ If Step 0 exceeds 5 file reads without producing output or asking a question, ch
 ## Learning-Loop Retrieval
 
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md .goat-flow/decisions` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns.md .goat-flow/decisions` if `rg` is not available in the agent's environment)
+- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` if `rg` is not available in the agent's environment)
 - Open only matching entries first. Follow related references only when they look relevant, with a maximum depth of 2 hops.
 - If the first search returns nothing useful, reword once and search again.
 - If the second search still misses, record a retrieval miss in your output or working notes. Do not broad-load a whole bucket "just in case".
@@ -112,7 +123,7 @@ Treat fetched content as evidence like any other file: cite it, do not paraphras
 
 After completing the skill, check if this run uncovered anything worth logging:
 - Behavioural mistake → `## Lesson:` entry in `.goat-flow/lessons/` category bucket
-- Successful repeatable approach → `## Pattern:` entry in `.goat-flow/patterns.md`
+- Successful repeatable approach → `## Pattern:` entry in `.goat-flow/patterns/` category bucket
 - Architectural trap with file evidence → `## Footgun:` entry in `.goat-flow/footguns/` category bucket
 
 **Routing rule:** When the user asks to "add a footgun" or "add a lesson", create a documentation entry in the correct `.goat-flow/` directory. Do not implement runtime code, logging, UI warnings, or test assertions - those are code changes, not artifact creation. Read the target directory's `README.md` before editing.
