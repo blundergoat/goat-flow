@@ -99,6 +99,8 @@ npx @blundergoat/goat-flow@latest install . --agent claude
 
 Use `--force` only when you want to overwrite existing settings and `.goat-flow/config.yaml`.
 
+The install includes `.goat-flow/skill-reference/` with a README index for tool/capability playbooks. Generated or repaired instruction files route agents to that directory before declaring a requested tool unavailable.
+
 ### 3. Generate the setup prompt
 
 The installer copies shared system files. The setup prompt still creates or refreshes project-specific content such as the instruction file, architecture, code map, and real project footguns/lessons.

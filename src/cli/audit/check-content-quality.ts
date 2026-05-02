@@ -55,6 +55,7 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
   // Shared skill doctrine
+  ".goat-flow/skill-reference/README.md",
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
   ".goat-flow/skill-reference/browser-use.md",

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.1 - 2026-05-03
+
+Instruction discoverability and audit enforcement for shared tool playbooks.
+
+- **Skill-reference discoverability** - Generated and maintained instruction files now append the READ rule that agents must check `.goat-flow/skill-reference/` before declaring a tool or capability unavailable, and their Router Tables point at the tool playbooks directory.
+- **Skill Reference Index** - Installs `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md`, with a ToolSearch/harness-only anti-pattern callout, available-reference table, authoring guidance for new references, and browser-use incident provenance.
+- **Audit enforcement** - Added the default setup check [`instruction-file-skill-reference-pointer`](docs/audit-checks.md#setup-scope-14). When `.goat-flow/skill-reference/` exists, audit fails if the README index is missing or any present instruction file lacks a literal `.goat-flow/skill-reference/` pointer; projects without the directory get a skipped check.
+
 ## v1.4.0 - 2026-05-02
 
 Cross-rater skill quality audit, skill hardening, deny-dangerous security fixes, structural reorg, dispatcher rewrite, and v1.3.3 features rolled in.

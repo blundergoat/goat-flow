@@ -378,6 +378,38 @@ export function computeHarness(ctx: AuditContext): {
 }
 
 /** Run build checks and return per-scope results. */
+function isAggregateAgentSkip(
+  ctx: AuditContext,
+  check: BuildCheck,
+  failure: ReturnType<BuildCheck["run"]>,
+): boolean {
+  return (
+    failure === null &&
+    check.scope === "agent" &&
+    !ctx.agentFilter &&
+    !check.supportsAggregate
+  );
+}
+
+function runSingleBuildCheck(
+  ctx: AuditContext,
+  check: BuildCheck,
+): CheckResult {
+  assertCheckCanRunWithoutStack(ctx, check);
+  const explicitlySkipped = check.skip?.(ctx) ?? false;
+  const failure = explicitlySkipped ? null : check.run(ctx);
+  const provenance = check.provenanceFor?.(ctx, failure) ?? check.provenance;
+  const skipped =
+    explicitlySkipped || isAggregateAgentSkip(ctx, check, failure);
+  return {
+    id: check.id,
+    name: check.name,
+    status: skipped ? "skipped" : failure ? "fail" : "pass",
+    provenance,
+    failure: failure ?? undefined,
+  };
+}
+
 function runBuildChecks(ctx: AuditContext): {
   setup: AuditScope;
   agent: AuditScope;
@@ -388,21 +420,7 @@ function runBuildChecks(ctx: AuditContext): {
   };
   const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
   for (const check of BUILD_CHECKS) {
-    assertCheckCanRunWithoutStack(ctx, check);
-    const failure = check.run(ctx);
-    const provenance = check.provenanceFor?.(ctx, failure) ?? check.provenance;
-    const skipped =
-      failure === null &&
-      check.scope === "agent" &&
-      !ctx.agentFilter &&
-      !check.supportsAggregate;
-    scopeChecks[check.scope].push({
-      id: check.id,
-      name: check.name,
-      status: skipped ? "skipped" : failure ? "fail" : "pass",
-      provenance,
-      failure: failure ?? undefined,
-    });
+    scopeChecks[check.scope].push(runSingleBuildCheck(ctx, check));
   }
   return {
     setup: buildScope(scopeChecks.setup, setupSummary(ctx)),

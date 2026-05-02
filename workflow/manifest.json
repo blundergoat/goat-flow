@@ -16,6 +16,7 @@
     ".goat-flow/footguns/README.md",
     ".goat-flow/decisions/README.md",
     ".goat-flow/logs/sessions/.gitkeep",
+    ".goat-flow/skill-reference/README.md",
     ".goat-flow/skill-reference/skill-preamble.md",
     ".goat-flow/skill-reference/skill-conventions.md",
     ".goat-flow/skill-reference/browser-use.md",
@@ -53,7 +54,7 @@
     ".goat-flow/logs/critiques/": "Workspace-local, gitignored-by-design critique run history. Phase 3 snapshots from `/goat-critique` runs persisted before the Phase 4 blocking gate so work survives session interruptions. Only README.md is committed.",
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/skill-reference/": "Committed shared cold-path skill doctrine copied from workflow templates. Holds skill-preamble.md, skill-conventions.md, browser-use.md for browser evidence capture, page-capture.md for Playwright page-capture usage tiers, and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023); durable reference state used across sessions, not transient notes.",
+    ".goat-flow/skill-reference/": "Committed shared cold-path skill doctrine copied from workflow templates. Holds README.md as the capability-playbook index, skill-preamble.md, skill-conventions.md, browser-use.md for browser evidence capture, page-capture.md for Playwright page-capture usage tiers, and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023); durable reference state used across sessions, not transient notes.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 

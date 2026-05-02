@@ -358,6 +358,57 @@ async function makeTempProject(
   };
 }
 
+async function writeAuditSetupFixture(
+  root: string,
+  options: {
+    skillReferenceDir: boolean;
+    skillReferenceReadme?: boolean;
+    instructionPointer: boolean;
+  },
+): Promise<void> {
+  const manifest = JSON.parse(
+    readFileSync(join(PROJECT_ROOT, "workflow/manifest.json"), "utf-8"),
+  ) as { required_files: string[]; required_dirs: string[] };
+
+  for (const dir of manifest.required_dirs) {
+    if (
+      !options.skillReferenceDir &&
+      dir.startsWith(".goat-flow/skill-reference/")
+    ) {
+      continue;
+    }
+    await mkdir(join(root, dir), { recursive: true });
+  }
+
+  for (const file of manifest.required_files) {
+    if (
+      !options.skillReferenceDir &&
+      file.startsWith(".goat-flow/skill-reference/")
+    ) {
+      continue;
+    }
+    if (
+      options.skillReferenceReadme === false &&
+      file === ".goat-flow/skill-reference/README.md"
+    ) {
+      continue;
+    }
+    const content =
+      file === ".goat-flow/config.yaml"
+        ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
+        : "# Stub\n";
+    await writeProjectFile(root, file, content);
+  }
+
+  await writeProjectFile(
+    root,
+    "CLAUDE.md",
+    options.instructionPointer
+      ? "# CLAUDE.md\n.goat-flow/skill-reference/\n"
+      : "# CLAUDE.md\n",
+  );
+}
+
 function makeAuditScope(
   status: "pass" | "fail",
   checks: AuditReport["scopes"]["setup"]["checks"],
@@ -456,6 +507,116 @@ describe("audit on well-configured project", () => {
       assert.equal(report.command, "audit");
       assert.equal(report.target, project.root);
       assert.ok(["pass", "fail"].includes(report.status));
+    } finally {
+      await project.cleanup();
+    }
+  });
+});
+
+describe("audit skill-reference pointer rule", () => {
+  it("fails when skill-reference exists but CLAUDE.md lacks the pointer", async () => {
+    const project = await makeTempProject((root) =>
+      writeAuditSetupFixture(root, {
+        skillReferenceDir: true,
+        instructionPointer: false,
+      }),
+    );
+    try {
+      const report = runAudit(createFS(project.root), project.root, {
+        agentFilter: null,
+        harness: false,
+      });
+      const check = report.scopes.setup.checks.find(
+        (entry) => entry.id === "instruction-file-skill-reference-pointer",
+      );
+
+      assert.equal(report.status, "fail");
+      assert.equal(check?.status, "fail");
+      assert.match(check?.failure?.message ?? "", /CLAUDE\.md/);
+      assert.match(check?.failure?.howToFix ?? "", /Before declaring any tool/);
+    } finally {
+      await project.cleanup();
+    }
+  });
+
+  it("passes when skill-reference exists and CLAUDE.md contains the pointer", async () => {
+    const project = await makeTempProject((root) =>
+      writeAuditSetupFixture(root, {
+        skillReferenceDir: true,
+        instructionPointer: true,
+      }),
+    );
+    try {
+      const report = runAudit(createFS(project.root), project.root, {
+        agentFilter: null,
+        harness: false,
+      });
+      const check = report.scopes.setup.checks.find(
+        (entry) => entry.id === "instruction-file-skill-reference-pointer",
+      );
+
+      assert.equal(
+        report.status,
+        "pass",
+        `Expected pass but got: ${JSON.stringify(report.scopes)}`,
+      );
+      assert.equal(check?.status, "pass");
+    } finally {
+      await project.cleanup();
+    }
+  });
+
+  it("skips when the project has no skill-reference directory", async () => {
+    const project = await makeTempProject((root) =>
+      writeAuditSetupFixture(root, {
+        skillReferenceDir: false,
+        instructionPointer: false,
+      }),
+    );
+    try {
+      const report = runAudit(createFS(project.root), project.root, {
+        agentFilter: null,
+        harness: false,
+      });
+      const check = report.scopes.setup.checks.find(
+        (entry) => entry.id === "instruction-file-skill-reference-pointer",
+      );
+
+      assert.equal(
+        report.status,
+        "pass",
+        `Expected pass but got: ${JSON.stringify(report.scopes)}`,
+      );
+      assert.equal(check?.status, "skipped");
+    } finally {
+      await project.cleanup();
+    }
+  });
+
+  it("fails when the skill-reference directory exists without README.md", async () => {
+    const project = await makeTempProject((root) =>
+      writeAuditSetupFixture(root, {
+        skillReferenceDir: true,
+        skillReferenceReadme: false,
+        instructionPointer: true,
+      }),
+    );
+    try {
+      const report = runAudit(createFS(project.root), project.root, {
+        agentFilter: null,
+        harness: false,
+      });
+      const check = report.scopes.setup.checks.find(
+        (entry) => entry.id === "instruction-file-skill-reference-pointer",
+      );
+
+      assert.equal(report.status, "fail");
+      assert.equal(check?.status, "fail");
+      assert.match(check?.failure?.message ?? "", /README\.md/);
+      assert.equal(
+        check?.failure?.evidence,
+        ".goat-flow/skill-reference/README.md",
+      );
     } finally {
       await project.cleanup();
     }

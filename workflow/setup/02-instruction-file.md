@@ -63,6 +63,8 @@ After writing/updating the instruction file:
 - [ ] Instruction file exists at the correct path
 - [ ] All sections (a) through (h) are present
 - [ ] Examples and boundaries reference real project files
+- [ ] READ step says to read `.goat-flow/skill-reference/` before declaring a tool or capability unavailable
+- [ ] Router table includes `.goat-flow/skill-reference/` as tool playbooks to read before declaring a tool unavailable
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits
 - [ ] `.gitignore` updated for agent-local files

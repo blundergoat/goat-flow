@@ -20,6 +20,14 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const TEMPLATE_REFERENCE_README = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/reference/README.md",
+);
+const INSTALLED_REFERENCE_README = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-reference/README.md",
+);
 const TEMPLATE_PREAMBLE = resolve(
   PROJECT_ROOT,
   "workflow/skills/reference/skill-preamble.md",
@@ -85,6 +93,20 @@ function diffQuiet(a: string, b: string): number {
 // Template and installed copies currently match (sanity check)
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: current state", () => {
+  it("template and installed skill-reference README.md match", () => {
+    if (
+      !existsSync(TEMPLATE_REFERENCE_README) ||
+      !existsSync(INSTALLED_REFERENCE_README)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_REFERENCE_README, INSTALLED_REFERENCE_README),
+      0,
+      "skill-reference README.md: template and installed should match",
+    );
+  });
+
   it("template and installed skill-preamble.md match", () => {
     if (!existsSync(TEMPLATE_PREAMBLE) || !existsSync(INSTALLED_PREAMBLE)) {
       return; // Skip if either file is missing

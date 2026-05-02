@@ -1,6 +1,6 @@
 ---
 category: verification-review
-last_reviewed: 2026-04-27
+last_reviewed: 2026-05-03
 ---
 
 ## Lesson: Multi-agent critique finds findings single reviewers miss - but synthesis is the expensive part
@@ -55,11 +55,11 @@ last_reviewed: 2026-04-27
 
 **Status:** active | **Created:** 2026-04-14
 
-**What happened:** A critique agent claimed `.goat-flow/architecture.md` (search: `17 build checks`) had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The claim was accepted at face value and the doc was changed. A subsequent refactor restructured the checks into `SETUP_CHECKS` (13 checks) and `AGENT_CHECKS` (4 checks), making the actual breakdown **13 setup + 4 agent** (17 total). The preflight's "Architecture doc counts match code" check only validates the total (17), not the sub-breakdown, so incorrect breakdowns pass all automated gates.
+**What happened:** A critique agent claimed `.goat-flow/architecture.md` (search: `18 build checks`) had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The claim was accepted at face value and the doc was changed. A subsequent refactor restructured the checks into `SETUP_CHECKS` and `AGENT_CHECKS`; the current breakdown is **14 setup + 4 agent** (18 total). The preflight's "Architecture doc counts match code" check now validates both total and sub-breakdown because incorrect breakdowns previously passed automated gates.
 
 **Root cause:** The first critique agent likely miscounted or read a stale build of the code. The claim was plausible (it got the total right), which made it easy to accept without running the verification command. The same session also changed `code-map.md` correctly for a different issue, creating a false sense that all claims were verified.
 
-**Evidence:** `node --input-type=module -e "const a=await import('./dist/cli/audit/check-goat-flow.js'); const b=await import('./dist/cli/audit/check-agent-setup.js'); console.log('setup:', a.SETUP_CHECKS.length, 'agent:', b.AGENT_CHECKS.length)"` - outputs 13 setup + 4 agent (17 total).
+**Evidence:** `node --input-type=module -e "const a=await import('./dist/cli/audit/check-goat-flow.js'); const b=await import('./dist/cli/audit/check-agent-setup.js'); console.log('setup:', a.SETUP_CHECKS.length, 'agent:', b.AGENT_CHECKS.length)"` - outputs 14 setup + 4 agent (18 total).
 
 **Prevention:**
 1. Before changing any numeric claim in a canonical doc, run the verification command yourself - never trust a critique's count.

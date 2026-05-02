@@ -12,7 +12,78 @@ import {
   makeCtx,
   stubAgentFacts,
   stubConfig,
+  stubFS,
 } from "../fixtures/projects/index.js";
+
+const skillReferenceCheck = SETUP_CHECKS.find(
+  (check) => check.id === "instruction-file-skill-reference-pointer",
+)!;
+
+const requiredSkillReferenceFiles = [
+  ".goat-flow/skill-reference/README.md",
+  ".goat-flow/skill-reference/skill-preamble.md",
+  ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-reference/browser-use.md",
+  ".goat-flow/skill-reference/page-capture.md",
+  ".goat-flow/skill-reference/skill-quality-testing.md",
+  ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
+];
+
+function makeSkillReferenceCtx(options: {
+  dirPresent: boolean;
+  readmePresent?: boolean;
+  instructionContent?: string;
+  instructionFiles?: Record<string, string>;
+}) {
+  const present = new Set<string>();
+  const instructionFiles = options.instructionFiles ?? {
+    "CLAUDE.md": options.instructionContent ?? "",
+  };
+  if (options.dirPresent) {
+    present.add(".goat-flow/skill-reference");
+    for (const file of requiredSkillReferenceFiles) {
+      if (
+        file !== ".goat-flow/skill-reference/README.md" ||
+        options.readmePresent !== false
+      ) {
+        present.add(file);
+      }
+    }
+  }
+  for (const path of Object.keys(instructionFiles)) {
+    present.add(path);
+  }
+
+  return makeCtx({
+    fs: stubFS({
+      exists: (path) => present.has(path),
+      readFile: (path) => instructionFiles[path] ?? "# Stub\n",
+    }),
+    structure: {
+      ...makeCtx().structure,
+      agents: {
+        claude: {
+          instruction_file: "CLAUDE.md",
+          skills_dir: ".claude/skills",
+        },
+        codex: {
+          instruction_file: "AGENTS.md",
+          skills_dir: ".agents/skills",
+        },
+        gemini: {
+          instruction_file: "GEMINI.md",
+          skills_dir: ".gemini/skills",
+        },
+        copilot: {
+          instruction_file: ".github/copilot-instructions.md",
+          skills_dir: ".github/skills",
+        },
+      },
+    },
+  });
+}
 
 const require = createRequire(import.meta.url);
 const childProcess =
@@ -92,6 +163,71 @@ describe("audit build: harness scope fails on missing deny", () => {
       0,
       "Presence-only summary mode should not shell out",
     );
+  });
+});
+
+describe("audit build: skill-reference discoverability", () => {
+  it("fails when skill-reference exists but an instruction file lacks the pointer", () => {
+    const ctx = makeSkillReferenceCtx({
+      dirPresent: true,
+      instructionContent: "# CLAUDE.md\n",
+    });
+
+    assert.equal(skillReferenceCheck.skip?.(ctx), false);
+    const result = skillReferenceCheck.run(ctx);
+
+    assert.notEqual(result, null);
+    assert.match(result!.message, /CLAUDE\.md/);
+    assert.match(result!.howToFix ?? "", /Before declaring any tool/);
+  });
+
+  it("passes when present instruction files contain the pointer", () => {
+    const ctx = makeSkillReferenceCtx({
+      dirPresent: true,
+      instructionContent: "# CLAUDE.md\n.goat-flow/skill-reference/\n",
+    });
+
+    assert.equal(skillReferenceCheck.skip?.(ctx), false);
+    assert.equal(skillReferenceCheck.run(ctx), null);
+  });
+
+  it("skips when the project has no skill-reference directory", () => {
+    const ctx = makeSkillReferenceCtx({
+      dirPresent: false,
+      instructionContent: "# CLAUDE.md\n",
+    });
+
+    assert.equal(skillReferenceCheck.skip?.(ctx), true);
+  });
+
+  it("fails when the skill-reference directory has no README index", () => {
+    const ctx = makeSkillReferenceCtx({
+      dirPresent: true,
+      readmePresent: false,
+      instructionContent: "# CLAUDE.md\n.goat-flow/skill-reference/\n",
+    });
+
+    const result = skillReferenceCheck.run(ctx);
+
+    assert.notEqual(result, null);
+    assert.match(result!.message, /README\.md/);
+    assert.equal(result!.evidence, ".goat-flow/skill-reference/README.md");
+  });
+
+  it("reports only present instruction files that dropped the pointer", () => {
+    const ctx = makeSkillReferenceCtx({
+      dirPresent: true,
+      instructionFiles: {
+        "CLAUDE.md": "# CLAUDE.md\n.goat-flow/skill-reference/\n",
+        "AGENTS.md": "# AGENTS.md\n",
+      },
+    });
+
+    const result = skillReferenceCheck.run(ctx);
+
+    assert.notEqual(result, null);
+    assert.doesNotMatch(result!.message, /CLAUDE\.md/);
+    assert.match(result!.message, /AGENTS\.md/);
   });
 });
 

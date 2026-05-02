@@ -1,6 +1,6 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-03
 ---
 
 ## Lesson: Dashboard audit cache survives code changes because signature doesn't cover compiled JS
@@ -97,6 +97,8 @@ last_reviewed: 2026-05-01
 - `.goat-flow/skill-reference/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
 
 **Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use || command -v browser-use-python` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
+
+**2026-05-03 reinforcement:** A downstream incident showed the broader failure mode: agents that skip `.goat-flow/skill-reference/` and go straight to harness ToolSearch can declare project-local CLI tools unavailable when they are not. The structural fix is to route every instruction file to `.goat-flow/skill-reference/` and make audit fail when that pointer disappears.
 
 ---
 

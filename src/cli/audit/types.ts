@@ -190,6 +190,8 @@ export interface BuildCheck {
   supportsAggregate?: boolean;
   /** True when the check reads `ctx.facts.stack` and must run only with full facts. */
   requiresStack?: boolean;
+  /** Return true when the check is intentionally not applicable for this context. */
+  skip?: (ctx: AuditContext) => boolean;
   run: (ctx: AuditContext) => AuditFailure | null;
 }
 

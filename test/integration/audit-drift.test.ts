@@ -67,6 +67,10 @@ function setupFixture(): string {
   // Template root layout
   mkdirSync(join(root, "workflow", "skills", "reference"), { recursive: true });
   writeFileSync(
+    join(root, "workflow", "skills", "reference", "README.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, "workflow", "skills", "reference", "skill-preamble.md"),
     SHARED_STUB,
   );
@@ -117,6 +121,10 @@ function setupFixture(): string {
     }
   }
   mkdirSync(join(root, ".goat-flow", "skill-reference"), { recursive: true });
+  writeFileSync(
+    join(root, ".goat-flow", "skill-reference", "README.md"),
+    SHARED_STUB,
+  );
   writeFileSync(
     join(root, ".goat-flow", "skill-reference", "skill-preamble.md"),
     SHARED_STUB,
@@ -311,7 +319,7 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    assert.equal(report.checked, expectedSkillComparisons + 8);
+    assert.equal(report.checked, expectedSkillComparisons + 9);
   });
 });
 

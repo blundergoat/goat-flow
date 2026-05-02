@@ -57,7 +57,7 @@ Do not run `npm run build` and `preflight-checks.sh` concurrently - the build's 
 
 There are two check systems - pick the right one:
 
-- **Build checks** (`src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts`) - 17 checks (13 setup scope + 4 agent scope) that gate CI pass/fail. Adding here makes it a blocking audit requirement.
+- **Build checks** (`src/cli/audit/check-goat-flow.ts` + `check-agent-setup.ts`) - 18 checks (14 setup scope + 4 agent scope) that gate CI pass/fail. Adding here makes it a blocking audit requirement.
 - **Quality checks** (`src/cli/audit/harness/`) - 17 checks grouped by 5 concerns. Gating when `--harness` is passed; not included in this repo's default CI.
 
 Every new `BuildCheck` and `HarnessCheck` must also ship a `provenance` record using `CheckEvidence` from `src/cli/audit/provenance-types.ts`. Populate the source, normative level, verified date, and supporting `evidence_paths` / `source_urls` in the same change as the check itself. Provenance is emitted per check in JSON output; text output stays unchanged unless you are deliberately changing the human-facing renderer.

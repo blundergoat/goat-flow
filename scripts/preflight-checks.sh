@@ -970,6 +970,15 @@ fi
 
 # ── Preamble/Conventions Sync ────────────────────────────────────────
 section "Preamble/Conventions Sync"
+if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-reference/README.md ]]; then
+    if diff -q workflow/skills/reference/README.md .goat-flow/skill-reference/README.md >/dev/null 2>&1; then
+        pass "skill-reference README.md: template and installed copy match"
+    else
+        fail "skill-reference README.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+    fi
+else
+    skip "skill-reference README.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skill-reference/skill-preamble.md ]]; then
     if diff -q workflow/skills/reference/skill-preamble.md .goat-flow/skill-reference/skill-preamble.md >/dev/null 2>&1; then
         pass "skill-preamble.md: template and installed copy match"

@@ -33,7 +33,7 @@ Binary pass/fail. This is the structural setup gate - it validates that required
 
 Checks are grouped by **scope**:
 
-**setup scope** (GOAT Flow Setup) - 13 checks on goat-flow-owned surfaces:
+**setup scope** (GOAT Flow Setup) - 14 checks on goat-flow-owned surfaces:
 - `lessons` - `.goat-flow/lessons/` directory and README exist
 - `footguns` - `.goat-flow/footguns/` directory and README exist
 - `architecture` - `.goat-flow/architecture.md` exists
@@ -44,7 +44,8 @@ Checks are grouped by **scope**:
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists
 - `tasks` - `.goat-flow/tasks/` directory, `.gitignore`, and README exist (local-session state by design)
 - `scratchpad` - `.goat-flow/scratchpad/` directory, `.gitignore`, and README exist (local WIP by design)
-- `other-files` - Other required manifest surfaces not already covered by named setup checks exist (for example skill-reference and quality-log paths)
+- `instruction-file-skill-reference-pointer` - when `.goat-flow/skill-reference/` exists, every present instruction file points to it and `.goat-flow/skill-reference/README.md` exists; when the directory is absent, this check is skipped
+- `other-files` - Other required manifest surfaces not already covered by named setup checks exist (for example quality-log paths)
 - `config-parses` - `.goat-flow/config.yaml` parses and validates, including manifest-backed `agents:` ids
 - `config-version` - Config version matches current release
 

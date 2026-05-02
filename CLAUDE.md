@@ -26,10 +26,10 @@ node --import tsx src/cli/cli.ts stats . --check  # Learning-loop health: last_r
 
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write - skills with write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) gate on explicit approval. Resume at ACT when the skill's first blocking gate releases.
 
-**READ** - MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns/`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
+**READ** - MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns/`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-reference/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
 ```
 BAD:  "The CLI has 20 audit checks" (guessed without reading)
-GOOD: Read src/cli/audit/check-goat-flow.ts → 13 setup checks, check-agent-setup.ts → 4 agent checks (17 total)
+GOOD: Read src/cli/audit/check-goat-flow.ts → 14 setup checks, check-agent-setup.ts → 4 agent checks (18 total)
 ```
 
 **SCOPE** - Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
@@ -102,7 +102,8 @@ MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh,
 | Scripts | `scripts/` |
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation) |
 | Skills | `.claude/skills/` (goat, goat-critique, goat-debug, goat-plan, goat-qa, goat-review, goat-security) |
-| Shared skill reference | `.goat-flow/skill-reference/` (skill-preamble.md, skill-conventions.md, browser-use.md, page-capture.md, skill-quality-testing.md index + skill-quality-testing/tdd-iteration.md, skill-quality-testing/adversarial-framing.md, and skill-quality-testing/deployment.md per ADR-023) |
+| Shared skill reference | `.goat-flow/skill-reference/` (README.md index, skill-preamble.md, skill-conventions.md, browser-use.md, page-capture.md, skill-quality-testing.md index + skill-quality-testing/tdd-iteration.md, skill-quality-testing/adversarial-framing.md, and skill-quality-testing/deployment.md per ADR-023) |
+| Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-* references) | `.goat-flow/skill-reference/` - read BEFORE declaring a tool unavailable |
 | Footguns (most-queried) | `.goat-flow/footguns/` |
 | Lessons | `.goat-flow/lessons/` |
 | Patterns | `.goat-flow/patterns/` |

@@ -12,7 +12,7 @@ b) Version header (v&lt;current-version&gt; - YYYY-MM-DD, matching `package.json
 
 c) Default Execution Loop: READ → SCOPE → ACT → VERIFY
    When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write. Resume at ACT when the skill's first blocking gate releases.
-   - READ: gather evidence from relevant files before any claim. Never fabricate codebase facts.
+   - READ: gather evidence from relevant files before any claim. Never fabricate codebase facts. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-reference/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
      - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use && browser-use doctor`; if available use `browser-use open`, `browser-use state`, and `browser-use screenshot`. If missing, ask before installing or use manual fallback.
    - SCOPE: declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius.
    - Include complexity tier, mode, and intent in this one step.
@@ -75,6 +75,7 @@ g) Router table: MUST include at minimum:
      - Learning loop directories (`.goat-flow/footguns/`, `.goat-flow/lessons/`)
      - Architecture doc (`.goat-flow/architecture.md`)
      - Config (`.goat-flow/config.yaml`)
+     - Tool playbooks (`.goat-flow/skill-reference/`: browser-use, page-capture, skill-* references) - read BEFORE declaring a tool unavailable
      - Any domain docs relevant to project
      Dual-agent projects: router MUST include the other agent's
      instruction file (AGENTS.md or CLAUDE.md).

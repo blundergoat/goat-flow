@@ -1,8 +1,8 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently registers **34 deterministic checks**:
+`npx goat-flow audit` currently registers **35 deterministic checks**:
 
-- **17 build checks**: 13 setup-scope checks plus 4 agent-scope checks
+- **18 build checks**: 14 setup-scope checks plus 4 agent-scope checks
 - **17 harness checks**: additional checks enabled by `--harness`
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
@@ -17,7 +17,7 @@ Source of truth:
 
 Build mode is the structural install gate. It validates files, directories, config, skills, settings, and deny wiring. It does **not** execute the project's lint, test, or build toolchain commands.
 
-### Setup Scope (13)
+### Setup Scope (14)
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
@@ -31,7 +31,8 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `session-logs` | Session logs | `.goat-flow/logs/sessions/` exists |
 | `tasks` | Tasks | `.goat-flow/tasks/`, `.goat-flow/tasks/.gitignore`, and `.goat-flow/tasks/README.md` exist |
 | `scratchpad` | Scratchpad | `.goat-flow/scratchpad/`, `.goat-flow/scratchpad/.gitignore`, and `.goat-flow/scratchpad/README.md` exist |
-| `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including the shared skill-reference and quality-log surfaces |
+| `instruction-file-skill-reference-pointer` | Instruction file skill-reference pointer | Skips when `.goat-flow/skill-reference/` is absent. When present, requires `.goat-flow/skill-reference/README.md` plus a literal `.goat-flow/skill-reference/` pointer in each present instruction file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`) |
+| `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including quality-log surfaces |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
 | `config-version` | Config version | `.goat-flow/config.yaml` declares the current `AUDIT_VERSION` |
 
@@ -51,7 +52,7 @@ Aggregate-mode nuance:
 
 ## Harness Checks
 
-`npx goat-flow audit . --harness` adds **17** deterministic harness-completeness checks on top of the 17 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`.
+`npx goat-flow audit . --harness` adds **17** deterministic harness-completeness checks on top of the 18 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -77,8 +78,8 @@ Aggregate-mode nuance:
 
 | Command | Checks included | Notes |
 |---------|-----------------|-------|
-| `npx goat-flow audit .` | 13 setup + 4 agent = 17 build checks | Structural install gate only |
-| `npx goat-flow audit . --agent <id>` | Same 17 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx goat-flow audit . --harness` | 17 build + 17 harness = 34 checks | Adds harness completeness, still deterministic |
+| `npx goat-flow audit .` | 14 setup + 4 agent = 18 build checks | Structural install gate only |
+| `npx goat-flow audit . --agent <id>` | Same 18 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
+| `npx goat-flow audit . --harness` | 18 build + 17 harness = 35 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.

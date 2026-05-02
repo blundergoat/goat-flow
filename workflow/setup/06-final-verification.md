@@ -33,6 +33,7 @@ Check these surfaces:
 - The instruction file
 - All installed skill files
 - Agent settings / hook config files
+- `.goat-flow/skill-reference/README.md`
 - `.goat-flow/skill-reference/skill-preamble.md`
 - `.goat-flow/skill-reference/browser-use.md`
 - `.goat-flow/config.yaml`

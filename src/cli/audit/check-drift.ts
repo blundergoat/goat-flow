@@ -10,6 +10,7 @@
  *       .claude/skills/<name>/SKILL.md
  *       .agents/skills/<name>/SKILL.md
  *   - Shared docs (template → installed in .goat-flow/skill-reference/):
+ *       workflow/skills/reference/README.md                 vs .goat-flow/skill-reference/README.md
  *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-reference/skill-preamble.md
  *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-reference/skill-conventions.md
  *       workflow/skills/reference/browser-use.md            vs .goat-flow/skill-reference/browser-use.md
@@ -112,6 +113,10 @@ interface SharedFileSpec {
 }
 
 const SHARED_FILES: SharedFileSpec[] = [
+  {
+    template: "workflow/skills/reference/README.md",
+    installed: ".goat-flow/skill-reference/README.md",
+  },
   {
     template: "workflow/skills/reference/skill-preamble.md",
     installed: ".goat-flow/skill-reference/skill-preamble.md",

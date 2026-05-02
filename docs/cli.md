@@ -105,6 +105,8 @@ Use `--apply` when you want setup to run the deterministic file-copy installer i
 
 Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Existing settings and config are skipped unless `--force` is passed.
 
+The shared references include `.goat-flow/skill-reference/README.md`, an index for tool/capability playbooks such as `browser-use.md` and `page-capture.md`. Generated or repaired instruction files include a Router Table pointer to `.goat-flow/skill-reference/` so agents check local availability playbooks before declaring a tool unavailable.
+
 ```bash
 npx @blundergoat/goat-flow@latest install . --agent claude
 npx @blundergoat/goat-flow@latest install . --agent codex --force

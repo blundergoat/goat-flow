@@ -260,6 +260,7 @@ echo ""
 # 3. Copy shared reference files (always overwrite - verbatim copies)
 # ==========================================================================
 echo "Reference files → .goat-flow/skill-reference/:"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-reference/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-reference/skill-preamble.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-reference/skill-conventions.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/browser-use.md" ".goat-flow/skill-reference/browser-use.md"

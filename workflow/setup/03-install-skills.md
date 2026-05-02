@@ -31,6 +31,7 @@ Each SKILL.md MUST include:
 ## Shared skill reference
 
 Install the full shared reference pack from `workflow/skills/reference/`:
+- `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md` - index for tool/capability playbooks and availability-check discipline
 - `.goat-flow/skill-reference/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
 - `.goat-flow/skill-reference/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
 - `.goat-flow/skill-reference/browser-use.md` from `workflow/skills/reference/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
@@ -60,6 +61,7 @@ After installing, verify each SKILL.md frontmatter has the correct `goat-flow-sk
 - [ ] All 7 skill files exist in the agent's skills directory
 - [ ] goat/SKILL.md (dispatcher) exists
 - [ ] All 7 skills have matching `goat-flow-skill-version` tags
+- [ ] `.goat-flow/skill-reference/README.md` exists
 - [ ] `.goat-flow/skill-reference/skill-preamble.md` exists
 - [ ] `.goat-flow/skill-reference/skill-conventions.md` exists
 - [ ] `.goat-flow/skill-reference/browser-use.md` exists
