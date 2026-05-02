@@ -154,11 +154,11 @@ Then the full critique:
 
 **Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Must never be empty.
 
-**BLOCKING GATE:** "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
-
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion.
 
-**Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (budget: 2 tool calls, no context beyond the draft Phase 5 output). Audit the critique for internal consistency against the 10-point rubric in `references/rubric-examples.md`. If issues found, insert an `## Auto-Detected Issues` block before the human gate. Verdict block updated with `Meta-score: N/100`.
+**Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (budget: 2 tool calls, no context beyond the draft Phase 5 output). Audit the critique for internal consistency against the 10-point rubric in `references/rubric-examples.md`. If issues found, insert an `## Auto-Detected Issues` block before presenting. Verdict block updated with `Meta-score: N/100`.
+
+**BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 
 **Phase 5.6 - Outcome capture.** After the human picks A/B/C/D, tag each surviving finding: `accepted | rejected | deferred | partial`. Default: option (A) → all `accepted`; option (D) → all `deferred`. Persisted to the critique log under `## Outcomes`.
 
@@ -183,7 +183,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ## Constraints
 
-- MUST run in one mode: full delegated, Phases 1-5 plus mandatory post-synthesis steps (5.5, 5.6), three sub-agents. Phase 5 is not complete until 5.5 and 5.6 have run. Quick/lite modes were tried and removed - a single reviewer running lens passes in one context is self-talk under three labels, not multi-perspective critique.
+- MUST run in one mode: full delegated, Phases 1-5 plus mandatory post-synthesis steps (5.5, 5.6), three sub-agents. Phase 5.5 (meta-audit) runs before the human gate; Phase 5.6 (outcome capture) runs after the human responds. Quick/lite modes were tried and removed - a single reviewer running lens passes in one context is self-talk under three labels, not multi-perspective critique.
 - Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.

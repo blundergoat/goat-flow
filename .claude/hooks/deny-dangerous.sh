@@ -344,6 +344,13 @@ run_self_test() {
   run_case "rm scoped separated flags" "rm -r -f ./node_modules" 0
   run_case "rm scoped uppercase recursive" "rm -Rf ./node_modules" 0
   run_case "rm scoped tmp build" "rm -rf /tmp/build-goat-flow" 0
+  run_case "rm bare node_modules" "rm -rf node_modules" 0
+  run_case "rm bare dist" "rm -rf dist" 0
+  run_case "rm subdirectory path" "rm -rf src/old-module" 0
+  run_case "rm bare src blocked" "rm -rf src" 2
+  run_case "rm bare workflow blocked" "rm -rf workflow" 2
+  run_case "rm bare docs blocked" "rm -rf docs" 2
+  run_case "rm bare test blocked" "rm -rf test" 2
   run_case "chmod recursive 777" "chmod -R 777 ." 2
   run_case "chmod leading zero 777" "chmod 0777 file" 2
   # False-positive cases: read-only commands containing dangerous literals as data.
@@ -612,7 +619,13 @@ rm_has_recursive_force() {
 
 rm_is_safely_scoped() {
   local c="$1"
-  [[ "$c" =~ ^[[:space:]]*rm([[:space:]]+--?[[:alnum:]-]+)*[[:space:]]+(\./[a-zA-Z][^[:space:]]*|[a-zA-Z][^[:space:]]*|/tmp/build-[a-zA-Z0-9._-][^[:space:]]*)[[:space:]]*$ ]]
+  # Safe rm -rf targets:
+  #   ./relative/path        — explicitly dot-prefixed
+  #   path/with/slash        — has subdirectory (not a bare top-level dir)
+  #   node_modules|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo — known ephemeral dirs
+  #   /tmp/build-*           — CI artifacts
+  # Bare top-level names like src, workflow, docs, test are NOT safe.
+  [[ "$c" =~ ^[[:space:]]*rm([[:space:]]+--?[[:alnum:]-]+)*[[:space:]]+(\./[a-zA-Z][^[:space:]]*|[a-zA-Z][^[:space:]]*/[^[:space:]]*|(node_modules|dist|out|build|coverage|__pycache__|\.cache|\.next|\.nuxt|\.turbo)|/tmp/build-[a-zA-Z0-9._-][^[:space:]]*)[[:space:]]*$ ]]
 }
 
 
