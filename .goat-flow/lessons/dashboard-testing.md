@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-02
 ---
 
 ## Lesson: Dashboard readers must preserve fields used by score logic
@@ -20,6 +20,8 @@ last_reviewed: 2026-05-01
 **Status:** active | **Created:** 2026-04-25
 
 **What happened:** M03 added a VM-loaded browser helper test for `dashboard-custom-prompts.ts`. The first focused run failed even though the expected and actual arrays had the same printed contents, because `assert.deepEqual` compared an array created inside the VM realm against a host-realm array literal.
+
+**Current recurrence:** On 2026-05-02, custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. The helper behavior was correct; the assertions needed `Array.from(...)` or scalar field comparisons.
 
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 

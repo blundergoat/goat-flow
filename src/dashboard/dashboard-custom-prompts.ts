@@ -15,6 +15,124 @@ const CUSTOM_PROMPT_ROUTES = new Set([
   "goat-security",
 ]);
 
+const CUSTOM_PROMPT_ROUTE_OPTIONS: CustomPromptRouteOption[] = [
+  {
+    id: "direct",
+    label: "direct",
+    desc: "Launch the prompt exactly as written without a goat skill wrapper.",
+  },
+  {
+    id: "goat",
+    label: "goat",
+    desc: "Choose the right goat workflow from the outcome you describe.",
+  },
+  {
+    id: "goat-debug",
+    label: "goat-debug",
+    desc: "Diagnose bugs, unexpected behavior, or unfamiliar code paths.",
+  },
+  {
+    id: "goat-review",
+    label: "goat-review",
+    desc: "Review a diff, PR, or code area for quality and correctness issues.",
+  },
+  {
+    id: "goat-qa",
+    label: "goat-qa",
+    desc: "Assess testing gaps, coverage risk, and verification strategy.",
+  },
+  {
+    id: "goat-plan",
+    label: "goat-plan",
+    desc: "Break non-trivial work into scoped, testable implementation steps.",
+  },
+  {
+    id: "goat-critique",
+    label: "goat-critique",
+    desc: "Run multi-lens critique on a plan, report, or decision artifact.",
+  },
+  {
+    id: "goat-security",
+    label: "goat-security",
+    desc: "Assess security implications, supply-chain risk, and agent surfaces.",
+  },
+];
+
+const CUSTOM_PROMPT_FLAG_GROUPS: CustomPromptFlagGroup[] = [
+  {
+    id: "prerequisites",
+    label: "Prerequisites",
+    flags: [
+      {
+        field: "requiresGh",
+        label: "Requires gh",
+        title:
+          "Uses GitHub CLI when available; provide fallback context if gh is missing.",
+      },
+      {
+        field: "requiresPrOrIssue",
+        label: "Needs PR",
+        title: "Needs a PR, issue, branch, or pasted diff context.",
+      },
+      {
+        field: "requiresLocalDiff",
+        label: "Needs diff",
+        title: "Needs local changes, a branch comparison, or pasted diff context.",
+      },
+      {
+        field: "requiresDependencyFiles",
+        label: "Dependency files",
+        title: "Needs package manifests or lockfiles for dependency evidence.",
+      },
+      {
+        field: "requiresGoatFlowInstall",
+        label: "GOAT install",
+        title:
+          "Requires goat-flow installed in the selected target; disables Global safe.",
+      },
+      {
+        field: "artifactRequired",
+        label: "Artifact required",
+        title: "Needs a plan, report, or other artifact to assess.",
+      },
+    ],
+  },
+  {
+    id: "permissions",
+    label: "Permissions",
+    flags: [
+      {
+        field: "mayCheckoutBranch",
+        label: "May checkout",
+        title: "May ask to checkout a branch after clean-worktree confirmation.",
+      },
+      {
+        field: "mayWriteFiles",
+        label: "May write",
+        title:
+          "May write files only when the prompt or user explicitly approves it.",
+      },
+    ],
+  },
+  {
+    id: "compatibility",
+    label: "Compatibility",
+    flags: [
+      {
+        field: "requiresUiApp",
+        label: "UI workflow",
+        title: "Best suited to app/UI testing.",
+      },
+      {
+        field: "globalSafe",
+        label: "Global safe",
+        title:
+          "Can run against external target projects without goat-flow installed.",
+      },
+    ],
+  },
+];
+
 interface PromptGlobalSafetyInput {
   requiresGoatFlowInstall?: boolean;
   globalSafe?: boolean;
@@ -31,9 +149,12 @@ function dashboardResolvedGlobalSafe(prompt: PromptGlobalSafetyInput): boolean {
 interface DashboardCustomPromptsContext {
   customPrompts: CustomPrompt[];
   customPromptDraft: CustomPromptDraft;
+  customPromptSurfaceDraft?: string;
+  customPromptSubmitAttempted?: boolean;
   editingCustomPromptId: string | null;
   showCustomPromptEditor: boolean;
   selectedPreset: Preset | null;
+  allPresets?: Preset[];
   showToast(msg: string, isError?: boolean): void;
 }
 
@@ -73,6 +194,43 @@ function dashboardSlugifyCustomPromptName(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return slug || "prompt";
+}
+
+function dashboardCustomPromptRouteOptions(): CustomPromptRouteOption[] {
+  return CUSTOM_PROMPT_ROUTE_OPTIONS;
+}
+
+function dashboardCustomPromptFlagGroups(): CustomPromptFlagGroup[] {
+  return CUSTOM_PROMPT_FLAG_GROUPS;
+}
+
+function dashboardSelectedCustomPromptRoute(
+  draft: CustomPromptDraft,
+): CustomPromptRouteOption {
+  return (
+    CUSTOM_PROMPT_ROUTE_OPTIONS.find((route) => route.id === draft.route) ??
+    CUSTOM_PROMPT_ROUTE_OPTIONS[0]!
+  );
+}
+
+function dashboardNormalizeSurfaceTag(surface: string): string {
+  return surface.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function dashboardParseTargetSurfaces(text: string): string[] {
+  const seen = new Set<string>();
+  const surfaces: string[] = [];
+  for (const raw of text.split(",")) {
+    const surface = dashboardNormalizeSurfaceTag(raw);
+    if (!surface || seen.has(surface)) continue;
+    seen.add(surface);
+    surfaces.push(surface);
+  }
+  return surfaces;
+}
+
+function dashboardJoinTargetSurfaces(surfaces: string[]): string {
+  return surfaces.map(dashboardNormalizeSurfaceTag).filter(Boolean).join(", ");
 }
 
 function dashboardReadBoolean(value: unknown): boolean {
@@ -186,6 +344,36 @@ function dashboardCustomPromptToPreset(custom: CustomPrompt): Preset {
   };
 }
 
+function dashboardCustomPromptDraftFromPreset(preset: Preset): CustomPromptDraft {
+  const route = preset.route || dashboardInferPromptRoute(preset.prompt);
+  const requiresGoatFlowInstall = preset.requiresGoatFlowInstall === true;
+  return {
+    name: preset.name,
+    desc: preset.desc,
+    prompt: preset.prompt,
+    route: CUSTOM_PROMPT_ROUTES.has(route) ? route : "direct",
+    runnerHint: "any",
+    requiresGh: preset.requiresGh === true,
+    requiresPrOrIssue: preset.requiresPrOrIssue === true,
+    requiresLocalDiff: preset.requiresLocalDiff === true,
+    requiresUiApp: preset.requiresUiApp === true,
+    requiresDependencyFiles: preset.requiresDependencyFiles === true,
+    requiresGoatFlowInstall,
+    mayCheckoutBranch: preset.mayCheckoutBranch === true,
+    requiresCleanWorktree: preset.requiresCleanWorktree === true,
+    mayWriteFiles: preset.mayWriteFiles === true,
+    artifactRequired: preset.artifactRequired === true,
+    globalSafe: dashboardResolvedGlobalSafe({
+      requiresGoatFlowInstall,
+      globalSafe: preset.globalSafe === true,
+    }),
+    bestTargetSurfacesText: dashboardJoinTargetSurfaces(
+      preset.bestTargetSurfaces ?? [],
+    ),
+    notes: preset.fallbackPrompt ?? "",
+  };
+}
+
 function dashboardCustomPromptDraftFromCustom(
   custom: CustomPrompt,
 ): CustomPromptDraft {
@@ -211,41 +399,111 @@ function dashboardCustomPromptDraftFromCustom(
   };
 }
 
-function dashboardValidateCustomPromptDraft(
+function dashboardValidateCustomPromptDraftDetails(
   ctx: DashboardCustomPromptsContext,
-): string[] {
+): CustomPromptValidationError[] {
   const draft = ctx.customPromptDraft;
-  const errors: string[] = [];
+  const errors: CustomPromptValidationError[] = [];
   const name = draft.name.trim();
   const prompt = draft.prompt.trim();
-  if (!name) errors.push("Name is required.");
-  if (!prompt) errors.push("Prompt is required.");
+  const editing = ctx.editingCustomPromptId;
+  if (!name) {
+    errors.push({
+      field: "name",
+      message: "Name is required.",
+      anchor: "custom-prompt-name",
+    });
+  } else {
+    const duplicateName = ctx.customPrompts.some(
+      (custom) =>
+        custom.id !== editing &&
+        custom.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (duplicateName) {
+      errors.push({
+        field: "name",
+        message: "Name already exists.",
+        anchor: "custom-prompt-name",
+      });
+    }
+  }
+  if (!prompt) {
+    errors.push({
+      field: "prompt",
+      message: "Prompt is required.",
+      anchor: "custom-prompt-body",
+    });
+  }
   const route =
     draft.route === "direct"
       ? dashboardInferPromptRoute(prompt)
       : draft.route || dashboardInferPromptRoute(prompt);
   if (!CUSTOM_PROMPT_ROUTES.has(route)) {
-    errors.push("Route must be direct or a known goat skill.");
+    errors.push({
+      field: "route",
+      message: "Route must be direct or a known goat skill.",
+      anchor: "custom-prompt-route",
+    });
   }
   if (
     draft.runnerHint !== "any" &&
     !["claude", "codex", "gemini", "copilot"].includes(draft.runnerHint)
   ) {
-    errors.push("Runner hint is invalid.");
+    errors.push({
+      field: "runnerHint",
+      message: "Runner hint is invalid.",
+      anchor: "custom-prompt-name",
+    });
   }
   const duplicateIds = new Set<string>();
   for (const custom of ctx.customPrompts) {
     if (duplicateIds.has(custom.id)) {
-      errors.push(`Duplicate custom prompt id: ${custom.id}`);
+      errors.push({
+        field: "id",
+        message: `Duplicate custom prompt id: ${custom.id}`,
+        anchor: "custom-prompt-name",
+      });
       break;
     }
     duplicateIds.add(custom.id);
   }
-  const editing = ctx.editingCustomPromptId;
   if (editing && !ctx.customPrompts.some((custom) => custom.id === editing)) {
-    errors.push("The custom prompt being edited no longer exists.");
+    errors.push({
+      field: "id",
+      message: "The custom prompt being edited no longer exists.",
+      anchor: "custom-prompt-name",
+    });
   }
   return errors;
+}
+
+function dashboardValidateCustomPromptDraft(
+  ctx: DashboardCustomPromptsContext,
+): string[] {
+  return dashboardValidateCustomPromptDraftDetails(ctx).map(
+    (error) => error.message,
+  );
+}
+
+function dashboardCustomPromptFieldError(
+  ctx: DashboardCustomPromptsContext,
+  field: string,
+): string {
+  return (
+    dashboardValidateCustomPromptDraftDetails(ctx).find(
+      (error) => error.field === field,
+    )?.message ?? ""
+  );
+}
+
+function dashboardCustomPromptPromptWarning(
+  ctx: DashboardCustomPromptsContext,
+): string {
+  const prompt = ctx.customPromptDraft.prompt.trim();
+  if (prompt && prompt.length < 20) {
+    return "Prompt is short; make sure it is not a placeholder.";
+  }
+  return "";
 }
 
 function dashboardBuildCustomPrompt(
@@ -286,13 +544,109 @@ function dashboardBuildCustomPrompt(
       requiresGoatFlowInstall,
       globalSafe: draft.globalSafe,
     }),
-    bestTargetSurfaces: draft.bestTargetSurfacesText
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean),
+    bestTargetSurfaces: dashboardParseTargetSurfaces(
+      draft.bestTargetSurfacesText,
+    ),
     notes: draft.notes.trim(),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+  };
+}
+
+function dashboardCustomPromptSurfaceTags(
+  ctx: DashboardCustomPromptsContext,
+): string[] {
+  return dashboardParseTargetSurfaces(ctx.customPromptDraft.bestTargetSurfacesText);
+}
+
+function dashboardSetCustomPromptSurfaceTags(
+  ctx: DashboardCustomPromptsContext,
+  surfaces: string[],
+): void {
+  ctx.customPromptDraft.bestTargetSurfacesText =
+    dashboardJoinTargetSurfaces(surfaces);
+}
+
+function dashboardAddCustomPromptSurface(
+  ctx: DashboardCustomPromptsContext,
+  surface: string,
+): void {
+  const next = dashboardNormalizeSurfaceTag(surface);
+  if (!next) return;
+  const tags = dashboardCustomPromptSurfaceTags(ctx);
+  if (!tags.includes(next)) {
+    dashboardSetCustomPromptSurfaceTags(ctx, [...tags, next]);
+  }
+  ctx.customPromptSurfaceDraft = "";
+}
+
+function dashboardRemoveCustomPromptSurface(
+  ctx: DashboardCustomPromptsContext,
+  surface: string,
+): void {
+  const target = dashboardNormalizeSurfaceTag(surface);
+  dashboardSetCustomPromptSurfaceTags(
+    ctx,
+    dashboardCustomPromptSurfaceTags(ctx).filter((tag) => tag !== target),
+  );
+}
+
+function dashboardCustomPromptSurfaceSuggestions(
+  ctx: DashboardCustomPromptsContext,
+): string[] {
+  const selected = new Set(dashboardCustomPromptSurfaceTags(ctx));
+  const seen = new Set<string>();
+  const suggestions: string[] = [];
+  for (const preset of ctx.allPresets ?? []) {
+    for (const surface of preset.bestTargetSurfaces ?? []) {
+      const normalized = dashboardNormalizeSurfaceTag(surface);
+      if (!normalized || selected.has(normalized) || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      suggestions.push(normalized);
+    }
+  }
+  return suggestions.sort();
+}
+
+function dashboardPreviewCustomPromptPreset(
+  ctx: DashboardCustomPromptsContext,
+): Preset {
+  const draft = ctx.customPromptDraft;
+  const prompt = draft.prompt.trim();
+  const route =
+    draft.route === "direct"
+      ? dashboardInferPromptRoute(prompt)
+      : draft.route || dashboardInferPromptRoute(prompt);
+  const requiresGoatFlowInstall = draft.requiresGoatFlowInstall === true;
+  return {
+    id: ctx.editingCustomPromptId ?? "custom:preview",
+    name: draft.name.trim() || "Untitled custom prompt",
+    desc: draft.desc.trim() || draft.notes.trim() || "Custom prompt",
+    prompt: prompt || "Write your prompt body...",
+    cat: "custom",
+    route: CUSTOM_PROMPT_ROUTES.has(route) ? route : "direct",
+    source: "custom",
+    globalSafe: dashboardResolvedGlobalSafe({
+      requiresGoatFlowInstall,
+      globalSafe: draft.globalSafe,
+    }),
+    internalOnly: false,
+    qualityMode: false,
+    requiresGh: draft.requiresGh,
+    requiresPrOrIssue: draft.requiresPrOrIssue,
+    requiresLocalDiff: draft.requiresLocalDiff,
+    requiresUiApp: draft.requiresUiApp,
+    requiresDependencyFiles: draft.requiresDependencyFiles,
+    requiresGoatFlowInstall,
+    mayCheckoutBranch: draft.mayCheckoutBranch,
+    requiresCleanWorktree: draft.requiresCleanWorktree,
+    mayWriteFiles: draft.mayWriteFiles,
+    artifactRequired: draft.artifactRequired,
+    bestTargetSurfaces: dashboardCustomPromptSurfaceTags(ctx),
+    fallbackPrompt: draft.notes.trim(),
+    costTier: "medium",
   };
 }
 
@@ -300,6 +654,8 @@ function dashboardOpenNewCustomPrompt(
   ctx: DashboardCustomPromptsContext,
 ): void {
   ctx.customPromptDraft = dashboardDefaultCustomPromptDraft();
+  ctx.customPromptSurfaceDraft = "";
+  ctx.customPromptSubmitAttempted = false;
   ctx.editingCustomPromptId = null;
   ctx.showCustomPromptEditor = true;
 }
@@ -312,6 +668,8 @@ function dashboardOpenEditCustomPrompt(
   const custom = ctx.customPrompts.find((entry) => entry.id === preset.id);
   if (!custom) return;
   ctx.customPromptDraft = dashboardCustomPromptDraftFromCustom(custom);
+  ctx.customPromptSurfaceDraft = "";
+  ctx.customPromptSubmitAttempted = false;
   ctx.editingCustomPromptId = custom.id;
   ctx.showCustomPromptEditor = true;
 }
@@ -320,22 +678,33 @@ function dashboardDuplicateCustomPrompt(
   ctx: DashboardCustomPromptsContext,
   preset: Preset | null,
 ): void {
-  if (!preset?.id.startsWith("custom:")) return;
-  const custom = ctx.customPrompts.find((entry) => entry.id === preset.id);
-  if (!custom) return;
+  if (!preset) return;
   ctx.customPromptDraft = {
-    ...dashboardCustomPromptDraftFromCustom(custom),
-    name: `${custom.name} copy`,
+    ...dashboardCustomPromptDraftFromPreset(preset),
+    name: `${preset.name} (copy)`,
   };
+  ctx.customPromptSurfaceDraft = "";
+  ctx.customPromptSubmitAttempted = false;
   ctx.editingCustomPromptId = null;
   ctx.showCustomPromptEditor = true;
 }
 
-function dashboardSaveCustomPrompt(ctx: DashboardCustomPromptsContext): void {
+function dashboardStartCustomPromptFromPresetId(
+  ctx: DashboardCustomPromptsContext,
+  presetId: string,
+): void {
+  const preset = (ctx.allPresets ?? []).find((entry) => entry.id === presetId);
+  if (!preset) return;
+  dashboardDuplicateCustomPrompt(ctx, preset);
+}
+
+function dashboardSaveCustomPrompt(
+  ctx: DashboardCustomPromptsContext,
+): CustomPrompt | null {
   const errors = dashboardValidateCustomPromptDraft(ctx);
   if (errors.length > 0) {
     ctx.showToast(errors[0] ?? "Custom prompt is invalid", true);
-    return;
+    return null;
   }
   const editing = ctx.editingCustomPromptId;
   const existing = editing
@@ -353,7 +722,9 @@ function dashboardSaveCustomPrompt(ctx: DashboardCustomPromptsContext): void {
   ctx.selectedPreset = dashboardCustomPromptToPreset(next);
   ctx.showCustomPromptEditor = false;
   ctx.editingCustomPromptId = null;
+  ctx.customPromptSubmitAttempted = false;
   ctx.showToast(existing ? "Custom prompt updated" : "Custom prompt saved");
+  return next;
 }
 
 function dashboardDeleteSelectedCustomPrompt(
@@ -369,5 +740,6 @@ function dashboardDeleteSelectedCustomPrompt(
   ctx.selectedPreset = null;
   ctx.showCustomPromptEditor = false;
   ctx.editingCustomPromptId = null;
+  ctx.customPromptSubmitAttempted = false;
   ctx.showToast("Custom prompt deleted");
 }

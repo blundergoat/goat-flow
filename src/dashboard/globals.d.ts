@@ -319,6 +319,30 @@ interface CustomPromptDraft {
   notes: string;
 }
 
+interface CustomPromptRouteOption {
+  id: string;
+  label: string;
+  desc: string;
+}
+
+interface CustomPromptFlagOption {
+  field: keyof CustomPromptDraft;
+  label: string;
+  title: string;
+}
+
+interface CustomPromptFlagGroup {
+  id: "prerequisites" | "permissions" | "compatibility";
+  label: string;
+  flags: CustomPromptFlagOption[];
+}
+
+interface CustomPromptValidationError {
+  field: string;
+  message: string;
+  anchor: string;
+}
+
 /** One selectable quality-page prompt mode. */
 interface QualityModeOption {
   id: string;

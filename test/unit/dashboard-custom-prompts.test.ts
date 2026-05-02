@@ -28,10 +28,19 @@ type HelperContext = {
     ctx: TestContext,
     preset: TestPreset | null,
   ): void;
-  dashboardSaveCustomPrompt(ctx: TestContext): void;
+  dashboardSaveCustomPrompt(ctx: TestContext): TestCustomPrompt | null;
   dashboardDeleteSelectedCustomPrompt(ctx: TestContext): void;
   dashboardLoadCustomPrompts(ctx: TestContext): void;
+  dashboardCustomPromptRouteOptions(): Array<Record<string, unknown>>;
+  dashboardCustomPromptFlagGroups(): Array<Record<string, unknown>>;
+  dashboardPreviewCustomPromptPreset(ctx: TestContext): TestPreset;
+  dashboardCustomPromptSurfaceTags(ctx: TestContext): string[];
+  dashboardAddCustomPromptSurface(ctx: TestContext, surface: string): void;
+  dashboardRemoveCustomPromptSurface(ctx: TestContext, surface: string): void;
   dashboardValidateCustomPromptDraft(ctx: TestContext): string[];
+  dashboardValidateCustomPromptDraftDetails(
+    ctx: TestContext,
+  ): Array<Record<string, unknown>>;
   dashboardCustomPromptToPreset(custom: TestCustomPrompt): TestPreset;
   dashboardGlobalSafeAllowed(prompt: Record<string, unknown>): boolean;
 };
@@ -52,9 +61,12 @@ type TestPreset = Record<string, unknown> & {
 type TestContext = {
   customPrompts: TestCustomPrompt[];
   customPromptDraft: Record<string, unknown>;
+  customPromptSurfaceDraft: string;
+  customPromptSubmitAttempted: boolean;
   editingCustomPromptId: string | null;
   showCustomPromptEditor: boolean;
   selectedPreset: TestPreset | null;
+  allPresets: TestPreset[];
   toast: string | null;
   toastError: boolean;
   showToast(msg: string, isError?: boolean): void;
@@ -98,10 +110,17 @@ globalThis.__helpers = {
   dashboardSaveCustomPrompt,
   dashboardDeleteSelectedCustomPrompt,
   dashboardLoadCustomPrompts,
-	  dashboardValidateCustomPromptDraft,
-	  dashboardCustomPromptToPreset,
-	  dashboardGlobalSafeAllowed,
-	};`,
+  dashboardCustomPromptRouteOptions,
+  dashboardCustomPromptFlagGroups,
+  dashboardPreviewCustomPromptPreset,
+  dashboardCustomPromptSurfaceTags,
+  dashboardAddCustomPromptSurface,
+  dashboardRemoveCustomPromptSurface,
+  dashboardValidateCustomPromptDraft,
+  dashboardValidateCustomPromptDraftDetails,
+  dashboardCustomPromptToPreset,
+  dashboardGlobalSafeAllowed,
+};`,
     context,
   );
   return {
@@ -115,9 +134,12 @@ function makeContext(helpers: HelperContext): TestContext {
   const ctx = {
     customPrompts: [],
     customPromptDraft: helpers.dashboardDefaultCustomPromptDraft(),
+    customPromptSurfaceDraft: "",
+    customPromptSubmitAttempted: false,
     editingCustomPromptId: null,
     showCustomPromptEditor: false,
     selectedPreset: null,
+    allPresets: [],
     toast: null,
     toastError: false,
     showToast(msg: string, isError?: boolean): void {
@@ -187,6 +209,112 @@ describe("custom prompt helpers", () => {
     helpers.dashboardDeleteSelectedCustomPrompt(reloaded);
     assert.equal(reloaded.customPrompts.length, 1);
     assert.equal(reloaded.selectedPreset, null);
+  });
+
+  it("duplicates built-in prompts into editable custom drafts", () => {
+    const { helpers } = loadHelpers();
+    const ctx = makeContext(helpers);
+    const preset = {
+      id: "code-review",
+      name: "Code Review",
+      desc: "Review recent changes",
+      prompt: "/goat-review review the diff",
+      cat: "review",
+      route: "goat-review",
+      source: "builtin",
+      requiresLocalDiff: true,
+      mayWriteFiles: false,
+      globalSafe: true,
+      bestTargetSurfaces: ["repo", "library"],
+      fallbackPrompt: "If no diff exists, ask for one.",
+    };
+
+    helpers.dashboardDuplicateCustomPrompt(ctx, preset);
+
+    assert.equal(ctx.showCustomPromptEditor, true);
+    assert.equal(ctx.editingCustomPromptId, null);
+    assert.equal(ctx.customPromptDraft.name, "Code Review (copy)");
+    assert.equal(ctx.customPromptDraft.route, "goat-review");
+    assert.equal(ctx.customPromptDraft.requiresLocalDiff, true);
+    assert.equal(ctx.customPromptDraft.bestTargetSurfacesText, "repo, library");
+    assert.equal(ctx.customPromptDraft.notes, "If no diff exists, ask for one.");
+  });
+
+  it("returns saved custom prompts and validates case-insensitive name uniqueness", () => {
+    const { helpers } = loadHelpers();
+    const ctx = makeContext(helpers);
+
+    helpers.dashboardOpenNewCustomPrompt(ctx);
+    ctx.customPromptDraft.name = "Review target";
+    ctx.customPromptDraft.prompt = "/goat-review review the selected target";
+    const saved = helpers.dashboardSaveCustomPrompt(ctx);
+
+    assert.equal(saved?.name, "Review target");
+    assert.equal(ctx.toastError, false);
+
+    helpers.dashboardOpenNewCustomPrompt(ctx);
+    ctx.customPromptDraft.name = "review TARGET";
+    ctx.customPromptDraft.prompt = "/goat-review review the selected target";
+
+    assert.deepEqual(Array.from(helpers.dashboardValidateCustomPromptDraft(ctx)), [
+      "Name already exists.",
+    ]);
+    const [firstError] = helpers.dashboardValidateCustomPromptDraftDetails(ctx);
+    assert.equal(firstError?.field, "name");
+    assert.equal(firstError?.message, "Name already exists.");
+    assert.equal(firstError?.anchor, "custom-prompt-name");
+  });
+
+  it("manages target surface tags without changing persisted array shape", () => {
+    const { helpers } = loadHelpers();
+    const ctx = makeContext(helpers);
+
+    helpers.dashboardOpenNewCustomPrompt(ctx);
+    ctx.customPromptDraft.bestTargetSurfacesText = "Repo, api, repo";
+    helpers.dashboardAddCustomPromptSurface(ctx, " UI App ");
+    helpers.dashboardRemoveCustomPromptSurface(ctx, "api");
+
+    assert.deepEqual(Array.from(helpers.dashboardCustomPromptSurfaceTags(ctx)), [
+      "repo",
+      "ui-app",
+    ]);
+
+    ctx.customPromptDraft.name = "Surface prompt";
+    ctx.customPromptDraft.prompt = "Summarize this target repository.";
+    helpers.dashboardSaveCustomPrompt(ctx);
+
+    assert.deepEqual(Array.from(ctx.customPrompts[0]!.bestTargetSurfaces), [
+      "repo",
+      "ui-app",
+    ]);
+  });
+
+  it("builds route, flag, and live-preview metadata for the form", () => {
+    const { helpers } = loadHelpers();
+    const ctx = makeContext(helpers);
+
+    ctx.customPromptDraft.name = "Critique artifact";
+    ctx.customPromptDraft.prompt = "/goat-critique review this plan";
+    ctx.customPromptDraft.route = "goat-critique";
+    ctx.customPromptDraft.artifactRequired = true;
+
+    assert.ok(
+      helpers
+        .dashboardCustomPromptRouteOptions()
+        .some((route) => route.id === "goat-security"),
+    );
+    assert.deepEqual(
+      Array.from(
+        helpers.dashboardCustomPromptFlagGroups().map((group) => group.id),
+      ),
+      ["prerequisites", "permissions", "compatibility"],
+    );
+
+    const preview = helpers.dashboardPreviewCustomPromptPreset(ctx);
+    assert.equal(preview.name, "Critique artifact");
+    assert.equal(preview.route, "goat-critique");
+    assert.equal(preview.artifactRequired, true);
+    assert.equal(preview.source, "custom");
   });
 
   it("validates metadata before saving custom prompts", () => {

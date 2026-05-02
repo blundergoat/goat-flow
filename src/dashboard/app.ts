@@ -250,6 +250,10 @@ function app() {
     showCustomPromptEditor: false,
     editingCustomPromptId: null as string | null,
     customPromptDraft: dashboardDefaultCustomPromptDraft(),
+    customPromptSurfaceDraft: "",
+    customPromptSubmitAttempted: false,
+    showPromptStartPicker: false,
+    customPromptStartId: "",
     presetFilter: "all",
     presetSearch: "",
     presetFavorites: readStoredStringArray("goat-flow-preset-favorites"),
@@ -327,21 +331,131 @@ function app() {
     copyPreset(prompt: string) {
       dashboardCopyPreset(this, prompt);
     },
+    /** Return custom prompt route options with descriptions. */
+    customPromptRouteOptions(): CustomPromptRouteOption[] {
+      return dashboardCustomPromptRouteOptions();
+    },
+    /** Return the selected custom prompt route metadata. */
+    selectedCustomPromptRoute(): CustomPromptRouteOption {
+      return dashboardSelectedCustomPromptRoute(this.customPromptDraft);
+    },
+    /** Return grouped custom prompt flag metadata. */
+    customPromptFlagGroups(): CustomPromptFlagGroup[] {
+      return dashboardCustomPromptFlagGroups();
+    },
+    /** Check whether a custom prompt flag should be disabled. */
+    customPromptFlagDisabled(flag: CustomPromptFlagOption): boolean {
+      return (
+        flag.field === "globalSafe" &&
+        this.customPromptDraft.requiresGoatFlowInstall
+      );
+    },
+    /** Keep Global safe false when a prompt requires target goat-flow install. */
+    syncCustomPromptFlag(flag: CustomPromptFlagOption) {
+      if (
+        flag.field === "requiresGoatFlowInstall" &&
+        this.customPromptDraft.requiresGoatFlowInstall
+      ) {
+        this.customPromptDraft.globalSafe = false;
+      }
+    },
+    /** Return validation errors for the current custom prompt draft. */
+    customPromptErrors(): CustomPromptValidationError[] {
+      return dashboardValidateCustomPromptDraftDetails(this);
+    },
+    /** Return the first validation error for one draft field. */
+    customPromptFieldError(field: string): string {
+      return dashboardCustomPromptFieldError(this, field);
+    },
+    /** Return non-blocking prompt-body guidance. */
+    customPromptWarning(): string {
+      return dashboardCustomPromptPromptWarning(this);
+    },
+    /** Return the current target surface tags. */
+    customPromptSurfaceTags(): string[] {
+      return dashboardCustomPromptSurfaceTags(this);
+    },
+    /** Return available target surface suggestions. */
+    customPromptSurfaceSuggestions(): string[] {
+      return dashboardCustomPromptSurfaceSuggestions(this);
+    },
+    /** Add a target surface tag. */
+    addCustomPromptSurface(surface: string) {
+      dashboardAddCustomPromptSurface(this, surface);
+    },
+    /** Commit the typed target surface tag, if any. */
+    commitCustomPromptSurfaceDraft() {
+      dashboardAddCustomPromptSurface(this, this.customPromptSurfaceDraft);
+    },
+    /** Remove a target surface tag. */
+    removeCustomPromptSurface(surface: string) {
+      dashboardRemoveCustomPromptSurface(this, surface);
+    },
+    /** Return a live preset-shaped preview for the custom prompt draft. */
+    customPromptPreview(): Preset {
+      return dashboardPreviewCustomPromptPreset(this);
+    },
+    /** Focus a custom prompt editor control after Alpine renders it. */
+    focusCustomPromptField(id = "custom-prompt-name") {
+      const self = this as typeof this & AlpineMagics<typeof this>;
+      void self.$nextTick(() => {
+        requestAnimationFrame(() => {
+          const field = document.getElementById(id);
+          if (field instanceof HTMLElement) field.focus();
+        });
+      });
+    },
+    /** Focus the first invalid custom prompt field. */
+    focusFirstCustomPromptError() {
+      const first = this.customPromptErrors()[0];
+      this.focusCustomPromptField(first?.anchor ?? "custom-prompt-name");
+    },
     /** Open a blank custom prompt editor. */
     openNewCustomPrompt() {
       dashboardOpenNewCustomPrompt(this);
+      this.showPromptStartPicker = false;
+      this.customPromptStartId = "";
+      this.focusCustomPromptField();
     },
     /** Edit the currently selected custom prompt. */
     editSelectedCustomPrompt() {
       dashboardOpenEditCustomPrompt(this, this.selectedPreset);
+      this.showPromptStartPicker = false;
+      this.focusCustomPromptField();
     },
-    /** Start a new custom prompt from the selected custom prompt. */
+    /** Start a new custom prompt from the selected preset. */
     duplicateSelectedCustomPrompt() {
       dashboardDuplicateCustomPrompt(this, this.selectedPreset);
+      this.showPromptStartPicker = false;
+      this.customPromptStartId = "";
+      this.focusCustomPromptField();
+    },
+    /** Start a new custom prompt from one selected existing prompt. */
+    startCustomPromptFromPreset() {
+      dashboardStartCustomPromptFromPresetId(this, this.customPromptStartId);
+      this.showPromptStartPicker = false;
+      this.customPromptStartId = "";
+      this.focusCustomPromptField();
     },
     /** Save the custom prompt editor draft. */
-    saveCustomPrompt() {
-      dashboardSaveCustomPrompt(this);
+    saveCustomPrompt(): CustomPrompt | null {
+      this.customPromptSubmitAttempted = true;
+      const saved = dashboardSaveCustomPrompt(this);
+      if (!saved) this.focusFirstCustomPromptError();
+      return saved;
+    },
+    /** Save the draft and immediately launch it with the active runner. */
+    async saveAndRunCustomPrompt() {
+      if (!this.activeRunner) {
+        this.showToast("Select a runner before launching", true);
+        return;
+      }
+      const saved = this.saveCustomPrompt();
+      if (!saved) return;
+      const preset = dashboardCustomPromptToPreset(saved);
+      await this.launchPreset(preset.prompt, this.activeRunner, preset.name, {
+        presetId: preset.id,
+      });
     },
     /** Delete the selected custom prompt after confirmation. */
     deleteSelectedCustomPrompt() {
@@ -351,6 +465,8 @@ function app() {
     cancelCustomPromptEdit() {
       this.showCustomPromptEditor = false;
       this.editingCustomPromptId = null;
+      this.customPromptSubmitAttempted = false;
+      this.showPromptStartPicker = false;
     },
     /** Return quality-page prompt modes. */
     get qualityModes(): QualityModeOption[] {
@@ -589,6 +705,11 @@ function app() {
           });
         }
         if (this.activeView === "prompts") {
+          if (e.key === "Escape" && this.showCustomPromptEditor) {
+            e.preventDefault();
+            this.cancelCustomPromptEdit();
+            return;
+          }
           const inputFocused = ["INPUT", "TEXTAREA", "SELECT"].includes(
             document.activeElement?.tagName ?? "",
           );
