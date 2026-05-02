@@ -33,7 +33,7 @@ Guided setup flow. Detects your project stack and existing configuration, lets y
 
 ### Prompts
 
-A library of 29 preset prompts across six categories: critique, debug, plan, QA, review, and security. Two-pane layout with search, category filters, and favorites. Select a prompt and launch it in a new terminal, send it to an active session, or copy it to clipboard. Keyboard-navigable: `/` to search, arrows to browse, Enter to launch.
+A library of 26 preset prompts across six categories: critique, debug, plan, QA, review, and security. Two-pane layout with search, category filters, and favorites. Select a prompt and launch it in a new terminal, send it to an active session, or copy it to clipboard. Keyboard-navigable: `/` to search, arrows to browse, Enter to launch.
 
 Prompts include structured workflows like pre-walk-through notes with targeted testing plans, multi-lens critiques, full threat assessments, dependency scans, coverage audits, and milestone planning.
 

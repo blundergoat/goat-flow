@@ -164,14 +164,34 @@ function dashboardPlainTerminalText(text: string): string {
 /** Heuristic for agent prompts waiting on a numbered human choice. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
+  const numberedChoices =
+    /(^|\n)\s*1[.)]\s+\S[\s\S]{0,900}\n\s*2[.)]\s+\S[\s\S]{0,900}\n\s*3[.)]\s+\S/i.test(
+      plain,
+    );
+  const choicePrompt =
+    /\b(?:choose|select|pick)\s+(?:an?\s+)?(?:option|choice)\b/i.test(plain) ||
+    /\b(?:enter|type)\s+(?:the\s+)?(?:number|choice|option)\b/i.test(plain) ||
+    /\bwhich option\b/i.test(plain);
   return (
     /\bdo you want to (?:proceed|continue|allow|approve)\??/i.test(plain) ||
     /\bawaiting (?:input|confirmation|approval)\b/i.test(plain) ||
     /\bEsc to cancel\b[\s\S]{0,240}\bTab to amend\b/i.test(plain) ||
-    /(^|\n)\s*1[.)]\s+\S[\s\S]{0,900}\n\s*2[.)]\s+\S[\s\S]{0,900}\n\s*3[.)]\s+\S/i.test(
-      plain,
-    )
+    (choicePrompt && numberedChoices)
   );
+}
+
+/** Decide whether a new output chunk should leave a session waiting. */
+function dashboardNextAwaitingInputState(
+  previousAwaiting: boolean,
+  previousTail: string,
+  outputChunk: string,
+): boolean {
+  const nextTail = (previousTail + outputChunk).slice(-5000);
+  const chunkHasText =
+    dashboardPlainTerminalText(outputChunk).trim().length > 0;
+  if (dashboardOutputLooksAwaitingInput(outputChunk)) return true;
+  if (!dashboardOutputLooksAwaitingInput(nextTail)) return false;
+  return !previousAwaiting || !chunkHasText;
 }
 
 /** Mutate the Alpine-backed local session and the launch-time reference together. */
@@ -905,17 +925,19 @@ function dashboardConnectTerminal(
       const type = readString(msg.type);
       if (type === "output" && typeof msg.data === "string") {
         const reactive = ctx.sessions.find((s) => s.id === sessionId);
-        const tail = (
-          (reactive?.outputTail ?? session.outputTail ?? "") + msg.data
-        ).slice(-5000);
+        const previousTail = reactive?.outputTail ?? session.outputTail ?? "";
+        const previousAwaiting =
+          reactive?.awaitingInput === true || session.awaitingInput === true;
+        const tail = (previousTail + msg.data).slice(-5000);
+        const awaitingInput = dashboardNextAwaitingInputState(
+          previousAwaiting,
+          previousTail,
+          msg.data,
+        );
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.outputTail = tail;
+          target.awaitingInput = awaitingInput;
         });
-        if (dashboardOutputLooksAwaitingInput(tail)) {
-          dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
-            target.awaitingInput = true;
-          });
-        }
         term.write(msg.data);
       } else if (type === "exit") {
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {

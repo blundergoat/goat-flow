@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-04-30
+last_reviewed: 2026-05-02
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -356,3 +356,14 @@ last_reviewed: 2026-04-30
 **Root cause:** I treated focused tests plus typecheck as enough before the repo-wide gate even though new TypeScript test assertions had not been formatter-normalized. Preflight records formatter failure before later gates, so fixing format after a failed preflight requires a clean rerun to produce valid final evidence.
 
 **Prevention:** After editing TypeScript tests or prompt/schema fixtures, run `npm run format` or `npm run format:check` before `bash scripts/preflight-checks.sh`. If preflight fails at Prettier, format, inspect the diff, and rerun preflight from scratch before claiming the final gate. Evidence anchors: `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `test/unit/quality-schema.test.ts` (search: `evidence_warning_count`).
+
+---
+## Lesson: Snapshot-table updates must verify the snapshot files, not infer from live state
+
+**Status:** active | **Created:** 2026-05-02
+
+**What happened:** While updating the preset catalog contract after intentionally removing built-in prompts, I added v1.3.1, v1.3.2, and v1.4.0 to the snapshot-claim test expectations. I inferred the v1.3.2 harness count from current live state and set it to 17, but the frozen `workflow/manifest-snapshots/v1.3.2.json` file records 16 harness checks. The focused snapshot test failed until I reread the snapshot file and corrected the expectation and README table.
+
+**Root cause:** I mixed live manifest facts with frozen release-snapshot facts. Snapshot tests are supposed to preserve historical release state, so current repo counts are the wrong source unless the current release snapshot itself is being updated.
+
+**Prevention:** Before editing `EXPECTED_RELEASE_SNAPSHOTS` or `workflow/manifest-snapshots/README.md`, read the matching versioned snapshot JSON files and copy their `snapshot_facts` values. Only update the current release snapshot after confirming the catalog/check change is intentionally part of that release. Evidence anchors: `test/unit/check-snapshot-claims.test.ts` (search: `EXPECTED_RELEASE_SNAPSHOTS`), `workflow/manifest-snapshots/v1.3.2.json` (search: `"checks_harness": 16`), `workflow/manifest-snapshots/v1.4.0.json` (search: `"presets_count": 26`).

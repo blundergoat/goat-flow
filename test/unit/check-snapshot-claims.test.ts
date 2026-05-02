@@ -143,6 +143,48 @@ const EXPECTED_RELEASE_SNAPSHOTS = [
       presets_count: 29,
     },
   },
+  {
+    version: "1.3.1",
+    facts: {
+      skills_total: 7,
+      skills_functional_count: 6,
+      checks_setup: 13,
+      checks_agent: 4,
+      checks_build: 17,
+      checks_harness: 16,
+      checks_total: 33,
+      dashboard_views_count: 8,
+      presets_count: 29,
+    },
+  },
+  {
+    version: "1.3.2",
+    facts: {
+      skills_total: 7,
+      skills_functional_count: 6,
+      checks_setup: 13,
+      checks_agent: 4,
+      checks_build: 17,
+      checks_harness: 16,
+      checks_total: 33,
+      dashboard_views_count: 8,
+      presets_count: 29,
+    },
+  },
+  {
+    version: "1.4.0",
+    facts: {
+      skills_total: 7,
+      skills_functional_count: 6,
+      checks_setup: 13,
+      checks_agent: 4,
+      checks_build: 17,
+      checks_harness: 17,
+      checks_total: 34,
+      dashboard_views_count: 8,
+      presets_count: 26,
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------

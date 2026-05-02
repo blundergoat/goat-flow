@@ -69,6 +69,11 @@ type HelperContext = {
   ): Promise<void>;
   dashboardEndSession(ctx: LaunchContext, sessionId: string): void;
   dashboardOutputLooksAwaitingInput(text: string): boolean;
+  dashboardNextAwaitingInputState(
+    previousAwaiting: boolean,
+    previousTail: string,
+    outputChunk: string,
+  ): boolean;
 };
 
 function loadHelpers(fetchImpl: typeof fetch): HelperContext {
@@ -98,6 +103,7 @@ globalThis.__helpers = {
   dashboardLaunchInTerminal,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
+  dashboardNextAwaitingInputState,
 };`,
     context,
   );
@@ -336,6 +342,38 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(
       helpers.dashboardOutputLooksAwaitingInput("All checks passing\nDone."),
       false,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Implementation plan\n1. Read files\n2. Patch code\n3. Run tests",
+      ),
+      false,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Choose an option:\n1) Continue\n2) Explain\n3) Cancel",
+      ),
+      true,
+    );
+  });
+
+  it("clears awaiting-input state when later output resumes normally", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    const prompt = "Do you want to proceed?\n1. Yes\n2. Explain\n3. No";
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", prompt),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, "\nContinuing..."),
+      false,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, "\n   "),
+      true,
     );
   });
 

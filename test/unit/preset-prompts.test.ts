@@ -255,12 +255,6 @@ describe("preset prompt catalog", () => {
     assert.match(compliance.prompt, /authoritative clause\/control source/);
     assert.match(compliance.prompt, /not assessed/);
 
-    const critique = byId("security-critique");
-    assert.equal(critique.cat, "security");
-    assert.match(critique.prompt, /^\/goat-critique\b/);
-    assert.match(critique.prompt, /security assessment artifact/);
-    assert.match(critique.prompt, /fresh goat-security scan/);
-
     const depScan = byId("dep-scan");
     assert.equal(depScan.cat, "security");
     assert.match(depScan.prompt, /^\/goat-security\b/);
@@ -275,12 +269,7 @@ describe("preset prompt catalog", () => {
   });
 
   it("keeps prerequisite metadata aligned with prompt text", () => {
-    const prWorkflowIds = [
-      "coverage-check",
-      "walkthrough-comment",
-      "walkthrough-with-testing",
-      "test",
-    ];
+    const prWorkflowIds = ["walkthrough-with-testing", "test"];
     for (const id of prWorkflowIds) {
       const preset = byId(id);
       assert.equal(preset.requiresGh, true, `${id} requires gh metadata`);
@@ -297,11 +286,7 @@ describe("preset prompt catalog", () => {
       );
     }
 
-    for (const id of [
-      "walkthrough-comment",
-      "walkthrough-with-testing",
-      "test",
-    ]) {
+    for (const id of ["walkthrough-with-testing", "test"]) {
       const preset = byId(id);
       assert.equal(preset.mayCheckoutBranch, true, `${id} may checkout`);
       assert.equal(
@@ -318,7 +303,8 @@ describe("preset prompt catalog", () => {
     assert.equal(byId("skill-quality-test").internalOnly, true);
     assert.equal(byId("skill-quality-test").qualityMode, true);
     assert.equal(byId("dep-scan").requiresDependencyFiles, true);
-    assert.equal(byId("security-critique").artifactRequired, true);
+    assert.equal(byId("critique-plan").artifactRequired, true);
+    assert.equal(byId("skill-quality-test").artifactRequired, true);
     assert.equal(byId("compliance-check").artifactRequired, true);
   });
 
@@ -513,6 +499,11 @@ describe("preset prompt catalog", () => {
     assert.match(source, /dashboardCustomPromptToPreset/);
   });
 
+  it("keeps custom prompt route validation target focusable", () => {
+    const view = readFileSync(PROMPTS_VIEW_PATH, "utf-8");
+    assert.match(view, /id="custom-prompt-route"\s+tabindex="-1"/);
+  });
+
   it("mounts internal quality presets on explicit quality-page modes", () => {
     const source = readFileSync(DASHBOARD_QUALITY_PATH, "utf-8");
     for (const mode of ["process", "agent-setup", "harness", "skills"]) {
@@ -595,16 +586,13 @@ describe("preset prompt catalog", () => {
     assert.equal(smallUiPr.mayCheckoutBranch, true);
     assert.match(smallUiPr.prompt, /require a clean worktree/i);
 
-    const largePr = byId("walkthrough-comment");
-    assert.match(largePr.fallbackPrompt, /diff is too large/i);
-    assert.match(largePr.fallbackPrompt, /chunked local diff/i);
-
     const dependencyOnlyPr = byId("dep-scan");
     assert.equal(dependencyOnlyPr.requiresDependencyFiles, true);
     assert.match(dependencyOnlyPr.prompt, /dependenc/i);
 
-    const localDiffWithoutGh = byId("coverage-check");
+    const localDiffWithoutGh = byId("test-vs-code");
     assert.equal(localDiffWithoutGh.requiresLocalDiff, true);
-    assert.match(localDiffWithoutGh.fallbackPrompt, /pasted PR\/diff context/i);
+    assert.equal(localDiffWithoutGh.requiresGh, false);
+    assert.match(localDiffWithoutGh.prompt, /actual diff/i);
   });
 });
