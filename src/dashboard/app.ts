@@ -277,6 +277,14 @@ function app() {
     presetBadges(preset: Preset): PresetBadge[] {
       return dashboardPresetBadges(preset);
     },
+    /** Route chip label for a prompt card or detail view. */
+    presetRouteLabel(preset: Preset): string {
+      return dashboardPresetRouteLabel(preset);
+    },
+    /** Left-edge category accent for a prompt card. */
+    presetCategoryAccent(preset: Preset): string {
+      return dashboardPresetCategoryAccent(preset);
+    },
     /** Built-in presets plus local browser custom prompts. */
     get allPresets(): Preset[] {
       return dashboardAllPresets(this);
@@ -394,6 +402,14 @@ function app() {
     /** Return a live preset-shaped preview for the custom prompt draft. */
     customPromptPreview(): Preset {
       return dashboardPreviewCustomPromptPreset(this);
+    },
+    /** Return preview name text, including an explicit placeholder. */
+    customPromptPreviewName(): string {
+      return this.customPromptDraft.name.trim() || "Untitled custom prompt";
+    },
+    /** Return preview description text, including an explicit placeholder. */
+    customPromptPreviewDescription(): string {
+      return this.customPromptDraft.desc.trim() || "No description yet";
     },
     /** Focus a custom prompt editor control after Alpine renders it. */
     focusCustomPromptField(id = "custom-prompt-name") {

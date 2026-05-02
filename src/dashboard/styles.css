@@ -559,6 +559,13 @@ body {
   display: flex;
   justify-content: flex-end;
 }
+.gf-start-picker-trigger {
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+.gf-start-picker-trigger:hover {
+  background: var(--neutral-bg);
+}
 .gf-start-picker-panel {
   position: absolute;
   right: 0;
@@ -597,11 +604,67 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.gf-prompt-list-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-left-width: 3px;
+  cursor: pointer;
+  text-align: left;
+}
+.gf-prompt-favorite {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  line-height: 1;
+}
+.gf-prompt-favorite-preview {
+  cursor: default;
+}
+.gf-prompt-card-content {
+  min-width: 0;
+  flex: 1;
+}
+.gf-prompt-card-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.gf-prompt-card-desc {
+  margin: 2px 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.gf-prompt-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.gf-prompt-route-chip {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.08);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.gf-prompt-category-label {
+  font-size: 10px;
+}
+.gf-prompt-placeholder {
+  font-style: italic;
+}
 .gf-custom-form-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   gap: 18px;
   align-items: start;
+  min-height: 100%;
 }
 .gf-custom-form-main {
   min-width: 0;
@@ -722,12 +785,24 @@ body {
 .gf-flag-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 5px;
   min-width: 0;
 }
 .gf-flag-row .gf-check-row {
+  flex: 0 1 auto;
   min-width: 0;
+}
+.gf-flag-default-badge {
+  padding: 1px 5px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 .gf-tooltip-wrap {
   position: relative;
@@ -742,14 +817,14 @@ body {
   border: 1px solid var(--border-default);
   border-radius: 999px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: help;
   font-size: 11px;
   line-height: 1;
 }
 .gf-tooltip {
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 8px);
   z-index: 20;
   width: 240px;
@@ -830,12 +905,13 @@ body {
   top: 12px;
   display: grid;
   gap: 8px;
+  align-self: start;
 }
 .gf-custom-preview-card {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
+  cursor: default;
+}
+.gf-custom-preview-card:hover {
+  background: var(--surface-base);
 }
 .gf-custom-form-footer {
   position: sticky;
@@ -848,6 +924,14 @@ body {
   padding: 12px 20px 0;
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-base);
+}
+.gf-custom-save-secondary {
+  min-width: 78px;
+}
+.gf-custom-run-primary {
+  padding-inline: 16px;
+  font-weight: 700;
+  box-shadow: 0 8px 22px rgba(59, 130, 246, 0.18);
 }
 
 /* --- Surfaces --- */
@@ -1469,15 +1553,36 @@ body {
 .gf-header-proj-edit-btn {
   background: transparent;
   border: none;
+  border-radius: 4px;
   color: var(--text-disabled, #64748b);
   cursor: pointer;
   font-size: 13px;
   padding: 2px 4px;
-  margin-left: -2px;
   line-height: 1;
 }
 .gf-header-proj-edit-btn:hover {
   color: var(--text-primary);
+}
+.gf-header-proj-edit-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.gf-header-tooltip-wrap {
+  margin-left: -2px;
+}
+.gf-header-tooltip {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 50%;
+  width: max-content;
+  min-width: 0;
+  max-width: 180px;
+  transform: translate(-50%, -4px);
+  white-space: nowrap;
+}
+.gf-header-tooltip-wrap:hover .gf-header-tooltip,
+.gf-header-tooltip-wrap:focus-within .gf-header-tooltip {
+  transform: translate(-50%, 0);
 }
 .gf-nav-wrap {
   flex: 1;

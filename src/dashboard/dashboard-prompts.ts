@@ -8,6 +8,16 @@ type RenderedPresetEntry =
   | { kind: "header"; id: string; label: string }
   | { kind: "row"; preset: Preset };
 
+const PRESET_CATEGORY_ACCENTS: Record<string, string> = {
+  debug: "#60a5fa",
+  review: "#2dd4bf",
+  plan: "#fbbf24",
+  critique: "#a78bfa",
+  qa: "#f472b6",
+  security: "#f87171",
+  custom: "var(--accent)",
+};
+
 interface DashboardPromptsContext {
   presets: Preset[];
   customPrompts: CustomPrompt[];
@@ -210,6 +220,17 @@ function dashboardPresetBadges(preset: Preset): PresetBadge[] {
     });
   }
   return badges;
+}
+
+/** Return the route label shown on prompt cards. */
+function dashboardPresetRouteLabel(preset: Preset): string {
+  const route = preset.route || dashboardInferPromptRoute(preset.prompt);
+  return route === "direct" ? "direct" : `/${route}`;
+}
+
+/** Return the left-edge accent color for prompt cards. */
+function dashboardPresetCategoryAccent(preset: Preset): string {
+  return PRESET_CATEGORY_ACCENTS[preset.cat] ?? "var(--border-subtle)";
 }
 
 /**

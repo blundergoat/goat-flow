@@ -117,74 +117,32 @@
         <template x-for="p in filteredPresets" :key="'mock-preset-' + p.id">
           <div
             @click="selectedPreset = p"
-            class="gf-card"
+            class="gf-card gf-prompt-list-card"
             :style="{
-              ...(selectedPreset?.id === p.id ? { borderColor: 'var(--accent-border)', background: 'var(--accent-bg)' } : {}),
-              borderLeftWidth: '3px',
-              borderLeftColor: { debug: '#60a5fa', review: '#2dd4bf', plan: '#fbbf24', critique: '#a78bfa', qa: '#f472b6', security: '#f87171' }[p.cat] || 'var(--border-subtle)'
-            }"
-            style="
-              text-align: left;
-              padding: 10px 12px;
-              display: flex;
-              gap: 10px;
-              align-items: flex-start;
-              cursor: pointer;
-            "
+	              ...(selectedPreset?.id === p.id ? { borderColor: 'var(--accent-border)', background: 'var(--accent-bg)' } : {}),
+	              borderLeftColor: presetCategoryAccent(p)
+	            }"
           >
             <button
               @click.stop="toggleFavorite(p.id)"
-              style="
-                background: transparent;
-                border: none;
-                color: var(--text-dim);
-                padding: 0;
-                margin-top: 2px;
-                cursor: pointer;
-              "
+              class="gf-prompt-favorite"
               :style="isFavorite(p.id) ? { color: 'var(--amber-400)' } : {}"
               :title="isFavorite(p.id) ? 'Remove from favorites' : 'Add to favorites'"
               x-text="isFavorite(p.id) ? '★' : '☆'"
             ></button>
-            <div style="min-width: 0; flex: 1">
+            <div class="gf-prompt-card-content">
               <div
-                style="font-size: 13px; font-weight: 500"
-                class="gf-text-primary"
+                class="gf-text-primary gf-prompt-card-title"
                 x-text="p.name"
               ></div>
-              <p
-                class="gf-text-muted"
-                style="
-                  font-size: 12px;
-                  margin: 2px 0 6px;
-                  white-space: nowrap;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                "
-                x-text="p.desc"
-              ></p>
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  flex-wrap: wrap;
-                "
-              >
+              <p class="gf-text-muted gf-prompt-card-desc" x-text="p.desc"></p>
+              <div class="gf-prompt-card-meta">
                 <span
-                  class="gf-text-secondary"
-                  style="
-                    font-family: var(--font-mono);
-                    font-size: 10px;
-                    padding: 1px 6px;
-                    background: rgba(148, 163, 184, 0.08);
-                    border-radius: 3px;
-                  "
-                  x-text="p.prompt.startsWith('/') ? p.prompt.split(' ')[0] : 'direct'"
+                  class="gf-text-secondary gf-prompt-route-chip"
+                  x-text="presetRouteLabel(p)"
                 ></span>
                 <span
-                  class="gf-text-muted"
-                  style="font-size: 10px"
+                  class="gf-text-muted gf-prompt-category-label"
                   x-text="p.cat"
                 ></span>
                 <template
@@ -226,7 +184,7 @@
               <div class="gf-start-picker">
                 <button
                   type="button"
-                  class="gf-btn gf-btn-sm gf-btn-text"
+                  class="gf-btn gf-btn-sm gf-btn-text gf-start-picker-trigger"
                   @click="showPromptStartPicker = !showPromptStartPicker"
                   aria-controls="custom-prompt-start-picker"
                   :aria-expanded="showPromptStartPicker ? 'true' : 'false'"
@@ -304,7 +262,8 @@
                         aria-describedby="custom-prompt-name-help custom-prompt-name-error"
                       />
                       <span id="custom-prompt-name-help" class="gf-field-help">
-                        Used as the display name. The stored id is generated from it.
+                        Used as the display name. The stored id is generated
+                        from it.
                       </span>
                       <span
                         id="custom-prompt-name-error"
@@ -321,6 +280,7 @@
                         role="radiogroup"
                         aria-label="Custom prompt route"
                         aria-required="true"
+                        aria-describedby="custom-prompt-route-help custom-prompt-route-error"
                       >
                         <template
                           x-for="route in customPromptRouteOptions()"
@@ -337,10 +297,12 @@
                         </template>
                       </div>
                       <span
+                        id="custom-prompt-route-help"
                         class="gf-field-help"
                         x-text="selectedCustomPromptRoute().desc"
                       ></span>
                       <span
+                        id="custom-prompt-route-error"
                         class="gf-field-error"
                         x-show="customPromptSubmitAttempted && customPromptFieldError('route')"
                         x-text="customPromptFieldError('route')"
@@ -355,14 +317,23 @@
                       x-model="customPromptDraft.desc"
                       class="gf-input"
                       placeholder="Short note shown in the prompt list"
+                      aria-describedby="custom-prompt-desc-help"
                     />
+                    <span id="custom-prompt-desc-help" class="gf-field-help">
+                      Shown under the name in the prompt list - keep to one
+                      line.
+                    </span>
                   </label>
                 </section>
 
                 <section class="gf-custom-section">
-                  <h4 class="gf-custom-section-title">Prompt</h4>
-                  <label class="gf-field" for="custom-prompt-body">
-                    <span class="section-label">Prompt <span>*</span></span>
+                  <h4
+                    id="custom-prompt-body-heading"
+                    class="gf-custom-section-title"
+                  >
+                    Prompt <span>*</span>
+                  </h4>
+                  <div class="gf-field">
                     <textarea
                       id="custom-prompt-body"
                       x-model="customPromptDraft.prompt"
@@ -370,6 +341,7 @@
                       placeholder="/goat-review review the selected target project..."
                       required
                       aria-required="true"
+                      aria-labelledby="custom-prompt-body-heading"
                       :aria-invalid="customPromptFieldError('prompt') ? 'true' : 'false'"
                       aria-describedby="custom-prompt-body-error custom-prompt-body-count custom-prompt-body-warning"
                     ></textarea>
@@ -390,7 +362,7 @@
                       class="gf-count-line"
                       x-text="`${customPromptDraft.prompt.length} chars · ${customPromptDraft.prompt ? customPromptDraft.prompt.split('\n').length : 0} lines`"
                     ></span>
-                  </label>
+                  </div>
                 </section>
 
                 <section class="gf-custom-section">
@@ -401,7 +373,10 @@
                       :key="'flag-group-' + group.id"
                     >
                       <div class="gf-flag-group">
-                        <div class="gf-flag-group-title" x-text="group.label"></div>
+                        <div
+                          class="gf-flag-group-title"
+                          x-text="group.label"
+                        ></div>
                         <div class="gf-flag-grid">
                           <template
                             x-for="flag in group.flags"
@@ -421,11 +396,17 @@
                                   @change="syncCustomPromptFlag(flag)"
                                 />
                                 <span x-text="flag.label"></span>
+                                <span
+                                  x-show="flag.field === 'globalSafe' && !customPromptFlagDisabled(flag)"
+                                  class="gf-flag-default-badge"
+                                  >default</span
+                                >
                               </label>
                               <span class="gf-tooltip-wrap">
                                 <button
                                   type="button"
                                   class="gf-info-button"
+                                  @click.stop
                                   :aria-label="flag.label + ' information'"
                                   :aria-describedby="'custom-flag-tip-' + flag.field"
                                 >
@@ -447,11 +428,17 @@
 
                   <div class="gf-custom-grid-2">
                     <div class="gf-field">
-                      <span class="section-label">Target surfaces (optional)</span>
+                      <span
+                        id="custom-prompt-surfaces-label"
+                        class="section-label"
+                        >Target surfaces (optional)</span
+                      >
                       <div
                         class="gf-tag-input"
                         id="custom-prompt-surfaces"
-                        aria-label="Target surfaces"
+                        role="group"
+                        aria-labelledby="custom-prompt-surfaces-label"
+                        aria-describedby="custom-prompt-surfaces-help"
                       >
                         <template
                           x-for="surface in customPromptSurfaceTags()"
@@ -469,12 +456,22 @@
                           </span>
                         </template>
                         <input
+                          id="custom-prompt-surface-entry"
                           x-model="customPromptSurfaceDraft"
                           @keydown="if ($event.key === 'Enter' || $event.key === ',') { $event.preventDefault(); commitCustomPromptSurfaceDraft(); }"
                           @blur="commitCustomPromptSurfaceDraft()"
                           placeholder="Add surface"
+                          aria-label="Add target surface"
+                          aria-describedby="custom-prompt-surfaces-help"
                         />
                       </div>
+                      <span
+                        id="custom-prompt-surfaces-help"
+                        class="gf-field-help"
+                      >
+                        Where this prompt is appropriate. Type to add a new
+                        surface or pick from suggestions.
+                      </span>
                       <div class="gf-surface-suggestions">
                         <template
                           x-for="surface in customPromptSurfaceSuggestions().slice(0, 8)"
@@ -497,8 +494,9 @@
                         x-model="customPromptDraft.notes"
                         class="gf-input gf-custom-notes"
                         placeholder="Fallbacks or launch notes"
+                        aria-describedby="custom-prompt-notes-help"
                       ></textarea>
-                      <span class="gf-field-help">
+                      <span id="custom-prompt-notes-help" class="gf-field-help">
                         Internal fallback notes - not appended before launch.
                       </span>
                     </label>
@@ -509,51 +507,36 @@
               <aside class="gf-custom-preview-pane" aria-label="Live preview">
                 <div class="section-label">Live preview</div>
                 <div
-                  class="gf-card gf-custom-preview-card"
+                  class="gf-card gf-prompt-list-card gf-custom-preview-card"
                   :style="{
-                    borderLeftWidth: '3px',
-                    borderLeftColor: 'var(--border-subtle)'
-                  }"
+	                    borderLeftColor: presetCategoryAccent(customPromptPreview())
+	                  }"
                 >
-                  <div style="min-width: 0; flex: 1">
+                  <span
+                    class="gf-prompt-favorite gf-prompt-favorite-preview"
+                    aria-hidden="true"
+                    >☆</span
+                  >
+                  <div class="gf-prompt-card-content">
                     <div
-                      style="font-size: 13px; font-weight: 500"
-                      class="gf-text-primary"
-                      x-text="customPromptPreview().name"
+                      class="gf-prompt-card-title"
+                      :class="customPromptDraft.name.trim() ? 'gf-text-primary' : 'gf-text-muted gf-prompt-placeholder'"
+                      x-text="customPromptPreviewName()"
                     ></div>
                     <p
-                      class="gf-text-muted"
-                      style="
-                        font-size: 12px;
-                        margin: 2px 0 6px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                      "
-                      x-text="customPromptPreview().desc"
+                      class="gf-text-muted gf-prompt-card-desc"
+                      :class="customPromptDraft.desc.trim() ? '' : 'gf-prompt-placeholder'"
+                      x-text="customPromptPreviewDescription()"
                     ></p>
-                    <div
-                      style="
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                        flex-wrap: wrap;
-                      "
-                    >
+                    <div class="gf-prompt-card-meta">
                       <span
-                        class="gf-text-secondary"
-                        style="
-                          font-family: var(--font-mono);
-                          font-size: 10px;
-                          padding: 1px 6px;
-                          background: rgba(148, 163, 184, 0.08);
-                          border-radius: 3px;
-                        "
-                        x-text="customPromptPreview().prompt.startsWith('/') ? customPromptPreview().prompt.split(' ')[0] : 'direct'"
+                        class="gf-text-secondary gf-prompt-route-chip"
+                        x-text="presetRouteLabel(customPromptPreview())"
                       ></span>
-                      <span class="gf-text-muted" style="font-size: 10px">
-                        custom
-                      </span>
+                      <span
+                        class="gf-text-muted gf-prompt-category-label"
+                        x-text="customPromptPreview().cat"
+                      ></span>
                       <template
                         x-for="badge in presetBadges(customPromptPreview()).slice(0, 3)"
                         :key="'preview-' + badge.label"
@@ -580,7 +563,7 @@
               </button>
               <button
                 type="submit"
-                class="gf-btn gf-btn-md gf-btn-secondary"
+                class="gf-btn gf-btn-md gf-btn-secondary gf-custom-save-secondary"
               >
                 Save
               </button>
@@ -589,7 +572,7 @@
                 @click="saveAndRunCustomPrompt()"
                 :disabled="!activeRunner || launching || serverSessions.length >= serverMaxSessions"
                 :title="!activeRunner ? 'Select a runner before launching' : (serverSessions.length >= serverMaxSessions ? 'Maximum sessions reached' : '')"
-                class="gf-btn gf-btn-md gf-btn-primary"
+                class="gf-btn gf-btn-md gf-btn-primary gf-custom-run-primary"
               >
                 Save and run with <span x-text="activeRunner"></span>
               </button>
@@ -678,7 +661,7 @@
                       color: var(--accent);
                       border: 1px solid var(--accent-border);
                     "
-                    x-text="selectedPreset.prompt.startsWith('/') ? selectedPreset.prompt.split(' ')[0] : 'direct'"
+                    x-text="presetRouteLabel(selectedPreset)"
                   ></span>
                   <span
                     class="gf-text-muted"

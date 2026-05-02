@@ -237,7 +237,10 @@ describe("custom prompt helpers", () => {
     assert.equal(ctx.customPromptDraft.route, "goat-review");
     assert.equal(ctx.customPromptDraft.requiresLocalDiff, true);
     assert.equal(ctx.customPromptDraft.bestTargetSurfacesText, "repo, library");
-    assert.equal(ctx.customPromptDraft.notes, "If no diff exists, ask for one.");
+    assert.equal(
+      ctx.customPromptDraft.notes,
+      "If no diff exists, ask for one.",
+    );
   });
 
   it("returns saved custom prompts and validates case-insensitive name uniqueness", () => {
@@ -256,9 +259,10 @@ describe("custom prompt helpers", () => {
     ctx.customPromptDraft.name = "review TARGET";
     ctx.customPromptDraft.prompt = "/goat-review review the selected target";
 
-    assert.deepEqual(Array.from(helpers.dashboardValidateCustomPromptDraft(ctx)), [
-      "Name already exists.",
-    ]);
+    assert.deepEqual(
+      Array.from(helpers.dashboardValidateCustomPromptDraft(ctx)),
+      ["Name already exists."],
+    );
     const [firstError] = helpers.dashboardValidateCustomPromptDraftDetails(ctx);
     assert.equal(firstError?.field, "name");
     assert.equal(firstError?.message, "Name already exists.");
@@ -274,10 +278,10 @@ describe("custom prompt helpers", () => {
     helpers.dashboardAddCustomPromptSurface(ctx, " UI App ");
     helpers.dashboardRemoveCustomPromptSurface(ctx, "api");
 
-    assert.deepEqual(Array.from(helpers.dashboardCustomPromptSurfaceTags(ctx)), [
-      "repo",
-      "ui-app",
-    ]);
+    assert.deepEqual(
+      Array.from(helpers.dashboardCustomPromptSurfaceTags(ctx)),
+      ["repo", "ui-app"],
+    );
 
     ctx.customPromptDraft.name = "Surface prompt";
     ctx.customPromptDraft.prompt = "Summarize this target repository.";
@@ -315,6 +319,22 @@ describe("custom prompt helpers", () => {
     assert.equal(preview.route, "goat-critique");
     assert.equal(preview.artifactRequired, true);
     assert.equal(preview.source, "custom");
+  });
+
+  it("uses the selected route pill instead of reparsing slash commands", () => {
+    const { helpers } = loadHelpers();
+    const ctx = makeContext(helpers);
+
+    ctx.customPromptDraft.name = "Direct slash text";
+    ctx.customPromptDraft.prompt = "/goat-review pasted as literal text";
+    ctx.customPromptDraft.route = "direct";
+
+    const preview = helpers.dashboardPreviewCustomPromptPreset(ctx);
+    assert.equal(preview.route, "direct");
+
+    helpers.dashboardSaveCustomPrompt(ctx);
+    assert.equal(ctx.customPrompts[0]!.route, "direct");
+    assert.equal(ctx.selectedPreset?.route, "direct");
   });
 
   it("validates metadata before saving custom prompts", () => {

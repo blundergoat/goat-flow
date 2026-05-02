@@ -77,7 +77,8 @@ const CUSTOM_PROMPT_FLAG_GROUPS: CustomPromptFlagGroup[] = [
       {
         field: "requiresLocalDiff",
         label: "Needs diff",
-        title: "Needs local changes, a branch comparison, or pasted diff context.",
+        title:
+          "Needs local changes, a branch comparison, or pasted diff context.",
       },
       {
         field: "requiresDependencyFiles",
@@ -104,7 +105,8 @@ const CUSTOM_PROMPT_FLAG_GROUPS: CustomPromptFlagGroup[] = [
       {
         field: "mayCheckoutBranch",
         label: "May checkout",
-        title: "May ask to checkout a branch after clean-worktree confirmation.",
+        title:
+          "May ask to checkout a branch after clean-worktree confirmation.",
       },
       {
         field: "mayWriteFiles",
@@ -127,7 +129,7 @@ const CUSTOM_PROMPT_FLAG_GROUPS: CustomPromptFlagGroup[] = [
         field: "globalSafe",
         label: "Global safe",
         title:
-          "Can run against external target projects without goat-flow installed.",
+          "Default: can run against external target projects without goat-flow installed. Disabled when GOAT install is required.",
       },
     ],
   },
@@ -344,7 +346,9 @@ function dashboardCustomPromptToPreset(custom: CustomPrompt): Preset {
   };
 }
 
-function dashboardCustomPromptDraftFromPreset(preset: Preset): CustomPromptDraft {
+function dashboardCustomPromptDraftFromPreset(
+  preset: Preset,
+): CustomPromptDraft {
   const route = preset.route || dashboardInferPromptRoute(preset.prompt);
   const requiresGoatFlowInstall = preset.requiresGoatFlowInstall === true;
   return {
@@ -434,10 +438,7 @@ function dashboardValidateCustomPromptDraftDetails(
       anchor: "custom-prompt-body",
     });
   }
-  const route =
-    draft.route === "direct"
-      ? dashboardInferPromptRoute(prompt)
-      : draft.route || dashboardInferPromptRoute(prompt);
+  const route = draft.route || "direct";
   if (!CUSTOM_PROMPT_ROUTES.has(route)) {
     errors.push({
       field: "route",
@@ -514,10 +515,7 @@ function dashboardBuildCustomPrompt(
   const now = new Date().toISOString();
   const prompt = draft.prompt.trim();
   const requiresGoatFlowInstall = draft.requiresGoatFlowInstall;
-  const route =
-    draft.route === "direct"
-      ? dashboardInferPromptRoute(prompt)
-      : draft.route || dashboardInferPromptRoute(prompt);
+  const route = CUSTOM_PROMPT_ROUTES.has(draft.route) ? draft.route : "direct";
   let id =
     existing?.id ?? `custom:${dashboardSlugifyCustomPromptName(draft.name)}`;
   if (!existing && ctx.customPrompts.some((custom) => custom.id === id)) {
@@ -556,7 +554,9 @@ function dashboardBuildCustomPrompt(
 function dashboardCustomPromptSurfaceTags(
   ctx: DashboardCustomPromptsContext,
 ): string[] {
-  return dashboardParseTargetSurfaces(ctx.customPromptDraft.bestTargetSurfacesText);
+  return dashboardParseTargetSurfaces(
+    ctx.customPromptDraft.bestTargetSurfacesText,
+  );
 }
 
 function dashboardSetCustomPromptSurfaceTags(
@@ -615,10 +615,7 @@ function dashboardPreviewCustomPromptPreset(
 ): Preset {
   const draft = ctx.customPromptDraft;
   const prompt = draft.prompt.trim();
-  const route =
-    draft.route === "direct"
-      ? dashboardInferPromptRoute(prompt)
-      : draft.route || dashboardInferPromptRoute(prompt);
+  const route = CUSTOM_PROMPT_ROUTES.has(draft.route) ? draft.route : "direct";
   const requiresGoatFlowInstall = draft.requiresGoatFlowInstall === true;
   return {
     id: ctx.editingCustomPromptId ?? "custom:preview",
@@ -626,7 +623,7 @@ function dashboardPreviewCustomPromptPreset(
     desc: draft.desc.trim() || draft.notes.trim() || "Custom prompt",
     prompt: prompt || "Write your prompt body...",
     cat: "custom",
-    route: CUSTOM_PROMPT_ROUTES.has(route) ? route : "direct",
+    route,
     source: "custom",
     globalSafe: dashboardResolvedGlobalSafe({
       requiresGoatFlowInstall,
