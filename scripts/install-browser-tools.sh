@@ -13,7 +13,8 @@
 #
 # Notes:
 #   - Default install path: ~/.local/share/goatflow-browser-tools/venv
-#   - Wrapper path:        ~/.local/bin/browser-use-python
+#   - CLI wrapper path:    ~/.local/bin/browser-use
+#   - Python wrapper path: ~/.local/bin/browser-use-python
 #   - The script does not write to repo .env files or install Python packages
 #     into the project's app environment.
 # =============================================================================
@@ -137,6 +138,13 @@ exec "$VENV_PYTHON" "\$@"
 EOF
 chmod +x "$WRAPPER"
 
+CLI_WRAPPER="$BIN_DIR/browser-use"
+cat > "$CLI_WRAPPER" <<EOF
+#!/usr/bin/env bash
+exec "$VENV_PYTHON" -m browser_use "\$@"
+EOF
+chmod +x "$CLI_WRAPPER"
+
 echo -e "${CYAN}Verifying install${NC}"
 "$VENV_PYTHON" - <<'PY'
 import importlib.util
@@ -152,9 +160,10 @@ PY
 
 echo ""
 echo -e "${GREEN}Browser tools installed successfully.${NC}"
+echo -e "${WHITE}CLI wrapper:${NC}    ${GREEN}${CLI_WRAPPER}${NC}"
 echo -e "${WHITE}Python wrapper:${NC} ${GREEN}${WRAPPER}${NC}"
-echo -e "${WHITE}Run a quick import check:${NC}"
-echo -e "  ${GREEN}${WRAPPER} -c 'import browser_use, playwright; print(\"ok\")'${NC}"
+echo -e "${WHITE}Run a quick check:${NC}"
+echo -e "  ${GREEN}browser-use doctor${NC}"
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo ""

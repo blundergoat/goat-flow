@@ -275,6 +275,17 @@ async function dashboardEndAllSessions(
       if (kept.length > 0) keptProjects[key] = kept;
     }
     ctx._projectSessions = keptProjects;
+    for (const key of Object.keys(ctx._projectActiveSession)) {
+      const activeSessionForProject = ctx._projectActiveSession[key];
+      if (activeSessionForProject && !activeIds.has(activeSessionForProject)) {
+        const projectSessions = keptProjects[key];
+        if (projectSessions?.[0]) {
+          ctx._projectActiveSession[key] = projectSessions[0].sessionId;
+        } else {
+          Reflect.deleteProperty(ctx._projectActiveSession, key);
+        }
+      }
+    }
     ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
     if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
       ctx.activeSessionId = null;

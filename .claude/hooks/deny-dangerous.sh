@@ -362,6 +362,11 @@ run_self_test() {
   run_case "rm trailing slash dotslash src blocked" "rm -rf ./src/" 2
   run_case "rm trailing slash node_modules allowed" "rm -rf node_modules/" 0
   run_case "rm trailing slash subdir allowed" "rm -rf src/old-module/" 0
+  run_case "rm multi-path safe blocked" "rm -rf src/old /" 2
+  run_case "rm multi-path mixed blocked" "rm -rf node_modules /" 2
+  run_case "rm multi-path both safe" "rm -rf src/old src/new" 0
+  run_case "rm tilde ssh blocked" "rm -rf ~/.ssh" 2
+  run_case "rm tilde home blocked" "rm -rf ~/Documents" 2
   run_case "chmod recursive 777" "chmod -R 777 ." 2
   run_case "chmod leading zero 777" "chmod 0777 file" 2
   # False-positive cases: read-only commands containing dangerous literals as data.
@@ -630,27 +635,26 @@ rm_has_recursive_force() {
 
 rm_is_safely_scoped() {
   local c="$1"
-  # Extract the target path: strip "rm" + flags, trim whitespace.
+  # Extract target paths: strip "rm" + flags, trim whitespace.
+  local targets_str
+  targets_str="$(echo "$c" | sed 's/^[[:space:]]*rm\([[:space:]]\+--\?[[:alnum:]-]\+\)*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+  [[ -z "$targets_str" ]] && return 1
+  # Check each target independently — one unsafe path fails the whole command.
   local target
-  target="$(echo "$c" | sed 's/^[[:space:]]*rm\([[:space:]]\+--\?[[:alnum:]-]\+\)*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
-  # Normalize: strip leading ./ so ./src and src are evaluated the same way.
-  target="${target#./}"
-  # Strip trailing slash so src/ is evaluated the same as src.
-  target="${target%/}"
-  # Empty target or absolute path (except /tmp/build-*) is not safe.
-  [[ -z "$target" ]] && return 1
-  # /tmp/build-* CI artifacts are safe.
-  [[ "$target" =~ ^/tmp/build-[a-zA-Z0-9._-] ]] && return 0
-  # Reject any other absolute path.
-  [[ "$target" == /* ]] && return 1
-  # Known ephemeral top-level dirs are safe without a subdirectory.
-  case "$target" in
-    node_modules|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo) return 0 ;;
-  esac
-  # Paths with a subdirectory component (contains /) are safe.
-  [[ "$target" == */* ]] && return 0
-  # Bare top-level name (src, workflow, docs, test, etc.) is NOT safe.
-  return 1
+  for target in $targets_str; do
+    target="${target#./}"
+    target="${target%/}"
+    [[ -z "$target" ]] && return 1
+    [[ "$target" =~ ^/tmp/build-[a-zA-Z0-9._-] ]] && continue
+    [[ "$target" == /* ]] && return 1
+    [[ "$target" == "~"* ]] && return 1
+    case "$target" in
+      node_modules|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo) continue ;;
+    esac
+    [[ "$target" == */* ]] && continue
+    return 1
+  done
+  return 0
 }
 
 
