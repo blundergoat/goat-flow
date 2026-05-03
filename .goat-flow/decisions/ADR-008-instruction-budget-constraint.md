@@ -1,4 +1,4 @@
-# ADR-008: Instruction budget constraint - why 120 lines, why it matters
+# ADR-008: Instruction budget constraint - why 125 lines, why it matters
 
 **Status:** Accepted
 **Date:** 2026-04-06
@@ -16,7 +16,7 @@ Key evidence:
 
 ## Decision
 
-CLAUDE.md (and equivalent instruction files) MUST stay under 150 lines. Target 120.
+CLAUDE.md (and equivalent instruction files) MUST stay under 150 lines. Target 125.
 
 Every rule MUST apply to every session. Situation-specific guidance belongs in skills, playbooks, or local instruction files - not the hot path.
 
@@ -34,6 +34,6 @@ Every rule MUST apply to every session. Situation-specific guidance belongs in s
 ## Consequences
 
 - Hard 150-line limit enforced by scanner (AP1: -3 deduction if exceeded)
-- Setup templates generate instruction files targeting 120 lines
+- Setup templates generate instruction files targeting 125 lines
 - Domain knowledge that doesn't fit moves to .goat-flow/ cold path
 - Skills load on demand (not every turn), preserving budget for core behavior rules

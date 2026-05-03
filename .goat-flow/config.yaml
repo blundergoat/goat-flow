@@ -33,7 +33,7 @@ telemetry: false
 #   Standard:  target 120, limit 150 (default)
 #   Large:     target 150, limit 200
 line-limits:
-  target: 120
+  target: 125
   limit: 150
 
 # ── Terminal ──────────────────────────────────
