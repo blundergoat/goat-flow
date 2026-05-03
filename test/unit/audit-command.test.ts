@@ -1870,11 +1870,79 @@ describe("composeSetup routing", () => {
         output,
         /2 hook scripts \(deny, post-turn\) in \.codex\/hooks\//,
       );
-      assert.match(output, /Run `goat-flow audit .+ --harness`/);
+      assert.match(output, /Run `goat-flow audit .+ --harness --agent codex`/);
       assert.ok(
         !output.includes("scanner"),
         `audit-pass output should not regress to scanner wording: ${output}`,
       );
+    } finally {
+      await project.cleanup();
+    }
+  });
+
+  it("does not claim a full audit pass for static dashboard setup evidence", async () => {
+    const project = await makeTempProject(async (root) => {
+      await writeProjectFile(
+        root,
+        ".goat-flow/config.yaml",
+        `version: "${AUDIT_VERSION}"\n`,
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/skill-reference/skill-preamble.md",
+        "# Preamble\n",
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/skill-reference/skill-conventions.md",
+        "# Conventions\n",
+      );
+      await writeProjectFile(root, "AGENTS.md", "# Codex\n");
+      for (const skill of SKILL_NAMES) {
+        await writeProjectFile(root, `.agents/skills/${skill}/SKILL.md`, "#\n");
+      }
+    });
+
+    try {
+      const facts = makeProjectFacts(project.root, [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          skills: {
+            ...stubAgentFacts().skills,
+            found: [...SKILL_NAMES],
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyExists: true,
+            postTurnExists: true,
+          },
+        }),
+      ]);
+
+      const output = composeSetup(
+        makeAuditReport(
+          project.root,
+          "pass",
+          [],
+          [],
+          [
+            {
+              id: "decisions-tracked",
+              name: "Decisions directory exists",
+              status: "pass",
+            },
+          ],
+        ),
+        facts,
+        "codex",
+        { denyMechanismEvidenceLevel: "static" },
+      );
+
+      assert.ok(output, "composeSetup should return setup text");
+      assert.match(output, /Dashboard setup checks pass\./);
+      assert.doesNotMatch(output, /All audit checks pass\./);
+      assert.match(output, /runtime deny-hook self-test not run/);
+      assert.match(output, /Run `goat-flow audit .+ --harness --agent codex`/);
     } finally {
       await project.cleanup();
     }
@@ -1955,6 +2023,78 @@ describe("composeSetup routing", () => {
       assert.match(
         output,
         /Re-run: `node .*dist\/cli\/cli\.js audit .+ --agent codex`/,
+      );
+    } finally {
+      await project.cleanup();
+    }
+  });
+
+  it("excludes informational harness metrics from full-scope failure prompts", async () => {
+    const project = await makeTempProject(async (root) => {
+      await writeProjectFile(
+        root,
+        ".goat-flow/config.yaml",
+        `version: "${AUDIT_VERSION}"\n`,
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/skill-reference/skill-preamble.md",
+        "# Preamble\n",
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/skill-reference/skill-conventions.md",
+        "# Conventions\n",
+      );
+      await writeProjectFile(root, "AGENTS.md", "# Codex\n");
+      for (const skill of SKILL_NAMES) {
+        await writeProjectFile(root, `.agents/skills/${skill}/SKILL.md`, "#\n");
+      }
+    });
+
+    try {
+      const output = composeSetup(
+        makeAuditReport(
+          project.root,
+          "fail",
+          [
+            {
+              id: "config-version",
+              name: "Config version",
+              status: "fail",
+              failure: {
+                check: "Config version",
+                message: "Config version mismatch",
+              },
+            },
+          ],
+          [],
+          [
+            {
+              id: "post-turn-hook-integrity",
+              name: "Post-turn hook integrity",
+              status: "fail",
+              type: "metric",
+              failure: {
+                check: "Post-turn hook integrity",
+                message: "No post-turn hooks installed",
+              },
+            },
+          ],
+        ),
+        makeProjectFacts(project.root, [
+          stubAgentFacts({ agent: PROFILES.codex }),
+        ]),
+        "codex",
+      );
+
+      assert.ok(output, "composeSetup should return failure guidance");
+      assert.match(output, /1 audit check failed:/);
+      assert.match(output, /Config version/);
+      assert.doesNotMatch(output, /Post-turn hook integrity/);
+      assert.match(
+        output,
+        /Re-run: `node .* audit .+ --harness --agent codex`/,
       );
     } finally {
       await project.cleanup();
@@ -2120,7 +2260,34 @@ describe("composeSetup routing", () => {
     try {
       const retiredOutdatedGuide = "upgrade-from-1" + ".0.x.md";
       const output = composeSetup(
-        makeAuditReport(project.root, "fail"),
+        makeAuditReport(
+          project.root,
+          "fail",
+          [
+            {
+              id: "config-version",
+              name: "Config version",
+              status: "fail",
+              failure: {
+                check: "Config version",
+                message: `Config version 1.1.0 does not match current ${AUDIT_VERSION}`,
+                evidence: ".goat-flow/config.yaml",
+              },
+            },
+          ],
+          [
+            {
+              id: "agent-skills",
+              name: "Agent skills",
+              status: "fail",
+              failure: {
+                check: "Agent skills",
+                message: `Skill goat is at v1.1.0; expected v${AUDIT_VERSION}`,
+                evidence: ".agents/skills/goat/SKILL.md",
+              },
+            },
+          ],
+        ),
         makeProjectFacts(project.root, [
           stubAgentFacts({
             agent: PROFILES.codex,
@@ -2132,6 +2299,14 @@ describe("composeSetup routing", () => {
 
       assert.ok(output, "composeSetup should return upgrade guidance");
       assert.match(output, /# GOAT Flow Upgrade - Codex/);
+      assert.match(output, /## Detected install issues/);
+      assert.match(
+        output,
+        new RegExp(
+          `Config version 1\\.1\\.0 does not match current ${AUDIT_VERSION.replaceAll(".", "\\.")}`,
+        ),
+      );
+      assert.match(output, /Skill goat is at v1\.1\.0; expected v/);
       assert.match(
         output,
         /npx @blundergoat\/goat-flow@latest install .* --agent codex/,

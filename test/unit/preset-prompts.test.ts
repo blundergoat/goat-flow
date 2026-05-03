@@ -64,6 +64,14 @@ const DASHBOARD_QUALITY_PATH = resolve(
   "dashboard",
   "dashboard-setup-quality.ts",
 );
+const DASHBOARD_APP_PATH = resolve(PROJECT_ROOT, "src", "dashboard", "app.ts");
+const HOME_VIEW_PATH = resolve(
+  PROJECT_ROOT,
+  "src",
+  "dashboard",
+  "views",
+  "home.html",
+);
 const WORKSPACE_VIEW_PATH = resolve(
   PROJECT_ROOT,
   "src",
@@ -560,6 +568,38 @@ describe("preset prompt catalog", () => {
     assert.match(helper, /GEMINI\.md, \.gemini\/settings\.json/);
     assert.match(helper, /\.github\/copilot-instructions\.md/);
     assert.match(helper, /\.github\/hooks\/hooks\.json/);
+  });
+
+  it("keeps Home install donut based on install checklist plus harness", () => {
+    const view = readFileSync(HOME_VIEW_PATH, "utf-8");
+    assert.match(view, /installChecklistScore\(\)/);
+    assert.match(view, /readinessScore\(\)/);
+    assert.match(
+      view,
+      /scores\.push\(installScore\)[\s\S]*scores\.push\(harnessScore\)/,
+    );
+    assert.match(view, /Agent instruction files present/);
+    assert.doesNotMatch(
+      view,
+      /selectedAgentName \+ ' instruction file present'/,
+    );
+    assert.match(view, /agentCheckDetail\('agent-skills'\)/);
+    assert.match(view, /verificationGateDetail\(\)/);
+    assert.match(view, /install-check-detail/);
+    assert.match(view, /Install .*Harness /);
+    assert.match(view, /ringBreakdown\(\)/);
+  });
+
+  it("keeps Setup target cards based on setup, agent, and harness scopes", () => {
+    const app = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+    const view = readFileSync(SETUP_VIEW_PATH, "utf-8");
+    assert.match(app, /setupTargetScore\(agentId: RunnerId\)/);
+    assert.match(app, /this\.auditScopePercent\(this\.report\.scopes\.setup\)/);
+    assert.match(app, /this\.auditScopePercent\(score\.agent\)/);
+    assert.match(app, /this\.auditScopePercent\(score\.harness\)/);
+    assert.match(view, /setupTargetGrade\(agent\.id\)/);
+    assert.match(view, /setupTargetPercent\(agent\.id\)/);
+    assert.doesNotMatch(view, /s\.harness\.checks\.filter/);
   });
 
   it("renders stored prompt metadata as badges without redefining global safe", () => {

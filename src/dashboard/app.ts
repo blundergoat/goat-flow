@@ -227,6 +227,43 @@ function app() {
       if (!agentPass) return { label: "Setup failing", color: "#f87171" };
       return { label: "Harness failing", color: "#fbbf24" };
     },
+    /** Convert one audit scope into a percentage, excluding metric-only checks. */
+    auditScopePercent(scope: AuditScope | null | undefined): number | null {
+      const checks = scope?.checks ?? [];
+      const scored = checks.filter((check) => check.type !== "metric");
+      if (scored.length === 0) return null;
+      const passed = scored.filter((check) => check.status === "pass").length;
+      return Math.round((passed / scored.length) * 100);
+    },
+    /** Readiness for the Setup page target card: setup + selected agent + harness. */
+    setupTargetScore(agentId: RunnerId): number | null {
+      if (!this.report) return null;
+      const score = this.report.agentScores.find((s) => s.id === agentId);
+      if (!score) return null;
+      const parts = [
+        this.auditScopePercent(this.report.scopes.setup),
+        this.auditScopePercent(score.agent),
+        this.auditScopePercent(score.harness),
+      ].filter(
+        (value): value is number => value !== null && !Number.isNaN(value),
+      );
+      if (parts.length === 0) return null;
+      return Math.round(
+        parts.reduce((total, value) => total + value, 0) / parts.length,
+      );
+    },
+    setupTargetGrade(agentId: RunnerId): string {
+      const score = this.setupTargetScore(agentId);
+      if (score === null) return "-";
+      if (score >= 90) return "A";
+      if (score >= 80) return "B";
+      if (score >= 70) return "C";
+      return "F";
+    },
+    setupTargetPercent(agentId: RunnerId): string {
+      const score = this.setupTargetScore(agentId);
+      return score === null ? "Not audited" : `${score}%`;
+    },
 
     // --- Setup state ---
     setupDetecting: false,

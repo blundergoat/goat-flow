@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.4.3 - 2026-05-04
+
+Dashboard install-readiness scoring, setup prompt truthfulness, and `/api/setup` latency fixes.
+
+- **Install readiness donut** - Home now labels the install donut as `READINESS` and calculates it from both the install checklist and harness average. The breakdown text shows the two inputs (`Install X% / Harness Y%`) so a partial install can no longer render as an unexplained 100% harness average. (`src/dashboard/views/home.html`, `src/dashboard/styles.css`)
+- **Install checklist detail** - Failed install checklist rows now show the underlying audit failure message. Stale skills, config-version drift, and settings/config failures are visible directly under rows like "Skills installed and current" and "Verification gates configured" instead of hiding behind a red icon. (`src/dashboard/views/home.html`)
+- **Setup target scoring** - Setup target cards now score setup scope, selected-agent install scope, and harness scope together instead of showing harness-only percentages. This keeps Setup card grades aligned with the project install state. (`src/dashboard/app.ts`, `src/dashboard/views/setup.html`)
+- **Full-scope dashboard setup prompts** - The `/api/setup` route now generates prompts from the full audit scope instead of the harness-card prompt scope, so setup and agent install failures no longer produce "All audit checks pass" on the Setup page. (`src/cli/server/dashboard-routes.ts`, `src/cli/prompt/compose-setup.ts`)
+- **Outdated install issue detail** - Upgrade and migration setup prompts now include a `Detected install issues` section before the install steps, listing concrete config-version, skill-version, and other install failures when audit data is available. (`src/cli/prompt/compose-setup.ts`)
+- **Setup endpoint latency** - `/api/setup` now uses dashboard-summary facts, skips stack detection, and runs static deny-hook evidence instead of shelling out to `deny-dangerous.sh --self-test`. Local rebuilt-dashboard smoke measured setup prompt calls at about 0.06s for both healthy and stale synthetic targets. (`src/cli/server/dashboard-routes.ts`, `src/cli/audit/check-agent-setup.ts`)
+- **Static deny evidence mode** - Audit gained a `denyMechanismEvidenceLevel: "static"` mode for dashboard routes. It still checks deny hook presence, syntax, patterns, and template version, while leaving runtime self-tests to explicit full validation paths. (`src/cli/audit/audit.ts`, `src/cli/audit/types.ts`, `src/cli/audit/check-agent-setup.ts`)
+- **Regression coverage** - Added tests for Home readiness scoring, Setup target card scoring, full-scope setup prompt behavior, outdated prompt issue details, and `/api/setup` self-test avoidance. (`test/integration/dashboard-server.test.ts`, `test/unit/audit-command.test.ts`, `test/unit/preset-prompts.test.ts`)
+- **Verification lesson** - Recorded the lesson that behavior-scope changes need matching assertion updates before the first focused run, after an initial stale test assertion caught the old harness-only expectation. (`.goat-flow/lessons/verification.md`)
+- **Release propagation** - Package/config/manifest, skill mirrors, shared references, hooks, fixtures, docs sample output, instruction files, and manifest snapshot catalog bumped to 1.4.3. Manifest snapshot `v1.4.3.json` frozen.
+- **Verification run** - Rechecked with focused setup endpoint tests, compose setup unit tests, preset prompt tests, `npm run typecheck`, full `bash scripts/preflight-checks.sh`, browser-use Home/Setup smoke, and curl timing smoke.
+
 ## v1.4.2 - 2026-05-04
 
 Dashboard agent-targeting fix, audit scope consistency for setup prompts, harness-card prompt scope, and harness fix prompt improvements.

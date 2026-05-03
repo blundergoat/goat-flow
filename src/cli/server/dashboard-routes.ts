@@ -22,6 +22,7 @@ import {
 } from "../agents/registry.js";
 import { detectAgents as detectConfiguredAgents } from "../detect/agents.js";
 import { createFS } from "../facts/fs.js";
+import { extractProjectFacts } from "../facts/orchestrator.js";
 import { extractSharedFacts } from "../facts/shared/index.js";
 import {
   findLatestQualityReport,
@@ -1105,21 +1106,22 @@ export function createDashboardRouteHandlers(
     try {
       requireProjectDirectory(projectPath);
       const fs = createFS(projectPath);
-      const { loadConfig } = await import("../config/reader.js");
-      const { extractProjectFacts } = await import("../facts/orchestrator.js");
       const configState = loadConfig(projectPath, fs);
       const facts = extractProjectFacts(fs, {
         agentFilter: agent,
         projectPath,
         configState,
+        includeStack: false,
       });
       const auditReport = runAudit(fs, projectPath, {
         agentFilter: agent,
         harness: true,
+        factProfile: "dashboard-summary",
+        denyMechanismEvidenceLevel: "static",
       });
       const { composeSetup } = await import("../prompt/compose-setup.js");
       const output = composeSetup(auditReport, facts, agent, {
-        promptScope: "harness-card",
+        denyMechanismEvidenceLevel: "static",
       });
       jsonResponse(res, 200, {
         output: output ?? "No setup output generated.",

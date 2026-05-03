@@ -434,13 +434,17 @@ const agentDenyMechanism: BuildCheck = {
     }
     // Order the checks from cheapest/static to most expensive/runtime so we stop on
     // the clearest failure before attempting shell execution.
-    return (
+    const staticFailure =
       checkDenyHookPresent(ctx) ??
       checkHookSyntax(ctx) ??
       checkDenyPatterns(ctx) ??
-      checkHookVersion(ctx) ??
-      checkHookSelfTest(ctx)
-    );
+      checkHookVersion(ctx);
+
+    if (ctx.denyMechanismEvidenceLevel === "static") {
+      return staticFailure;
+    }
+
+    return staticFailure ?? checkHookSelfTest(ctx);
   },
 };
 

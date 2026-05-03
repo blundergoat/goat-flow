@@ -1111,7 +1111,37 @@ describe("dashboard /api/setup", () => {
     });
   }
 
-  it("uses harness-card scope when install checks fail but selected harness checks pass", async () => {
+  it("avoids deny hook self-tests while preserving setup prompt checks", async () => {
+    let selfTestCalls = 0;
+    childProcess.execFileSync = ((file, args, options) => {
+      if (Array.isArray(args) && args.includes("--self-test")) {
+        selfTestCalls += 1;
+        throw new Error("setup prompt should not run deny hook self-tests");
+      }
+      return originalExecFileSync(file, args, options);
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+
+    try {
+      const { res, body } = await fetchJson(
+        `/api/setup?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude`,
+      );
+      assert.equal(res.status, 200);
+
+      const data = expectRecord(body, "Setup response");
+      assert.equal(typeof data.output, "string");
+      assert.equal(
+        selfTestCalls,
+        0,
+        "setup prompt should not run deny hook self-tests",
+      );
+    } finally {
+      childProcess.execFileSync = originalExecFileSync;
+      syncBuiltinESMExports();
+    }
+  });
+
+  it("reports setup and agent install failures even when selected harness checks pass", async () => {
     const project = await makeDashboardSetupPromptProject({
       decisionsDir: true,
       installSkills: false,
@@ -1124,16 +1154,18 @@ describe("dashboard /api/setup", () => {
 
       const data = expectRecord(body, "Setup response");
       const output = String(data.output);
-      assert.match(output, /All audit checks pass\./);
-      assert.match(output, /audit .* --harness --agent codex/);
-      assert.doesNotMatch(output, /Agent skills/);
-      assert.doesNotMatch(output, /skills installed/);
+      assert.doesNotMatch(output, /All audit checks pass\./);
+      assert.match(output, /Agent skills/);
+      assert.match(
+        output,
+        /Re-run: `[^`]* audit [^`]* --harness --agent codex`/,
+      );
     } finally {
       await project.cleanup();
     }
   });
 
-  it("reports harness failures and keeps harness scope in remediation", async () => {
+  it("reports harness failures alongside setup remediation", async () => {
     const project = await makeDashboardSetupPromptProject({
       decisionsDir: false,
       installSkills: false,

@@ -148,15 +148,43 @@
         (agent.agent?.checks || []).some((check) => check.id === id && check.status === 'pass')
       );
     },
-    installChecks() {
-      const selectedAgentName = agentName(activeRunner);
+    failureText(check) {
+      return check?.failure?.message || check?.failure?.howToFix || '';
+    },
+    setupCheckDetail(id) {
+      const check = this.setupChecks().find((item) => item.id === id && item.status === 'fail');
+      return this.failureText(check);
+    },
+    agentCheckDetail(id) {
+      const agents = this.agentScores();
+      const active = agents.find((agent) => agent.id === activeRunner);
+      const ordered = active ? [active, ...agents.filter((agent) => agent.id !== activeRunner)] : agents;
+      const check = ordered
+        .flatMap((agent) => agent.agent?.checks || [])
+        .find((item) => item.id === id && item.status === 'fail');
+      return this.failureText(check);
+    },
+    verificationGateDetail() {
       return [
-        { label: selectedAgentName + ' instruction file present', ok: this.allAgentsPassCheck('agent-instruction') },
-        { label: 'Skills installed and current', ok: this.allAgentsPassCheck('agent-skills') },
-        { label: 'deny-dangerous hook enabled', ok: this.allAgentsPassCheck('agent-deny-dangerous') },
-        { label: 'Footguns and lessons tracked', ok: this.setupCheckPass('footguns') && this.setupCheckPass('lessons') },
-        { label: 'Verification gates configured', ok: this.setupCheckPass('config-parses') && this.setupCheckPass('config-version') && this.allAgentsPassCheck('agent-settings') }
+        this.setupCheckDetail('config-version'),
+        this.setupCheckDetail('config-parses'),
+        this.agentCheckDetail('agent-settings')
+      ].find((detail) => detail) || '';
+    },
+    installChecks() {
+      return [
+        { label: 'Agent instruction files present', ok: this.allAgentsPassCheck('agent-instruction'), detail: this.agentCheckDetail('agent-instruction') },
+        { label: 'Agent skills installed and current', ok: this.allAgentsPassCheck('agent-skills'), detail: this.agentCheckDetail('agent-skills') },
+        { label: 'Agent deny-dangerous hooks enabled', ok: this.allAgentsPassCheck('agent-deny-dangerous'), detail: this.agentCheckDetail('agent-deny-dangerous') },
+        { label: 'Footguns and lessons tracked', ok: this.setupCheckPass('footguns') && this.setupCheckPass('lessons'), detail: this.setupCheckDetail('footguns') || this.setupCheckDetail('lessons') },
+        { label: 'Verification gates configured', ok: this.setupCheckPass('config-parses') && this.setupCheckPass('config-version') && this.allAgentsPassCheck('agent-settings'), detail: this.verificationGateDetail() }
       ];
+    },
+    installChecklistScore() {
+      const checks = this.installChecks();
+      if (checks.length === 0) return null;
+      const passed = checks.filter((check) => check.ok).length;
+      return Math.round((passed / checks.length) * 100);
     },
     installCheckIcon(check) { return check.ok ? '&#10003;' : '&#10005;'; },
     installPillTone() {
@@ -176,7 +204,16 @@
       if (scores.length === 0) return null;
       return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
     },
-    ringTone() { return this.toneForScore(this.harnessAverage()); },
+    readinessScore() {
+      const scores = [];
+      const installScore = this.installChecklistScore();
+      if (installScore !== null && !Number.isNaN(installScore)) scores.push(installScore);
+      const harnessScore = this.harnessAverage();
+      if (!this.setupMissing() && harnessScore !== null && !Number.isNaN(harnessScore)) scores.push(harnessScore);
+      if (scores.length === 0) return null;
+      return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
+    },
+    ringTone() { return this.toneForScore(this.readinessScore()); },
     ringColor() {
       const tone = this.ringTone();
       if (tone === 'ok') return 'var(--status-pass)';
@@ -185,20 +222,24 @@
       return 'rgba(148, 163, 184, 0.25)';
     },
     ringStyle() {
-      const value = this.harnessAverage();
+      const value = this.readinessScore();
       return { '--ring-color': this.ringColor(), '--ring-value': value === null ? '0%' : value + '%' };
     },
     ringLabel() {
-      if (this.setupMissing()) return 'AFTER SETUP';
-      return 'HARNESS AVG';
+      return 'READINESS';
     },
     ringNumber() {
-      const value = this.harnessAverage();
-      if (this.setupMissing()) return 'N/A';
+      const value = this.readinessScore();
       return value === null ? '--' : String(value);
     },
     ringShowPct() {
-      return this.harnessAverage() !== null && !this.setupMissing();
+      return this.readinessScore() !== null;
+    },
+    ringBreakdown() {
+      const installScore = this.installChecklistScore();
+      const harnessScore = this.setupMissing() ? null : this.harnessAverage();
+      const fmt = (value) => value === null || Number.isNaN(value) ? '--' : value + '%';
+      return 'Install ' + fmt(installScore) + ' / Harness ' + fmt(harnessScore);
     },
     atAGrade() { return this.agentScores().filter((agent) => this.agentScore(agent) >= 90).length; },
     widestGap() {
@@ -942,7 +983,14 @@
                     :class="{ ok: check.ok, bad: !check.ok }"
                     x-html="installCheckIcon(check)"
                   ></span>
-                  <span x-text="check.label"></span>
+                  <span class="install-check-copy">
+                    <span x-text="check.label"></span>
+                    <span
+                      class="install-check-detail"
+                      x-show="!check.ok && check.detail"
+                      x-text="check.detail"
+                    ></span>
+                  </span>
                 </div>
               </template>
             </div>
@@ -955,6 +1003,7 @@
                 </span>
               </div>
               <span class="ring-label" x-text="ringLabel()"></span>
+              <span class="ring-breakdown" x-text="ringBreakdown()"></span>
             </div>
           </div>
         </article>

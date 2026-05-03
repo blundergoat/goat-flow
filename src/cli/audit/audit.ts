@@ -42,7 +42,7 @@ interface AuditOptions {
   /** Optional cold-path content lint (M05). Defaults to false when omitted. */
   checkContent?: boolean;
   /** Optional summary-mode downgrade for expensive deny-hook runtime validation. */
-  denyMechanismEvidenceLevel?: "full" | "present-only";
+  denyMechanismEvidenceLevel?: "full" | "static" | "present-only";
   /** Optional fact profile. Dashboard summary omits stack facts by contract. */
   factProfile?: AuditFactProfile;
   /** Optional development/test profiler for audit-path timing. */

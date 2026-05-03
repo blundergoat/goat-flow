@@ -169,8 +169,8 @@ export interface AuditContext {
   agentFilter: AgentId | null;
   /** Fact extraction profile backing this context. Summary contexts omit stack facts. */
   factProfile?: AuditFactProfile;
-  /** Optional downgrade for expensive per-agent summary checks used by dashboard home load. */
-  denyMechanismEvidenceLevel?: "full" | "present-only";
+  /** Optional downgrade for expensive per-agent summary checks used by dashboard routes. */
+  denyMechanismEvidenceLevel?: "full" | "static" | "present-only";
 }
 
 export type AuditScopeName = "setup" | "agent";

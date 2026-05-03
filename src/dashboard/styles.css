@@ -2534,6 +2534,16 @@ body {
   color: var(--red-400);
   background: var(--red-bg);
 }
+.install-check-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.install-check-detail {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.25;
+}
 .ring-wrap {
   display: flex;
   flex-direction: column;
@@ -2580,6 +2590,12 @@ body {
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.ring-breakdown {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
 }
 .lesson-list {
   display: grid;

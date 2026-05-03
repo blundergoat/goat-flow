@@ -1,6 +1,18 @@
 ---
 category: verification
-last_reviewed: 2026-05-03
+last_reviewed: 2026-05-04
+---
+
+## Lesson: Behavior-scope changes need assertion updates before the first focused run
+
+**Status:** active | **Created:** 2026-05-04
+
+**What happened:** Changed the dashboard Setup page prompt from harness-card scope to full setup remediation scope, then the first focused `dashboard /api/setup` integration run failed because one regression still expected a `--harness --agent codex` rerun command.
+
+**Root cause:** Updated the route contract and one setup-prompt test, but missed the adjacent assertion that encoded the previous harness-only remediation behavior.
+
+**Prevention:** When changing an endpoint's scope semantics, grep focused tests for the old flag/phrase contract before the first run. For setup prompt scope changes, search `test/integration/dashboard-server.test.ts` and `test/unit/audit-command.test.ts` for `harness-card`, `--harness`, and `All audit checks pass`.
+
 ---
 
 ## Lesson: "Double check" means read the files, not re-run the tests
