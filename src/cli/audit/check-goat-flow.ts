@@ -61,7 +61,6 @@ const NAMED_PATHS = new Set([
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
 const SKILL_REFERENCE_DIR = ".goat-flow/skill-reference";
-const SKILL_REFERENCE_POINTER = ".goat-flow/skill-reference/";
 const READ_RULE_PATTERNS = [
   /Before declaring any tool(?: or capability)? unavailable/i,
   /\.goat-flow\/skill-reference\//,
@@ -83,6 +82,13 @@ const REQUIRED_SKILL_REFERENCE_FILES = [
   ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
 ];
 
+interface MarkdownHeading {
+  index: number;
+  end: number;
+  level: number;
+  title: string;
+}
+
 function presentInstructionFiles(
   ctx: Parameters<BuildCheck["run"]>[0],
 ): string[] {
@@ -92,32 +98,41 @@ function presentInstructionFiles(
   return [...new Set(paths)].filter((path) => ctx.fs.exists(path));
 }
 
+function markdownHeadings(content: string): MarkdownHeading[] {
+  const headingPattern = /^(#{1,6})\s+(.+?)\s*$/gm;
+  const headings: MarkdownHeading[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = headingPattern.exec(content)) !== null) {
+    headings.push({
+      index: match.index,
+      end: match.index + match[0].length,
+      level: match[1]?.length ?? 0,
+      title: match[2] ?? "",
+    });
+  }
+  return headings;
+}
+
+function sectionStartOffset(content: string, headingEnd: number): number {
+  if (content.slice(headingEnd, headingEnd + 2) === "\r\n")
+    return headingEnd + 2;
+  if (content[headingEnd] === "\n") return headingEnd + 1;
+  return headingEnd;
+}
+
 function markdownSection(content: string, heading: RegExp): string | null {
-  const lines = content.split(/\r?\n/);
-  let start = -1;
-  let level = 0;
+  const headings = markdownHeadings(content);
+  const headingIndex = headings.findIndex((entry) => heading.test(entry.title));
+  if (headingIndex < 0) return null;
 
-  for (let i = 0; i < lines.length; i++) {
-    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(lines[i] ?? "");
-    if (!match) continue;
-    if (!heading.test(match[2] ?? "")) continue;
-    start = i + 1;
-    level = match[1]?.length ?? 0;
-    break;
-  }
-
-  if (start < 0 || level === 0) return null;
-
-  let end = lines.length;
-  for (let i = start; i < lines.length; i++) {
-    const match = /^(#{1,6})\s+/.exec(lines[i] ?? "");
-    if (match && (match[1]?.length ?? 0) <= level) {
-      end = i;
-      break;
-    }
-  }
-
-  return lines.slice(start, end).join("\n");
+  const startHeading = headings[headingIndex];
+  if (!startHeading) return null;
+  const nextHeading = headings
+    .slice(headingIndex + 1)
+    .find((entry) => entry.level <= startHeading.level);
+  return content
+    .slice(sectionStartOffset(content, startHeading.end), nextHeading?.index)
+    .trim();
 }
 
 function boldStepSection(content: string, step: string): string | null {
