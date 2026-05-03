@@ -141,7 +141,7 @@ Low blast radius, 1-2 milestones, no analysis signals. Present Phase 1 milestone
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
-After Phase 1 approval, run SBAO (multi-perspective alternative generation via goat-critique) before writing milestone files: generate N independent approaches, rank against shared criteria, synthesise into the prime plan. Present alternatives and rationale inline - do not save SBAO dissent to disk.
+After Phase 1 approval, invoke `/goat-critique` as the delegated alternatives pass before writing milestone files. Use the accepted synthesis as the prime plan. Present alternatives and rationale inline - do not save dissent to disk.
 
 Then write each milestone to `.goat-flow/tasks/<active>/` as a separate file.
 
