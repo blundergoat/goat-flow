@@ -69,7 +69,7 @@ Aggregate-mode nuance:
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | Commit guidance exists at `.github/git-commit-instructions.md` when `.github/` exists, or in a supporting commit-guidance document otherwise |
 | Verification | `post-turn-hook-integrity` | `metric` | Reports whether any post-turn hook runs validation and whether it swallows failures; absence is no hook evidence, not proof |
-| Recovery | `milestone-tracking` | `integrity` | `.goat-flow/tasks/` exists and active/testing-gate milestones are resumable rather than stranded with unchecked gates |
+| Recovery | `milestone-tracking` | `integrity` | `.goat-flow/tasks/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |
 | Recovery | `session-logs` | `integrity` | `.goat-flow/logs/sessions/` exists |
 | Feedback loop | `feedback-loop-active` | `integrity` | The lessons and footguns directories exist; stale references are informational only |
 | Feedback loop | `decisions-tracked` | `integrity` | `.goat-flow/decisions/` exists |

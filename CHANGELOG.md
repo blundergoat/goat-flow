@@ -2,11 +2,18 @@
 
 ## v1.4.1 - 2026-05-03
 
-Instruction discoverability and audit enforcement for shared tool playbooks.
+Instruction file quality guards, execution loop skill integration, deny-dangerous search command blocking, harness audit expansion, and shared tool-playbook discoverability.
 
+- **Instruction file quality guards** - `preflight-checks.sh` gained four guards: line count against the configured target, router table parity across instruction files and setup templates, encyclopedia/downstream detection (flagging verbatim setup-template content in live instruction files), and Quality Bar template presence. Backed by a 351-line contract test suite (`instruction-quality-guards.test.ts`).
+- **Deterministic parity guard** - New `scripts/check-instruction-parity.mjs` validates canonical section order and required phrases across all four instruction files and their setup templates, catching structural drift between what setup generates and what the live files contain.
+- **Execution loop skill integration** - goat-* skills now declare mode/depth at Step 0, replacing READ. SCOPE gates on write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) require explicit approval before file writes. Added to all four instruction files and setup agent templates.
+- **Deny-dangerous search command blocking** - New `strip_shell_quotes_for_path_scan()` catches secret paths split or quoted with shell tricks (`cat '.'env`). Search command operand analysis blocks attempts to read secrets via search tool arguments or pattern files (`grep foo .env`, `grep -f .env`). Self-test suite expanded with search and quoting scenarios across all 6 hook copies.
+- **Harness audit expansion** - Verification concern now scans for recent (≤14-day) validation artifacts in `.goat-flow/logs/`. Recovery concern tracks unchecked milestone items, next-action clarity, testing-gate status, and archive state. Constraints concern refactored with clearer fact-gathering. Audit test coverage expanded.
 - **Skill-reference discoverability** - Generated and maintained instruction files now append the READ rule that agents must check `.goat-flow/skill-reference/` before declaring a tool or capability unavailable, and their Router Tables point at the tool playbooks directory.
 - **Skill Reference Index** - Installs `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md`, with a ToolSearch/harness-only anti-pattern callout, available-reference table, authoring guidance for new references, and browser-use incident provenance.
 - **Audit enforcement** - Added the default setup check [`instruction-file-skill-reference-pointer`](docs/audit-checks.md#setup-scope-14). When `.goat-flow/skill-reference/` exists, audit fails if the README index is missing or any present instruction file lacks a literal `.goat-flow/skill-reference/` pointer; projects without the directory get a skipped check.
+- **Instruction file budget** - Line target raised from 120 to 125 across `config.yaml`, `compose-quality.ts`, and the Copilot template to accommodate skill-reference and execution-loop additions.
+- **Release propagation** - Package/config/manifest, skill mirrors, shared references, security reference packs, fixtures, hooks, and instruction files bumped to 1.4.1. Manifest snapshot `v1.4.1.json` frozen.
 
 ## v1.4.0 - 2026-05-02
 

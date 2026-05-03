@@ -66,14 +66,14 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 - Do the configured validation commands actually run and produce meaningful output?
 - Does the post-turn hook run real validation (lint, typecheck, shellcheck), or just exit 0?
 - Does the hook report failures honestly, or swallow them with `|| true`?
-- Are testing gates in milestone files practical or checkbox theater?
+- If the project uses milestone files for active work, are testing gates practical or checkbox theater?
 
 ### 4. Recovery
 
 **Audit checks:** tasks directory exists, session logs directory exists.
 
 **Quality evaluates:**
-- Do milestone files have trackable checkbox items with clear completion criteria?
+- If the project uses milestone files for active work, do they have clear next actions and practical completion criteria?
 - Are session logs current or abandoned?
 - Would a fresh agent, after context compaction, have enough state to resume the current task?
 

@@ -118,7 +118,7 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 
 **Recovery checks (2):**
 
-- `milestone-tracking` - `.goat-flow/tasks/` directory exists. Passes if the directory is empty (valid for fresh installs) or milestones are complete/resumable. Active or `testing-gate` milestones with unchecked tasks or unmet testing gates degrade recovery instead of scoring as complete.
+- `milestone-tracking` - `.goat-flow/tasks/` directory exists. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists. Does not count entries.
 
 **Not checked here:** entry counts, recency, content quality of task or session files. A fresh install passes.

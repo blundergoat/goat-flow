@@ -1258,7 +1258,7 @@ describe("optional config calibration", () => {
 });
 
 describe("recovery harness milestone tracking", () => {
-  function taskCtx(files: Record<string, string>): AuditContext {
+  function taskCtx(files: Record<string, string>, tasksExists = true): AuditContext {
     const dirs = new Map<string, Set<string>>();
     dirs.set(".goat-flow/tasks", new Set());
     for (const file of Object.keys(files)) {
@@ -1273,7 +1273,8 @@ describe("recovery harness milestone tracking", () => {
     }
     return makeCtx({
       fs: stubFS({
-        exists: (path) => path === ".goat-flow/tasks" || path in files,
+        exists: (path) =>
+          (tasksExists && path === ".goat-flow/tasks") || path in files,
         listDir: (path) => [...(dirs.get(path) ?? new Set<string>())],
         readFile: (path) => files[path] ?? null,
       }),
@@ -1282,101 +1283,44 @@ describe("recovery harness milestone tracking", () => {
 
   const check = HARNESS_CHECKS.find((c) => c.id === "milestone-tracking")!;
 
+  it("fails when the tasks directory is missing", () => {
+    const result = check.run(taskCtx({}, false));
+    assert.equal(result.status, "fail");
+    assert.ok(result.findings.some((f) => f.includes("No tasks directory")));
+  });
+
   it("passes with an empty tasks directory", () => {
     const result = check.run(taskCtx({}));
     assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("empty")));
+    assert.ok(result.findings.some((f) => f.includes("tracking is optional")));
   });
 
-  it("reports archived complete milestone progress as healthy", () => {
+  it("reports optional task files without scoring completion", () => {
     const result = check.run(
       taskCtx({
-        ".goat-flow/tasks/_archived/M01-done.md":
-          "**Status:** complete\n\n## Tasks\n- [x] One\n- [x] Two\n",
-      }),
-    );
-    assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("2/2 checkboxes")));
-  });
-
-  it("passes complete milestones with all tasks checked", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M01-complete.md":
-          "**Status:** complete\n\n## Tasks\n- [x] One\n- [x] Two\n",
-      }),
-    );
-    assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("2/2 checkboxes")));
-  });
-
-  it("degrades active zero-percent milestones without a next action", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M00-active.md":
-          "**Status:** in-progress\n\n## Tasks\n- [ ] One\n- [ ] Two\n",
-      }),
-    );
-    assert.equal(result.status, "fail");
-    assert.ok(result.findings.some((f) => f.includes("0/2 checkboxes")));
-    assert.ok(result.findings.some((f) => f.includes("at 0%")));
-    assert.ok(result.findings.some((f) => f.includes("Recovery degraded")));
-  });
-
-  it("degrades active partial milestone progress without a next action", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M01-partial.md":
+        ".goat-flow/tasks/1.3.0/M01-demo.md":
           "**Status:** in-progress\n\n## Tasks\n- [x] One\n- [ ] Two\n",
       }),
     );
-    assert.equal(result.status, "fail");
-    assert.ok(result.findings.some((f) => f.includes("1/2 checkboxes")));
-  });
-
-  it("accepts in-progress milestones with a clear next action", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M01-partial.md":
-          "**Status:** in-progress\n\n## Tasks\n- [x] One\n- [ ] Two\n\nNext action: finish task two\n",
-      }),
-    );
     assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("1/2 checkboxes")));
+    assert.ok(result.findings.some((f) => f.includes("1 markdown file")));
+    assert.ok(result.findings.some((f) => f.includes("2 checkbox marker")));
+    assert.ok(result.findings.some((f) => f.includes("not audited")));
   });
 
-  it("degrades testing-gate milestones with unchecked tasks", () => {
+  it("does not fail active, testing-gate, or roadmap checkbox gaps", () => {
     const result = check.run(
       taskCtx({
+        ".goat-flow/tasks/1.3.0/M01-active.md":
+          "**Status:** in-progress\n\n## Tasks\n- [ ] One\n- [ ] Two\n",
         ".goat-flow/tasks/1.3.0/M02-testing.md":
-          "**Status:** testing-gate\n\n## Tasks\n- [x] Code\n- [ ] Tests\n\n## Testing Gate\n- [ ] npm test passes\n",
-      }),
-    );
-    assert.equal(result.status, "fail");
-    assert.ok(result.findings.some((f) => f.includes("testing-gate")));
-    assert.ok(result.findings.some((f) => f.includes("Recovery degraded")));
-  });
-
-  it("keeps planned-but-not-started milestones intentional", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M02-planned.md":
-          "**Status:** planned\n\n## Tasks\n- [ ] One\n- [ ] Two\n",
+          "**Status:** testing-gate\n\n## Testing Gate\n- [ ] npm test passes\n",
+        ".goat-flow/tasks/1.8.0/M09-runtime-verification.md":
+          "**Status:** planned\n\n## Long-term ideas\n- [ ] Explore runtime probes\n",
       }),
     );
     assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("at 0%")));
-  });
-
-  it("does not fail complete milestones with skipped local checkboxes", () => {
-    const result = check.run(
-      taskCtx({
-        ".goat-flow/tasks/1.3.0/M03-complete.md":
-          "**Status:** complete\n\n## Tasks\n- [x] One\n- [ ] Two\n",
-      }),
-    );
-    assert.equal(result.status, "pass");
-    assert.ok(result.findings.some((f) => f.includes("1/2 checkboxes")));
+    assert.doesNotMatch(result.findings.join("\n"), /Recovery degraded|0%/);
   });
 });
 

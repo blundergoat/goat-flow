@@ -256,7 +256,7 @@ describe("zero-entry fresh install", () => {
 });
 
 describe("harness scoring honesty", () => {
-  it("degrades active milestone checkbox gaps instead of scoring recovery as complete", () => {
+  it("does not score optional task checkbox completion as recovery health", () => {
     const check = HARNESS_CHECKS.find((c) => c.id === "milestone-tracking");
     assert.ok(check, "milestone-tracking check must exist");
     const ctx = makeCtx({
@@ -279,9 +279,9 @@ describe("harness scoring honesty", () => {
     });
 
     const result = check.run(ctx);
-    assert.equal(result.status, "fail");
-    assert.match(result.findings.join("\n"), /at 0%/);
-    assert.match(result.findings.join("\n"), /Recovery degraded/);
+    assert.equal(result.status, "pass");
+    assert.match(result.findings.join("\n"), /not audited/);
+    assert.doesNotMatch(result.findings.join("\n"), /at 0%|Recovery degraded/);
   });
 
   it("does not report perfect feedback-loop health when stale learning-loop refs exist", () => {
