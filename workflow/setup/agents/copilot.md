@@ -27,7 +27,7 @@ Copilot runs on a standalone hot-path instruction file, not an overlay. `.github
 
 ### Instruction composition
 
-- Keep `.github/copilot-instructions.md` at `<= 150` lines (hard limit) with `<= 120` as the target.
+- Keep `.github/copilot-instructions.md` at `<= 150` lines (hard limit) with `<= 125` as the target.
 - It MUST contain Truth Order, Execution Loop (READ → SCOPE → ACT → VERIFY), Definition of Done, Router Table, and Autonomy Tiers - the same hot-path sections as CLAUDE.md / AGENTS.md / GEMINI.md.
 - Add a **Copilot-Specific** section at the end for runtime specifics: current Copilot CLI commands (`/agent`, `/review`, `/research`, `/tasks`), `/fleet` usage, `.github/hooks/hooks.json` guardrails, and `.copilotignore` hygiene.
 - Do NOT defer to AGENTS.md; Copilot is a peer, not an overlay consumer.
@@ -55,7 +55,7 @@ After completing step 03 (skills):
 
 ### Verification
 
-- `.github/copilot-instructions.md` exists and stays under the 150-line hard limit (120 target)
+- `.github/copilot-instructions.md` exists and stays under the 150-line hard limit (125 target)
 - `.github/git-commit-instructions.md` exists
 - `.github/copilot-instructions.md` contains Truth Order, Execution Loop, Definition of Done, Router Table, and Autonomy Tiers as level-2 headings
 - Instruction file includes the `.goat-flow/skill-reference/` READ rule and Router Table pointer (per Step 02 verification gate)

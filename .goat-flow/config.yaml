@@ -29,9 +29,9 @@ telemetry: false
 
 # ── Line Limits ──────────────────────────────────
 # Adjust for project complexity:
-#   Small CLI: target 80, limit 120
-#   Standard:  target 120, limit 150 (default)
-#   Large:     target 150, limit 200
+#   Small CLI: target 125, limit 150
+#   Standard:  target 125, limit 150 (default)
+#   Large:     target 125, limit 150
 line-limits:
   target: 125
   limit: 150

@@ -664,7 +664,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("");
   lines.push("# 3. Quick structural checks");
   lines.push(
-    `wc -l ${instructionFile}                          # target: about 120 lines; hard limit: 150`,
+    `wc -l ${instructionFile}                          # target: about 125 lines; hard limit: 150`,
   );
   lines.push(
     `ls ${skillsDir}/                                  # expect ${skillFacts.total} goat-flow skill directories`,
@@ -728,7 +728,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("- No `playbooks/` directory (that's legacy)?");
   lines.push("");
   lines.push("**Instruction file (from Step 0 output):**");
-  lines.push("- Line count (target: under 120, hard limit: 150)?");
+  lines.push("- Line count (target: under 125, hard limit: 150)?");
   lines.push(
     "- Has required sections: project identity, execution loop (4-step READ->SCOPE->ACT->VERIFY), autonomy tiers, definition of done, router table, essential commands?",
   );
