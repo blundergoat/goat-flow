@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.4.2"
+goat-flow-reference-version: "1.4.3"
 ---
 # goat-security reference: dependency and supply chain
 
