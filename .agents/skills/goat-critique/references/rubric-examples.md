@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.4.1"
+goat-flow-reference-version: "1.4.2"
 ---
 # Critique Rubric Examples (Reference Pack)
 
@@ -51,7 +51,7 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 ```markdown
 ## Finding: Migration sequencing risk
 - **Severity:** HIGH | **Confidence:** HIGH
-- **Evidence:** `.goat-flow/tasks/1.4.1/M02-critique-improvements.md:15` - Phase 2 additions depend on Phase 1 extraction completing first
+- **Evidence:** `.goat-flow/tasks/1.4.2/M02-critique-improvements.md:15` - Phase 2 additions depend on Phase 1 extraction completing first
 - **Proof attempt:** Read M02 milestone file, confirmed extraction must precede additions
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** If extraction doesn't reclaim enough words, Phase 2 additions blow the 2500 cap

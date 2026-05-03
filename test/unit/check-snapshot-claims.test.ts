@@ -199,6 +199,20 @@ const EXPECTED_RELEASE_SNAPSHOTS = [
       presets_count: 26,
     },
   },
+  {
+    version: "1.4.2",
+    facts: {
+      skills_total: 7,
+      skills_functional_count: 6,
+      checks_setup: 14,
+      checks_agent: 4,
+      checks_build: 18,
+      checks_harness: 17,
+      checks_total: 35,
+      dashboard_views_count: 8,
+      presets_count: 26,
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------

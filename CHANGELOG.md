@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.2 - 2026-05-04
+
+Dashboard agent-targeting fix, audit scope consistency for setup prompts, harness-card prompt scope, and harness fix prompt improvements.
+
+- **Dashboard agent targeting** - Home "Fix First" card, harness fix prompts, and action commands now resolve the target agent from audit data (`failingHarnessAgent()`) instead of always using `activeRunner`. Prevents misleading `--agent claude` commands when a different agent (e.g. codex at 93%) has the actual failing harness check. Quality pill label now shows which agent the score belongs to. (`src/dashboard/views/home.html`)
+- **Audit scope consistency** - The `/api/setup` route now runs audit with `harness: true` and requests `harness-card` prompt scope, matching the harness-scored grades shown on Setup target cards. Previously the route used `harness: false` while the display used harness scores, producing contradictory pass/fail signals on the same page. (`src/cli/server/dashboard-routes.ts`)
+- **Harness-card prompt scope** - New `SetupPromptScope` type (`"full" | "harness-card"`) in `compose-setup.ts`. Harness-card scope isolates status and failed-check collection to `scopes.harness` only (excluding metrics and acknowledged checks), with a dedicated pass renderer (`renderHarnessCardPass`) and scope-aware re-run commands that include `--harness`. Full scope now collects failures from all three audit scopes (setup + agent + harness) instead of omitting harness.
+- **Harness fix prompt rework** - `harnessFixPrompt()` in the Home view now targets `failingHarnessAgent()`, includes agent-scope and harness-scope check failures alongside concern findings, filters out metrics and acknowledged checks, and provides a safe empty-scores fallback that asks the agent to re-run audit before proposing fixes.
+- **Setup cache invalidation** - Fresh audit loads now clear cached `setupOutputs` and reset the project-path tracker, triggering prompt regeneration when the Setup view is active. Prevents stale prompts from persisting after a re-audit. (`src/dashboard/app.ts`)
+- **Footgun: runner-vs-target agent confusion** - New entry in `.goat-flow/footguns/dashboard.md` documenting the `activeRunner` vs failing-agent conflation and the audit-scope mismatch, with real evidence from 2026-05-03 (basedata.halaxy.net project) and three prevention rules.
+- **goat-plan skill wording** - Clarified that `/goat-critique` is invoked as the delegated alternatives pass before writing milestone files. Updated across all 4 agent skill copies.
+- **Test coverage** - 2 new `/api/setup` integration tests for harness-card pass-through and failure remediation, with a ~100-line `makeDashboardSetupPromptProject()` factory. 2 new `composeSetup` unit tests for scope-aware routing. 1 new `dashboardGenerateSetupPrompt` unit test verifying cache invalidation on project-path change. `makeAuditReport()` helper extended with `harnessChecks` parameter.
+- **Release propagation** - Package/config/manifest, skill mirrors, shared references, security reference packs, fixtures, hooks, and instruction files bumped to 1.4.2. Manifest snapshot `v1.4.2.json` frozen.
+
 ## v1.4.1 - 2026-05-03
 
 Instruction file quality guards, execution loop skill integration, deny-dangerous search command blocking, harness audit expansion, and shared tool-playbook discoverability.

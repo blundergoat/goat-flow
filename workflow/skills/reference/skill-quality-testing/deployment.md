@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.4.1"
+goat-flow-reference-version: "1.4.2"
 ---
 # Skill Deployment
 
@@ -54,7 +54,7 @@ If current logs do not meet `bulletproof`, say so directly. Do not backfill miss
 
 **GREEN phase - write minimal skill:**
 - [ ] Name describes what you DO or the core insight
-- [ ] Frontmatter has `goat-flow-skill-version: "1.4.1"` and trigger-only `description`
+- [ ] Frontmatter has `goat-flow-skill-version: "1.4.2"` and trigger-only `description`
 - [ ] `description` is CSO-optimised: "Use when [trigger]", not a workflow summary
 - [ ] Keywords throughout for search (error messages, symptoms, tool names)
 - [ ] Overview states the core principle in 1–2 sentences

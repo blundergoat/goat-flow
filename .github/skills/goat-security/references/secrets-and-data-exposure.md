@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.4.1"
+goat-flow-reference-version: "1.4.2"
 ---
 # goat-security reference: secrets and data exposure
 

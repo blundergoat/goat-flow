@@ -224,5 +224,17 @@
       "setup",
       "workspace"
     ]
+  },
+  "snapshot_facts": {
+    "_note": "Numeric facts as shipped at v1.4.2 release. Used by CHANGELOG lint to validate claims inside the v1.4.2 section of CHANGELOG.md.",
+    "skills_total": 7,
+    "skills_functional_count": 6,
+    "checks_setup": 14,
+    "checks_agent": 4,
+    "checks_build": 18,
+    "checks_harness": 17,
+    "checks_total": 35,
+    "dashboard_views_count": 8,
+    "presets_count": 26
   }
 }
