@@ -550,6 +550,12 @@ else
     fi
 fi
 
+# Derive instruction file list from manifest once, reuse across sections
+agent_files=()
+while IFS= read -r af; do
+    [[ -f "$af" ]] && agent_files+=("$af")
+done < <(node -e "const m=require('./workflow/manifest.json');for(const a of Object.values(m.agents))console.log(a.instruction_file)" 2>/dev/null)
+
 # ── Version Consistency ──────────────────────────────────────────────
 section "Version Consistency"
 if [[ -f package.json ]]; then
@@ -573,12 +579,10 @@ if [[ -f package.json ]]; then
     fi
 
     # Instruction file headers must match package version
-    for ifile in CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md; do
-        if [[ -f "$ifile" ]]; then
-            header_version=$(head -1 "$ifile" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
-            if [[ -n "$header_version" ]] && [[ "$header_version" != "$pkg_version" ]]; then
-                fail "$ifile header says v${header_version}, expected v${pkg_version}"
-            fi
+    for ifile in "${agent_files[@]}"; do
+        header_version=$(head -1 "$ifile" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
+        if [[ -n "$header_version" ]] && [[ "$header_version" != "$pkg_version" ]]; then
+            fail "$ifile header says v${header_version}, expected v${pkg_version}"
         fi
     done
 else
@@ -613,10 +617,6 @@ if [[ "$contract_ok" == true ]]; then
 fi
 
 # ── Cross-Agent Loop Consistency ─────────────────────────────────────
-agent_files=()
-for af in CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md; do
-    [[ -f "$af" ]] && agent_files+=("$af")
-done
 if [[ ${#agent_files[@]} -ge 2 ]]; then
     section "Cross-Agent Consistency"
     # Extract execution loop (READ→Autonomy) from each file, normalize, compare word sets
@@ -647,6 +647,144 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
     if $loop_ok; then
         pass "Execution loops consistent across ${#agent_files[@]} agent files"
     fi
+
+    # Router Table path parity (path-based, not label-based — labels drift
+    # across agents but .goat-flow/ paths are consistent)
+    router_parity_output=$(
+        node - "${agent_files[@]}" <<'NODE'
+const fs = require("node:fs");
+const files = process.argv.slice(2);
+
+function extractRouterPaths(filepath) {
+    const lines = fs.readFileSync(filepath, "utf8").split(/\r?\n/);
+    let inSection = false;
+    const paths = new Set();
+    for (const line of lines) {
+        if (/^##\s+Router\s+Table/i.test(line)) { inSection = true; continue; }
+        if (inSection && /^##\s/.test(line)) break;
+        if (!inSection) continue;
+        for (const m of line.matchAll(/`([^`]+)`/g)) {
+            const raw = m[1];
+            const wasDir = raw.endsWith("/");
+            const p = raw.replace(/\/+$/, "");
+            if (/^\.(claude|github|agents|codex|gemini)\//.test(p)) continue;
+            if (p.includes("/") || p.endsWith(".md") || p.endsWith(".yaml") || wasDir) paths.add(p);
+        }
+    }
+    return paths;
+}
+
+if (files.length < 3) {
+    console.log("PASS\tRouter Table parity: " + files.length + " files present, requires 3+ (noted)");
+    process.exit(0);
+}
+
+const filePaths = new Map();
+for (const f of files) filePaths.set(f, extractRouterPaths(f));
+
+function hasCoverage(pathSet, target) {
+    if (pathSet.has(target)) return true;
+    // Parent-directory coverage: .goat-flow/skill-reference/ covers
+    // .goat-flow/skill-reference/README.md
+    for (const p of pathSet) {
+        if (target.startsWith(p + "/")) return true;
+    }
+    return false;
+}
+
+const allPaths = new Set();
+for (const paths of filePaths.values()) for (const p of paths) allPaths.add(p);
+
+const total = files.length;
+const majority = Math.ceil(total / 2);
+let ok = true;
+
+for (const p of [...allPaths].sort()) {
+    const presentIn = files.filter((f) => hasCoverage(filePaths.get(f), p));
+    if (presentIn.length >= majority && presentIn.length < total) {
+        const missing = files.filter((f) => !hasCoverage(filePaths.get(f), p));
+        for (const m of missing) {
+            // Skip self-reference warnings (CLAUDE.md doesn't list itself
+            // in its own Peer instructions row)
+            const basename = require("node:path").basename(m);
+            if (p === basename || p.endsWith("/" + basename)) continue;
+            console.log("WARN\tRouter Table path '" + p + "' present in " + presentIn.length + "/" + total + " but missing from " + m);
+            ok = false;
+        }
+    }
+}
+if (ok) console.log("PASS\tRouter Table path parity across " + total + " agent files");
+NODE
+    )
+    while IFS=$'\t' read -r status message; do
+        [[ -z "${status:-}" ]] && continue
+        case "$status" in
+            PASS) pass "$message" ;;
+            WARN) warn "$message" ;;
+            FAIL) fail "$message" ;;
+        esac
+    done <<< "$router_parity_output"
+fi
+
+# ── Instruction File Quality ────────────────────────────────────────
+section "Instruction File Quality"
+
+# Line-count check (thresholds from manifest, not hard-coded)
+line_target=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_target)" 2>/dev/null || echo "120")
+line_limit=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_limit)" 2>/dev/null || echo "150")
+
+for ifile in "${agent_files[@]}"; do
+    count=$(wc -l < "$ifile")
+    if [[ "$count" -gt "$line_limit" ]]; then
+        fail "$ifile exceeds line limit ($count lines, limit $line_limit)"
+    elif [[ "$count" -gt "$line_target" ]]; then
+        warn "$ifile exceeds line target ($count lines, target $line_target)"
+    else
+        pass "$ifile ($count lines, target $line_target)"
+    fi
+done
+
+# Encyclopedia guard (advisory — downstream projects may have edge cases)
+encyclopedia_patterns="database schema|api reference|endpoint list|table definition|historical background|architecture history|full project overview"
+enc_ok=true
+for ifile in "${agent_files[@]}"; do
+    if [[ -f "$ifile" ]]; then
+        enc_hits=$(grep -inE "$encyclopedia_patterns" "$ifile" || true)
+        if [[ -n "$enc_hits" ]]; then
+            while IFS= read -r hit; do
+                warn "Encyclopedia content in $ifile: $(echo "$hit" | head -c 120)"
+                enc_ok=false
+            done <<< "$enc_hits"
+        fi
+    fi
+done
+if $enc_ok; then
+    pass "No encyclopedia content in instruction files"
+fi
+
+# Downstream-content guard (fail — upstream surfaces must not contain project-specific names)
+downstream_patterns="healthkit|Halaxy|PracGroup|LinkPaG|/home/hxdev/|/home/devgoat/projects/healthkit"
+downstream_surfaces=(
+    "${agent_files[@]}"
+    workflow/setup/agents/claude.md workflow/setup/agents/codex.md
+    workflow/setup/agents/copilot.md workflow/setup/agents/gemini.md
+    workflow/setup/reference/execution-loop.md
+    workflow/setup/02-instruction-file.md
+)
+ds_ok=true
+for f in "${downstream_surfaces[@]}"; do
+    if [[ -f "$f" ]]; then
+        ds_hits=$(grep -inE "$downstream_patterns" "$f" || true)
+        if [[ -n "$ds_hits" ]]; then
+            while IFS= read -r hit; do
+                fail "Downstream project content in $f: $(echo "$hit" | head -c 120)"
+                ds_ok=false
+            done <<< "$ds_hits"
+        fi
+    fi
+done
+if $ds_ok; then
+    pass "No downstream project content in upstream surfaces"
 fi
 
 # ── TypeScript ───────────────────────────────────────────────────────

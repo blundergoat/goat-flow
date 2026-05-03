@@ -36,6 +36,8 @@ grep -rn 'TODO\|FIXME\|HACK\|XXX' src/ --include='*.ts' --include='*.php' --incl
 git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
 ```
 
+What looks broken but is intentional? (semi-manual workflows, expected auth failures, known data caveats, deliberately disabled features with re-enablement steps). Route findings to `.goat-flow/footguns/` with a `hallucination-risk: high` tag.
+
 - Read config files for stale project names, hardcoded paths, outdated references
 - Write findings to `.goat-flow/footguns/` bucket files with real file paths as evidence
 - Every entry MUST cite specific file paths. Use `ACTUAL_MEASURED` evidence labels.

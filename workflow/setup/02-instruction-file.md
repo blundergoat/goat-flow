@@ -42,6 +42,7 @@ The instruction file MUST include these sections. Use `workflow/setup/reference/
 - (f) Definition of Done
 - (g) Router table
 - (h) Essential commands
+- (h-bis) Quality Bar: every line must fit one of: behavioral rule, scope boundary, command, verification gate, router pointer, composition rule. Domain knowledge belongs in cold-path files. For strict constraints, state whether prose-only or mechanically enforced.
 
 Adapt all examples, Ask First boundaries, and essential commands for THIS project's real codebase. Use real file paths, real commands, real boundaries. Preserve the composition rule: when a goat-* skill is active, the skill's Step 0 satisfies READ/SCOPE and the instruction file resumes at ACT.
 
@@ -61,10 +62,11 @@ After writing/updating the instruction file:
 
 **Verification gate:**
 - [ ] Instruction file exists at the correct path
-- [ ] All sections (a) through (h) are present
+- [ ] All sections (a) through (h-bis) are present
 - [ ] Examples and boundaries reference real project files
 - [ ] READ step says to read `.goat-flow/skill-reference/` before declaring a tool or capability unavailable
 - [ ] Router table includes `.goat-flow/skill-reference/` as tool playbooks to read before declaring a tool unavailable
+- [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits
 - [ ] `.gitignore` updated for agent-local files

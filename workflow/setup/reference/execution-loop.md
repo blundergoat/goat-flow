@@ -46,6 +46,7 @@ e) Autonomy Tiers: Always / Ask First / Never
      3. Continue file edits after the user interrupts or says no changes.
         Freeze writes; run only read-only status/diff checks until the
         user explicitly asks for cleanup, revert, or apply.
+   New Never/Ask First rules must trace to a real incident, current file evidence, or a documented footgun/lesson — not hypothetical best practices.
    - Adapt Ask First boundaries for THIS project's specific risks
    - Include Ask First checklist. Choose SHORT or FULL form:
      SHORT (2 questions - recommended for most projects):
@@ -84,6 +85,16 @@ g) Router table: MUST include at minimum:
 
 h) Essential commands
 
+h-bis) Quality Bar: every line in the instruction file must fit one of these categories:
+   - **Behavioral rule** - what the agent must/must not do
+   - **Scope boundary** - what requires human approval before touching
+   - **Command** - exact shell command to run (lint, test, build, deploy)
+   - **Verification gate** - pass/fail check the agent runs before declaring done
+   - **Router pointer** - path to a file or directory the agent should read
+   - **Composition rule** - how skills, loops, or multi-agent handoffs interact
+   Domain knowledge, project history, and glossary entries belong in cold-path files (`.goat-flow/architecture.md`, `.goat-flow/glossary.md`, `.goat-flow/footguns/`), not inlined in the instruction file.
+   For strict Never/MUST constraints, state whether the constraint is prose-only or mechanically enforced (lint rule, pre-commit hook, CI check). Mechanically enforced constraints are stronger; prose-only constraints should be promoted to mechanical enforcement when feasible.
+
 i) (Optional) Complexity and read policy:
    - Hotfix, Small Feature, Standard, System, Infrastructure.
    - If reads exceed 3x your initial estimate, re-classify.
@@ -93,4 +104,4 @@ j) (Optional) Session continuity:
 
 If you must weaken a MUST to meet the line target, the target is
 wrong - raise it, don't weaken the rule.
-Do NOT skip sections (a)-(h) - they are required. Sections (i)-(j) are optional but recommended.
+Do NOT skip sections (a)-(h-bis) - they are required. Sections (i)-(j) are optional but recommended.

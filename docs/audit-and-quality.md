@@ -29,7 +29,7 @@ For the full deterministic inventory, including every check id and what it valid
 
 ### Build mode (default)
 
-Binary pass/fail. This is the structural setup gate - it validates that required files/directories exist, config parses, skills are installed at the expected paths, and hooks are registered. It does not execute configured toolchain commands (lint, test, build). Step 06 uses `audit` as the minimum gate; preflight runs `audit` plus additional checks including ESLint, Prettier, and version consistency.
+Binary pass/fail. This is the structural setup gate - it validates that required files/directories exist, config parses, skills are installed at the expected paths, and hooks are registered. It does not execute configured toolchain commands (lint, test, build). Step 06 uses `audit` as the minimum gate; preflight runs `audit` plus additional checks including ESLint, Prettier, version consistency, instruction file line counts (warn at `line_target`, fail at `line_limit`), Router Table path parity across agents, encyclopedia-content guards, and downstream-content guards.
 
 Checks are grouped by **scope**:
 
