@@ -185,7 +185,9 @@ function parseQualityModeParam(param: string | null): QualityMode | null {
 function resolveDashboardManagedAgentIds(
   projectPath: string,
   fs: ReturnType<typeof createFS>,
+  agentFilter: AgentId | null,
 ): AgentId[] {
+  let ids: AgentId[];
   const configState = loadConfig(projectPath, fs);
   if (
     configState.exists &&
@@ -193,13 +195,18 @@ function resolveDashboardManagedAgentIds(
     configState.config.agents !== null
   ) {
     const seen = new Set<AgentId>();
-    return configState.config.agents.filter((id): id is AgentId => {
+    ids = configState.config.agents.filter((id): id is AgentId => {
       if (!VALID_AGENTS.has(id) || seen.has(id as AgentId)) return false;
       seen.add(id as AgentId);
       return true;
     });
+  } else {
+    ids = detectConfiguredAgents(fs).map((agent) => agent.id);
   }
-  return detectConfiguredAgents(fs).map((agent) => agent.id);
+  if (agentFilter !== null && !ids.includes(agentFilter)) {
+    ids.push(agentFilter);
+  }
+  return ids;
 }
 
 /** Build the latest quality summary. */
@@ -1021,11 +1028,8 @@ export function createDashboardRouteHandlers(
 
       const fs = createFS(projectPath);
       const configAgents = profiler.span("managed-agent resolution", () =>
-        resolveDashboardManagedAgentIds(projectPath, fs),
+        resolveDashboardManagedAgentIds(projectPath, fs, agentFilter),
       );
-      if (agentFilter !== null && !configAgents.includes(agentFilter)) {
-        configAgents.push(agentFilter);
-      }
       const auditFactProfile =
         agentFilter === null ? "dashboard-summary" : "full";
       const batch = profiler.span("runAuditBatch", () =>
