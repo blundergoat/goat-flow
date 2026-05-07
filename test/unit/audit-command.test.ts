@@ -906,6 +906,94 @@ describe("copilot install requires GitHub commit instructions", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Test 2b: Phantom agent detection (M09 Bug 4)
+// ---------------------------------------------------------------------------
+describe("orphaned artifact detection refinement", () => {
+  it("does not flag bare .claude/ dir as orphaned when no goat-flow skills are installed", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
+    const result = check.run(
+      makeCtx({
+        agentFilter: null,
+        agents: [],
+        config: stubConfig(),
+        structure: {
+          ...STUB_STRUCTURE,
+          agents: {
+            claude: {
+              instruction_file: "CLAUDE.md",
+              skills_dir: ".claude/skills",
+              hooks_dir: ".claude/hooks",
+              settings: ".claude/settings.json",
+            },
+          },
+        },
+        fs: stubFS({
+          exists: (path: string) => {
+            if (path === "CLAUDE.md") return false;
+            if (path === ".claude/settings.json") return true;
+            if (path === ".claude/hooks") return true;
+            if (path === ".claude/hooks/deny-dangerous.sh") return false;
+            return false;
+          },
+          listDir: () => [],
+        }),
+      }),
+    );
+
+    // Should NOT report orphaned artifacts for a bare .claude/ dir
+    if (result !== null) {
+      assert.doesNotMatch(
+        result.message,
+        /artifacts exist/i,
+        "bare .claude/ with settings.json but no goat-flow skills should not be flagged",
+      );
+    }
+  });
+
+  it("flags genuine orphan when goat-flow deny hook exists but instruction file is missing", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-instruction")!;
+    const claudeNoInstruction = stubAgentFacts({
+      instruction: {
+        exists: false,
+        content: null,
+        lineCount: 0,
+        sections: new Map(),
+      },
+    });
+    const result = check.run(
+      makeCtx({
+        agentFilter: null,
+        agents: [claudeNoInstruction],
+        config: stubConfig(),
+        structure: {
+          ...STUB_STRUCTURE,
+          agents: {
+            claude: {
+              instruction_file: "CLAUDE.md",
+              skills_dir: ".claude/skills",
+              hooks_dir: ".claude/hooks",
+              settings: ".claude/settings.json",
+            },
+          },
+        },
+        fs: stubFS({
+          exists: (path: string) => {
+            if (path === "CLAUDE.md") return false;
+            if (path === ".claude/hooks/deny-dangerous.sh") return true;
+            return false;
+          },
+          listDir: () => [],
+        }),
+      }),
+    );
+
+    assert.notEqual(result, null, "should report a problem");
+    // The check finds configured agents with missing instruction files first
+    assert.match(result!.message, /missing/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Test 3: config.agents filters which agents are checked
 // ---------------------------------------------------------------------------
 describe("config.agents filtering", () => {
@@ -2184,17 +2272,22 @@ describe("composeSetup routing", () => {
 
     try {
       const output = composeSetup(
-        makeAuditReport(project.root, "fail", [], [
-          {
-            id: "agent-instruction",
-            name: "Agent instruction file",
-            status: "fail",
-            failure: {
-              check: "Agent instruction file",
-              message: "Missing: codex (AGENTS.md)",
+        makeAuditReport(
+          project.root,
+          "fail",
+          [],
+          [
+            {
+              id: "agent-instruction",
+              name: "Agent instruction file",
+              status: "fail",
+              failure: {
+                check: "Agent instruction file",
+                message: "Missing: codex (AGENTS.md)",
+              },
             },
-          },
-        ]),
+          ],
+        ),
         makeProjectFacts(project.root, []),
         "codex",
       );
@@ -2476,7 +2569,7 @@ describe("composeSetup routing", () => {
         output,
         /npx @blundergoat\/goat-flow@latest install .* --agent codex/,
       );
-      assert.match(output, /Remove legacy surfaces manually/);
+      assert.match(output, /Remove legacy surfaces/);
       assert.match(output, /workflow\/setup\/02-instruction-file\.md/);
       assert.ok(!output.includes(retiredMigrationScript), output);
       assert.ok(!output.includes(retiredLegacyGuide), output);

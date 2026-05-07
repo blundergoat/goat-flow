@@ -551,7 +551,7 @@ const configVersionCurrent: BuildCheck = {
       return {
         check: "Config version",
         message: `Config version ${version} does not match current ${AUDIT_VERSION}`,
-        howToFix: `Update the version field in .goat-flow/config.yaml to "${AUDIT_VERSION}".`,
+        howToFix: `Run \`goat-flow install . --agent <id> --update-config-version\` or update the version field in .goat-flow/config.yaml to "${AUDIT_VERSION}".`,
       };
     }
     return null;

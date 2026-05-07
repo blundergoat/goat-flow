@@ -436,6 +436,7 @@ if $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
+    # shellcheck disable=SC2016
     echo '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash \"$(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh\""}]}'
   fi
   echo ""

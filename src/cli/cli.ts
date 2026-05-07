@@ -65,6 +65,8 @@ Flags:
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --force           Install/setup --apply: overwrite settings and config files
+  --update-config-version  Install: update only the version field in existing config.yaml
+  --clean-deprecated       Install: remove deprecated skill directories
   --verbose         Show per-check details
   --output <file>   Write output to file instead of stdout
   --dev             Dashboard: live reload on file changes
@@ -128,6 +130,8 @@ interface ParsedArgValues {
   check?: boolean;
   apply?: boolean;
   force?: boolean;
+  "update-config-version"?: boolean;
+  "clean-deprecated"?: boolean;
   dev?: boolean;
   help?: boolean;
   version?: boolean;
@@ -199,6 +203,8 @@ export interface ParsedCLI extends CLIOptions {
   check: boolean;
   apply: boolean;
   force: boolean;
+  updateConfigVersion: boolean;
+  cleanDeprecated: boolean;
   qualitySubcommand: QualitySubcommand;
   qualityDiffPair: string | null;
   qualityValidatePath: string | null;
@@ -378,19 +384,30 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   }
 }
 
+/** Returns true when the command resolves to a deterministic install/apply path. */
+function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
+  return (
+    command === "install" || (command === "setup" && values.apply === true)
+  );
+}
+
 /** Validate deterministic install/setup flags. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   if (command !== "setup" && values.apply === true) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
-  if (
-    values.force === true &&
-    !(command === "install" || (command === "setup" && values.apply === true))
-  ) {
-    throw new CLIError(
-      "--force is only valid for install or setup --apply.",
-      2,
-    );
+  const installOnly: Array<[string, boolean | undefined]> = [
+    ["--force", values.force],
+    ["--update-config-version", values["update-config-version"]],
+    ["--clean-deprecated", values["clean-deprecated"]],
+  ];
+  for (const [flag, set] of installOnly) {
+    if (set === true && !isInstallCommand(command, values)) {
+      throw new CLIError(
+        `${flag} is only valid for install or setup --apply.`,
+        2,
+      );
+    }
   }
 }
 
@@ -443,6 +460,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       check: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       force: { type: "boolean", default: false },
+      "update-config-version": { type: "boolean", default: false },
+      "clean-deprecated": { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -475,6 +494,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     check: parsedValues.check === true,
     apply: parsedValues.apply === true,
     force: parsedValues.force === true,
+    updateConfigVersion: parsedValues["update-config-version"] === true,
+    cleanDeprecated: parsedValues["clean-deprecated"] === true,
     qualitySubcommand: qualityPositionals.qualitySubcommand,
     qualityDiffPair: qualityPositionals.qualityDiffPair,
     qualityValidatePath: qualityPositionals.qualityValidatePath,
@@ -733,6 +754,29 @@ async function handleSetupCommand(
   }
 }
 
+/** Derive installer flags from the project's adoption state. */
+function deriveInstallFlags(
+  projectPath: string,
+  agentId: string,
+  options: ParsedCLI,
+): string[] {
+  if (options.force || options.updateConfigVersion) return [];
+  try {
+    const projectFS = createFS(projectPath);
+    const state = classifyProjectState(projectFS, agentId);
+    const flags: string[] = [];
+    if (state.state === "outdated" || state.state === "v0.9") {
+      flags.push("--update-config-version");
+    }
+    if (state.state === "v0.9" && !options.cleanDeprecated) {
+      flags.push("--clean-deprecated");
+    }
+    return flags;
+  } catch {
+    return [];
+  }
+}
+
 /** Handle deterministic install/update by delegating to the packaged installer. */
 function handleInstallCommand(options: ParsedCLI): void {
   if (!options.agent) {
@@ -748,21 +792,9 @@ function handleInstallCommand(options: ParsedCLI): void {
   const scriptPath = getTemplatePath("workflow/install-goat-flow.sh");
   const args = [scriptPath, options.projectPath, "--agent", options.agent];
   if (options.force) args.push("--force");
-
-  // Auto-detect project state and add targeted flags for upgrades/migrations
-  try {
-    const projectFS = createFS(options.projectPath);
-    const state = classifyProjectState(projectFS, options.agent);
-    if (state.state === "outdated") {
-      args.push("--update-config-version");
-    }
-    if (state.state === "v0.9") {
-      args.push("--update-config-version");
-      args.push("--clean-deprecated");
-    }
-  } catch {
-    // State detection is best-effort; proceed without flags
-  }
+  if (options.updateConfigVersion) args.push("--update-config-version");
+  if (options.cleanDeprecated) args.push("--clean-deprecated");
+  args.push(...deriveInstallFlags(options.projectPath, options.agent, options));
 
   const result = spawnSync("bash", args, { stdio: "inherit" });
   if (result.error) {
