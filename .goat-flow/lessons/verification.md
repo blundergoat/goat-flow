@@ -17,6 +17,18 @@ last_reviewed: 2026-05-07
 
 ---
 
+## Lesson: Do not cite gitignored task files from durable artifacts
+
+**Status:** active | **Created:** 2026-05-07
+
+**What happened:** While cleaning review findings for the `/goat-plan` dashboard preset change, I changed an ADR future-work pointer from one local task-file reference to another instead of removing the pointer. The user corrected it: learning-loop entries and decisions must not depend on gitignored task/log/scratchpad files as durable evidence.
+
+**Root cause:** Treated local planning state as if it were a stable cross-reference. Task workspace files are useful coordination artifacts during a session, but they are not durable repo truth for ADRs, lessons, footguns, or patterns.
+
+**Prevention:** Before adding or editing learning-loop or decision artifacts, reject references to gitignored workspace files unless the artifact is documenting that workspace policy itself. Cite committed source files, committed docs, issue/PR URLs, or semantic anchors in durable artifacts instead. Evidence anchors: `.goat-flow/decisions/README.md` (search: `Implementation TODO, checklist, milestone, or scoped plan`), `.goat-flow/decisions/ADR-014-optional-project-calibration-config.md` (search: `Personal preferences stay out`).
+
+---
+
 ## Lesson: "Double check" means read the files, not re-run the tests
 
 **Status:** active | **Created:** 2026-03-22

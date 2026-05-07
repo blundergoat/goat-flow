@@ -17,6 +17,8 @@ import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getKnownAgentIds } from "./agents/registry.js";
+import { classifyProjectState } from "./classify-state.js";
+import { createFS } from "./facts/fs.js";
 
 /** Current package version used in --version output */
 const PACKAGE_VERSION = getPackageVersion();
@@ -735,7 +737,7 @@ async function handleSetupCommand(
 function handleInstallCommand(options: ParsedCLI): void {
   if (!options.agent) {
     throw new CLIError(
-      `install requires --agent. Use one of: ${validAgentFlags()}`,
+      `install requires --agent. Use one of: ${validAgentFlags()}\n  (--apply installs per-agent surfaces; each agent needs a separate run)`,
       2,
     );
   }
@@ -746,6 +748,21 @@ function handleInstallCommand(options: ParsedCLI): void {
   const scriptPath = getTemplatePath("workflow/install-goat-flow.sh");
   const args = [scriptPath, options.projectPath, "--agent", options.agent];
   if (options.force) args.push("--force");
+
+  // Auto-detect project state and add targeted flags for upgrades/migrations
+  try {
+    const projectFS = createFS(options.projectPath);
+    const state = classifyProjectState(projectFS, options.agent);
+    if (state.state === "outdated") {
+      args.push("--update-config-version");
+    }
+    if (state.state === "v0.9") {
+      args.push("--update-config-version");
+      args.push("--clean-deprecated");
+    }
+  } catch {
+    // State detection is best-effort; proceed without flags
+  }
 
   const result = spawnSync("bash", args, { stdio: "inherit" });
   if (result.error) {

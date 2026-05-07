@@ -12,6 +12,8 @@
 # - Skills and reference files are always overwritten (verbatim copies)
 # - Settings and config.yaml are NOT overwritten if they already exist
 # - Pass --force to overwrite settings and config
+# - Pass --update-config-version to update only the version field in existing config.yaml
+# - Pass --clean-deprecated to remove deprecated skill directories
 # =============================================================================
 set -euo pipefail
 
@@ -39,6 +41,13 @@ if (mode === "supported-agents") {
 
 if (mode === "supported-skills") {
   for (const skill of manifest.skills?.canonical || []) {
+    console.log(skill);
+  }
+  process.exit(0);
+}
+
+if (mode === "stale-skills") {
+  for (const skill of manifest.skills?.stale_names || []) {
     console.log(skill);
   }
   process.exit(0);
@@ -117,11 +126,15 @@ SUPPORTED_AGENTS_DISPLAY="${SUPPORTED_AGENTS_CSV//,/, }"
 PROJECT=""
 AGENT=""
 FORCE=false
+UPDATE_CONFIG_VERSION=false
+CLEAN_DEPRECATED=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2 ;;
     --force) FORCE=true; shift ;;
+    --update-config-version) UPDATE_CONFIG_VERSION=true; shift ;;
+    --clean-deprecated) CLEAN_DEPRECATED=true; shift ;;
     -*)      echo "ERROR: Unknown flag: $1"; exit 1 ;;
     *)       PROJECT="$1"; shift ;;
   esac
@@ -290,6 +303,30 @@ done
 echo ""
 
 # ==========================================================================
+# 4b. Remove deprecated skills (only with --clean-deprecated or --force)
+# ==========================================================================
+if $CLEAN_DEPRECATED || $FORCE; then
+  readarray -t STALE_NAMES < <(manifest_eval stale-skills)
+  if [[ ${#STALE_NAMES[@]} -gt 0 ]]; then
+    REMOVED=0
+    echo "Deprecated skill cleanup:"
+    for stale in "${STALE_NAMES[@]}"; do
+      [[ -n "$stale" ]] || continue
+      stale_path="$SKILLS_DIR/$stale"
+      if [[ -d "$stale_path" ]]; then
+        rm -rf "$stale_path"
+        REMOVED=$((REMOVED + 1))
+        echo "  ✗ $stale_path (removed)"
+      fi
+    done
+    if [[ $REMOVED -eq 0 ]]; then
+      echo "  · no deprecated skills found"
+    fi
+    echo ""
+  fi
+fi
+
+# ==========================================================================
 # 5. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
 echo "Hooks → $HOOKS_DIR/:"
@@ -305,8 +342,15 @@ echo ""
 # 6. Install agent settings (skip if exists, unless --force)
 # ==========================================================================
 echo "Settings:"
+SETTINGS_SKIPPED=false
 if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
-  copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+  if [[ -f "$SETTINGS_DST" ]] && ! $FORCE; then
+    SETTINGS_SKIPPED=true
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $SETTINGS_DST (exists, skipped)"
+  else
+    copy_file "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+  fi
 else
   echo "  · no settings file for $AGENT"
 fi
@@ -318,8 +362,20 @@ echo ""
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
 if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
-  SKIPPED=$((SKIPPED + 1))
-  echo "  · $CONFIG_PATH (exists, skipped)"
+  if $UPDATE_CONFIG_VERSION; then
+    if grep -q "^version:" "$CONFIG_PATH"; then
+      sed -i "s/^version:.*$/version: \"$VERSION\"/" "$CONFIG_PATH"
+      COPIED=$((COPIED + 1))
+      echo "  ✓ $CONFIG_PATH (version updated to $VERSION)"
+    else
+      echo "version: \"$VERSION\"" >> "$CONFIG_PATH"
+      COPIED=$((COPIED + 1))
+      echo "  ✓ $CONFIG_PATH (version field added: $VERSION)"
+    fi
+  else
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $CONFIG_PATH (exists, skipped)"
+  fi
 else
   IFS=',' read -r -a CONFIG_AGENTS <<< "${CONFIG_AGENTS_CSV:-$SUPPORTED_AGENTS_CSV}"
   config_agent_lines=""
@@ -370,6 +426,21 @@ echo ""
 echo "─────────────────────────────────────────"
 echo "DONE: $COPIED files installed, $SKIPPED skipped"
 echo ""
+
+# Warn when deny hook is installed but settings file was skipped (hook may not be registered)
+if $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
+  echo "⚠ Settings file was preserved (not overwritten)."
+  echo "  The deny hook at $DENY_HOOK_DST was installed but may not be"
+  echo "  registered in $SETTINGS_DST. Verify your settings file includes"
+  echo "  a PreToolUse hook entry pointing at the deny script."
+  if [[ "$AGENT" == "claude" ]]; then
+    echo ""
+    echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
+    echo '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash \"$(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh\""}]}'
+  fi
+  echo ""
+fi
+
 echo "Next steps:"
 echo "  1. Run the setup steps to create project-specific content"
 echo "     (CLAUDE.md, architecture.md, code-map.md, footguns, lessons)"

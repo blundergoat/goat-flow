@@ -420,6 +420,13 @@ describe("preset prompt catalog", () => {
     assert.match(byId("test-regression").prompt, /without writing test code/);
   });
 
+  it("lets the milestone preset write goat-plan task files", () => {
+    const preset = byId("milestones");
+    assert.equal(preset.route, "goat-plan");
+    assert.equal(preset.mayWriteFiles, true);
+    assert.match(preset.desc, /Milestone task files/);
+  });
+
   it("keeps goat-review zero-findings and integrity contracts in presets", () => {
     const uncommitted = byId("uncommitted");
     assert.match(uncommitted.prompt, /Review Integrity/);

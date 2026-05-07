@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import type { ReadonlyFS } from "../types.js";
-import { AUDIT_VERSION } from "../constants.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "../constants.js";
 import { getTemplatePath } from "../paths.js";
 
 const VERIFIED_ON = "2026-04-18";
@@ -42,14 +42,27 @@ function uniquePaths(paths: string[]): string[] {
 
 // === 1. Agent Instruction ===
 
-/** Returns true if agent-specific artifacts (hooks dir or settings file) exist. */
+/** Returns true if goat-flow-specific artifacts exist for an agent.
+ *  A bare agent directory (e.g. `.claude/` from Claude Code) with only a
+ *  settings file does NOT count — we require goat-flow skill directories
+ *  or the deny hook script to distinguish goat-flow installs from the
+ *  agent's own config. */
 function agentArtifactsExist(
   fs: ReadonlyFS,
-  profile: { hooks_dir?: string; settings?: string },
+  profile: { hooks_dir?: string; settings?: string; skills_dir: string },
 ): boolean {
   const hooksDir = profile.hooks_dir?.replace(/\/$/, "");
-  if (hooksDir !== undefined && fs.exists(hooksDir)) return true;
-  return profile.settings !== undefined && fs.exists(profile.settings);
+  if (hooksDir !== undefined && fs.exists(`${hooksDir}/deny-dangerous.sh`)) {
+    return true;
+  }
+  const skillsDir = profile.skills_dir.replace(/\/$/, "");
+  try {
+    const entries = fs.listDir(skillsDir);
+    if (entries.some((e) => SKILL_NAMES.includes(e))) return true;
+  } catch {
+    // listDir may throw if the directory doesn't exist
+  }
+  return false;
 }
 
 /** Check whether the selected agent has its instruction file installed. */
