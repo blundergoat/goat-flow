@@ -70,6 +70,31 @@ describe("skill hardening contracts", () => {
     }
   });
 
+  it("lets goat-plan File-Write persist without phase-one approval or critique handoff", () => {
+    for (const path of skillPaths("goat-plan")) {
+      const body = read(path);
+      assert.match(body, /Small File-Write/, path);
+      assert.match(body, /no Phase 1 approval pause/, path);
+      assert.match(body, /Write artifacts immediately/, path);
+      assert.match(
+        body,
+        /MUST NOT invoke or prompt for `\/goat-critique`/,
+        path,
+      );
+      assert.doesNotMatch(body, /After Phase 1 approval/, path);
+      assert.doesNotMatch(
+        body,
+        /Approve milestones and start implementing/,
+        path,
+      );
+      assert.doesNotMatch(
+        body,
+        /delegated alternatives pass before writing milestone files/,
+        path,
+      );
+    }
+  });
+
   it("keeps goat dispatcher from routing bare task paths to implementation", () => {
     for (const path of skillPaths("goat")) {
       const body = read(path);

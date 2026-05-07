@@ -44,7 +44,7 @@ f) Essential Commands
    - Keep common checks in a short code block; route situational checks to one terse line.
 
 g) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
-   When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write. Resume at ACT when the skill's first blocking gate releases.
+   When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
    ### READ
    MUST read relevant files before changes. Never fabricate codebase facts. Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour. Use grep-first retrieval across learning-loop dirs; include decisions for architecture, policy, or setup work. Before declaring any tool unavailable, read the matching `.goat-flow/skill-reference/` playbook and run its Availability Check.
    ### SCOPE

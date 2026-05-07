@@ -19,7 +19,7 @@ flowchart LR
 |-------|---------|-----------|-------------|
 | [/goat](#goat--dispatcher) | Route to the right skill | -- | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
-| [/goat-plan](#goat-plan) | Milestone planning with testing gates | Human approval between milestones | Before non-trivial implementation |
+| [/goat-plan](#goat-plan) | Milestone planning with testing gates | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
@@ -143,7 +143,7 @@ For onboarding ("I'm new to this project"), use investigate mode - covers stack 
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Inline-Then-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/tasks/` only in File-Write and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
+Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Small File-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/tasks/` in Small File-Write, File-Write, and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
 
 ```mermaid
 flowchart TD
@@ -161,11 +161,11 @@ flowchart TD
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
+**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
 
 **Plan completion (Phase 4):** When all milestones are done, the agent runs an AI verification gate (every milestone complete, every task ticked, every exit criterion evidenced, every testing gate passed with current-session proof) then presents results at a blocking human verification gate. Plan artifacts must not include self-destruct instructions, and agents must not delete or archive plan files without human approval.
 
-**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST pick exactly one mode in Step 0 and stay in it - cross-mode drift is the failure the mode-picker exists to prevent.
+**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST NOT invoke or prompt for `/goat-critique` from `/goat-plan`. MUST pick exactly one mode in Step 0 and stay in it - cross-mode drift is the failure the mode-picker exists to prevent.
 
 ---
 

@@ -27,4 +27,4 @@ For 1.1.0:
 - `audit --harness` must not penalize the absence of these fields
 - Contract tests must distinguish between "the reader supports this field" and "the committed project config contains this field"
 - Personal preferences stay out of the committed config surface unless a future ADR promotes them to shared project truth
-- Future work is tracked in `.goat-flow/tasks/1.5.0/M04-calibration-config-decisions.md`
+- Future work is tracked in `.goat-flow/tasks/1.8.0/M08-config-capabilities-and-project-constraints.md`

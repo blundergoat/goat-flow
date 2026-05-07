@@ -18,7 +18,7 @@ Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** test
 
 | Excuse | Reality |
 |--------|---------|
-| "Skip SBAO - approach is obvious" | Agents role-play SBAO inline instead of spawning independent plans. Obvious approaches have the highest confirmation-bias risk. |
+| "Show milestones first, files later" | File-Write creates milestone artifacts immediately. Read-Only Analysis is for inline plans. |
 | "Vague tasks are fine - implementer will figure it out" | Tasks without file paths, replacement text, and verification commands are not executable by a cold-start agent. Four recurrences of untickable checkboxes traced to vague tasks. |
 | "Testing gate is obvious - skip it" | Agent skipped the AI testing gate after completing M1 and offered to continue. The gate caught what the agent missed. |
 | "Bare task path means start implementing" | Path-only context is data, not delegation. Bare task paths must not update .active, milestone status, checkboxes, or code. |
@@ -42,7 +42,7 @@ Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** test
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 1. **Named-File Update** - user asks to update, improve, tighten, rewrite, or fix a specific existing plan file. A path alone is not write approval. Proceed to Phase 2 § Mode 1 only for plan-file edits, not code implementation.
 2. **Read-Only Analysis** - analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "how would you approach", "sketch the milestones", "walk me through the plan", "reporting-only", "no-implementation". No files written; inline output; Phase 3 skipped; transition to file mode available later.
-3. **Inline-Then-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius) with no analysis signals. Offer: *"Would you like milestones in inline form first, or written to `.goat-flow/tasks/<active>/` now?"* Inline first; write on approval.
+3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Write concise milestone files directly to `.goat-flow/tasks/<active>/`.
 4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "write the milestone files", "start planning") OR Standard / System / Infrastructure scope with a clear build objective and no analysis signals. Write directly to `.goat-flow/tasks/<active>/`.
 
 If ambiguous, ask. Never silently pick.
@@ -51,7 +51,7 @@ If ambiguous, ask. Never silently pick.
 
 **CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. Orientation summary for [path]: [status]. Active plan pointer: [state]. Next action needed from user."
 
-**CHECKPOINT (all other modes):** "Mode: [Named-File Update | Read-Only Analysis | Inline-Then-Write | File-Write]. Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]. Proceeding to milestone breakdown."
+**CHECKPOINT (all other modes):** "Mode: [Named-File Update | Read-Only Analysis | Small File-Write | File-Write]. Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]. Proceeding to milestone breakdown."
 
 ## Phase 1 - Milestone Breakdown
 
@@ -102,7 +102,7 @@ Good tasks are concrete actions with a target or exit criterion, not vague wishe
 
 Assumptions are beliefs about the system, not tasks. Tick with evidence when validated. If invalidated, update the plan immediately. See `references/milestone-examples.md` for format and examples.
 
-**BLOCKING GATE:** Present all milestones. "Approve milestones and start implementing, or adjust?"
+**CHECKPOINT:** Read-Only Analysis presents milestones inline and stops. Write modes go to Phase 2 to write files; no Phase 1 approval pause.
 
 ## Phase 2 - Deliver Milestones
 
@@ -135,15 +135,17 @@ Analysis signals triggered this mode.
 
 **CHECKPOINT:** "Milestones for [feature] (no files written). Say 'write to files' to persist, or adjust first."
 
-### Mode 3: Inline-Then-Write (Hotfix / Small Feature)
+### Mode 3: Small File-Write (Hotfix / Small Feature)
 
-Low blast radius, 1-2 milestones, no analysis signals. Present Phase 1 milestones inline. On approval to persist, switch to Mode 4 using the already-approved output.
+Low blast radius, 1-2 milestones, no analysis signals. Write artifacts using File Artifact Rules, then present paths + summary. No inline-first prompt.
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
-After Phase 1 approval, invoke `/goat-critique` as the delegated alternatives pass before writing milestone files. Use the accepted synthesis as the prime plan. Present alternatives and rationale inline - do not save dissent to disk.
+Write artifacts immediately. Do NOT invoke/ask about `/goat-critique`; run it only on request.
 
-Then write each milestone to `.goat-flow/tasks/<active>/` as a separate file.
+### File Artifact Rules (Modes 3 and 4)
+
+For a fresh plan, create a slugged task directory and update `.goat-flow/tasks/.active` to that slug in the same batch. Write one milestone per `.goat-flow/tasks/<active>/M*.md` file.
 
 **Filename format:** `M<NN>-<slug>.md`, e.g. `M01-prove-api-integration.md`.
 
@@ -222,6 +224,7 @@ Plan is NOT complete until the human explicitly approves.
 - MUST tick assumption checkboxes with evidence when validated or invalidated
 - MUST present milestone updates to human for approval - never silently change
 - MUST order tasks riskiest-first within each milestone
+- MUST NOT invoke or prompt for `/goat-critique` from `/goat-plan`; run critique only on request
 - MUST ensure each task fits one coding session - split if not
 - MUST NOT create vague tasks ("set up backend", "make it work", "research options")
 - MUST NOT skip per-milestone AI + human verification gates
@@ -238,7 +241,7 @@ The output depends on the mode picked in Step 0:
 - **Mode 0 (Path-Only Intake):** status/orientation summary plus next-action question. No files.
 - **Mode 1 (Named-File Update):** the edited milestone file plus a concise delta shown to the user.
 - **Mode 2 (Read-Only Analysis):** the inline milestone breakdown in the response. No files.
-- **Mode 3 (Inline-Then-Write):** inline milestones; optionally the written files on approval.
+- **Mode 3 (Small File-Write):** milestone files in `.goat-flow/tasks/<active>/` plus a concise summary.
 - **Mode 4 (File-Write):** the milestone files in `.goat-flow/tasks/<active>/`.
 
 Summary format for presentation:

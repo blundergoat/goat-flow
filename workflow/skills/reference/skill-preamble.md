@@ -10,7 +10,7 @@ also read `skill-conventions.md`.
 
 ## Execution Loop Integration
 
-When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before any file write: skills with write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) gate on explicit approval. Resume the loop at ACT when the skill's first blocking gate releases.
+When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume the loop at ACT after Step 0 output or when a blocking gate releases.
 
 ## Report-Only Skill Contract
 
@@ -72,8 +72,8 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks. This tab
 |------------|----------|
 | Hotfix | Skip goat-plan - just implement directly. Skip goat-critique entirely. |
 | Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-critique. |
-| Standard | goat-plan: full milestone breakdown with testing gates. Use goat-critique if approach is genuinely uncertain. |
-| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. goat-critique strongly recommended. |
+| Standard | goat-plan: full milestone breakdown with testing gates. Do not chain goat-critique automatically. |
+| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. Do not chain goat-critique automatically; the user can invoke it separately. |
 
 ## Depth Choice
 

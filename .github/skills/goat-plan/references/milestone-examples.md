@@ -68,6 +68,6 @@ When an assumption is validated, tick it and note the evidence. When an assumpti
 - Developer self-check
 ```
 
-## SBAO Process
+## Critique Follow-up
 
-When Phase 2 SBAO runs, the agent generates N independent approaches, ranks them, and synthesises the selected approach into the milestone files. The alternatives and rationale are presented inline during Phase 2 - they are not saved to disk. If a decision made during SBAO is architecturally significant, the Prompted README/ADR gate (after milestone file creation) is the place to capture it as a proper ADR.
+`/goat-plan` does not run `/goat-critique` automatically. If the user explicitly asks to critique a plan, run `/goat-critique` against the written milestone files as separate report-only work. Do not save critique alternatives inside milestone files unless the user asks to apply a specific change.

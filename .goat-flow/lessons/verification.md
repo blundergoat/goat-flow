@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-04
+last_reviewed: 2026-05-07
 ---
 
 ## Lesson: Behavior-scope changes need assertion updates before the first focused run
@@ -9,9 +9,11 @@ last_reviewed: 2026-05-04
 
 **What happened:** Changed the dashboard Setup page prompt from harness-card scope to full setup remediation scope, then the first focused `dashboard /api/setup` integration run failed because one regression still expected a `--harness --agent codex` rerun command.
 
+**Recurrence 2026-05-07:** Changed dashboard `/goat-plan` launch context from inline-only to Step 0/File-Write mode semantics. Focused skill and dashboard terminal tests passed, but the first full `npm test` failed because `test/unit/preset-prompts.test.ts` still asserted the old `treat bare task paths as read-only context` phrase. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `goat-plan global mode`), `test/unit/preset-prompts.test.ts` (search: `File-Write modes may create target`).
+
 **Root cause:** Updated the route contract and one setup-prompt test, but missed the adjacent assertion that encoded the previous harness-only remediation behavior.
 
-**Prevention:** When changing an endpoint's scope semantics, grep focused tests for the old flag/phrase contract before the first run. For setup prompt scope changes, search `test/integration/dashboard-server.test.ts` and `test/unit/audit-command.test.ts` for `harness-card`, `--harness`, and `All audit checks pass`.
+**Prevention:** When changing an endpoint or launch-context scope semantics, grep focused tests for the old flag/phrase contract before the first run. For setup prompt scope changes, search `test/integration/dashboard-server.test.ts` and `test/unit/audit-command.test.ts` for `harness-card`, `--harness`, and `All audit checks pass`. For dashboard terminal launch-context changes, search `test/unit/preset-prompts.test.ts` for the old launch-context phrase.
 
 ---
 
@@ -102,6 +104,8 @@ last_reviewed: 2026-05-04
 **Status:** active | **Created:** 2026-04-18
 
 **What happened:** During rename verification for ~~`.goat-flow/tasks/1.3.0`~~ to `.goat-flow/tasks/1.2.0-wave-6` (old path no longer exists - historical context), a ripgrep command embedded backticks in the shell pattern. Bash treated ``1.3.0`` as command substitution and failed with `/bin/bash: line 1: 1.3.0: command not found`, which made the verification step noisy and ambiguous.
+
+**Recurrence 2026-05-05:** During 1.8.0 task-plan consolidation, a source-slice reference check embedded a literal markdown backtick in the shell regex (`reference/imported...\\.md` with a backtick exclusion). The PreToolUse hook blocked it with `Backtick command substitution hides nested execution`. The check was rerun with a safer single-quoted pattern that avoided backticks entirely.
 
 **Root cause:** Mixed markdown-style quoting with shell quoting during a verification command. The search intent was correct, but the shell interpreted the pattern before `rg` saw it.
 
