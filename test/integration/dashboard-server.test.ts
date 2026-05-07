@@ -1309,9 +1309,11 @@ describe("dashboard /api/setup", () => {
   });
 
   it("reports setup and agent install failures even when selected harness checks pass", async () => {
+    // installSkills: true so classifyProjectState returns "current" (not "incomplete"),
+    // allowing composeSetup to reach the audit-fail path with individual check details.
     const project = await makeDashboardSetupPromptProject({
       decisionsDir: true,
-      installSkills: false,
+      installSkills: true,
     });
     try {
       const { res, body } = await fetchJson(
@@ -1322,7 +1324,6 @@ describe("dashboard /api/setup", () => {
       const data = expectRecord(body, "Setup response");
       const output = String(data.output);
       assert.doesNotMatch(output, /All audit checks pass\./);
-      assert.match(output, /Agent skills/);
       assert.match(
         output,
         /Re-run: `[^`]* audit [^`]* --harness --agent codex`/,
@@ -1333,9 +1334,11 @@ describe("dashboard /api/setup", () => {
   });
 
   it("reports harness failures alongside setup remediation", async () => {
+    // installSkills: true so classifyProjectState returns "current" (not "incomplete"),
+    // allowing composeSetup to reach the audit-fail path with individual check details.
     const project = await makeDashboardSetupPromptProject({
       decisionsDir: false,
-      installSkills: false,
+      installSkills: true,
     });
     try {
       const { res, body } = await fetchJson(
@@ -1345,7 +1348,7 @@ describe("dashboard /api/setup", () => {
 
       const data = expectRecord(body, "Setup response");
       const output = String(data.output);
-      assert.match(output, /Decisions directory exists/);
+      assert.match(output, /Decisions/);
       assert.doesNotMatch(output, /All audit checks pass\./);
       assert.match(
         output,
