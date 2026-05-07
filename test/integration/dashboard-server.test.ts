@@ -794,7 +794,7 @@ describe("dashboard /api/audit", () => {
       await writeProjectFile(
         root,
         ".goat-flow/config.yaml",
-        `version: "${AUDIT_VERSION}"\nagents:\n  - claude\n  - codex\n  - gemini\n  - copilot\nskills:\n  install: all\n`,
+        `version: "${AUDIT_VERSION}"\nagents:\n  - claude\n  - claude\n  - codex\n  - codex\n  - gemini\n  - copilot\nskills:\n  install: all\n`,
       );
       await writeProjectFile(
         root,
@@ -818,8 +818,14 @@ describe("dashboard /api/audit", () => {
         /Configured agent instruction files missing: codex \(AGENTS\.md\), gemini \(GEMINI\.md\), copilot \(\.github\/copilot-instructions\.md\)/,
       );
 
+      const agentScores = report.agentScores as unknown[];
+      const scoreIds = agentScores.map((score, index) =>
+        String(expectRecord(score, `Configured-agent score[${index}]`).id),
+      );
+      assert.deepEqual(scoreIds, ["claude", "codex", "gemini", "copilot"]);
+
       const scoresById = new Map<string, Record<string, unknown>>();
-      for (const score of report.agentScores as unknown[]) {
+      for (const score of agentScores) {
         const entry = expectRecord(score, "Configured-agent score");
         scoresById.set(String(entry.id), entry);
       }

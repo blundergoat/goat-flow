@@ -192,9 +192,12 @@ function resolveDashboardManagedAgentIds(
     configState.valid &&
     configState.config.agents !== null
   ) {
-    return configState.config.agents.filter((id): id is AgentId =>
-      VALID_AGENTS.has(id),
-    );
+    const seen = new Set<AgentId>();
+    return configState.config.agents.filter((id): id is AgentId => {
+      if (!VALID_AGENTS.has(id) || seen.has(id as AgentId)) return false;
+      seen.add(id as AgentId);
+      return true;
+    });
   }
   return detectConfiguredAgents(fs).map((agent) => agent.id);
 }

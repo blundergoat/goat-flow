@@ -231,6 +231,18 @@ touch_anchor() {
   echo "  ✓ $dst"
 }
 
+update_config_version_line() {
+  local path="$1"
+  node - "$path" "$VERSION" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const version = process.argv[3];
+const content = fs.readFileSync(path, "utf8");
+fs.writeFileSync(path, content.replace(/^version:.*$/m, `version: "${version}"`));
+NODE
+}
+
 echo "goat-flow install: $(basename "$PROJECT") (agent: $AGENT)"
 echo ""
 
@@ -364,7 +376,7 @@ CONFIG_PATH=".goat-flow/config.yaml"
 if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
   if $UPDATE_CONFIG_VERSION; then
     if grep -q "^version:" "$CONFIG_PATH"; then
-      sed -i "s/^version:.*$/version: \"$VERSION\"/" "$CONFIG_PATH"
+      update_config_version_line "$CONFIG_PATH"
       COPIED=$((COPIED + 1))
       echo "  ✓ $CONFIG_PATH (version updated to $VERSION)"
     else

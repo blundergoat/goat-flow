@@ -102,7 +102,9 @@ const sessionLogs: HarnessCheck = {
       return fail(
         ["Session logs path exists but is not readable as a directory"],
         ["Ensure .goat-flow/logs/sessions/ is a directory, not a file"],
-        ["Remove or rename the file at .goat-flow/logs/sessions and recreate as a directory."],
+        [
+          "Remove or rename the file at .goat-flow/logs/sessions and recreate as a directory.",
+        ],
       );
     }
     return pass(["Session logs directory exists"]);

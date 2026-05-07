@@ -20,6 +20,7 @@ import { extractBacktickPaths } from "../../src/cli/audit/harness/helpers.js";
 import { AUDIT_VERSION, SKILL_NAMES } from "../../src/cli/constants.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { composeSetup } from "../../src/cli/prompt/compose-setup.js";
+import { extractProjectFacts } from "../../src/cli/facts/orchestrator.js";
 import { extractHookFacts } from "../../src/cli/facts/agent/hooks.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -733,6 +734,21 @@ describe("M03 batch fact reuse", () => {
       assert.equal(entry.audit.scopes.agent.checks.length > 0, true);
       assert.equal(entry.audit.target, PROJECT_ROOT);
     }
+  });
+
+  it("deduplicates configured agents before extracting facts", () => {
+    const facts = extractProjectFacts(createFS(PROJECT_ROOT), {
+      agentFilter: null,
+      projectPath: PROJECT_ROOT,
+      configState: stubConfig({
+        agents: ["claude", "claude", "codex", "codex"],
+      }),
+    });
+
+    assert.deepEqual(
+      facts.agents.map((agentFacts) => agentFacts.agent.id),
+      ["claude", "codex"],
+    );
   });
 
   it("runs dashboard-summary batch audits without stack detection or stack access", () => {
