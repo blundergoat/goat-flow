@@ -10,7 +10,8 @@
 #
 # Safe by design:
 # - Skills and reference files are always overwritten (verbatim copies)
-# - Settings and config.yaml are NOT overwritten if they already exist
+# - Settings are NOT overwritten if they already exist
+# - Existing config.yaml is preserved but the requested agent is registered
 # - Pass --force to overwrite settings and config
 # - Pass --update-config-version to update only the version field in existing config.yaml
 # - Pass --clean-deprecated to remove deprecated skill directories
@@ -243,6 +244,107 @@ fs.writeFileSync(path, content.replace(/^version:.*$/m, `version: "${version}"`)
 NODE
 }
 
+ensure_config_agent_entry() {
+  local path="$1"
+  local agent="$2"
+  node - "$path" "$agent" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const agent = process.argv[3];
+const content = fs.readFileSync(path, "utf8");
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function splitInlineList(value) {
+  const match = value.trim().match(/^\[(.*)\]$/u);
+  if (!match) return null;
+  return match[1]
+    .split(",")
+    .map((item) => item.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+}
+
+function indentOf(line) {
+  return line.match(/^\s*/u)?.[0] ?? "";
+}
+
+let lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines = lines.slice(0, -1);
+
+const agentKeyRe = /^(\s*)agents\s*:\s*(.*?)(\s*#.*)?$/u;
+const agentItemRe = new RegExp(
+  `^\\s*-\\s*["']?${escapeRegExp(agent)}["']?\\s*(?:#.*)?$`,
+  "u",
+);
+const index = lines.findIndex((line) => agentKeyRe.test(line));
+let changed = false;
+
+if (index === -1) {
+  if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
+  lines.push("agents:", `  - ${agent}`);
+  changed = true;
+} else {
+  const match = lines[index].match(agentKeyRe);
+  const baseIndent = match?.[1] ?? "";
+  const rest = (match?.[2] ?? "").trim();
+  const inlineAgents = splitInlineList(rest);
+
+  if (inlineAgents) {
+    if (!inlineAgents.includes(agent)) {
+      inlineAgents.push(agent);
+      changed = true;
+    }
+    if (changed) {
+      lines.splice(
+        index,
+        1,
+        `${baseIndent}agents:`,
+        ...inlineAgents.map((id) => `${baseIndent}  - ${id}`),
+      );
+    }
+  } else if (rest === "null" || rest === "[]") {
+    lines.splice(index, 1, `${baseIndent}agents:`, `${baseIndent}  - ${agent}`);
+    changed = true;
+  } else {
+    const baseIndentLength = baseIndent.length;
+    let cursor = index + 1;
+    let lastAgentItem = -1;
+    let agentAlreadyPresent = false;
+
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      const trimmed = line.trim();
+      if (trimmed !== "" && !trimmed.startsWith("#")) {
+        const currentIndentLength = indentOf(line).length;
+        if (currentIndentLength <= baseIndentLength) break;
+      }
+      if (/^\s*-\s*/u.test(line)) {
+        lastAgentItem = cursor;
+        if (agentItemRe.test(line)) agentAlreadyPresent = true;
+      }
+      cursor += 1;
+    }
+
+    if (!agentAlreadyPresent) {
+      const insertAt = lastAgentItem >= 0 ? lastAgentItem + 1 : index + 1;
+      lines.splice(insertAt, 0, `${baseIndent}  - ${agent}`);
+      changed = true;
+    }
+  }
+}
+
+if (changed) {
+  fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+}
+console.log(changed ? "changed" : "unchanged");
+NODE
+}
+
 echo "goat-flow install: $(basename "$PROJECT") (agent: $AGENT)"
 echo ""
 
@@ -369,24 +471,35 @@ fi
 echo ""
 
 # ==========================================================================
-# 7. Scaffold config.yaml (skip if exists, unless --force)
+# 7. Scaffold or maintain config.yaml
 # ==========================================================================
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
 if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
+  CONFIG_CHANGED=false
+  CONFIG_NOTES=()
   if $UPDATE_CONFIG_VERSION; then
     if grep -q "^version:" "$CONFIG_PATH"; then
       update_config_version_line "$CONFIG_PATH"
-      COPIED=$((COPIED + 1))
-      echo "  ✓ $CONFIG_PATH (version updated to $VERSION)"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version updated to $VERSION")
     else
       echo "version: \"$VERSION\"" >> "$CONFIG_PATH"
-      COPIED=$((COPIED + 1))
-      echo "  ✓ $CONFIG_PATH (version field added: $VERSION)"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version field added: $VERSION")
     fi
+  fi
+  if [[ "$(ensure_config_agent_entry "$CONFIG_PATH" "$AGENT")" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("agent $AGENT registered")
+  fi
+  if $CONFIG_CHANGED; then
+    COPIED=$((COPIED + 1))
+    note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
+    echo "  ✓ $CONFIG_PATH ($note_text)"
   else
     SKIPPED=$((SKIPPED + 1))
-    echo "  · $CONFIG_PATH (exists, skipped)"
+    echo "  · $CONFIG_PATH (exists, no config changes)"
   fi
 else
   IFS=',' read -r -a CONFIG_AGENTS <<< "${CONFIG_AGENTS_CSV:-$SUPPORTED_AGENTS_CSV}"
