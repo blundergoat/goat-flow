@@ -218,19 +218,15 @@ function app() {
     skillQualityLoading: false,
     skillQualityAbortController: null as AbortController | null,
 
-    // --- Skill authoring modal state ---
-    skillAuthorOpen: false,
-    skillAuthorTab: "description" as "description" | "draft",
-    skillAuthorDescription: "",
-    skillAuthorDraft: "",
-    skillAuthorName: "",
-    skillAuthorResult: null as SkillCandidacyResult | null,
-    skillAuthorLoading: false,
-    skillAuthorScaffoldOutput: null as null | {
-      path: string;
-      score: { totalScore: number; profileMax: number } | null;
-    },
-    skillAuthorError: null as string | null,
+    // --- Skill analyser modal state ---
+    skillAnalyserOpen: false,
+    skillAnalyserName: "",
+    skillAnalyserContent: "",
+    skillAnalyserFiles: [] as { name: string; content: string }[],
+    skillAnalyserDragActive: false,
+    skillAnalyserResult: null as SkillAnalyseResult | null,
+    skillAnalyserLoading: false,
+    skillAnalyserError: null as string | null,
 
     /** Resolve the current display name for one supported agent id. */
     agentName(agentId: RunnerId): string {
@@ -809,6 +805,15 @@ function app() {
         if (this.activeView === "home") {
           void this.generateHomeQualitySummary();
         }
+        if (this.activeView === "skills") {
+          this.skillQualityAbortController?.abort();
+          this.skillQualityAbortController = null;
+          this.skillQualityArtifacts = [];
+          this.skillQualitySelectedId = null;
+          this.skillQualityReport = null;
+          this.skillQualityLoading = false;
+          void this.loadSkillQualityInventory();
+        }
       });
       self.$watch("selectedQualityModeId", () => {
         if (this.activeView === "quality") {
@@ -1090,9 +1095,10 @@ function app() {
     // -- Skill quality --
     async loadSkillQualityInventory() {
       const requestProjectPath = this.projectPath;
+      const requestRunner = this.activeRunner;
       try {
         const res = await dashboardFetch(
-          `/api/skill-quality/inventory?path=${encodeURIComponent(requestProjectPath)}`,
+          `/api/skill-quality/inventory?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}`,
         );
         const payload = readRecord(await res.json(), "Skill quality inventory");
         const error = readErrorMessage(payload);
@@ -1100,7 +1106,12 @@ function app() {
           this.showToast(error, true);
           return;
         }
-        if (this.projectPath !== requestProjectPath) return;
+        if (
+          this.projectPath !== requestProjectPath ||
+          this.activeRunner !== requestRunner
+        ) {
+          return;
+        }
         this.skillQualityArtifacts = Array.isArray(payload.artifacts)
           ? payload.artifacts
           : [];
@@ -1114,12 +1125,13 @@ function app() {
       const controller = new AbortController();
       this.skillQualityAbortController = controller;
       const requestProjectPath = this.projectPath;
+      const requestRunner = this.activeRunner;
       this.skillQualitySelectedId = artifactId;
       this.skillQualityReport = null;
       this.skillQualityLoading = true;
       try {
         const res = await dashboardFetch(
-          `/api/skill-quality?path=${encodeURIComponent(requestProjectPath)}&artifact=${encodeURIComponent(artifactId)}`,
+          `/api/skill-quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}&artifact=${encodeURIComponent(artifactId)}`,
           { signal: controller.signal },
         );
         const payload = readRecord(await res.json(), "Skill quality report");
@@ -1128,6 +1140,7 @@ function app() {
           this.showToast(error, true);
         } else if (
           this.projectPath === requestProjectPath &&
+          this.activeRunner === requestRunner &&
           this.skillQualitySelectedId === artifactId
         ) {
           this.skillQualityReport = payload as unknown as SkillQualityReport;
@@ -1143,129 +1156,153 @@ function app() {
       }
     },
 
-    // -- Skill authoring modal --
-    openSkillAuthor() {
-      this.skillAuthorOpen = true;
-      this.skillAuthorTab = "description";
-      this.resetSkillAuthor();
+    // -- Skill analyser modal --
+    openSkillAnalyser() {
+      this.skillAnalyserOpen = true;
+      this.resetSkillAnalyser();
     },
-    closeSkillAuthor() {
-      this.skillAuthorOpen = false;
-      this.resetSkillAuthor();
+    closeSkillAnalyser() {
+      this.skillAnalyserOpen = false;
+      this.resetSkillAnalyser();
     },
-    resetSkillAuthor() {
-      this.skillAuthorDescription = "";
-      this.skillAuthorDraft = "";
-      this.skillAuthorName = "";
-      this.skillAuthorResult = null;
-      this.skillAuthorScaffoldOutput = null;
-      this.skillAuthorError = null;
-      this.skillAuthorLoading = false;
+    resetSkillAnalyser() {
+      this.skillAnalyserName = "";
+      this.skillAnalyserContent = "";
+      this.skillAnalyserFiles = [];
+      this.skillAnalyserDragActive = false;
+      this.skillAnalyserResult = null;
+      this.skillAnalyserError = null;
+      this.skillAnalyserLoading = false;
     },
-    get skillAuthorScaffoldable(): boolean {
-      const rec = this.skillAuthorResult?.recommendedArtifact;
-      if (!rec) return false;
-      return rec.type === "skill" || rec.type === "reference";
+    clearSkillAnalyserResult() {
+      this.skillAnalyserResult = null;
+      this.skillAnalyserError = null;
     },
-    get skillAuthorResultLabel(): string {
-      const rec = this.skillAuthorResult?.recommendedArtifact;
-      if (!rec) return "";
-      if (rec.type === "skill") return `skill (${rec.subtype})`;
-      if (rec.type === "reference") return `reference (${rec.subtype})`;
-      if (rec.type === "instruction-file")
-        return `instruction-file (${rec.reason})`;
-      if (rec.type === "learning-loop") return `learning-loop (${rec.subtype})`;
-      if (rec.type === "cli-command") return "cli-command";
-      return `do-not-create (${rec.reason})`;
-    },
-    async runSkillAuthorCandidacy() {
-      this.skillAuthorError = null;
-      this.skillAuthorScaffoldOutput = null;
-      const payload =
-        this.skillAuthorTab === "description"
-          ? { kind: "description", text: this.skillAuthorDescription.trim() }
-          : { kind: "draft", content: this.skillAuthorDraft };
-      if (
-        (payload.kind === "description" && !payload.text) ||
-        (payload.kind === "draft" && !payload.content)
-      ) {
-        this.skillAuthorError = "Provide a description or paste a draft first.";
+
+    /** Read multiple `.md` files via FileReader; populates the file list and
+     *  pre-fills the suggestedName from the first file. Skips non-markdown
+     *  inputs and surfaces a per-file error if any one fails. */
+    async _ingestSkillAnalyserFiles(fileList: FileList | File[]) {
+      const list = Array.from(fileList).filter(
+        (file) =>
+          file.name.endsWith(".md") ||
+          file.name.endsWith(".markdown") ||
+          file.type === "text/markdown" ||
+          file.type === "text/plain",
+      );
+      if (list.length === 0) {
+        this.skillAnalyserError =
+          "Drop .md / .markdown files only (got 0 valid files).";
         return;
       }
-      this.skillAuthorLoading = true;
+      const reads = list.map(
+        (file) =>
+          new Promise<{ name: string; content: string }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === "string") {
+                resolve({ name: file.name, content: reader.result });
+              } else {
+                reject(new Error(`Could not read ${file.name}`));
+              }
+            };
+            reader.onerror = () => {
+              reject(new Error(`Could not read ${file.name}`));
+            };
+            reader.readAsText(file);
+          }),
+      );
       try {
-        const res = await dashboardFetch("/api/quality/candidacy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = readRecord(await res.json(), "Candidacy result");
-        const error = readErrorMessage(data);
-        if (error) {
-          this.skillAuthorError = error;
-          return;
+        const loaded = await Promise.all(reads);
+        const existing = new Set(this.skillAnalyserFiles.map((f) => f.name));
+        for (const item of loaded) {
+          if (existing.has(item.name)) continue;
+          this.skillAnalyserFiles.push(item);
         }
-        this.skillAuthorResult = data as unknown as SkillCandidacyResult;
+        if (!this.skillAnalyserName && this.skillAnalyserFiles[0]) {
+          const first = this.skillAnalyserFiles[0];
+          this.skillAnalyserName = first.name.replace(/\.(md|markdown)$/i, "");
+        }
+        this.skillAnalyserError = null;
       } catch (err) {
-        this.skillAuthorError =
+        this.skillAnalyserError =
           err instanceof Error ? err.message : String(err);
-      } finally {
-        this.skillAuthorLoading = false;
       }
     },
-    async scaffoldFromCandidacy() {
-      this.skillAuthorError = null;
-      const name = this.skillAuthorName.trim();
-      if (!name) {
-        this.skillAuthorError = "Enter a kebab-case name.";
+
+    /** File input change handler (multi-select). */
+    loadSkillAnalyserFile(event: Event) {
+      const input = event.target as HTMLInputElement;
+      if (!input.files || input.files.length === 0) return;
+      void this._ingestSkillAnalyserFiles(input.files);
+      input.value = "";
+    },
+
+    /** dragover handler — keep the dropzone visually active. */
+    skillAnalyserDragOver(event: DragEvent) {
+      event.preventDefault();
+      this.skillAnalyserDragActive = true;
+    },
+    /** dragleave handler — only clear when leaving the modal card itself. */
+    skillAnalyserDragLeave(event: DragEvent) {
+      const related = event.relatedTarget as Node | null;
+      const target = event.currentTarget as Node | null;
+      if (target && related && target.contains(related)) return;
+      this.skillAnalyserDragActive = false;
+    },
+    /** drop handler — read every dropped .md file and append to the list. */
+    skillAnalyserDrop(event: DragEvent) {
+      event.preventDefault();
+      this.skillAnalyserDragActive = false;
+      const files = event.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      void this._ingestSkillAnalyserFiles(files);
+    },
+    /** Remove one already-attached file by name. */
+    removeSkillAnalyserFile(name: string) {
+      this.skillAnalyserFiles = this.skillAnalyserFiles.filter(
+        (f) => f.name !== name,
+      );
+    },
+
+    async runSkillAnalyser() {
+      this.skillAnalyserError = null;
+      this.skillAnalyserResult = null;
+      const hasFiles = this.skillAnalyserFiles.length > 0;
+      const hasContent = this.skillAnalyserContent.trim().length > 0;
+      if (!hasFiles && !hasContent) {
+        this.skillAnalyserError =
+          "Drop .md files, upload, or paste markdown first.";
         return;
       }
-      const payload: Record<string, unknown> = {
-        projectPath: this.projectPath,
-        name,
-        confirm: true,
-      };
-      if (this.skillAuthorTab === "description") {
-        payload.description = this.skillAuthorDescription.trim();
-      } else {
-        payload.draftContent = this.skillAuthorDraft;
-      }
-      this.skillAuthorLoading = true;
+      this.skillAnalyserLoading = true;
       try {
-        const res = await dashboardFetch("/api/quality/scaffold", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = readRecord(await res.json(), "Scaffold result");
-        const error = readErrorMessage(data);
-        if (error) {
-          this.skillAuthorError = error;
-          return;
-        }
-        if (data.written && typeof data.proposedPath === "string") {
-          const score =
-            data.postScaffoldScore && typeof data.postScaffoldScore === "object"
-              ? (data.postScaffoldScore as {
-                  totalScore: number;
-                  profileMax: number;
-                })
-              : null;
-          this.skillAuthorScaffoldOutput = {
-            path: data.proposedPath,
-            score,
-          };
-          await this.loadSkillQualityInventory();
+        const url = `/api/quality/analyse?path=${encodeURIComponent(this.projectPath)}`;
+        const body: Record<string, unknown> = {};
+        if (hasFiles) {
+          body.files = this.skillAnalyserFiles;
         } else {
-          this.skillAuthorError = Array.isArray(data.output)
-            ? (data.output as string[]).join("\n")
-            : "Scaffold did not write a file.";
+          body.content = this.skillAnalyserContent;
         }
+        const name = this.skillAnalyserName.trim();
+        if (name.length > 0) body.suggestedName = name;
+        const res = await dashboardFetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = readRecord(await res.json(), "Analyse result");
+        const error = readErrorMessage(data);
+        if (error) {
+          this.skillAnalyserError = error;
+          return;
+        }
+        this.skillAnalyserResult = data as unknown as SkillAnalyseResult;
       } catch (err) {
-        this.skillAuthorError =
+        this.skillAnalyserError =
           err instanceof Error ? err.message : String(err);
       } finally {
-        this.skillAuthorLoading = false;
+        this.skillAnalyserLoading = false;
       }
     },
 

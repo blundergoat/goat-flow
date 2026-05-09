@@ -345,6 +345,29 @@ function composeArtifactContent(
     sources.push(`references/${relativeRef}`);
   }
 
+  // Sibling .md files alongside SKILL.md that the goat composition recipe
+  // didn't already pick up (skipping SKILL.md itself, README.md, and any
+  // file under references/). This catches non-goat-shaped bundles where the
+  // skill is split across multiple top-level markdown files (e.g. a
+  // `workflow.md` + `template.md` + `steps/*.md` BMAD-style layout). The
+  // max-bytes cap still applies, so a wildly oversized bundle gets truncated
+  // rather than blowing the composition budget.
+  try {
+    for (const entry of readdirSync(skillDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".md")) continue;
+      if (entry.name === "SKILL.md" || entry.name === "README.md") continue;
+      const filePath = join(skillDir, entry.name);
+      if (!isSafeEntry(filePath)) continue;
+      const content = readOptionalText(filePath, config);
+      if (content === null) continue;
+      chunks.push(content);
+      sources.push(entry.name);
+    }
+  } catch {
+    // Directory unreadable: ignore — composition continues with what we have.
+  }
+
   const composed = chunks.join("\n\n---\n\n");
   if (composed.length <= config.composition.maxComposedBytes) {
     return { raw: rawContent, composed, sources, notes };
@@ -1085,19 +1108,25 @@ function deriveRecommendation(
 // Public API
 // ---------------------------------------------------------------------------
 
-export function scoreArtifact(
+/**
+ * Score raw content against the rubric without reading any file from disk.
+ * Used by both `scoreArtifact` (which reads first) and `analyseContent`
+ * (which gets content from an upload or paste).
+ */
+function scoreContent(
   projectRoot: string,
   artifact: ArtifactEntry,
-  config: QualityConfig = loadQualityConfig(projectRoot),
+  rawContent: string,
+  config: QualityConfig,
+  preReadNotes: string[] = [],
 ): SkillQualityReport {
-  const raw = readArtifactContent(projectRoot, artifact, config);
-  const classification = classifyArtifact(artifact, raw.content, config);
+  const classification = classifyArtifact(artifact, rawContent, config);
   const subtype = classification.detectedSubtype;
   const profileMax = profileMaxForSubtype(config, subtype);
   const composed = composeArtifactContent(
     projectRoot,
     artifact,
-    raw.content,
+    rawContent,
     config,
   );
   const metricInput: MetricInput = {
@@ -1131,8 +1160,17 @@ export function scoreArtifact(
     recommendation,
     metrics,
     composedFrom: composed.sources,
-    fitNotes: [...raw.notes, ...composed.notes, ...fitNotes],
+    fitNotes: [...preReadNotes, ...composed.notes, ...fitNotes],
   };
+}
+
+export function scoreArtifact(
+  projectRoot: string,
+  artifact: ArtifactEntry,
+  config: QualityConfig = loadQualityConfig(projectRoot),
+): SkillQualityReport {
+  const raw = readArtifactContent(projectRoot, artifact, config);
+  return scoreContent(projectRoot, artifact, raw.content, config, raw.notes);
 }
 
 export function scoreAllArtifacts(
@@ -1142,4 +1180,452 @@ export function scoreAllArtifacts(
   return discoverArtifacts(projectRoot, config).map((a) =>
     scoreArtifact(projectRoot, a, config),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Uploaded-content analysis
+// ---------------------------------------------------------------------------
+
+interface AnalyseInput {
+  /** Raw markdown content (uploaded file or pasted text). */
+  content: string;
+  /** Optional name; falls back to a generic placeholder. */
+  suggestedName?: string;
+  /** Optional explicit kind; otherwise inferred from frontmatter. */
+  kind?: ArtifactKind;
+}
+
+interface ImprovementTip {
+  metric: MetricName;
+  severity: MetricSeverity;
+  message: string;
+}
+
+interface AnalyseResult extends SkillQualityReport {
+  tips: ImprovementTip[];
+}
+
+function inferArtifactKind(content: string): ArtifactKind {
+  if (/goat-flow-skill-version:/i.test(content)) return "skill";
+  if (/goat-flow-reference-version:/i.test(content)) return "shared-reference";
+  if (/^##\s+Step 0/im.test(content) || /^##\s+Route Map/im.test(content)) {
+    return "skill";
+  }
+  return "shared-reference";
+}
+
+function sanitiseUploadName(raw: string | undefined): string {
+  if (!raw) return "uploaded-skill";
+  const slug = raw
+    .toLowerCase()
+    .replace(/\.(md|markdown)$/i, "")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return slug.length > 0 ? slug : "uploaded-skill";
+}
+
+const TIP_RULES: Array<{
+  metric: MetricName;
+  match: RegExp;
+  message: string;
+}> = [
+  {
+    metric: "trigger-clarity",
+    match: /missing frontmatter description/,
+    message:
+      'Add a `description: "..."` field in the frontmatter explaining what this skill does in one line.',
+  },
+  {
+    metric: "trigger-clarity",
+    match: /missing "When to Use"/,
+    message:
+      "Add a `## When to Use` section describing the trigger conditions for this skill.",
+  },
+  {
+    metric: "trigger-clarity",
+    match: /missing "NOT this skill"/,
+    message:
+      "Add a `**NOT this skill:**` exclusion list naming intents that route to other skills, so the dispatcher can disambiguate.",
+  },
+  {
+    metric: "trigger-clarity",
+    match: /missing purpose or version header/,
+    message:
+      "Add a `## Purpose` section or a `goat-flow-reference-version` frontmatter field to anchor the reference.",
+  },
+  {
+    metric: "trigger-clarity",
+    match: /missing Availability Check/,
+    message:
+      "Add an `## Availability Check` section showing how to verify the underlying tool is installed (e.g. `command -v <tool>`).",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /missing Step 0 intake/,
+    message:
+      "Add a `## Step 0 - Intake` section that lists the files, modes, and assumptions the skill loads before acting.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /only \d+ sections/,
+    message:
+      "Break the work into at least four `##` sections (Step 0 + Phase 1/2/3 + Verification) so the workflow is reviewable phase-by-phase.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /no CHECKPOINT stops/,
+    message:
+      "Add `CHECKPOINT:` markers between phases to gate human review before continuing.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /missing dispatcher Route Map/,
+    message:
+      "Dispatcher skills need an explicit `## Route Map` table mapping user intents to sibling skills.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /no workflow\/steps section/,
+    message:
+      "Add a `## Workflow` or `### Step N` section so the reference is procedurally usable.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /no troubleshooting\/fallback/,
+    message:
+      "Add a `## Fallback / Troubleshooting` section listing what to do when the documented path fails.",
+  },
+  {
+    metric: "gate-quality",
+    match: /no verification gates or checklists/,
+    message:
+      "Add a `## Verification` section with `- [ ]` checkboxes or a `BLOCKING GATE:` marker for human approval.",
+  },
+  {
+    metric: "gate-quality",
+    match: /no explicit pass\/fail criteria/,
+    message:
+      'State pass/fail criteria explicitly (e.g. "evidence required", "must pass", "exit on green").',
+  },
+  {
+    metric: "gate-quality",
+    match: /no explicit human stop or checkpoint/,
+    message:
+      "Reference the `Proof Gate` from `skill-preamble.md` or add a `BLOCKING GATE: human approves before...` line.",
+  },
+  {
+    metric: "evidence-testability",
+    match: /no evidence quality tags/,
+    message:
+      "Tag findings as `OBSERVED` (cited from a re-read source) or `INFERRED` (derived) so reviewers see what's verified.",
+  },
+  {
+    metric: "evidence-testability",
+    match: /no proof gate/,
+    message:
+      "Apply the Proof Gate from `skill-preamble.md` — every claim must cite a fresh re-read of the source.",
+  },
+  {
+    metric: "evidence-testability",
+    match: /no semantic anchors/,
+    message:
+      'Cite evidence with file + semantic anchor (e.g. `path/file.ts (search: "function-name")`) rather than line numbers, which go stale.',
+  },
+  {
+    metric: "cold-start",
+    match: /no preamble\/conventions loading/,
+    message:
+      "Reference `.goat-flow/skill-reference/skill-preamble.md` early so the skill inherits the Proof Gate and evidence discipline.",
+  },
+  {
+    metric: "cold-start",
+    match: /no Read First or context setup/,
+    message:
+      "Add a `## Read First` section listing files the skill must load before acting.",
+  },
+  {
+    metric: "cold-start",
+    match: /no clear purpose statement/,
+    message:
+      "Open with `## Purpose` or `This reference covers …` so an agent knows when to load it.",
+  },
+  {
+    metric: "cold-start",
+    match: /no prerequisites or availability check/,
+    message:
+      "Document prerequisites or an Availability Check so callers know the preconditions.",
+  },
+  {
+    metric: "token-cost",
+    match: /tokens - very large|tokens - large/,
+    message:
+      "Split content into `references/*.md` so SKILL.md stays under 5k tokens; the skill loads them on-demand.",
+  },
+  {
+    metric: "token-cost",
+    match: /sub-references loaded/,
+    message:
+      "Sub-reference count is high — review whether some can be merged or moved into a shared playbook.",
+  },
+  {
+    metric: "tool-deps",
+    match: /references tools without availability check/,
+    message:
+      "Add an Availability Check (e.g. `command -v <tool>`) before invoking external tools, so the skill fails closed.",
+  },
+  {
+    metric: "tool-deps",
+    match: /no fallback for tool dependencies/,
+    message:
+      "Add a fallback path (manual evidence, alternative tool, or skip) when the external tool is unavailable.",
+  },
+  {
+    metric: "write-risk",
+    match: /no read-only vs write mode system/,
+    message:
+      "Define explicit `Read-Only` and `File-Write` modes; default to read-only and require approval to escalate.",
+  },
+  {
+    metric: "write-risk",
+    match: /no escalation gate for writes/,
+    message:
+      "Require explicit user approval before any file write (e.g. `ask before` or `approval` keyword in the mode-escalation prose).",
+  },
+  {
+    metric: "write-risk",
+    match: /reference mentions file writes/,
+    message:
+      "Either mark the reference as read-only or move write-side procedures into a skill that owns the gates.",
+  },
+  {
+    metric: "skill-reference-fit",
+    match: /weak skill identity/,
+    message:
+      "Strengthen the skill identity — add the frontmatter `name`, `## Step 0`, and `CHECKPOINT` markers so it reads as a skill rather than a doc.",
+  },
+  {
+    metric: "skill-reference-fit",
+    match: /lacks skill structure - may belong/,
+    message:
+      "Consider moving this content under `.goat-flow/skill-reference/` as a playbook; it lacks the structural signals of a skill.",
+  },
+  {
+    metric: "skill-reference-fit",
+    match: /strong reference signals - consider demoting/,
+    message:
+      "Strong reference-shape signals — if this is supposed to be a skill, drop the playbook framing and add Step 0 / phases / gates.",
+  },
+  {
+    metric: "skill-reference-fit",
+    match: /strong skill signals - consider promoting/,
+    message:
+      "This reference reads like a skill. If it has a workflow with gates, scaffold it under `.claude/skills/<name>/SKILL.md` instead.",
+  },
+];
+
+function tipsForMetric(metric: MetricResult): ImprovementTip[] {
+  if (metric.severity === "ok" || metric.severity === "n/a") return [];
+  const matched: ImprovementTip[] = [];
+  for (const rule of TIP_RULES) {
+    if (rule.metric !== metric.metric) continue;
+    if (rule.match.test(metric.detail)) {
+      matched.push({
+        metric: metric.metric,
+        severity: metric.severity,
+        message: rule.message,
+      });
+    }
+  }
+  if (matched.length === 0) {
+    matched.push({
+      metric: metric.metric,
+      severity: metric.severity,
+      message: `${metric.label}: ${metric.detail}`,
+    });
+  }
+  return matched;
+}
+
+function synthesiseImprovementTips(
+  report: SkillQualityReport,
+): ImprovementTip[] {
+  const tips: ImprovementTip[] = [];
+  for (const metric of report.metrics) {
+    tips.push(...tipsForMetric(metric));
+  }
+  return tips;
+}
+
+/**
+ * Score uploaded markdown content (no file IO) and synthesise actionable
+ * improvement tips from the metric breakdown. Used by the dashboard
+ * "Analyse skill" modal and by the CLI's analyse subcommand.
+ */
+export function analyseContent(
+  projectRoot: string,
+  input: AnalyseInput,
+  config: QualityConfig = loadQualityConfig(projectRoot),
+): AnalyseResult {
+  const kind = input.kind ?? inferArtifactKind(input.content);
+  const name = sanitiseUploadName(input.suggestedName);
+  const artifact: ArtifactEntry = {
+    id: `${kind === "skill" ? "skill" : "reference"}:${name}`,
+    name,
+    path:
+      kind === "skill"
+        ? `.claude/skills/${name}/SKILL.md`
+        : `.goat-flow/skill-reference/${name}.md`,
+    kind,
+    source: kind === "skill" ? "installed" : "shared-reference",
+    mirrorPaths: [],
+    missingMirrors: [],
+  };
+  const report = scoreContent(projectRoot, artifact, input.content, config);
+  return { ...report, tips: synthesiseImprovementTips(report) };
+}
+
+interface AnalyseBundleFile {
+  name: string;
+  content: string;
+}
+
+interface AnalyseBundleInput {
+  files: AnalyseBundleFile[];
+  suggestedName?: string;
+  kind?: ArtifactKind;
+}
+
+/**
+ * Score a multi-file uploaded skill bundle (no file IO). Picks a primary file
+ * — `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
+ * — and treats the remaining files as sibling `.md` files appended to the
+ * composed surface. The same composition recipe applies as for on-disk skills:
+ * preamble + conventions are still pulled in if available, and the bundle
+ * surface contributes to gate/evidence/tool-deps scoring. `composedFrom` lists
+ * every input file in drop order, plus preamble/conventions when composed in.
+ */
+// eslint-disable-next-line complexity -- multi-file scoring fans out across primary-file selection, single-file fast path, and the manual compose+score pipeline; each branch represents one distinct case
+export function analyseUploadedBundle(
+  projectRoot: string,
+  input: AnalyseBundleInput,
+  config: QualityConfig = loadQualityConfig(projectRoot),
+): AnalyseResult {
+  const files = input.files;
+  const primaryIndex = Math.max(
+    0,
+    files.findIndex((f) => f.name === "SKILL.md"),
+  );
+  const primary = files[primaryIndex] ?? files[0];
+  if (!primary) {
+    throw new Error("analyseUploadedBundle: files array must be non-empty");
+  }
+  const siblings = files.filter((_, i) => i !== primaryIndex);
+
+  const kind = input.kind ?? inferArtifactKind(primary.content);
+  const name = sanitiseUploadName(
+    input.suggestedName ?? primary.name.replace(/\.(md|markdown)$/i, ""),
+  );
+  const artifact: ArtifactEntry = {
+    id: `${kind === "skill" ? "skill" : "reference"}:${name}`,
+    name,
+    path:
+      kind === "skill"
+        ? `.claude/skills/${name}/SKILL.md`
+        : `.goat-flow/skill-reference/${name}.md`,
+    kind,
+    source: kind === "skill" ? "installed" : "shared-reference",
+    mirrorPaths: [],
+    missingMirrors: [],
+  };
+
+  const baseReport = scoreContent(
+    projectRoot,
+    artifact,
+    primary.content,
+    config,
+  );
+  if (siblings.length === 0) {
+    // Replace the synthetic "SKILL.md"/"<name>.md" entry with the uploaded
+    // filename, but keep the meta order from the engine (preamble/conventions
+    // first, primary last) so it matches the on-disk artifact view.
+    const remappedComposedFrom = baseReport.composedFrom.map((s) =>
+      s === "SKILL.md" || s === `${name}.md` ? primary.name : s,
+    );
+    return {
+      ...baseReport,
+      composedFrom: remappedComposedFrom,
+      tips: synthesiseImprovementTips(baseReport),
+    };
+  }
+
+  // Re-score with the composed surface explicitly extended by sibling files.
+  // We construct the composed content ourselves (rather than relying on the
+  // on-disk composer) and replay the metric pipeline so tool/evidence/gate
+  // signals from sibling files count.
+  const baseCompose = composeArtifactContent(
+    projectRoot,
+    artifact,
+    primary.content,
+    config,
+  );
+  const siblingChunks = siblings.map((f) => f.content);
+  const siblingNames = siblings.map((f) => f.name);
+  const composedFull = [baseCompose.composed, ...siblingChunks].join(
+    "\n\n---\n\n",
+  );
+  const composed =
+    composedFull.length <= config.composition.maxComposedBytes
+      ? composedFull
+      : composedFull.slice(0, config.composition.maxComposedBytes);
+  const truncated = composedFull.length > config.composition.maxComposedBytes;
+
+  const classification = classifyArtifact(artifact, primary.content, config);
+  const subtype = classification.detectedSubtype;
+  const profileMax = profileMaxForSubtype(config, subtype);
+  const metricInput: MetricInput = {
+    rawContent: primary.content,
+    composedContent: composed,
+    artifact,
+    subtype,
+    profileMax,
+    projectRoot,
+    config,
+  };
+  const metrics = ALL_METRICS.map((scorer) => scorer(metricInput));
+  const totalScore = metrics.reduce((sum, m) => sum + m.score, 0);
+  const maxTotalScore = metrics.reduce((sum, m) => sum + m.maxScore, 0);
+  const { recommendation, fitNotes } = deriveRecommendation(
+    artifact,
+    metrics,
+    totalScore,
+    maxTotalScore,
+    classification,
+  );
+
+  // Build composedFrom: meta sources first (preamble/conventions) for visual
+  // grouping, then every uploaded file in drop order.
+  const metaSources = baseCompose.sources.filter(
+    (s) => s !== "SKILL.md" && s !== `${name}.md`,
+  );
+  const composedFrom = [...metaSources, primary.name, ...siblingNames];
+  const notes = truncated
+    ? [
+        `composition truncated at ${Math.round(config.composition.maxComposedBytes / 1024)}KB`,
+      ]
+    : [];
+
+  const report: SkillQualityReport = {
+    artifact,
+    totalScore,
+    maxTotalScore,
+    profileMax,
+    subtype,
+    classification,
+    recommendation,
+    metrics,
+    composedFrom,
+    fitNotes: [...notes, ...fitNotes],
+  };
+  return { ...report, tips: synthesiseImprovementTips(report) };
 }

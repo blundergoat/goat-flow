@@ -9,12 +9,15 @@
  *       workflow/skills/<name>/SKILL.md  vs
  *       .claude/skills/<name>/SKILL.md
  *       .agents/skills/<name>/SKILL.md
- *   - Shared docs (template → installed in .goat-flow/skill-reference/):
+ *   - Shared meta references (template → installed in .goat-flow/skill-reference/):
  *       workflow/skills/reference/README.md                 vs .goat-flow/skill-reference/README.md
  *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-reference/skill-preamble.md
  *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-reference/skill-conventions.md
- *       workflow/skills/reference/browser-use.md            vs .goat-flow/skill-reference/browser-use.md
- *       workflow/skills/reference/skill-quality-testing.md  vs .goat-flow/skill-reference/skill-quality-testing.md
+ *   - Standalone playbooks (template → installed in .goat-flow/skill-playbooks/):
+ *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
+ *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
+ *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
+ *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-playbooks/skill-quality-testing.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
  *     name is not in SKILL_NAMES. Names that appear in manifest.stale_names
  *     are reported as deprecated instead of a plain orphan.
@@ -113,6 +116,7 @@ interface SharedFileSpec {
 }
 
 const SHARED_FILES: SharedFileSpec[] = [
+  // Meta references (composed into every skill)
   {
     template: "workflow/skills/reference/README.md",
     installed: ".goat-flow/skill-reference/README.md",
@@ -125,33 +129,38 @@ const SHARED_FILES: SharedFileSpec[] = [
     template: "workflow/skills/reference/skill-conventions.md",
     installed: ".goat-flow/skill-reference/skill-conventions.md",
   },
+  // Standalone playbooks (loaded on-demand)
   {
-    template: "workflow/skills/reference/browser-use.md",
-    installed: ".goat-flow/skill-reference/browser-use.md",
+    template: "workflow/skills/playbooks/README.md",
+    installed: ".goat-flow/skill-playbooks/README.md",
   },
   {
-    template: "workflow/skills/reference/skill-quality-testing.md",
-    installed: ".goat-flow/skill-reference/skill-quality-testing.md",
+    template: "workflow/skills/playbooks/browser-use.md",
+    installed: ".goat-flow/skill-playbooks/browser-use.md",
+  },
+  {
+    template: "workflow/skills/playbooks/page-capture.md",
+    installed: ".goat-flow/skill-playbooks/page-capture.md",
+  },
+  {
+    template: "workflow/skills/playbooks/skill-quality-testing.md",
+    installed: ".goat-flow/skill-playbooks/skill-quality-testing.md",
   },
   {
     template:
-      "workflow/skills/reference/skill-quality-testing/tdd-iteration.md",
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
     installed:
-      ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
   },
   {
     template:
-      "workflow/skills/reference/skill-quality-testing/adversarial-framing.md",
+      "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
     installed:
-      ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
   },
   {
-    template: "workflow/skills/reference/skill-quality-testing/deployment.md",
-    installed: ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
-  },
-  {
-    template: "workflow/skills/reference/page-capture.md",
-    installed: ".goat-flow/skill-reference/page-capture.md",
+    template: "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+    installed: ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
   },
 ];
 

@@ -143,7 +143,7 @@ last_reviewed: 2026-05-01
 
 **Created:** 2026-04-27
 
-**What happened:** M12 promoted browser-use guidance into the canonical shared reference `.goat-flow/skill-reference/browser-use.md`, but the first implementation kept four per-skill browser-use compatibility files under goat-debug reference directories. The user pointed out that once the shared reference exists, those skill-local copies duplicate doctrine and create another drift surface.
+**What happened:** M12 promoted browser-use guidance into the canonical shared playbook `.goat-flow/skill-playbooks/browser-use.md`, but the first implementation kept four per-skill browser-use compatibility files under goat-debug reference directories. The user pointed out that once the shared playbook exists, those skill-local copies duplicate doctrine and create another drift surface.
 
 **Root cause:** The agent preserved a backward-compatibility shape from the starting point without proving that any installed project still needed the per-skill file. That weakened the shared-reference migration: one canonical reference existed, but stale compatibility files could keep attracting edits or references.
 

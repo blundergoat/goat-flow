@@ -310,7 +310,7 @@ last_reviewed: 2026-05-08
 
 **Root cause:** A `file://` URL is not representative enough for local browser evidence in this agent environment. The browser navigation can succeed while DOM/state capture is empty, which makes a false negative look like a page problem.
 
-**Prevention:** For local HTML/browser-use verification, serve the directory over localhost before opening the page. Treat `file://` empty DOM output as a verification-environment issue to rerun over HTTP before drawing conclusions. Evidence anchors: `workflow/skills/reference/browser-use.md` (search: `Local HTML shows an empty DOM`), `.goat-flow/skill-reference/browser-use.md` (search: `serve the directory over localhost`).
+**Prevention:** For local HTML/browser-use verification, serve the directory over localhost before opening the page. Treat `file://` empty DOM output as a verification-environment issue to rerun over HTTP before drawing conclusions. Evidence anchors: `workflow/skills/playbooks/browser-use.md` (search: `Local HTML shows an empty DOM`), `.goat-flow/skill-playbooks/browser-use.md` (search: `serve the directory over localhost`).
 
 ---
 ## Lesson: Temp cleanup must satisfy destructive-command hooks

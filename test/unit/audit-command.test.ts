@@ -379,7 +379,10 @@ async function writeAuditSetupFixture(
   for (const dir of manifest.required_dirs) {
     if (
       !options.skillReferenceDir &&
-      dir.startsWith(".goat-flow/skill-reference/")
+      (dir.startsWith(".goat-flow/skill-reference/") ||
+        dir.startsWith(".goat-flow/skill-playbooks/") ||
+        dir === ".goat-flow/skill-reference/" ||
+        dir === ".goat-flow/skill-playbooks/")
     ) {
       continue;
     }
@@ -389,7 +392,8 @@ async function writeAuditSetupFixture(
   for (const file of manifest.required_files) {
     if (
       !options.skillReferenceDir &&
-      file.startsWith(".goat-flow/skill-reference/")
+      (file.startsWith(".goat-flow/skill-reference/") ||
+        file.startsWith(".goat-flow/skill-playbooks/"))
     ) {
       continue;
     }

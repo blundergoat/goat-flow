@@ -64,7 +64,7 @@ function writeSkillFiles(root: string, baseDir: string, name: string): void {
 
 function setupFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-drift-"));
-  // Template root layout
+  // Template: meta references stay under workflow/skills/reference/
   mkdirSync(join(root, "workflow", "skills", "reference"), { recursive: true });
   writeFileSync(
     join(root, "workflow", "skills", "reference", "README.md"),
@@ -78,20 +78,26 @@ function setupFixture(): string {
     join(root, "workflow", "skills", "reference", "skill-conventions.md"),
     SHARED_STUB,
   );
+  // Template: standalone playbooks live under workflow/skills/playbooks/
+  mkdirSync(join(root, "workflow", "skills", "playbooks"), { recursive: true });
   writeFileSync(
-    join(root, "workflow", "skills", "reference", "browser-use.md"),
+    join(root, "workflow", "skills", "playbooks", "README.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, "workflow", "skills", "reference", "page-capture.md"),
+    join(root, "workflow", "skills", "playbooks", "browser-use.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, "workflow", "skills", "reference", "skill-quality-testing.md"),
+    join(root, "workflow", "skills", "playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "skill-quality-testing.md"),
     SHARED_STUB,
   );
   mkdirSync(
-    join(root, "workflow", "skills", "reference", "skill-quality-testing"),
+    join(root, "workflow", "skills", "playbooks", "skill-quality-testing"),
     { recursive: true },
   );
   for (const topical of [
@@ -104,7 +110,7 @@ function setupFixture(): string {
         root,
         "workflow",
         "skills",
-        "reference",
+        "playbooks",
         "skill-quality-testing",
         `${topical}.md`,
       ),
@@ -114,12 +120,13 @@ function setupFixture(): string {
   for (const name of SKILL_NAMES) {
     writeSkillFiles(root, join("workflow", "skills"), name);
   }
-  // Project installed copies
+  // Project installed copies of skill files
   for (const agentDir of getInstalledSkillRoots()) {
     for (const name of SKILL_NAMES) {
       writeSkillFiles(root, agentDir, name);
     }
   }
+  // Installed: meta references under .goat-flow/skill-reference/
   mkdirSync(join(root, ".goat-flow", "skill-reference"), { recursive: true });
   writeFileSync(
     join(root, ".goat-flow", "skill-reference", "README.md"),
@@ -133,20 +140,26 @@ function setupFixture(): string {
     join(root, ".goat-flow", "skill-reference", "skill-conventions.md"),
     SHARED_STUB,
   );
+  // Installed: standalone playbooks under .goat-flow/skill-playbooks/
+  mkdirSync(join(root, ".goat-flow", "skill-playbooks"), { recursive: true });
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "browser-use.md"),
+    join(root, ".goat-flow", "skill-playbooks", "README.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "page-capture.md"),
+    join(root, ".goat-flow", "skill-playbooks", "browser-use.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "skill-quality-testing.md"),
+    join(root, ".goat-flow", "skill-playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "skill-quality-testing.md"),
     SHARED_STUB,
   );
   mkdirSync(
-    join(root, ".goat-flow", "skill-reference", "skill-quality-testing"),
+    join(root, ".goat-flow", "skill-playbooks", "skill-quality-testing"),
     { recursive: true },
   );
   for (const topical of [
@@ -158,7 +171,7 @@ function setupFixture(): string {
       join(
         root,
         ".goat-flow",
-        "skill-reference",
+        "skill-playbooks",
         "skill-quality-testing",
         `${topical}.md`,
       ),
@@ -327,7 +340,7 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    assert.equal(report.checked, expectedSkillComparisons + 9);
+    assert.equal(report.checked, expectedSkillComparisons + 10);
   });
 });
 

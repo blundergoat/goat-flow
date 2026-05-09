@@ -354,7 +354,7 @@ describe("preset prompt catalog", () => {
     assert.doesNotMatch(preset.prompt, /Ask me which skill/i);
     assert.match(
       preset.prompt,
-      /\.goat-flow\/skill-reference\/skill-quality-testing\//,
+      /\.goat-flow\/skill-playbooks\/skill-quality-testing\//,
     );
     for (const skill of [
       "goat",

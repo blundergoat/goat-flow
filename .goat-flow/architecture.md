@@ -15,7 +15,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 18 build checks (14 setup scope + 4 agent scope) + 16 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, projects, prompts, quality, settings, setup, skill, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -57,7 +57,7 @@ src/cli/
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.json  # Preset configurations
-  views/              # Page views (about, home, projects, prompts, quality, settings, setup, skill, workspace)
+  views/              # Page views (about, home, projects, prompts, quality, settings, setup, skills, workspace)
 ```
 
 ## Key Constraints
@@ -76,7 +76,7 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instru
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, and the shared reference files at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, `.goat-flow/skill-reference/browser-use.md`, `.goat-flow/skill-reference/page-capture.md`, `.goat-flow/skill-reference/skill-quality-testing.md` (index) plus the topical files `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md`, `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md`, and `.goat-flow/skill-reference/skill-quality-testing/deployment.md` (per ADR-023) | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, the meta references at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, and the standalone playbooks at `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`, `.goat-flow/skill-playbooks/skill-quality-testing.md` (index) plus the topical files `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md`, `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md`, and `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` (per ADR-023) | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `tasks/**`, `scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state. Coordinates a single work session - not project history. |
 | **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, and critique snapshots from goat-critique runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
 

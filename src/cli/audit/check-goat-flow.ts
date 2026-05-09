@@ -3,7 +3,7 @@
  * 14 setup-scope checks that validate project structure:
  *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
  *             decisions, session-logs, tasks, scratchpad)
- * + 1 conditional skill-reference discoverability check
+ * + 1 conditional skill-reference / skill-playbooks discoverability check
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
  */
@@ -48,12 +48,14 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-reference/README.md",
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
-  ".goat-flow/skill-reference/browser-use.md",
-  ".goat-flow/skill-reference/page-capture.md",
-  ".goat-flow/skill-reference/skill-quality-testing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-playbooks/",
+  ".goat-flow/skill-playbooks/README.md",
+  ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/page-capture.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
   ".goat-flow/config.yaml",
 ]);
 
@@ -61,25 +63,29 @@ const NAMED_PATHS = new Set([
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
 const SKILL_REFERENCE_DIR = ".goat-flow/skill-reference";
+const SKILL_PLAYBOOKS_DIR = ".goat-flow/skill-playbooks";
 const READ_RULE_PATTERNS = [
   /Before declaring any tool(?: or capability)? unavailable/i,
-  /\.goat-flow\/skill-reference\//,
+  /\.goat-flow\/skill-(?:reference|playbooks)\//,
   /Availability Check/i,
 ];
 const ROUTER_POINTER_PATTERNS = [
-  /\.goat-flow\/skill-reference\//,
-  /tool playbooks?|skill reference/i,
+  /\.goat-flow\/skill-(?:reference|playbooks)\//,
+  /tool playbooks?|skill reference|skill playbooks?/i,
 ];
 const REQUIRED_SKILL_REFERENCE_FILES = [
+  // Meta references
   ".goat-flow/skill-reference/README.md",
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
-  ".goat-flow/skill-reference/browser-use.md",
-  ".goat-flow/skill-reference/page-capture.md",
-  ".goat-flow/skill-reference/skill-quality-testing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
+  // Standalone playbooks
+  ".goat-flow/skill-playbooks/README.md",
+  ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/page-capture.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
 ];
 
 interface MarkdownHeading {
@@ -422,8 +428,10 @@ const instructionFileSkillReferencePointer: BuildCheck = {
     "workflow/setup/reference/execution-loop.md",
     "workflow/setup/02-instruction-file.md",
     "workflow/skills/reference/README.md",
+    "workflow/skills/playbooks/README.md",
   ]),
-  skip: (ctx) => !ctx.fs.exists(SKILL_REFERENCE_DIR),
+  skip: (ctx) =>
+    !ctx.fs.exists(SKILL_REFERENCE_DIR) && !ctx.fs.exists(SKILL_PLAYBOOKS_DIR),
   /** Run the Instruction file skill-reference pointer check. */
   run: (ctx) => {
     const missingReferenceFiles = REQUIRED_SKILL_REFERENCE_FILES.filter(

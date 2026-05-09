@@ -54,16 +54,18 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
-  // Shared skill doctrine
+  // Shared meta references (composed into every skill)
   ".goat-flow/skill-reference/README.md",
   ".goat-flow/skill-reference/skill-preamble.md",
   ".goat-flow/skill-reference/skill-conventions.md",
-  ".goat-flow/skill-reference/browser-use.md",
-  ".goat-flow/skill-reference/page-capture.md",
-  ".goat-flow/skill-reference/skill-quality-testing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
+  // Standalone playbooks (loaded on-demand by skills/agents)
+  ".goat-flow/skill-playbooks/README.md",
+  ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/page-capture.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
   // Public docs
   "docs/cli.md",
   "docs/skills.md",

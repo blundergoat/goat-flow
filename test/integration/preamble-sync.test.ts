@@ -46,38 +46,38 @@ const INSTALLED_CONVENTIONS = resolve(
 );
 const TEMPLATE_BROWSER_USE = resolve(
   PROJECT_ROOT,
-  "workflow/skills/reference/browser-use.md",
+  "workflow/skills/playbooks/browser-use.md",
 );
 const INSTALLED_BROWSER_USE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/browser-use.md",
+  ".goat-flow/skill-playbooks/browser-use.md",
 );
 const TEMPLATE_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
-  "workflow/skills/reference/page-capture.md",
+  "workflow/skills/playbooks/page-capture.md",
 );
 const INSTALLED_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/page-capture.md",
+  ".goat-flow/skill-playbooks/page-capture.md",
 );
 const TEMPLATE_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
-  "workflow/skills/reference/skill-quality-testing.md",
+  "workflow/skills/playbooks/skill-quality-testing.md",
 );
 const INSTALLED_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/skill-quality-testing.md",
+  ".goat-flow/skill-playbooks/skill-quality-testing.md",
 );
 const TOPICAL_FILES = ["tdd-iteration", "adversarial-framing", "deployment"];
 const TOPICAL_PAIRS = TOPICAL_FILES.map((name) => ({
   name,
   template: resolve(
     PROJECT_ROOT,
-    `workflow/skills/reference/skill-quality-testing/${name}.md`,
+    `workflow/skills/playbooks/skill-quality-testing/${name}.md`,
   ),
   installed: resolve(
     PROJECT_ROOT,
-    `.goat-flow/skill-reference/skill-quality-testing/${name}.md`,
+    `.goat-flow/skill-playbooks/skill-quality-testing/${name}.md`,
   ),
 }));
 

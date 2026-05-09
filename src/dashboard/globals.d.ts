@@ -415,19 +415,14 @@ interface SkillQualityReport {
   prompt?: string;
 }
 
-type SkillCandidacyArtifact =
-  | { type: "skill"; subtype: string }
-  | { type: "reference"; subtype: string }
-  | { type: "instruction-file"; reason: string }
-  | { type: "learning-loop"; subtype: string }
-  | { type: "cli-command" }
-  | { type: "do-not-create"; reason: string };
+interface SkillAnalyseTip {
+  metric: string;
+  severity: SkillQualityMetricSeverity;
+  message: string;
+}
 
-interface SkillCandidacyResult {
-  recommendedArtifact: SkillCandidacyArtifact;
-  confidence: number;
-  reasoning: string[];
-  nextSteps: { action: string; template?: string }[];
+interface SkillAnalyseResult extends SkillQualityReport {
+  tips: SkillAnalyseTip[];
 }
 
 /** One selectable quality-page prompt mode. */

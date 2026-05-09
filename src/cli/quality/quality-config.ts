@@ -178,6 +178,7 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
     ],
     references: [
       { dir: ".goat-flow/skill-reference", source: "shared-reference" },
+      { dir: ".goat-flow/skill-playbooks", source: "shared-reference" },
     ],
   },
   composition: {

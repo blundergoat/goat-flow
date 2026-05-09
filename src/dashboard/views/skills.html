@@ -21,17 +21,16 @@
           Skills
         </div>
         <div class="gf-text-muted" style="font-size: 13px">
-          Per-artifact deterministic structural metrics for skills and shared
-          references. Subtype profiles adjust the applicable metrics for
-          workflow, dispatcher, report, playbook, index, and meta artifacts.
+          Deterministic structural metrics for the selected runner's installed
+          skills.
         </div>
       </div>
       <button
-        @click="openSkillAuthor()"
+        @click="openSkillAnalyser()"
         class="gf-btn gf-btn-primary"
         style="padding: 6px 12px; font-size: 12px; font-weight: 600"
       >
-        + Create new skill
+        Analyse skill
       </button>
     </div>
 
@@ -54,7 +53,7 @@
           align-items: start;
         "
       >
-        <!-- Artifact list -->
+          <!-- Skill list -->
         <div
           style="
             border-right: 1px solid var(--border-subtle);
@@ -68,7 +67,7 @@
               class="gf-text-muted"
               style="padding: 8px 0; font-size: 11px; text-align: center"
             >
-              No artifacts discovered.
+              No skills discovered.
             </div>
           </template>
 
@@ -91,49 +90,6 @@
               </div>
               <template
                 x-for="art in skillQualityArtifacts.filter(a => a.kind === 'skill')"
-                :key="'sq-' + art.id"
-              >
-                <button
-                  @click="loadSkillQualityReport(art.id)"
-                  style="
-                    display: block;
-                    width: 100%;
-                    text-align: left;
-                    padding: 4px 8px;
-                    border: none;
-                    background: none;
-                    cursor: pointer;
-                    font-size: 12px;
-                    font-family: inherit;
-                    border-radius: 4px;
-                  "
-                  :style="skillQualitySelectedId === art.id ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : { color: 'var(--text-primary)' }"
-                >
-                  <span x-text="art.name"></span>
-                </button>
-              </template>
-            </div>
-          </template>
-
-          <!-- References group -->
-          <template
-            x-if="skillQualityArtifacts.filter(a => a.kind === 'shared-reference').length > 0"
-          >
-            <div style="margin-top: 6px">
-              <div
-                class="gf-text-muted"
-                style="
-                  font-size: 9px;
-                  font-weight: 600;
-                  padding: 2px 0;
-                  text-transform: uppercase;
-                  letter-spacing: 0.05em;
-                "
-              >
-                References
-              </div>
-              <template
-                x-for="art in skillQualityArtifacts.filter(a => a.kind === 'shared-reference')"
                 :key="'sq-' + art.id"
               >
                 <button
@@ -203,7 +159,7 @@
               class="gf-text-muted"
               style="padding: 20px 0; font-size: 12px; text-align: center"
             >
-              Select an artifact to view its quality metrics.
+              Select a skill to view its quality metrics.
             </div>
           </template>
 
@@ -258,14 +214,6 @@
                   x-text="skillQualityReport.totalScore + '/' + skillQualityReport.maxTotalScore"
                 ></span>
               </div>
-
-              <template x-if="skillQualityReport.composedFrom.length > 0">
-                <div
-                  class="gf-text-muted"
-                  style="font-size: 10px"
-                  x-text="'Composed from: ' + skillQualityReport.composedFrom.join(', ')"
-                ></div>
-              </template>
 
               <!-- Classification card: subtype confidence + alternatives -->
               <div
@@ -453,6 +401,73 @@
                 style="font-size: 10px"
                 x-text="skillQualityReport.artifact.path"
               ></div>
+
+              <!-- Composed-from list — every file the engine pulled into the
+                   scored surface. Labelled by file role so the bundle is
+                   visible (preamble + conventions + the artifact + sibling
+                   references/*.md or top-level .md files). Lives at the end
+                   of the artifact view so the score and metric breakdown
+                   stay above the fold. -->
+              <template x-if="skillQualityReport.composedFrom.length > 0">
+                <div
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    margin-top: 8px;
+                    padding: 6px 8px;
+                    background: var(--surface-page);
+                    border: 1px solid var(--border-subtle);
+                    border-radius: 4px;
+                  "
+                >
+                  <div
+                    class="gf-text-muted"
+                    style="
+                      font-size: 10px;
+                      text-transform: uppercase;
+                      letter-spacing: 0.05em;
+                      font-weight: 600;
+                    "
+                  >
+                    Composed from
+                    <span
+                      x-text="'(' + skillQualityReport.composedFrom.length + ' file' + (skillQualityReport.composedFrom.length === 1 ? '' : 's') + ')'"
+                    ></span>
+                  </div>
+                  <template
+                    x-for="src in skillQualityReport.composedFrom"
+                    :key="src"
+                  >
+                    <div
+                      style="
+                        display: flex;
+                        gap: 6px;
+                        align-items: center;
+                        font-family: ui-monospace, monospace;
+                        font-size: 11px;
+                      "
+                    >
+                      <span
+                        x-text="src === 'skill-preamble.md' ? 'preamble' : src === 'skill-conventions.md' ? 'conventions' : src === 'SKILL.md' ? 'skill' : src.startsWith('references/') ? 'reference' : 'file'"
+                        style="
+                          font-size: 9px;
+                          font-family: inherit;
+                          text-transform: uppercase;
+                          letter-spacing: 0.05em;
+                          padding: 1px 5px;
+                          border: 1px solid var(--border-subtle);
+                          border-radius: 3px;
+                          color: var(--text-muted);
+                          min-width: 64px;
+                          text-align: center;
+                        "
+                      ></span>
+                      <span x-text="src"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
             </div>
           </template>
         </div>
@@ -474,285 +489,494 @@
     </div>
   </div>
 
-  <!-- ═══ Create new skill modal ═══ -->
-  <template x-if="skillAuthorOpen">
+  <!-- ═══ Analyse skill modal ═══ -->
+  <!-- x-teleport lifts the modal to <body> so it isn't trapped by an ancestor
+       containing block (Tailwind utility classes on <html> can do this).
+       x-show on the teleported div lets Alpine toggle display: none / restore
+       the CSS-defined display: flex from `.gf-modal-overlay`. -->
+  <template x-teleport="body">
     <div
-      @keydown.escape.window="closeSkillAuthor()"
+      x-show="skillAnalyserOpen"
+      x-cloak
+      @keydown.escape.window="closeSkillAnalyser()"
       class="gf-modal-overlay"
-      @click.self="closeSkillAuthor()"
-    >
-    <div
-      class="gf-card"
-      style="
-        width: 720px;
-        max-width: calc(100vw - 32px);
-        max-height: calc(100vh - 64px);
-        overflow-y: auto;
-        padding: 20px 24px;
-        background: var(--bg-elevated);
-      "
+      @click.self="closeSkillAnalyser()"
     >
       <div
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        "
+        class="gf-modal-card"
+        @dragover="skillAnalyserDragOver($event)"
+        @dragleave="skillAnalyserDragLeave($event)"
+        @drop="skillAnalyserDrop($event)"
+        :class="{ 'gf-modal-card-dragover': skillAnalyserDragActive }"
       >
-        <div class="gf-text-primary" style="font-size: 16px; font-weight: 600">
-          Create new skill
-        </div>
-        <button
-          @click="closeSkillAuthor()"
-          class="gf-text-muted"
-          style="
-            background: none;
-            border: none;
-            font-size: 18px;
-            cursor: pointer;
-            color: var(--text-muted);
-          "
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </div>
-      <div class="gf-text-muted" style="font-size: 12px; margin-bottom: 12px">
-        Describe the skill you want to create or paste a draft. The candidacy
-        check routes the input to the right artifact type before scaffolding.
-      </div>
-
-      <!-- Tab switcher -->
-      <div
-        style="
-          display: flex;
-          gap: 4px;
-          border-bottom: 1px solid var(--border-subtle);
-          margin-bottom: 12px;
-        "
-      >
-        <button
-          @click="skillAuthorTab = 'description'"
-          :style="{
-            padding: '6px 12px',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            color: skillAuthorTab === 'description' ? 'var(--accent)' : 'var(--text-muted)',
-            borderBottom: skillAuthorTab === 'description' ? '2px solid var(--accent)' : '2px solid transparent',
-            fontWeight: 600,
-            fontSize: '12px',
-          }"
-        >
-          From description
-        </button>
-        <button
-          @click="skillAuthorTab = 'draft'"
-          :style="{
-            padding: '6px 12px',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            color: skillAuthorTab === 'draft' ? 'var(--accent)' : 'var(--text-muted)',
-            borderBottom: skillAuthorTab === 'draft' ? '2px solid var(--accent)' : '2px solid transparent',
-            fontWeight: 600,
-            fontSize: '12px',
-          }"
-        >
-          From draft
-        </button>
-      </div>
-
-      <!-- Description tab -->
-      <template x-if="skillAuthorTab === 'description'">
-        <div style="display: flex; flex-direction: column; gap: 8px">
-          <label
-            class="gf-text-secondary"
-            style="font-size: 11px; font-weight: 600"
-          >
-            What should this skill do?
-          </label>
-          <textarea
-            x-model="skillAuthorDescription"
-            placeholder="I want a workflow that …"
-            rows="4"
-            style="
-              width: 100%;
-              padding: 8px 10px;
-              font-size: 12px;
-              background: var(--bg-input);
-              color: var(--text-primary);
-              border: 1px solid var(--border-subtle);
-              border-radius: 4px;
-              font-family: inherit;
-              resize: vertical;
-            "
-          ></textarea>
-        </div>
-      </template>
-
-      <!-- Draft tab -->
-      <template x-if="skillAuthorTab === 'draft'">
-        <div style="display: flex; flex-direction: column; gap: 8px">
-          <label
-            class="gf-text-secondary"
-            style="font-size: 11px; font-weight: 600"
-          >
-            Paste your markdown draft
-          </label>
-          <textarea
-            x-model="skillAuthorDraft"
-            placeholder="---&#10;name: my-skill&#10;…"
-            rows="10"
-            style="
-              width: 100%;
-              padding: 8px 10px;
-              font-size: 11px;
-              background: var(--bg-input);
-              color: var(--text-primary);
-              border: 1px solid var(--border-subtle);
-              border-radius: 4px;
-              font-family: ui-monospace, monospace;
-              resize: vertical;
-            "
-          ></textarea>
-        </div>
-      </template>
-
-      <div style="display: flex; gap: 12px; margin-top: 12px">
-        <button
-          @click="runSkillAuthorCandidacy()"
-          :disabled="skillAuthorLoading"
-          class="gf-btn gf-btn-primary"
-          style="padding: 6px 14px; font-size: 12px; font-weight: 600"
-        >
-          <span x-show="!skillAuthorLoading">Run candidacy check</span>
-          <span x-show="skillAuthorLoading">Checking…</span>
-        </button>
-      </div>
-
-      <!-- Candidacy result -->
-      <template x-if="skillAuthorResult">
         <div
           style="
-            margin-top: 16px;
-            padding: 12px;
-            border: 1px solid var(--border-subtle);
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.02);
             display: flex;
-            flex-direction: column;
-            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
           "
         >
-          <div style="display: flex; align-items: center; gap: 8px">
-            <span
-              class="gf-text-primary"
-              style="font-weight: 600; font-size: 13px"
-              x-text="skillAuthorResultLabel"
-            ></span>
-            <span
-              class="gf-text-muted"
-              style="font-size: 11px"
-              x-text="`(${Math.round(skillAuthorResult.confidence * 100)}% confidence)`"
-            ></span>
+          <div
+            class="gf-text-primary"
+            style="font-size: 16px; font-weight: 600"
+          >
+            Analyse skill
           </div>
-          <div class="gf-text-muted" style="font-size: 11px; line-height: 1.5">
-            <strong>Reasoning:</strong>
-            <ul style="margin: 4px 0; padding-left: 18px">
-              <template x-for="r in skillAuthorResult.reasoning" :key="r">
-                <li x-text="r"></li>
-              </template>
-            </ul>
-          </div>
-          <div class="gf-text-muted" style="font-size: 11px; line-height: 1.5">
-            <strong>Next steps:</strong>
-            <ul style="margin: 4px 0; padding-left: 18px">
-              <template
-                x-for="s in skillAuthorResult.nextSteps"
-                :key="s.action"
-              >
-                <li x-text="s.action"></li>
-              </template>
-            </ul>
-          </div>
+          <button
+            @click="closeSkillAnalyser()"
+            style="
+              background: none;
+              border: none;
+              font-size: 18px;
+              cursor: pointer;
+              color: var(--text-muted);
+              padding: 0 4px;
+            "
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="gf-text-muted" style="font-size: 12px; margin-bottom: 12px">
+          Score a skill or shared reference against the deterministic rubric and
+          surface improvement tips. Drop one or more <code>.md</code> files
+          anywhere on this modal to analyse a bundled skill (e.g.
+          <code>SKILL.md</code> + <code>workflow.md</code> +
+          <code>template.md</code>); the engine composes the files into one
+          scored surface. Or paste markdown into the textarea for a single
+          draft.
+        </div>
 
-          <!-- Scaffold action (only for skill / playbook recommendations) -->
-          <template x-if="skillAuthorScaffoldable">
+        <!-- Drag-and-drop hint zone (visible cue when dragging files over) -->
+        <div
+          x-show="skillAnalyserDragActive"
+          x-cloak
+          class="gf-text-primary"
+          style="
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent-bg);
+            border: 2px dashed var(--accent);
+            border-radius: 8px;
+            z-index: 10;
+            font-weight: 600;
+            font-size: 14px;
+            pointer-events: none;
+          "
+        >
+          Drop .md files to add to the bundle
+        </div>
+
+        <!-- File picker (multi-select) + name input -->
+        <div
+          style="
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+          "
+        >
+          <label
+            class="gf-btn"
+            style="
+              padding: 6px 10px;
+              font-size: 11px;
+              font-weight: 600;
+              cursor: pointer;
+              border: 1px solid var(--border-default);
+              border-radius: 4px;
+              color: var(--text-secondary);
+            "
+          >
+            <input
+              type="file"
+              accept=".md,.markdown,text/markdown,text/plain"
+              multiple
+              @change="loadSkillAnalyserFile($event)"
+              style="display: none"
+            />
+            Upload .md (multi-select)
+          </label>
+          <input
+            x-model="skillAnalyserName"
+            placeholder="bundle display name (optional)"
+            class="gf-modal-input"
+            style="flex: 1"
+          />
+        </div>
+
+        <!-- Attached files list — visible only when one or more files have
+             been dropped/uploaded. Each row shows the file name and a remove
+             (×) button. Order is preserved (drop order = composition order). -->
+        <template x-if="skillAnalyserFiles.length > 0">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+              margin-bottom: 10px;
+              padding: 6px 8px;
+              background: var(--surface-page);
+              border: 1px solid var(--border-subtle);
+              border-radius: 4px;
+            "
+          >
+            <div
+              class="gf-text-muted"
+              style="
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-weight: 600;
+              "
+            >
+              Attached files
+              <span x-text="'(' + skillAnalyserFiles.length + ')'"></span>
+            </div>
+            <template x-for="file in skillAnalyserFiles" :key="file.name">
+              <div
+                style="
+                  display: flex;
+                  gap: 6px;
+                  align-items: center;
+                  font-family: ui-monospace, monospace;
+                  font-size: 11px;
+                "
+              >
+                <span style="color: var(--text-muted)">📄</span>
+                <span x-text="file.name" style="flex: 1"></span>
+                <button
+                  @click="removeSkillAnalyserFile(file.name)"
+                  class="gf-text-muted"
+                  style="
+                    background: none;
+                    border: none;
+                    font-size: 14px;
+                    cursor: pointer;
+                    padding: 0 4px;
+                  "
+                  aria-label="Remove file"
+                  title="Remove this file from the bundle"
+                >
+                  ×
+                </button>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Markdown content textarea -->
+        <label
+          class="gf-text-secondary"
+          style="font-size: 11px; font-weight: 600; margin-top: 4px"
+        >
+          Markdown content
+        </label>
+        <textarea
+          x-model="skillAnalyserContent"
+          placeholder='---&#10;name: my-skill&#10;description: "…"&#10;goat-flow-skill-version: "1.5.1"&#10;---&#10;&#10;# /my-skill&#10;…'
+          rows="14"
+          class="gf-modal-input"
+          style="
+            margin-top: 6px;
+            font-family: ui-monospace, monospace;
+            font-size: 11px;
+            resize: vertical;
+          "
+        ></textarea>
+
+        <div style="display: flex; gap: 12px; margin-top: 12px">
+          <button
+            @click="runSkillAnalyser()"
+            :disabled="skillAnalyserLoading || (skillAnalyserFiles.length === 0 && !skillAnalyserContent.trim())"
+            class="gf-btn gf-btn-primary"
+            style="padding: 6px 14px; font-size: 12px; font-weight: 600"
+          >
+            <span x-show="!skillAnalyserLoading">Analyse</span>
+            <span x-show="skillAnalyserLoading">Scoring…</span>
+          </button>
+          <button
+            @click="clearSkillAnalyserResult()"
+            x-show="skillAnalyserResult"
+            class="gf-btn"
+            style="
+              padding: 6px 14px;
+              font-size: 12px;
+              border: 1px solid var(--border-default);
+              border-radius: 4px;
+              color: var(--text-secondary);
+              background: none;
+            "
+          >
+            Clear
+          </button>
+        </div>
+
+        <!-- Error display -->
+        <template x-if="skillAnalyserError">
+          <div class="gf-modal-error" x-text="skillAnalyserError"></div>
+        </template>
+
+        <!-- Result -->
+        <template x-if="skillAnalyserResult">
+          <div class="gf-modal-result">
+            <!-- Header: name + subtype + recommendation + score -->
             <div
               style="
                 display: flex;
-                gap: 8px;
                 align-items: center;
+                justify-content: space-between;
+              "
+            >
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span
+                  class="gf-text-primary"
+                  style="font-size: 14px; font-weight: 600"
+                  x-text="skillAnalyserResult.artifact.name"
+                ></span>
+                <span
+                  class="gf-text-muted"
+                  style="
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 1px 5px;
+                    border-radius: 3px;
+                    border: 1px solid var(--border-subtle);
+                    text-transform: uppercase;
+                    letter-spacing: 0.02em;
+                  "
+                  x-text="skillAnalyserResult.subtype"
+                ></span>
+                <span
+                  class="gf-modal-rec-badge"
+                  :data-rec="skillAnalyserResult.recommendation"
+                  x-text="skillAnalyserResult.recommendation"
+                ></span>
+              </div>
+              <span
+                style="font-size: 13px; font-weight: 700"
+                :style="{ color: skillAnalyserResult.totalScore / skillAnalyserResult.profileMax >= 0.7 ? 'var(--status-pass)' : skillAnalyserResult.totalScore / skillAnalyserResult.profileMax >= 0.5 ? 'var(--status-waiting)' : 'var(--status-danger)' }"
+                x-text="skillAnalyserResult.totalScore + '/' + skillAnalyserResult.profileMax"
+              ></span>
+            </div>
+
+            <!-- Classification -->
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 11px;
+              "
+            >
+              <span class="gf-text-muted" style="font-weight: 600"
+                >Classification:</span
+              >
+              <span
+                :style="{ color: skillAnalyserResult.classification.confidence >= 0.7 ? 'var(--status-pass)' : 'var(--status-waiting)' }"
+                x-text="Math.round(skillAnalyserResult.classification.confidence * 100) + '% ' + skillAnalyserResult.classification.detectedSubtype"
+              ></span>
+              <template
+                x-if="skillAnalyserResult.classification.alternatives.length > 0"
+              >
+                <span class="gf-text-muted">
+                  (also:
+                  <span
+                    x-text="skillAnalyserResult.classification.alternatives.map(a => a.subtype + '=' + a.score).join(', ')"
+                  ></span
+                  >)
+                </span>
+              </template>
+            </div>
+
+            <!-- Metric bars -->
+            <div
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
                 margin-top: 4px;
               "
             >
-              <input
-                x-model="skillAuthorName"
-                placeholder="kebab-case-name"
+              <template
+                x-for="m in skillAnalyserResult.metrics"
+                :key="'sam-' + m.metric"
+              >
+                <div style="display: flex; align-items: center; gap: 6px">
+                  <span
+                    class="gf-text-muted"
+                    style="
+                      font-size: 10px;
+                      width: 140px;
+                      flex-shrink: 0;
+                      text-align: right;
+                    "
+                    x-text="m.label"
+                  ></span>
+                  <div
+                    style="
+                      flex: 1;
+                      height: 6px;
+                      background: var(--neutral-bg);
+                      border-radius: 3px;
+                      overflow: hidden;
+                    "
+                  >
+                    <div
+                      :style="{
+                        width: m.maxScore === 0 ? '0%' : (m.score / m.maxScore * 100) + '%',
+                        height: '100%',
+                        background: m.severity === 'ok' ? 'var(--status-pass)' : m.severity === 'warn' ? 'var(--status-waiting)' : m.severity === 'fail' ? 'var(--status-danger)' : 'var(--text-disabled)',
+                      }"
+                    ></div>
+                  </div>
+                  <span
+                    style="
+                      font-size: 10px;
+                      width: 50px;
+                      text-align: right;
+                      flex-shrink: 0;
+                    "
+                    :style="{ color: m.severity === 'ok' ? 'var(--status-pass)' : m.severity === 'warn' ? 'var(--status-waiting)' : m.severity === 'fail' ? 'var(--status-danger)' : 'var(--text-disabled)' }"
+                    x-text="m.severity === 'n/a' ? 'n/a' : (m.score + '/' + m.maxScore)"
+                  ></span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Improvement tips -->
+            <template x-if="skillAnalyserResult.tips.length > 0">
+              <div style="margin-top: 8px">
+                <div
+                  class="gf-text-secondary"
+                  style="font-size: 12px; font-weight: 600; margin-bottom: 6px"
+                >
+                  Improvement tips
+                </div>
+                <ul
+                  style="
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                  "
+                >
+                  <template
+                    x-for="(tip, idx) in skillAnalyserResult.tips"
+                    :key="'tip-' + idx"
+                  >
+                    <li
+                      style="
+                        font-size: 11px;
+                        line-height: 1.5;
+                        padding: 6px 10px;
+                        border-radius: 4px;
+                        border: 1px solid var(--border-subtle);
+                      "
+                      :style="{
+                        borderLeft: '3px solid ' + (tip.severity === 'fail' ? 'var(--status-danger)' : tip.severity === 'warn' ? 'var(--status-waiting)' : 'var(--text-disabled)'),
+                      }"
+                    >
+                      <span
+                        class="gf-text-muted"
+                        style="font-weight: 600; margin-right: 6px"
+                        x-text="`[${tip.metric}]`"
+                      ></span>
+                      <span class="gf-text-primary" x-text="tip.message"></span>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+            </template>
+
+            <!-- Fit notes -->
+            <template x-if="skillAnalyserResult.fitNotes.length > 0">
+              <div style="margin-top: 4px">
+                <template
+                  x-for="note in skillAnalyserResult.fitNotes"
+                  :key="note"
+                >
+                  <div
+                    class="gf-text-muted"
+                    style="font-size: 11px"
+                    x-text="note"
+                  ></div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Composed-from list — shows every file the engine pulled into
+                 the scored surface (preamble, conventions, the artifact itself,
+                 and any sibling references/*.md). Lives at the end so the
+                 score and metric breakdown stay above the fold. -->
+            <template x-if="skillAnalyserResult.composedFrom.length > 0">
+              <div
                 style="
-                  flex: 1;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 2px;
+                  margin-top: 8px;
                   padding: 6px 8px;
-                  font-size: 12px;
-                  background: var(--bg-input);
-                  color: var(--text-primary);
+                  background: var(--surface-page);
                   border: 1px solid var(--border-subtle);
                   border-radius: 4px;
-                  font-family: ui-monospace, monospace;
                 "
-              />
-              <button
-                @click="scaffoldFromCandidacy()"
-                :disabled="skillAuthorLoading || !skillAuthorName"
-                class="gf-btn gf-btn-primary"
-                style="padding: 6px 14px; font-size: 12px; font-weight: 600"
               >
-                Scaffold and write
-              </button>
-            </div>
-          </template>
-        </div>
-      </template>
-
-      <!-- Scaffold confirmation -->
-      <template x-if="skillAuthorScaffoldOutput">
-        <div
-          style="
-            margin-top: 12px;
-            padding: 10px 12px;
-            background: rgba(34, 197, 94, 0.1);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            border-radius: 4px;
-            font-size: 11px;
-            color: #22c55e;
-          "
-        >
-          <strong>Wrote:</strong>
-          <code x-text="skillAuthorScaffoldOutput.path"></code>
-          <template x-if="skillAuthorScaffoldOutput.score">
-            <span
-              x-text="` (initial score ${skillAuthorScaffoldOutput.score.totalScore}/${skillAuthorScaffoldOutput.score.profileMax})`"
-            ></span>
-          </template>
-        </div>
-      </template>
-
-      <!-- Error display -->
-      <template x-if="skillAuthorError">
-        <div
-          style="
-            margin-top: 12px;
-            padding: 10px 12px;
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 4px;
-            font-size: 11px;
-            color: #ef4444;
-          "
-          x-text="skillAuthorError"
-        ></div>
-      </template>
+                <div
+                  class="gf-text-muted"
+                  style="
+                    font-size: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    font-weight: 600;
+                  "
+                >
+                  Composed from
+                  <span
+                    x-text="'(' + skillAnalyserResult.composedFrom.length + ' file' + (skillAnalyserResult.composedFrom.length === 1 ? '' : 's') + ')'"
+                  ></span>
+                </div>
+                <template
+                  x-for="src in skillAnalyserResult.composedFrom"
+                  :key="src"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      gap: 6px;
+                      align-items: center;
+                      font-family: ui-monospace, monospace;
+                      font-size: 11px;
+                    "
+                  >
+                    <span
+                      x-text="src === 'skill-preamble.md' ? 'preamble' : src === 'skill-conventions.md' ? 'conventions' : src === 'SKILL.md' ? 'skill' : src.startsWith('references/') ? 'reference' : 'file'"
+                      style="
+                        font-size: 9px;
+                        font-family: inherit;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        padding: 1px 5px;
+                        border: 1px solid var(--border-subtle);
+                        border-radius: 3px;
+                        color: var(--text-muted);
+                        min-width: 64px;
+                        text-align: center;
+                      "
+                    ></span>
+                    <span x-text="src"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </div>
   </template>

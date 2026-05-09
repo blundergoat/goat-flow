@@ -36,12 +36,16 @@ import type { DashboardReport } from "./types.js";
 import type { QualityMode } from "../quality/schema.js";
 import { QUALITY_MODES } from "../quality/schema.js";
 import {
+  analyseContent,
+  analyseUploadedBundle,
   discoverArtifacts,
   findArtifact,
   scoreArtifact,
 } from "../quality/skill-quality.js";
-import { runCandidacyCheck } from "../quality/candidacy.js";
-import { runSkillNew } from "../skill-author.js";
+import {
+  loadQualityConfig,
+  type ArtifactSource,
+} from "../quality/quality-config.js";
 import { composeArtifactQualityPrompt } from "../prompt/compose-quality.js";
 import { buildStatsReport, checkStats } from "../stats/stats.js";
 
@@ -790,12 +794,7 @@ export function createDashboardRouteHandlers(
     url: URL,
     res: ServerResponse,
   ) => boolean;
-  handleQualityCandidacyRequest: (
-    req: IncomingMessage,
-    url: URL,
-    res: ServerResponse,
-  ) => Promise<boolean>;
-  handleQualityScaffoldRequest: (
+  handleQualityAnalyseRequest: (
     req: IncomingMessage,
     url: URL,
     res: ServerResponse,
@@ -993,6 +992,38 @@ export function createDashboardRouteHandlers(
 
   function parseAgentFilter(param: string | null): AgentId | null {
     return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
+  }
+
+  function parseRequiredAgentParam(
+    param: string | null,
+    routeName: string,
+    res: ServerResponse,
+  ): AgentId | null {
+    if (!param || !VALID_AGENTS.has(param)) {
+      jsonResponse(res, 400, {
+        error: `${routeName} requires agent. Valid: ${KNOWN_AGENT_LIST}`,
+      });
+      return null;
+    }
+    return param as AgentId;
+  }
+
+  function skillSourceForDir(dir: string): ArtifactSource {
+    if (dir === ".agents/skills") return "agent-mirror";
+    if (dir === ".github/skills") return "github-mirror";
+    return "installed";
+  }
+
+  function runnerSkillQualityConfig(projectPath: string, agent: AgentId) {
+    const base = loadQualityConfig(projectPath);
+    const skillsDir = AGENT_PROFILE_MAP[agent].skillsDir;
+    return {
+      ...base,
+      walkRoots: {
+        skills: [{ dir: skillsDir, source: skillSourceForDir(skillsDir) }],
+        references: [],
+      },
+    };
   }
 
   /**
@@ -1331,9 +1362,18 @@ export function createDashboardRouteHandlers(
     if (url.pathname !== "/api/skill-quality/inventory") return false;
 
     const projectPath = safeResolvePath(url.searchParams.get("path"));
+    const agent = parseRequiredAgentParam(
+      url.searchParams.get("agent"),
+      "skill-quality inventory",
+      res,
+    );
+    if (!agent) return true;
     try {
       requireProjectDirectory(projectPath);
-      const artifacts = discoverArtifacts(projectPath);
+      const artifacts = discoverArtifacts(
+        projectPath,
+        runnerSkillQualityConfig(projectPath, agent),
+      );
       jsonResponse(res, 200, { artifacts });
     } catch (err) {
       jsonResponse(res, 500, {
@@ -1348,6 +1388,12 @@ export function createDashboardRouteHandlers(
     if (url.pathname !== "/api/skill-quality") return false;
 
     const projectPath = safeResolvePath(url.searchParams.get("path"));
+    const agent = parseRequiredAgentParam(
+      url.searchParams.get("agent"),
+      "skill-quality",
+      res,
+    );
+    if (!agent) return true;
     const artifactId = url.searchParams.get("artifact");
 
     if (!artifactId) {
@@ -1359,14 +1405,15 @@ export function createDashboardRouteHandlers(
 
     try {
       requireProjectDirectory(projectPath);
-      const artifact = findArtifact(projectPath, artifactId);
+      const config = runnerSkillQualityConfig(projectPath, agent);
+      const artifact = findArtifact(projectPath, artifactId, config);
       if (!artifact) {
         jsonResponse(res, 404, {
           error: `artifact not found: ${artifactId}`,
         });
         return true;
       }
-      const report = scoreArtifact(projectPath, artifact);
+      const report = scoreArtifact(projectPath, artifact, config);
       const prompt = composeArtifactQualityPrompt(report);
       jsonResponse(res, 200, { ...report, prompt });
     } catch (err) {
@@ -1377,91 +1424,50 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** POST /api/quality/candidacy — run the candidacy check on a draft or description. */
-  async function handleQualityCandidacyRequest(
+  /** POST /api/quality/analyse — score uploaded markdown and return tips.
+   *
+   * Body: { content: string, suggestedName?: string, kind?: "skill" | "shared-reference" }.
+   * Returns the full SkillQualityReport plus an `tips` array with actionable
+   * improvement suggestions derived from failing/warning metrics.
+   *
+   * Read-only — does not write any file. The "side-effectful" classification
+   * is conservative: even though no IO happens, the endpoint is POST so the
+   * Origin check applies, and the body cap keeps the engine from being abused
+   * as a CPU sink. */
+  async function handleQualityAnalyseRequest(
     req: IncomingMessage,
     url: URL,
     res: ServerResponse,
   ): Promise<boolean> {
-    if (url.pathname !== "/api/quality/candidacy") return false;
+    if (url.pathname !== "/api/quality/analyse") return false;
     if (req.method !== "POST") {
       jsonResponse(res, 405, { error: "Method not allowed" });
       return true;
     }
     const body = await readBody(req);
-    const { decodeCandidacyBody } = await import("./decoders.js");
-    const decoded = decodeCandidacyBody(body);
+    const { decodeAnalyseBody } = await import("./decoders.js");
+    const decoded = decodeAnalyseBody(body);
     if (!decoded.ok) {
       jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
       return true;
     }
     try {
-      let result;
-      if (decoded.value.kind === "description") {
-        const text = decoded.value.text ?? "";
-        result = runCandidacyCheck({ kind: "description", text });
-      } else {
-        const content = decoded.value.content ?? "";
-        result = runCandidacyCheck({
-          kind: "draft",
-          content,
-          suggestedName: decoded.value.suggestedName,
-        });
-      }
-      jsonResponse(res, 200, result);
-    } catch (err) {
-      jsonResponse(res, 500, {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    return true;
-  }
-
-  /** POST /api/quality/scaffold — write a scaffolded skill or playbook. */
-  async function handleQualityScaffoldRequest(
-    req: IncomingMessage,
-    url: URL,
-    res: ServerResponse,
-  ): Promise<boolean> {
-    if (url.pathname !== "/api/quality/scaffold") return false;
-    if (req.method !== "POST") {
-      jsonResponse(res, 405, { error: "Method not allowed" });
-      return true;
-    }
-    const body = await readBody(req);
-    const { decodeScaffoldBody } = await import("./decoders.js");
-    const decoded = decodeScaffoldBody(body);
-    if (!decoded.ok) {
-      jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
-      return true;
-    }
-    try {
-      const projectPath = safeResolvePath(decoded.value.projectPath);
+      const projectPath = safeResolvePath(
+        url.searchParams.get("path") ?? absDefault,
+      );
       requireProjectDirectory(projectPath);
-      const result = await runSkillNew({
-        description: decoded.value.description,
-        // Draft-content mode: write the draft into a temp file is not needed —
-        // candidacy + scaffolding works off in-memory content for the description
-        // path. Draft path is only used by the CLI flow when a file already exists
-        // on disk; the dashboard always passes content via either `description`
-        // or (effectively) by writing the user's edited markdown into `description`.
-        // For now, draftContent is treated as the description-equivalent so the
-        // candidacy heuristics route correctly.
-        ...(decoded.value.draftContent
-          ? { description: decoded.value.draftContent }
-          : {}),
-        name: decoded.value.name,
-        skipConfirm: true,
-        projectRoot: projectPath,
-        stdinAnswers: [],
-      });
-      jsonResponse(res, 200, {
-        candidacy: result.candidacy,
-        proposedPath: result.proposedPath,
-        written: result.written,
-        postScaffoldScore: result.postScaffoldScore ?? null,
-        output: result.output,
-      });
+      const result = decoded.value.files
+        ? analyseUploadedBundle(projectPath, {
+            files: decoded.value.files,
+            suggestedName: decoded.value.suggestedName,
+            kind: decoded.value.kind,
+          })
+        : analyseContent(projectPath, {
+            content: decoded.value.content ?? "",
+            suggestedName: decoded.value.suggestedName,
+            kind: decoded.value.kind,
+          });
+      jsonResponse(res, 200, result);
     } catch (err) {
       jsonResponse(res, 500, {
         error: err instanceof Error ? err.message : String(err),
@@ -1630,8 +1636,7 @@ export function createDashboardRouteHandlers(
     handleQualityHistoryRequest,
     handleSkillQualityRequest,
     handleSkillQualityInventoryRequest,
-    handleQualityCandidacyRequest,
-    handleQualityScaffoldRequest,
+    handleQualityAnalyseRequest,
     handleBrowseRequest,
     handleAgentDetectRequest,
     handleProjectsListRequest,

@@ -51,7 +51,7 @@ last_reviewed: 2026-05-02
 **Evidence:**
 - `.goat-flow/skill-reference/skill-preamble.md` (search: `Routing rule`) contains the runtime rule that triggered the current drift.
 - `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) is the corresponding template source that must remain byte-equivalent except for intentionally synchronized edits.
-- `scripts/preflight-checks.sh` (search: `Preamble/Conventions Sync`) fails when shared reference templates and installed copies differ.
+- `scripts/preflight-checks.sh` (search: `Skill Reference + Playbooks Sync`) fails when shared reference and playbook templates and installed copies differ.
 - `src/cli/audit/check-drift.ts` (search: `workflow/skills/reference/skill-preamble.md`) also checks shared-reference template/install parity through the audit path.
 
 **Prevention:** When changing `skill-preamble.md`, `skill-conventions.md`, `skill-quality-testing.md`, or topical files under `skill-quality-testing/`, edit the workflow template and installed copy together. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
@@ -152,7 +152,7 @@ last_reviewed: 2026-05-02
 
 **Resolution:** Four preventions implemented:
 1. Divergence fixed - both files now match (verified by diff).
-2. Preflight preamble/conventions check (search: `Preamble/Conventions Sync` in `scripts/preflight-checks.sh`) - byte-exact diff of preamble and conventions against workflow templates, fails if they differ.
+2. Preflight skill-reference/playbooks sync check (search: `Skill Reference + Playbooks Sync` in `scripts/preflight-checks.sh`) - byte-exact diff of preamble, conventions, and playbooks against workflow templates, fails if any differ.
 3. Preflight skill parity check (search: `Skill SKILL.md Parity` in `scripts/preflight-checks.sh`) - byte-exact diff of each workflow template vs `.claude/skills/` and `.agents/skills/` installed copies.
 4. CLI drift check (M04, 2026-04-17) via `goat-flow audit --check-drift` (search: `skillContentsEquivalent` in `src/cli/audit/check-drift.ts`) - YAML-aware normalisation so frontmatter key reorder and trailing whitespace do not false-positive; also detects orphan directories and deprecated skill names from `workflow/manifest.json:stale_names`.
 5. Integration tests: `test/integration/preamble-sync.test.ts` covers shared docs; `test/integration/audit-drift.test.ts` covers the CLI path with tmpdir fixtures.

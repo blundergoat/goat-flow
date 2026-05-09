@@ -240,8 +240,8 @@ describe("skill hardening contracts", () => {
 
   it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
     for (const path of [
-      "workflow/skills/reference/skill-quality-testing/deployment.md",
-      ".goat-flow/skill-reference/skill-quality-testing/deployment.md",
+      "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
     ]) {
       const body = read(path);
       assert.match(body, /release gate before merging/, path);

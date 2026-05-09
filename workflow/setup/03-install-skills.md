@@ -28,18 +28,23 @@ Each SKILL.md MUST include:
 
 **IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/footguns/`, `.goat-flow/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
-## Shared skill reference
+## Shared meta references
 
-Install the full shared reference pack from `workflow/skills/reference/`:
-- `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md` - index for tool/capability playbooks and availability-check discipline
+Install the meta references from `workflow/skills/reference/`:
+- `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md` - meta references index
 - `.goat-flow/skill-reference/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
 - `.goat-flow/skill-reference/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
-- `.goat-flow/skill-reference/browser-use.md` from `workflow/skills/reference/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
-- `.goat-flow/skill-reference/page-capture.md` from `workflow/skills/reference/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
-- `.goat-flow/skill-reference/skill-quality-testing.md` from `workflow/skills/reference/skill-quality-testing.md` - short index for skill authoring and hardening
-- `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md` from `workflow/skills/reference/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
-- `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md` from `workflow/skills/reference/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
-- `.goat-flow/skill-reference/skill-quality-testing/deployment.md` from `workflow/skills/reference/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
+
+## Standalone playbooks
+
+Install the playbook pack from `workflow/skills/playbooks/`:
+- `.goat-flow/skill-playbooks/README.md` from `workflow/skills/playbooks/README.md` - index for tool/capability playbooks and availability-check discipline
+- `.goat-flow/skill-playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
+- `.goat-flow/skill-playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
+- `.goat-flow/skill-playbooks/skill-quality-testing.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
+- `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
+- `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
+- `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` from `workflow/skills/playbooks/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
 
 ## Clean stale cross-agent skills
 
@@ -64,12 +69,13 @@ After installing, verify each SKILL.md frontmatter has the correct `goat-flow-sk
 - [ ] `.goat-flow/skill-reference/README.md` exists
 - [ ] `.goat-flow/skill-reference/skill-preamble.md` exists
 - [ ] `.goat-flow/skill-reference/skill-conventions.md` exists
-- [ ] `.goat-flow/skill-reference/browser-use.md` exists
-- [ ] `.goat-flow/skill-reference/page-capture.md` exists
-- [ ] `.goat-flow/skill-reference/skill-quality-testing.md` exists
-- [ ] `.goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md` exists
-- [ ] `.goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md` exists
-- [ ] `.goat-flow/skill-reference/skill-quality-testing/deployment.md` exists
+- [ ] `.goat-flow/skill-playbooks/README.md` exists
+- [ ] `.goat-flow/skill-playbooks/browser-use.md` exists
+- [ ] `.goat-flow/skill-playbooks/page-capture.md` exists
+- [ ] `.goat-flow/skill-playbooks/skill-quality-testing.md` exists
+- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` exists
+- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` exists
+- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` exists
 - [ ] Instruction file router table references the skills directory
 
 **Progress marker:** Append one line to the shared setup session log:

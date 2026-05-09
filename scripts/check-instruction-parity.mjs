@@ -56,8 +56,8 @@ const SHARED_PHRASES = [
     label: "tool-playbook Key Resources",
     section: "Key Resources",
     phrases: [
-      ".goat-flow/skill-reference/browser-use.md",
-      ".goat-flow/skill-reference/page-capture.md",
+      ".goat-flow/skill-playbooks/browser-use.md",
+      ".goat-flow/skill-playbooks/page-capture.md",
       "read BEFORE declaring a tool unavailable",
     ],
   },
@@ -66,7 +66,7 @@ const SHARED_PHRASES = [
     section: "Execution Loop",
     phrases: [
       "Before declaring any tool or capability unavailable",
-      ".goat-flow/skill-reference/",
+      ".goat-flow/skill-playbooks/",
       "Availability Check",
     ],
   },
@@ -97,6 +97,7 @@ const SHARED_PHRASES = [
     section: "Router Table",
     phrases: [
       ".goat-flow/skill-reference/",
+      ".goat-flow/skill-playbooks/",
       ".goat-flow/footguns/",
       ".goat-flow/lessons/",
       ".goat-flow/patterns/",

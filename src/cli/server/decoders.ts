@@ -41,26 +41,15 @@ interface TerminalUploadBody {
   files: TerminalUploadFile[];
 }
 
-interface CandidacyBody {
-  kind: "draft" | "description";
-  /** For description mode: the natural-language intent. */
-  text?: string;
-  /** For draft mode: the markdown content to evaluate. */
+interface AnalyseBody {
+  /** Either a single content string (paste / textarea) OR an array of named
+   *  files (multi-file drop). Exactly one must be set. */
   content?: string;
-  /** Optional name suggestion (used by draft mode for naming heuristics). */
+  files?: { name: string; content: string }[];
+  /** Optional filename or display name; used as the analyzed artifact name. */
   suggestedName?: string;
-}
-
-interface ScaffoldBody {
-  /** Project root the scaffold will write into. */
-  projectPath: string;
-  /** Skill name in kebab-case. */
-  name: string;
-  /** Either a description (description mode) or the source draft content. */
-  description?: string;
-  draftContent?: string;
-  /** Must be true; refuses to write otherwise. */
-  confirm: true;
+  /** Optional explicit kind override; otherwise inferred from frontmatter. */
+  kind?: "skill" | "shared-reference";
 }
 
 const MAX_PROJECT_TITLE_LENGTH = 120;
@@ -307,106 +296,143 @@ export function decodeClientMessage(raw: string): DecodeResult<ClientMessage> {
   );
 }
 
-const MAX_CANDIDACY_TEXT_BYTES = 32 * 1024;
-const MAX_CANDIDACY_CONTENT_BYTES = 256 * 1024;
+const MAX_ANALYSE_CONTENT_BYTES = 256 * 1024;
+const MAX_ANALYSE_NAME_BYTES = 200;
+const MAX_ANALYSE_FILES = 32;
+const MAX_ANALYSE_FILENAME_BYTES = 256;
 
-/** Decode and validate a `POST /api/quality/candidacy` request body. */
-// eslint-disable-next-line complexity -- explicit boundary validation; each branch maps to one rejection class for the candidacy payload
-export function decodeCandidacyBody(body: string): DecodeResult<CandidacyBody> {
-  const parsed = parseJson(body, "body");
-  if (!parsed.ok) return parsed;
-  if (!isRecord(parsed.value)) {
-    return err("body", "must be a JSON object");
-  }
-  const obj = parsed.value;
-  if (obj.kind !== "draft" && obj.kind !== "description") {
-    return err("body.kind", 'must be "draft" or "description"');
-  }
-  if (obj.kind === "description") {
-    if (typeof obj.text !== "string" || obj.text.trim().length === 0) {
+/** Decode the optional `suggestedName` and `kind` fields shared between the
+ *  single-content and multi-file analyse payloads. */
+function decodeAnalyseOptionals(obj: Record<string, unknown>): DecodeResult<{
+  suggestedName?: string;
+  kind?: "skill" | "shared-reference";
+}> {
+  let suggestedName: string | undefined;
+  if (obj.suggestedName !== undefined) {
+    if (typeof obj.suggestedName !== "string") {
+      return err("body.suggestedName", "must be a string");
+    }
+    if (obj.suggestedName.length > MAX_ANALYSE_NAME_BYTES) {
       return err(
-        "body.text",
-        "must be a non-empty string for description mode",
+        "body.suggestedName",
+        `must be at most ${MAX_ANALYSE_NAME_BYTES} bytes`,
       );
     }
-    if (obj.text.length > MAX_CANDIDACY_TEXT_BYTES) {
-      return err(
-        "body.text",
-        `must be at most ${MAX_CANDIDACY_TEXT_BYTES} bytes`,
-      );
+    suggestedName = obj.suggestedName;
+  }
+  let kind: "skill" | "shared-reference" | undefined;
+  if (obj.kind !== undefined) {
+    if (obj.kind !== "skill" && obj.kind !== "shared-reference") {
+      return err("body.kind", 'must be "skill" or "shared-reference"');
     }
-    return { ok: true, value: { kind: "description", text: obj.text } };
+    kind = obj.kind;
   }
-  // Draft mode
-  if (typeof obj.content !== "string" || obj.content.length === 0) {
-    return err("body.content", "must be a non-empty string for draft mode");
-  }
-  if (obj.content.length > MAX_CANDIDACY_CONTENT_BYTES) {
-    return err(
-      "body.content",
-      `must be at most ${MAX_CANDIDACY_CONTENT_BYTES} bytes`,
-    );
-  }
-  const suggestedName =
-    typeof obj.suggestedName === "string" ? obj.suggestedName : undefined;
-  return {
-    ok: true,
-    value: { kind: "draft", content: obj.content, suggestedName },
-  };
+  return { ok: true, value: { suggestedName, kind } };
 }
 
-/** Decode and validate a `POST /api/quality/scaffold` request body. */
-// eslint-disable-next-line complexity -- exhaustive shape validation; each branch maps to one missing/invalid field
-export function decodeScaffoldBody(body: string): DecodeResult<ScaffoldBody> {
+/** Decode the `files` array on a multi-file analyse body. Validates count,
+ *  per-file name + content shape, and enforces the same total-byte cap as the
+ *  single-content path so the server can't be used as a CPU sink. */
+// eslint-disable-next-line complexity -- per-file boundary validation; each branch maps to one rejection class for the bundle payload
+function decodeAnalyseFiles(
+  raw: unknown,
+): DecodeResult<{ name: string; content: string }[]> {
+  if (!Array.isArray(raw)) return err("body.files", "must be an array");
+  if (raw.length === 0)
+    return err("body.files", "must contain at least one file");
+  if (raw.length > MAX_ANALYSE_FILES) {
+    return err("body.files", `must contain at most ${MAX_ANALYSE_FILES} files`);
+  }
+  const files: { name: string; content: string }[] = [];
+  let totalBytes = 0;
+  const seenNames = new Set<string>();
+  for (const [index, item] of raw.entries()) {
+    if (!isRecord(item)) {
+      return err(`body.files[${index}]`, "must be an object");
+    }
+    if (typeof item.name !== "string" || item.name.length === 0) {
+      return err(`body.files[${index}].name`, "must be a non-empty string");
+    }
+    if (item.name.length > MAX_ANALYSE_FILENAME_BYTES) {
+      return err(
+        `body.files[${index}].name`,
+        `must be at most ${MAX_ANALYSE_FILENAME_BYTES} bytes`,
+      );
+    }
+    if (item.name.includes("/") || item.name.includes("\0")) {
+      return err(
+        `body.files[${index}].name`,
+        "must be a bare filename (no path separators or NUL bytes)",
+      );
+    }
+    if (seenNames.has(item.name)) {
+      return err(
+        `body.files[${index}].name`,
+        `duplicate filename: ${JSON.stringify(item.name)}`,
+      );
+    }
+    seenNames.add(item.name);
+    if (typeof item.content !== "string") {
+      return err(`body.files[${index}].content`, "must be a string");
+    }
+    totalBytes += item.content.length;
+    if (totalBytes > MAX_ANALYSE_CONTENT_BYTES) {
+      return err(
+        "body.files",
+        `combined content size exceeds ${MAX_ANALYSE_CONTENT_BYTES} bytes`,
+      );
+    }
+    files.push({ name: item.name, content: item.content });
+  }
+  return { ok: true, value: files };
+}
+
+/** Decode and validate a `POST /api/quality/analyse` request body.
+ *  Accepts either a single `content` string (paste / textarea) or a `files`
+ *  array (multi-file drag-drop) — exactly one must be set. */
+export function decodeAnalyseBody(body: string): DecodeResult<AnalyseBody> {
   const parsed = parseJson(body, "body");
   if (!parsed.ok) return parsed;
   if (!isRecord(parsed.value)) {
     return err("body", "must be a JSON object");
   }
   const obj = parsed.value;
-  if (typeof obj.projectPath !== "string" || obj.projectPath.length === 0) {
-    return err("body.projectPath", "must be a non-empty string");
+  const hasContent = obj.content !== undefined;
+  const hasFiles = obj.files !== undefined;
+  if (hasContent === hasFiles) {
+    return err("body", 'exactly one of "content" or "files" must be set');
   }
-  if (typeof obj.name !== "string" || obj.name.length === 0) {
-    return err("body.name", "must be a non-empty string");
+  const optionals = decodeAnalyseOptionals(obj);
+  if (!optionals.ok) return optionals;
+
+  if (hasContent) {
+    if (typeof obj.content !== "string" || obj.content.trim().length === 0) {
+      return err("body.content", "must be a non-empty markdown string");
+    }
+    if (obj.content.length > MAX_ANALYSE_CONTENT_BYTES) {
+      return err(
+        "body.content",
+        `must be at most ${MAX_ANALYSE_CONTENT_BYTES} bytes`,
+      );
+    }
+    return {
+      ok: true,
+      value: {
+        content: obj.content,
+        suggestedName: optionals.value.suggestedName,
+        kind: optionals.value.kind,
+      },
+    };
   }
-  if (obj.confirm !== true) {
-    return err(
-      "body.confirm",
-      "must be true (scaffold refuses to write without explicit confirmation)",
-    );
-  }
-  const description =
-    typeof obj.description === "string" && obj.description.length > 0
-      ? obj.description
-      : undefined;
-  const draftContent =
-    typeof obj.draftContent === "string" && obj.draftContent.length > 0
-      ? obj.draftContent
-      : undefined;
-  if (!description && !draftContent) {
-    return err(
-      "body",
-      "exactly one of description or draftContent is required",
-    );
-  }
-  if (description && draftContent) {
-    return err("body", "pass either description or draftContent, not both");
-  }
-  if (draftContent && draftContent.length > MAX_CANDIDACY_CONTENT_BYTES) {
-    return err(
-      "body.draftContent",
-      `must be at most ${MAX_CANDIDACY_CONTENT_BYTES} bytes`,
-    );
-  }
+
+  const filesResult = decodeAnalyseFiles(obj.files);
+  if (!filesResult.ok) return filesResult;
   return {
     ok: true,
     value: {
-      projectPath: obj.projectPath,
-      name: obj.name,
-      description,
-      draftContent,
-      confirm: true,
+      files: filesResult.value,
+      suggestedName: optionals.value.suggestedName,
+      kind: optionals.value.kind,
     },
   };
 }

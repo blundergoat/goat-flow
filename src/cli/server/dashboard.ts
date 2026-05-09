@@ -91,8 +91,7 @@ const DASHBOARD_ROUTE_INVENTORY = [
   { method: "GET", path: "/api/projects/list", class: "privileged-read" },
   { method: "POST", path: "/api/projects/list", class: "side-effectful" },
   { method: "GET", path: "/api/projects/status", class: "privileged-read" },
-  { method: "POST", path: "/api/quality/candidacy", class: "side-effectful" },
-  { method: "POST", path: "/api/quality/scaffold", class: "side-effectful" },
+  { method: "POST", path: "/api/quality/analyse", class: "side-effectful" },
   { method: "POST", path: "/api/terminal/create", class: "side-effectful" },
   { method: "GET", path: "/api/terminal/list", class: "privileged-read" },
   { method: "GET", path: "/api/terminal/sessions", class: "privileged-read" },
@@ -156,8 +155,7 @@ export function serveDashboard(
       handleQualityHistoryRequest,
       handleSkillQualityRequest,
       handleSkillQualityInventoryRequest,
-      handleQualityCandidacyRequest,
-      handleQualityScaffoldRequest,
+      handleQualityAnalyseRequest,
       handleBrowseRequest,
       handleAgentDetectRequest,
       handleProjectsListRequest,
@@ -229,16 +227,13 @@ export function serveDashboard(
     }
 
     /** Return whether a request targets a route that can mutate local state. */
-    // eslint-disable-next-line complexity -- enumerates the explicit list of side-effectful routes; one branch per route keeps the security-critical list reviewable
     function isSideEffectfulApiRoute(req: IncomingMessage, url: URL): boolean {
       const method = req.method ?? "GET";
       if (method === "POST" && url.pathname === "/api/projects/list")
         return true;
       if (method === "POST" && url.pathname === "/api/terminal/create")
         return true;
-      if (method === "POST" && url.pathname === "/api/quality/candidacy")
-        return true;
-      if (method === "POST" && url.pathname === "/api/quality/scaffold")
+      if (method === "POST" && url.pathname === "/api/quality/analyse")
         return true;
       return method === "DELETE" && url.pathname.startsWith("/api/terminal/");
     }
@@ -319,8 +314,7 @@ export function serveDashboard(
         () => handleQualityHistoryRequest(url, res),
         () => Promise.resolve(handleSkillQualityRequest(url, res)),
         () => Promise.resolve(handleSkillQualityInventoryRequest(url, res)),
-        () => handleQualityCandidacyRequest(req, url, res),
-        () => handleQualityScaffoldRequest(req, url, res),
+        () => handleQualityAnalyseRequest(req, url, res),
 
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),

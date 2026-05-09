@@ -501,15 +501,17 @@ else
     fi
 
     installed_reference_fail=0
-    if [[ -d .goat-flow/skill-reference ]]; then
-        while IFS= read -r -d '' f; do
-            ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
-            if [[ "$ver" != "$skill_version" ]]; then
-                fail "Installed shared reference $f has version '$ver', expected '$skill_version'"
-                installed_reference_fail=1
-            fi
-        done < <(find .goat-flow/skill-reference -type f -name '*.md' -print0)
-    fi
+    for installed_dir in .goat-flow/skill-reference .goat-flow/skill-playbooks; do
+        if [[ -d "$installed_dir" ]]; then
+            while IFS= read -r -d '' f; do
+                ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                if [[ "$ver" != "$skill_version" ]]; then
+                    fail "Installed shared reference $f has version '$ver', expected '$skill_version'"
+                    installed_reference_fail=1
+                fi
+            done < <(find "$installed_dir" -type f -name '*.md' -print0)
+        fi
+    done
     while IFS= read -r dir; do
         if [[ -d "$dir" ]]; then
             while IFS= read -r -d '' f; do
@@ -1126,8 +1128,8 @@ NODE
     fi
 fi
 
-# ── Preamble/Conventions Sync ────────────────────────────────────────
-section "Preamble/Conventions Sync"
+# ── Skill Reference + Playbooks Sync ─────────────────────────────────
+section "Skill Reference + Playbooks Sync"
 if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-reference/README.md ]]; then
     if diff -q workflow/skills/reference/README.md .goat-flow/skill-reference/README.md >/dev/null 2>&1; then
         pass "skill-reference README.md: template and installed copy match"
@@ -1155,41 +1157,50 @@ if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/s
 else
     skip "skill-conventions.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/browser-use.md ]] && [[ -f .goat-flow/skill-reference/browser-use.md ]]; then
-    if diff -q workflow/skills/reference/browser-use.md .goat-flow/skill-reference/browser-use.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-playbooks/README.md ]]; then
+    if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-playbooks/README.md >/dev/null 2>&1; then
+        pass "skill-playbooks README.md: template and installed copy match"
+    else
+        fail "skill-playbooks README.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "skill-playbooks README.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-playbooks/browser-use.md ]]; then
+    if diff -q workflow/skills/playbooks/browser-use.md .goat-flow/skill-playbooks/browser-use.md >/dev/null 2>&1; then
         pass "browser-use.md: template and installed copy match"
     else
-        fail "browser-use.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "browser-use.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
     fi
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/page-capture.md ]] && [[ -f .goat-flow/skill-reference/page-capture.md ]]; then
-    if diff -q workflow/skills/reference/page-capture.md .goat-flow/skill-reference/page-capture.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-playbooks/page-capture.md ]]; then
+    if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-playbooks/page-capture.md >/dev/null 2>&1; then
         pass "page-capture.md: template and installed copy match"
     else
-        fail "page-capture.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "page-capture.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
     fi
 else
     skip "page-capture.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-reference/skill-quality-testing.md ]]; then
-    if diff -q workflow/skills/reference/skill-quality-testing.md .goat-flow/skill-reference/skill-quality-testing.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-playbooks/skill-quality-testing.md ]]; then
+    if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-playbooks/skill-quality-testing.md >/dev/null 2>&1; then
         pass "skill-quality-testing.md: template and installed copy match"
     else
-        fail "skill-quality-testing.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "skill-quality-testing.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
     fi
 else
     skip "skill-quality-testing.md sync (one or both files missing)"
 fi
 for topical in tdd-iteration adversarial-framing deployment; do
-    tpl="workflow/skills/reference/skill-quality-testing/${topical}.md"
-    inst=".goat-flow/skill-reference/skill-quality-testing/${topical}.md"
+    tpl="workflow/skills/playbooks/skill-quality-testing/${topical}.md"
+    inst=".goat-flow/skill-playbooks/skill-quality-testing/${topical}.md"
     if [[ -f "$tpl" ]] && [[ -f "$inst" ]]; then
         if diff -q "$tpl" "$inst" >/dev/null 2>&1; then
             pass "skill-quality-testing/${topical}.md: template and installed copy match"
         else
-            fail "skill-quality-testing/${topical}.md: template (workflow/skills/reference/skill-quality-testing/) and installed (.goat-flow/skill-reference/skill-quality-testing/) differ"
+            fail "skill-quality-testing/${topical}.md: template (workflow/skills/playbooks/skill-quality-testing/) and installed (.goat-flow/skill-playbooks/skill-quality-testing/) differ"
         fi
     else
         skip "skill-quality-testing/${topical}.md sync (one or both files missing)"

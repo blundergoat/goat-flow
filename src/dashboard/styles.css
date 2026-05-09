@@ -2965,3 +2965,105 @@ body {
   background: rgba(220, 38, 38, 0.08);
   border-color: rgba(220, 38, 38, 0.28);
 }
+
+/* --- Modal overlay (Analyse skill) ---
+ *
+ * The element is teleported to <body> (Alpine x-teleport) so an ancestor's
+ * transformed containing block cannot trap position: fixed. x-show on the
+ * teleported div toggles the inline `display` property; this rule provides
+ * the default `display: flex` that Alpine restores when showing.
+ */
+.gf-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.gf-modal-card {
+  width: 760px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Make the card a positioning context so the drag-drop hint overlay can
+     fill it via inset:0 without escaping into the page. */
+  position: relative;
+}
+.gf-modal-card-dragover {
+  border-color: var(--accent);
+}
+:root:not(.dark) .gf-modal-card {
+  background: var(--surface-base);
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.18);
+}
+.gf-modal-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.gf-modal-input:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.gf-modal-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--status-danger);
+}
+.gf-modal-result {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gf-modal-rec-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--neutral-bg);
+  color: var(--text-secondary);
+}
+.gf-modal-rec-badge[data-rec="keep-skill"],
+.gf-modal-rec-badge[data-rec="reference-playbook"] {
+  background: var(--status-pass-bg);
+  color: var(--status-pass);
+}
+.gf-modal-rec-badge[data-rec="needs-human-review"],
+.gf-modal-rec-badge[data-rec="consider-reclassifying"] {
+  background: var(--amber-bg);
+  color: var(--status-waiting);
+}
+.gf-modal-rec-badge[data-rec="retire"],
+.gf-modal-rec-badge[data-rec="consider-revision"] {
+  background: var(--red-bg);
+  color: var(--status-danger);
+}

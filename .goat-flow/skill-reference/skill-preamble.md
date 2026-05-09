@@ -30,7 +30,7 @@ Order findings by severity, not by file or discovery order.
 ## Evidence Standard
 
 - Every live review finding MUST include file evidence. Prefer `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string). Line numbers are session-local navigation hints only.
-- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-reference/browser-use.md` and run `command -v browser-use && browser-use doctor` before claiming browser automation is unavailable.
+- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-playbooks/browser-use.md` and run `command -v browser-use && browser-use doctor` before claiming browser automation is unavailable.
 - Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited file and semantic anchor to confirm accuracy

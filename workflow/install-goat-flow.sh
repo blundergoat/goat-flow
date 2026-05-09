@@ -426,7 +426,7 @@ cd "$PROJECT"
 # 1. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/critiques .goat-flow/logs/security .goat-flow/skill-reference; do
+for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/critiques .goat-flow/logs/security .goat-flow/skill-reference .goat-flow/skill-playbooks; do
   if [[ ! -d "$dir" ]]; then
     mkdir -p "$dir"
     echo "  ✓ $dir/"
@@ -456,23 +456,56 @@ touch_anchor ".goat-flow/logs/sessions/.gitkeep"
 echo ""
 
 # ==========================================================================
-# 3. Copy shared reference files (always overwrite - verbatim copies)
+# 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
+#    The `skill-reference/` dir was split into:
+#      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
+#      - skill-playbooks/   (browser-use.md, page-capture.md, skill-quality-testing.md + topical dir)
+#    On upgrade, sweep the legacy locations so the installed layout matches.
 # ==========================================================================
-echo "Reference files → .goat-flow/skill-reference/:"
+legacy_reference_files=(
+  ".goat-flow/skill-reference/browser-use.md"
+  ".goat-flow/skill-reference/page-capture.md"
+  ".goat-flow/skill-reference/skill-quality-testing.md"
+)
+legacy_reference_dir=".goat-flow/skill-reference/skill-quality-testing"
+removed_any=false
+for legacy_file in "${legacy_reference_files[@]}"; do
+  if [[ -f "$legacy_file" ]]; then
+    rm -f "$legacy_file"
+    echo "  ✓ migrated $legacy_file → .goat-flow/skill-playbooks/"
+    removed_any=true
+  fi
+done
+if [[ -d "$legacy_reference_dir" ]]; then
+  rm -rf "$legacy_reference_dir"
+  echo "  ✓ migrated $legacy_reference_dir/ → .goat-flow/skill-playbooks/"
+  removed_any=true
+fi
+if [[ "$removed_any" == true ]]; then
+  echo ""
+fi
+
+# ==========================================================================
+# 4. Copy shared reference files (always overwrite - verbatim copies)
+# ==========================================================================
+echo "Meta references → .goat-flow/skill-reference/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-reference/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-reference/skill-preamble.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-reference/skill-conventions.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/browser-use.md" ".goat-flow/skill-reference/browser-use.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-quality-testing.md" ".goat-flow/skill-reference/skill-quality-testing.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-reference/skill-quality-testing/tdd-iteration.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-reference/skill-quality-testing/adversarial-framing.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-quality-testing/deployment.md" ".goat-flow/skill-reference/skill-quality-testing/deployment.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/page-capture.md" ".goat-flow/skill-reference/page-capture.md"
+
+echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-playbooks/skill-quality-testing.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/deployment.md" ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md"
 copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/security-policy.md" ".goat-flow/security-policy.md"
 echo ""
 
 # ==========================================================================
-# 4. Install skills (always overwrite - verbatim from templates)
+# 5. Install skills (always overwrite - verbatim from templates)
 # ==========================================================================
 echo "Skills → $SKILLS_DIR/:"
 for skill in "${SKILL_NAMES[@]}"; do
@@ -513,7 +546,7 @@ if $CLEAN_DEPRECATED || $FORCE; then
 fi
 
 # ==========================================================================
-# 5. Install hooks (always overwrite - verbatim copy)
+# 6. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
 echo "Hooks → $HOOKS_DIR/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$DENY_HOOK_DST"
@@ -527,7 +560,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 6. Install agent settings (skip if exists, unless --force)
+# 7. Install agent settings (skip if exists, unless --force)
 # ==========================================================================
 echo "Settings:"
 SETTINGS_SKIPPED=false
@@ -550,7 +583,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 7. Scaffold or maintain config.yaml
+# 8. Scaffold or maintain config.yaml
 # ==========================================================================
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
@@ -595,7 +628,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 8. Write .active marker if exactly one version-named subdir exists
+# 9. Write .active marker if exactly one version-named subdir exists
 # ==========================================================================
 # Convention: .goat-flow/tasks/.active is a one-line file naming the active
 # plan subdir (e.g. "1.2.2"). Skills (goat, goat-plan) read it to scope their

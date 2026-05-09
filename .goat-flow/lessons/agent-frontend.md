@@ -86,15 +86,15 @@ last_reviewed: 2026-05-03
 
 **Created:** 2026-04-27
 
-**What happened:** User asked the agent to view two static site pages (`docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`). The agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed there was no headless browser installed. The user pointed at the repo's browser-use skill reference, now canonical at `.goat-flow/skill-reference/browser-use.md`, which documents the local `browser-use` CLI. `browser-use` was installed and worked immediately: `browser-use doctor` reported 4/5 checks passed, and the agent was able to open both local routes, capture rendered state, and save screenshots.
+**What happened:** User asked the agent to view two static site pages (`docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`). The agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed there was no headless browser installed. The user pointed at the repo's browser-use skill reference, now canonical at `.goat-flow/skill-playbooks/browser-use.md`, which documents the local `browser-use` CLI. `browser-use` was installed and worked immediately: `browser-use doctor` reported 4/5 checks passed, and the agent was able to open both local routes, capture rendered state, and save screenshots.
 
 **Root cause:** The agent treated "view this HTML" as a generic static-file inspection task instead of a UI/browser-evidence task. It searched for familiar tools from habit and failed to check repository-provided skill references before making a broad tooling claim.
 
 **Why this matters:** Saying "there is no browser" when a project-specific browser tool exists creates false constraints and wastes the user's time. It also undermines the purpose of local skill references: they are there to encode exactly this kind of workflow knowledge.
 
 **Evidence:**
-- `.goat-flow/skill-reference/browser-use.md` (search: `command -v browser-use || command -v browser-use-python`) documents the availability check.
-- `.goat-flow/skill-reference/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
+- `.goat-flow/skill-playbooks/browser-use.md` (search: `command -v browser-use || command -v browser-use-python`) documents the availability check.
+- `.goat-flow/skill-playbooks/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
 
 **Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use || command -v browser-use-python` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
 

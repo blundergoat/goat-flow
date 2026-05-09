@@ -184,6 +184,7 @@ const FRAMEWORK_EVIDENCE_PREFIXES = [
   ".goat-flow/lessons/",
   ".goat-flow/decisions/",
   ".goat-flow/skill-reference/",
+  ".goat-flow/skill-playbooks/",
 ];
 
 const FRAMEWORK_EVIDENCE_PATHS = new Set([

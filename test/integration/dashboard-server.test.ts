@@ -1480,7 +1480,7 @@ describe("dashboard /api/quality", () => {
 describe("dashboard /api/skill-quality", () => {
   it("returns artifact inventory for the project", async () => {
     const { res, body } = await fetchJson(
-      `/api/skill-quality/inventory?path=${encodeURIComponent(PROJECT_PATH)}`,
+      `/api/skill-quality/inventory?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude`,
     );
     assert.equal(res.status, 200);
     const data = expectRecord(body, "Skill quality inventory");
@@ -1490,13 +1490,41 @@ describe("dashboard /api/skill-quality", () => {
       artifacts.length >= 7,
       `expected at least 7 artifacts, got ${artifacts.length}`,
     );
+    assert.ok(artifacts.every((a) => a.kind === "skill"));
     assert.ok(artifacts.some((a) => a.id === "skill:goat-plan"));
-    assert.ok(artifacts.some((a) => a.id === "reference:browser-use"));
+    assert.ok(!artifacts.some((a) => a.id === "reference:browser-use"));
+  });
+
+  it("uses the selected runner skills directory for inventory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-skill-runner-"));
+    try {
+      await writeProjectFile(
+        root,
+        ".claude/skills/claude-only/SKILL.md",
+        "# Claude\n",
+      );
+      await writeProjectFile(
+        root,
+        ".agents/skills/codex-only/SKILL.md",
+        "# Codex\n",
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/skill-quality/inventory?path=${encodeURIComponent(root)}&agent=codex`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Skill quality inventory");
+      const artifacts = data.artifacts as Array<Record<string, unknown>>;
+      assert.ok(artifacts.some((a) => a.id === "skill:codex-only"));
+      assert.ok(!artifacts.some((a) => a.id === "skill:claude-only"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("scores a valid artifact with metrics and prompt", async () => {
     const { res, body } = await fetchJson(
-      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&artifact=skill:goat-plan`,
+      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&artifact=skill:goat-plan`,
     );
     assert.equal(res.status, 200);
     const data = expectRecord(body, "Skill quality report");
@@ -1517,7 +1545,7 @@ describe("dashboard /api/skill-quality", () => {
 
   it("returns 404 for unknown artifact id", async () => {
     const { res, body } = await fetchJson(
-      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&artifact=skill:nonexistent`,
+      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&artifact=skill:nonexistent`,
     );
     assert.equal(res.status, 404);
     const data = expectRecord(body, "Skill quality 404");
@@ -1526,149 +1554,232 @@ describe("dashboard /api/skill-quality", () => {
 
   it("returns 400 when artifact param is missing", async () => {
     const { res } = await fetchJson(
-      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}`,
+      `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude`,
+    );
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 when agent param is missing", async () => {
+    const { res } = await fetchJson(
+      `/api/skill-quality/inventory?path=${encodeURIComponent(PROJECT_PATH)}`,
     );
     assert.equal(res.status, 400);
   });
 });
 
-describe("dashboard /api/quality/candidacy", () => {
-  it("returns a candidacy result for a description payload", async () => {
-    const { res, body } = await fetchJson("/api/quality/candidacy", {
+describe("dashboard /api/quality/analyse", () => {
+  const SKILL_DRAFT = [
+    "---",
+    "name: postgres-index",
+    "description: Walk through a Postgres index change with explicit evidence gates.",
+    "goat-flow-skill-version: 1.5.1",
+    "---",
+    "# /postgres-index",
+    "",
+    "## Step 0",
+    "Read CLAUDE.md and the migration file.",
+    "",
+    "## Phase 1",
+    "Plan the index change with downtime estimate.",
+    "",
+    "## Verification",
+    "- [ ] EXPLAIN ANALYZE confirms the new plan.",
+    "- [ ] Lock acquisition under 100ms in staging.",
+  ].join("\n");
+
+  it("returns a quality report and improvement tips for an uploaded skill", async () => {
+    const { res, body } = await fetchJson("/api/quality/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        kind: "description",
-        text: "I want a workflow that walks through Postgres index changes.",
+        content: SKILL_DRAFT,
+        suggestedName: "postgres-index.md",
+        kind: "skill",
       }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Candidacy result");
-    const recommended = expectRecord(
-      data.recommendedArtifact,
-      "recommendedArtifact",
-    );
-    assert.equal(recommended.type, "skill");
-    assert.ok(typeof data.confidence === "number");
-    assert.ok(Array.isArray(data.reasoning));
+    const data = expectRecord(body, "Analyse result");
+    const artifact = expectRecord(data.artifact, "Analyse result.artifact");
+    assert.equal(artifact.kind, "skill");
+    assert.equal(typeof data.totalScore, "number");
+    assert.equal(typeof data.profileMax, "number");
+    assert.ok(Array.isArray(data.metrics));
+    assert.ok(Array.isArray(data.tips));
+    assert.equal(typeof data.subtype, "string");
+    assert.equal(typeof data.recommendation, "string");
   });
 
-  it("returns a candidacy result for a draft payload", async () => {
-    const draft = [
-      "# /test-skill",
-      "## Step 0",
-      "Read context.",
-      "## Phase 1",
-      "Do work.",
-      "## Verification",
-      "- [ ] evidence required.",
+  it("infers the artifact kind when no explicit kind is provided", async () => {
+    const { res, body } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: SKILL_DRAFT }),
+    });
+    assert.equal(res.status, 200);
+    const data = expectRecord(body, "Analyse result");
+    const artifact = expectRecord(data.artifact, "Analyse result.artifact");
+    assert.equal(artifact.kind, "skill");
+  });
+
+  it("surfaces improvement tips for a deliberately weak draft", async () => {
+    const weakDraft = [
+      "# untitled",
+      "",
+      "Some prose without sections, frontmatter, or evidence.",
     ].join("\n");
-    const { res, body } = await fetchJson("/api/quality/candidacy", {
+    const { res, body } = await fetchJson("/api/quality/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "draft", content: draft }),
+      body: JSON.stringify({ content: weakDraft, kind: "skill" }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Candidacy result");
-    const recommended = expectRecord(
-      data.recommendedArtifact,
-      "recommendedArtifact",
+    const data = expectRecord(body, "Analyse result");
+    assert.ok(Array.isArray(data.tips));
+    assert.ok(
+      (data.tips as unknown[]).length > 0,
+      "expected at least one improvement tip for a weak draft",
     );
-    assert.equal(recommended.type, "skill");
-    assert.equal(recommended.subtype, "workflow");
   });
 
-  it("returns 400 for invalid payload (missing text)", async () => {
-    const { res } = await fetchJson("/api/quality/candidacy", {
+  it("returns 400 for empty content", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "description" }),
+      body: JSON.stringify({ content: "" }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 for missing content", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ suggestedName: "x.md" }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 for an invalid kind value", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: SKILL_DRAFT, kind: "not-a-kind" }),
     });
     assert.equal(res.status, 400);
   });
 
   it("returns 405 for non-POST methods", async () => {
-    const { res } = await fetchJson("/api/quality/candidacy");
+    const { res } = await fetchJson("/api/quality/analyse");
     assert.equal(res.status, 405);
   });
-});
 
-describe("dashboard /api/quality/scaffold", () => {
-  async function makeScaffoldRoot(): Promise<string> {
-    return mkdtemp(join(tmpdir(), "goat-flow-dash-scaffold-"));
-  }
-
-  it("scaffolds a workflow skill into the project", async () => {
-    const scaffoldRoot = await makeScaffoldRoot();
-    const { res, body } = await fetchJson("/api/quality/scaffold", {
+  it("scores a multi-file uploaded bundle and lists every file in composedFrom", async () => {
+    const skillBody = [
+      "---",
+      "name: bundled-skill",
+      "description: A multi-file workflow that walks through a deploy.",
+      "goat-flow-skill-version: 1.5.1",
+      "---",
+      "# /bundled-skill",
+      "",
+      "## Step 0",
+      "Read the workflow.md and template.md alongside this file.",
+    ].join("\n");
+    const workflow = [
+      "## Phase 1 - Plan",
+      "List the change, downtime, and rollback.",
+      "",
+      "## Phase 2 - Apply",
+      "CHECKPOINT: human reviews before applying.",
+      "",
+      "## Verification",
+      "- [ ] EXPLAIN ANALYZE confirms the new plan.",
+    ].join("\n");
+    const template = [
+      "# Deploy template",
+      "",
+      "Used by Phase 1 to scaffold the report body.",
+    ].join("\n");
+    const { res, body } = await fetchJson("/api/quality/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        projectPath: scaffoldRoot,
-        name: "dash-workflow",
-        description:
-          "I want a workflow that walks through Postgres index changes.",
-        confirm: true,
+        files: [
+          { name: "SKILL.md", content: skillBody },
+          { name: "workflow.md", content: workflow },
+          { name: "template.md", content: template },
+        ],
+        suggestedName: "bundled-skill",
+        kind: "skill",
       }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Scaffold result");
-    assert.equal(data.written, true);
-    const path = String(data.proposedPath);
-    assert.ok(path.endsWith(".claude/skills/dash-workflow/SKILL.md"));
+    const data = expectRecord(body, "Bundle analyse result");
+    const composed = data.composedFrom as string[];
+    assert.ok(Array.isArray(composed), "composedFrom must be an array");
+    for (const expected of ["SKILL.md", "workflow.md", "template.md"]) {
+      assert.ok(
+        composed.includes(expected),
+        `expected ${expected} in composedFrom (got ${composed.join(", ")})`,
+      );
+    }
+    assert.ok(Array.isArray(data.tips));
+    assert.equal(typeof data.totalScore, "number");
   });
 
-  it("refuses to write without confirm: true", async () => {
-    const scaffoldRoot = await makeScaffoldRoot();
-    const { res, body } = await fetchJson("/api/quality/scaffold", {
+  it("returns 400 when both content and files are set", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        projectPath: scaffoldRoot,
-        name: "dash-no-confirm",
-        description: "I want a workflow.",
-      }),
-    });
-    assert.equal(res.status, 400);
-    const data = expectRecord(body, "Scaffold 400");
-    assert.match(String(data.error), /confirm/);
-  });
-
-  it("returns 400 for invalid skill names", async () => {
-    const scaffoldRoot = await makeScaffoldRoot();
-    const { res, body } = await fetchJson("/api/quality/scaffold", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectPath: scaffoldRoot,
-        name: "",
-        description: "I want a workflow.",
-        confirm: true,
-      }),
-    });
-    assert.equal(res.status, 400);
-    void body;
-  });
-
-  it("returns 400 when both description and draftContent are provided", async () => {
-    const scaffoldRoot = await makeScaffoldRoot();
-    const { res } = await fetchJson("/api/quality/scaffold", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectPath: scaffoldRoot,
-        name: "dash-both",
-        description: "x",
-        draftContent: "y",
-        confirm: true,
+        content: "# x",
+        files: [{ name: "SKILL.md", content: "# x" }],
       }),
     });
     assert.equal(res.status, 400);
   });
 
-  it("returns 405 for non-POST methods", async () => {
-    const { res } = await fetchJson("/api/quality/scaffold");
-    assert.equal(res.status, 405);
+  it("returns 400 when neither content nor files is set", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ suggestedName: "x" }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 for an empty files array", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: [] }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 for a file with a path-separator in its name", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [{ name: "../escape.md", content: "# x" }],
+      }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("returns 400 for duplicate filenames in the bundle", async () => {
+    const { res } = await fetchJson("/api/quality/analyse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          { name: "SKILL.md", content: "# a" },
+          { name: "SKILL.md", content: "# b" },
+        ],
+      }),
+    });
+    assert.equal(res.status, 400);
   });
 });
 
