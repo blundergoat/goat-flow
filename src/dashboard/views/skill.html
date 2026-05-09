@@ -1,0 +1,379 @@
+<!-- ═══ Skill View ═══ -->
+<div
+  x-show="activeView === 'skill'"
+  x-cloak
+  style="height: calc(100vh - 3.5rem); overflow-y: auto"
+>
+  <div style="max-width: 1280px; margin: 0 auto; padding: 20px 24px 24px">
+    <div style="margin-bottom: 14px">
+      <div
+        class="gf-text-primary"
+        style="font-size: 20px; font-weight: 600; margin-bottom: 4px"
+      >
+        Skill
+      </div>
+      <div class="gf-text-muted" style="font-size: 13px">
+        Per-artifact deterministic structural metrics for skills and shared
+        references. Select an artifact to see its quality breakdown and launch a
+        focused review prompt.
+      </div>
+    </div>
+
+    <div class="gf-card" style="padding: 16px 20px">
+      <div
+        class="gf-text-secondary"
+        style="font-size: 13px; font-weight: 600; margin-bottom: 4px"
+      >
+        Skill Quality
+      </div>
+      <div class="gf-text-muted" style="font-size: 11px; margin-bottom: 12px">
+        Deterministic structural metrics per artifact.
+      </div>
+
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 220px 1fr;
+          gap: 16px;
+          align-items: start;
+        "
+      >
+        <!-- Artifact list -->
+        <div
+          style="
+            border-right: 1px solid var(--border-subtle);
+            padding-right: 12px;
+            max-height: calc(100vh - 14rem);
+            overflow-y: auto;
+          "
+        >
+          <template x-if="skillQualityArtifacts.length === 0">
+            <div
+              class="gf-text-muted"
+              style="padding: 8px 0; font-size: 11px; text-align: center"
+            >
+              No artifacts discovered.
+            </div>
+          </template>
+
+          <!-- Skills group -->
+          <template
+            x-if="skillQualityArtifacts.filter(a => a.kind === 'skill').length > 0"
+          >
+            <div>
+              <div
+                class="gf-text-muted"
+                style="
+                  font-size: 9px;
+                  font-weight: 600;
+                  padding: 2px 0;
+                  text-transform: uppercase;
+                  letter-spacing: 0.05em;
+                "
+              >
+                Skills
+              </div>
+              <template
+                x-for="art in skillQualityArtifacts.filter(a => a.kind === 'skill')"
+                :key="'sq-' + art.id"
+              >
+                <button
+                  @click="loadSkillQualityReport(art.id)"
+                  style="
+                    display: block;
+                    width: 100%;
+                    text-align: left;
+                    padding: 4px 8px;
+                    border: none;
+                    background: none;
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-family: inherit;
+                    border-radius: 4px;
+                  "
+                  :style="skillQualitySelectedId === art.id ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : { color: 'var(--text-primary)' }"
+                >
+                  <span x-text="art.name"></span>
+                </button>
+              </template>
+            </div>
+          </template>
+
+          <!-- References group -->
+          <template
+            x-if="skillQualityArtifacts.filter(a => a.kind === 'shared-reference').length > 0"
+          >
+            <div style="margin-top: 6px">
+              <div
+                class="gf-text-muted"
+                style="
+                  font-size: 9px;
+                  font-weight: 600;
+                  padding: 2px 0;
+                  text-transform: uppercase;
+                  letter-spacing: 0.05em;
+                "
+              >
+                References
+              </div>
+              <template
+                x-for="art in skillQualityArtifacts.filter(a => a.kind === 'shared-reference')"
+                :key="'sq-' + art.id"
+              >
+                <button
+                  @click="loadSkillQualityReport(art.id)"
+                  style="
+                    display: block;
+                    width: 100%;
+                    text-align: left;
+                    padding: 4px 8px;
+                    border: none;
+                    background: none;
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-family: inherit;
+                    border-radius: 4px;
+                  "
+                  :style="skillQualitySelectedId === art.id ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : { color: 'var(--text-primary)' }"
+                >
+                  <span x-text="art.name"></span>
+                </button>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Metric detail -->
+        <div>
+          <!-- Loading -->
+          <template x-if="skillQualityLoading">
+            <div
+              style="
+                padding: 16px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              "
+            >
+              <svg
+                class="animate-spin"
+                style="width: 14px; height: 14px; color: var(--accent)"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="gf-text-muted" style="font-size: 12px"
+                >Scoring...</span
+              >
+            </div>
+          </template>
+
+          <!-- Empty state -->
+          <template x-if="!skillQualityLoading && !skillQualityReport">
+            <div
+              class="gf-text-muted"
+              style="padding: 20px 0; font-size: 12px; text-align: center"
+            >
+              Select an artifact to view its quality metrics.
+            </div>
+          </template>
+
+          <!-- Report -->
+          <template x-if="!skillQualityLoading && skillQualityReport">
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <!-- Score + recommendation -->
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span
+                    class="gf-text-primary"
+                    style="font-size: 14px; font-weight: 600"
+                    x-text="skillQualityReport.artifact.name"
+                  ></span>
+                  <span
+                    style="
+                      font-size: 11px;
+                      font-weight: 600;
+                      padding: 1px 6px;
+                      border-radius: 3px;
+                    "
+                    :style="{
+                      background: skillQualityReport.recommendation === 'keep-skill' ? 'rgba(34,197,94,0.15)' : skillQualityReport.recommendation === 'reference-playbook' ? 'rgba(59,130,246,0.15)' : skillQualityReport.recommendation === 'needs-human-review' ? 'rgba(251,191,36,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: skillQualityReport.recommendation === 'keep-skill' ? '#22c55e' : skillQualityReport.recommendation === 'reference-playbook' ? '#3b82f6' : skillQualityReport.recommendation === 'needs-human-review' ? '#fbbf24' : '#ef4444'
+                    }"
+                    x-text="skillQualityReport.recommendation"
+                  ></span>
+                </div>
+                <span
+                  style="font-size: 13px; font-weight: 700"
+                  :style="{ color: skillQualityReport.totalScore / skillQualityReport.maxTotalScore >= 0.7 ? 'var(--status-pass)' : skillQualityReport.totalScore / skillQualityReport.maxTotalScore >= 0.5 ? 'var(--status-waiting)' : 'var(--status-danger)' }"
+                  x-text="skillQualityReport.totalScore + '/' + skillQualityReport.maxTotalScore"
+                ></span>
+              </div>
+
+              <template x-if="skillQualityReport.fitNotes.length > 0">
+                <div style="display: flex; flex-direction: column; gap: 1px">
+                  <template
+                    x-for="note in skillQualityReport.fitNotes"
+                    :key="note"
+                  >
+                    <div
+                      class="gf-text-muted"
+                      style="font-size: 11px"
+                      x-text="note"
+                    ></div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Metric bars -->
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 4px;
+                  margin-top: 4px;
+                "
+              >
+                <template
+                  x-for="m in skillQualityReport.metrics"
+                  :key="'sqm-' + m.metric"
+                >
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <span
+                      class="gf-text-muted"
+                      style="
+                        font-size: 10px;
+                        width: 140px;
+                        flex-shrink: 0;
+                        text-align: right;
+                      "
+                      x-text="m.label"
+                    ></span>
+                    <div
+                      style="
+                        flex: 1;
+                        height: 5px;
+                        background: var(--surface-elevated, #27272a);
+                        border-radius: 999px;
+                        overflow: hidden;
+                      "
+                    >
+                      <div
+                        style="
+                          height: 100%;
+                          border-radius: 999px;
+                          transition: width 0.3s;
+                        "
+                        :style="{
+                          width: (m.maxScore > 0 ? m.score / m.maxScore * 100 : 0) + '%',
+                          background: m.severity === 'ok' ? 'var(--status-pass)' : m.severity === 'warn' ? 'var(--status-waiting)' : 'var(--status-danger)'
+                        }"
+                      ></div>
+                    </div>
+                    <span
+                      style="
+                        font-size: 10px;
+                        font-weight: 600;
+                        width: 36px;
+                        flex-shrink: 0;
+                        text-align: right;
+                      "
+                      :style="{ color: m.severity === 'ok' ? 'var(--status-pass)' : m.severity === 'warn' ? 'var(--status-waiting)' : 'var(--status-danger)' }"
+                      x-text="m.score + '/' + m.maxScore"
+                    ></span>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Warn/fail details -->
+              <template
+                x-if="skillQualityReport.metrics.filter(m => m.severity !== 'ok').length > 0"
+              >
+                <div
+                  style="
+                    margin-top: 4px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                  "
+                >
+                  <template
+                    x-for="m in skillQualityReport.metrics.filter(m => m.severity !== 'ok')"
+                    :key="'sqd-' + m.metric"
+                  >
+                    <div style="display: flex; gap: 4px; font-size: 11px">
+                      <span
+                        style="flex-shrink: 0"
+                        :style="{ color: m.severity === 'warn' ? 'var(--status-waiting)' : 'var(--status-danger)' }"
+                        x-text="m.severity === 'warn' ? '!' : 'x'"
+                      ></span>
+                      <span
+                        class="gf-text-primary"
+                        style="font-weight: 500"
+                        x-text="m.label"
+                      ></span>
+                      <span class="gf-text-muted" x-text="m.detail"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Action -->
+              <template x-if="skillQualityReport.prompt && terminalAvailable">
+                <div style="margin-top: 4px">
+                  <button
+                    @click="launchPreset(skillQualityReport.prompt, activeRunner, 'Skill Quality: ' + skillQualityReport.artifact.name, { cwdPath: window.__GOAT_FLOW_DEFAULT_PATH__ || '.' }); activeView = 'workspace'"
+                    :disabled="launching || serverSessions.length >= 10"
+                    class="gf-btn gf-btn-md gf-btn-secondary"
+                    style="font-size: 11px"
+                  >
+                    Review in Runner
+                  </button>
+                </div>
+              </template>
+
+              <div
+                class="gf-text-muted"
+                style="font-size: 10px"
+                x-text="skillQualityReport.artifact.path"
+              ></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="gf-footer"
+      style="text-align: center; font-size: 11px; padding: 12px 0"
+    >
+      Built by
+      <a
+        href="https://www.blundergoat.com"
+        target="_blank"
+        class="gf-footer-link"
+        >BlunderGOAT</a
+      >
+      · <span x-text="dashboardVersion ? `v${dashboardVersion}` : ''"></span>
+    </div>
+  </div>
+</div>

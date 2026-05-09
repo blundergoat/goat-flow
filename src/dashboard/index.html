@@ -289,6 +289,13 @@
               Quality
             </button>
             <button
+              @click="activeView = 'skill'"
+              class="gf-nb"
+              :class="activeView === 'skill' && 'gf-nb-active'"
+            >
+              Skill
+            </button>
+            <button
               @click="activeView = 'setup'"
               class="gf-nb"
               :class="activeView === 'setup' && 'gf-nb-active'"
@@ -493,6 +500,7 @@
 
         <!-- include: views/prompts.html -->
         <!-- include: views/quality.html -->
+        <!-- include: views/skill.html -->
         <!-- include: views/setup.html -->
         <!-- include: views/home.html -->
         <!-- include: views/projects.html -->
