@@ -6,6 +6,7 @@
 const TERMINAL_REFIT_RETRY_DELAY_MS = 50;
 const TERMINAL_REFIT_MAX_ATTEMPTS = 20;
 const TERMINAL_INITIAL_FIT_DELAYS_MS = [50, 200, 500] as const;
+const TERMINAL_LAUNCH_PROMPT_FALLBACK_DELAY_MS = 6000;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
 let xtermLoadPromise: Promise<void> | null = null;
 
@@ -181,6 +182,16 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
   );
 }
 
+/** Heuristic for a freshly launched runner reaching its interactive prompt. */
+function dashboardOutputLooksReadyForLaunchPrompt(text: string): boolean {
+  const tail = dashboardPlainTerminalText(text).slice(-2000);
+  const claudeReady =
+    /\/remote-control is active\b/i.test(tail) &&
+    /(^|\n)\s*❯\s*(?:\n|$)/u.test(tail);
+  const shellReady = /(^|\n)\s*(?:[$#]|>)\s*$/u.test(tail);
+  return claudeReady || shellReady;
+}
+
 /** Decide whether a new output chunk should leave a session waiting. */
 function dashboardNextAwaitingInputState(
   previousAwaiting: boolean,
@@ -324,6 +335,75 @@ function dashboardSendToTerminal(
     return false;
   }
   return dashboardSendToTerminalSession(ctx, active.id, text, { adapt });
+}
+
+/** Cancel a pending dashboard launch prompt for one terminal session. */
+function dashboardClearLaunchPromptTimer(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs?.launchPromptTimer) return;
+  clearTimeout(refs.launchPromptTimer);
+  refs.launchPromptTimer = undefined;
+}
+
+/** Clear any pending dashboard launch prompt state for one terminal session. */
+function dashboardClearLaunchPrompt(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs) return;
+  dashboardClearLaunchPromptTimer(ctx, sessionId);
+  refs.launchPrompt = undefined;
+}
+
+/** Send a pending dashboard launch prompt once the terminal is ready. */
+function dashboardMaybeSendLaunchPrompt(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  { force = false }: { force?: boolean } = {},
+): boolean {
+  const refs = ctx._terminalRefs[sessionId];
+  const prompt = refs?.launchPrompt;
+  if (!prompt) return false;
+  const target = ctx.sessions.find((session) => session.id === sessionId);
+  if (!target || target.ended) {
+    dashboardClearLaunchPrompt(ctx, sessionId);
+    return false;
+  }
+  if (!refs.ws || refs.ws.readyState !== WebSocket.OPEN) return false;
+  if (
+    !force &&
+    !dashboardOutputLooksReadyForLaunchPrompt(target.outputTail ?? "")
+  ) {
+    return false;
+  }
+  refs.launchPrompt = undefined;
+  dashboardClearLaunchPromptTimer(ctx, sessionId);
+  return dashboardSendToTerminalSession(ctx, sessionId, prompt, {
+    adapt: false,
+  });
+}
+
+/** Send a dashboard launch prompt after the browser terminal is attached. */
+function dashboardScheduleLaunchPrompt(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  prompt: string,
+): void {
+  if (!prompt.trim()) return;
+  dashboardClearLaunchPrompt(ctx, sessionId);
+  const refs = ctx._terminalRefs[sessionId] ?? {};
+  refs.launchPrompt = prompt;
+  refs.launchPromptTimer = setTimeout(() => {
+    const currentRefs = ctx._terminalRefs[sessionId];
+    if (currentRefs) currentRefs.launchPromptTimer = undefined;
+    dashboardMaybeSendLaunchPrompt(ctx, sessionId, { force: true });
+  }, TERMINAL_LAUNCH_PROMPT_FALLBACK_DELAY_MS);
+  ctx._terminalRefs[sessionId] = refs;
+  dashboardMaybeSendLaunchPrompt(ctx, sessionId);
 }
 
 /** Send a preset prompt to an active session in the current project. */
@@ -790,7 +870,7 @@ async function dashboardLaunchInTerminal(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt,
+        prompt: "",
         projectPath: controllingCwd,
         targetPath: selectedTargetPath,
         runner,
@@ -830,6 +910,7 @@ async function dashboardLaunchInTerminal(
     await self.$nextTick();
     await ctx.loadXterm();
     ctx.connectTerminal(session.id, wsUrl);
+    dashboardScheduleLaunchPrompt(ctx, session.id, prompt);
     void ctx.updateSessionCount();
   } catch (err) {
     if (createdSessionId) {
@@ -932,6 +1013,7 @@ function dashboardConnectTerminal(
       target.connected = true;
     });
     setTimeout(doFit, TERMINAL_REFIT_RETRY_DELAY_MS);
+    dashboardMaybeSendLaunchPrompt(ctx, sessionId);
     if (ageInterval) clearInterval(ageInterval);
     ageInterval = setInterval(() => {
       if (session.ended) {
@@ -992,6 +1074,7 @@ function dashboardConnectTerminal(
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.outputTail = tail;
         });
+        dashboardMaybeSendLaunchPrompt(ctx, sessionId);
         if (awaitingInput) {
           if (
             reactive?.awaitingInput === true ||
@@ -1013,6 +1096,7 @@ function dashboardConnectTerminal(
         term.write(msg.data);
       } else if (type === "exit") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
+        dashboardClearLaunchPrompt(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
           target.connected = false;
@@ -1031,6 +1115,7 @@ function dashboardConnectTerminal(
         term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } else if (type === "shutdown") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
+        dashboardClearLaunchPrompt(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
           target.connected = false;
@@ -1097,6 +1182,7 @@ function dashboardConnectTerminal(
     window.removeEventListener("resize", resizeHandler);
     if (ageInterval) clearInterval(ageInterval);
     dashboardClearAwaitingInputTimer(ctx, sessionId);
+    dashboardClearLaunchPrompt(ctx, sessionId);
     try {
       ws.close();
     } catch {

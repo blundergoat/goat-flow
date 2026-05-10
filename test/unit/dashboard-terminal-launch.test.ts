@@ -51,6 +51,8 @@ type LaunchContext = {
       ws?: { readyState: number; send(payload: string): void };
       xterm?: { focus(): void };
       awaitingInputTimer?: ReturnType<typeof setTimeout>;
+      launchPrompt?: string;
+      launchPromptTimer?: ReturnType<typeof setTimeout>;
     }
   >;
   showMaxSessionsModal: boolean;
@@ -84,6 +86,7 @@ type HelperContext = {
   ): Promise<void>;
   dashboardEndSession(ctx: LaunchContext, sessionId: string): void;
   dashboardOutputLooksAwaitingInput(text: string): boolean;
+  dashboardOutputLooksReadyForLaunchPrompt(text: string): boolean;
   dashboardNextAwaitingInputState(
     previousAwaiting: boolean,
     previousTail: string,
@@ -122,6 +125,7 @@ globalThis.__helpers = {
   dashboardLaunchInTerminal,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
+  dashboardOutputLooksReadyForLaunchPrompt,
   dashboardNextAwaitingInputState,
 };`,
     context,
@@ -483,6 +487,25 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("detects freshly launched runner readiness before sending launch prompts", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    assert.equal(
+      helpers.dashboardOutputLooksReadyForLaunchPrompt(
+        "/remote-control is active · Code in CLI\n\n❯  ",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksReadyForLaunchPrompt(
+        "/remote-control is active · Code in CLI\nloading project...",
+      ),
+      false,
+    );
+  });
+
   it("debounces the visible awaiting-input badge", () => {
     const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
     assert.match(source, /const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200/);
@@ -547,6 +570,23 @@ describe("dashboard terminal launch flow", () => {
     assert.match(
       source,
       /dashboardSendToTerminalSession\(this, sessionId, note, \{\s+adapt: false,\s+\}\)/,
+    );
+  });
+
+  it("defers dashboard launch prompts until after terminal attachment", () => {
+    const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
+    assert.match(
+      source,
+      /const TERMINAL_LAUNCH_PROMPT_FALLBACK_DELAY_MS = 6000/,
+    );
+    assert.match(source, /body: JSON\.stringify\(\{\s+prompt: ""/);
+    assert.match(
+      source,
+      /ctx\.connectTerminal\(session\.id, wsUrl\);\s+dashboardScheduleLaunchPrompt\(ctx, session\.id, prompt\)/,
+    );
+    assert.match(
+      source,
+      /dashboardOutputLooksReadyForLaunchPrompt\(target\.outputTail \?\? ""\)/,
     );
   });
 

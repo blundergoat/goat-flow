@@ -315,6 +315,28 @@ describe("terminal exports", () => {
     manager.shutdown();
   });
 
+  it("uses the fallback deadline when runner output keeps updating", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = {
+      spawn: () => spawned.pty,
+    };
+    internals.nodePtyAvailable = true;
+
+    await manager.create("review this", PROJECT_ROOT, "claude");
+    const interval = setInterval(
+      () => spawned.emitData("status redraw\n"),
+      100,
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 5300));
+    clearInterval(interval);
+
+    assert.deepStrictEqual(spawned.writes, ["\x1b[200~review this\x1b[201~\r"]);
+    manager.shutdown();
+  });
+
   it("sends a typed error and closes when attaching to a missing session", () => {
     const manager = makeManager();
     const socket = new FakeWebSocket();

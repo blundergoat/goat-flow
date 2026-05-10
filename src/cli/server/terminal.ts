@@ -50,7 +50,7 @@ const POSIX_PROMPT_ENV_CLEANUP = "unset GOAT_RUNNER";
 const WINDOWS_PROMPT_ENV_CLEANUP =
   "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue";
 const INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS = 150;
-const INITIAL_PROMPT_FALLBACK_DELAY_MS = 2000;
+const INITIAL_PROMPT_FALLBACK_DELAY_MS = 5000;
 export const INITIAL_PROMPT_CHUNK_SIZE = 2048;
 
 /** Maximum output to buffer while a session is detached (characters). */
@@ -329,6 +329,8 @@ export class TerminalManager {
 
     let initialInputSent = false;
     let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
+    const initialInputLatestDueAt =
+      Date.now() + INITIAL_PROMPT_FALLBACK_DELAY_MS;
     let initialInputDueAt = 0;
 
     const session: TerminalSession = {
@@ -370,13 +372,18 @@ export class TerminalManager {
       { reset = false }: { reset?: boolean } = {},
     ): void => {
       if (!spawnSpec.initialInput || initialInputSent) return;
-      const nextDueAt = Date.now() + delayMs;
+      const now = Date.now();
+      const boundedDelayMs = Math.max(
+        0,
+        Math.min(delayMs, initialInputLatestDueAt - now),
+      );
+      const nextDueAt = now + boundedDelayMs;
       if (initialInputTimer) {
         if (!reset && initialInputDueAt <= nextDueAt) return;
         clearTimeout(initialInputTimer);
       }
       initialInputDueAt = nextDueAt;
-      initialInputTimer = setTimeout(sendInitialInput, delayMs);
+      initialInputTimer = setTimeout(sendInitialInput, boundedDelayMs);
     };
 
     // Wire PTY output at creation - routes to WebSocket if attached, buffer if detached
