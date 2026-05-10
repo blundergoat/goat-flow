@@ -1319,8 +1319,12 @@ body {
   border-color: var(--accent-hover);
   color: var(--accent-contrast);
 }
-.gf-btn-primary:disabled {
-  opacity: 0.5;
+.gf-btn-primary:disabled,
+.gf-btn-primary:disabled:hover {
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  border-color: var(--border-default);
+  cursor: not-allowed;
 }
 
 /* Variant: Audit/secondary accent */
