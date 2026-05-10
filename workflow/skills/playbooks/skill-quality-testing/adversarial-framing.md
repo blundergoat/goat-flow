@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.5.1"
+goat-flow-reference-version: "1.6.0"
 ---
 # Adversarial Framing (review-class skills)
 
@@ -24,6 +24,10 @@ The role primes adversarial attention on the artefact without slipping into pers
 **Zero findings without explicit justification is an error condition, not a clean bill of health - HALT and re-analyse or ask for guidance.** If thorough review legitimately surfaces nothing, state the coverage explicitly ("I checked boundary conditions, error paths, and integration points and found nothing") rather than approving silently. Quality beats quota - a fabricated tenth finding is worse than nine honest ones.
 
 goat-review's zero-findings HALT rule comes from this pattern. The rule is deliberate friction against rubber-stamping; the quality-beats-quota clause is the anti-fabrication guardrail that sits next to it.
+
+## Semantic assessment anti-bias
+
+The Skills page **Assess in Runner** prompt now carries an explicit anti-bias preamble before semantic scoring. It tells the reviewer to score against absolute criteria, avoid halo effects, read the whole artifact before scoring, and round down when tempted toward leniency. Keep review-class skills aligned with that posture: semantic judgments are advisory, but each deduction still needs file + semantic-anchor evidence.
 
 ## Parallel reviewer pattern (for high-stakes artefacts)
 

@@ -3,8 +3,8 @@
  *
  * Scores one artifact (skill or reference) across structural metrics
  * without executing agent prompts. Produces a recommendation:
- * keep-skill, consider-revision, reference-playbook, retire,
- * or needs-human-review.
+ * keep-skill, consider-revision, consider-reclassifying,
+ * reference-playbook, retire, or needs-human-review.
  *
  * All hardcoded values (walk roots, gate vocabulary, subtype profiles, etc.)
  * are sourced from `QualityConfig` (see `quality-config.ts`). Goat-flow's

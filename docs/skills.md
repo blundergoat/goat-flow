@@ -4,6 +4,18 @@ Seven focused capabilities (six plus dispatcher) loaded on demand. Each skill ha
 
 All skills use the `goat-` prefix to avoid conflicts with built-in agent commands.
 
+## Skill Quality Surfaces
+
+The Skills page separates three quality verbs:
+
+| Verb | Surface | What it does |
+|------|---------|--------------|
+| **Audit** | Installed skills and references | Deterministic structure score, classification confidence, metric breakdown, and recommendation. |
+| **Evaluate** | Draft markdown | Deterministic score and improvement tips for pasted/uploaded content. Read-only. |
+| **Assess** | Runner session | LLM semantic review launched from **Assess in Runner**. Advisory only. |
+
+The semantic layer starts from the deterministic baseline and asks the runner to score Clarity, Examples, Focus, and Coherence on a 1-5 scale. The prompt includes anti-bias guidance, a final `ship` / `revise` / `block` gate, and a final fenced JSON verdict. The dashboard does not persist or render that JSON verdict yet; it remains runner output.
+
 ```mermaid
 flowchart LR
     User["User input"] --> Dispatcher["/goat\n(dispatcher)"]

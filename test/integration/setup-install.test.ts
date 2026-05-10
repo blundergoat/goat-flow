@@ -80,7 +80,7 @@ describe("setup --apply installer", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.yaml"),
-      'version: "1.5.1"\n\nagents:\n  - claude\n\nskills:\n  install: all\n\ncustom_key: preserve_me\n',
+      'version: "1.6.0"\n\nagents:\n  - claude\n\nskills:\n  install: all\n\ncustom_key: preserve_me\n',
     );
 
     const result = runInstaller(root, "--agent", "codex");
@@ -97,7 +97,7 @@ describe("setup --apply installer", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.yaml"),
-      'version: "1.5.1"\n\nagents:\n  - claude\n  - codex\n\nskills:\n  install: all\n',
+      'version: "1.6.0"\n\nagents:\n  - claude\n  - codex\n\nskills:\n  install: all\n',
     );
 
     const result = runInstaller(root, "--agent", "codex");
@@ -113,7 +113,7 @@ describe("setup --apply installer", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.yaml"),
-      'version: "1.5.1"\n\nskills:\n  install: all\n',
+      'version: "1.6.0"\n\nskills:\n  install: all\n',
     );
 
     const result = runInstaller(root, "--agent", "codex");
@@ -129,7 +129,7 @@ describe("setup --apply installer", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.yaml"),
-      'version: "1.5.1"\n\nagents: null\n\nskills:\n  install: all\n',
+      'version: "1.6.0"\n\nagents: null\n\nskills:\n  install: all\n',
     );
 
     const result = runInstaller(root, "--agent", "codex");

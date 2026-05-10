@@ -3,7 +3,8 @@
 # check-markdown-links.sh - Verify relative markdown links resolve
 # =============================================================================
 # Finds [text](path) links in markdown files and checks that targets exist.
-# Skips URLs, anchors, mailto links, fenced code blocks, and archived/task files.
+# Skips URLs, anchors, mailto links, fenced code blocks, archived/task files,
+# logs, and scratchpad source material.
 #
 # Usage: bash scripts/check-markdown-links.sh [root-dir]
 # Exit:  0 if all links resolve, 1 if broken links found.
@@ -17,11 +18,13 @@ broken=0
 checked=0
 
 # Find markdown files in shipped directories.
-# Skip: _archived, tasks (local working state), logs, node_modules, .git
+# Skip: _archived, tasks/logs (local working state), scratchpad source
+# material, node_modules, .git
 files_with_links=$(find docs/ workflow/setup/ workflow/skills/ .goat-flow/ \
   -name '*.md' \
   -not -path '.goat-flow/tasks/*' \
   -not -path '.goat-flow/logs/*' \
+  -not -path '.goat-flow/scratchpad/*' \
   -not -path '*/_archived/*' \
   -not -path '*/node_modules/*' \
   -not -path '*/.git/*' \

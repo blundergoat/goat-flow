@@ -168,7 +168,7 @@ describe("skill new — draft mode", () => {
         "---",
         "name: draft",
         'description: "Draft skill."',
-        'goat-flow-skill-version: "1.5.1"',
+        'goat-flow-skill-version: "1.6.0"',
         "---",
         "# /draft",
         "## When to Use",

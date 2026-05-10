@@ -55,7 +55,7 @@ describe("loadQualityConfig", () => {
 
   it("returns goat-flow defaults when config has no quality section", () => {
     const projectRoot = makeTempProject();
-    writeYaml(projectRoot, "version: 1.5.1\n");
+    writeYaml(projectRoot, "version: 1.6.0\n");
     const config = loadQualityConfig(projectRoot);
     assert.deepEqual(
       config.walkRoots.skills,
@@ -151,7 +151,7 @@ describe("loadQualityConfig", () => {
         "---",
         "name: tiny",
         'description: "Tiny skill."',
-        'goat-flow-skill-version: "1.5.1"',
+        'goat-flow-skill-version: "1.6.0"',
         "---",
         "# /tiny",
         "## When to Use",

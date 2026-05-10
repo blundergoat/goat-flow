@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Harness engineering framework for AI coding agents - deterministic audit, structured skills, deny-hook safety, feedback loops, and a local dashboard. Works with Claude Code, Codex, Gemini CLI, and GitHub Copilot.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -25,6 +25,8 @@
     "docs/cli.md",
     "docs/dashboard.md",
     "docs/skills.md",
+    "docs/skill-quality-config.md",
+    "docs/skill-authoring.md",
     "docs/audit-and-quality.md",
     "docs/audit-checks.md",
     "docs/harness-audit.md",
