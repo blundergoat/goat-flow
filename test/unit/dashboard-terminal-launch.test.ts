@@ -197,7 +197,7 @@ function makeContext(
 }
 
 describe("dashboard terminal launch flow", () => {
-  it("sends terminal text to the requested session instead of the current active tab", () => {
+  it("sends terminal text to the requested session instead of the current active tab", async () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
     );
@@ -272,8 +272,14 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(sent.active.length, 0);
     assert.deepStrictEqual(JSON.parse(sent.upload[0] ?? "{}"), {
       type: "input",
-      data: "\x1b[200~Attached files\x1b[201~\r",
+      data: "\x1b[200~Attached files\x1b[201~",
     });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 60));
+    assert.deepStrictEqual(JSON.parse(sent.upload[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(sent.active.length, 0);
     assert.equal(ctx.sessions[0]?.awaitingInput, false);
   });
 

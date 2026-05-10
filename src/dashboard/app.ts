@@ -1130,8 +1130,25 @@ function app() {
           return;
         }
         this.skillQualityArtifacts = Array.isArray(payload.artifacts)
-          ? payload.artifacts
+          ? payload.artifacts.filter(
+              (artifact): artifact is SkillQualityArtifact =>
+                isRecord(artifact) &&
+                artifact.kind === "skill" &&
+                typeof artifact.id === "string" &&
+                typeof artifact.name === "string" &&
+                typeof artifact.path === "string" &&
+                typeof artifact.source === "string",
+            )
           : [];
+        if (
+          this.skillQualitySelectedId &&
+          !this.skillQualityArtifacts.some(
+            (artifact) => artifact.id === this.skillQualitySelectedId,
+          )
+        ) {
+          this.skillQualitySelectedId = null;
+          this.skillQualityReport = null;
+        }
         this.skillQualityReports = {};
         this.skillQualityAuditedAt = null;
         void this.prefetchSkillReports(requestProjectPath, requestRunner);

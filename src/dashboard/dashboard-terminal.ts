@@ -7,6 +7,7 @@ const TERMINAL_REFIT_RETRY_DELAY_MS = 50;
 const TERMINAL_REFIT_MAX_ATTEMPTS = 20;
 const TERMINAL_INITIAL_FIT_DELAYS_MS = [50, 200, 500] as const;
 const TERMINAL_LAUNCH_PROMPT_FALLBACK_DELAY_MS = 6000;
+const TERMINAL_PASTE_SUBMIT_DELAY_MS = 50;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
 let xtermLoadPromise: Promise<void> | null = null;
 
@@ -312,10 +313,15 @@ function dashboardSendToTerminalSession(
   }
   const prepared = adapt ? ctx.adaptPrompt(text, target.runner) : text;
   // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
-  // a stream of independent keystrokes. `\x1b[200~` starts paste mode, `\x1b[201~`
-  // ends it, and the trailing carriage return submits exactly once.
-  const pasteData = "\x1b[200~" + prepared + "\x1b[201~" + "\r";
+  // a stream of independent keystrokes. Submit on the next tick so Claude Code
+  // can first commit pasted content out of its `[Pasted text #N]` composer state.
+  const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
   refs.ws.send(JSON.stringify({ type: "input", data: pasteData }));
+  setTimeout(() => {
+    const currentRefs = ctx._terminalRefs[sessionId];
+    if (currentRefs?.ws?.readyState !== WebSocket.OPEN) return;
+    currentRefs.ws.send(JSON.stringify({ type: "input", data: "\r" }));
+  }, TERMINAL_PASTE_SUBMIT_DELAY_MS);
   dashboardClearAwaitingInputTimer(ctx, sessionId);
   target.lastInputTime = Date.now();
   target.awaitingInput = false;

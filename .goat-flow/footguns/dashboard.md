@@ -92,20 +92,24 @@ last_reviewed: 2026-05-10
 
 **Status:** active | **Created:** 2026-05-10 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Clicking a dashboard action such as "Run Quality Assessment in Runner" creates a Claude terminal session with the right title, but the terminal lands at Claude's empty `❯` prompt with no assessment prompt pasted.
+**Symptoms:** Clicking a dashboard action such as "Run Quality Assessment in Runner" creates a Claude terminal session with the right title, but the terminal lands at Claude's empty `❯` prompt with no assessment prompt pasted. A related Claude Code variant shows `[Pasted text #N +... lines]` in the composer and never submits it.
 
 **Evidence:**
 - User-observed dashboard session on 2026-05-10: "Quality Agent Installation for Claude Code via Claude Code" opened in Claude Code v2.1.138, reached the `❯` prompt, and no quality prompt appeared.
 - `test/smoke/dashboard-endpoints.test.ts` (search: `waits for runner output to settle before initial prompt delivery`) reproduces the multi-chunk startup condition: a second output chunk must reset the initial-input timer, and no prompt may be written until output has been quiet.
 - `src/dashboard/dashboard-terminal.ts` (search: `dashboardOutputLooksReadyForLaunchPrompt`) sends dashboard-launched prompts after the browser terminal is attached and the runner output reaches an interactive prompt, with a fallback timer for runners whose readiness cannot be detected.
 - Built-dashboard browser verification on 2026-05-10: clicking "Run Quality Assessment in Runner" opened Claude Code v2.1.138 and pasted the generated `# GOAT Flow Quality Assessment - Claude Code` prompt into the terminal.
+- User-observed Skills page session on 2026-05-10: "Assess in Runner" opened Claude Code v2.1.138 and showed `[Pasted text #1 +110 lines]` instead of running the skill quality prompt.
+- `src/dashboard/dashboard-terminal.ts` (search: `TERMINAL_PASTE_SUBMIT_DELAY_MS`) submits dashboard-launched pasted prompts as a second PTY input after the bracketed paste, so Claude Code can commit the pasted-text block before Enter is sent.
+- `test/unit/dashboard-terminal-launch.test.ts` (search: `data: "\r"`) pins the split paste-then-submit browser wire contract.
 
-**Why it happens:** Agent CLIs render startup screens in multiple PTY chunks, and Claude Code's remote-control startup can ignore a server-side initial PTY paste even after a simple delay. The PTY write succeeds from goat-flow's perspective, but the runner can drop or ignore the prompt before the browser-attached terminal path is ready.
+**Why it happens:** Agent CLIs render startup screens in multiple PTY chunks, and Claude Code's remote-control startup can ignore a server-side initial PTY paste even after a simple delay. The PTY write succeeds from goat-flow's perspective, but the runner can drop or ignore the prompt before the browser-attached terminal path is ready. For browser-side Claude Code sends, sending bracketed paste markers, prompt text, and Enter in one PTY write can also leave Claude in its pasted-text composer state without submitting.
 
 **Prevention:**
 1. For dashboard launch buttons, send the prompt after the browser terminal is attached and runner output looks ready, not as the terminal-create `prompt` payload.
 2. When changing `scheduleInitialInput`, test at least two output chunks with a delay between them and assert no prompt write before the final quiet window.
-3. Verify built-dashboard behavior after restarting the dashboard process; a running `dist/cli/cli.js dashboard` server keeps old terminal code in memory until restart.
+3. For browser-side sends, keep bracketed paste and Enter as separate ordered WebSocket inputs; do not collapse them back into one `paste + "\r"` payload.
+4. Verify built-dashboard behavior after restarting the dashboard process; a running `dist/cli/cli.js dashboard` server keeps old terminal code in memory until restart.
 
 ---
 
