@@ -127,6 +127,15 @@ const DASHBOARD_ROUTE_INVENTORY = [
 
 void DASHBOARD_ROUTE_INVENTORY;
 
+const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
+  "POST /api/projects/list",
+  "POST /api/quality/evaluate",
+  "POST /api/quality/analyse",
+  "POST /api/terminal/create",
+]);
+const TERMINAL_UPLOAD_IMAGE_API_ROUTE =
+  /^\/api\/terminal\/[^/]+\/upload-image$/u;
+
 /** Read the dashboard authorization token supplied by a browser/API client. */
 function readDashboardToken(req: IncomingMessage, url: URL): string | null {
   const header = req.headers[DASHBOARD_TOKEN_HEADER];
@@ -250,19 +259,11 @@ export function serveDashboard(
     /** Return whether a request targets a route that can mutate local state. */
     function isSideEffectfulApiRoute(req: IncomingMessage, url: URL): boolean {
       const method = req.method ?? "GET";
-      if (method === "POST" && url.pathname === "/api/projects/list")
-        return true;
-      if (method === "POST" && url.pathname === "/api/terminal/create")
-        return true;
+      const routeKey = `${method} ${url.pathname}`;
+      if (SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)) return true;
       if (
         method === "POST" &&
-        /^\/api\/terminal\/[^/]+\/upload-image$/u.test(url.pathname)
-      )
-        return true;
-      if (
-        method === "POST" &&
-        (url.pathname === "/api/quality/evaluate" ||
-          url.pathname === "/api/quality/analyse")
+        TERMINAL_UPLOAD_IMAGE_API_ROUTE.test(url.pathname)
       )
         return true;
       return method === "DELETE" && url.pathname.startsWith("/api/terminal/");
