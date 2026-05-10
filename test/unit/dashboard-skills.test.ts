@@ -42,4 +42,15 @@ describe("Skills dashboard view", () => {
     assert.doesNotMatch(viewSource, /kind\s*===\s*['"]shared-reference['"]/);
     assert.doesNotMatch(viewSource, />\s*References\s*<span/s);
   });
+
+  it("guards skill report prefetch writes with a generation token", () => {
+    const appSource = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+
+    assert.match(appSource, /skillQualityPrefetchGeneration:\s*0/);
+    assert.match(
+      appSource,
+      /this\.skillQualityPrefetchGeneration !== generation/,
+    );
+    assert.match(appSource, /prefetchSkillReports\([^)]*generation/s);
+  });
 });

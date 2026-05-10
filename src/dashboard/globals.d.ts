@@ -235,6 +235,8 @@ interface TerminalRefs {
   ageInterval?: ReturnType<typeof setInterval>;
   awaitingInputTimer?: ReturnType<typeof setTimeout>;
   pasteSubmitTimer?: ReturnType<typeof setTimeout>;
+  pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
+  pasteSubmitOutputTail?: string;
   launchPrompt?: string;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
   launchPromptQuietTimer?: ReturnType<typeof setTimeout>;

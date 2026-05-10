@@ -52,6 +52,8 @@ type LaunchContext = {
       xterm?: { focus(): void };
       awaitingInputTimer?: ReturnType<typeof setTimeout>;
       pasteSubmitTimer?: ReturnType<typeof setTimeout>;
+      pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
+      pasteSubmitOutputTail?: string;
       launchPrompt?: string;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
       launchPromptQuietTimer?: ReturnType<typeof setTimeout>;
@@ -109,9 +111,18 @@ type HelperContext = {
     sessionId: string,
     output: string,
   ): void;
+  dashboardClearPasteSubmitState(ctx: LaunchContext, sessionId: string): void;
 };
 
-function loadHelpers(fetchImpl: typeof fetch): HelperContext {
+type TimerControls = {
+  setTimeout: typeof setTimeout;
+  clearTimeout: typeof clearTimeout;
+};
+
+function loadHelpers(
+  fetchImpl: typeof fetch,
+  timers: TimerControls = { setTimeout, clearTimeout },
+): HelperContext {
   const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
   const js = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
@@ -121,8 +132,8 @@ function loadHelpers(fetchImpl: typeof fetch): HelperContext {
     dashboardFetch: fetchImpl,
     dashboardTerminalWsPath: (path: string) => path,
     console,
-    setTimeout,
-    clearTimeout,
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
     WebSocket: { OPEN: 1 },
     readRecord: (value: unknown): unknown => value,
     readErrorMessage: (value: unknown): string | null =>
@@ -147,6 +158,7 @@ globalThis.__helpers = {
   dashboardScheduleLaunchPrompt,
   dashboardHandleLaunchPromptOutput,
   dashboardHandlePasteSubmitOutput,
+  dashboardClearPasteSubmitState,
 };`,
     context,
   );
@@ -258,6 +270,52 @@ async function delay(ms: number): Promise<void> {
   await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 }
 
+function createFakeTimers(): TimerControls & {
+  tick(ms: number): void;
+  pending(): number;
+} {
+  let now = 0;
+  let nextId = 1;
+  const timers = new Map<number, { at: number; callback: () => void }>();
+  const fakeSetTimeout = ((
+    callback: (...args: unknown[]) => void,
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    const id = nextId;
+    nextId += 1;
+    timers.set(id, {
+      at: now + (ms ?? 0),
+      callback: () => callback(...args),
+    });
+    return id as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  const fakeClearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
+    timers.delete(Number(handle));
+  }) as typeof clearTimeout;
+  return {
+    setTimeout: fakeSetTimeout,
+    clearTimeout: fakeClearTimeout,
+    tick(ms: number): void {
+      const target = now + ms;
+      while (true) {
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.at <= target)
+          .sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        const [id, timer] = due;
+        timers.delete(id);
+        now = timer.at;
+        timer.callback();
+      }
+      now = target;
+    },
+    pending(): number {
+      return timers.size;
+    },
+  };
+}
+
 describe("dashboard terminal launch flow", () => {
   it("sends terminal text to the requested session instead of the current active tab", async () => {
     const helpers = loadHelpers(
@@ -349,9 +407,71 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(ctx.sessions[0]?.awaitingInput, false);
   });
 
-  it("falls back to submitting pasted terminal text when no paste echo arrives", async () => {
+  it("submits single-line or non-Claude sends immediately", async () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "codex",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Attached files",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Attached files\x1b[201~",
+    });
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(
+      ctx._terminalRefs["session-upload"]?.pasteSubmitTimer,
+      undefined,
+    );
+  });
+
+  it("falls back to submitting pasted terminal text when no paste echo arrives", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
     );
     const sent: string[] = [];
     const ctx = makeContext({
@@ -389,18 +509,153 @@ describe("dashboard terminal launch flow", () => {
       helpers.dashboardSendToTerminalSession(
         ctx,
         "session-upload",
-        "Attached files",
+        "Attached files\nsecond line",
         { adapt: false },
       ),
       true,
     );
 
     assert.equal(sent.length, 1);
-    await delay(1050);
+    timers.tick(1000);
     assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
     });
+    assert.equal(timers.pending(), 0);
+  });
+
+  it("queues later delayed Claude pastes behind the pending submit", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "claude",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "First\nprompt",
+        { adapt: false },
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Second\nprompt",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.equal(sent.length, 1);
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~First\nprompt\x1b[201~",
+    });
+    assert.equal(
+      ctx._terminalRefs["session-upload"]?.pasteSubmitQueue?.length,
+      1,
+    );
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "session-upload",
+      "[Pasted text #1 +1 lines]",
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.deepStrictEqual(JSON.parse(sent[2] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Second\nprompt\x1b[201~",
+    });
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "session-upload",
+      "[Pasted text #2 +1 lines]",
+    );
+    assert.deepStrictEqual(JSON.parse(sent[3] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+  });
+
+  it("clears pending delayed paste submit state when user input takes over", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const ctx = makeLaunchPromptContext([]);
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "launch-session",
+        "First\nprompt",
+        { adapt: false },
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "launch-session",
+        "Second\nprompt",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    helpers.dashboardClearPasteSubmitState(ctx, "launch-session");
+    timers.tick(1000);
+
+    assert.equal(
+      ctx._terminalRefs["launch-session"]?.pasteSubmitTimer,
+      undefined,
+    );
+    assert.equal(
+      ctx._terminalRefs["launch-session"]?.pasteSubmitQueue,
+      undefined,
+    );
+    assert.equal(ctx.sent.length, 1);
   });
 
   it("creates the backend session before waiting on xterm assets", async () => {

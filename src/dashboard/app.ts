@@ -223,6 +223,7 @@ function app() {
     skillQualityReports: {} as Record<string, SkillQualityReport>,
     skillQualityAuditedAt: null as number | null,
     skillQualityPrefetching: false,
+    skillQualityPrefetchGeneration: 0,
 
     // --- Skill evaluator modal state ---
     skillEvaluatorOpen: false,
@@ -826,6 +827,7 @@ function app() {
           this.skillQualityReports = {};
           this.skillQualityAuditedAt = null;
           this.skillQualityPrefetching = false;
+          this.skillQualityPrefetchGeneration += 1;
           void this.loadSkillQualityInventory();
         }
       });
@@ -868,6 +870,7 @@ function app() {
           this.skillQualityReports = {};
           this.skillQualityAuditedAt = null;
           this.skillQualityPrefetching = false;
+          this.skillQualityPrefetchGeneration += 1;
           if (this.activeView === "skills") {
             void this.loadSkillQualityInventory();
           }
@@ -1113,6 +1116,9 @@ function app() {
     async loadSkillQualityInventory() {
       const requestProjectPath = this.projectPath;
       const requestRunner = this.activeRunner;
+      const requestGeneration = this.skillQualityPrefetchGeneration + 1;
+      this.skillQualityPrefetchGeneration = requestGeneration;
+      this.skillQualityPrefetching = false;
       try {
         const res = await dashboardFetch(
           `/api/skill-quality/inventory?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}`,
@@ -1151,7 +1157,12 @@ function app() {
         }
         this.skillQualityReports = {};
         this.skillQualityAuditedAt = null;
-        void this.prefetchSkillReports(requestProjectPath, requestRunner);
+        this.skillQualityPrefetching = false;
+        void this.prefetchSkillReports(
+          requestProjectPath,
+          requestRunner,
+          requestGeneration,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(msg || "Skill quality inventory failed", true);
@@ -1160,7 +1171,11 @@ function app() {
     /** Fetch reports for every artifact in parallel so the sidebar can show
      *  a per-skill grade without requiring the user to click each one first.
      *  Aborts silently if the project/runner changes mid-flight. */
-    async prefetchSkillReports(projectPath: string, runner: string) {
+    async prefetchSkillReports(
+      projectPath: string,
+      runner: string,
+      generation: number,
+    ) {
       const artifacts = [...this.skillQualityArtifacts];
       if (artifacts.length === 0) return;
       this.skillQualityPrefetching = true;
@@ -1171,8 +1186,13 @@ function app() {
           );
           const payload = readRecord(await res.json(), "Skill quality report");
           if (readErrorMessage(payload)) return;
-          if (this.projectPath !== projectPath || this.activeRunner !== runner)
+          if (
+            this.projectPath !== projectPath ||
+            this.activeRunner !== runner ||
+            this.skillQualityPrefetchGeneration !== generation
+          ) {
             return;
+          }
           this.skillQualityReports[art.id] =
             payload as unknown as SkillQualityReport;
         } catch {
@@ -1180,7 +1200,11 @@ function app() {
         }
       });
       await Promise.all(fetches);
-      if (this.projectPath === projectPath && this.activeRunner === runner) {
+      if (
+        this.projectPath === projectPath &&
+        this.activeRunner === runner &&
+        this.skillQualityPrefetchGeneration === generation
+      ) {
         this.skillQualityAuditedAt = Date.now();
         this.skillQualityPrefetching = false;
         if (

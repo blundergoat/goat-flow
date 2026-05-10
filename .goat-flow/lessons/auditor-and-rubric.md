@@ -1,6 +1,6 @@
 ---
 category: auditor-and-rubric
-last_reviewed: 2026-05-09
+last_reviewed: 2026-05-11
 ---
 
 ## Lesson: Rubric changes require fixture expectation sync
@@ -24,6 +24,18 @@ Scanner and rubric changes can invalidate "known failing" fixture expectations e
 **Root cause:** The deterministic tool-dependency regex scanned full markdown, including metadata, and did not distinguish version fields from executable tool references.
 
 **Prevention:** When broadening rubric keywords, add negative tests for frontmatter/version strings and ordinary prose, not only positive command examples. Evidence anchors: `src/cli/quality/skill-quality.ts` (search: `goat-flow-skill-version`), `test/unit/skill-quality.test.ts` (search: `which milestone`).
+
+---
+
+## Lesson: Generic skill rubrics must not require goat-flow inheritance
+
+**Status:** active | **Created:** 2026-05-11
+
+**What happened:** During M04 skill-quality shape detection, the evaluator treated `.goat-flow/skill-reference/skill-preamble.md` and the goat-flow Proof Gate as if they were universal skill-quality requirements. The dashboard then told an uploaded skill to "Reference `.goat-flow/skill-reference/skill-preamble.md` early so the skill inherits the Proof Gate and evidence discipline." The user correctly objected: not every skill is a goat-flow-installed skill, and standalone uploaded skills may never inherit that preamble.
+
+**Root cause:** The rubric mixed two scopes: installed goat-flow skills that really compose `skill-preamble.md`, and generic uploaded/non-goat-flow skills that must be judged only by what they explicitly contain. The cold-start and evidence tips rewarded framework-specific inheritance instead of portable behavior such as explicit prerequisites, context, gates, and evidence rules.
+
+**Prevention:** Every generic skill-quality rubric rule must be satisfiable by a standalone skill with no goat-flow files present. Framework inheritance can be credited only on installed artifact paths that actually compose the shared references; uploaded or external skills must earn credit through explicit local instructions. Add a negative regression whenever a rubric mentions a framework-specific path or doctrine. Evidence anchors: `src/cli/quality/skill-quality.ts` (search: `no prerequisites or operating context`), `test/unit/skill-quality.test.ts` (search: `does not require goat-flow preamble inheritance for portable uploaded skills`), `docs/skill-quality-config.md` (search: `Keep the scoring rubric portable`).
 
 ---
 

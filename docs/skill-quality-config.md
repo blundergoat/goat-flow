@@ -49,7 +49,7 @@ quality:
       notes: "Audit-only skills score like reports but use a domain-specific Audit Mode marker."
 ```
 
-Subtype detection contributes to the classification confidence shown in the dashboard. `subtype` remains the applied scoring profile, so existing reports and fixtures keep a stable contract. Newer reports may also include additive shape fields such as `detectedShape`, `shapeConfidence`, and `shapeMismatch`; these describe what the content reads like without changing the profile used for scoring. For example, an uploaded `SKILL.md` can keep `subtype: workflow` while reporting `detectedShape: playbook` when the content is really a runbook. A high structure score with low subtype confidence still returns `consider-reclassifying`.
+Subtype detection contributes to the classification confidence shown in the dashboard. `subtype` remains the applied scoring profile, so existing reports and fixtures keep a stable contract. Newer reports may also include additive shape fields such as `detectedShape`, `shapeConfidence`, and `shapeMismatch`; these describe what the content reads like without changing the profile used for scoring. For example, an uploaded skill file can keep `subtype: workflow` while reporting `detectedShape: playbook` when the content is really a runbook. A high structure score with low subtype confidence still returns `consider-reclassifying`.
 
 Fallback-only subtype matches are intentionally low confidence. If a subtype only matched because it is the default fallback for a kind, the evaluator must not report that as certain.
 

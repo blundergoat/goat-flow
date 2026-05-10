@@ -13,6 +13,11 @@ const TERMINAL_PASTE_SUBMIT_DELAY_MS = 1000;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
 let xtermLoadPromise: Promise<void> | null = null;
 
+interface DashboardQueuedPaste {
+  data: string;
+  delayed: boolean;
+}
+
 interface DashboardTerminalContext {
   projectPath: string;
   activeView: string;
@@ -275,6 +280,19 @@ function dashboardClearPasteSubmitTimer(
   refs.pasteSubmitTimer = undefined;
 }
 
+/** Cancel all pending delayed submit state for a bracketed paste. */
+function dashboardClearPasteSubmitState(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  dashboardClearPasteSubmitTimer(ctx, sessionId);
+  const refs = ctx._terminalRefs[sessionId];
+  if (refs) {
+    refs.pasteSubmitQueue = undefined;
+    refs.pasteSubmitOutputTail = undefined;
+  }
+}
+
 /** Submit the current terminal composer if the session is still attached. */
 function dashboardSendTerminalSubmit(
   ctx: DashboardTerminalContext,
@@ -286,13 +304,70 @@ function dashboardSendTerminalSubmit(
   return true;
 }
 
+function dashboardArmPasteSubmitTimer(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs) return;
+  dashboardClearPasteSubmitTimer(ctx, sessionId);
+  refs.pasteSubmitOutputTail = "";
+  refs.pasteSubmitTimer = setTimeout(() => {
+    const currentRefs = ctx._terminalRefs[sessionId];
+    if (currentRefs) currentRefs.pasteSubmitTimer = undefined;
+    dashboardSubmitPendingPaste(ctx, sessionId);
+  }, TERMINAL_PASTE_SUBMIT_DELAY_MS);
+}
+
+function dashboardSendNextQueuedPaste(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  const next = refs?.pasteSubmitQueue?.shift();
+  if (!refs || !next) return;
+  if (refs.pasteSubmitQueue?.length === 0) refs.pasteSubmitQueue = undefined;
+  dashboardSendBracketedPaste(ctx, sessionId, next);
+}
+
 /** Submit a bracketed paste once the runner has had time to commit it. */
 function dashboardSubmitPendingPaste(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): boolean {
   dashboardClearPasteSubmitTimer(ctx, sessionId);
-  return dashboardSendTerminalSubmit(ctx, sessionId);
+  const submitted = dashboardSendTerminalSubmit(ctx, sessionId);
+  if (submitted) dashboardSendNextQueuedPaste(ctx, sessionId);
+  return submitted;
+}
+
+function dashboardSendBracketedPaste(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  paste: DashboardQueuedPaste,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) return;
+  refs.ws.send(JSON.stringify({ type: "input", data: paste.data }));
+  if (paste.delayed) {
+    dashboardArmPasteSubmitTimer(ctx, sessionId);
+  } else if (dashboardSendTerminalSubmit(ctx, sessionId)) {
+    dashboardSendNextQueuedPaste(ctx, sessionId);
+  }
+}
+
+function dashboardSendOrQueueBracketedPaste(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  paste: DashboardQueuedPaste,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs) return;
+  if (refs.pasteSubmitTimer) {
+    refs.pasteSubmitQueue = [...(refs.pasteSubmitQueue ?? []), paste];
+    return;
+  }
+  dashboardSendBracketedPaste(ctx, sessionId, paste);
 }
 
 /** React to runner output while a bracketed paste submit is pending. */
@@ -303,7 +378,9 @@ function dashboardHandlePasteSubmitOutput(
 ): void {
   const refs = ctx._terminalRefs[sessionId];
   if (!refs?.pasteSubmitTimer) return;
-  if (dashboardOutputLooksCommittedPaste(output)) {
+  const outputTail = ((refs.pasteSubmitOutputTail ?? "") + output).slice(-2000);
+  refs.pasteSubmitOutputTail = outputTail;
+  if (dashboardOutputLooksCommittedPaste(outputTail)) {
     dashboardSubmitPendingPaste(ctx, sessionId);
   }
 }
@@ -375,13 +452,11 @@ function dashboardSendToTerminalSession(
   // asynchronously, so submit on its pasted-text echo or fall back after a short
   // bounded delay for CLIs that do not echo that state.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  dashboardClearPasteSubmitTimer(ctx, sessionId);
-  refs.ws.send(JSON.stringify({ type: "input", data: pasteData }));
-  refs.pasteSubmitTimer = setTimeout(() => {
-    const currentRefs = ctx._terminalRefs[sessionId];
-    if (currentRefs) currentRefs.pasteSubmitTimer = undefined;
-    dashboardSendTerminalSubmit(ctx, sessionId);
-  }, TERMINAL_PASTE_SUBMIT_DELAY_MS);
+  const delayedSubmit = target.runner === "claude" && prepared.includes("\n");
+  dashboardSendOrQueueBracketedPaste(ctx, sessionId, {
+    data: pasteData,
+    delayed: delayedSubmit,
+  });
   dashboardClearAwaitingInputTimer(ctx, sessionId);
   target.lastInputTime = Date.now();
   target.awaitingInput = false;
@@ -1246,7 +1321,7 @@ function dashboardConnectTerminal(
         term.write(msg.data);
       } else if (type === "exit") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
-        dashboardClearPasteSubmitTimer(ctx, sessionId);
+        dashboardClearPasteSubmitState(ctx, sessionId);
         dashboardClearLaunchPrompt(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
@@ -1266,7 +1341,7 @@ function dashboardConnectTerminal(
         term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } else if (type === "shutdown") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
-        dashboardClearPasteSubmitTimer(ctx, sessionId);
+        dashboardClearPasteSubmitState(ctx, sessionId);
         dashboardClearLaunchPrompt(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
@@ -1319,6 +1394,7 @@ function dashboardConnectTerminal(
       ws.send(JSON.stringify({ type: "input", data }));
     const lastInputTime = Date.now();
     dashboardClearAwaitingInputTimer(ctx, sessionId);
+    dashboardClearPasteSubmitState(ctx, sessionId);
     dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
       target.lastInputTime = lastInputTime;
       target.awaitingInput = false;
@@ -1334,7 +1410,7 @@ function dashboardConnectTerminal(
     window.removeEventListener("resize", resizeHandler);
     if (ageInterval) clearInterval(ageInterval);
     dashboardClearAwaitingInputTimer(ctx, sessionId);
-    dashboardClearPasteSubmitTimer(ctx, sessionId);
+    dashboardClearPasteSubmitState(ctx, sessionId);
     dashboardClearLaunchPrompt(ctx, sessionId);
     try {
       ws.close();

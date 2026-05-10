@@ -497,6 +497,27 @@ function renderExamplesDimensionCriteria(subtype: string): string[] {
   return lines;
 }
 
+function appendComposedFromInstruction(
+  lines: string[],
+  report: SkillQualityReport,
+  kindLower: string,
+): void {
+  const { artifact, composedFrom } = report;
+  if (composedFrom.length === 0) {
+    lines.push(
+      `Assess the ${kindLower} artifact at \`${artifact.path}\`. The engine composed no additional files (single-file scoring path); read this file in full before scoring.`,
+    );
+    return;
+  }
+  lines.push(
+    `Assess the ${kindLower} **${artifact.name}**. Read every file in **Composed from** below — the engine composes ${composedFrom.length} file${composedFrom.length === 1 ? "" : "s"} into the runtime surface (\`${composedFrom.join("`, `")}\`). Structural signals from referenced files count toward your assessment: a phase-2 procedure documented in \`references/identity-and-data.md\` is part of the ${kindLower}, not bonus material.`,
+  );
+  lines.push("");
+  lines.push(
+    'If a `composition truncated` fit note appears below, the composed bundle is incomplete. Read the actual files listed in **Composed from** directly when context allows; otherwise note the skipped files in the final "What was not verified" section.',
+  );
+}
+
 /** Compose a focused quality prompt for a single skill or reference artifact.
  *  After M09, the prompt requires four scored semantic dimensions, an
  *  anti-bias preamble, an explicit per-file `composedFrom` reading
@@ -527,19 +548,7 @@ export function composeArtifactQualityPrompt(
     "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. This prompt is the full assessment contract. You may read files and run read-only commands.",
   );
   lines.push("");
-  if (composedFrom.length > 0) {
-    lines.push(
-      `Assess the ${kindLower} **${artifact.name}**. Read every file in **Composed from** below — the engine composes ${composedFrom.length} file${composedFrom.length === 1 ? "" : "s"} into the runtime surface (\`${composedFrom.join("`, `")}\`). Structural signals from referenced files count toward your assessment: a phase-2 procedure documented in \`references/identity-and-data.md\` is part of the ${kindLower}, not bonus material.`,
-    );
-    lines.push("");
-    lines.push(
-      'If a `composition truncated` fit note appears below, the composed bundle is incomplete. Read the actual files listed in **Composed from** directly when context allows; otherwise note the skipped files in the final "What was not verified" section.',
-    );
-  } else {
-    lines.push(
-      `Assess the ${kindLower} artifact at \`${artifact.path}\`. The engine composed no additional files (single-file scoring path); read this file in full before scoring.`,
-    );
-  }
+  appendComposedFromInstruction(lines, report, kindLower);
   lines.push("");
 
   lines.push("## Deterministic Baseline");
