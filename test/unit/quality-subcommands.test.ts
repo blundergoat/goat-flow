@@ -3,6 +3,8 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli.js";
 
 describe("quality subcommand parsing", () => {
@@ -62,5 +64,36 @@ describe("quality subcommand parsing", () => {
       () => parseCLIArgs(["audit", ".", "--all"]),
       /only valid for the quality command/i,
     );
+  });
+});
+
+describe("skill subcommand parsing", () => {
+  it("keeps projectPath at cwd instead of treating 'new' as a path", () => {
+    const parsed = parseCLIArgs([
+      "skill",
+      "new",
+      "I want a workflow for deploy checks",
+      "--name",
+      "deploy-checks",
+      "--yes",
+    ]);
+    assert.equal(parsed.command, "skill");
+    assert.equal(parsed.skillSubcommand, "new");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(
+      parsed.skillDescription,
+      "I want a workflow for deploy checks",
+    );
+  });
+});
+
+describe("quality candidacy draft naming", () => {
+  it("uses the platform path basename instead of POSIX-only splitting", () => {
+    const cliSource = readFileSync(
+      resolve(import.meta.dirname, "..", "..", "src", "cli", "cli.ts"),
+      "utf-8",
+    );
+    assert.match(cliSource, /basename\(path\)\.replace/);
+    assert.doesNotMatch(cliSource, /path\.split\("\/"\)/);
   });
 });

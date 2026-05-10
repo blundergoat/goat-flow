@@ -296,7 +296,7 @@ export function decodeClientMessage(raw: string): DecodeResult<ClientMessage> {
   );
 }
 
-const MAX_EVALUATE_CONTENT_BYTES = 256 * 1024;
+export const MAX_EVALUATE_CONTENT_BYTES = 256 * 1024;
 const MAX_EVALUATE_NAME_BYTES = 200;
 const MAX_EVALUATE_FILES = 32;
 const MAX_EVALUATE_FILENAME_BYTES = 256;

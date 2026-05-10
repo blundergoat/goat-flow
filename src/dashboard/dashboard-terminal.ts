@@ -282,6 +282,36 @@ function getXtermConstructors(): {
   return { Terminal, FitAddon };
 }
 
+/** Send text to a specific terminal session without changing the active tab. */
+function dashboardSendToTerminalSession(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  text: string,
+  { adapt = true }: { adapt?: boolean } = {},
+): boolean {
+  const target = ctx.sessions.find((session) => session.id === sessionId);
+  if (!target) {
+    ctx.showToast("No active terminal session", true);
+    return false;
+  }
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) {
+    ctx.showToast("No active terminal session", true);
+    return false;
+  }
+  const prepared = adapt ? ctx.adaptPrompt(text, target.runner) : text;
+  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
+  // a stream of independent keystrokes. `\x1b[200~` starts paste mode, `\x1b[201~`
+  // ends it, and the trailing carriage return submits exactly once.
+  const pasteData = "\x1b[200~" + prepared + "\x1b[201~" + "\r";
+  refs.ws.send(JSON.stringify({ type: "input", data: pasteData }));
+  dashboardClearAwaitingInputTimer(ctx, sessionId);
+  target.lastInputTime = Date.now();
+  target.awaitingInput = false;
+  if (ctx.activeSessionId === sessionId && refs.xterm) refs.xterm.focus();
+  return true;
+}
+
 /** Send text to the active terminal session and focus it. */
 function dashboardSendToTerminal(
   ctx: DashboardTerminalContext,
@@ -293,22 +323,7 @@ function dashboardSendToTerminal(
     ctx.showToast("No active terminal session", true);
     return false;
   }
-  const refs = ctx._terminalRefs[active.id];
-  if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) {
-    ctx.showToast("No active terminal session", true);
-    return false;
-  }
-  const prepared = adapt ? ctx.adaptPrompt(text) : text;
-  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
-  // a stream of independent keystrokes. `\x1b[200~` starts paste mode, `\x1b[201~`
-  // ends it, and the trailing carriage return submits exactly once.
-  const pasteData = "\x1b[200~" + prepared + "\x1b[201~" + "\r";
-  refs.ws.send(JSON.stringify({ type: "input", data: pasteData }));
-  dashboardClearAwaitingInputTimer(ctx, active.id);
-  active.lastInputTime = Date.now();
-  active.awaitingInput = false;
-  if (refs.xterm) refs.xterm.focus();
-  return true;
+  return dashboardSendToTerminalSession(ctx, active.id, text, { adapt });
 }
 
 /** Send a preset prompt to an active session in the current project. */

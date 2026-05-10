@@ -32,24 +32,41 @@ const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const PACKAGE_VERSION = getPackageVersion();
 const DASHBOARD_TOKEN_HEADER = "x-goat-flow-dashboard-token";
 
-/** Read the request body as a string, capped at MAX_BODY_BYTES. */
-function readBody(req: IncomingMessage): Promise<string> {
+interface ReadBodyOptions {
+  maxBytes?: number;
+  tooLargeMessage?: string;
+}
+
+/** Read the request body as a string, capped at the configured byte limit. */
+function readBody(
+  req: IncomingMessage,
+  options: ReadBodyOptions = {},
+): Promise<string> {
   return new Promise((resolve, reject) => {
+    const maxBytes = options.maxBytes ?? MAX_BODY_BYTES;
+    const tooLargeMessage = options.tooLargeMessage ?? "Request body too large";
     const chunks: Buffer[] = [];
     let size = 0;
+    let rejected = false;
     req.on("data", (chunk: Buffer) => {
+      if (rejected) return;
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
-        req.destroy();
-        reject(new Error("Request body too large"));
+      if (size > maxBytes) {
+        rejected = true;
+        chunks.length = 0;
+        req.resume();
+        reject(new Error(tooLargeMessage));
         return;
       }
       chunks.push(chunk);
     });
     req.on("end", () => {
+      if (rejected) return;
       resolve(Buffer.concat(chunks).toString("utf-8"));
     });
-    req.on("error", reject);
+    req.on("error", (err) => {
+      if (!rejected) reject(err);
+    });
   });
 }
 
@@ -236,6 +253,11 @@ export function serveDashboard(
       if (method === "POST" && url.pathname === "/api/projects/list")
         return true;
       if (method === "POST" && url.pathname === "/api/terminal/create")
+        return true;
+      if (
+        method === "POST" &&
+        /^\/api\/terminal\/[^/]+\/upload-image$/u.test(url.pathname)
+      )
         return true;
       if (
         method === "POST" &&

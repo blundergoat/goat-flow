@@ -44,8 +44,17 @@ type LaunchContext = {
   promptRunStates: Record<string, string>;
   launching: boolean;
   activeSessionId: string | null;
-  _terminalRefs: Record<string, { cleanup?: () => void }>;
+  _terminalRefs: Record<
+    string,
+    {
+      cleanup?: () => void;
+      ws?: { readyState: number; send(payload: string): void };
+      xterm?: { focus(): void };
+      awaitingInputTimer?: ReturnType<typeof setTimeout>;
+    }
+  >;
   showMaxSessionsModal: boolean;
+  adaptPrompt(prompt: string, runner?: string): string;
   showToast(msg: string, isError?: boolean): void;
   _forgetSavedSession(sessionId: string): void;
   loadXterm(): Promise<void>;
@@ -61,6 +70,12 @@ type LaunchContext = {
 };
 
 type HelperContext = {
+  dashboardSendToTerminalSession(
+    ctx: LaunchContext,
+    sessionId: string,
+    text: string,
+    options?: { adapt?: boolean },
+  ): boolean;
   dashboardLaunchInTerminal(
     ctx: LaunchContext,
     prompt: string,
@@ -88,6 +103,7 @@ function loadHelpers(fetchImpl: typeof fetch): HelperContext {
     console,
     setTimeout,
     clearTimeout,
+    WebSocket: { OPEN: 1 },
     readRecord: (value: unknown): unknown => value,
     readErrorMessage: (value: unknown): string | null =>
       typeof value === "object" &&
@@ -102,6 +118,7 @@ function loadHelpers(fetchImpl: typeof fetch): HelperContext {
   runInContext(
     `${js}
 globalThis.__helpers = {
+  dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
@@ -131,6 +148,9 @@ function makeContext(
     activeSessionId: null,
     _terminalRefs: {},
     showMaxSessionsModal: false,
+    adaptPrompt(prompt: string): string {
+      return prompt;
+    },
     _forgetSavedSession(): void {
       return;
     },
@@ -173,6 +193,86 @@ function makeContext(
 }
 
 describe("dashboard terminal launch flow", () => {
+  it("sends terminal text to the requested session instead of the current active tab", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const sent: Record<string, string[]> = {
+      upload: [],
+      active: [],
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-active",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "claude",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: true,
+          age: "0s",
+          presetId: null,
+        },
+        {
+          id: "session-active",
+          runner: "codex",
+          promptLabel: "Active target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.upload.push(payload);
+            },
+          },
+        },
+        "session-active": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.active.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Attached files",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.equal(sent.active.length, 0);
+    assert.deepStrictEqual(JSON.parse(sent.upload[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Attached files\x1b[201~\r",
+    });
+    assert.equal(ctx.sessions[0]?.awaitingInput, false);
+  });
+
   it("creates the backend session before waiting on xterm assets", async () => {
     const calls: string[] = [];
     const helpers = loadHelpers(async (input, init) => {
@@ -440,5 +540,21 @@ describe("dashboard terminal launch flow", () => {
     assert.match(source, /@click="openSession\(s\)"/);
     assert.match(source, /:aria-label="'Open ' \+ sessionTitleFor\(s\)"/);
     assert.match(source, /justify-content: flex-start;/);
+  });
+
+  it("routes terminal upload notes to the originating session", () => {
+    const source = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+    assert.match(
+      source,
+      /dashboardSendToTerminalSession\(this, sessionId, note, \{\s+adapt: false,\s+\}\)/,
+    );
+  });
+
+  it("only treats image file drag items as terminal upload candidates", () => {
+    const source = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+    assert.match(
+      source,
+      /item\.kind === "file" && item\.type\.startsWith\("image\/"\)/,
+    );
   });
 });

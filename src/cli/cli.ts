@@ -6,7 +6,7 @@
  */
 
 import { parseArgs } from "node:util";
-import { resolve, dirname, join } from "node:path";
+import { resolve, dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -442,6 +442,14 @@ function parseCommandPositionals(
 ): ReturnType<typeof parseQualityPositionals> {
   if (command === "quality")
     return parseQualityPositionals(positionals, draftFlag);
+  if (command === "skill")
+    return {
+      qualitySubcommand: "prompt",
+      projectPath: resolve("."),
+      qualityDiffPair: null,
+      qualityValidatePath: null,
+      candidacyInput: null,
+    };
   return {
     qualitySubcommand: "prompt",
     projectPath: resolve(positionals[0] ?? "."),
@@ -1149,7 +1157,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
       result = runCandidacyCheck({
         kind: "draft",
         content: readFileSync(path, "utf-8"),
-        suggestedName: path.split("/").pop()?.replace(/\.md$/, ""),
+        suggestedName: basename(path).replace(/\.md$/, ""),
       });
     } else {
       result = runCandidacyCheck({

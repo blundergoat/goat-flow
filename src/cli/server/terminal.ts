@@ -329,6 +329,7 @@ export class TerminalManager {
 
     let initialInputSent = false;
     let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
+    let initialInputDueAt = 0;
 
     const session: TerminalSession = {
       id,
@@ -355,6 +356,7 @@ export class TerminalManager {
       if (initialInputTimer) {
         clearTimeout(initialInputTimer);
         initialInputTimer = null;
+        initialInputDueAt = 0;
       }
       for (const chunk of chunkTerminalInput(spawnSpec.initialInput)) {
         pty.write(chunk);
@@ -364,8 +366,13 @@ export class TerminalManager {
 
     /** Schedule initial prompt delivery after the runner has had time to draw. */
     const scheduleInitialInput = (delayMs: number): void => {
-      if (!spawnSpec.initialInput || initialInputSent || initialInputTimer)
-        return;
+      if (!spawnSpec.initialInput || initialInputSent) return;
+      const nextDueAt = Date.now() + delayMs;
+      if (initialInputTimer) {
+        if (initialInputDueAt <= nextDueAt) return;
+        clearTimeout(initialInputTimer);
+      }
+      initialInputDueAt = nextDueAt;
       initialInputTimer = setTimeout(sendInitialInput, delayMs);
     };
 
@@ -386,6 +393,7 @@ export class TerminalManager {
       if (initialInputTimer) {
         clearTimeout(initialInputTimer);
         initialInputTimer = null;
+        initialInputDueAt = 0;
       }
       if (session.ws) {
         sendMessage(session.ws, {

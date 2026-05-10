@@ -42,6 +42,7 @@ import {
   findArtifact,
   scoreArtifact,
 } from "../quality/skill-quality.js";
+import { MAX_EVALUATE_CONTENT_BYTES } from "./decoders.js";
 import {
   loadQualityConfig,
   type ArtifactSource,
@@ -56,6 +57,7 @@ const AGENT_PROFILES = getAgentProfiles();
 const SUPPORTED_AGENTS = AGENT_PROFILES.map(({ id, name }) => ({ id, name }));
 const VALID_AGENTS = new Set<string>(KNOWN_AGENT_IDS);
 const VALID_QUALITY_MODES = new Set<string>(QUALITY_MODES);
+const QUALITY_EVALUATE_MAX_BODY_BYTES = MAX_EVALUATE_CONTENT_BYTES + 64 * 1024;
 
 interface DashboardPresetData {
   id: string;
@@ -98,7 +100,15 @@ type JsonResponder = (
   body: unknown,
 ) => void;
 
-type BodyReader = (req: IncomingMessage) => Promise<string>;
+interface BodyReadOptions {
+  maxBytes?: number;
+  tooLargeMessage?: string;
+}
+
+type BodyReader = (
+  req: IncomingMessage,
+  options?: BodyReadOptions,
+) => Promise<string>;
 
 interface DashboardAuditProfileSpan {
   name: string;
@@ -1457,7 +1467,19 @@ export function createDashboardRouteHandlers(
       jsonResponse(res, 405, { error: "Method not allowed" });
       return true;
     }
-    const body = await readBody(req);
+    let body: string;
+    try {
+      body = await readBody(req, {
+        maxBytes: QUALITY_EVALUATE_MAX_BODY_BYTES,
+        tooLargeMessage: "Evaluate body too large",
+      });
+    } catch (err) {
+      if (isAlias) markEvaluateAliasDeprecation(res);
+      jsonResponse(res, 413, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return true;
+    }
     const { decodeEvaluateBody } = await import("./decoders.js");
     const decoded = decodeEvaluateBody(body);
     if (!decoded.ok) {

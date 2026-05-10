@@ -659,6 +659,21 @@ describe("dashboard API authorization", () => {
     assert.deepEqual(await res.json(), { error: "Forbidden" });
   });
 
+  it("rejects cross-origin terminal image uploads", async () => {
+    const res = await fetch(`${baseUrl}/api/terminal/sess-x/upload-image`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://evil.example",
+        "X-Goat-Flow-Dashboard-Token": dashboardToken,
+      },
+      body: JSON.stringify({ files: [] }),
+    });
+    assert.equal(res.status, 403);
+    assertJsonResponse(res, "bad origin terminal upload rejection");
+    assert.deepEqual(await res.json(), { error: "Forbidden" });
+  });
+
   it("accepts valid token and same-origin side-effectful requests", async () => {
     const res = await fetch(`${baseUrl}/api/projects/list`, {
       method: "POST",
@@ -1679,6 +1694,17 @@ describe("dashboard /api/quality/evaluate", () => {
       body: JSON.stringify({ content: SKILL_DRAFT, kind: "not-a-kind" }),
     });
     assert.equal(res.status, 400);
+  });
+
+  it("returns 413 for evaluate bodies above the route body cap", async () => {
+    const { res, body } = await fetchJson("/api/quality/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x".repeat(330 * 1024) }),
+    });
+    assert.equal(res.status, 413);
+    const data = expectRecord(body, "Evaluate oversized result");
+    assert.match(String(data.error), /Evaluate body too large/);
   });
 
   it("returns 405 for non-POST methods", async () => {

@@ -615,7 +615,8 @@ function app() {
       if (!items || items.length === 0) return false;
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
-        if (item && item.kind === "file") return true;
+        if (item && item.kind === "file" && item.type.startsWith("image/"))
+          return true;
       }
       return false;
     },
@@ -655,7 +656,9 @@ function app() {
           ? payload.rejected
           : [];
         if (note.length > 0) {
-          this.sendToTerminal(note, { adapt: false });
+          dashboardSendToTerminalSession(this, sessionId, note, {
+            adapt: false,
+          });
         }
         if (rejected.length > 0) {
           for (const entry of rejected) {

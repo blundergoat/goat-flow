@@ -31,7 +31,15 @@ type JsonResponder = (
   body: unknown,
 ) => void;
 
-type BodyReader = (req: IncomingMessage) => Promise<string>;
+interface BodyReadOptions {
+  maxBytes?: number;
+  tooLargeMessage?: string;
+}
+
+type BodyReader = (
+  req: IncomingMessage,
+  options?: BodyReadOptions,
+) => Promise<string>;
 
 interface DashboardTerminalDependencies {
   absDefault: string;

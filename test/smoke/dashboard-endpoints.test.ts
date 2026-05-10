@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import {
   buildTerminalSpawnSpec,
   pickWindowsRunnerPath,
@@ -17,6 +18,7 @@ import {
 } from "../../src/cli/server/terminal.js";
 import type { ServerMessage } from "../../src/cli/server/types.js";
 
+const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const require = createRequire(import.meta.url);
 const childProcess =
   require("node:child_process") as typeof import("node:child_process");
@@ -133,6 +135,41 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
     ...overrides,
   };
   return { session, writes, resizes };
+}
+
+function makeSpawnedPty(): {
+  pty: TestPty & {
+    onData(handler: (data: string) => void): void;
+    onExit(
+      handler: (event: { exitCode: number; signal?: number | string }) => void,
+    ): void;
+  };
+  writes: string[];
+  emitData(data: string): void;
+} {
+  const writes: string[] = [];
+  let dataHandler: (data: string) => void = () => undefined;
+  let exitHandler: (event: {
+    exitCode: number;
+    signal?: number | string;
+  }) => void = () => undefined;
+  return {
+    writes,
+    pty: {
+      write: (data) => writes.push(data),
+      resize: () => undefined,
+      kill: () => exitHandler({ exitCode: 0 }),
+      onData: (handler) => {
+        dataHandler = handler;
+      },
+      onExit: (handler) => {
+        exitHandler = handler;
+      },
+    },
+    emitData(data: string): void {
+      dataHandler(data);
+    },
+  };
 }
 
 describe("dashboard server exports", () => {
@@ -254,6 +291,24 @@ describe("terminal exports", () => {
     ]);
     assert.equal(spec.env.GOAT_PROMPT, undefined);
     assert.equal(spec.initialInput, "\x1b[200~audit target\x1b[201~\r");
+  });
+
+  it("reschedules initial prompt delivery after first runner output", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = {
+      spawn: () => spawned.pty,
+    };
+    internals.nodePtyAvailable = true;
+
+    await manager.create("review this", PROJECT_ROOT, "claude");
+    spawned.emitData("runner ready\n");
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
+
+    assert.deepStrictEqual(spawned.writes, ["\x1b[200~review this\x1b[201~\r"]);
+    manager.shutdown();
   });
 
   it("sends a typed error and closes when attaching to a missing session", () => {
