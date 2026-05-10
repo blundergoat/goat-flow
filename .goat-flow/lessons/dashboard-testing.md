@@ -1,6 +1,18 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-09
+last_reviewed: 2026-05-10
+---
+
+## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
+
+**Status:** active | **Created:** 2026-05-10
+
+**What happened:** During v1.6.0 browser-use manual dashboard QA, clicking Workspace `Open terminal` launched a real Claude Code session in the selected project. Before cleanup, `git status --short` showed an unexpected tracked diff in `docs/dashboard.md` adding a temporary `### Skills` section that was not part of the QA request; the diff was removed to restore the read-only testing scope.
+
+**Root cause:** I treated the terminal launch as a harmless UI smoke, but the dashboard terminal starts a real agent process in the selected project. For release QA that only needs Workspace layout and session controls, a real runner can attach to existing agent state and mutate the repository.
+
+**Prevention:** For manual dashboard page/modal sweeps, do not click runner launch buttons unless terminal runner behavior is the explicit target. Prefer browser-use state checks of the empty Workspace, `/api/terminal/sessions`, or a non-agent test harness. If the max-session modal needs coverage, trigger Alpine state via browser-use Python/CDP instead of starting ten runner sessions. When terminal launch is in scope, snapshot `git status --short` before and after, then close the session immediately. Evidence anchors: `src/dashboard/views/workspace.html` (search: `launchInTerminal('', activeRunner`), `src/dashboard/dashboard-terminal.ts` (search: `async function dashboardLaunchInTerminal`).
+
 ---
 
 ## Lesson: Slow verification can expose unrelated dashboard doc drift
@@ -8,6 +20,8 @@ last_reviewed: 2026-05-09
 **Status:** active | **Created:** 2026-05-09
 
 **What happened:** While double-checking an unrelated Codex config fix, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported `Dashboard view names drift between manifest and architecture prose`. The Codex fix was clean; the blocker was stale `.goat-flow/architecture.md` prose missing the `skill` dashboard view in both required snippets.
+
+**2026-05-10 recurrence:** Manual v1.6.0 CLI release smoke hit the same class through `node dist/cli/cli.js audit . --check-content --format text`: `Cold-Path Content Lint` failed because `docs/dashboard.md` listed dashboard headings without the manifest-backed `skills` view. Adding the missing `### Skills` section changed the check to `Cold-Path Content Lint: PASS (0 warning(s), 9 info, 177 file(s) scanned)`.
 
 **Root cause:** I treated the broad slow suite as a final confirmation step, but it also runs repo-wide cold-path truth checks through `scripts/preflight-checks.sh`. Those checks can surface unrelated committed dashboard doc drift that focused tests do not touch.
 

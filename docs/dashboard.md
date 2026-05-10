@@ -22,6 +22,10 @@ Generate and view agent quality-assessment prompts. Select a target agent, gener
 
 Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent (Claude, Codex, Gemini, Copilot), then generates a setup prompt you can preview and launch directly in a terminal session.
 
+### Skills
+
+Per-artifact quality view for installed skills and shared references. Shows deterministic structural scores, warning counts, subtype-aware metric profiles, and a detail panel for inspecting one artifact at a time. Use `Re-audit all` to refresh the cached scores or `Evaluate skill` to inspect uploaded skill/reference content before installing it.
+
 ### Projects
 
 Multi-project browser. Lists all registered project paths with their latest audit status. "Audit All" re-audits every project in one click. Select a project to switch context and view its results on the Home view.
