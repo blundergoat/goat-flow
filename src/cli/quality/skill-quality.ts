@@ -391,6 +391,23 @@ function readOptionalText(path: string, config: QualityConfig): string | null {
   return readTextCapped(path, config)?.content ?? null;
 }
 
+function utf8ByteLength(content: string): number {
+  return Buffer.byteLength(content, "utf-8");
+}
+
+function truncateUtf8Bytes(content: string, maxBytes: number): string {
+  const cap = Math.max(0, Math.floor(maxBytes));
+  let used = 0;
+  let output = "";
+  for (const char of content) {
+    const next = utf8ByteLength(char);
+    if (used + next > cap) break;
+    output += char;
+    used += next;
+  }
+  return output;
+}
+
 // eslint-disable-next-line complexity -- composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case
 function composeArtifactContent(
   projectRoot: string,
@@ -477,7 +494,7 @@ function composeArtifactContent(
   }
 
   const composed = chunks.join("\n\n---\n\n");
-  if (composed.length <= config.composition.maxComposedBytes) {
+  if (utf8ByteLength(composed) <= config.composition.maxComposedBytes) {
     return { raw: rawContent, composed, sources, notes };
   }
   notes.push(
@@ -485,7 +502,7 @@ function composeArtifactContent(
   );
   return {
     raw: rawContent,
-    composed: composed.slice(0, config.composition.maxComposedBytes),
+    composed: truncateUtf8Bytes(composed, config.composition.maxComposedBytes),
     sources,
     notes,
   };
@@ -1731,10 +1748,11 @@ export function evaluateUploadedBundle(
     "\n\n---\n\n",
   );
   const composed =
-    composedFull.length <= config.composition.maxComposedBytes
+    utf8ByteLength(composedFull) <= config.composition.maxComposedBytes
       ? composedFull
-      : composedFull.slice(0, config.composition.maxComposedBytes);
-  const truncated = composedFull.length > config.composition.maxComposedBytes;
+      : truncateUtf8Bytes(composedFull, config.composition.maxComposedBytes);
+  const truncated =
+    utf8ByteLength(composedFull) > config.composition.maxComposedBytes;
 
   const classification = classifyArtifact(artifact, primary.content, config);
   const subtype = classification.detectedSubtype;

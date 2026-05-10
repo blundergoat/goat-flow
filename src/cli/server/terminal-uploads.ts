@@ -5,8 +5,14 @@
  * handler module so file-level constants, MIME tables, sanitization, and
  * containment checks can be unit-tested without spinning up an HTTP server.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 /** Maximum bytes per uploaded image file (raw, post-base64-decode). */
 const TERMINAL_UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MiB
@@ -41,6 +47,32 @@ interface RejectedUpload {
 interface UploadResult {
   accepted: AcceptedUpload[];
   rejected: RejectedUpload[];
+}
+
+interface UploadDirectory {
+  absPath: string;
+  relPath: string;
+  realRootPath: string;
+}
+
+function isPathWithin(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  if (rel === "") return true;
+  if (isAbsolute(rel)) return false;
+  const [firstSegment] = rel.split(/[\\/]/);
+  return firstSegment !== "..";
+}
+
+function assertUploadComponentSafe(root: string, candidate: string): void {
+  if (!existsSync(candidate)) return;
+  if (lstatSync(candidate).isSymbolicLink()) {
+    throw new Error("Upload path escapes session target directory");
+  }
+  const realRoot = existsSync(root) ? realpathSync(root) : root;
+  const realCandidate = realpathSync(candidate);
+  if (!isPathWithin(realRoot, realCandidate)) {
+    throw new Error("Upload path escapes session target directory");
+  }
 }
 
 /** Strip directory components and unsafe characters from an upload filename. */
@@ -96,7 +128,7 @@ export function detectImageExtension(bytes: Uint8Array): string | null {
 export function uploadDirForSession(
   targetPath: string,
   sessionId: string,
-): { absPath: string; relPath: string } {
+): UploadDirectory {
   if (!/^[a-zA-Z0-9_-]+$/u.test(sessionId)) {
     throw new Error("Invalid session id for upload path");
   }
@@ -106,7 +138,19 @@ export function uploadDirForSession(
   if (rel.startsWith("..") || resolve(root, rel) !== absPath) {
     throw new Error("Upload path escapes session target directory");
   }
-  return { absPath, relPath: rel.replace(/\\/gu, "/") };
+  for (const component of [
+    resolve(root, ".goat-flow"),
+    resolve(root, ".goat-flow", "logs"),
+    resolve(root, ".goat-flow", "logs", "uploads"),
+    absPath,
+  ]) {
+    assertUploadComponentSafe(root, component);
+  }
+  return {
+    absPath,
+    relPath: rel.replace(/\\/gu, "/"),
+    realRootPath: existsSync(root) ? realpathSync(root) : root,
+  };
 }
 
 /** Generate a collision-safe saved filename for one accepted upload. */
@@ -175,7 +219,7 @@ export function decodeUploadFile(
 /** Persist accepted uploads to disk and return their saved metadata.
  *  Caller is responsible for upstream session/path validation. */
 export function persistUploads(
-  uploadDir: { absPath: string; relPath: string },
+  uploadDir: { absPath: string; relPath: string; realRootPath?: string },
   files: Array<{ name: string; data: string }>,
   options: { now?: () => number } = {},
 ): UploadResult {
@@ -192,6 +236,12 @@ export function persistUploads(
     }
     if (!dirCreated) {
       mkdirSync(uploadDir.absPath, { recursive: true });
+      if (
+        uploadDir.realRootPath !== undefined &&
+        !isPathWithin(uploadDir.realRootPath, realpathSync(uploadDir.absPath))
+      ) {
+        throw new Error("Upload path escapes session target directory");
+      }
       dirCreated = true;
     }
     const savedName = buildSavedName(

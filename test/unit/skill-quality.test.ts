@@ -19,6 +19,10 @@ import {
   scoreAllArtifacts,
   type SkillQualityReport,
 } from "../../src/cli/quality/skill-quality.js";
+import {
+  cloneQualityConfig,
+  DEFAULT_QUALITY_CONFIG,
+} from "../../src/cli/quality/quality-config.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const SNAPSHOT_FIXTURE = resolve(
@@ -307,6 +311,72 @@ describe("skill scoring", () => {
     const artifact = findArtifact(projectRoot, "skill:huge-compose")!;
     const report = scoreArtifact(projectRoot, artifact);
     assert.ok(report.fitNotes.includes("composition truncated at 32KB"));
+  });
+
+  it("enforces composed content caps by UTF-8 byte length", () => {
+    const projectRoot = makeTempProject();
+    const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+    config.composition.maxComposedBytes = 1024;
+    config.composition.skillPreamblePath = null;
+    config.composition.skillConventionsPath = null;
+    const content = [
+      "---",
+      "name: utf8-compose",
+      'description: "Skill with multibyte composed content."',
+      'goat-flow-skill-version: "1.6.0"',
+      "---",
+      "# /utf8-compose",
+      "## When to Use",
+      "Use when testing byte caps.",
+      "語".repeat(400),
+    ].join("\n");
+    assert.ok(content.length < config.composition.maxComposedBytes);
+    assert.ok(
+      Buffer.byteLength(content, "utf-8") > config.composition.maxComposedBytes,
+    );
+    writeSkill(projectRoot, "utf8-compose", content);
+
+    const artifact = findArtifact(projectRoot, "skill:utf8-compose", config)!;
+    const report = scoreArtifact(projectRoot, artifact, config);
+    assert.ok(report.fitNotes.includes("composition truncated at 1KB"));
+  });
+
+  it("enforces uploaded bundle composition caps by UTF-8 byte length", () => {
+    const projectRoot = makeTempProject();
+    const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+    config.composition.maxComposedBytes = 1024;
+    config.composition.skillPreamblePath = null;
+    config.composition.skillConventionsPath = null;
+    const siblingContent = "語".repeat(400);
+    assert.ok(siblingContent.length < config.composition.maxComposedBytes);
+    assert.ok(
+      Buffer.byteLength(siblingContent, "utf-8") >
+        config.composition.maxComposedBytes,
+    );
+
+    const report = evaluateUploadedBundle(
+      projectRoot,
+      {
+        files: [
+          {
+            name: "SKILL.md",
+            content: [
+              "---",
+              "name: utf8-upload",
+              'description: "Uploaded skill."',
+              'goat-flow-skill-version: "1.6.0"',
+              "---",
+              "# /utf8-upload",
+              "## When to Use",
+              "Use when testing byte caps.",
+            ].join("\n"),
+          },
+          { name: "notes.md", content: siblingContent },
+        ],
+      },
+      config,
+    );
+    assert.ok(report.fitNotes.includes("composition truncated at 1KB"));
   });
 
   it("caps oversized artifact content and surfaces a fit note", () => {

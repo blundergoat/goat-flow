@@ -3,8 +3,9 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli.js";
 
 describe("quality subcommand parsing", () => {
@@ -84,6 +85,48 @@ describe("skill subcommand parsing", () => {
       parsed.skillDescription,
       "I want a workflow for deploy checks",
     );
+  });
+
+  it("parses an explicit project path after skill new", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-skill-cli-"));
+    try {
+      const parsed = parseCLIArgs([
+        "skill",
+        "new",
+        projectRoot,
+        "I want a workflow for deploy checks",
+      ]);
+      assert.equal(parsed.command, "skill");
+      assert.equal(parsed.skillSubcommand, "new");
+      assert.equal(parsed.projectPath, projectRoot);
+      assert.equal(
+        parsed.skillDescription,
+        "I want a workflow for deploy checks",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("parses an explicit project path before skill new", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-skill-cli-"));
+    try {
+      const parsed = parseCLIArgs([
+        "skill",
+        projectRoot,
+        "new",
+        "I want a workflow for deploy checks",
+      ]);
+      assert.equal(parsed.command, "skill");
+      assert.equal(parsed.skillSubcommand, "new");
+      assert.equal(parsed.projectPath, projectRoot);
+      assert.equal(
+        parsed.skillDescription,
+        "I want a workflow for deploy checks",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });
 

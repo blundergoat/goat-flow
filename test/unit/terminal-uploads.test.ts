@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -147,6 +155,28 @@ describe("uploadDirForSession", () => {
       () => uploadDirForSession("/tmp/proj", ""),
       /Invalid session id/,
     );
+  });
+
+  it("rejects upload paths that escape through symlinked components", () => {
+    const target = mkdtempSync(join(tmpdir(), "gf-upload-target-"));
+    const outside = mkdtempSync(join(tmpdir(), "gf-upload-outside-"));
+    try {
+      mkdirSync(join(target, ".goat-flow", "logs"), { recursive: true });
+      symlinkSync(
+        outside,
+        join(target, ".goat-flow", "logs", "uploads"),
+        "dir",
+      );
+
+      assert.throws(
+        () => uploadDirForSession(target, "sess1"),
+        /escapes session target directory/,
+      );
+      assert.equal(existsSync(join(outside, "sess1")), false);
+    } finally {
+      rmSync(target, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 

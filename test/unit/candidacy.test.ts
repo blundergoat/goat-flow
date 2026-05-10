@@ -184,6 +184,22 @@ describe("runCandidacyCheck — description mode", () => {
     assert.equal(result.recommendedArtifact.type, "skill");
   });
 
+  it("does not treat implementation as a workflow keyword", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "implementation notes for onboarding",
+    });
+    assert.notEqual(result.recommendedArtifact.type, "skill");
+  });
+
+  it("does not treat rerun as a workflow keyword", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "rerun a formatter helper",
+    });
+    assert.notEqual(result.recommendedArtifact.type, "skill");
+  });
+
   it("recommends skill (report) for audit-shaped descriptions without writes", () => {
     const result = runCandidacyCheck({
       kind: "description",

@@ -301,7 +301,7 @@ function matchSkillIntent(tokens: DescriptionTokens): CandidacyResult | null {
   const { lower } = tokens;
   const wantsWorkflow =
     /\b(workflow|protocol|process)\b/.test(lower) ||
-    /\bplan|implement|execute|run\b/.test(lower);
+    /\b(?:plan|implement|execute|run)\b/.test(lower);
   const wantsAudit = /\baudit|review|assess|check|inspect|scan|verify\b/.test(
     lower,
   );

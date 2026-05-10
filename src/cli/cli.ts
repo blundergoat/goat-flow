@@ -95,6 +95,7 @@ Examples:
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
+  goat-flow skill ./repo new "<description>"
   goat-flow skill new --draft <path>   Validate an existing draft against the candidacy check
   goat-flow skill new --interactive    Prompt for description and name, then scaffold
   goat-flow --format markdown          PR-comment friendly output
@@ -445,7 +446,7 @@ function parseCommandPositionals(
   if (command === "skill")
     return {
       qualitySubcommand: "prompt",
-      projectPath: resolve("."),
+      projectPath: parseSkillPositionals(positionals).projectPath,
       qualityDiffPair: null,
       qualityValidatePath: null,
       candidacyInput: null,
@@ -462,29 +463,63 @@ function parseCommandPositionals(
 interface SkillPositionals {
   skillSubcommand: SkillSubcommand | null;
   skillDescription: string | null;
+  projectPath: string;
 }
 
-/** Parse `skill <subcommand> [description...]` positionals. */
-function parseSkillPositionals(positionals: string[]): SkillPositionals {
-  const [first, ...rest] = positionals;
-  if (first === undefined) {
-    return { skillSubcommand: null, skillDescription: null };
-  }
-  if (first !== "new") {
-    throw new CLIError(
-      `unknown skill subcommand "${first}". Supported: new`,
-      2,
-    );
-  }
-  const description = rest
+function isPathShapedSkillProject(value: string): boolean {
+  const normalized = value.replace(/\\/gu, "/");
+  return (
+    value === "." ||
+    value === ".." ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    /^[a-zA-Z]:[\\/]/u.test(value) ||
+    value.startsWith("\\\\")
+  );
+}
+
+function parseSkillDescription(parts: string[]): string | null {
+  const description = parts
     .filter(
       (part): part is string => typeof part === "string" && part.length > 0,
     )
     .join(" ");
-  return {
-    skillSubcommand: "new",
-    skillDescription: description.length > 0 ? description : null,
-  };
+  return description.length > 0 ? description : null;
+}
+
+/** Parse `skill [project-path] new [project-path] [description...]` positionals. */
+function parseSkillPositionals(positionals: string[]): SkillPositionals {
+  const [first, second, ...rest] = positionals;
+  if (first === undefined) {
+    return {
+      skillSubcommand: null,
+      skillDescription: null,
+      projectPath: resolve("."),
+    };
+  }
+  if (first === "new") {
+    const descriptionParts =
+      second !== undefined && isPathShapedSkillProject(second)
+        ? rest
+        : positionals.slice(1);
+    return {
+      skillSubcommand: "new",
+      skillDescription: parseSkillDescription(descriptionParts),
+      projectPath:
+        second !== undefined && isPathShapedSkillProject(second)
+          ? resolve(second)
+          : resolve("."),
+    };
+  }
+  if (second === "new") {
+    return {
+      skillSubcommand: "new",
+      skillDescription: parseSkillDescription(rest),
+      projectPath: resolve(first),
+    };
+  }
+  throw new CLIError(`unknown skill subcommand "${first}". Supported: new`, 2);
 }
 
 /** Validate flags shared across commands. */
@@ -637,7 +672,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   const skillPositionals: SkillPositionals =
     command === "skill"
       ? parseSkillPositionals(positionals)
-      : { skillSubcommand: null, skillDescription: null };
+      : {
+          skillSubcommand: null,
+          skillDescription: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   validateFlagCombinations(
     command,
     parsedValues,
