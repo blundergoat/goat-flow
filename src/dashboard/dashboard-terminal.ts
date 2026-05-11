@@ -10,9 +10,12 @@ const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000;
 const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000;
 const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500;
 const TERMINAL_PASTE_SUBMIT_DELAY_MS = 1000;
+const TERMINAL_PASTE_COMMIT_DELAY_MS = 300;
 const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300;
 const TERMINAL_PASTE_SUBMIT_MAX_RETRIES = 5;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
+const TERMINAL_LOADING_SLOW_HINT_MS = 3000;
+const TERMINAL_LOADING_RETRY_MS = 10000;
 const BRACKETED_PASTE_MARKER_PATTERN = /\x1b\[(?:200|201)~/g;
 let xtermLoadPromise: Promise<void> | null = null;
 
@@ -253,6 +256,88 @@ function dashboardMutateLocalSession(
   if (reactive !== fallback) mutate(fallback);
 }
 
+/** Clear the loading-overlay escalation timers for one terminal session. */
+function dashboardClearTerminalLoadingTimers(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs) return;
+  if (refs.loadingSlowTimer) {
+    clearTimeout(refs.loadingSlowTimer);
+    refs.loadingSlowTimer = undefined;
+  }
+  if (refs.loadingRetryTimer) {
+    clearTimeout(refs.loadingRetryTimer);
+    refs.loadingRetryTimer = undefined;
+  }
+}
+
+/** Move one session through the terminal loading-overlay state machine. */
+function dashboardSetTerminalLoadingPhase(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  fallback: LocalSession,
+  phase: TerminalLoadingPhase,
+  error?: string,
+): void {
+  if (phase === "ready" || phase === "error") {
+    dashboardClearTerminalLoadingTimers(ctx, sessionId);
+  }
+  dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
+    target.loadingPhase = phase;
+    if (phase === "error") {
+      target.loadingError = error || "Could not start session.";
+      target.loadingShowRetry = true;
+    } else {
+      target.loadingError = undefined;
+      if (phase === "ready") {
+        target.loadingShowSlowHint = false;
+        target.loadingShowRetry = false;
+      }
+    }
+  });
+}
+
+/** Arm the slow-start and retry affordances for the loading overlay. */
+function dashboardArmTerminalLoadingTimers(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  fallback: LocalSession,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs) return;
+  dashboardClearTerminalLoadingTimers(ctx, sessionId);
+  refs.loadingSlowTimer = setTimeout(() => {
+    refs.loadingSlowTimer = undefined;
+    const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;
+    if (current.ended || current.loadingPhase === "ready") return;
+    dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
+      target.loadingShowSlowHint = true;
+    });
+  }, TERMINAL_LOADING_SLOW_HINT_MS);
+  refs.loadingRetryTimer = setTimeout(() => {
+    refs.loadingRetryTimer = undefined;
+    const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;
+    if (current.ended || current.loadingPhase === "ready") return;
+    dashboardMutateLocalSession(ctx, sessionId, fallback, (target) => {
+      target.loadingShowRetry = true;
+    });
+  }, TERMINAL_LOADING_RETRY_MS);
+}
+
+/** Mark the loading overlay ready as soon as the PTY sends its first output. */
+function dashboardMarkTerminalLoadingReady(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  fallback: LocalSession,
+  previousTail: string,
+  output: string,
+): void {
+  if (previousTail.length > 0 || output.length === 0) return;
+  dashboardSetTerminalLoadingPhase(ctx, sessionId, fallback, "ready");
+}
+
 /** Cancel a pending "awaiting input" reveal for one terminal session. */
 function dashboardClearAwaitingInputTimer(
   ctx: DashboardTerminalContext,
@@ -412,9 +497,9 @@ function dashboardHandlePasteSubmitOutput(
   refs.pasteSubmitOutputTail = outputTail;
   if (dashboardOutputLooksCommittedPaste(outputTail)) {
     const target = ctx.sessions.find((session) => session.id === sessionId);
-    if (target?.runner === "gemini") {
+    if (target?.runner === "claude" || target?.runner === "gemini") {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
-        delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
+        delayMs: TERMINAL_PASTE_COMMIT_DELAY_MS,
       });
     } else {
       dashboardSubmitPendingPaste(ctx, sessionId);
@@ -806,6 +891,7 @@ async function dashboardEndAllSessions(
         if (active) keptRefs[id] = active;
       } else {
         const refs = ctx._terminalRefs[id];
+        dashboardClearTerminalLoadingTimers(ctx, id);
         if (refs?.cleanup) refs.cleanup();
       }
     }
@@ -1027,6 +1113,7 @@ function dashboardDetachTerminal(
   }
   for (const id of Object.keys(ctx._terminalRefs)) {
     const refs = ctx._terminalRefs[id];
+    dashboardClearTerminalLoadingTimers(ctx, id);
     if (refs?.cleanup) refs.cleanup();
   }
   ctx._terminalRefs = {};
@@ -1083,12 +1170,22 @@ async function dashboardReconnectTerminal(
       ended: false,
       awaitingInput: false,
       outputTail: "",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
       age: "",
       presetId: null,
     };
     ctx.rememberSessionTitle(session.id, session.promptLabel);
     ctx.sessions.push(session);
-    ctx._terminalRefs[session.id] = {};
+    ctx._terminalRefs[session.id] = {
+      retryPrompt: "",
+      retryPromptLabel: session.promptLabel,
+      retryPresetId: null,
+      retryCwdPath: session.cwd,
+      retryTargetPath: session.targetPath,
+    };
+    dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   }
   const savedActiveId = ctx._projectActiveSession[ctx.projectPath];
   const first = liveSaved[0];
@@ -1168,13 +1265,23 @@ async function dashboardLaunchInTerminal(
       ended: false,
       awaitingInput: false,
       outputTail: "",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
       age: "",
       presetId,
     };
     createdSessionId = session.id;
     ctx.rememberSessionTitle(session.id, session.promptLabel);
     ctx.sessions.push(session);
-    ctx._terminalRefs[session.id] = {};
+    ctx._terminalRefs[session.id] = {
+      retryPrompt: prompt,
+      retryPromptLabel: session.promptLabel,
+      retryPresetId: presetId,
+      retryCwdPath: controllingCwd,
+      retryTargetPath: selectedTargetPath,
+    };
+    dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
@@ -1187,6 +1294,7 @@ async function dashboardLaunchInTerminal(
     if (createdSessionId) {
       const failedSessionId = createdSessionId;
       const refs = ctx._terminalRefs[failedSessionId];
+      dashboardClearTerminalLoadingTimers(ctx, failedSessionId);
       if (refs?.cleanup) refs.cleanup();
       Reflect.deleteProperty(ctx._terminalRefs, failedSessionId);
       ctx.sessions = ctx.sessions.filter((s) => s.id !== failedSessionId);
@@ -1283,6 +1391,7 @@ function dashboardConnectTerminal(
     dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
       target.connected = true;
     });
+    dashboardSetTerminalLoadingPhase(ctx, sessionId, session, "loading");
     setTimeout(doFit, TERMINAL_REFIT_RETRY_DELAY_MS);
     dashboardArmLaunchPromptNoOutputFallback(ctx, sessionId);
     dashboardMaybeSendLaunchPrompt(ctx, sessionId);
@@ -1346,6 +1455,13 @@ function dashboardConnectTerminal(
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.outputTail = tail;
         });
+        dashboardMarkTerminalLoadingReady(
+          ctx,
+          sessionId,
+          session,
+          previousTail,
+          msg.data,
+        );
         dashboardHandlePasteSubmitOutput(ctx, sessionId, msg.data);
         if (refs?.launchPrompt)
           dashboardHandleLaunchPromptOutput(ctx, sessionId);
@@ -1372,6 +1488,7 @@ function dashboardConnectTerminal(
         dashboardClearAwaitingInputTimer(ctx, sessionId);
         dashboardClearPasteSubmitState(ctx, sessionId);
         dashboardClearLaunchPrompt(ctx, sessionId);
+        dashboardClearTerminalLoadingTimers(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
           target.connected = false;
@@ -1387,11 +1504,21 @@ function dashboardConnectTerminal(
         }
         void ctx.updateSessionCount();
       } else if (type === "error" && typeof msg.message === "string") {
+        if (session.loadingPhase !== "ready") {
+          dashboardSetTerminalLoadingPhase(
+            ctx,
+            sessionId,
+            session,
+            "error",
+            msg.message,
+          );
+        }
         term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } else if (type === "shutdown") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
         dashboardClearPasteSubmitState(ctx, sessionId);
         dashboardClearLaunchPrompt(ctx, sessionId);
+        dashboardClearTerminalLoadingTimers(ctx, sessionId);
         dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
           target.ended = true;
           target.connected = false;
@@ -1411,6 +1538,15 @@ function dashboardConnectTerminal(
   };
   /** Handle terminal WebSocket errors. */
   ws.onerror = () => {
+    if (session.loadingPhase !== "ready") {
+      dashboardSetTerminalLoadingPhase(
+        ctx,
+        sessionId,
+        session,
+        "error",
+        "WebSocket connection failed",
+      );
+    }
     dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
       target.connected = false;
     });
@@ -1461,6 +1597,7 @@ function dashboardConnectTerminal(
     dashboardClearAwaitingInputTimer(ctx, sessionId);
     dashboardClearPasteSubmitState(ctx, sessionId);
     dashboardClearLaunchPrompt(ctx, sessionId);
+    dashboardClearTerminalLoadingTimers(ctx, sessionId);
     try {
       ws.close();
     } catch {
@@ -1498,6 +1635,7 @@ function dashboardEndSession(
   }
   ctx.rememberRecentSession(session);
   const refs = ctx._terminalRefs[sessionId];
+  dashboardClearTerminalLoadingTimers(ctx, sessionId);
   if (refs?.cleanup) refs.cleanup();
   Reflect.deleteProperty(ctx._terminalRefs, sessionId);
   ctx.sessions = ctx.sessions.filter((s) => s.id !== sessionId);
@@ -1511,6 +1649,38 @@ function dashboardEndSession(
 /** Exit the active terminal session from the workspace view. */
 function dashboardExitTerminal(ctx: DashboardTerminalContext): void {
   if (ctx.activeSessionId) ctx.endSession(ctx.activeSessionId);
+}
+
+/** Retry a terminal session that failed or stalled before first PTY output. */
+async function dashboardRetryTerminalSession(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+): Promise<void> {
+  const session = ctx.sessions.find((s) => s.id === sessionId);
+  if (!session) return;
+  const refs = ctx._terminalRefs[sessionId];
+  const prompt = refs?.retryPrompt ?? refs?.launchPrompt ?? "";
+  const runner = session.runner;
+  const promptLabel = refs?.retryPromptLabel ?? session.promptLabel;
+  const presetId = refs?.retryPresetId ?? session.presetId;
+  const cwdPath = refs?.retryCwdPath ?? session.cwd;
+  const targetPath = refs?.retryTargetPath ?? session.targetPath;
+
+  dashboardClearTerminalLoadingTimers(ctx, sessionId);
+  if (refs?.cleanup) refs.cleanup();
+  Reflect.deleteProperty(ctx._terminalRefs, sessionId);
+  ctx.sessions = ctx.sessions.filter((s) => s.id !== sessionId);
+  if (ctx.activeSessionId === sessionId) ctx.activeSessionId = null;
+  await dashboardFetch(`/api/terminal/${sessionId}`, {
+    method: "DELETE",
+  }).catch(() => {});
+
+  await ctx.launchInTerminal(prompt, runner, {
+    promptLabel,
+    presetId,
+    cwdPath,
+    targetPath,
+  });
 }
 
 /** Switch the workspace to an existing local terminal session. */
@@ -1550,12 +1720,22 @@ async function dashboardOpenServerSession(
     ended: false,
     awaitingInput: false,
     outputTail: "",
+    loadingPhase: "connecting",
+    loadingShowSlowHint: false,
+    loadingShowRetry: false,
     age: "",
     presetId: null,
   };
   ctx.rememberSessionTitle(session.id, session.promptLabel);
   ctx.sessions.push(session);
-  ctx._terminalRefs[session.id] = {};
+  ctx._terminalRefs[session.id] = {
+    retryPrompt: "",
+    retryPromptLabel: session.promptLabel,
+    retryPresetId: null,
+    retryCwdPath: session.cwd,
+    retryTargetPath: session.targetPath,
+  };
+  dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   ctx.activeSessionId = session.id;
   ctx.activeView = "workspace";
   ctx.workspacePanel = "terminal";

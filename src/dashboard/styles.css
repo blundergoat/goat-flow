@@ -195,6 +195,53 @@ body {
 .terminal-container .xterm {
   height: 100%;
 }
+.terminal-session-shell {
+  background: #0f1729;
+}
+.terminal-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #0f1729;
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+}
+.terminal-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: min(440px, 100%);
+  text-align: center;
+}
+.terminal-loading-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 22px;
+  font-size: 13px;
+}
+.terminal-loading-spinner::before {
+  display: inline-block;
+  width: 1.1em;
+  content: "⠋";
+  animation: terminal-loading-spinner 0.8s steps(10, end) infinite;
+}
+.terminal-loading-hint {
+  max-width: 34rem;
+  margin: 0;
+  color: #94a3b8;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.terminal-loading-overlay-error {
+  color: #fecaca;
+}
 .terminal-overlay {
   position: absolute;
   inset: 0;
@@ -204,6 +251,39 @@ body {
   background: rgba(0, 0, 0, 0.6);
   z-index: 10;
   border-radius: 0.75rem;
+}
+@keyframes terminal-loading-spinner {
+  0% {
+    content: "⠋";
+  }
+  10% {
+    content: "⠙";
+  }
+  20% {
+    content: "⠹";
+  }
+  30% {
+    content: "⠸";
+  }
+  40% {
+    content: "⠼";
+  }
+  50% {
+    content: "⠴";
+  }
+  60% {
+    content: "⠦";
+  }
+  70% {
+    content: "⠧";
+  }
+  80% {
+    content: "⠇";
+  }
+  90%,
+  100% {
+    content: "⠏";
+  }
 }
 .sr-only {
   position: absolute;

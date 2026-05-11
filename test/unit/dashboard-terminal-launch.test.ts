@@ -62,6 +62,13 @@ type LaunchContext = {
       pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
       pasteSubmitOutputTail?: string;
       launchPrompt?: string;
+      retryPrompt?: string;
+      retryPromptLabel?: string | null;
+      retryPresetId?: string | null;
+      retryCwdPath?: string | null;
+      retryTargetPath?: string | null;
+      loadingSlowTimer?: ReturnType<typeof setTimeout>;
+      loadingRetryTimer?: ReturnType<typeof setTimeout>;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
       launchPromptQuietTimer?: ReturnType<typeof setTimeout>;
       launchPromptOutputSeen?: boolean;
@@ -74,6 +81,11 @@ type LaunchContext = {
   loadXterm(): Promise<void>;
   connectTerminal(sessionId: string, wsUrl: string): void;
   updateSessionCount(): Promise<void>;
+  launchInTerminal(
+    prompt: string,
+    runner?: string,
+    options?: LaunchOptions,
+  ): Promise<void>;
   rememberSessionTitle(
     sessionId: string,
     title: string | null | undefined,
@@ -122,6 +134,29 @@ type HelperContext = {
     output: string,
   ): void;
   dashboardClearPasteSubmitState(ctx: LaunchContext, sessionId: string): void;
+  dashboardSetTerminalLoadingPhase(
+    ctx: LaunchContext,
+    sessionId: string,
+    fallback: Record<string, unknown>,
+    phase: "connecting" | "loading" | "ready" | "error",
+    error?: string,
+  ): void;
+  dashboardArmTerminalLoadingTimers(
+    ctx: LaunchContext,
+    sessionId: string,
+    fallback: Record<string, unknown>,
+  ): void;
+  dashboardMarkTerminalLoadingReady(
+    ctx: LaunchContext,
+    sessionId: string,
+    fallback: Record<string, unknown>,
+    previousTail: string,
+    output: string,
+  ): void;
+  dashboardRetryTerminalSession(
+    ctx: LaunchContext,
+    sessionId: string,
+  ): Promise<void>;
 };
 
 type TimerControls = {
@@ -169,6 +204,10 @@ globalThis.__helpers = {
   dashboardHandleLaunchPromptOutput,
   dashboardHandlePasteSubmitOutput,
   dashboardClearPasteSubmitState,
+  dashboardSetTerminalLoadingPhase,
+  dashboardArmTerminalLoadingTimers,
+  dashboardMarkTerminalLoadingReady,
+  dashboardRetryTerminalSession,
 };`,
     context,
   );
@@ -207,6 +246,9 @@ function makeContext(
       return;
     },
     async updateSessionCount(): Promise<void> {
+      return;
+    },
+    async launchInTerminal(): Promise<void> {
       return;
     },
     rememberSessionTitle(
@@ -590,6 +632,78 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(timers.pending(), 0);
   });
 
+  it("waits for Claude pasted-text marker to settle before submitting multiline paste", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "claude",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Setup prompt\nsecond line",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Setup prompt\nsecond line\x1b[201~",
+    });
+    assert.equal(sent.length, 1);
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "session-upload",
+      "[Pasted text #1 +2 lines]",
+    );
+
+    assert.equal(sent.length, 1);
+    timers.tick(299);
+    assert.equal(sent.length, 1);
+    timers.tick(1);
+
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(timers.pending(), 0);
+  });
+
   it("submits Gemini multiline pasted terminal text after the pasted-text marker", async () => {
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -797,6 +911,9 @@ describe("dashboard terminal launch flow", () => {
       "[Pasted text #1 +1 lines]",
     );
 
+    assert.equal(sent.length, 1);
+    timers.tick(300);
+
     assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -811,6 +928,7 @@ describe("dashboard terminal launch flow", () => {
       "session-upload",
       "[Pasted text #2 +1 lines]",
     );
+    timers.tick(300);
     assert.deepStrictEqual(JSON.parse(sent[3] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -890,6 +1008,12 @@ describe("dashboard terminal launch flow", () => {
 
     assert.equal(ctx.sessions.length, 1);
     assert.equal(ctx.sessions[0]?.promptLabel, "Manual session");
+    assert.equal(ctx.sessions[0]?.loadingPhase, "connecting");
+    assert.equal(ctx._terminalRefs["session-1"]?.retryPrompt, "");
+    assert.equal(
+      ctx._terminalRefs["session-1"]?.retryPromptLabel,
+      "Manual session",
+    );
     assert.equal(ctx.sessionTitles["session-1"], "Manual session");
     assert.equal(ctx.activeView, "workspace");
     assert.equal(ctx.workspacePanel, "terminal");
@@ -910,6 +1034,219 @@ describe("dashboard terminal launch flow", () => {
     );
     assert.ok(calls.includes("updateSessionCount"));
     assert.deepStrictEqual(ctx.toasts, []);
+  });
+
+  it("loading overlay escalates slow starts and clears on first output", () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const session = {
+      id: "session-loading",
+      runner: "claude",
+      promptLabel: "Loading session",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
+      ended: false,
+      outputTail: "",
+    };
+    const ctx = makeContext({
+      sessions: [session],
+      _terminalRefs: {
+        "session-loading": {},
+      },
+    });
+
+    helpers.dashboardArmTerminalLoadingTimers(ctx, "session-loading", session);
+
+    timers.tick(2999);
+    assert.equal(session.loadingShowSlowHint, false);
+    assert.equal(session.loadingShowRetry, false);
+
+    timers.tick(1);
+    assert.equal(session.loadingShowSlowHint, true);
+    assert.equal(session.loadingShowRetry, false);
+
+    timers.tick(7000);
+    assert.equal(session.loadingShowRetry, true);
+
+    helpers.dashboardSetTerminalLoadingPhase(
+      ctx,
+      "session-loading",
+      session,
+      "loading",
+    );
+    helpers.dashboardMarkTerminalLoadingReady(
+      ctx,
+      "session-loading",
+      session,
+      "",
+      "first byte",
+    );
+
+    assert.equal(session.loadingPhase, "ready");
+    assert.equal(session.loadingShowSlowHint, false);
+    assert.equal(session.loadingShowRetry, false);
+    assert.equal(timers.pending(), 0);
+  });
+
+  it("loading overlay avoids escalation when first output arrives quickly", () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const session = {
+      id: "session-fast",
+      runner: "codex",
+      promptLabel: "Fast session",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
+      ended: false,
+      outputTail: "",
+    };
+    const ctx = makeContext({
+      sessions: [session],
+      _terminalRefs: {
+        "session-fast": {},
+      },
+    });
+
+    helpers.dashboardArmTerminalLoadingTimers(ctx, "session-fast", session);
+    helpers.dashboardMarkTerminalLoadingReady(
+      ctx,
+      "session-fast",
+      session,
+      "",
+      "first byte",
+    );
+    timers.tick(10000);
+
+    assert.equal(session.loadingPhase, "ready");
+    assert.equal(session.loadingShowSlowHint, false);
+    assert.equal(session.loadingShowRetry, false);
+    assert.equal(timers.pending(), 0);
+  });
+
+  it("loading overlay state stays per-session when switching active sessions", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const connecting = {
+      id: "session-connecting",
+      runner: "claude",
+      promptLabel: "Connecting session",
+      loadingPhase: "connecting",
+      ended: false,
+    };
+    const loading = {
+      id: "session-loading",
+      runner: "gemini",
+      promptLabel: "Loading session",
+      loadingPhase: "loading",
+      ended: false,
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-connecting",
+      sessions: [connecting, loading],
+      _terminalRefs: {
+        "session-connecting": {},
+        "session-loading": {},
+      },
+    });
+
+    ctx.activeSessionId = "session-loading";
+    helpers.dashboardMarkTerminalLoadingReady(
+      ctx,
+      "session-loading",
+      loading,
+      "",
+      "first byte",
+    );
+
+    assert.equal(connecting.loadingPhase, "connecting");
+    assert.equal(loading.loadingPhase, "ready");
+  });
+
+  it("loading overlay records pre-output errors and retries the original launch", async () => {
+    const calls: string[] = [];
+    const helpers = loadHelpers(async (input, init) => {
+      calls.push(`fetch:${init?.method ?? "GET"}:${String(input)}`);
+      return { json: async () => ({ ok: true }) } as Response;
+    });
+    const launchCalls: Array<{
+      prompt: string;
+      runner?: string;
+      options?: LaunchOptions;
+    }> = [];
+    const session = {
+      id: "session-error",
+      runner: "claude",
+      promptLabel: "Setup Claude",
+      presetId: "preset-setup",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/target",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
+      ended: false,
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-error",
+      sessions: [session],
+      _terminalRefs: {
+        "session-error": {
+          retryPrompt: "setup prompt",
+          retryPromptLabel: "Setup Claude",
+          retryPresetId: "preset-setup",
+          retryCwdPath: "/tmp/example",
+          retryTargetPath: "/tmp/target",
+          cleanup(): void {
+            calls.push("cleanup:session-error");
+          },
+        },
+      },
+      async launchInTerminal(
+        prompt: string,
+        runner?: string,
+        options?: LaunchOptions,
+      ): Promise<void> {
+        launchCalls.push({ prompt, runner, options });
+      },
+    });
+
+    helpers.dashboardSetTerminalLoadingPhase(
+      ctx,
+      "session-error",
+      session,
+      "error",
+      "WebSocket connection failed",
+    );
+
+    assert.equal(session.loadingPhase, "error");
+    assert.equal(session.loadingError, "WebSocket connection failed");
+    assert.equal(session.loadingShowRetry, true);
+
+    await helpers.dashboardRetryTerminalSession(ctx, "session-error");
+
+    assert.ok(calls.includes("cleanup:session-error"));
+    assert.ok(calls.includes("fetch:DELETE:/api/terminal/session-error"));
+    assert.deepStrictEqual(ctx.sessions, []);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(launchCalls)), [
+      {
+        prompt: "setup prompt",
+        runner: "claude",
+        options: {
+          promptLabel: "Setup Claude",
+          presetId: "preset-setup",
+          cwdPath: "/tmp/example",
+          targetPath: "/tmp/target",
+        },
+      },
+    ]);
   });
 
   it("cleans up the backend session when xterm loading fails after creation", async () => {
@@ -1162,6 +1499,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "[Pasted text #1 +1 lines]",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1281,6 +1619,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "[Pasted text #1 +1 lines]",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1323,6 +1662,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "paste again to expand",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1450,6 +1790,10 @@ describe("dashboard terminal launch flow", () => {
       /if \(!session\.connected \|\| session\.ended\) return false/,
     );
     assert.match(source, /if \(session\.awaitingInput\) return false/);
+    assert.match(
+      source,
+      /session\.loadingPhase === "ready" \|\| session\.loadingPhase === "error"/,
+    );
     assert.match(source, /return tail\.length === 0/);
   });
 
@@ -1457,5 +1801,23 @@ describe("dashboard terminal launch flow", () => {
     const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
     assert.match(source, /x-show="terminalWaitingForRunner"/);
     assert.match(source, /Waiting for runner\.\.\./);
+  });
+
+  it("renders a terminal loading overlay inside each session shell", () => {
+    const workspace = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
+    const styles = readFileSync(
+      resolve(PROJECT_ROOT, "src", "dashboard", "styles.css"),
+      "utf-8",
+    );
+    assert.match(workspace, /class="terminal-session-shell"/);
+    assert.match(workspace, /class="terminal-loading-overlay"/);
+    assert.match(
+      workspace,
+      /x-show="!session\.ended && session\.loadingPhase !== 'ready'"/,
+    );
+    assert.match(workspace, /terminalLoadingMessage\(session\)/);
+    assert.match(workspace, /retryTerminalSession\(session\.id\)/);
+    assert.match(styles, /\.terminal-loading-overlay/);
+    assert.match(styles, /@keyframes terminal-loading-spinner/);
   });
 });

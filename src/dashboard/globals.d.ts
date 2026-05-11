@@ -210,6 +210,8 @@ interface ServerSessionInfo {
 }
 
 /** Local terminal session tracked by the frontend Alpine state. */
+type TerminalLoadingPhase = "connecting" | "loading" | "ready" | "error";
+
 interface LocalSession {
   id: string;
   runner: RunnerId;
@@ -223,6 +225,11 @@ interface LocalSession {
   ended: boolean;
   awaitingInput?: boolean;
   outputTail?: string;
+  /** Loading overlay state: create/mount -> connecting, ws open -> loading, first output -> ready, pre-output failure -> error. */
+  loadingPhase: TerminalLoadingPhase;
+  loadingError?: string;
+  loadingShowSlowHint?: boolean;
+  loadingShowRetry?: boolean;
   age: string;
   presetId: string | null;
 }
@@ -238,6 +245,13 @@ interface TerminalRefs {
   pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
   pasteSubmitOutputTail?: string;
   launchPrompt?: string;
+  retryPrompt?: string;
+  retryPromptLabel?: string | null;
+  retryPresetId?: string | null;
+  retryCwdPath?: string | null;
+  retryTargetPath?: string | null;
+  loadingSlowTimer?: ReturnType<typeof setTimeout>;
+  loadingRetryTimer?: ReturnType<typeof setTimeout>;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
   launchPromptQuietTimer?: ReturnType<typeof setTimeout>;
   launchPromptOutputSeen?: boolean;

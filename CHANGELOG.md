@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.6.3 - 2026-05-12
+
+Dashboard terminal UX release for setup launches and cold-start visibility.
+
+- **Claude setup paste-submit reliability** - Claude Code v2.1.139 can drop an Enter sent in the same redraw burst as its `[Pasted text #N +M lines]` composer marker. Claude now follows the same short commit-delay path as Gemini: paste the multiline prompt, wait for the pasted-text marker, pause briefly, then submit. This prevents Setup prompts from sitting in Claude's collapsed paste composer until the user manually presses Enter.
+- **Workspace terminal loading overlay** - New terminal sessions now carry per-session loading state (`connecting`, `loading`, `ready`, `error`) and render an in-viewport overlay above the xterm pane until the first PTY output arrives. The overlay shows runner-specific startup text, a braille spinner, a 3s cold-start hint, and a 10s Retry action.
+- **Terminal retry recovery** - Sessions that fail or stall before first output can be retried from the overlay. Retry cleans up the old backend session, preserves the original runner, prompt, cwd, target path, and prompt label, then relaunches a fresh terminal session.
+- **Session-safe loading state** - Loading state is stored on each local session, so switching between terminal sessions mid-start preserves each session's own overlay phase instead of leaking global state across tabs.
+- **Regression coverage and smoke proof** - Added focused unit coverage for loading escalation timers, fast first output, per-session switching, retry preservation, and overlay rendering. Dashboard integration tests and a rebuilt-dashboard browser smoke confirmed terminal sessions reach first PTY output without a stale overlay.
+
 ## v1.6.2 - 2026-05-12
 
 Dashboard terminal reliability release for setup-page runner launches.

@@ -742,11 +742,47 @@
             >
               <template x-for="session in sessions" :key="session.id">
                 <div
-                  :id="`gf-terminal-${session.id}`"
-                  class="terminal-container"
+                  class="terminal-session-shell"
                   x-show="session.id === activeSessionId"
                   style="position: absolute; inset: 0"
-                ></div>
+                >
+                  <div
+                    :id="`gf-terminal-${session.id}`"
+                    class="terminal-container"
+                    style="position: absolute; inset: 0"
+                  ></div>
+                  <div
+                    x-show="!session.ended && session.loadingPhase !== 'ready'"
+                    x-cloak
+                    class="terminal-loading-overlay"
+                    :class="session.loadingPhase === 'error' && 'terminal-loading-overlay-error'"
+                  >
+                    <div class="terminal-loading-card">
+                      <div class="terminal-loading-row">
+                        <span
+                          x-show="session.loadingPhase !== 'error'"
+                          class="terminal-loading-spinner"
+                          aria-hidden="true"
+                        ></span>
+                        <span x-text="terminalLoadingMessage(session)"></span>
+                      </div>
+                      <p
+                        x-show="session.loadingShowSlowHint && session.loadingPhase !== 'error'"
+                        class="terminal-loading-hint"
+                      >
+                        Still starting - cold starts can take a few seconds.
+                      </p>
+                      <button
+                        x-show="session.loadingShowRetry || session.loadingPhase === 'error'"
+                        @click.stop="retryTerminalSession(session.id)"
+                        class="gf-btn gf-btn-sm gf-btn-secondary"
+                        type="button"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </template>
               <div
                 x-show="terminalDragActive && !terminalEnded && activeSessionId"

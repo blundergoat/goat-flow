@@ -144,8 +144,21 @@ function app() {
       if (!session) return false;
       if (!session.connected || session.ended) return false;
       if (session.awaitingInput) return false;
+      if (session.loadingPhase === "ready" || session.loadingPhase === "error")
+        return false;
       const tail = session.outputTail ?? "";
       return tail.length === 0;
+    },
+    /** Return the active terminal loading-overlay message. */
+    terminalLoadingMessage(session: LocalSession | null): string {
+      if (!session) return "";
+      if (session.loadingPhase === "error") {
+        return `Failed to start: ${session.loadingError || "Could not start session."}`;
+      }
+      if (session.loadingPhase === "loading") {
+        return "Connected. Loading shell...";
+      }
+      return `Spinning up ${session.runner} session...`;
     },
     /** Return the active terminal age label. */
     get terminalAge(): string {
@@ -1836,6 +1849,10 @@ function app() {
     /** Clear non-active (terminated/starting) sessions, preserving running ones. */
     async endAllSessions() {
       await dashboardEndAllSessions(this);
+    },
+    /** Retry a terminal session that failed or stalled before first output. */
+    async retryTerminalSession(sessionId: string) {
+      await dashboardRetryTerminalSession(this, sessionId);
     },
     /** Load the xterm.js globals on demand before any terminal view is rendered. */
     async loadXterm() {
