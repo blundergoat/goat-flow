@@ -64,7 +64,8 @@ i) Artifact Routing
 j) Router Table
    MUST be the final section. Include at minimum:
    - Learning loop dirs (`.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`)
-   - Skill reference + tool playbooks (`.goat-flow/skill-reference/`)
+   - Skill reference (meta) (`.goat-flow/skill-reference/`)
+   - Tool playbooks (`.goat-flow/skill-playbooks/`)
    - Orientation docs (`.goat-flow/code-map.md`, `.goat-flow/glossary.md`) when present
    - Architecture doc (`.goat-flow/architecture.md`)
    - Agent skills directory (`.claude/skills/`, `.agents/skills/`, or `.github/skills/`)

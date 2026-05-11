@@ -56,7 +56,7 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-reference/` READ rule / Router Table row from Step 02. If `.github/` exists, verify `.github/git-commit-instructions.md` exists with project-specific commit guidance.
+3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-reference/` (meta) and `.goat-flow/skill-playbooks/` (tools) READ rules / Router Table rows from Step 02. If `.github/` exists, verify `.github/git-commit-instructions.md` exists with project-specific commit guidance.
 
 ## Duplicate surface check
 

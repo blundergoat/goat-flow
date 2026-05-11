@@ -1516,7 +1516,7 @@ function app() {
     /** Copy a markdown summary of the current evaluation result to the user's
      *  clipboard. The format mirrors what the engine itself emits so the
      *  result can be pasted into PR descriptions or session notes. */
-    async copySkillEvaluatorReport() {
+    copySkillEvaluatorReport() {
       const r = this.skillEvaluatorResult;
       if (!r) return;
       const lines: string[] = [];
