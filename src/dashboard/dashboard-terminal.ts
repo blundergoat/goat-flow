@@ -10,7 +10,10 @@ const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000;
 const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000;
 const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500;
 const TERMINAL_PASTE_SUBMIT_DELAY_MS = 1000;
+const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300;
+const TERMINAL_PASTE_SUBMIT_MAX_RETRIES = 5;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
+const BRACKETED_PASTE_MARKER_PATTERN = /\x1b\[(?:200|201)~/g;
 let xtermLoadPromise: Promise<void> | null = null;
 
 interface DashboardQueuedPaste {
@@ -171,6 +174,13 @@ function dashboardPlainTerminalText(text: string): string {
   return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\r/g, "\n");
 }
 
+/** Prepare user prompt text for one bracketed-paste payload. */
+function dashboardPreparePasteBody(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(BRACKETED_PASTE_MARKER_PATTERN, "");
+}
+
 /** Heuristic for agent prompts waiting on a numbered human choice. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
@@ -191,8 +201,13 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
 }
 
 /** Heuristic for a freshly launched runner reaching its interactive prompt. */
-function dashboardOutputLooksReadyForLaunchPrompt(text: string): boolean {
-  const tail = dashboardPlainTerminalText(text).slice(-2000);
+function dashboardOutputLooksReadyForLaunchPrompt(
+  text: string,
+  runner?: RunnerId | null,
+): boolean {
+  const tail = dashboardPlainTerminalText(text).slice(-5000);
+  const geminiReady = /\bType your message or @path\/to\/file\b/i.test(tail);
+  if (runner === "gemini") return geminiReady;
   const claudeReady =
     /\/remote-control is active\b/i.test(tail) &&
     /(^|\n)\s*❯\s*(?:\n|$)/u.test(tail);
@@ -207,7 +222,7 @@ function dashboardOutputLooksReadyForLaunchPrompt(text: string): boolean {
 function dashboardOutputLooksCommittedPaste(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
   return (
-    /\[Pasted text #\d+/i.test(plain) ||
+    /\[Pasted\s+text(?:\s+#\d+|:)/i.test(plain) ||
     /paste\s+again\s+to\s+expand/i.test(plain)
   );
 }
@@ -307,16 +322,26 @@ function dashboardSendTerminalSubmit(
 function dashboardArmPasteSubmitTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
+  {
+    delayMs = TERMINAL_PASTE_SUBMIT_DELAY_MS,
+    retryCount = 0,
+  }: { delayMs?: number; retryCount?: number } = {},
 ): void {
   const refs = ctx._terminalRefs[sessionId];
   if (!refs) return;
   dashboardClearPasteSubmitTimer(ctx, sessionId);
-  refs.pasteSubmitOutputTail = "";
+  if (retryCount === 0) refs.pasteSubmitOutputTail = "";
   refs.pasteSubmitTimer = setTimeout(() => {
     const currentRefs = ctx._terminalRefs[sessionId];
     if (currentRefs) currentRefs.pasteSubmitTimer = undefined;
-    dashboardSubmitPendingPaste(ctx, sessionId);
-  }, TERMINAL_PASTE_SUBMIT_DELAY_MS);
+    const submitted = dashboardSubmitPendingPaste(ctx, sessionId);
+    if (!submitted && retryCount < TERMINAL_PASTE_SUBMIT_MAX_RETRIES) {
+      dashboardArmPasteSubmitTimer(ctx, sessionId, {
+        delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
+        retryCount: retryCount + 1,
+      });
+    }
+  }, delayMs);
 }
 
 function dashboardSendNextQueuedPaste(
@@ -353,6 +378,11 @@ function dashboardSendBracketedPaste(
     dashboardArmPasteSubmitTimer(ctx, sessionId);
   } else if (dashboardSendTerminalSubmit(ctx, sessionId)) {
     dashboardSendNextQueuedPaste(ctx, sessionId);
+  } else {
+    dashboardArmPasteSubmitTimer(ctx, sessionId, {
+      delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
+      retryCount: 1,
+    });
   }
 }
 
@@ -381,7 +411,14 @@ function dashboardHandlePasteSubmitOutput(
   const outputTail = ((refs.pasteSubmitOutputTail ?? "") + output).slice(-2000);
   refs.pasteSubmitOutputTail = outputTail;
   if (dashboardOutputLooksCommittedPaste(outputTail)) {
-    dashboardSubmitPendingPaste(ctx, sessionId);
+    const target = ctx.sessions.find((session) => session.id === sessionId);
+    if (target?.runner === "gemini") {
+      dashboardArmPasteSubmitTimer(ctx, sessionId, {
+        delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
+      });
+    } else {
+      dashboardSubmitPendingPaste(ctx, sessionId);
+    }
   }
 }
 
@@ -446,13 +483,17 @@ function dashboardSendToTerminalSession(
     ctx.showToast("No active terminal session", true);
     return false;
   }
-  const prepared = adapt ? ctx.adaptPrompt(text, target.runner) : text;
+  const prepared = dashboardPreparePasteBody(
+    adapt ? ctx.adaptPrompt(text, target.runner) : text,
+  );
   // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
   // a stream of independent keystrokes. Claude Code commits long pastes
   // asynchronously, so submit on its pasted-text echo or fall back after a short
   // bounded delay for CLIs that do not echo that state.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  const delayedSubmit = target.runner === "claude" && prepared.includes("\n");
+  const delayedSubmit =
+    (target.runner === "claude" || target.runner === "gemini") &&
+    prepared.includes("\n");
   dashboardSendOrQueueBracketedPaste(ctx, sessionId, {
     data: pasteData,
     delayed: delayedSubmit,
@@ -528,10 +569,11 @@ function dashboardMaybeSendLaunchPrompt(
     return false;
   }
   if (!refs.ws || refs.ws.readyState !== WebSocket.OPEN) return false;
-  if (
-    !force &&
-    !dashboardOutputLooksReadyForLaunchPrompt(target.outputTail ?? "")
-  ) {
+  const ready = dashboardOutputLooksReadyForLaunchPrompt(
+    target.outputTail ?? "",
+    target.runner,
+  );
+  if (!ready && (!force || target.runner === "gemini")) {
     return false;
   }
   refs.launchPrompt = undefined;
@@ -693,7 +735,10 @@ async function dashboardCheckTerminalAvailable(
           : 480;
       const [firstRunner] = ctx.availableRunners;
       if (firstRunner) ctx.activeRunner = firstRunner;
-      if (ctx.terminalAvailable && ctx.activeView === "workspace") {
+      if (
+        ctx.terminalAvailable &&
+        (ctx.activeView === "workspace" || ctx.activeView === "setup")
+      ) {
         void dashboardWarmXterm(ctx);
       }
     }
@@ -819,14 +864,12 @@ async function dashboardLoadXterm(
       await new Promise<void>((resolve, reject) => {
         const link = document.createElement("link");
         link.rel = "stylesheet";
-        link.href =
-          "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css";
+        link.href = "/assets/xterm.css";
         document.head.appendChild(link);
         // The fit addon patches the global Terminal constructor, so xterm itself
         // has to finish loading before the addon script is appended.
         const script = document.createElement("script");
-        script.src =
-          "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js";
+        script.src = "/assets/xterm.js";
         /** Handle script load failures. */
         script.onerror = () => {
           reject(new Error("xterm.js load failed"));
@@ -843,8 +886,7 @@ async function dashboardLoadXterm(
       });
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement("script");
-        script.src =
-          "https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js";
+        script.src = "/assets/addon-fit.js";
         const timer = setTimeout(() => {
           reject(new Error("fit addon load timeout"));
         }, 5000);

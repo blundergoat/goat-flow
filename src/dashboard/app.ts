@@ -711,7 +711,7 @@ function app() {
         document.documentElement.classList.toggle("dark", v);
       });
       self.$watch("activeView", (v: string) => {
-        if (v === "workspace" && this.terminalAvailable) {
+        if ((v === "workspace" || v === "setup") && this.terminalAvailable) {
           void this.loadXterm().catch(() => {});
         }
         if (v !== "workspace" || !this.activeSessionId) return;

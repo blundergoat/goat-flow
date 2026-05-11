@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.6.1"
+goat-flow-reference-version: "1.6.2"
 ---
 # Milestone Template - Detailed Field Reference
 

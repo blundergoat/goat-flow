@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.6.2 - 2026-05-12
+
+Dashboard terminal reliability release for setup-page runner launches.
+
+- **Gemini setup launch reliability** - Setup page launches with runner `gemini` now wait for Gemini CLI's real composer marker (`Type your message or @path/to/file`) instead of letting generic fallback timers consume the queued setup prompt during the auth/status splash. Multiline Gemini prompts now follow the same paste-then-submit contract as Claude, including detection of Gemini's `[Pasted Text: ...]` marker and a short delayed Enter submit after the TUI commits the collapsed paste.
+- **Terminal paste-submit hardening** - Browser-side terminal sends now retry delayed Enter submits when the WebSocket is briefly unavailable, keep queued pastes behind a pending submit, normalize CRLF line endings, and strip embedded bracketed-paste markers from prompt bodies before wrapping them. This prevents setup/quality prompts from landing as inert pasted text or being truncated by accidental paste terminators.
+- **Self-hosted xterm assets** - The dashboard no longer fetches xterm.js and the fit addon from jsDelivr on first terminal open. `@xterm/xterm` and `@xterm/addon-fit` are bundled through `scripts/build-dashboard-assets.mjs` and served from local `/assets/xterm.css`, `/assets/xterm.js`, and `/assets/addon-fit.js` routes, avoiding CDN latency/failure for a local dashboard.
+- **Setup-page terminal prewarm** - Opening either Workspace or Setup now warms xterm assets when terminal support is available, reducing visible delay before `Run Setup in Terminal` can render the terminal pane.
+- **Regression coverage and browser proof** - Added focused terminal-launch tests for Gemini auth readiness, Gemini pasted-text submission, WebSocket retry, paste-body normalization, setup/workspace xterm warming, and local xterm asset routes. Browser verification covered Gemini setup launch through auth to `Thinking...` after receiving `goat-flow audit . --harness --agent gemini`.
+
 ## v1.6.1 - 2026-05-11
 
 Windows compatibility consolidation, dashboard Skills polish, runner launch reliability, skill evaluator shape detection and report export, skill-quality config toggles, goat-security reference consolidation, and pre-ship correctness fixes.

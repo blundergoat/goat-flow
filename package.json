@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Harness engineering framework for AI coding agents - deterministic audit, structured skills, deny-hook safety, feedback loops, and a local dashboard. Works with Claude Code, Codex, Gemini CLI, and GitHub Copilot.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -48,7 +48,7 @@
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
-    "build:dashboard": "tsc -p tsconfig.dashboard.json && node -e \"const { cpSync, mkdirSync, rmSync } = require('node:fs'); mkdirSync('dist/dashboard', { recursive: true }); for (const file of ['index.html', 'styles.css', 'preset-prompts.json']) cpSync('src/dashboard/' + file, 'dist/dashboard/' + file); rmSync('dist/dashboard/views', { recursive: true, force: true }); cpSync('src/dashboard/views', 'dist/dashboard/views', { recursive: true });\"",
+    "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node --import tsx --test --test-concurrency=8 $(find test -name '*.test.ts' ! -path 'test/integration/audit-drift.test.ts' ! -path 'test/integration/dashboard-server.test.ts' ! -path 'test/integration/quality-constraint-isolation.test.ts' ! -path 'test/performance/*.test.ts' | sort)",
     "test:slow": "npm run build && node --import tsx --test test/integration/audit-drift.test.ts test/integration/dashboard-server.test.ts test/integration/quality-constraint-isolation.test.ts",
@@ -107,6 +107,8 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.6.0",
     "@types/ws": "^8.18.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "eslint": "^10.1.0",
     "knip": "^6.0.2",
     "prettier": "^3.8.1",

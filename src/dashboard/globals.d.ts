@@ -537,7 +537,7 @@ interface AlpineMagics<TData extends object = Record<string, unknown>> {
 // Window globals
 // ---------------------------------------------------------------------------
 
-/** Globals injected by the dashboard shell or xterm.js CDN scripts. */
+/** Globals injected by the dashboard shell or bundled xterm.js scripts. */
 interface Window {
   __GOAT_FLOW_REPORT__?: DashboardClientReport | null;
   __GOAT_FLOW_DEFAULT_PATH__?: string;

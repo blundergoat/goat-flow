@@ -1,6 +1,7 @@
 {
+  "_snapshot_note": "Frozen copy of workflow/manifest.json as it shipped at v1.6.1 release. Immutable. CHANGELOG lint compares version-tagged numeric claims against this file, not the live manifest. The live source of truth stays at workflow/manifest.json. See workflow/manifest-snapshots/README.md for the frozen-copy contract.",
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.6.2",
+  "version": "1.6.1",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -227,5 +228,18 @@
       "skills",
       "workspace"
     ]
+  },
+
+  "snapshot_facts": {
+    "_note": "Numeric facts as shipped at v1.6.1 release. Used by CHANGELOG lint to validate claims inside the v1.6.1 section of CHANGELOG.md.",
+    "skills_total": 7,
+    "skills_functional_count": 6,
+    "checks_setup": 14,
+    "checks_agent": 4,
+    "checks_build": 18,
+    "checks_harness": 16,
+    "checks_total": 34,
+    "dashboard_views_count": 9,
+    "presets_count": 26
   }
 }

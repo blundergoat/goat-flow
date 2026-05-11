@@ -584,6 +584,24 @@ describe("dashboard assets", () => {
     assert.match(body, /function dashboardConnectTerminal\(/);
   });
 
+  it("GET /assets/xterm.js returns bundled xterm JavaScript", async () => {
+    const res = await fetch(`${baseUrl}/assets/xterm.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+
+    const body = await res.text();
+    assert.match(body, /bracketedPasteMode/);
+  });
+
+  it("GET /assets/addon-fit.js returns bundled xterm fit addon JavaScript", async () => {
+    const res = await fetch(`${baseUrl}/assets/addon-fit.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/i);
+
+    const body = await res.text();
+    assert.match(body, /FitAddon/);
+  });
+
   it("GET /assets/app.js returns JavaScript", async () => {
     const res = await fetch(`${baseUrl}/assets/app.js`);
     assert.equal(res.status, 200);
@@ -597,6 +615,15 @@ describe("dashboard assets", () => {
     const res = await fetch(`${baseUrl}/assets/styles.css`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /text\/css/i);
+  });
+
+  it("GET /assets/xterm.css returns bundled xterm CSS", async () => {
+    const res = await fetch(`${baseUrl}/assets/xterm.css`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/css/i);
+
+    const body = await res.text();
+    assert.match(body, /\.xterm/);
   });
 
   it("GET /assets/preset-prompts.json returns preset data", async () => {

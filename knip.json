@@ -10,5 +10,9 @@
     "src/dashboard/dashboard-setup-quality.ts",
     "src/dashboard/dashboard-terminal.ts",
     "src/dashboard/globals.d.ts"
+  ],
+  "ignoreDependencies": [
+    "@xterm/addon-fit",
+    "@xterm/xterm"
   ]
 }

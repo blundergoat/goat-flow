@@ -117,6 +117,7 @@ evaluation/                # Quality-assessment prompt templates
 ## scripts/ -- Shell scripts
 
 ```
+build-dashboard-assets.mjs # Copy dashboard HTML/CSS/views + vendor xterm assets from node_modules into dist/dashboard/
 bump-version.sh            # Bump package version across package.json, config.yaml, and skill templates
 check-markdown-links.sh    # Verify relative markdown links resolve across docs
 check-instruction-parity.mjs # Verify instruction files share the required contract

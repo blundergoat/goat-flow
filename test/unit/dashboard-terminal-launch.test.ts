@@ -98,7 +98,10 @@ type HelperContext = {
   ): Promise<void>;
   dashboardEndSession(ctx: LaunchContext, sessionId: string): void;
   dashboardOutputLooksAwaitingInput(text: string): boolean;
-  dashboardOutputLooksReadyForLaunchPrompt(text: string): boolean;
+  dashboardOutputLooksReadyForLaunchPrompt(
+    text: string,
+    runner?: string,
+  ): boolean;
   dashboardNextAwaitingInputState(
     previousAwaiting: boolean,
     previousTail: string,
@@ -474,6 +477,62 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("normalizes paste bodies before wrapping them in bracketed paste markers", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "codex",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "first\r\nsecond\x1b[201~third\x1b[200~\rfourth",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~first\nsecondthird\nfourth\x1b[201~",
+    });
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+  });
+
   it("falls back to submitting pasted terminal text when no paste echo arrives", async () => {
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -524,6 +583,140 @@ describe("dashboard terminal launch flow", () => {
 
     assert.equal(sent.length, 1);
     timers.tick(1000);
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(timers.pending(), 0);
+  });
+
+  it("submits Gemini multiline pasted terminal text after the pasted-text marker", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "gemini",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Setup prompt\nsecond line",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Setup prompt\nsecond line\x1b[201~",
+    });
+    assert.equal(sent.length, 1);
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "session-upload",
+      "[Pasted Text: 2 lines]",
+    );
+
+    assert.equal(sent.length, 1);
+    timers.tick(300);
+
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(timers.pending(), 0);
+  });
+
+  it("retries delayed paste submit when the websocket is briefly unavailable", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const sent: string[] = [];
+    const ws = {
+      readyState: 1,
+      send(payload: string): void {
+        sent.push(payload);
+      },
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "claude",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws,
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Attached files\nsecond line",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.equal(sent.length, 1);
+    ws.readyState = 0;
+    timers.tick(1000);
+    assert.equal(sent.length, 1);
+    assert.equal(timers.pending(), 1);
+
+    ws.readyState = 1;
+    timers.tick(300);
     assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -757,6 +950,14 @@ describe("dashboard terminal launch flow", () => {
     assert.match(ctx.toasts[0]?.msg ?? "", /xterm\.js load failed/);
   });
 
+  it("loads xterm assets from the local dashboard asset route", () => {
+    const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
+    assert.match(source, /link\.href = "\/assets\/xterm\.css"/);
+    assert.match(source, /script\.src = "\/assets\/xterm\.js"/);
+    assert.match(source, /script\.src = "\/assets\/addon-fit\.js"/);
+    assert.doesNotMatch(source, /cdn\.jsdelivr\.net\/npm\/@xterm/);
+  });
+
   it("keeps the launch title when a local session is ended into recent history", () => {
     const calls: string[] = [];
     const helpers = loadHelpers(async (input, init) => {
@@ -905,6 +1106,38 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("detects Gemini readiness only after the Gemini composer appears", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    assert.equal(
+      helpers.dashboardOutputLooksReadyForLaunchPrompt(
+        [
+          "Gemini CLI v0.41.2",
+          "Signed in with Google",
+          "/auth",
+          "Plan: Gemini Code Assist in Google One AI Pro",
+          "? for shortcuts",
+        ].join("\n"),
+        "gemini",
+      ),
+      false,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksReadyForLaunchPrompt(
+        [
+          "Gemini CLI v0.41.2",
+          "Signed in with Google",
+          "Type your message or @path/to/file",
+          "workspace (/directory) branch sandbox /model quota",
+        ].join("\n"),
+        "gemini",
+      ),
+      true,
+    );
+  });
+
   it("sends launch prompts immediately when runner readiness is already visible", async () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
@@ -938,6 +1171,70 @@ describe("dashboard terminal launch flow", () => {
       ctx._terminalRefs["launch-session"]?.launchPromptFallbackTimer,
       undefined,
     );
+  });
+
+  it("keeps Gemini launch prompts queued through auth output until the composer is ready", () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const ctx = makeLaunchPromptContext();
+    const session = ctx.sessions[0] as Record<string, unknown>;
+    session.runner = "gemini";
+
+    helpers.dashboardScheduleLaunchPrompt(
+      ctx,
+      "launch-session",
+      "run prompt\nsecond line",
+    );
+
+    timers.tick(6000);
+    assert.deepStrictEqual(ctx.sent, []);
+    assert.equal(
+      ctx._terminalRefs["launch-session"]?.launchPrompt,
+      "run prompt\nsecond line",
+    );
+
+    session.outputTail = [
+      "Gemini CLI v0.41.2",
+      "Signed in with Google",
+      "/auth",
+      "Plan: Gemini Code Assist in Google One AI Pro",
+      "? for shortcuts",
+    ].join("\n");
+    helpers.dashboardHandleLaunchPromptOutput(ctx, "launch-session");
+    timers.tick(2500);
+
+    assert.deepStrictEqual(ctx.sent, []);
+    assert.equal(
+      ctx._terminalRefs["launch-session"]?.launchPrompt,
+      "run prompt\nsecond line",
+    );
+
+    session.outputTail = `${session.outputTail}\nType your message or @path/to/file`;
+    helpers.dashboardHandleLaunchPromptOutput(ctx, "launch-session");
+
+    assert.deepStrictEqual(JSON.parse(ctx.sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~run prompt\nsecond line\x1b[201~",
+    });
+    assert.equal(ctx.sent.length, 1);
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "launch-session",
+      "[Pasted Text: 2 lines]",
+    );
+
+    assert.equal(ctx.sent.length, 1);
+    timers.tick(300);
+
+    assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(ctx._terminalRefs["launch-session"]?.launchPrompt, undefined);
   });
 
   it("detects the compact Claude composer footer as runner readiness", () => {
@@ -1055,11 +1352,11 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
-  it("warms xterm when the workspace view opens", () => {
+  it("warms xterm when the workspace or setup view opens", () => {
     const source = readFileSync(DASHBOARD_APP_PATH, "utf-8");
     assert.match(
       source,
-      /if \(v === "workspace" && this\.terminalAvailable\) \{\s+void this\.loadXterm\(\)\.catch\(\(\) => \{\}\);\s+\}/,
+      /if \(\(v === "workspace" \|\| v === "setup"\) && this\.terminalAvailable\) \{\s+void this\.loadXterm\(\)\.catch\(\(\) => \{\}\);\s+\}/,
     );
   });
 
@@ -1112,6 +1409,7 @@ describe("dashboard terminal launch flow", () => {
       /const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000/,
     );
     assert.match(source, /const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500/);
+    assert.match(source, /const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300/);
     assert.match(source, /body: JSON\.stringify\(\{\s+prompt: ""/);
     assert.match(
       source,
