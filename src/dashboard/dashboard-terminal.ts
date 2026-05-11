@@ -565,7 +565,14 @@ function dashboardArmLaunchPromptNoOutputFallback(
   }, TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS);
 }
 
-/** Arm a short cap once runner output proves the PTY stream is live. */
+/**
+ * Arm a short cap once runner output proves the PTY stream is live. The cap
+ * is unconditional by design: it exists for runners that emit output but never
+ * surface a known readiness marker (custom prompts, alternate CLIs). Gating
+ * the force-send on a readiness check would stall those sessions forever; the
+ * sibling quiet-window path covers the more common "output settles then send"
+ * case.
+ */
 function dashboardArmLaunchPromptAfterOutputFallback(
   ctx: DashboardTerminalContext,
   sessionId: string,

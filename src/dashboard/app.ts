@@ -1516,7 +1516,7 @@ function app() {
     /** Copy a markdown summary of the current evaluation result to the user's
      *  clipboard. The format mirrors what the engine itself emits so the
      *  result can be pasted into PR descriptions or session notes. */
-    copySkillEvaluatorReport() {
+    async copySkillEvaluatorReport() {
       const r = this.skillEvaluatorResult;
       if (!r) return;
       const lines: string[] = [];
@@ -1555,7 +1555,8 @@ function app() {
         }
       }
       try {
-        this.copyTextToClipboard(lines.join("\n"));
+        const ok = await this.copyTextToClipboard(lines.join("\n"));
+        if (!ok) throw new Error("Clipboard write failed");
         this.skillEvaluatorReportCopied = true;
         if (this._skillEvaluatorReportCopiedTimer) {
           clearTimeout(this._skillEvaluatorReportCopiedTimer);
@@ -1789,21 +1790,27 @@ function app() {
     },
 
     // -- Clipboard + Toast --
-    copyTextToClipboard(text: string) {
+    async copyTextToClipboard(text: string): Promise<boolean> {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Falls through to legacy textarea+execCommand on TypeError (clipboard
+        // API undefined in insecure contexts) or any Promise reject reason.
+      }
       const el = document.createElement("textarea");
       el.value = text;
       el.style.position = "fixed";
       el.style.opacity = "0";
       document.body.appendChild(el);
       el.select();
-      // Clipboard API is preferred elsewhere; this keeps copy working in
-      // browsers/contexts where programmatic clipboard writes are unavailable.
       // eslint-disable-next-line @typescript-eslint/no-deprecated
-      document.execCommand("copy");
+      const ok = document.execCommand("copy");
       document.body.removeChild(el);
+      return ok;
     },
     copyText(text: string) {
-      this.copyTextToClipboard(text);
+      void this.copyTextToClipboard(text);
       this.copyLabel = "Copied!";
       setTimeout(() => {
         this.copyLabel = "Copy";

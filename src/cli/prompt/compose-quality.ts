@@ -16,12 +16,16 @@ import type { SkillQualityReport } from "../quality/skill-quality.js";
  * Build the forward-slash project sub-path that goes inside a Bash snippet in
  * the prompt. On Windows `path.resolve` returns backslashes and (worse) drive-
  * prefixes POSIX-shape inputs; `path.posix.join` keeps the input shape and
- * forces forward-slash separators for the appended segment. The follow-up
- * `\\` → `/` pass cleans any backslashes that survived from a host-native
- * projectPath.
+ * forces forward-slash separators for the appended segment. Backslashes are
+ * normalised first so UNC roots (`\\server\share`) survive as `//server/share`;
+ * the leading slash that `posix.join` collapses on UNC inputs is then restored
+ * so quality writes still target the network share, not a local absolute path.
  */
 function toShellProjectPath(projectPath: string, sub: string): string {
-  return posix.join(projectPath, sub).replace(/\\/g, "/");
+  const normalized = projectPath.replace(/\\/g, "/");
+  const isUnc = normalized.startsWith("//");
+  const joined = posix.join(normalized, sub);
+  return isUnc && !joined.startsWith("//") ? "/" + joined : joined;
 }
 
 interface QualityInput {
