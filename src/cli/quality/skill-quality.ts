@@ -1067,14 +1067,19 @@ const triggerClarity: MetricScorer = (input) => {
 
 // eslint-disable-next-line complexity -- exhaustive structural signal scoring; each branch maps to one workflow-completeness rule
 const workflowCompleteness: MetricScorer = (input) => {
-  const { artifact, rawContent: content, subtype } = input;
+  const { artifact, rawContent: content, subtype, config } = input;
   let score = 0;
   const notes: string[] = [];
 
   if (artifact.kind === "skill") {
     const hasStep0 = hasSection(content, /##\s+Step 0/i);
     const phaseCount = countHeadings(content, 2) + countHeadings(content, 3);
-    const hasCheckpoint = /CHECKPOINT/i.test(content);
+    // Accept any human-stop vocabulary the gate scorer recognises
+    // (CHECKPOINT, BLOCKING GATE, Human Verification, approval, ...).
+    // Keeping this single source of truth avoids penalising skills that use
+    // valid stop phrasing other than the literal word "CHECKPOINT".
+    const humanStop = compilePatternList(config.gateVocabulary.humanStop);
+    const hasCheckpoint = humanStop.test(content);
     const hasRouteMap = hasSection(content, /##\s+Route Map/i);
     const hasQuickScan = hasSection(content, /##\s+Quick Scan Path/i);
 
@@ -1087,7 +1092,7 @@ const workflowCompleteness: MetricScorer = (input) => {
       if (phaseCount >= 4) score += 5;
       else notes.push(`only ${phaseCount} sections (expected 4+)`);
       if (hasCheckpoint || subtype === "report") score += 5;
-      else notes.push("no CHECKPOINT stops");
+      else notes.push("no checkpoint or blocking gate stops");
     }
   } else {
     const hasWorkflow =
@@ -1733,9 +1738,9 @@ const TIP_RULES: Array<{
   },
   {
     metric: "workflow-completeness",
-    match: /no CHECKPOINT stops/,
+    match: /no checkpoint or blocking gate stops/,
     message:
-      "Add `CHECKPOINT:` markers between phases to gate human review before continuing.",
+      "Add a phase-stop marker between phases — `CHECKPOINT:` or `BLOCKING GATE:` — to gate human review before continuing.",
   },
   {
     metric: "workflow-completeness",
