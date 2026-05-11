@@ -590,6 +590,78 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(timers.pending(), 0);
   });
 
+  it("waits for Claude pasted-text marker to settle before submitting multiline paste", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      timers,
+    );
+    const sent: string[] = [];
+    const ctx = makeContext({
+      activeSessionId: "session-upload",
+      sessions: [
+        {
+          id: "session-upload",
+          runner: "claude",
+          promptLabel: "Upload target",
+          projectPath: "/tmp/example",
+          cwd: "/tmp/example",
+          targetPath: "/tmp/example",
+          startTime: Date.now(),
+          lastInputTime: 0,
+          connected: true,
+          ended: false,
+          awaitingInput: false,
+          age: "0s",
+          presetId: null,
+        },
+      ],
+      _terminalRefs: {
+        "session-upload": {
+          ws: {
+            readyState: 1,
+            send(payload: string): void {
+              sent.push(payload);
+            },
+          },
+        },
+      },
+    });
+
+    assert.equal(
+      helpers.dashboardSendToTerminalSession(
+        ctx,
+        "session-upload",
+        "Setup prompt\nsecond line",
+        { adapt: false },
+      ),
+      true,
+    );
+
+    assert.deepStrictEqual(JSON.parse(sent[0] ?? "{}"), {
+      type: "input",
+      data: "\x1b[200~Setup prompt\nsecond line\x1b[201~",
+    });
+    assert.equal(sent.length, 1);
+
+    helpers.dashboardHandlePasteSubmitOutput(
+      ctx,
+      "session-upload",
+      "[Pasted text #1 +2 lines]",
+    );
+
+    assert.equal(sent.length, 1);
+    timers.tick(299);
+    assert.equal(sent.length, 1);
+    timers.tick(1);
+
+    assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
+      type: "input",
+      data: "\r",
+    });
+    assert.equal(timers.pending(), 0);
+  });
+
   it("submits Gemini multiline pasted terminal text after the pasted-text marker", async () => {
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -797,6 +869,9 @@ describe("dashboard terminal launch flow", () => {
       "[Pasted text #1 +1 lines]",
     );
 
+    assert.equal(sent.length, 1);
+    timers.tick(300);
+
     assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -811,6 +886,7 @@ describe("dashboard terminal launch flow", () => {
       "session-upload",
       "[Pasted text #2 +1 lines]",
     );
+    timers.tick(300);
     assert.deepStrictEqual(JSON.parse(sent[3] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1162,6 +1238,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "[Pasted text #1 +1 lines]",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1281,6 +1358,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "[Pasted text #1 +1 lines]",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",
@@ -1323,6 +1401,7 @@ describe("dashboard terminal launch flow", () => {
       "launch-session",
       "paste again to expand",
     );
+    await delay(320);
     assert.deepStrictEqual(JSON.parse(ctx.sent[1] ?? "{}"), {
       type: "input",
       data: "\r",

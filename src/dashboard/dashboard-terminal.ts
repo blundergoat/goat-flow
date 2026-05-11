@@ -10,6 +10,7 @@ const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000;
 const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000;
 const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500;
 const TERMINAL_PASTE_SUBMIT_DELAY_MS = 1000;
+const TERMINAL_PASTE_COMMIT_DELAY_MS = 300;
 const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300;
 const TERMINAL_PASTE_SUBMIT_MAX_RETRIES = 5;
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
@@ -412,9 +413,9 @@ function dashboardHandlePasteSubmitOutput(
   refs.pasteSubmitOutputTail = outputTail;
   if (dashboardOutputLooksCommittedPaste(outputTail)) {
     const target = ctx.sessions.find((session) => session.id === sessionId);
-    if (target?.runner === "gemini") {
+    if (target?.runner === "claude" || target?.runner === "gemini") {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
-        delayMs: TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS,
+        delayMs: TERMINAL_PASTE_COMMIT_DELAY_MS,
       });
     } else {
       dashboardSubmitPendingPaste(ctx, sessionId);
