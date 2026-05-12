@@ -376,6 +376,8 @@ function collectPythonSetup(
 ): void {
   if (
     rootExists(projectPath, "pyproject.toml") ||
+    rootExists(projectPath, "setup.py") ||
+    rootExists(projectPath, "setup.cfg") ||
     rootExists(projectPath, "requirements.txt") ||
     hasBoundedSetupDir(projectPath, "strands_agents")
   ) {

@@ -359,19 +359,49 @@ browser_use_kill_pid() {
     if [[ ! "\$pid" =~ ^[0-9]+$ ]] || ! kill -0 "\$pid" 2>/dev/null; then
         return 0
     fi
+    if ! browser_use_pid_is_owned "\$pid"; then
+        return 0
+    fi
     if command -v pgrep >/dev/null 2>&1; then
         while IFS= read -r child_pid; do
-            kill "\$child_pid" 2>/dev/null || true
+            if browser_use_pid_is_owned "\$child_pid"; then
+                kill "\$child_pid" 2>/dev/null || true
+            fi
         done < <(pgrep -P "\$pid" || true)
     fi
     kill "\$pid" 2>/dev/null || true
     sleep 0.2
     if command -v pgrep >/dev/null 2>&1; then
         while IFS= read -r child_pid; do
-            kill -9 "\$child_pid" 2>/dev/null || true
+            if browser_use_pid_is_owned "\$child_pid"; then
+                kill -9 "\$child_pid" 2>/dev/null || true
+            fi
         done < <(pgrep -P "\$pid" || true)
     fi
     kill -9 "\$pid" 2>/dev/null || true
+}
+
+browser_use_pid_args() {
+    ps -o args= -p "\$1" 2>/dev/null || true
+}
+
+browser_use_pid_is_owned() {
+    local pid="\$1"
+    local args
+
+    if [[ ! "\$pid" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    args="\$(browser_use_pid_args "\$pid")"
+    if [[ -z "\$args" ]]; then
+        return 1
+    fi
+    case "\$args" in
+        *"browser_use.skill_cli.daemon --session"*|*"$VENV_DIR/bin/browser-use"*|*"$VENV_PYTHON"*browser_use*|*chrome*--remote-debugging-port*|*chromium*--remote-debugging-port*|*Chrome*--remote-debugging-port*)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 if [[ "\$browser_use_close" == true ]]; then

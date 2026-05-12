@@ -33,7 +33,7 @@ Binary pass/fail. This is the structural setup gate - it validates that required
 
 Checks are grouped by **scope**:
 
-**setup scope** (GOAT Flow Setup) - 14 checks on goat-flow-owned surfaces:
+**setup scope** (GOAT Flow Setup) - 15 checks on goat-flow-owned surfaces:
 - `lessons` - `.goat-flow/lessons/` directory and README exist
 - `footguns` - `.goat-flow/footguns/` directory and README exist
 - `architecture` - `.goat-flow/architecture.md` exists

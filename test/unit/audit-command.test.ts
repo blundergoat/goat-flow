@@ -418,7 +418,9 @@ async function writeAuditSetupFixture(
     const content =
       file === ".goat-flow/config.yaml"
         ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
-        : "# Stub\n";
+        : file === ".goat-flow/.gitignore"
+          ? "*\n!.gitignore\n!skill-reference/\n!skill-reference/**\n!skill-playbooks/\n!skill-playbooks/**\n"
+          : "# Stub\n";
     await writeProjectFile(root, file, content);
   }
 

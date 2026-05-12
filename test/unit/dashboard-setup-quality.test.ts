@@ -150,24 +150,22 @@ describe("dashboardGenerateSetupPrompt", () => {
 describe("dashboardGenerateQuality", () => {
   it("uses the fast quality endpoint for automatic page loads", async () => {
     let requested = "";
-    const helpers = loadHelpers(
-      async (input: RequestInfo | URL) => {
-        requested = String(input);
-        return new Response(
-          JSON.stringify({
-            command: "quality",
-            agent: "claude",
-            auditStatus: "unavailable",
-            auditSummary: "cache-only",
-            prompt: "fast quality prompt",
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      },
-    );
+    const helpers = loadHelpers(async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(
+        JSON.stringify({
+          command: "quality",
+          agent: "claude",
+          auditStatus: "unavailable",
+          auditSummary: "cache-only",
+          prompt: "fast quality prompt",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
     const ctx = makeContext();
 
     await helpers.dashboardGenerateQuality(ctx, { fast: true });
@@ -186,24 +184,22 @@ describe("dashboardGenerateQuality", () => {
 
   it("requests a fresh audit for explicit quality regeneration", async () => {
     let requested = "";
-    const helpers = loadHelpers(
-      async (input: RequestInfo | URL) => {
-        requested = String(input);
-        return new Response(
-          JSON.stringify({
-            command: "quality",
-            agent: "claude",
-            auditStatus: "fail",
-            auditSummary: "fresh audit",
-            prompt: "fresh quality prompt",
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      },
-    );
+    const helpers = loadHelpers(async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(
+        JSON.stringify({
+          command: "quality",
+          agent: "claude",
+          auditStatus: "fail",
+          auditSummary: "fresh audit",
+          prompt: "fresh quality prompt",
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
     const ctx = makeContext();
 
     await helpers.dashboardGenerateQuality(ctx, { fresh: true });

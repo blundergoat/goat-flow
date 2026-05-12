@@ -1098,9 +1098,7 @@ function app() {
     },
 
     // -- Quality --
-    async generateQuality(
-      options: { fast?: boolean; fresh?: boolean } = {},
-    ) {
+    async generateQuality(options: { fast?: boolean; fresh?: boolean } = {}) {
       await dashboardGenerateQuality(this, options);
     },
     /** Load persisted quality-history rows for the selected project and agent. */

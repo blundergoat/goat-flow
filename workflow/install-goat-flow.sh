@@ -679,6 +679,33 @@ if $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
   echo ""
 fi
 
+# Hint about previously-hidden playbook/reference files (pre-1.6.1 upgrade case).
+# Pre-1.6.1 .goat-flow/.gitignore lacked the !skill-playbooks/ exception, so
+# upgraders may have files on disk that git still treats as untracked-but-ignored.
+# Detect by asking git itself, only inside a git repo, and only when at least
+# one of the directories holds files. No automatic `git add` - that is the
+# user's decision.
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  hidden_paths=()
+  for hint_dir in ".goat-flow/skill-playbooks" ".goat-flow/skill-reference"; do
+    if [[ -d "$hint_dir" ]] && \
+       git -C . check-ignore -q "$hint_dir/." 2>/dev/null; then
+      hidden_paths+=("$hint_dir/")
+    fi
+  done
+  if [[ ${#hidden_paths[@]} -gt 0 ]]; then
+    echo "⚠ Some installed directories are still gitignored:"
+    for path in "${hidden_paths[@]}"; do
+      echo "    $path"
+    done
+    echo "  The installer refreshed .goat-flow/.gitignore, but git tracks the"
+    echo "  ignore state per file. To track these (recommended), run:"
+    echo "    git add ${hidden_paths[*]}"
+    echo "  Skip this step if you intentionally keep the playbook pack local."
+    echo ""
+  fi
+fi
+
 echo "Next steps:"
 echo "  1. Run the setup steps to create project-specific content"
 echo "     (CLAUDE.md, architecture.md, code-map.md, footguns, lessons)"

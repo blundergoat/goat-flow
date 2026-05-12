@@ -1,9 +1,10 @@
 /**
  * GOAT Flow Setup checks for `goat-flow audit`.
- * 14 setup-scope checks that validate project structure:
+ * 15 setup-scope checks that validate project structure:
  *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
  *             decisions, session-logs, tasks, scratchpad)
  * + 1 conditional skill-reference / skill-playbooks discoverability check
+ * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
  */
@@ -86,6 +87,18 @@ const REQUIRED_SKILL_REFERENCE_FILES = [
   ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+];
+
+// Un-ignore patterns the goat-flow-gitignore template installs into
+// `.goat-flow/.gitignore`. The template ignores everything (`*`) by default,
+// then re-includes these committed surfaces. Pre-1.6.1 installs are missing
+// the skill-playbooks entries, which silently hides the playbook pack from
+// git even though the files exist on disk.
+const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
+  "!skill-reference/",
+  "!skill-reference/**",
+  "!skill-playbooks/",
+  "!skill-playbooks/**",
 ];
 
 interface MarkdownHeading {
@@ -419,6 +432,40 @@ const scratchpad: BuildCheck = {
   },
 };
 
+const goatFlowGitignoreContent: BuildCheck = {
+  id: "goat-flow-gitignore",
+  name: "goat-flow gitignore exceptions",
+  scope: "setup",
+  provenance: setupSpecProvenance([
+    "workflow/setup/reference/goat-flow-gitignore",
+    "workflow/install-goat-flow.sh",
+  ]),
+  /** Run the goat-flow gitignore exceptions check. */
+  run: (ctx) => {
+    if (!ctx.fs.exists(".goat-flow/.gitignore")) {
+      return {
+        check: "goat-flow gitignore exceptions",
+        message: "Missing: .goat-flow/.gitignore",
+        evidence: ".goat-flow/.gitignore",
+        howToFix:
+          "Run `goat-flow install . --agent <id>` to copy the current gitignore template. The installer always overwrites .goat-flow/.gitignore.",
+      };
+    }
+    const content = ctx.fs.readFile(".goat-flow/.gitignore") ?? "";
+    const missing = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
+      (pattern) => !content.includes(pattern),
+    );
+    if (missing.length === 0) return null;
+    return {
+      check: "goat-flow gitignore exceptions",
+      message: `.goat-flow/.gitignore is missing required un-ignore entries: ${missing.join(", ")}. Stale gitignores from pre-1.6.1 silently hide the skill-playbooks pack from git.`,
+      evidence: ".goat-flow/.gitignore",
+      howToFix:
+        "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden.",
+    };
+  },
+};
+
 const instructionFileSkillReferencePointer: BuildCheck = {
   id: "instruction-file-skill-reference-pointer",
   name: "Instruction file skill-playbooks pointer",
@@ -566,7 +613,7 @@ const configVersionCurrent: BuildCheck = {
   },
 };
 
-/** 14 setup-scope build checks */
+/** 15 setup-scope build checks */
 export const SETUP_CHECKS: BuildCheck[] = [
   lessons,
   footguns,
@@ -578,6 +625,7 @@ export const SETUP_CHECKS: BuildCheck[] = [
   sessionLogs,
   tasks,
   scratchpad,
+  goatFlowGitignoreContent,
   instructionFileSkillReferencePointer,
   otherFiles,
   configExistsAndParses,

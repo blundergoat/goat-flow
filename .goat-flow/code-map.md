@@ -17,7 +17,7 @@ agents/
 
 audit/
   audit.ts                 # Public audit command: build checks + optional harness completeness (--harness)
-  check-goat-flow.ts       # 14 setup build checks (gate CI pass/fail)
+  check-goat-flow.ts       # 15 setup build checks (gate CI pass/fail)
   check-agent-setup.ts     # 4 agent build checks (gate CI pass/fail)
   check-drift.ts           # Template-vs-installed skill drift detection (M04)
   check-content-quality.ts # Cold-path content quality lint (vague terms, generic instructions)

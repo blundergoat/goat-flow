@@ -562,8 +562,8 @@
               @click="loadSkillQualityReport(art.id)"
               class="gf-skill-sidebar-item"
               :class="{ 'is-active': skillQualitySelectedId === art.id }"
-              :aria-label="'Evaluate this skill: ' + art.name"
-              title="Evaluate this skill"
+              :aria-label="'View audit report for ' + art.name"
+              title="View audit report"
             >
               <span x-text="art.name"></span>
               <template x-if="skillQualityReports[art.id]">

@@ -18,10 +18,25 @@ import type {
 } from "../../../src/cli/audit/types.js";
 import { AUDIT_VERSION, SKILL_NAMES } from "../../../src/cli/constants.js";
 
+const HEALTHY_GOAT_FLOW_GITIGNORE = [
+  "*",
+  "!.gitignore",
+  "!config.yaml",
+  "!skill-reference/",
+  "!skill-reference/**",
+  "!skill-playbooks/",
+  "!skill-playbooks/**",
+  "",
+].join("\n");
+
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
+  const defaultReadFile = (path: string): string | null => {
+    if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;
+    return null;
+  };
   const fs = {
     exists: () => true,
-    readFile: () => null,
+    readFile: defaultReadFile,
     lineCount: () => 0,
     readJson: () => null,
     listDir: () => [],

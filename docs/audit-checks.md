@@ -1,8 +1,8 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently registers **34 deterministic checks**:
+`npx goat-flow audit` currently registers **35 deterministic checks**:
 
-- **18 build checks**: 14 setup-scope checks plus 4 agent-scope checks
+- **19 build checks**: 15 setup-scope checks plus 4 agent-scope checks
 - **16 harness checks**: additional checks enabled by `--harness`
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
@@ -17,7 +17,7 @@ Source of truth:
 
 Build mode is the structural install gate. It validates files, directories, config, skills, settings, and deny wiring. It does **not** execute the project's lint, test, or build toolchain commands.
 
-### Setup Scope (14)
+### Setup Scope (15)
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
@@ -31,6 +31,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `session-logs` | Session logs | `.goat-flow/logs/sessions/` exists |
 | `tasks` | Tasks | `.goat-flow/tasks/`, `.goat-flow/tasks/.gitignore`, and `.goat-flow/tasks/README.md` exist |
 | `scratchpad` | Scratchpad | `.goat-flow/scratchpad/`, `.goat-flow/scratchpad/.gitignore`, and `.goat-flow/scratchpad/README.md` exist |
+| `goat-flow-gitignore` | goat-flow gitignore exceptions | `.goat-flow/.gitignore` exists and contains the `!skill-reference/`, `!skill-reference/**`, `!skill-playbooks/`, `!skill-playbooks/**` un-ignore entries. Catches pre-1.6.1 installs whose stale gitignore silently hid the playbook pack from git. Remediation re-runs the installer (always overwrites `.goat-flow/.gitignore`) and prompts a `git add` of the previously hidden directories |
 | `instruction-file-skill-reference-pointer` | Instruction file skill-playbooks pointer | Skips when both `.goat-flow/skill-reference/` and `.goat-flow/skill-playbooks/` are absent. When present, requires the full meta-reference and playbook pack, a READ-step rule to consult `.goat-flow/skill-playbooks/` and run playbook Availability Checks before declaring tools unavailable, and a Router Table pointer in each present instruction file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`) |
 | `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including quality-log surfaces |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
@@ -52,7 +53,7 @@ Aggregate-mode nuance:
 
 ## Harness Checks
 
-`npx goat-flow audit . --harness` adds **16** deterministic harness-completeness checks on top of the 18 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
+`npx goat-flow audit . --harness` adds **16** deterministic harness-completeness checks on top of the 19 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -77,8 +78,8 @@ Aggregate-mode nuance:
 
 | Command | Checks included | Notes |
 |---------|-----------------|-------|
-| `npx goat-flow audit .` | 14 setup + 4 agent = 18 build checks | Structural install gate only |
-| `npx goat-flow audit . --agent <id>` | Same 18 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx goat-flow audit . --harness` | 18 build + 16 harness = 34 checks | Adds harness completeness, still deterministic |
+| `npx goat-flow audit .` | 15 setup + 4 agent = 19 build checks | Structural install gate only |
+| `npx goat-flow audit . --agent <id>` | Same 19 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
+| `npx goat-flow audit . --harness` | 19 build + 16 harness = 35 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.

@@ -12,10 +12,12 @@ Read this first. This is what you're installing and why.
 If `.goat-flow/config.yaml` exists and its version matches the current goat-flow release, AND `goat-flow audit . --agent {agent}` passes, AND `goat-flow audit . --agent {agent} --harness` passes, verify cold-path truth before stopping: spot-check that architecture doc claims match code reality (dashboard views, check counts, component paths). If structural audit + harness + cold-path spot-check all pass, **STOP**. If the version matches but audit fails or skills/instruction file/preamble are missing, continue with setup to repair the incomplete install.
 
 If the version is older, there is no maintained in-place upgrade guide. Refresh the current agent files, then continue through the current numbered setup flow:
-- Run the current install script first:
+- **Always run the installer first** - on any version mismatch, before touching anything else:
   ```bash
   npx @blundergoat/goat-flow@latest install . --agent {agent}
   ```
+  The installer is the only path that overwrites `.goat-flow/.gitignore` from the current template. **Pre-1.6.1 installs have a stale `.goat-flow/.gitignore`** that is missing the `!skill-playbooks/` and `!skill-playbooks/**` un-ignore entries. The playbook files exist on disk but git silently hides them, so teammates and CI never see them. Skipping the installer leaves this misconfigured.
+- After the installer overwrites `.goat-flow/.gitignore`, run `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden. The `goat-flow-gitignore` audit check (in `goat-flow audit . --agent {agent}`) confirms the exceptions are present; fix any failure before moving on.
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
 - If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/lessons/`, `.goat-flow/footguns/`, or `.goat-flow/decisions/` before removing them. Session logs are local continuity only.
 

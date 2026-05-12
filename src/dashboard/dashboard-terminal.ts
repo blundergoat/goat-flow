@@ -9,7 +9,6 @@ const TERMINAL_INITIAL_FIT_DELAYS_MS = [50, 200, 500] as const;
 const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000;
 const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000;
 const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500;
-const TERMINAL_PASTE_SUBMIT_DELAY_MS = 1000;
 const TERMINAL_PASTE_COMMIT_DELAY_MS = 1200;
 const TERMINAL_PASTE_COMMIT_FALLBACK_DELAY_MS = 15000;
 const TERMINAL_PASTE_FALLBACK_RELEASE_DELAY_MS = 5000;
@@ -239,7 +238,9 @@ function dashboardOutputLooksCommittedPaste(text: string): boolean {
 
 /** Heuristic for a long paste that is still parked in the runner composer. */
 function dashboardOutputStillAtCommittedPaste(text: string): boolean {
-  const tail = dashboardPlainTerminalText(text).replace(/[ \t]+/g, " ").trim();
+  const tail = dashboardPlainTerminalText(text)
+    .replace(/[ \t]+/g, " ")
+    .trim();
   if (!dashboardOutputLooksCommittedPaste(tail)) return false;
   if (dashboardOutputLooksAwaitingInput(tail)) return false;
   if (/\b(?:Running|Working)\b|Do you want to proceed\?/i.test(tail)) {
@@ -428,7 +429,7 @@ function dashboardArmPasteSubmitTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
   {
-    delayMs = TERMINAL_PASTE_SUBMIT_DELAY_MS,
+    delayMs = TERMINAL_PASTE_COMMIT_DELAY_MS,
     retryCount = 0,
     keepAwaitingCommit = false,
     retryIfStillCommitted = false,
@@ -697,7 +698,8 @@ function dashboardSendToTerminalSession(
   // asynchronously, so submit on its pasted-text echo or fall back after a short
   // bounded delay for CLIs that do not echo that state.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  const delayedSubmit = target.runner === "claude" || target.runner === "gemini";
+  const delayedSubmit =
+    target.runner === "claude" || target.runner === "gemini";
   dashboardSendOrQueueBracketedPaste(ctx, sessionId, {
     data: pasteData,
     delayed: delayedSubmit,

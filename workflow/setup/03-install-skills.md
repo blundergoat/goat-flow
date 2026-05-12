@@ -46,6 +46,19 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
 - `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` from `workflow/skills/playbooks/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
 
+## Gitignore exception check (load-bearing for git tracking)
+
+The playbook files are copied to disk by the installer, but `.goat-flow/.gitignore` ignores everything (`*`) by default and re-includes committed surfaces with `!` exceptions. Pre-1.6.1 installs are missing the `!skill-playbooks/` and `!skill-playbooks/**` exception lines, so the playbook pack is silently hidden from git even though the files exist locally.
+
+Verify the parent gitignore is current after running the installer:
+
+```bash
+grep -E '^!skill-playbooks/(\*\*)?$' .goat-flow/.gitignore
+grep -E '^!skill-reference/(\*\*)?$' .goat-flow/.gitignore
+```
+
+Both greps must return matches. If either is missing, the installer either did not run or was an older version. Re-run `npx @blundergoat/goat-flow@latest install . --agent <id>` (it always overwrites `.goat-flow/.gitignore`), then `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden. The `goat-flow-gitignore` audit check enforces this.
+
 ## Clean stale cross-agent skills
 
 After installing canonical skills for the current agent, check other agents' skill directories for stale goat-flow skill names. For Claude: check `.agents/skills/`, `.github/skills/`. For Codex: check `.claude/skills/`, `.github/skills/`. For Gemini: check `.claude/skills/`, `.github/skills/`. For Copilot: check `.claude/skills/`, `.agents/skills/`. Do NOT check the current agent's own skill directory here - that was handled during installation above. Stale names to look for (manifest `skills.stale_names`):
@@ -76,6 +89,8 @@ After installing, verify each SKILL.md frontmatter has the correct `goat-flow-sk
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` exists
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` exists
+- [ ] `.goat-flow/.gitignore` contains `!skill-playbooks/` and `!skill-playbooks/**` un-ignore entries
+- [ ] `.goat-flow/.gitignore` contains `!skill-reference/` and `!skill-reference/**` un-ignore entries
 - [ ] Instruction file router table references the skills directory
 
 **Progress marker:** Append one line to the shared setup session log:
