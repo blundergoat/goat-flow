@@ -368,6 +368,18 @@
               <span class="gf-side-link-label">Home</span>
             </button>
             <button
+              @click="activeView = 'prompts'"
+              class="gf-side-link"
+              :class="activeView === 'prompts' && 'gf-side-link-active'"
+              data-short="Pr"
+              aria-label="Prompts"
+            >
+              <svg class="gf-side-icon" aria-hidden="true">
+                <use href="#gf-side-icon-prompts"></use>
+              </svg>
+              <span class="gf-side-link-label">Prompts</span>
+            </button>
+            <button
               @click="activeView = 'workspace'"
               class="gf-side-link"
               :class="activeView === 'workspace' && 'gf-side-link-active'"
@@ -385,18 +397,6 @@
                 aria-label="Terminal session active"
                 >●</span
               >
-            </button>
-            <button
-              @click="activeView = 'tasks'"
-              class="gf-side-link"
-              :class="activeView === 'tasks' && 'gf-side-link-active'"
-              data-short="T"
-              aria-label="Tasks"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-tasks"></use>
-              </svg>
-              <span class="gf-side-link-label">Tasks</span>
             </button>
           </section>
 
@@ -467,30 +467,6 @@
           <section class="gf-side-nav-group" aria-label="Managers">
             <div class="gf-side-group-label">Managers</div>
             <button
-              @click="activeView = 'skills'"
-              class="gf-side-link"
-              :class="activeView === 'skills' && 'gf-side-link-active'"
-              data-short="S"
-              aria-label="Skills"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-skills"></use>
-              </svg>
-              <span class="gf-side-link-label">Skills</span>
-            </button>
-            <button
-              @click="activeView = 'playbooks'"
-              class="gf-side-link"
-              :class="activeView === 'playbooks' && 'gf-side-link-active'"
-              data-short="P"
-              aria-label="Playbooks"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-playbooks"></use>
-              </svg>
-              <span class="gf-side-link-label">Playbooks</span>
-            </button>
-            <button
               @click="activeView = 'hooks'"
               class="gf-side-link"
               :class="activeView === 'hooks' && 'gf-side-link-active'"
@@ -515,16 +491,40 @@
               <span class="gf-side-link-label">Memory</span>
             </button>
             <button
-              @click="activeView = 'prompts'"
+              @click="activeView = 'playbooks'"
               class="gf-side-link"
-              :class="activeView === 'prompts' && 'gf-side-link-active'"
-              data-short="Pr"
-              aria-label="Prompts"
+              :class="activeView === 'playbooks' && 'gf-side-link-active'"
+              data-short="P"
+              aria-label="Playbooks"
             >
               <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-prompts"></use>
+                <use href="#gf-side-icon-playbooks"></use>
               </svg>
-              <span class="gf-side-link-label">Prompts</span>
+              <span class="gf-side-link-label">Playbooks</span>
+            </button>
+            <button
+              @click="activeView = 'skills'"
+              class="gf-side-link"
+              :class="activeView === 'skills' && 'gf-side-link-active'"
+              data-short="S"
+              aria-label="Skills"
+            >
+              <svg class="gf-side-icon" aria-hidden="true">
+                <use href="#gf-side-icon-skills"></use>
+              </svg>
+              <span class="gf-side-link-label">Skills</span>
+            </button>
+            <button
+              @click="activeView = 'tasks'"
+              class="gf-side-link"
+              :class="activeView === 'tasks' && 'gf-side-link-active'"
+              data-short="T"
+              aria-label="Tasks"
+            >
+              <svg class="gf-side-icon" aria-hidden="true">
+                <use href="#gf-side-icon-tasks"></use>
+              </svg>
+              <span class="gf-side-link-label">Tasks</span>
             </button>
           </section>
 
@@ -543,16 +543,16 @@
               <span class="gf-side-link-label">Projects</span>
             </button>
             <button
-              @click="activeView = 'telemetry'"
+              @click="activeView = 'quality'"
               class="gf-side-link"
-              :class="activeView === 'telemetry' && 'gf-side-link-active'"
-              data-short="Te"
-              aria-label="Telemetry"
+              :class="activeView === 'quality' && 'gf-side-link-active'"
+              data-short="Q"
+              aria-label="Quality"
             >
               <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-telemetry"></use>
+                <use href="#gf-side-icon-quality"></use>
               </svg>
-              <span class="gf-side-link-label">Telemetry</span>
+              <span class="gf-side-link-label">Quality</span>
             </button>
             <button
               @click="activeView = 'setup'"
@@ -567,16 +567,16 @@
               <span class="gf-side-link-label">Setup</span>
             </button>
             <button
-              @click="activeView = 'quality'"
+              @click="activeView = 'telemetry'"
               class="gf-side-link"
-              :class="activeView === 'quality' && 'gf-side-link-active'"
-              data-short="Q"
-              aria-label="Quality"
+              :class="activeView === 'telemetry' && 'gf-side-link-active'"
+              data-short="Te"
+              aria-label="Telemetry"
             >
               <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-quality"></use>
+                <use href="#gf-side-icon-telemetry"></use>
               </svg>
-              <span class="gf-side-link-label">Quality</span>
+              <span class="gf-side-link-label">Telemetry</span>
             </button>
           </section>
         </nav>

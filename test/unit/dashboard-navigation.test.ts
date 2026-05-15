@@ -52,24 +52,36 @@ describe("dashboard side navigation", () => {
     for (const label of ["Harness", "Managers", "Operations"]) {
       assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
     }
+    assert.match(
+      sideMenu,
+      />\s*Home\s*<[\s\S]*>\s*Prompts\s*<[\s\S]*>\s*Workspace\s*</,
+    );
+    assert.match(
+      sideMenu,
+      />\s*Managers\s*<[\s\S]*>\s*Hooks\s*<[\s\S]*>\s*Memory\s*<[\s\S]*>\s*Playbooks\s*<[\s\S]*>\s*Skills\s*<[\s\S]*>\s*Tasks\s*</,
+    );
+    assert.match(
+      sideMenu,
+      />\s*Operations\s*<[\s\S]*>\s*Projects\s*<[\s\S]*>\s*Quality\s*<[\s\S]*>\s*Setup\s*<[\s\S]*>\s*Telemetry\s*</,
+    );
     for (const label of [
       "Home",
+      "Prompts",
       "Workspace",
-      "Tasks",
       "Context",
       "Constraints",
       "Verification",
       "Recovery",
       "Feedback Loop",
-      "Skills",
-      "Playbooks",
       "Hooks",
       "Memory",
-      "Prompts",
+      "Playbooks",
+      "Skills",
+      "Tasks",
       "Projects",
-      "Telemetry",
-      "Setup",
       "Quality",
+      "Setup",
+      "Telemetry",
     ]) {
       assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
     }
