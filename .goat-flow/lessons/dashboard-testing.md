@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-10
+last_reviewed: 2026-05-15
 ---
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
@@ -22,6 +22,8 @@ last_reviewed: 2026-05-10
 **What happened:** While double-checking an unrelated Codex config fix, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported `Dashboard view names drift between manifest and architecture prose`. The Codex fix was clean; the blocker was stale `.goat-flow/architecture.md` prose missing the `skill` dashboard view in both required snippets.
 
 **2026-05-10 recurrence:** Manual v1.6.0 CLI release smoke hit the same class through `node dist/cli/cli.js audit . --check-content --format text`: `Cold-Path Content Lint` failed because `docs/dashboard.md` listed dashboard headings without the manifest-backed `skills` view. Adding the missing `### Skills` section changed the check to `Cold-Path Content Lint: PASS (0 warning(s), 9 info, 177 file(s) scanned)`.
+
+**2026-05-15 recurrence:** During M00 side-menu execution, the focused dashboard route test failed before reaching `/api/tasks` because `validateManifest` reported `facts.dashboard_views drift` after `src/dashboard/views/tasks.html` and `src/dashboard/views/coming-soon.html` were added. The fix was to add both view names to `workflow/manifest.json` and update the two dashboard view lists in `.goat-flow/architecture.md` before rerunning the route slice.
 
 **Root cause:** I treated the broad slow suite as a final confirmation step, but it also runs repo-wide cold-path truth checks through `scripts/preflight-checks.sh`. Those checks can surface unrelated committed dashboard doc drift that focused tests do not touch.
 

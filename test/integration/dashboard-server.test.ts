@@ -2180,6 +2180,141 @@ describe("dashboard /api/projects", () => {
   });
 });
 
+describe("dashboard /api/tasks", () => {
+  it("returns an empty read-only state when the selected project has no tasks directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-no-tasks-"));
+    try {
+      const { res, body } = await fetchJson(
+        `/api/tasks?path=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Tasks response");
+      assert.equal(data.exists, false);
+      assert.equal(data.active, null);
+      assert.equal(data.activeExists, false);
+      assert.equal(data.selectedPlan, null);
+      assert.deepEqual(data.plans, []);
+      assert.deepEqual(data.milestones, []);
+      await assert.rejects(
+        readFile(join(root, ".goat-flow", "tasks", ".active")),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("parses task directories, active marker, milestones, and malformed fallbacks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-tasks-"));
+    try {
+      await writeProjectFile(root, ".goat-flow/tasks/.active", "1.7.0\n");
+      await writeProjectFile(
+        root,
+        ".goat-flow/tasks/1.7.0/M00-side-menu-navigation.md",
+        [
+          "# M00: Side Menu Navigation",
+          "",
+          "**Status:** in-progress",
+          "**Objective:** Build a desktop side menu.",
+          "",
+          "- [x] Done",
+          "- [ ] Pending",
+          "",
+        ].join("\n"),
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/tasks/1.7.0/M01-malformed.md",
+        "no heading or metadata\n- [ ] fallback task\n",
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/tasks?path=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Tasks response");
+      assert.equal(data.taskRoot, join(root, ".goat-flow", "tasks"));
+      assert.equal(data.exists, true);
+      assert.equal(data.active, "1.7.0");
+      assert.equal(data.activeExists, true);
+      assert.equal(data.selectedPlan, "1.7.0");
+      assert.ok(Array.isArray(data.plans));
+      assert.ok(Array.isArray(data.milestones));
+      const plans = data.plans as Record<string, unknown>[];
+      assert.equal(plans[0]?.name, "1.7.0");
+      assert.equal(plans[0]?.milestoneCount, 2);
+      assert.equal(plans[0]?.active, true);
+
+      const milestones = data.milestones as Record<string, unknown>[];
+      assert.equal(milestones[0]?.filename, "M00-side-menu-navigation.md");
+      assert.equal(milestones[0]?.title, "M00: Side Menu Navigation");
+      assert.equal(milestones[0]?.status, "in-progress");
+      assert.equal(milestones[0]?.objective, "Build a desktop side menu.");
+      assert.equal(milestones[0]?.totalTasks, 2);
+      assert.equal(milestones[0]?.completedTasks, 1);
+      assert.equal(milestones[1]?.filename, "M01-malformed.md");
+      assert.equal(milestones[1]?.title, "M01-malformed.md");
+      assert.equal(milestones[1]?.status, "unknown");
+      assert.equal(milestones[1]?.totalTasks, 1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves stale active markers without treating them as selected plans", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-stale-active-"));
+    try {
+      await writeProjectFile(root, ".goat-flow/tasks/.active", "missing\n");
+      await writeProjectFile(
+        root,
+        ".goat-flow/tasks/1.7.0/M00-demo.md",
+        "# M00: Demo\n\n**Status:** planned\n- [ ] Pending\n",
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/tasks?path=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Tasks response");
+      assert.equal(data.active, "missing");
+      assert.equal(data.activeExists, false);
+      assert.equal(data.selectedPlan, "1.7.0");
+      const plans = data.plans as Record<string, unknown>[];
+      assert.equal(plans[0]?.active, false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the selected target tasks tree instead of the controlling workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-target-tasks-"));
+    try {
+      await writeProjectFile(root, ".goat-flow/tasks/.active", "target\n");
+      await writeProjectFile(
+        root,
+        ".goat-flow/tasks/target/M01-target.md",
+        "# M01: Target Tasks\n\n**Status:** planned\n**Objective:** Target only.\n",
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/tasks?path=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Tasks response");
+      assert.equal(data.taskRoot, join(root, ".goat-flow", "tasks"));
+      assert.equal(data.selectedPlan, "target");
+      const milestones = data.milestones as Record<string, unknown>[];
+      assert.equal(milestones.length, 1);
+      assert.equal(milestones[0]?.filename, "M01-target.md");
+      assert.equal(
+        milestones[0]?.path,
+        join(root, ".goat-flow", "tasks", "target", "M01-target.md"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("dashboard terminal endpoints", () => {
   it("POST /api/terminal/create rejects unknown runners without launching a fallback", async () => {
     const { res, body } = await fetchJson("/api/terminal/create", {

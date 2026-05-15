@@ -88,10 +88,7 @@
         "references/rubric-examples.md",
         "references/sub-agent-directives.md"
       ],
-      "goat-review": [
-        "references/examples.md",
-        "references/refuter-spec.md"
-      ],
+      "goat-review": ["references/examples.md", "references/refuter-spec.md"],
       "goat-security": [
         "references/common-threats.md",
         "references/identity-and-data.md",
@@ -193,7 +190,11 @@
         "pre_tool": "preToolUse",
         "post_turn": null
       },
-      "hooks": ["hooks.json", "deny-dangerous.sh", "deny-dangerous.self-test.sh"]
+      "hooks": [
+        "hooks.json",
+        "deny-dangerous.sh",
+        "deny-dangerous.self-test.sh"
+      ]
     }
   },
 
@@ -218,6 +219,7 @@
     "_note": "Static facts only. Derived facts (check counts, skill names, version, presets count) are computed by src/cli/manifest/manifest.ts at load time. `goat-flow manifest --check` validates static facts against observed state (src/dashboard/views/*.html).",
     "dashboard_views": [
       "about",
+      "coming-soon",
       "home",
       "projects",
       "prompts",
@@ -225,6 +227,7 @@
       "settings",
       "setup",
       "skills",
+      "tasks",
       "workspace"
     ]
   }

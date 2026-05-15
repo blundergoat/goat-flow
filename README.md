@@ -37,9 +37,18 @@ For the dashboard's embedded terminal, you'll need `node-pty` to compile. See [T
 
 ![Dashboard](docs/assets/dashboard-preview.png)
 
+The desktop dashboard uses a persistent side menu for primary navigation. The
+header keeps the current project switcher, runner switcher, and utility actions
+available while you move between views.
+
 ### Home
 
 Live audit results for every supported agent. Per-agent cards show pass/fail across two scopes (GOAT Flow Setup, Agent Setup) with actionable fix hints. An AI Harness section scores each agent across five concerns - Context, Constraints, Verification, Recovery, and Feedback Loop - so you can see exactly where your setup is strong and where it's weak. "What to do next" action cards surface the highest-priority gaps. Re-audit after changes without leaving the page.
+
+### Tasks
+
+Read-only milestone view for the selected project. Shows active plan state,
+task directories, milestone status, and checkbox progress.
 
 ### Setup
 
@@ -141,7 +150,7 @@ Open the **Prompts** view, pick a workflow (code review, bug diagnosis, UI debug
 
 ## Multi-agent support
 
-GOAT Flow supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher (top nav bar) lets you toggle between agents and see per-agent audit results side by side.
+GOAT Flow supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
 
 Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matrix.
 

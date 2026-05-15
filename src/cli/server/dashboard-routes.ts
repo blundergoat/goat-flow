@@ -72,6 +72,35 @@ interface DashboardStateData {
   projectTitles: Record<string, string>;
 }
 
+interface DashboardTaskMilestoneSummary {
+  filename: string;
+  path: string;
+  title: string;
+  status: string;
+  objective: string;
+  totalTasks: number;
+  completedTasks: number;
+  modifiedAt: string;
+}
+
+interface DashboardTaskPlanSummary {
+  name: string;
+  path: string;
+  modifiedAt: string;
+  milestoneCount: number;
+  active: boolean;
+}
+
+interface DashboardTaskState {
+  taskRoot: string;
+  exists: boolean;
+  active: string | null;
+  activeExists: boolean;
+  selectedPlan: string | null;
+  plans: DashboardTaskPlanSummary[];
+  milestones: DashboardTaskMilestoneSummary[];
+}
+
 interface LatestQualitySummary {
   id: string;
   date: string;
@@ -200,6 +229,145 @@ function parseQualityHistoryLimit(param: string | null): number {
 function parseQualityModeParam(param: string | null): QualityMode | null {
   if (param === null) return null;
   return VALID_QUALITY_MODES.has(param) ? (param as QualityMode) : null;
+}
+
+function statOrNull(path: string) {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
+}
+
+function readOptionalTextFile(path: string): string | null {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+function listTaskMilestoneFilenames(planPath: string): string[] {
+  try {
+    return readdirSync(planPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^M.*\.md$/iu.test(entry.name))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  } catch {
+    return [];
+  }
+}
+
+function parseTaskMilestone(
+  planPath: string,
+  filename: string,
+): DashboardTaskMilestoneSummary {
+  const path = join(planPath, filename);
+  const content = readOptionalTextFile(path) ?? "";
+  const modifiedAt = statOrNull(path)?.mtime.toISOString() ?? "";
+  const title = content.match(/^#\s+(.+)$/mu)?.[1]?.trim() || filename;
+  const status =
+    content.match(/^\*\*Status:\*\*\s*(.+)$/mu)?.[1]?.trim() || "unknown";
+  const objective =
+    content.match(/^\*\*Objective:\*\*\s*(.+)$/mu)?.[1]?.trim() || "";
+  const taskMatches = Array.from(content.matchAll(/^\s*-\s+\[( |x|X)\]/gmu));
+  const completedTasks = taskMatches.filter(
+    (match) => match[1]?.toLowerCase() === "x",
+  ).length;
+  return {
+    filename,
+    path,
+    title,
+    status,
+    objective,
+    totalTasks: taskMatches.length,
+    completedTasks,
+    modifiedAt,
+  };
+}
+
+function buildTaskPlanSummary(
+  taskRoot: string,
+  name: string,
+  active: string | null,
+): DashboardTaskPlanSummary {
+  const planPath = join(taskRoot, name);
+  const milestoneFilenames = listTaskMilestoneFilenames(planPath);
+  const newestMilestoneTime = milestoneFilenames.reduce<number | null>(
+    (newest, filename) => {
+      const mtime = statOrNull(join(planPath, filename))?.mtime.getTime();
+      if (mtime === undefined) return newest;
+      return newest === null ? mtime : Math.max(newest, mtime);
+    },
+    null,
+  );
+  const planMtime = statOrNull(planPath)?.mtime.getTime() ?? 0;
+  const modifiedAt = new Date(newestMilestoneTime ?? planMtime).toISOString();
+  return {
+    name,
+    path: planPath,
+    modifiedAt,
+    milestoneCount: milestoneFilenames.length,
+    active: active === name,
+  };
+}
+
+function buildDashboardTaskState(
+  projectPath: string,
+  requestedPlan: string | null,
+): DashboardTaskState {
+  const taskRoot = join(projectPath, ".goat-flow", "tasks");
+  const taskRootStats = statOrNull(taskRoot);
+  const active =
+    readOptionalTextFile(join(taskRoot, ".active"))?.trim() || null;
+  if (!taskRootStats?.isDirectory()) {
+    return {
+      taskRoot,
+      exists: false,
+      active,
+      activeExists: false,
+      selectedPlan: null,
+      plans: [],
+      milestones: [],
+    };
+  }
+
+  const planNames = readdirSync(taskRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => entry.name);
+  const plans = planNames
+    .map((name) => buildTaskPlanSummary(taskRoot, name, active))
+    .sort((a, b) => {
+      const byMtime =
+        new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
+      return byMtime !== 0 ? byMtime : a.name.localeCompare(b.name);
+    });
+  const activeExists = Boolean(
+    active && plans.some((plan) => plan.name === active),
+  );
+  const selectedPlan =
+    (requestedPlan && plans.some((plan) => plan.name === requestedPlan)
+      ? requestedPlan
+      : null) ??
+    (activeExists ? active : null) ??
+    plans[0]?.name ??
+    null;
+  const selectedPlanPath = selectedPlan ? join(taskRoot, selectedPlan) : null;
+  const milestones = selectedPlanPath
+    ? listTaskMilestoneFilenames(selectedPlanPath).map((filename) =>
+        parseTaskMilestone(selectedPlanPath, filename),
+      )
+    : [];
+
+  return {
+    taskRoot,
+    exists: true,
+    active,
+    activeExists,
+    selectedPlan,
+    plans,
+    milestones,
+  };
 }
 
 /** Resolve the managed agent list for dashboard aggregate audits. */
@@ -792,6 +960,7 @@ export function createDashboardRouteHandlers(
     res: ServerResponse,
   ) => Promise<boolean>;
   handleBrowseRequest: (url: URL, res: ServerResponse) => boolean;
+  handleTasksRequest: (url: URL, res: ServerResponse) => boolean;
   handleAgentDetectRequest: (url: URL, res: ServerResponse) => boolean;
   handleProjectsListRequest: (
     req: IncomingMessage,
@@ -1545,6 +1714,27 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
+  /** Return read-only milestone/task state for the selected project. */
+  function handleTasksRequest(url: URL, res: ServerResponse): boolean {
+    if (url.pathname !== "/api/tasks") return false;
+
+    const projectPath = safeResolvePath(url.searchParams.get("path"));
+    const requestedPlan = url.searchParams.get("plan");
+    try {
+      requireProjectDirectory(projectPath);
+      jsonResponse(
+        res,
+        200,
+        buildDashboardTaskState(projectPath, requestedPlan),
+      );
+    } catch (err) {
+      jsonResponse(res, 500, {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return true;
+  }
+
   /** Detect which coding agent CLIs are installed on the machine. */
   function detectInstalledAgents(includeVersions: boolean): {
     id: string;
@@ -1680,6 +1870,7 @@ export function createDashboardRouteHandlers(
     handleSkillQualityInventoryRequest,
     handleQualityEvaluateRequest,
     handleBrowseRequest,
+    handleTasksRequest,
     handleAgentDetectRequest,
     handleProjectsListRequest,
     handleProjectsStatusRequest,

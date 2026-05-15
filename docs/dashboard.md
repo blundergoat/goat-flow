@@ -10,9 +10,19 @@ Read-only browsing and audit routes may still inspect arbitrary local paths sele
 
 ## Views
 
+The dashboard uses a persistent desktop side menu for primary navigation. The
+header stays focused on the current project switcher, runner switcher, and
+utility actions.
+
 ### Home
 
 Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
+
+### Tasks
+
+Read-only task milestone browser for the selected project. Shows the active plan
+marker, task directories, milestone status, and checkbox progress without
+creating or modifying task files.
 
 ### Quality
 
@@ -54,7 +64,13 @@ Configuration view. Manage registered project paths, dashboard preferences, and 
 
 ### About
 
-Getting-started page for new users. Explains what goat-flow is, the audit/quality model, what skills and hooks do, the learning loop, and the execution loop. Accessible from the "?" button in the nav bar.
+Getting-started page for new users. Explains what goat-flow is, the audit/quality model, what skills and hooks do, the learning loop, and the execution loop. Accessible from the side menu or the header "?" button.
+
+### Coming Soon Destinations
+
+Context, Constraints, Verification, Recovery, Feedback Loop, Playbooks, Hooks,
+Memory, and Telemetry are clickable side-menu destinations with lightweight
+Coming Soon pages until dedicated backed views are added.
 
 ## Terminal
 
@@ -82,6 +98,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/skill-quality` | GET | Score one installed skill/reference artifact and return the metric breakdown plus a runner-prompt preview |
 | `/api/agents/installed` | GET | Detect installed agent runtimes |
 | `/api/browse` | GET | Directory browsing for the dashboard's path picker (project directories only, no hidden entries) |
+| `/api/tasks` | GET | Read-only task milestone state for the selected project |
 | `/api/projects/list` | GET | List registered projects from saved dashboard state |
 | `/api/projects/list` | POST | Save the dashboard's registered project list |
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) |

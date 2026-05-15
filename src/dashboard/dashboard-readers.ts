@@ -463,6 +463,70 @@ function readRecentLesson(value: unknown): RecentLesson | null {
   };
 }
 
+/** Read a finite numeric payload field with a safe fallback. */
+function readFiniteNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** Read one top-level task directory summary from `/api/tasks`. */
+function readTaskPlanSummary(value: unknown): TaskPlanSummary | null {
+  if (!isRecord(value)) return null;
+  const name = readString(value.name);
+  const path = readString(value.path);
+  if (!name || !path) return null;
+  return {
+    name,
+    path,
+    modifiedAt: readString(value.modifiedAt),
+    milestoneCount: readFiniteNumber(value.milestoneCount),
+    active: value.active === true,
+  };
+}
+
+/** Read one milestone summary from `/api/tasks`. */
+function readTaskMilestoneSummary(value: unknown): TaskMilestoneSummary | null {
+  if (!isRecord(value)) return null;
+  const filename = readString(value.filename);
+  const path = readString(value.path);
+  const title = readString(value.title);
+  if (!filename || !path || !title) return null;
+  return {
+    filename,
+    path,
+    title,
+    status: readString(value.status, "unknown"),
+    objective: readString(value.objective),
+    totalTasks: readFiniteNumber(value.totalTasks),
+    completedTasks: readFiniteNumber(value.completedTasks),
+    modifiedAt: readString(value.modifiedAt),
+  };
+}
+
+/** Read the selected project's `.goat-flow/tasks/` state. */
+function readTaskState(value: unknown): TaskState {
+  const payload = readRecord(value, "Tasks response");
+  return {
+    taskRoot: readString(payload.taskRoot),
+    exists: payload.exists === true,
+    active: readString(payload.active) || null,
+    activeExists: payload.activeExists === true,
+    selectedPlan: readString(payload.selectedPlan) || null,
+    plans: Array.isArray(payload.plans)
+      ? payload.plans
+          .map((plan) => readTaskPlanSummary(plan))
+          .filter((plan): plan is TaskPlanSummary => plan !== null)
+      : [],
+    milestones: Array.isArray(payload.milestones)
+      ? payload.milestones
+          .map((milestone) => readTaskMilestoneSummary(milestone))
+          .filter(
+            (milestone): milestone is TaskMilestoneSummary =>
+              milestone !== null,
+          )
+      : [],
+  };
+}
+
 /** Read the full dashboard report from raw payload data. */
 function readDashboardReport(value: unknown): DashboardClientReport {
   const payload = readRecord(value, "Audit response");

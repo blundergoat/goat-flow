@@ -228,289 +228,397 @@
       </div>
     </div>
 
-    <div class="flex flex-col h-screen">
-      <!-- ═══ Header ═══ -->
-      <header class="no-print gf-header shrink-0 z-30">
-        <button @click="activeView = 'home'" class="gf-logo">
-          🐐 GOAT Flow
+    <div class="gf-app-shell">
+      <!-- ═══ Side Navigation ═══ -->
+      <aside class="no-print gf-side-nav" aria-label="Primary navigation">
+        <button @click="activeView = 'home'" class="gf-side-logo">
+          <span class="gf-side-logo-mark">GOAT</span>
+          <span>Flow</span>
         </button>
-        <span
-          x-show="!editingProjectTitle"
-          class="gf-header-proj"
-          @click="openBrowser()"
-          @dblclick.stop="startEditProjectTitle()"
-          x-text="projectName"
-          style="cursor: pointer"
-          title="Click to switch project · double-click to rename"
-        ></span>
-        <input
-          x-show="editingProjectTitle"
-          x-model="projectTitleDraft"
-          @keydown.enter.prevent="saveProjectTitle()"
-          @keydown.escape.prevent="cancelEditProjectTitle()"
-          @blur="saveProjectTitle()"
-          x-init="$watch('editingProjectTitle', v => { if (v) $nextTick(() => $el.focus()); })"
-          class="gf-header-proj gf-header-proj-edit"
-          type="text"
-          maxlength="120"
-          placeholder="Project title"
-          title="Enter to save · Esc to cancel · empty to reset"
-        />
-        <span
-          x-show="!editingProjectTitle"
-          class="gf-tooltip-wrap gf-header-tooltip-wrap"
-        >
-          <button
-            @click.stop="startEditProjectTitle()"
-            class="gf-header-proj-edit-btn"
-            aria-label="Rename project"
-            aria-describedby="project-title-rename-tip"
-            type="button"
-          >
-            ✎
-          </button>
-          <span
-            id="project-title-rename-tip"
-            class="gf-tooltip gf-header-tooltip"
-            role="tooltip"
-            >Rename project</span
-          >
-        </span>
-        <div class="gf-nav-wrap">
-          <div class="gf-nav">
+
+        <nav class="gf-side-nav-groups">
+          <section class="gf-side-nav-group" aria-label="Main">
             <button
               @click="activeView = 'home'"
-              class="gf-nb"
-              :class="activeView === 'home' && 'gf-nb-active'"
+              class="gf-side-link"
+              :class="activeView === 'home' && 'gf-side-link-active'"
             >
               Home
             </button>
             <button
-              @click="activeView = 'quality'"
-              class="gf-nb"
-              :class="activeView === 'quality' && 'gf-nb-active'"
-            >
-              Quality
-            </button>
-            <button
-              @click="activeView = 'skills'"
-              class="gf-nb"
-              :class="activeView === 'skills' && 'gf-nb-active'"
-            >
-              Skills
-            </button>
-            <button
-              @click="activeView = 'setup'"
-              class="gf-nb"
-              :class="activeView === 'setup' && 'gf-nb-active'"
-            >
-              Setup
-            </button>
-            <button
-              @click="activeView = 'projects'"
-              class="gf-nb"
-              :class="activeView === 'projects' && 'gf-nb-active'"
-            >
-              Projects
-            </button>
-            <button
-              @click="activeView = 'prompts'"
-              class="gf-nb"
-              :class="activeView === 'prompts' && 'gf-nb-active'"
-            >
-              Prompts
-            </button>
-            <button
               @click="activeView = 'workspace'"
-              class="gf-nb"
-              :class="activeView === 'workspace' && 'gf-nb-active'"
-              style="display: inline-flex; align-items: center; gap: 5px"
+              class="gf-side-link"
+              :class="activeView === 'workspace' && 'gf-side-link-active'"
             >
-              Workspace
+              <span>Workspace</span>
               <span
                 x-show="(terminalSessionId && !terminalEnded) || terminalSessionCount > 0"
                 title="Terminal session active"
                 class="gf-status-dot gf-status-running"
-                style="width: 12px; height: 12px; font-size: 7px"
                 aria-label="Terminal session active"
                 >●</span
               >
             </button>
-          </div>
-        </div>
-        <span
-          class="gf-text-muted gf-runner-label"
-          style="
-            font-size: 12px;
-            margin-right: 6px;
-            white-space: nowrap;
-            color: var(--text-disabled);
-          "
-          >Runner:</span
-        >
-        <div class="gf-asel">
-          <template x-for="agent in installedAgents" :key="agent.id">
             <button
-              @click="activeRunner = agent.id"
-              class="gf-ab"
-              :class="activeRunner === agent.id && 'gf-ab-active'"
-              x-text="agent.id"
-            ></button>
-          </template>
-          <template
-            x-for="agent in agentSkeletonList"
-            :key="'skel-' + agent.id"
-          >
-            <span class="gf-ab gf-ab-loading" x-text="agent.id"></span>
-          </template>
-          <span
-            x-show="installedAgents.length === 0 && agentsLoaded"
-            class="gf-ab"
-            style="cursor: default; font-style: italic"
-            >no agents</span
-          >
-        </div>
-        <button
-          @click="activeView = 'settings'"
-          class="gf-ib"
-          :class="activeView === 'settings' && 'gf-ib-active'"
-          title="Settings"
-          aria-label="Settings"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"
-            />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
-        <button
-          class="gf-ib"
-          :class="activeView === 'about' && 'gf-ib-active'"
-          @click="activeView = 'about'"
-          title="About"
-          aria-label="About"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-        </button>
-        <button
-          @click="darkMode = !darkMode"
-          class="gf-ib"
-          :title="darkMode ? 'Light mode' : 'Dark mode'"
-          :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-        >
-          <svg
-            x-show="darkMode"
-            x-cloak
-            x-transition:enter="transition ease-out duration-200"
-            x-transition:enter-start="opacity-0 rotate-[-90deg] scale-0"
-            x-transition:enter-end="opacity-100 rotate-0 scale-100"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2" />
-            <path d="M12 20v2" />
-            <path d="m4.93 4.93 1.41 1.41" />
-            <path d="m17.66 17.66 1.41 1.41" />
-            <path d="M2 12h2" />
-            <path d="M20 12h2" />
-            <path d="m6.34 17.66-1.41 1.41" />
-            <path d="m19.07 4.93-1.41 1.41" />
-          </svg>
-          <svg
-            x-show="!darkMode"
-            x-transition:enter="transition ease-out duration-200"
-            x-transition:enter-start="opacity-0 rotate-90 scale-0"
-            x-transition:enter-end="opacity-100 rotate-0 scale-100"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-          </svg>
-        </button>
-      </header>
+              @click="activeView = 'tasks'"
+              class="gf-side-link"
+              :class="activeView === 'tasks' && 'gf-side-link-active'"
+            >
+              Tasks
+            </button>
+          </section>
 
-      <!-- Main Content -->
-      <main class="flex-1 overflow-hidden">
-        <!-- Loading Spinner -->
-        <div
-          x-show="auditing"
-          x-cloak
-          class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/20 dark:bg-black/40"
-        >
-          <div
-            class="bg-white dark:bg-gray-800 rounded-xl shadow-lg px-6 py-4 flex items-center gap-3"
+          <section class="gf-side-nav-group" aria-label="Harness">
+            <div class="gf-side-group-label">Harness</div>
+            <button
+              @click="activeView = 'context'"
+              class="gf-side-link"
+              :class="activeView === 'context' && 'gf-side-link-active'"
+            >
+              Context
+            </button>
+            <button
+              @click="activeView = 'constraints'"
+              class="gf-side-link"
+              :class="activeView === 'constraints' && 'gf-side-link-active'"
+            >
+              Constraints
+            </button>
+            <button
+              @click="activeView = 'verification'"
+              class="gf-side-link"
+              :class="activeView === 'verification' && 'gf-side-link-active'"
+            >
+              Verification
+            </button>
+            <button
+              @click="activeView = 'recovery'"
+              class="gf-side-link"
+              :class="activeView === 'recovery' && 'gf-side-link-active'"
+            >
+              Recovery
+            </button>
+            <button
+              @click="activeView = 'feedback-loop'"
+              class="gf-side-link"
+              :class="activeView === 'feedback-loop' && 'gf-side-link-active'"
+            >
+              Feedback Loop
+            </button>
+          </section>
+
+          <section class="gf-side-nav-group" aria-label="Managers">
+            <div class="gf-side-group-label">Managers</div>
+            <button
+              @click="activeView = 'skills'"
+              class="gf-side-link"
+              :class="activeView === 'skills' && 'gf-side-link-active'"
+            >
+              Skills
+            </button>
+            <button
+              @click="activeView = 'playbooks'"
+              class="gf-side-link"
+              :class="activeView === 'playbooks' && 'gf-side-link-active'"
+            >
+              Playbooks
+            </button>
+            <button
+              @click="activeView = 'hooks'"
+              class="gf-side-link"
+              :class="activeView === 'hooks' && 'gf-side-link-active'"
+            >
+              Hooks
+            </button>
+            <button
+              @click="activeView = 'memory'"
+              class="gf-side-link"
+              :class="activeView === 'memory' && 'gf-side-link-active'"
+            >
+              Memory
+            </button>
+            <button
+              @click="activeView = 'prompts'"
+              class="gf-side-link"
+              :class="activeView === 'prompts' && 'gf-side-link-active'"
+            >
+              Prompts
+            </button>
+          </section>
+
+          <section class="gf-side-nav-group" aria-label="Operations">
+            <div class="gf-side-group-label">Operations</div>
+            <button
+              @click="activeView = 'projects'"
+              class="gf-side-link"
+              :class="activeView === 'projects' && 'gf-side-link-active'"
+            >
+              Projects
+            </button>
+            <button
+              @click="activeView = 'telemetry'"
+              class="gf-side-link"
+              :class="activeView === 'telemetry' && 'gf-side-link-active'"
+            >
+              Telemetry
+            </button>
+            <button
+              @click="activeView = 'setup'"
+              class="gf-side-link"
+              :class="activeView === 'setup' && 'gf-side-link-active'"
+            >
+              Setup
+            </button>
+            <button
+              @click="activeView = 'quality'"
+              class="gf-side-link"
+              :class="activeView === 'quality' && 'gf-side-link-active'"
+            >
+              Quality
+            </button>
+          </section>
+
+          <section class="gf-side-nav-group" aria-label="Other">
+            <button
+              @click="activeView = 'settings'"
+              class="gf-side-link"
+              :class="activeView === 'settings' && 'gf-side-link-active'"
+            >
+              Settings
+            </button>
+            <button
+              @click="activeView = 'about'"
+              class="gf-side-link"
+              :class="activeView === 'about' && 'gf-side-link-active'"
+            >
+              About
+            </button>
+          </section>
+        </nav>
+      </aside>
+
+      <div class="gf-main-shell">
+        <!-- ═══ Header ═══ -->
+        <header class="no-print gf-header shrink-0 z-30">
+          <span
+            x-show="!editingProjectTitle"
+            class="gf-header-proj"
+            @click="openBrowser()"
+            @dblclick.stop="startEditProjectTitle()"
+            x-text="projectName"
+            style="cursor: pointer"
+            title="Click to switch project · double-click to rename"
+          ></span>
+          <input
+            x-show="editingProjectTitle"
+            x-model="projectTitleDraft"
+            @keydown.enter.prevent="saveProjectTitle()"
+            @keydown.escape.prevent="cancelEditProjectTitle()"
+            @blur="saveProjectTitle()"
+            x-init="$watch('editingProjectTitle', v => { if (v) $nextTick(() => $el.focus()); })"
+            class="gf-header-proj gf-header-proj-edit"
+            type="text"
+            maxlength="120"
+            placeholder="Project title"
+            title="Enter to save · Esc to cancel · empty to reset"
+          />
+          <span
+            x-show="!editingProjectTitle"
+            class="gf-tooltip-wrap gf-header-tooltip-wrap"
+          >
+            <button
+              @click.stop="startEditProjectTitle()"
+              class="gf-header-proj-edit-btn"
+              aria-label="Rename project"
+              aria-describedby="project-title-rename-tip"
+              type="button"
+            >
+              ✎
+            </button>
+            <span
+              id="project-title-rename-tip"
+              class="gf-tooltip gf-header-tooltip"
+              role="tooltip"
+              >Rename project</span
+            >
+          </span>
+          <div class="gf-header-spacer"></div>
+          <span
+            class="gf-text-muted gf-runner-label"
+            style="
+              font-size: 12px;
+              margin-right: 6px;
+              white-space: nowrap;
+              color: var(--text-disabled);
+            "
+            >Runner:</span
+          >
+          <div class="gf-asel">
+            <template x-for="agent in installedAgents" :key="agent.id">
+              <button
+                @click="activeRunner = agent.id"
+                class="gf-ab"
+                :class="activeRunner === agent.id && 'gf-ab-active'"
+                x-text="agent.id"
+              ></button>
+            </template>
+            <template
+              x-for="agent in agentSkeletonList"
+              :key="'skel-' + agent.id"
+            >
+              <span class="gf-ab gf-ab-loading" x-text="agent.id"></span>
+            </template>
+            <span
+              x-show="installedAgents.length === 0 && agentsLoaded"
+              class="gf-ab"
+              style="cursor: default; font-style: italic"
+              >no agents</span
+            >
+          </div>
+          <button
+            @click="activeView = 'settings'"
+            class="gf-ib"
+            :class="activeView === 'settings' && 'gf-ib-active'"
+            title="Settings"
+            aria-label="Settings"
           >
             <svg
-              class="animate-spin h-5 w-5 text-blue-600"
-              fill="none"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              />
               <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"
               />
+              <circle cx="12" cy="12" r="3" />
             </svg>
-            <span class="text-sm font-medium">Auditing...</span>
+          </button>
+          <button
+            class="gf-ib"
+            :class="activeView === 'about' && 'gf-ib-active'"
+            @click="activeView = 'about'"
+            title="About"
+            aria-label="About"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+          <button
+            @click="darkMode = !darkMode"
+            class="gf-ib"
+            :title="darkMode ? 'Light mode' : 'Dark mode'"
+            :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+          >
+            <svg
+              x-show="darkMode"
+              x-cloak
+              x-transition:enter="transition ease-out duration-200"
+              x-transition:enter-start="opacity-0 rotate-[-90deg] scale-0"
+              x-transition:enter-end="opacity-100 rotate-0 scale-100"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2" />
+              <path d="M12 20v2" />
+              <path d="m4.93 4.93 1.41 1.41" />
+              <path d="m17.66 17.66 1.41 1.41" />
+              <path d="M2 12h2" />
+              <path d="M20 12h2" />
+              <path d="m6.34 17.66-1.41 1.41" />
+              <path d="m19.07 4.93-1.41 1.41" />
+            </svg>
+            <svg
+              x-show="!darkMode"
+              x-transition:enter="transition ease-out duration-200"
+              x-transition:enter-start="opacity-0 rotate-90 scale-0"
+              x-transition:enter-end="opacity-100 rotate-0 scale-100"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+          </button>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-hidden">
+          <!-- Loading Spinner -->
+          <div
+            x-show="auditing"
+            x-cloak
+            class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/20 dark:bg-black/40"
+          >
+            <div
+              class="bg-white dark:bg-gray-800 rounded-xl shadow-lg px-6 py-4 flex items-center gap-3"
+            >
+              <svg
+                class="animate-spin h-5 w-5 text-blue-600"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm font-medium">Auditing...</span>
+            </div>
           </div>
-        </div>
 
-        <!-- View fragments (assembled server-side) -->
-        <!-- include: views/workspace.html -->
+          <!-- View fragments (assembled server-side) -->
+          <!-- include: views/workspace.html -->
 
-        <!-- include: views/prompts.html -->
-        <!-- include: views/quality.html -->
-        <!-- include: views/skills.html -->
-        <!-- include: views/setup.html -->
-        <!-- include: views/home.html -->
-        <!-- include: views/projects.html -->
-        <!-- include: views/settings.html -->
-        <!-- include: views/about.html -->
-      </main>
+          <!-- include: views/tasks.html -->
+          <!-- include: views/prompts.html -->
+          <!-- include: views/quality.html -->
+          <!-- include: views/skills.html -->
+          <!-- include: views/setup.html -->
+          <!-- include: views/home.html -->
+          <!-- include: views/projects.html -->
+          <!-- include: views/settings.html -->
+          <!-- include: views/about.html -->
+          <!-- include: views/coming-soon.html -->
+        </main>
+      </div>
     </div>
 
     <script src="/assets/dashboard-readers.js"></script>

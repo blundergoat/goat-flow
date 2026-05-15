@@ -1,0 +1,15 @@
+<!-- ═══ Coming Soon Destinations ═══ -->
+<div
+  x-show="isComingSoonView()"
+  x-cloak
+  class="gf-coming-soon-view"
+  style="height: calc(100vh - 3.5rem); overflow-y: auto"
+>
+  <main class="gf-coming-soon-page">
+    <section class="gf-coming-soon-panel">
+      <div class="gf-section-label">Coming Soon</div>
+      <h1 x-text="comingSoonMeta(activeView)?.title || 'Coming Soon'"></h1>
+      <p x-text="comingSoonMeta(activeView)?.desc || ''"></p>
+    </section>
+  </main>
+</div>

@@ -224,6 +224,12 @@ function app() {
     projectsSortAsc: true,
     newProjectPath: "",
 
+    // --- Tasks state ---
+    tasksState: null as TaskState | null,
+    tasksLoading: false,
+    tasksError: "",
+    selectedTaskPlan: null as string | null,
+
     // --- Quality state ---
     qualityAgent: defaultRunner,
     selectedQualityModeId: "agent-setup",
@@ -836,6 +842,9 @@ function app() {
           void this.detectStack();
           this.scheduleSetupPrompt();
         }
+        if (v === "tasks") {
+          void this.loadTasks();
+        }
       });
       self.$watch("qualityAgent", () => {
         if (this.activeView === "quality") {
@@ -890,6 +899,10 @@ function app() {
           }
           if (this.activeView === "home") {
             void this.generateHomeQualitySummary();
+          }
+          if (this.activeView === "tasks") {
+            this.selectedTaskPlan = null;
+            void this.loadTasks();
           }
           this.skillQualityAbortController?.abort();
           this.skillQualityAbortController = null;
@@ -997,6 +1010,52 @@ function app() {
       });
     },
 
+    // -- Navigation --
+    comingSoonMeta(view: string): { title: string; desc: string } | null {
+      const meta: Record<string, { title: string; desc: string }> = {
+        context: {
+          title: "Context",
+          desc: "A focused Context dashboard is planned. For now, Home shows the current harness summary.",
+        },
+        constraints: {
+          title: "Constraints",
+          desc: "A focused Constraints dashboard is planned. For now, Home and Setup show current hook and guardrail status.",
+        },
+        verification: {
+          title: "Verification",
+          desc: "A focused Verification dashboard is planned. For now, Quality and Home show current verification signals.",
+        },
+        recovery: {
+          title: "Recovery",
+          desc: "A focused Recovery dashboard is planned. For now, Tasks and Workspace expose active work state.",
+        },
+        "feedback-loop": {
+          title: "Feedback Loop",
+          desc: "A focused Feedback Loop dashboard is planned. For now, Home summarizes lessons and learning-loop health.",
+        },
+        playbooks: {
+          title: "Playbooks",
+          desc: "Playbook management is planned. Existing playbook content remains in the project files for now.",
+        },
+        hooks: {
+          title: "Hooks",
+          desc: "Hook management is planned. Setup and audit views remain the backed hook surfaces for now.",
+        },
+        memory: {
+          title: "Memory",
+          desc: "Memory management is planned. Existing lessons, footguns, patterns, and decisions remain file-backed for now.",
+        },
+        telemetry: {
+          title: "Telemetry",
+          desc: "Telemetry reporting is planned. Quality history remains the backed trend surface for now.",
+        },
+      };
+      return meta[view] ?? null;
+    },
+    isComingSoonView(view?: string): boolean {
+      return this.comingSoonMeta(view ?? this.activeView) !== null;
+    },
+
     // -- API Calls --
     async runAudit(fresh = false) {
       this.auditing = true;
@@ -1082,6 +1141,54 @@ function app() {
     /** Set a browsed directory as the active project. */
     selectDir(dir: BrowseDir) {
       dashboardSelectDir(this, dir);
+    },
+
+    // -- Tasks --
+    async loadTasks(planName?: string) {
+      this.tasksLoading = true;
+      this.tasksError = "";
+      const requestProjectPath = this.projectPath;
+      const requestedPlan = planName ?? this.selectedTaskPlan;
+      const planParam = requestedPlan
+        ? `&plan=${encodeURIComponent(requestedPlan)}`
+        : "";
+      try {
+        const res = await dashboardFetch(
+          `/api/tasks?path=${encodeURIComponent(requestProjectPath)}${planParam}`,
+        );
+        const payload = readRecord(await res.json(), "Tasks response");
+        const error = readErrorMessage(payload);
+        if (error) throw new Error(error);
+        if (this.projectPath !== requestProjectPath) return;
+        const state = readTaskState(payload);
+        this.tasksState = state;
+        this.selectedTaskPlan = state.selectedPlan;
+      } catch (err) {
+        if (this.projectPath !== requestProjectPath) return;
+        this.tasksState = null;
+        this.tasksError = err instanceof Error ? err.message : String(err);
+      } finally {
+        if (this.projectPath === requestProjectPath) this.tasksLoading = false;
+      }
+    },
+    selectTaskPlan(planName: string) {
+      this.selectedTaskPlan = planName;
+      void this.loadTasks(planName);
+    },
+    taskProgressLabel(milestone: TaskMilestoneSummary): string {
+      return `${milestone.completedTasks}/${milestone.totalTasks}`;
+    },
+    taskProgressPct(milestone: TaskMilestoneSummary): number {
+      if (milestone.totalTasks <= 0) return 0;
+      return Math.round(
+        (milestone.completedTasks / milestone.totalTasks) * 100,
+      );
+    },
+    taskModifiedLabel(value: string): string {
+      if (!value) return "unknown";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "unknown";
+      return date.toLocaleString();
     },
 
     // -- Setup --

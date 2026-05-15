@@ -155,6 +155,38 @@ interface ProjectEntry {
   details: string;
 }
 
+/** Milestone summary from the selected project's `.goat-flow/tasks/`. */
+interface TaskMilestoneSummary {
+  filename: string;
+  path: string;
+  title: string;
+  status: string;
+  objective: string;
+  totalTasks: number;
+  completedTasks: number;
+  modifiedAt: string;
+}
+
+/** Top-level task directory summary from `.goat-flow/tasks/`. */
+interface TaskPlanSummary {
+  name: string;
+  path: string;
+  modifiedAt: string;
+  milestoneCount: number;
+  active: boolean;
+}
+
+/** Read-only response from `/api/tasks`. */
+interface TaskState {
+  taskRoot: string;
+  exists: boolean;
+  active: string | null;
+  activeExists: boolean;
+  selectedPlan: string | null;
+  plans: TaskPlanSummary[];
+  milestones: TaskMilestoneSummary[];
+}
+
 /** Quality-assessment prompt payload returned by `/api/quality`. */
 interface QualityResult {
   command: "quality";

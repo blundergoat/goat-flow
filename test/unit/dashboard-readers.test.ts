@@ -53,6 +53,30 @@ type HelperContext = {
       } | null;
     }[];
   };
+  readTaskState(value: unknown): {
+    taskRoot: string;
+    exists: boolean;
+    active: string | null;
+    activeExists: boolean;
+    selectedPlan: string | null;
+    plans: Array<{
+      name: string;
+      path: string;
+      modifiedAt: string;
+      milestoneCount: number;
+      active: boolean;
+    }>;
+    milestones: Array<{
+      filename: string;
+      path: string;
+      title: string;
+      status: string;
+      objective: string;
+      totalTasks: number;
+      completedTasks: number;
+      modifiedAt: string;
+    }>;
+  };
 };
 
 function loadHelpers(): HelperContext {
@@ -74,6 +98,7 @@ function loadHelpers(): HelperContext {
     `${js}
 globalThis.__helpers = {
   readDashboardReport,
+  readTaskState,
 };`,
     context,
   );
@@ -226,5 +251,49 @@ describe("dashboard payload readers", () => {
         100,
     );
     assert.equal(score, 50);
+  });
+
+  it("preserves task-state fields used by the Tasks view", () => {
+    const helpers = loadHelpers();
+
+    const state = helpers.readTaskState({
+      taskRoot: "/repo/.goat-flow/tasks",
+      exists: true,
+      active: "1.7.0",
+      activeExists: true,
+      selectedPlan: "1.7.0",
+      plans: [
+        {
+          name: "1.7.0",
+          path: "/repo/.goat-flow/tasks/1.7.0",
+          modifiedAt: "2026-05-15T06:00:00.000Z",
+          milestoneCount: 2,
+          active: true,
+        },
+      ],
+      milestones: [
+        {
+          filename: "M00-side-menu-navigation.md",
+          path: "/repo/.goat-flow/tasks/1.7.0/M00-side-menu-navigation.md",
+          title: "M00: Side Menu Navigation and Tasks View",
+          status: "in-progress",
+          objective: "Build the side menu.",
+          totalTasks: 13,
+          completedTasks: 4,
+          modifiedAt: "2026-05-15T06:30:00.000Z",
+        },
+      ],
+    });
+
+    assert.equal(state.taskRoot, "/repo/.goat-flow/tasks");
+    assert.equal(state.active, "1.7.0");
+    assert.equal(state.activeExists, true);
+    assert.equal(state.selectedPlan, "1.7.0");
+    assert.equal(state.plans[0]?.milestoneCount, 2);
+    assert.equal(state.plans[0]?.active, true);
+    assert.equal(state.milestones[0]?.status, "in-progress");
+    assert.equal(state.milestones[0]?.objective, "Build the side menu.");
+    assert.equal(state.milestones[0]?.completedTasks, 4);
+    assert.equal(state.milestones[0]?.totalTasks, 13);
   });
 });
