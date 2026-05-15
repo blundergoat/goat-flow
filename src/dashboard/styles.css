@@ -1621,6 +1621,7 @@ body {
   width: 64px;
   flex-basis: 64px;
   padding: 14px 8px;
+  overflow: visible;
 }
 .gf-side-top {
   display: flex;
@@ -1798,6 +1799,85 @@ body {
   height: 7px;
   font-size: 0;
   box-shadow: none;
+}
+/* Tooltips on collapsed side-nav icons — uses aria-label for content
+   so it stays in sync with the screen-reader name. */
+.gf-side-collapsed .gf-side-link::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 1000;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0s linear 0.14s;
+}
+.gf-side-collapsed .gf-side-link::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: calc(100% + 7px);
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%) translateX(-4px) rotate(45deg);
+  background: var(--surface-elevated);
+  border-left: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 1001;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0s linear 0.14s;
+}
+.gf-side-collapsed .gf-side-link:hover::after,
+.gf-side-collapsed .gf-side-link:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
+  transition:
+    opacity 0.14s ease 0.18s,
+    transform 0.14s ease 0.18s,
+    visibility 0s linear 0.18s;
+}
+.gf-side-collapsed .gf-side-link:hover::before,
+.gf-side-collapsed .gf-side-link:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0) rotate(45deg);
+  transition:
+    opacity 0.14s ease 0.18s,
+    transform 0.14s ease 0.18s,
+    visibility 0s linear 0.18s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-side-collapsed .gf-side-link::after,
+  .gf-side-collapsed .gf-side-link::before,
+  .gf-side-collapsed .gf-side-link:hover::after,
+  .gf-side-collapsed .gf-side-link:hover::before,
+  .gf-side-collapsed .gf-side-link:focus-visible::after,
+  .gf-side-collapsed .gf-side-link:focus-visible::before {
+    transition: none;
+  }
 }
 .gf-main-shell {
   display: flex;
