@@ -2112,6 +2112,21 @@ body {
   font-weight: 600;
   line-height: 1.25;
 }
+.gf-task-active-wrap {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.gf-task-active-help {
+  width: 17px;
+  height: 17px;
+  font-size: 10px;
+}
+.gf-task-active-tooltip {
+  width: 260px;
+}
 .gf-task-active-pill {
   max-width: 150px;
   overflow: hidden;

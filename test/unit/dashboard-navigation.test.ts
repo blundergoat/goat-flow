@@ -119,6 +119,8 @@ describe("dashboard side navigation", () => {
       tasksView,
       /\$dispatch\('gf-set-active-task-plan', \{ planName: plan\.name \}\)/,
     );
+    assert.match(tasksView, /What active task plan means/);
+    assert.match(tasksView, /Active is the default work plan/);
     assert.match(tasksView, /Set active plan/);
     assert.match(comingSoonView, /x-show="isComingSoonView\(\)"/);
     assert.match(comingSoonView, /comingSoonMeta\(activeView\)/);

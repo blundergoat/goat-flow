@@ -56,11 +56,32 @@
               <div class="gf-section-label">Plans</div>
               <h2 x-text="tasksState.plans.length"></h2>
             </div>
-            <span
-              x-show="tasksState.active"
-              class="gf-task-active-pill"
-              x-text="'active: ' + tasksState.active"
-            ></span>
+            <div x-show="tasksState.active" class="gf-task-active-wrap">
+              <span class="gf-tooltip-wrap">
+                <button
+                  type="button"
+                  class="gf-info-button gf-task-active-help"
+                  @click.stop
+                  aria-label="What active task plan means"
+                  aria-describedby="task-active-plan-tip"
+                >
+                  ?
+                </button>
+                <span
+                  id="task-active-plan-tip"
+                  class="gf-tooltip gf-task-active-tooltip"
+                  role="tooltip"
+                >
+                  Active is the default work plan. Goat skills scan this folder
+                  for current milestones and review/spec context; other plans
+                  stay visible but are not the default.
+                </span>
+              </span>
+              <span
+                class="gf-task-active-pill"
+                x-text="'active: ' + tasksState.active"
+              ></span>
+            </div>
           </div>
 
           <div x-show="tasksState.plans.length === 0" class="gf-empty-state">
