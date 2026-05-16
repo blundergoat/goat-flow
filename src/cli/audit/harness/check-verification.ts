@@ -1,23 +1,35 @@
 /**
  * Verification concern: Can the agent verify its own work honestly?
- * 3 checks: hooks-registered, commit-guidance, post-turn-hook-integrity.
+ * 4 checks: hooks-registered, commit-guidance, evidence-before-claims,
+ * post-turn-hook-integrity.
  */
-import type { HarnessCheck } from "../types.js";
+import type { AuditContext, HarnessCheck } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
 
 const VERIFIED_ON = "2026-04-18";
+const EVIDENCE_BEFORE_CLAIMS_VERIFIED_ON = "2026-05-16";
+const RED_FLAGS_SECTION = "Hallucination red-flags";
+const RED_FLAG_CLAUSES = [
+  "Checks passed",
+  "Completion",
+  "Fix verification",
+  "Hedged claims",
+] as const;
+const RATIONALISATIONS_PATH = ".goat-flow/skill-reference/skill-preamble.md";
+const RATIONALISATIONS_HEADING = "Rationalisations to reject";
 
 /** Return the verification provenance. */
 function verificationProvenance(
   type: HarnessCheck["type"],
   paths: string[],
   sourceType: CheckEvidence["source_type"] = "spec",
+  verifiedOn = VERIFIED_ON,
 ): CheckEvidence {
   return {
     source_type: sourceType,
     source_urls: [],
-    verified_on: VERIFIED_ON,
+    verified_on: verifiedOn,
     normative_level:
       type === "integrity"
         ? "MUST"
@@ -107,6 +119,120 @@ const commitGuidance: HarnessCheck = {
   },
 };
 
+/** Return unique manifest-backed instruction file paths for this project. */
+function instructionFilePaths(ctx: AuditContext): string[] {
+  const paths = new Set<string>();
+  for (const agent of Object.values(ctx.structure.agents)) {
+    if (agent.instruction_file) paths.add(agent.instruction_file);
+  }
+  for (const agentFacts of ctx.agents) {
+    paths.add(agentFacts.agent.instructionFile);
+  }
+  return [...paths];
+}
+
+/** Return the text following the Hallucination red-flags section marker. */
+function redFlagsSection(content: string): string | null {
+  const match = content.match(
+    /^\s*(?:#{1,6}\s*)?(?:\*\*)?Hallucination red-flags:?(?:\*\*)?\s*$/imu,
+  );
+  if (!match || match.index === undefined) return null;
+  return content.slice(match.index + match[0].length);
+}
+
+/** Return true when a red-flags section names one stable clause anchor. */
+function hasClause(section: string, clause: string): boolean {
+  return new RegExp(`\\b${clause}\\b`, "iu").test(section);
+}
+
+/** Return true when the rationalisations pointer appears as a single paragraph. */
+function hasRationalisationsPointer(section: string): boolean {
+  return section
+    .split(/\r?\n\s*\r?\n/u)
+    .some(
+      (paragraph) =>
+        paragraph.includes(RATIONALISATIONS_PATH) &&
+        paragraph.includes(RATIONALISATIONS_HEADING),
+    );
+}
+
+/** Metric: present instruction files carry the evidence-before-claims guard. */
+const evidenceBeforeClaims: HarnessCheck = {
+  id: "evidence-before-claims",
+  name: "Evidence-before-claims guard",
+  concern: "verification",
+  type: "metric",
+  evidenceKind: "structural",
+  provenance: verificationProvenance(
+    "metric",
+    [
+      "CLAUDE.md",
+      RATIONALISATIONS_PATH,
+      ".goat-flow/lessons/verification-review.md",
+      ".goat-flow/lessons/agent-behavior-trust.md",
+    ],
+    "incident",
+    EVIDENCE_BEFORE_CLAIMS_VERIFIED_ON,
+  ),
+  /** Run the Evidence-before-claims guard check. */
+  run: (ctx) => {
+    const findings: string[] = [];
+    const preamble = ctx.fs.readFile(RATIONALISATIONS_PATH);
+    if (preamble === null) {
+      findings.push(`${RATIONALISATIONS_PATH}: file missing`);
+    } else if (!preamble.includes(RATIONALISATIONS_HEADING)) {
+      findings.push(
+        `${RATIONALISATIONS_PATH}: missing ${RATIONALISATIONS_HEADING}`,
+      );
+    }
+
+    let presentInstructionFiles = 0;
+    for (const path of instructionFilePaths(ctx)) {
+      const content = ctx.fs.readFile(path);
+      if (content === null) continue;
+      presentInstructionFiles++;
+      const section = redFlagsSection(content);
+      if (section === null) {
+        findings.push(`${path}: missing ${RED_FLAGS_SECTION} section`);
+        continue;
+      }
+      const missingClauses = RED_FLAG_CLAUSES.filter(
+        (clause) => !hasClause(section, clause),
+      );
+      if (missingClauses.length > 0) {
+        findings.push(
+          `${path}: ${RED_FLAGS_SECTION} missing ${missingClauses.join(", ")}`,
+        );
+      }
+      if (!hasRationalisationsPointer(section)) {
+        findings.push(
+          `${path}: ${RED_FLAGS_SECTION} missing pointer to ${RATIONALISATIONS_PATH} (${RATIONALISATIONS_HEADING})`,
+        );
+      }
+    }
+
+    if (findings.length > 0) {
+      return fail(
+        findings,
+        [
+          "Restore the evidence-before-claims red-flags block and rationalisations pointer in every present agent instruction file",
+        ],
+        [
+          `Copy the canonical ${RED_FLAGS_SECTION} clauses and the ${RATIONALISATIONS_HEADING} pointer into each present instruction file; restore ${RATIONALISATIONS_PATH} if it is missing or renamed.`,
+        ],
+      );
+    }
+    if (presentInstructionFiles === 0) {
+      return pass([
+        "No agent instruction files present for red-flags coverage",
+      ]);
+    }
+    return pass([
+      `${presentInstructionFiles} present instruction file(s) include evidence-before-claims coverage`,
+    ]);
+  },
+};
+
 /** Consolidated: hook validation + honest failure reporting (informational) */
 const postTurnHookIntegrity: HarnessCheck = {
   id: "post-turn-hook-integrity",
@@ -169,5 +295,6 @@ const postTurnHookIntegrity: HarnessCheck = {
 export const VERIFICATION_CHECKS: HarnessCheck[] = [
   hooksRegistered,
   commitGuidance,
+  evidenceBeforeClaims,
   postTurnHookIntegrity,
 ];

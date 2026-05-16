@@ -23,6 +23,11 @@ import { composeSetup } from "../../src/cli/prompt/compose-setup.js";
 import { extractProjectFacts } from "../../src/cli/facts/orchestrator.js";
 import { extractHookFacts } from "../../src/cli/facts/agent/hooks.js";
 import { extractSettingsFacts } from "../../src/cli/facts/agent/settings.js";
+import {
+  completeInstruction,
+  INSTRUCTION_FILES,
+  RATIONALISATIONS_PREAMBLE,
+} from "../fixtures/evidence-before-claims.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
@@ -1842,13 +1847,13 @@ describe("M01 harness check type tagging", () => {
     }
   });
 
-  it("matches the locked distribution (9 integrity, 6 advisory, 1 metric)", () => {
+  it("matches the locked distribution (9 integrity, 6 advisory, 2 metric)", () => {
     const byType = { integrity: 0, advisory: 0, metric: 0 } as Record<
       string,
       number
     >;
     for (const check of HARNESS_CHECKS) byType[check.type]!++;
-    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 1 });
+    assert.deepStrictEqual(byType, { integrity: 9, advisory: 6, metric: 2 });
   });
 
   it("known-integrity ids are tagged integrity", () => {
@@ -1875,7 +1880,10 @@ describe("M01 harness check type tagging", () => {
   });
 
   it("known-metric ids are tagged metric", () => {
-    const metricIds = new Set(["post-turn-hook-integrity"]);
+    const metricIds = new Set([
+      "evidence-before-claims",
+      "post-turn-hook-integrity",
+    ]);
     for (const check of HARNESS_CHECKS) {
       if (metricIds.has(check.id)) {
         assert.equal(check.type, "metric", `${check.id} should be metric`);
@@ -2202,6 +2210,10 @@ describe("M01 scoring model", () => {
 
   it("no post-turn hook metric lowers verification score without failing the concern", () => {
     const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-reference/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
+    };
     const ctx = makeCtx({
       facts: {
         ...baseFacts,
@@ -2215,6 +2227,9 @@ describe("M01 scoring model", () => {
           },
         },
       },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
     });
     const { scope, concerns } = computeHarness(ctx);
     const metric = scope.checks.find(
@@ -2224,10 +2239,10 @@ describe("M01 scoring model", () => {
     assert.equal(metric.displayStatus, "warn");
     assert.equal(metric.impact, "score-only");
     assert.match(metric.failure?.evidence ?? "", /Metric/);
-    assert.equal(concerns.verification.metrics, 1);
+    assert.equal(concerns.verification.metrics, 2);
     assert.equal(concerns.verification.advisoryFail, 0);
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 67);
+    assert.equal(concerns.verification.score, 75);
   });
 
   it("CheckResult carries type, acknowledged, and provenance fields", () => {

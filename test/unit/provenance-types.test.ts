@@ -134,9 +134,9 @@ describe("M05 check evidence constants validate", () => {
     assert.deepEqual(validateProvenance(SNAPSHOT_CLAIMS_EVIDENCE), []);
   });
 
-  it("all 35 registered build and harness checks satisfy the schema", () => {
+  it("all 36 registered build and harness checks satisfy the schema", () => {
     const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
-    assert.equal(checks.length, 35);
+    assert.equal(checks.length, 36);
     for (const check of checks) {
       assert.deepEqual(
         validateProvenance(check.provenance),
