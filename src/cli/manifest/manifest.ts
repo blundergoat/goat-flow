@@ -36,6 +36,8 @@ import { ManifestValidationError } from "./types.js";
 
 /** goat-flow architectural fact: `goat` is the dispatcher, the rest are functional. */
 const DISPATCHER_NAME = "goat";
+const PROMPT_INVOCATION_STYLES = new Set(["slash", "dollar"]);
+const SKILL_SOURCES = new Set(["installed", "agent-mirror", "github-mirror"]);
 
 /** Read the on-disk manifest JSON. Throws on missing or malformed file. */
 function readManifestJson(): ManifestJson {
@@ -95,6 +97,71 @@ export function validateSkillReferenceSchema(json: ManifestJson): void {
       findings,
     );
   }
+}
+
+/** Validate stable agent capability metadata consumed by runtime surfaces. */
+function validateAgentCapabilities(json: ManifestJson): string[] {
+  const findings: string[] = [];
+  for (const [agentId, agent] of Object.entries(json.agents)) {
+    const capabilities = (
+      agent as {
+        capabilities?: {
+          terminal_binary?: unknown;
+          setup_surfaces?: unknown;
+          prompt_invocation_style?: unknown;
+          skill_source?: unknown;
+        };
+      }
+    ).capabilities;
+    const prefix = `agents.${agentId}.capabilities`;
+
+    if (
+      typeof capabilities !== "object" ||
+      capabilities === null ||
+      Array.isArray(capabilities)
+    ) {
+      findings.push(`${prefix} must be an object.`);
+      continue;
+    }
+
+    if (
+      typeof capabilities.terminal_binary !== "string" ||
+      capabilities.terminal_binary.trim().length === 0
+    ) {
+      findings.push(`${prefix}.terminal_binary must be a non-empty string.`);
+    }
+
+    if (
+      !Array.isArray(capabilities.setup_surfaces) ||
+      capabilities.setup_surfaces.length === 0 ||
+      capabilities.setup_surfaces.some(
+        (surface) => typeof surface !== "string" || surface.trim().length === 0,
+      )
+    ) {
+      findings.push(
+        `${prefix}.setup_surfaces must be a non-empty string array.`,
+      );
+    }
+
+    if (
+      typeof capabilities.prompt_invocation_style !== "string" ||
+      !PROMPT_INVOCATION_STYLES.has(capabilities.prompt_invocation_style)
+    ) {
+      findings.push(
+        `${prefix}.prompt_invocation_style must be one of: slash, dollar.`,
+      );
+    }
+
+    if (
+      typeof capabilities.skill_source !== "string" ||
+      !SKILL_SOURCES.has(capabilities.skill_source)
+    ) {
+      findings.push(
+        `${prefix}.skill_source must be one of: installed, agent-mirror, github-mirror.`,
+      );
+    }
+  }
+  return findings;
 }
 
 /** Enumerate dashboard view names by listing `src/dashboard/views/*.html`. */
@@ -187,6 +254,7 @@ export function validateManifest(
   observed: ObservedFacts,
 ): void {
   const findings: string[] = [];
+  findings.push(...validateAgentCapabilities(json));
 
   if (!json.facts) {
     const msg =

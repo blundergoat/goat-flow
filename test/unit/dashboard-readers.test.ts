@@ -17,6 +17,8 @@ const READERS_PATH = resolve(
 );
 
 type HelperContext = {
+  readRunnerId(value: unknown): string | null;
+  readInjectedSupportedAgents(): SupportedAgent[];
   readDashboardReport(value: unknown): {
     scopes: {
       setup: {
@@ -79,7 +81,35 @@ type HelperContext = {
   };
 };
 
-function loadHelpers(): HelperContext {
+type SupportedAgent = {
+  id: string;
+  name: string;
+  terminalBinary: string;
+  setupSurfaces: string[];
+  promptInvocationStyle: string;
+  skillSource: string;
+  supportsPostTurnHook: boolean;
+};
+
+function supportedAgent(
+  id: string,
+  overrides: Partial<SupportedAgent> = {},
+): SupportedAgent {
+  return {
+    id,
+    name: id === "codex" ? "Codex" : "Claude Code",
+    terminalBinary: id,
+    setupSurfaces: id === "codex" ? ["AGENTS.md"] : ["CLAUDE.md"],
+    promptInvocationStyle: id === "codex" ? "dollar" : "slash",
+    skillSource: id === "claude" ? "installed" : "agent-mirror",
+    supportsPostTurnHook: id !== "copilot",
+    ...overrides,
+  };
+}
+
+function loadHelpers(
+  windowOverrides: Record<string, unknown> = {},
+): HelperContext {
   const source = readFileSync(READERS_PATH, "utf-8");
   const js = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
@@ -91,12 +121,15 @@ function loadHelpers(): HelperContext {
       history: { replaceState: () => undefined },
       __GOAT_FLOW_RUNNER_IDS__: ["claude"],
       __GOAT_FLOW_REPORT__: null,
-      __GOAT_FLOW_AGENTS__: [{ id: "claude", name: "Claude Code" }],
+      __GOAT_FLOW_AGENTS__: [supportedAgent("claude")],
+      ...windowOverrides,
     },
   });
   runInContext(
     `${js}
 globalThis.__helpers = {
+  readRunnerId,
+  readInjectedSupportedAgents,
   readDashboardReport,
   readTaskState,
 };`,
@@ -142,6 +175,39 @@ function scope(
 }
 
 describe("dashboard payload readers", () => {
+  it("narrows supported agents from injected runner metadata", () => {
+    const helpers = loadHelpers({
+      __GOAT_FLOW_RUNNER_IDS__: ["claude", "codex"],
+      __GOAT_FLOW_AGENTS__: [
+        supportedAgent("claude"),
+        supportedAgent("opencode", {
+          name: "OpenCode",
+          terminalBinary: "opencode",
+          setupSurfaces: ["OPENCODE.md"],
+          promptInvocationStyle: "slash",
+          skillSource: "agent-mirror",
+        }),
+        supportedAgent("codex", {
+          setupSurfaces: ["AGENTS.md", ".codex/hooks.json"],
+        }),
+      ],
+    });
+
+    assert.equal(helpers.readRunnerId("codex"), "codex");
+    assert.equal(helpers.readRunnerId("opencode"), null);
+
+    const agents = helpers.readInjectedSupportedAgents();
+    assert.deepEqual(
+      agents.map((agent) => agent.id),
+      ["claude", "codex"],
+    );
+    assert.deepEqual(agents[1]?.setupSurfaces, [
+      "AGENTS.md",
+      ".codex/hooks.json",
+    ]);
+    assert.equal(agents[1]?.promptInvocationStyle, "dollar");
+  });
+
   it("preserves skipped setup checks so Home totals match the audit API", () => {
     const helpers = loadHelpers();
 

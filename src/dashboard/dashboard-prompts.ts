@@ -26,6 +26,7 @@ interface DashboardPromptsContext {
   presetFavorites: string[];
   selectedPreset: Preset | null;
   activeRunner: RunnerId;
+  supportedAgents: SupportedAgent[];
   allPresets: Preset[];
   flatPresetOrder: string[];
   presetsByCategory: Array<{ id: string; label: string; items: Preset[] }>;
@@ -335,7 +336,10 @@ function dashboardAdaptPrompt(
   runner?: RunnerId,
 ): string {
   const r = runner ?? ctx.activeRunner;
-  if (r === "codex") return prompt.replace(/^\/goat\b/, "$goat");
+  const style =
+    ctx.supportedAgents.find((agent) => agent.id === r)?.promptInvocationStyle ??
+    "slash";
+  if (style === "dollar") return prompt.replace(/^\/goat\b/, "$goat");
   return prompt;
 }
 

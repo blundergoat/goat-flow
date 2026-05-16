@@ -30,7 +30,7 @@ Generate and view agent quality-assessment prompts. Select a target agent, gener
 
 ### Setup
 
-Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent (Claude, Codex, Gemini, Copilot), then generates a setup prompt you can preview and launch directly in a terminal session.
+Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent from the manifest-backed registry, then generates a setup prompt you can preview and launch directly in a terminal session.
 
 ### Skills
 
@@ -38,7 +38,7 @@ Per-artifact quality view for installed skills and shared references. Shows dete
 
 ### Projects
 
-Multi-project browser. Lists all registered project paths with their latest audit status. "Audit All" re-audits every project in one click. Select a project to switch context and view its results on the Home view.
+Multi-project browser. Lists registered projects with their latest audit status. Project titles and favorites follow a stable identity when possible: git remote hash first, then a local `.goat-flow/project-id` marker for non-git goat-flow projects, then absolute path fallback. The marker is local dashboard state and remains gitignored by the default `.goat-flow/.gitignore`. "Audit All" re-audits every project in one click. Select a project to switch context and view its results on the Home view.
 
 ### Prompts
 
@@ -74,7 +74,7 @@ Coming Soon pages until dedicated backed views are added.
 
 ## Terminal
 
-- Supports Claude, Codex, Gemini, and Copilot runners from `workflow/manifest.json`
+- Supports runners from `workflow/manifest.json`; terminal binary names, setup surfaces, and prompt invocation style are injected from the manifest-backed agent registry
 - WebSocket-based PTY sessions via xterm.js
 - 480-minute idle timeout (8 hours) with auto-kill
 - Maximum 10 concurrent sessions
@@ -100,9 +100,9 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/browse` | GET | Directory browsing for the dashboard's path picker (project directories only, no hidden entries) |
 | `/api/tasks` | GET | Task milestone state for the selected project |
 | `/api/tasks` | POST | Set the selected project's active task plan in `.goat-flow/tasks/.active` |
-| `/api/projects/list` | GET | List registered projects from saved dashboard state |
-| `/api/projects/list` | POST | Save the dashboard's registered project list |
-| `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) |
+| `/api/projects/list` | GET | List registered projects from saved dashboard state, including identity-keyed project records |
+| `/api/projects/list` | POST | Save the dashboard's registered project list and migrate it to identity-keyed records |
+| `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
 | `/api/terminal/create` | POST | Start a terminal session |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |

@@ -19,6 +19,23 @@ interface ManifestHookEvents {
   post_turn: string | null;
 }
 
+/** Prompt invocation syntax an agent expects for goat-flow skills. */
+export type ManifestPromptInvocationStyle = "slash" | "dollar";
+
+/** Skill mirror/source classification used by quality inventory. */
+export type ManifestSkillSource =
+  | "installed"
+  | "agent-mirror"
+  | "github-mirror";
+
+/** Stable capability metadata consumed outside setup/audit internals. */
+interface ManifestAgentCapabilities {
+  terminal_binary: string;
+  setup_surfaces: string[];
+  prompt_invocation_style: ManifestPromptInvocationStyle;
+  skill_source: ManifestSkillSource;
+}
+
 /** Manifest deny-mechanism metadata for one runtime. */
 export type ManifestDenyMechanism =
   | { type: "settings-deny"; path: string }
@@ -30,6 +47,7 @@ export interface AgentProfile {
   name: string;
   instruction_file: string;
   skills_dir: string;
+  capabilities: ManifestAgentCapabilities;
   hooks_dir?: string;
   settings?: string;
   hook_config_file?: string;

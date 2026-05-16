@@ -72,7 +72,7 @@ type TestContext = {
   showToast(msg: string, isError?: boolean): void;
 };
 
-function loadHelpers(): {
+function loadHelpers(runnerIds = ["claude", "codex", "gemini", "copilot"]): {
   helpers: HelperContext;
   storage: Map<string, string>;
 } {
@@ -89,7 +89,10 @@ function loadHelpers(): {
         storage.set(key, value);
       },
     },
-    window: { confirm: () => true },
+    window: {
+      confirm: () => true,
+      __GOAT_FLOW_RUNNER_IDS__: runnerIds,
+    },
     isRecord: (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value),
     readString: (value: unknown, fallback = ""): string =>
@@ -363,6 +366,24 @@ describe("custom prompt helpers", () => {
     assert.match(
       helpers.dashboardValidateCustomPromptDraft(ctx).join("\n"),
       /Duplicate custom prompt id/,
+    );
+  });
+
+  it("validates runner hints from injected runner ids", () => {
+    const { helpers } = loadHelpers(["codex"]);
+    const ctx = makeContext(helpers);
+    ctx.customPromptDraft.name = "Codex prompt";
+    ctx.customPromptDraft.prompt = "$goat-review review this diff";
+    ctx.customPromptDraft.runnerHint = "codex";
+    assert.deepEqual(
+      Array.from(helpers.dashboardValidateCustomPromptDraft(ctx)),
+      [],
+    );
+
+    ctx.customPromptDraft.runnerHint = "claude";
+    assert.deepEqual(
+      Array.from(helpers.dashboardValidateCustomPromptDraft(ctx)),
+      ["Runner hint is invalid."],
     );
   });
 

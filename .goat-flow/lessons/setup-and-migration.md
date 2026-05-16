@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-05-03
+last_reviewed: 2026-05-16
 ---
 
 ## Lesson: Agents given broad setup tasks rewrite shared docs as agent-specific
@@ -71,7 +71,7 @@ last_reviewed: 2026-05-03
 
 **What happened:** The dashboard rated Recovery low because audit treated unchecked `.goat-flow/tasks/` milestone checkboxes as degraded recovery. It also rated Verification low because `test-runner-configured` required a structured/detected test command or saved validation artifact. The user corrected both assumptions: task checkboxes are optional local workflow state and can be long-term roadmap or brainstorming; project test command choice is project-specific and belongs in quality/release review, not deterministic install audit.
 
-**Prevention:** Deterministic audit may check that goat-flow-owned directories and hook/registration surfaces exist, but must not score optional local workflow state or project-specific command calibration. Quality prompts must also avoid flagging unchecked task/milestone checkboxes, status fields, roadmap files, or completion percentages by themselves. Only report task-file issues when an observed skill behavior fails. Evidence anchors: `src/cli/audit/harness/check-recovery.ts` (search: `not audited`), `src/cli/audit/harness/check-verification.ts` (search: `3 checks`), `src/cli/prompt/compose-quality.ts` (search: `Do NOT report them as quality findings`).
+**Prevention:** Deterministic audit may check that goat-flow-owned directories and hook/registration surfaces exist, but must not score optional local workflow state or project-specific command calibration. Quality prompts must also avoid flagging unchecked task/milestone checkboxes, status fields, roadmap files, or completion percentages by themselves. Only report task-file issues when an observed skill behavior fails. Evidence anchors: `src/cli/audit/harness/check-recovery.ts` (search: `not audited`), `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`), `src/cli/prompt/compose-quality.ts` (search: `Do NOT report them as quality findings`).
 
 ---
 

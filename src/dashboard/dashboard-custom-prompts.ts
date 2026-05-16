@@ -241,6 +241,18 @@ function dashboardReadBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
+function dashboardKnownRunnerIds(): string[] {
+  return Array.isArray(window.__GOAT_FLOW_RUNNER_IDS__)
+    ? window.__GOAT_FLOW_RUNNER_IDS__.filter(
+        (id): id is string => typeof id === "string",
+      )
+    : [];
+}
+
+function dashboardIsKnownRunnerId(value: string): value is RunnerId {
+  return dashboardKnownRunnerIds().includes(value);
+}
+
 function dashboardReadCustomPrompt(value: unknown): CustomPrompt | null {
   if (!isRecord(value)) return null;
   const id = readString(value.id);
@@ -251,11 +263,7 @@ function dashboardReadCustomPrompt(value: unknown): CustomPrompt | null {
   if (!CUSTOM_PROMPT_ROUTES.has(route)) return null;
   const runnerHintValue = readString(value.runnerHint);
   const runnerHint =
-    runnerHintValue === "any" ||
-    runnerHintValue === "claude" ||
-    runnerHintValue === "codex" ||
-    runnerHintValue === "gemini" ||
-    runnerHintValue === "copilot"
+    runnerHintValue === "any" || dashboardIsKnownRunnerId(runnerHintValue)
       ? runnerHintValue
       : "any";
   const requiresGoatFlowInstall = dashboardReadBoolean(
@@ -450,7 +458,7 @@ function dashboardValidateCustomPromptDraftDetails(
   }
   if (
     draft.runnerHint !== "any" &&
-    !["claude", "codex", "gemini", "copilot"].includes(draft.runnerHint)
+    !dashboardIsKnownRunnerId(draft.runnerHint)
   ) {
     errors.push({
       field: "runnerHint",

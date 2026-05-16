@@ -13,6 +13,8 @@ type AuditCheckAssurance = "full" | "limited";
  *  Importing CLI types here causes the dashboard build to emit `src/cli/types.js`
  *  back into the source tree, which then poisons lint/format/drift gates. */
 type RunnerId = "claude" | "codex" | "gemini" | "copilot";
+type PromptInvocationStyle = "slash" | "dollar";
+type SkillSource = "installed" | "agent-mirror" | "github-mirror";
 type SessionStatus = "starting" | "active" | "terminated";
 
 // ---------------------------------------------------------------------------
@@ -132,6 +134,11 @@ interface RecentLesson {
 interface SupportedAgent {
   id: RunnerId;
   name: string;
+  terminalBinary: string;
+  setupSurfaces: string[];
+  promptInvocationStyle: PromptInvocationStyle;
+  skillSource: SkillSource;
+  supportsPostTurnHook: boolean;
 }
 
 /** Agent detection info from `/api/agents/installed`. */
@@ -148,8 +155,15 @@ interface BrowseDir {
 }
 
 /** Project entry shown in the dashboard Projects view. */
+type ProjectIdentitySource = "git-remote" | "goat-marker" | "path";
+
 interface ProjectEntry {
   path: string;
+  paths?: string[];
+  identity?: string;
+  identitySource?: ProjectIdentitySource;
+  remoteUrlHash?: string;
+  markerId?: string;
   state: string;
   action: string;
   details: string;

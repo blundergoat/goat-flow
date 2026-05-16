@@ -165,6 +165,20 @@ function readRunnerId(value: unknown): RunnerId | null {
   return readInjectedRunnerIds().includes(runner) ? (runner as RunnerId) : null;
 }
 
+function readPromptInvocationStyle(
+  value: unknown,
+): PromptInvocationStyle | null {
+  return value === "slash" || value === "dollar" ? value : null;
+}
+
+function readSkillSource(value: unknown): SkillSource | null {
+  return value === "installed" ||
+    value === "agent-mirror" ||
+    value === "github-mirror"
+    ? value
+    : null;
+}
+
 /** Build the default setup-agent selection from the injected support list. */
 function buildDefaultSetupAgents(
   supportedAgents: SupportedAgent[],
@@ -587,8 +601,35 @@ function readSupportedAgent(value: unknown): SupportedAgent | null {
   if (!isRecord(value)) return null;
   const id = readRunnerId(value.id);
   const name = readString(value.name);
-  if (!id || !name) return null;
-  return { id, name };
+  const terminalBinary = readString(value.terminalBinary).trim();
+  const setupSurfaces = readStringArray(value.setupSurfaces).filter(
+    (surface) => surface.trim().length > 0,
+  );
+  const promptInvocationStyle = readPromptInvocationStyle(
+    value.promptInvocationStyle,
+  );
+  const skillSource = readSkillSource(value.skillSource);
+  const supportsPostTurnHook = value.supportsPostTurnHook;
+  if (
+    !id ||
+    !name ||
+    !terminalBinary ||
+    setupSurfaces.length === 0 ||
+    !promptInvocationStyle ||
+    !skillSource ||
+    typeof supportsPostTurnHook !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    id,
+    name,
+    terminalBinary,
+    setupSurfaces,
+    promptInvocationStyle,
+    skillSource,
+    supportsPostTurnHook,
+  };
 }
 
 /** Read the supported agent list injected into the dashboard shell. */
@@ -685,13 +726,11 @@ function readInjectedPresets(): Preset[] {
 /** Read one installed-agent record from raw payload data. */
 function readAgentInfo(value: unknown): AgentInfo | null {
   if (!isRecord(value)) return null;
-  const id = readRunnerId(value.id);
-  const name = readString(value.name);
-  if (!id || !name || typeof value.installed !== "boolean") return null;
+  const agent = readSupportedAgent(value);
+  if (!agent || typeof value.installed !== "boolean") return null;
 
   return {
-    id,
-    name,
+    ...agent,
     installed: value.installed,
     version: typeof value.version === "string" ? value.version : null,
   };
@@ -712,13 +751,28 @@ function readProjectEntry(value: unknown): ProjectEntry | null {
   if (!isRecord(value)) return null;
   const path = readString(value.path);
   if (!path) return null;
+  const identity = readString(value.identity);
+  const identitySource =
+    value.identitySource === "git-remote" ||
+    value.identitySource === "goat-marker" ||
+    value.identitySource === "path"
+      ? value.identitySource
+      : null;
 
-  return {
+  const entry: ProjectEntry = {
     path,
+    paths: readStringArray(value.paths),
     state: readString(value.state),
     action: readString(value.action),
     details: readString(value.details),
   };
+  if (identity) entry.identity = identity;
+  if (identitySource) entry.identitySource = identitySource;
+  const remoteUrlHash = readString(value.remoteUrlHash);
+  if (remoteUrlHash) entry.remoteUrlHash = remoteUrlHash;
+  const markerId = readString(value.markerId);
+  if (markerId) entry.markerId = markerId;
+  return entry;
 }
 
 /** Read one backend terminal-session record from raw payload data. */

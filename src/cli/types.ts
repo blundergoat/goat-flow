@@ -16,6 +16,12 @@ export type AgentId = (typeof KNOWN_AGENT_IDS)[number];
 
 // === Agent Profile ===
 
+/** Prompt invocation syntax an agent expects for goat-flow skills. */
+export type PromptInvocationStyle = "slash" | "dollar";
+
+/** Skill mirror/source classification used by quality inventory. */
+export type SkillSource = "installed" | "agent-mirror" | "github-mirror";
+
 /**
  * Describes an agent's file layout and enforcement mechanisms.
  * One profile per supported agent (Claude, Codex, Gemini, Copilot).
@@ -24,6 +30,11 @@ export interface AgentProfile {
   id: AgentId;
   name: string;
   instructionFile: string;
+  terminalBinary: string;
+  setupSurfaces: string[];
+  promptInvocationStyle: PromptInvocationStyle;
+  skillSource: SkillSource;
+  supportsPostTurnHook: boolean;
   // Null when the agent has no JSON settings mechanism (e.g., Codex)
   settingsFile: string | null;
   // File that stores hook registrations when it differs from settingsFile.

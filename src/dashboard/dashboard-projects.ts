@@ -16,15 +16,82 @@ interface DashboardProjectsContext {
   projectsSortAsc: boolean;
   newProjectPath: string;
   projectTitles: Record<string, string>;
+  projectIdentities: Record<string, string>;
   editingProjectTitle: boolean;
   projectTitleDraft: string;
   presetFavorites: string[];
   displayNameFor(path: string): string;
+  projectKeyFor(path: string): string;
   runAudit(fresh?: boolean): Promise<void>;
   showToast(msg: string, isError?: boolean): void;
   browseTo(path: string): Promise<void>;
   _saveProjectsList(): void;
   _saveDashboardState(): void;
+}
+
+function dashboardRememberProjectIdentity(
+  ctx: DashboardProjectsContext,
+  project: ProjectEntry,
+): void {
+  if (!project.identity) return;
+  const aliases =
+    project.paths && project.paths.length > 0 ? project.paths : [project.path];
+  ctx.projectIdentities[project.path] = project.identity;
+  for (const alias of aliases) {
+    ctx.projectIdentities[alias] = project.identity;
+  }
+}
+
+function dashboardRememberProjectIdentities(
+  ctx: DashboardProjectsContext,
+  projects: ProjectEntry[],
+): void {
+  for (const project of projects) {
+    dashboardRememberProjectIdentity(ctx, project);
+  }
+}
+
+function dashboardReadProjectRecord(value: unknown): ProjectEntry | null {
+  if (!isRecord(value)) return null;
+  const path = readString(value.currentPath);
+  const identity = readString(value.identity);
+  if (!path || !identity) return null;
+  const entry: ProjectEntry = {
+    path,
+    paths: readStringArray(value.paths),
+    identity,
+    state: "...",
+    action: "...",
+    details: "Not audited",
+  };
+  if (
+    value.identitySource === "git-remote" ||
+    value.identitySource === "goat-marker" ||
+    value.identitySource === "path"
+  ) {
+    entry.identitySource = value.identitySource;
+  }
+  const remoteUrlHash = readString(value.remoteUrlHash);
+  if (remoteUrlHash) entry.remoteUrlHash = remoteUrlHash;
+  const markerId = readString(value.markerId);
+  if (markerId) entry.markerId = markerId;
+  return entry;
+}
+
+function dashboardReadProjectRecords(value: unknown): ProjectEntry[] {
+  if (!isRecord(value)) return [];
+  return Object.values(value)
+    .map((project) => dashboardReadProjectRecord(project))
+    .filter((project): project is ProjectEntry => project !== null);
+}
+
+function dashboardContainsProjectPath(
+  projects: ProjectEntry[],
+  path: string,
+): boolean {
+  return projects.some(
+    (project) => project.path === path || project.paths?.includes(path),
+  );
 }
 
 /** Open the project browser at the current workspace path. */
@@ -106,6 +173,7 @@ async function dashboardAddProject(
         (p) => p.path === ctx.newProjectPath || p.path === result.path,
       );
       if (idx >= 0) ctx.projectsList[idx] = result;
+      dashboardRememberProjectIdentity(ctx, result);
     }
   } catch {
     /* silent */
@@ -164,6 +232,7 @@ async function dashboardAuditAllProjects(
       ctx.projectsList = payload.projects
         .map((project) => readProjectEntry(project))
         .filter((project): project is ProjectEntry => project !== null);
+      dashboardRememberProjectIdentities(ctx, ctx.projectsList);
     }
   } catch {
     /* silent */
@@ -178,12 +247,14 @@ async function dashboardLoadSavedDashboardState(
   let savedPaths: string[] = [];
   let savedFavorites: string[] = [];
   let savedProjectTitles: Record<string, string> = {};
+  let savedProjectRecords: ProjectEntry[] = [];
   let loadedFromServer = false;
   try {
     const res = await dashboardFetch("/api/projects/list");
     const payload = readRecord(await res.json(), "Dashboard state response");
     const paths = readStringArray(payload.paths);
     const favorites = readStringArray(payload.favorites);
+    const projectRecords = dashboardReadProjectRecords(payload.projects);
     if (paths.length > 0) {
       savedPaths = paths;
     }
@@ -191,11 +262,17 @@ async function dashboardLoadSavedDashboardState(
       savedFavorites = favorites;
     }
     savedProjectTitles = readStringMap(payload.projectTitles);
+    if (projectRecords.length > 0) {
+      savedProjectRecords = projectRecords;
+      savedPaths = projectRecords.map((project) => project.path);
+    }
     loadedFromServer = true;
   } catch {
     /* server unavailable */
   }
   ctx.projectTitles = savedProjectTitles;
+  ctx.projectIdentities = {};
+  dashboardRememberProjectIdentities(ctx, savedProjectRecords);
   const localPaths = readStoredStringArray("goat-flow-projects");
   const localFavorites = readStoredStringArray("goat-flow-preset-favorites");
   if (savedPaths.length === 0 && localPaths.length > 0) {
@@ -211,11 +288,23 @@ async function dashboardLoadSavedDashboardState(
     savedFavorites = localFavorites;
   }
   const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
-  if (launchPath && !savedPaths.includes(launchPath)) {
+  if (
+    launchPath &&
+    !savedPaths.includes(launchPath) &&
+    !dashboardContainsProjectPath(savedProjectRecords, launchPath)
+  ) {
     savedPaths.unshift(launchPath);
+    savedProjectRecords.unshift({
+      path: launchPath,
+      state: "...",
+      action: "...",
+      details: "Not audited",
+    });
   }
   ctx.presetFavorites = [...new Set(savedFavorites)];
-  if (savedPaths.length > 0) {
+  if (savedProjectRecords.length > 0) {
+    ctx.projectsList = savedProjectRecords;
+  } else if (savedPaths.length > 0) {
     ctx.projectsList = savedPaths.map((path) => ({
       path,
       state: "...",
@@ -223,6 +312,7 @@ async function dashboardLoadSavedDashboardState(
       details: "Not audited",
     }));
   }
+  dashboardRememberProjectIdentities(ctx, ctx.projectsList);
   if (savedPaths.length > 0 || ctx.presetFavorites.length > 0) {
     ctx._saveDashboardState();
   }
@@ -230,7 +320,13 @@ async function dashboardLoadSavedDashboardState(
 
 /** Persist the current dashboard state to localStorage and the server store. */
 function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
-  const paths = [...new Set(ctx.projectsList.map((p) => p.path))];
+  const paths = [
+    ...new Set(
+      ctx.projectsList.flatMap((p) =>
+        p.paths && p.paths.length > 0 ? p.paths : [p.path],
+      ),
+    ),
+  ];
   const favorites = [...new Set(ctx.presetFavorites)];
   const projectTitles = { ...ctx.projectTitles };
   localStorage.setItem("goat-flow-projects", JSON.stringify(paths));
@@ -256,13 +352,18 @@ function dashboardSaveProjectTitle(ctx: DashboardProjectsContext): void {
   ctx.editingProjectTitle = false;
   const trimmed = ctx.projectTitleDraft.trim().slice(0, 120);
   const next = { ...ctx.projectTitles };
+  const titleKey = ctx.projectKeyFor(ctx.projectPath);
   if (
     trimmed.length === 0 ||
     trimmed === getProjectDisplayName(ctx.projectPath)
   ) {
+    Reflect.deleteProperty(next, titleKey);
     Reflect.deleteProperty(next, ctx.projectPath);
   } else {
-    next[ctx.projectPath] = trimmed;
+    next[titleKey] = trimmed;
+    if (titleKey !== ctx.projectPath) {
+      Reflect.deleteProperty(next, ctx.projectPath);
+    }
   }
   ctx.projectTitles = next;
   ctx.projectTitleDraft = "";

@@ -86,6 +86,38 @@ function fixtureObserved(
   };
 }
 
+function fixtureAgent(
+  overrides: Partial<ManifestJson["agents"][string]> = {},
+): ManifestJson["agents"][string] {
+  return {
+    name: "Claude Code",
+    instruction_file: "CLAUDE.md",
+    skills_dir: ".claude/skills/",
+    capabilities: {
+      terminal_binary: "claude",
+      setup_surfaces: ["CLAUDE.md", ".claude/settings.json"],
+      prompt_invocation_style: "slash",
+      skill_source: "installed",
+    },
+    hooks_dir: ".claude/hooks/",
+    settings: ".claude/settings.json",
+    hook_config_file: ".claude/settings.json",
+    deny_hook: ".claude/hooks/deny-dangerous.sh",
+    deny_mechanism: {
+      type: "both",
+      settings_path: ".claude/settings.json",
+      script_path: ".claude/hooks/deny-dangerous.sh",
+    },
+    local_pattern: "*/CLAUDE.md",
+    hook_events: {
+      pre_tool: "PreToolUse",
+      post_turn: "Stop",
+    },
+    hooks: ["deny-dangerous.sh"],
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // composeManifest: derivation + shape
 // ---------------------------------------------------------------------------
@@ -173,6 +205,64 @@ describe("validateManifest (clean case)", () => {
     const json = fixtureJson();
     const observed = fixtureObserved();
     assert.doesNotThrow(() => validateManifest(json, observed));
+  });
+
+  it("accepts an agent with valid capability metadata", () => {
+    const json = fixtureJson();
+    json.agents.claude = fixtureAgent();
+
+    assert.doesNotThrow(() => validateManifest(json, fixtureObserved()));
+  });
+});
+
+describe("validateManifest (agent capability metadata)", () => {
+  it("throws when a fake manifest agent is missing capability metadata", () => {
+    const json = fixtureJson();
+    const agent = fixtureAgent() as ManifestJson["agents"][string] & {
+      capabilities?: unknown;
+    };
+    delete agent.capabilities;
+    json.agents.opencode = agent;
+
+    assert.throws(
+      () => validateManifest(json, fixtureObserved()),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some((f) =>
+          f.includes("agents.opencode.capabilities must be an object"),
+        ),
+    );
+  });
+
+  it("throws on invalid capability enum values", () => {
+    const json = fixtureJson();
+    json.agents.claude = fixtureAgent();
+    (
+      json.agents.claude.capabilities as {
+        prompt_invocation_style: unknown;
+        skill_source: unknown;
+      }
+    ).prompt_invocation_style = "bang";
+    (
+      json.agents.claude.capabilities as {
+        prompt_invocation_style: unknown;
+        skill_source: unknown;
+      }
+    ).skill_source = "copied";
+
+    assert.throws(
+      () => validateManifest(json, fixtureObserved()),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some((f) =>
+          f.includes(
+            "agents.claude.capabilities.prompt_invocation_style",
+          ),
+        ) &&
+        err.findings.some((f) =>
+          f.includes("agents.claude.capabilities.skill_source"),
+        ),
+    );
   });
 });
 

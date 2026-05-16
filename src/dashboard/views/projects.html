@@ -193,7 +193,10 @@
           </tr>
         </thead>
         <tbody>
-          <template x-for="project in filteredProjects" :key="project.path">
+          <template
+            x-for="project in filteredProjects"
+            :key="project.identity || project.path"
+          >
             <tr class="gf-tr">
               <!-- Project name (clickable → home view) -->
               <td class="gf-td">
@@ -226,6 +229,20 @@
                   "
                   x-text="project.path"
                   :title="project.path"
+                ></div>
+                <div
+                  x-show="project.paths && project.paths.length > 1"
+                  class="gf-text-muted"
+                  style="
+                    font-size: 10px;
+                    margin-top: 1px;
+                    max-width: 200px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                  "
+                  x-text="'Aliases: ' + project.paths.length"
+                  :title="project.paths.join('\n')"
                 ></div>
               </td>
               <!-- State badge (color-coded) -->

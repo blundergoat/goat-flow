@@ -3,8 +3,13 @@
 ## v1.7.0 - unreleased
 
 - **Removed legacy `detectAgents` helper** - `src/cli/detect/agents.ts` no longer exports the unused `detectAgents` function; all callers route through the supported-agent registry directly.
+- **Dashboard Tasks view and active plan controls** - Dashboard now exposes `.goat-flow/tasks/` milestones through `/api/tasks`, adds a Tasks workspace view with milestone progress and plan preview, and supports setting the active task plan from the UI.
+- **Dashboard side navigation refresh** - Workspace navigation moved to a collapsible side rail with icon labels, responsive layout polish, collapsed-state tooltips, an active-task tooltip, and clearer Projects/Prompts/New Prompt placement.
+- **Stable dashboard project identity** - Saved project titles, favorites, and project rows now migrate to identity-keyed records using git remote hash, local `.goat-flow/project-id` marker, then path fallback so dashboard state survives common repo moves and duplicate checkout paths.
+- **Manifest-backed agent capabilities** - `workflow/manifest.json` now carries per-agent terminal binaries, setup surfaces, prompt invocation style, and skill-source classification; registry, manifest validation, setup/quality prompts, terminal launch hints, dashboard readers, custom prompts, and docs consume that data instead of parallel hardcoded lists.
 - **Preflight coverage reporting** - Preflight reports overall line/branch/function coverage from the fast test suite alongside pass/fail.
 - **Evidence-before-claims metric** - Harness adds `evidence-before-claims` as a score-only Verification metric covering red-flags coverage in all present agent instruction files.
+- **Verification documentation refresh** - Verification lessons and related docs now capture the current evidence-before-claims, stale-test, and manifest-backed refactor prevention patterns from the May 16 work.
 - **Mutation testing helper** - Added an opt-in `scripts/mutation-test.sh` StrykerJS helper with an interactive target menu, local `@stryker-mutator/core` dev dependency, sandbox ignores for goat-flow local state, and a mutation-safe fast-suite dry run.
 
 ## v1.6.4 - 2026-05-12

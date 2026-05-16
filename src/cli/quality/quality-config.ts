@@ -10,6 +10,7 @@
  * override.
  */
 import { loadConfig } from "../config/reader.js";
+import { getAgentProfiles } from "../agents/registry.js";
 
 export type ArtifactKind = "skill" | "shared-reference";
 export type ArtifactSource =
@@ -432,13 +433,30 @@ function mergeSubtypes(
   return merged;
 }
 
+function manifestSkillWalkRoots(): WalkRoot[] {
+  const roots = new Map<string, ArtifactSource>();
+  for (const profile of getAgentProfiles()) {
+    if (!roots.has(profile.skillsDir)) {
+      roots.set(profile.skillsDir, profile.skillSource);
+    }
+  }
+  roots.set("workflow/skills", "workflow");
+  return Array.from(roots, ([dir, source]) => ({ dir, source }));
+}
+
+function defaultQualityConfig(): QualityConfig {
+  const defaults = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+  defaults.walkRoots.skills = manifestSkillWalkRoots();
+  return defaults;
+}
+
 /**
  * Merge a raw quality config (read from YAML) on top of `DEFAULT_QUALITY_CONFIG`.
  * Returns the original defaults if the input is null or invalid.
  */
 export function mergeQualityConfig(raw: unknown): QualityConfig {
-  if (!isRecord(raw)) return cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
-  const defaults = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+  if (!isRecord(raw)) return defaultQualityConfig();
+  const defaults = defaultQualityConfig();
   return {
     walkRoots: {
       skills: mergeWalkRoot(

@@ -5,7 +5,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getKnownAgentIds } from "../../src/cli/agents/registry.js";
+import {
+  getAgentProfiles,
+  getKnownAgentIds,
+} from "../../src/cli/agents/registry.js";
 import { SKILL_NAMES } from "../../src/cli/constants.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { loadManifest } from "../../src/cli/manifest/manifest.js";
@@ -105,6 +108,74 @@ describe("dashboard runner type alignment", () => {
       runnerIds,
       getKnownAgentIds(),
       "dashboard RunnerId union must stay aligned with the CLI agent list",
+    );
+  });
+});
+
+describe("manifest-backed agent capability alignment", () => {
+  it("exposes capability metadata through the runtime registry", () => {
+    const manifest = loadManifest();
+
+    for (const profile of getAgentProfiles()) {
+      const manifestAgent = manifest.agents[profile.id];
+      assert.ok(manifestAgent, `manifest should include ${profile.id}`);
+      assert.equal(
+        profile.terminalBinary,
+        manifestAgent.capabilities.terminal_binary,
+      );
+      assert.deepEqual(
+        profile.setupSurfaces,
+        manifestAgent.capabilities.setup_surfaces,
+      );
+      assert.equal(
+        profile.promptInvocationStyle,
+        manifestAgent.capabilities.prompt_invocation_style,
+      );
+      assert.equal(profile.skillSource, manifestAgent.capabilities.skill_source);
+      assert.equal(
+        profile.supportsPostTurnHook,
+        manifestAgent.hook_events.post_turn !== null,
+      );
+      assert.ok(
+        profile.terminalBinary.trim(),
+        `${profile.id} needs a terminal binary`,
+      );
+      assert.ok(
+        profile.setupSurfaces.length > 0,
+        `${profile.id} needs at least one setup surface`,
+      );
+    }
+  });
+
+  it("keeps dashboard and terminal runner support manifest-backed", () => {
+    const dashboardRoutes = readFileSync(
+      resolve(PROJECT_ROOT, "src/cli/server/dashboard-routes.ts"),
+      "utf-8",
+    );
+    const terminalSource = readFileSync(
+      resolve(PROJECT_ROOT, "src/cli/server/terminal.ts"),
+      "utf-8",
+    );
+
+    assert.match(
+      dashboardRoutes,
+      /const SUPPORTED_AGENTS = AGENT_PROFILES\.map/,
+      "dashboard-supported agents should be projected from getAgentProfiles()",
+    );
+    assert.match(
+      dashboardRoutes,
+      /window\.__GOAT_FLOW_AGENTS__ = \$\{JSON\.stringify\(SUPPORTED_AGENTS\)\}/,
+      "dashboard shell should inject the manifest-backed supported-agent list",
+    );
+    assert.match(
+      terminalSource,
+      /for \(const profile of getAgentProfiles\(\)\)/,
+      "terminal runner support should iterate manifest-backed profiles",
+    );
+    assert.doesNotMatch(
+      terminalSource,
+      /RUNNER_BINARIES/,
+      "terminal should not carry a duplicate runner-binary allowlist",
     );
   });
 });

@@ -118,6 +118,12 @@
       "name": "Claude Code",
       "instruction_file": "CLAUDE.md",
       "skills_dir": ".claude/skills/",
+      "capabilities": {
+        "terminal_binary": "claude",
+        "setup_surfaces": ["CLAUDE.md", ".claude/settings.json"],
+        "prompt_invocation_style": "slash",
+        "skill_source": "installed"
+      },
       "hooks_dir": ".claude/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
@@ -138,6 +144,12 @@
       "name": "Codex",
       "instruction_file": "AGENTS.md",
       "skills_dir": ".agents/skills/",
+      "capabilities": {
+        "terminal_binary": "codex",
+        "setup_surfaces": ["AGENTS.md", ".codex/config.toml", ".codex/hooks.json"],
+        "prompt_invocation_style": "dollar",
+        "skill_source": "agent-mirror"
+      },
       "hooks_dir": ".codex/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
@@ -158,6 +170,12 @@
       "name": "Gemini CLI",
       "instruction_file": "GEMINI.md",
       "skills_dir": ".agents/skills/",
+      "capabilities": {
+        "terminal_binary": "gemini",
+        "setup_surfaces": ["GEMINI.md", ".gemini/settings.json"],
+        "prompt_invocation_style": "slash",
+        "skill_source": "agent-mirror"
+      },
       "hooks_dir": ".gemini/hooks/",
       "settings": ".gemini/settings.json",
       "hook_config_file": ".gemini/settings.json",
@@ -178,6 +196,16 @@
       "name": "Copilot CLI",
       "instruction_file": ".github/copilot-instructions.md",
       "skills_dir": ".github/skills/",
+      "capabilities": {
+        "terminal_binary": "copilot",
+        "setup_surfaces": [
+          ".github/copilot-instructions.md",
+          ".github/instructions/**/*.instructions.md",
+          ".github/hooks/hooks.json"
+        ],
+        "prompt_invocation_style": "slash",
+        "skill_source": "github-mirror"
+      },
       "hooks_dir": ".github/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
       "deny_hook": ".github/hooks/deny-dangerous.sh",

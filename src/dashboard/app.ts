@@ -4,7 +4,7 @@
  * plain `<script>` tag rather than an ES module import.
  */
 
-type ProjectSortKey = "name" | keyof ProjectEntry;
+type ProjectSortKey = "name" | "state" | "action" | "details";
 
 /** Alpine.js data factory for the dashboard shell. */
 function app() {
@@ -46,15 +46,22 @@ function app() {
     otherCollapsed: false,
     confirmEndSessionId: null as string | null,
     _workspacePoll: null as ReturnType<typeof setInterval> | null,
-    /** Optional user-supplied display titles keyed by absolute project path.
+    /** Optional user-supplied display titles keyed by stable project identity.
      *  Persisted alongside paths/favorites in .goat-flow/dashboard-state.json so
-     *  the same repo on WIN vs WSL can carry different labels per machine. */
+     *  titles follow repos across path moves when the server can resolve identity. */
     projectTitles: {} as Record<string, string>,
+    projectIdentities: {} as Record<string, string>,
     editingProjectTitle: false,
     projectTitleDraft: "",
+    /** Resolve the stable dashboard-state key for a path, falling back for older payloads. */
+    projectKeyFor(path: string): string {
+      return this.projectIdentities[path] ?? path;
+    },
     /** Resolve the display name for a project path, preferring a user override. */
     displayNameFor(path: string): string {
-      const override = this.projectTitles[path];
+      const identityKey = this.projectKeyFor(path);
+      const override =
+        this.projectTitles[identityKey] ?? this.projectTitles[path];
       if (typeof override === "string" && override.length > 0) return override;
       return getProjectDisplayName(path);
     },
@@ -1121,9 +1128,7 @@ function app() {
               .map((agent) => readAgentInfo(agent))
               .filter((agent): agent is AgentInfo => agent !== null)
           : [];
-        if (this.supportedAgents.length === 0) {
-          this.supportedAgents = agents.map(({ id, name }) => ({ id, name }));
-        }
+        if (this.supportedAgents.length === 0) this.supportedAgents = agents;
         this.allAgents = agents;
         this.installedAgents = agents.filter((a) => a.installed);
         this.agentsLoaded = true;

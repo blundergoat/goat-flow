@@ -56,14 +56,6 @@ interface DashboardQualityGenerateOptions {
   fresh?: boolean;
 }
 
-const SETUP_INSTRUCTION_SURFACES: Record<RunnerId, string> = {
-  claude: "CLAUDE.md, .claude/settings.json",
-  codex: "AGENTS.md, .codex/config.toml, .codex/hooks.json",
-  gemini: "GEMINI.md, .gemini/settings.json",
-  copilot:
-    ".github/copilot-instructions.md, .github/instructions/**/*.instructions.md, .github/hooks/hooks.json",
-};
-
 function dashboardAgentDisplayName(
   ctx: DashboardSetupQualityContext,
   agentId: RunnerId,
@@ -76,7 +68,10 @@ function dashboardAgentDisplayName(
 function dashboardSetupInstructionSurfaces(
   ctx: DashboardSetupQualityContext,
 ): string {
-  return SETUP_INSTRUCTION_SURFACES[ctx.setupSelectedAgent];
+  const agent = ctx.supportedAgents.find(
+    (entry) => entry.id === ctx.setupSelectedAgent,
+  );
+  return agent?.setupSurfaces.join(", ") ?? ctx.setupSelectedAgent;
 }
 
 function dashboardQualityModePreset(

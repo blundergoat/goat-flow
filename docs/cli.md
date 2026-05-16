@@ -92,7 +92,7 @@ npx goat-flow quality diff 2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-b
 
 ### `goat-flow manifest [--check] [--format json]`
 
-Print the resolved single-source-of-truth manifest (agent registry, installed skills, required files, and derived facts). Pass `--check` to validate that the static manifest matches observed repo state (exits non-zero on drift, used by CI).
+Print the resolved single-source-of-truth manifest (agent registry, agent capability metadata, installed skills, required files, and derived facts). Pass `--check` to validate that the static manifest matches observed repo state and capability schema (exits non-zero on drift, used by CI).
 
 ```bash
 npx goat-flow manifest                    # Print resolved manifest as Markdown

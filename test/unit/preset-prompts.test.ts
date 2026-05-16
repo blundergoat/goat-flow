@@ -570,15 +570,26 @@ describe("preset prompt catalog", () => {
   it("shows setup instruction surfaces for the selected target agent", () => {
     const view = readFileSync(SETUP_VIEW_PATH, "utf-8");
     const helper = readFileSync(DASHBOARD_QUALITY_PATH, "utf-8");
-    assert.match(view, /setupInstructionSurfaces\(\)/);
-    assert.match(helper, /CLAUDE\.md, \.claude\/settings\.json/);
-    assert.match(
-      helper,
-      /AGENTS\.md, \.codex\/config\.toml, \.codex\/hooks\.json/,
+    const manifest = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "workflow", "manifest.json"),
+        "utf-8",
+      ),
+    ) as {
+      agents: Record<string, { capabilities: { setup_surfaces: string[] } }>;
+    };
+    const surfaces = Object.values(manifest.agents).flatMap(
+      (agent) => agent.capabilities.setup_surfaces,
     );
-    assert.match(helper, /GEMINI\.md, \.gemini\/settings\.json/);
-    assert.match(helper, /\.github\/copilot-instructions\.md/);
-    assert.match(helper, /\.github\/hooks\/hooks\.json/);
+
+    assert.match(view, /setupInstructionSurfaces\(\)/);
+    assert.match(helper, /ctx\.supportedAgents\.find/);
+    assert.match(helper, /setupSurfaces\.join\(", "\)/);
+    assert.doesNotMatch(helper, /SETUP_INSTRUCTION_SURFACES/);
+    assert.ok(surfaces.includes("CLAUDE.md"));
+    assert.ok(surfaces.includes(".codex/hooks.json"));
+    assert.ok(surfaces.includes("GEMINI.md"));
+    assert.ok(surfaces.includes(".github/copilot-instructions.md"));
   });
 
   it("keeps Home install donut based on install checklist plus harness", () => {

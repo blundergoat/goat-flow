@@ -16,6 +16,7 @@ import type {
   Runner,
 } from "./types.js";
 import { decodeClientMessage } from "./decoders.js";
+import { getAgentProfiles } from "../agents/registry.js";
 
 // node-pty types - optional dep, can't use static import
 /** Lazily imported node-pty module type */
@@ -29,14 +30,6 @@ type IPty = ReturnType<typeof import("node-pty").spawn>;
  *  Single source of truth consumed by the dashboard API, client guards, and docs. */
 export const MAX_SESSIONS = 10;
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 480;
-
-/** CLI binary names for each runner. */
-const RUNNER_BINARIES: Record<Runner, string> = {
-  claude: "claude",
-  codex: "codex",
-  gemini: "gemini",
-  copilot: "copilot",
-};
 
 const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
   ".exe",
@@ -262,9 +255,9 @@ export class TerminalManager {
     const minutes = idleTimeoutMinutes ?? DEFAULT_IDLE_TIMEOUT_MINUTES;
     this.idleTimeoutMs = minutes === 0 ? null : minutes * 60 * 1000;
     // Resolve all runner CLI paths at startup
-    for (const [runner, binary] of Object.entries(RUNNER_BINARIES)) {
-      const path = resolveCLIPath(binary);
-      if (path) this.runnerPaths.set(runner as Runner, path);
+    for (const profile of getAgentProfiles()) {
+      const path = resolveCLIPath(profile.terminalBinary);
+      if (path) this.runnerPaths.set(profile.id, path);
     }
   }
 

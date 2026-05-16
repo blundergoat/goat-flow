@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-15
+last_reviewed: 2026-05-16
 ---
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
@@ -49,11 +49,23 @@ last_reviewed: 2026-05-15
 
 **What happened:** M03 added a VM-loaded browser helper test for `dashboard-custom-prompts.ts`. The first focused run failed even though the expected and actual arrays had the same printed contents, because `assert.deepEqual` compared an array created inside the VM realm against a host-realm array literal.
 
-**Current recurrence:** On 2026-05-02, custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. The helper behavior was correct; the assertions needed `Array.from(...)` or scalar field comparisons.
+**Current recurrence:** On 2026-05-02, custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. On 2026-05-16, the manifest-backed runner hint test hit the same issue for `dashboardValidateCustomPromptDraft(ctx)`. The helper behavior was correct; the assertions needed `Array.from(...)` or scalar field comparisons.
 
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
+
+---
+
+## Lesson: Dashboard row metadata should not widen UI sort contracts
+
+**Status:** active | **Created:** 2026-05-16
+
+**What happened:** While adding stable dashboard project identity, `npm run typecheck` failed after `ProjectEntry` gained optional identity metadata and `paths?: string[]`. `ProjectSortKey` was defined as `"name" | keyof ProjectEntry`, so adding non-string fields widened sort values to `string | string[] | undefined` and broke `localeCompare`. The first dashboard integration rerun also failed because the roundtrip test asserted exact `paths` array order even though identity grouping made alias order incidental.
+
+**Root cause:** I treated `ProjectEntry` as both the UI row model and the sortable-column contract. Extending the row shape for identity metadata unintentionally changed the sort type. The test had the same path-only assumption: it verified array order rather than the durable property, which is that all aliases are preserved under one identity-keyed record.
+
+**Prevention:** When adding metadata fields to dashboard row types, keep `ProjectSortKey` as an explicit union of sortable string columns. For identity or alias migrations, assert identity grouping, alias set membership, and title preservation; do not assert incidental path-array ordering unless the ordering is part of the product contract. Evidence anchors: `src/dashboard/app.ts` (search: `type ProjectSortKey = "name"`), `test/integration/dashboard-server.test.ts` (search: `persists project identities without raw private remote URLs`).
 
 ---
 

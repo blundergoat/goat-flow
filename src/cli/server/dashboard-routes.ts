@@ -5,8 +5,8 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -53,7 +53,25 @@ const KNOWN_AGENT_IDS = getKnownAgentIds();
 const KNOWN_AGENT_LIST = KNOWN_AGENT_IDS.join(", ");
 const AGENT_PROFILE_MAP = getAgentProfileMap();
 const AGENT_PROFILES = getAgentProfiles();
-const SUPPORTED_AGENTS = AGENT_PROFILES.map(({ id, name }) => ({ id, name }));
+const SUPPORTED_AGENTS = AGENT_PROFILES.map(
+  ({
+    id,
+    name,
+    terminalBinary,
+    setupSurfaces,
+    promptInvocationStyle,
+    skillSource,
+    supportsPostTurnHook,
+  }) => ({
+    id,
+    name,
+    terminalBinary,
+    setupSurfaces,
+    promptInvocationStyle,
+    skillSource,
+    supportsPostTurnHook,
+  }),
+);
 const VALID_AGENTS = new Set<string>(KNOWN_AGENT_IDS);
 const VALID_QUALITY_MODES = new Set<string>(QUALITY_MODES);
 const QUALITY_EVALUATE_MAX_BODY_BYTES = MAX_EVALUATE_CONTENT_BYTES + 64 * 1024;
@@ -66,10 +84,26 @@ interface DashboardPresetData {
   cat: string;
 }
 
+type ProjectIdentitySource = "git-remote" | "goat-marker" | "path";
+
+export interface DashboardProjectIdentity {
+  identity: string;
+  identitySource: ProjectIdentitySource;
+  currentPath: string;
+  remoteUrlHash?: string;
+  markerId?: string;
+}
+
+interface DashboardProjectRecord extends DashboardProjectIdentity {
+  paths: string[];
+  title?: string;
+}
+
 interface DashboardStateData {
   paths: string[];
   favorites: string[];
   projectTitles: Record<string, string>;
+  projects: Record<string, DashboardProjectRecord>;
 }
 
 interface DashboardTaskMilestoneSummary {
@@ -658,6 +692,148 @@ function hashString(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const PROJECT_ID_RELATIVE_PATH = ".goat-flow/project-id";
+const PROJECT_ID_COMMENT =
+  "# Local goat-flow dashboard project identity. Gitignored by default.";
+
+function identitySourceFrom(value: unknown): ProjectIdentitySource | null {
+  return value === "git-remote" || value === "goat-marker" || value === "path"
+    ? value
+    : null;
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const result: string[] = [];
+  for (const value of values) {
+    if (value && !result.includes(value)) result.push(value);
+  }
+  return result;
+}
+
+function normalizeProjectPath(projectPath: string): string {
+  const resolved = resolve(projectPath);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function directoryExists(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function normalizeGitRemoteUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const scpLike = trimmed.match(/^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/u);
+  if (scpLike && !trimmed.includes("://")) {
+    const host = scpLike[1]?.toLowerCase();
+    const remotePath = scpLike[2]?.replace(/^\/+/u, "");
+    if (!host || !remotePath) return null;
+    return `${host}/${remotePath}`.replace(/\.git$/u, "").replace(/\/+$/u, "");
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    const remotePath = parsed.pathname.replace(/^\/+/u, "");
+    if (!host || !remotePath) return null;
+    return `${host}/${remotePath}`.replace(/\.git$/u, "").replace(/\/+$/u, "");
+  } catch {
+    return trimmed.replace(/\.git$/u, "").replace(/\/+$/u, "");
+  }
+}
+
+function readGitRemote(projectPath: string): string | null {
+  try {
+    const output = execFileSync(
+      "git",
+      ["-C", projectPath, "config", "--get", "remote.origin.url"],
+      {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 1000,
+      },
+    );
+    return typeof output === "string" ? output.trim() : String(output).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readProjectMarkerId(markerPath: string): string | null {
+  try {
+    const raw = readFileSync(markerPath, "utf-8");
+    for (const line of raw.split(/\r?\n/u)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      return trimmed;
+    }
+  } catch {
+    /* missing or unreadable marker */
+  }
+  return null;
+}
+
+function writeProjectMarkerId(markerPath: string): string | null {
+  try {
+    const markerId = `gf_${randomUUID()}`;
+    writeFileSync(markerPath, `${PROJECT_ID_COMMENT}\n${markerId}\n`, {
+      encoding: "utf-8",
+    });
+    return markerId;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveProjectIdentity(
+  projectPath: string,
+  options: { allowMarkerWrite?: boolean } = {},
+): DashboardProjectIdentity {
+  const currentPath = normalizeProjectPath(projectPath);
+  const normalizedRemote = normalizeGitRemoteUrl(
+    readGitRemote(currentPath) ?? "",
+  );
+  if (normalizedRemote) {
+    const remoteUrlHash = hashString(normalizedRemote);
+    return {
+      identity: `git-remote:${remoteUrlHash}`,
+      identitySource: "git-remote",
+      currentPath,
+      remoteUrlHash,
+    };
+  }
+
+  const goatFlowDir = join(currentPath, ".goat-flow");
+  if (directoryExists(goatFlowDir)) {
+    const markerPath = join(currentPath, PROJECT_ID_RELATIVE_PATH);
+    const markerId =
+      readProjectMarkerId(markerPath) ??
+      (options.allowMarkerWrite ? writeProjectMarkerId(markerPath) : null);
+    if (markerId) {
+      return {
+        identity: `goat-marker:${markerId}`,
+        identitySource: "goat-marker",
+        currentPath,
+        markerId,
+      };
+    }
+  }
+
+  return {
+    identity: `path:${currentPath}`,
+    identitySource: "path",
+    currentPath,
+  };
+}
+
 function hashExistingFile(projectPath: string, relativePath: string): string {
   try {
     return hashString(readFileSync(join(projectPath, relativePath), "utf-8"));
@@ -1111,6 +1287,131 @@ export function createDashboardRouteHandlers(
     return result;
   }
 
+  function normalizeDashboardProjectRecord(
+    identity: string,
+    value: unknown,
+  ): DashboardProjectRecord | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    const identityValue =
+      typeof record.identity === "string" && record.identity.length > 0
+        ? record.identity
+        : identity;
+    const identitySource = identitySourceFrom(record.identitySource);
+    const currentPath =
+      typeof record.currentPath === "string" && record.currentPath.length > 0
+        ? normalizeProjectPath(record.currentPath)
+        : null;
+    if (!identityValue || !identitySource || !currentPath) return null;
+
+    const paths = Array.isArray(record.paths)
+      ? record.paths
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => normalizeProjectPath(entry))
+      : [];
+    const normalized: DashboardProjectRecord = {
+      identity: identityValue,
+      identitySource,
+      currentPath,
+      paths: dedupeStrings([currentPath, ...paths]),
+    };
+    if (typeof record.remoteUrlHash === "string") {
+      normalized.remoteUrlHash = record.remoteUrlHash;
+    }
+    if (typeof record.markerId === "string") {
+      normalized.markerId = record.markerId;
+    }
+    if (typeof record.title === "string" && record.title.trim().length > 0) {
+      normalized.title = record.title.trim().slice(0, 120);
+    }
+    return normalized;
+  }
+
+  function readOptionalProjectRecordsProperty(
+    value: Record<string, unknown>,
+  ): Record<string, DashboardProjectRecord> {
+    const raw = value.projects;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const records: Record<string, DashboardProjectRecord> = {};
+    for (const [identity, record] of Object.entries(raw)) {
+      const normalized = normalizeDashboardProjectRecord(identity, record);
+      if (normalized) records[normalized.identity] = normalized;
+    }
+    return records;
+  }
+
+  function addProjectRecord(
+    records: Map<string, DashboardProjectRecord>,
+    next: DashboardProjectRecord,
+  ): void {
+    const existing = records.get(next.identity);
+    if (!existing) {
+      records.set(next.identity, {
+        ...next,
+        paths: dedupeStrings(next.paths),
+      });
+      return;
+    }
+    records.set(next.identity, {
+      ...existing,
+      currentPath: next.currentPath,
+      paths: dedupeStrings([...existing.paths, ...next.paths]),
+      title: next.title ?? existing.title,
+      remoteUrlHash: next.remoteUrlHash ?? existing.remoteUrlHash,
+      markerId: next.markerId ?? existing.markerId,
+    });
+  }
+
+  function hydrateDashboardState(
+    state: DashboardStateData,
+    options: { allowMarkerWrite: boolean },
+  ): DashboardStateData {
+    const records = new Map<string, DashboardProjectRecord>();
+    for (const record of Object.values(state.projects)) {
+      addProjectRecord(records, record);
+    }
+
+    for (const path of state.paths) {
+      const identity = resolveProjectIdentity(path, {
+        allowMarkerWrite: options.allowMarkerWrite,
+      });
+      const title =
+        state.projectTitles[identity.identity] ?? state.projectTitles[path];
+      addProjectRecord(records, {
+        ...identity,
+        paths: [identity.currentPath],
+        ...(title ? { title } : {}),
+      });
+    }
+
+    const projectTitles: Record<string, string> = {};
+    for (const record of records.values()) {
+      const title =
+        record.title ??
+        state.projectTitles[record.identity] ??
+        state.projectTitles[record.currentPath];
+      if (title) {
+        record.title = title;
+        projectTitles[record.identity] = title;
+      }
+    }
+
+    const projects = Object.fromEntries(
+      [...records.entries()].sort(([a], [b]) => a.localeCompare(b)),
+    );
+    const paths = dedupeStrings(
+      Object.values(projects).flatMap((record) => record.paths),
+    );
+    return {
+      paths,
+      favorites: dedupeStrings(state.favorites),
+      projectTitles,
+      projects,
+    };
+  }
+
   /** Normalize parsed dashboard state JSON into the server's expected shape. */
   function normalizeDashboardState(value: unknown): DashboardStateData | null {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1125,7 +1426,15 @@ export function createDashboardRouteHandlers(
       record,
       "projectTitles",
     );
-    return { paths, favorites, projectTitles };
+    return hydrateDashboardState(
+      {
+        paths,
+        favorites,
+        projectTitles,
+        projects: readOptionalProjectRecordsProperty(record),
+      },
+      { allowMarkerWrite: false },
+    );
   }
 
   /** Read dashboard state from the new file first, then the legacy projects-only file. */
@@ -1141,7 +1450,7 @@ export function createDashboardRouteHandlers(
         /* try next location */
       }
     }
-    return { paths: [], favorites: [], projectTitles: {} };
+    return { paths: [], favorites: [], projectTitles: {}, projects: {} };
   }
 
   /** Fail fast when an endpoint expects a real project directory. */
@@ -1816,15 +2125,18 @@ export function createDashboardRouteHandlers(
     installed: boolean;
     version: string | null;
   }[] {
-    return SUPPORTED_AGENTS.map(({ id, name }) => {
+    return SUPPORTED_AGENTS.map((agent) => {
       try {
         const whichCmd = process.platform === "win32" ? "where" : "which";
-        execFileSync(whichCmd, [id], { timeout: 3000, stdio: "pipe" });
+        execFileSync(whichCmd, [agent.terminalBinary], {
+          timeout: 3000,
+          stdio: "pipe",
+        });
         let version: string | null = null;
         if (includeVersions) {
           try {
             version = normalizeAgentVersionOutput(
-              execFileSync(id, ["--version"], {
+              execFileSync(agent.terminalBinary, ["--version"], {
                 timeout: 5000,
                 stdio: "pipe",
               }).toString(),
@@ -1833,9 +2145,9 @@ export function createDashboardRouteHandlers(
             /* version detection optional */
           }
         }
-        return { id, name, installed: true, version };
+        return { ...agent, installed: true, version };
       } catch {
-        return { id, name, installed: false, version: null };
+        return { ...agent, installed: false, version: null };
       }
     });
   }
@@ -1881,11 +2193,15 @@ export function createDashboardRouteHandlers(
           return true;
         }
         const { mkdir, rm, writeFile } = await import("node:fs/promises");
-        await mkdir(join(absDefault, ".goat-flow"), { recursive: true });
-        await writeFile(
-          dashboardStateFile,
-          JSON.stringify(decoded.value, null, 2),
+        const nextState = hydrateDashboardState(
+          {
+            ...decoded.value,
+            projects: {},
+          },
+          { allowMarkerWrite: true },
         );
+        await mkdir(join(absDefault, ".goat-flow"), { recursive: true });
+        await writeFile(dashboardStateFile, JSON.stringify(nextState, null, 2));
         await rm(legacyProjectsListFile, { force: true });
         jsonResponse(res, 200, { ok: true });
       } catch (err) {
@@ -1915,9 +2231,16 @@ export function createDashboardRouteHandlers(
 
     const results = paths.map((p) => {
       try {
-        const resolved = resolve(p);
-        const fs = createFS(resolved);
-        return { path: resolved, ...classifyProjectState(fs) };
+        const identity = resolveProjectIdentity(p, {
+          allowMarkerWrite: true,
+        });
+        const fs = createFS(identity.currentPath);
+        return {
+          path: identity.currentPath,
+          paths: [identity.currentPath],
+          ...identity,
+          ...classifyProjectState(fs),
+        };
       } catch (err) {
         return {
           path: p,

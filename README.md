@@ -2,7 +2,7 @@
 
 **A dashboard for auditing, configuring, and running your AI coding agents.**
 
-One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
+One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, Codex, Gemini CLI, and Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 
@@ -66,7 +66,7 @@ Split layout for terminal work. A sessions rail lists all running terminal sessi
 
 ### Projects
 
-Multi-project browser. Register multiple project paths, view their audit status at a glance, and "Audit All" in one click. Select a project to switch context across the entire dashboard.
+Multi-project browser. Register multiple projects, view their audit status at a glance, and "Audit All" in one click. Titles and favorites follow a stable identity where possible: git remote hash first, then a local `.goat-flow/project-id` marker for non-git goat-flow projects, then path fallback. Select a project to switch context across the entire dashboard.
 
 ### Quality
 
@@ -122,7 +122,7 @@ npx @blundergoat/goat-flow@latest install . --agent claude
 
 Use `--force` only when you want to overwrite existing settings, `.goat-flow/config.yaml`, and remove deprecated skills. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
 
-The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry directly, so they always show or check Claude, Codex, Gemini, and Copilot setup status. Use `--agent <id>` when you intentionally want one agent.
+The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
 
 The install includes `.goat-flow/skill-reference/` for shared meta references and `.goat-flow/skill-playbooks/` for tool/capability playbooks. Generated or repaired instruction files route agents to `.goat-flow/skill-playbooks/` before declaring a requested tool unavailable.
 
@@ -150,9 +150,9 @@ Open the **Prompts** view, pick a workflow (code review, bug diagnosis, UI debug
 
 ## Multi-agent support
 
-GOAT Flow supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
+GOAT Flow's current manifest-backed registry supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
 
-Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matrix.
+Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matrix from `workflow/manifest.json`.
 
 ## CLI commands
 

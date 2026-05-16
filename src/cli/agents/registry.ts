@@ -16,6 +16,8 @@ import {
   type AgentId,
   type AgentProfile,
   type DenyMechanism,
+  type PromptInvocationStyle,
+  type SkillSource,
 } from "../types.js";
 
 /** Re-export the canonical runtime authority for agent identity. */
@@ -62,15 +64,41 @@ function requireDir(
   return trimmed;
 }
 
+/** Require a manifest capability string to be present and non-empty. */
+function requireCapabilityString(
+  id: AgentId,
+  field: string,
+  value: string | undefined,
+): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    throw new Error(
+      `workflow/manifest.json agent "${id}" is missing capabilities.${field}`,
+    );
+  }
+  return trimmed;
+}
+
 /** Convert a manifest agent entry into the runtime profile. */
 function toRuntimeProfile(
   id: AgentId,
   agent: ManifestAgentProfile,
 ): AgentProfile {
+  const capabilities = agent.capabilities;
   return {
     id,
     name: agent.name,
     instructionFile: agent.instruction_file,
+    terminalBinary: requireCapabilityString(
+      id,
+      "terminal_binary",
+      capabilities.terminal_binary,
+    ),
+    setupSurfaces: [...capabilities.setup_surfaces],
+    promptInvocationStyle:
+      capabilities.prompt_invocation_style as PromptInvocationStyle,
+    skillSource: capabilities.skill_source as SkillSource,
+    supportsPostTurnHook: agent.hook_events.post_turn !== null,
     settingsFile: agent.settings ?? null,
     hookConfigFile: agent.hook_config_file ?? agent.settings ?? null,
     skillsDir: requireDir(id, "skills_dir", agent.skills_dir),
