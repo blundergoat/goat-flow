@@ -59,7 +59,7 @@ Arguments:
   project-path    Target project directory (default: .)
 
 Flags:
-  --format <type>   Output format: json, text, markdown (omit for auto-detect: text in terminal, json otherwise)
+  --format <type>   Output format: json, text, markdown, sarif (omit for auto-detect: text in terminal, json otherwise)
   --agent <id>      Filter to one agent: ${validAgentList()}
   --mode <mode>     Quality prompt/history/diff mode: ${QUALITY_MODES.join(", ")}
   --all             Quality history: lift the default 20-run limit
@@ -84,6 +84,7 @@ Examples:
   goat-flow audit . --harness          Audit with AI harness completeness checks
   goat-flow audit . --agent claude     Audit scoped to Claude
   goat-flow audit . --format json      JSON output for CI
+  goat-flow audit . --format sarif     SARIF output for CI/code scanning upload
   goat-flow install . --agent claude   Copy/update goat-flow system files
   goat-flow setup . --agent claude --apply
   goat-flow setup --agent claude       Setup prompt for Claude
@@ -191,7 +192,7 @@ const REMOVED_COMMANDS: Record<string, string> = {
     '"critique" was renamed to "quality". Use "goat-flow quality . --agent <id>".',
 };
 /** Accepted values for the --format flag */
-const VALID_FORMATS = ["json", "text", "markdown"] as const;
+const VALID_FORMATS = ["json", "text", "markdown", "sarif"] as const;
 /** Accepted values for the --agent flag. Resolved lazily so that manifest drift
  *  does not crash commands (like `--help` or `--version`) that do not need the
  *  agent list. Strict callers get the exception; help-text callers fall back. */
@@ -284,7 +285,7 @@ function parseFormatArg(value: string | undefined): CLIOptions["format"] {
   if (!value) return defaultFormat;
   if (!VALID_FORMATS.includes(value as (typeof VALID_FORMATS)[number])) {
     throw new CLIError(
-      `Invalid format: ${value}. Use: json, text, markdown`,
+      `Invalid format: ${value}. Use: json, text, markdown, sarif`,
       2,
     );
   }
@@ -555,6 +556,12 @@ function parseSkillPositionals(positionals: string[]): SkillPositionals {
 
 /** Validate flags shared across commands. */
 function validateCommonFlags(command: Command, values: ParsedArgValues): void {
+  if (command !== "audit" && values.format === "sarif") {
+    throw new CLIError(
+      "--format sarif is only valid for the audit command.",
+      2,
+    );
+  }
   if (command !== "quality" && values.all === true) {
     throw new CLIError("--all is only valid for the quality command.", 2);
   }
@@ -1135,8 +1142,12 @@ function handleInfoCommand(options: ParsedCLI): void {
 async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   const { createFS } = await import("./facts/fs.js");
   const { runAudit } = await import("./audit/audit.js");
-  const { renderAuditText, renderAuditJson, renderAuditMarkdown } =
-    await import("./audit/render.js");
+  const {
+    renderAuditText,
+    renderAuditJson,
+    renderAuditMarkdown,
+    renderAuditSarif,
+  } = await import("./audit/render.js");
 
   const fs = createFS(options.projectPath);
   const report = runAudit(fs, options.projectPath, {
@@ -1151,6 +1162,8 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     rendered = renderAuditJson(report);
   } else if (options.format === "markdown") {
     rendered = renderAuditMarkdown(report);
+  } else if (options.format === "sarif") {
+    rendered = renderAuditSarif(report);
   } else {
     rendered = renderAuditText(report);
   }

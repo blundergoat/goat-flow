@@ -15,6 +15,7 @@
 - **Evidence-before-claims metric** - Harness adds `evidence-before-claims` as a score-only Verification metric covering red-flags coverage in all present agent instruction files.
 - **Verification documentation refresh** - Verification lessons and related docs now capture the current evidence-before-claims, stale-test, and manifest-backed refactor prevention patterns from the May 16 work.
 - **Mutation testing helper** - Added an opt-in `scripts/mutation-test.sh` StrykerJS helper with an interactive target menu, local `@stryker-mutator/core` dev dependency, sandbox ignores for goat-flow local state, and a mutation-safe fast-suite dry run.
+- **SARIF audit output** - `goat-flow audit --format sarif` now exports deterministic audit findings as SARIF 2.1.0 for CI and code-scanning integrations, including stable rule metadata, acknowledged advisory suppressions, no-location fallback behavior, and optional drift/content findings without changing audit pass/fail semantics.
 
 ## v1.6.4 - 2026-05-12
 

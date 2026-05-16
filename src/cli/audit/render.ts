@@ -12,6 +12,7 @@ import type {
   ContentReport,
   DriftReport,
 } from "./types.js";
+export { renderAuditSarif } from "./sarif.js";
 
 // === Text renderer ===
 

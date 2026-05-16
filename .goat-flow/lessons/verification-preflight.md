@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-05-10
+last_reviewed: 2026-05-17
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -74,6 +74,8 @@ last_reviewed: 2026-05-10
 **What happened:** Added `test/unit/preset-prompts.test.ts` for the M01 security preset contract and the focused test passed, but `npx prettier --check src/dashboard/preset-prompts.json test/unit/preset-prompts.test.ts` failed on the new file.
 
 **Root cause:** I treated the focused behavioral test as the first verification result for a new test file without running the repo formatter gate first.
+
+**Recurrence update (2026-05-17):** M11 SARIF added `src/cli/audit/sarif.ts`, `test/unit/audit-sarif.test.ts`, and a small CLI route edit. The focused SARIF tests passed first, but the next scoped formatter check failed on all three touched TypeScript files. Running `npx prettier --write src/cli/audit/sarif.ts src/cli/cli.ts test/unit/audit-sarif.test.ts` fixed the task-local formatter blocker before typecheck/full tests. Evidence anchors: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`), `test/unit/audit-sarif.test.ts` (search: `routes audit --format sarif through the CLI renderer`).
 
 **Prevention:** After adding or editing TypeScript tests, run `npx prettier --write <changed test files>` before claiming focused test verification. Keep the formatter check in the same verification bundle as the focused test so style failures are corrected before milestone boxes are ticked.
 

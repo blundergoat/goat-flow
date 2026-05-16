@@ -163,6 +163,7 @@ npx goat-flow dashboard .                  # Launch the dashboard
 npx goat-flow audit .                      # Run audit (pass/fail output)
 npx goat-flow audit . --harness            # Add AI harness scoring
 npx goat-flow audit . --format json        # JSON output for CI
+npx goat-flow audit . --format sarif       # SARIF output for code scanning upload
 npx goat-flow install . --agent claude     # Copy/update system files
 npx goat-flow setup . --agent claude       # Generate setup prompt
 npx goat-flow quality . --agent claude     # Generate quality-assessment prompt

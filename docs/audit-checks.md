@@ -7,6 +7,8 @@
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
 
+Machine-readable output is available with `--format json` or `--format sarif`. SARIF output registers each active audit check id as a SARIF rule id and emits results only for actionable audit findings: failing setup/agent/harness checks plus drift/content findings when those optional checks are enabled. SARIF rule ids are derived from the stable goat-flow check ids below, so renaming a check id is a downstream alert-identity change for SARIF consumers.
+
 Source of truth:
 
 - `src/cli/audit/check-goat-flow.ts` exports `SETUP_CHECKS`

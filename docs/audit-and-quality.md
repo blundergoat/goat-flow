@@ -8,6 +8,7 @@ goat-flow has two evaluation commands. `audit` is deterministic - it runs checks
 npx goat-flow audit .                              # Build correctness (pass/fail)
 npx goat-flow audit . --harness                    # Include AI harness completeness checks
 npx goat-flow audit . --agent claude               # Scope to one agent
+npx goat-flow audit . --format sarif               # Export audit findings as SARIF 2.1.0
 npx goat-flow quality . --agent gemini             # Generate quality-assessment prompt for one agent
 npx goat-flow quality history --agent gemini       # Review saved trend history
 npx goat-flow quality diff --agent gemini          # Compare the latest two saved runs
@@ -62,6 +63,14 @@ Checks are grouped by **scope**:
 `audit` JSON and text output includes an advisory `enforcement` matrix per audited agent. It uses the status values `hard`, `limited`, `soft`, `missing`, and `unknown` with evidence sources such as `local-hook`, `local-settings`, `runtime-self-test`, `manifest`, or `not-observed`.
 
 This matrix is a readout, not a gate. It does not change audit pass/fail status. It also does not infer broad filesystem restrictions from narrower evidence: secret-path read coverage, deny-hook installation, or a passing setup check do not by themselves prove general file read/write enforcement.
+
+### SARIF export (`--format sarif`)
+
+`audit --format sarif` renders the existing audit report as SARIF 2.1.0 for CI systems and SARIF-aware code-scanning integrations. The export does not change audit pass/fail semantics: CLI exit code still follows `report.status`, and SARIF results are derived from deterministic goat-flow findings rather than source-code vulnerability analysis.
+
+The renderer registers every rule from the active audit surface in `tool.driver.rules`, then emits results for failing setup, agent, and harness checks. `impact: "scope-fail"` maps to SARIF `error`; `impact: "score-only"` maps to `warning`; informational content findings map to `note`. Acknowledged advisory failures remain visible as SARIF results with `suppressions[]` so downstream consumers can distinguish acknowledged findings from absent findings.
+
+When `--check-drift` or `--check-content` is enabled, drift and content findings are included as SARIF rules/results with file locations where the finding already carries a repo-relative path. Checks without target-file evidence are still emitted as valid SARIF results, but no fake location is invented; GitHub code scanning only creates file annotations for results that include `locations[]`.
 
 ### Harness mode (`--harness`)
 

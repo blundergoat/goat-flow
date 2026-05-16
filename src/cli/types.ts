@@ -365,7 +365,7 @@ export interface ReadonlyFS {
 /** Parsed command-line arguments for the goat-flow CLI */
 export interface CLIOptions {
   projectPath: string;
-  format: "json" | "text" | "markdown";
+  format: "json" | "text" | "markdown" | "sarif";
   // Null means scan all detected agents
   agent: AgentId | null;
   verbose: boolean;

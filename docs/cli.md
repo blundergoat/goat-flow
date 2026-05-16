@@ -22,7 +22,7 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 | `--harness` | Add AI Harness Completeness scope (17 checks, installed/not-installed per concern) |
 | `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
-| `--format <type>` | Output: json, text, markdown (default: auto) |
+| `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |
 
@@ -31,10 +31,13 @@ npx goat-flow audit .                      # Audit current directory
 npx goat-flow audit . --harness            # Include AI harness completeness checks
 npx goat-flow audit . --agent claude       # Audit scoped to Claude
 npx goat-flow audit . --format json        # JSON output for CI
+npx goat-flow audit . --format sarif       # SARIF output for CI/code scanning upload
 npx goat-flow audit . --output report.json # Write to file
 ```
 
 The enforcement matrix is deliberately conservative. It reports local facts such as deny-hook registration, secret-path file-read coverage, secret shell-read blocking, and deny-hook self-test evidence. General file read/write restriction capability remains `unknown` unless goat-flow has explicit evidence; it is not inferred from setup success.
+
+`--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
@@ -186,6 +189,7 @@ Common tasks and the commands to run:
 | Decide what kind of artifact to author | `npx goat-flow quality candidacy "..."` |
 | Scaffold a new skill | `npx goat-flow skill new "..." --name <slug>` |
 | Use this in CI | `npx goat-flow audit . --format json` |
+| Export SARIF for code scanning | `npx goat-flow audit . --format sarif --output goat-flow-audit.sarif` |
 | Open the dashboard | `npx goat-flow dashboard .` |
 
 **CI pipeline example:**
@@ -194,6 +198,36 @@ Common tasks and the commands to run:
 # Fail the build if audit doesn't pass
 npx goat-flow audit . --format json --output report.json
 ```
+
+**GitHub code scanning SARIF example:**
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+
+steps:
+  - uses: actions/checkout@v4
+  - name: Run goat-flow audit as SARIF
+    id: goat-flow-audit
+    run: |
+      set +e
+      npx goat-flow audit . --harness --check-drift --check-content --format sarif --output goat-flow-audit.sarif
+      status=$?
+      echo "status=$status" >> "$GITHUB_OUTPUT"
+      exit 0
+  - name: Upload goat-flow SARIF
+    uses: github/codeql-action/upload-sarif@v3
+    if: always()
+    with:
+      sarif_file: goat-flow-audit.sarif
+      category: goat-flow-audit
+  - name: Enforce goat-flow audit gate
+    if: steps.goat-flow-audit.outputs.status != '0'
+    run: exit 1
+```
+
+The upload step is separate from the audit gate so failed audits still publish their SARIF file. GitHub categories distinguish multiple SARIF uploads for the same commit. Current GitHub code-scanning limits include 10 MB per gzip-compressed SARIF file, 25,000 results per run, and only the top 5,000 results displayed.
 
 **First-time setup:**
 
