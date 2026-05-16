@@ -5,7 +5,11 @@
 import type { SharedFacts, ReadonlyFS } from "../../types.js";
 import type { LoadedConfig } from "../../config/types.js";
 
-import { extractFootgunFacts, extractLessonsFacts } from "./learning-loop.js";
+import {
+  extractFootgunFacts,
+  extractLessonsFacts,
+  extractLearningLoopEntries,
+} from "./learning-loop.js";
 import { extractGitignoreFacts } from "./ci.js";
 import { extractLocalInstructions } from "./local-instructions.js";
 
@@ -132,5 +136,6 @@ export function extractSharedFacts(
     localInstructions,
     gitCommitInstructions: extractGitCommitInstructionFacts(fs),
     localInstructionsLineCount: countLocalInstructionLines(localInstructions),
+    learningLoopEntries: extractLearningLoopEntries(fs, configState),
   };
 }

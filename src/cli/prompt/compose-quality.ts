@@ -2,7 +2,7 @@
  * Composes a structured quality-assessment prompt for a selected agent.
  * Embeds live audit results when available.
  */
-import type { AgentId } from "../types.js";
+import type { AgentId, SharedFacts } from "../types.js";
 import type { AuditReport, AuditConcernKey } from "../audit/types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
 import { loadManifest } from "../manifest/manifest.js";
@@ -11,6 +11,10 @@ import { getPackageVersion } from "../paths.js";
 import { posix } from "node:path";
 import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
 import type { SkillQualityReport } from "../quality/skill-quality.js";
+import {
+  renderLearningLoopContext,
+  selectLearningLoopContext,
+} from "./learning-loop-context.js";
 
 /**
  * Build the forward-slash project sub-path that goes inside a Bash snippet in
@@ -36,6 +40,7 @@ interface QualityInput {
   qualityMode?: QualityMode;
   selectedProjectPath?: string;
   runDate?: string;
+  sharedFacts?: SharedFacts | null;
 }
 
 interface QualityPayload {
@@ -315,6 +320,19 @@ function renderPriorReportContext(
   return lines.join("\n");
 }
 
+function renderBoundedLearningLoopContext(
+  sharedFacts: SharedFacts | null | undefined,
+  qualityMode: QualityMode,
+): string {
+  if (!sharedFacts) return "";
+  if (qualityMode !== "agent-setup" && qualityMode !== "harness") return "";
+  const surface =
+    qualityMode === "harness" ? "quality-harness" : "quality-agent-setup";
+  return renderLearningLoopContext(
+    selectLearningLoopContext(sharedFacts, { surface }),
+  );
+}
+
 function appendFocusedReportContract(
   lines: string[],
   input: {
@@ -467,6 +485,14 @@ function composeFocusedQuality(
   lines.push("");
   lines.push(renderPriorReportContext(priorReport, qualityMode));
   lines.push("");
+  const learningLoopContext = renderBoundedLearningLoopContext(
+    input.sharedFacts,
+    qualityMode,
+  );
+  if (learningLoopContext) {
+    lines.push(learningLoopContext);
+    lines.push("");
+  }
   appendFocusedReportContract(lines, {
     agent,
     projectPath,
@@ -901,6 +927,14 @@ export function composeQuality(input: QualityInput): QualityPayload {
 
   lines.push(renderPriorReportContext(priorReport, qualityMode));
   lines.push("");
+  const learningLoopContext = renderBoundedLearningLoopContext(
+    input.sharedFacts,
+    qualityMode,
+  );
+  if (learningLoopContext) {
+    lines.push(learningLoopContext);
+    lines.push("");
+  }
 
   // Step 0 - Ground yourself (CLI version: audit already injected)
   lines.push("---");

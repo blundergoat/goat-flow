@@ -14,6 +14,8 @@ import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
+import type { LearningLoopEntryFact } from "../../src/cli/types.js";
+import { makeSharedFacts } from "../fixtures/projects/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -69,6 +71,27 @@ function extractExampleJson(prompt: string): string {
     '"scope": "framework-self | consumer"',
     '"scope": "framework-self"',
   );
+}
+
+function qualityContextEntry(
+  overrides: Partial<LearningLoopEntryFact> & { title: string },
+): LearningLoopEntryFact {
+  return {
+    sourcePath: ".goat-flow/footguns/auditor.md",
+    kind: "footgun",
+    title: overrides.title,
+    status: "active",
+    created: "2026-05-16",
+    updated: null,
+    resolved: null,
+    excerpt: `${overrides.title} excerpt`,
+    staleRefs: [],
+    invalidLineRefs: [],
+    hasValidAnchor: true,
+    bucketSizeBytes: 1_000,
+    order: 0,
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +302,39 @@ describe("quality prompt content", () => {
       parsed.ok,
       `skills-mode JSON example must parse: ${parsed.ok ? "" : parsed.error}`,
     );
+  });
+
+  it("adds bounded learning-loop context only to setup and harness quality prompts", () => {
+    const sharedFacts = {
+      ...makeSharedFacts(),
+      learningLoopEntries: [
+        qualityContextEntry({ title: "active prompt trap" }),
+        qualityContextEntry({
+          title: "resolved prompt trap",
+          status: "resolved",
+          resolved: "2026-05-16",
+        }),
+      ],
+    };
+    const harness = composeQuality({
+      agent: "claude",
+      projectPath: "/tmp/test-project",
+      auditReport: null,
+      qualityMode: "harness",
+      sharedFacts,
+    });
+    const skills = composeQuality({
+      agent: "claude",
+      projectPath: "/tmp/test-project",
+      auditReport: null,
+      qualityMode: "skills",
+      sharedFacts,
+    });
+
+    assert.match(harness.prompt, /<goat-learning-loop budget="\d+ bytes"/);
+    assert.match(harness.prompt, /active prompt trap/);
+    assert.doesNotMatch(harness.prompt, /resolved prompt trap/);
+    assert.doesNotMatch(skills.prompt, /<goat-learning-loop/);
   });
 
   it("defaults run_date from local calendar getters, not UTC ISO date", () => {

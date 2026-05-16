@@ -132,6 +132,29 @@ export interface BucketFreshness {
   lineCount: number;
 }
 
+export type LearningLoopEntryKind =
+  | "footgun"
+  | "lesson"
+  | "pattern"
+  | "decision";
+
+/** Compact parsed learning-loop entry used by bounded prompt retrieval. */
+export interface LearningLoopEntryFact {
+  sourcePath: string;
+  kind: LearningLoopEntryKind;
+  title: string;
+  status: "active" | "resolved" | null;
+  created: string | null;
+  updated: string | null;
+  resolved: string | null;
+  excerpt: string;
+  staleRefs: string[];
+  invalidLineRefs: string[];
+  hasValidAnchor: boolean;
+  bucketSizeBytes: number;
+  order: number;
+}
+
 /** Facts shared across all agents (project-wide files and directories) */
 export interface SharedFacts {
   footguns: {
@@ -219,6 +242,8 @@ export interface SharedFacts {
   };
   /** Total line count across canonical local-instruction files. */
   localInstructionsLineCount: number;
+  /** Parsed entries for deterministic, bounded prompt retrieval. */
+  learningLoopEntries?: LearningLoopEntryFact[];
 }
 
 /** Per-agent facts gathered from instruction files, settings, skills, and hooks */

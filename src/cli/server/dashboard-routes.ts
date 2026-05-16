@@ -1803,6 +1803,8 @@ export function createDashboardRouteHandlers(
 
     try {
       requireProjectDirectory(projectPath);
+      const fs = createFS(projectPath);
+      const sharedFacts = extractSharedFacts(fs, loadConfig(projectPath, fs));
       const auditReport = getOrRunQualityAudit(projectPath, agent, {
         cacheOnly: fast,
         fresh,
@@ -1819,6 +1821,7 @@ export function createDashboardRouteHandlers(
         priorReport,
         qualityMode,
         selectedProjectPath,
+        sharedFacts,
       });
       jsonResponse(res, 200, result);
     } catch (err) {

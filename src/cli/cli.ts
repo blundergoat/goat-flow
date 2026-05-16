@@ -1292,6 +1292,8 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   const { runAudit } = await import("./audit/audit.js");
   const { composeQuality } = await import("./prompt/compose-quality.js");
   const { findLatestQualityReport } = await import("./quality/history.js");
+  const { loadConfig } = await import("./config/reader.js");
+  const { extractSharedFacts } = await import("./facts/shared/index.js");
 
   const fs = createFS(options.projectPath);
 
@@ -1312,6 +1314,10 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   for (const warning of historyWarnings) {
     console.error(warning);
   }
+  const sharedFacts = extractSharedFacts(
+    fs,
+    loadConfig(options.projectPath, fs),
+  );
 
   const result = composeQuality({
     agent: options.agent,
@@ -1319,6 +1325,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
     auditReport,
     priorReport,
     qualityMode,
+    sharedFacts,
   });
 
   if (options.format === "json") {

@@ -10,6 +10,7 @@ import {
   computeFreshness,
   extractFootgunFacts,
   extractLessonsFacts,
+  extractLearningLoopEntries,
 } from "../../src/cli/facts/shared/learning-loop.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 import type {
@@ -309,5 +310,33 @@ describe("extractFootgunFacts search-anchor staleness", () => {
     assert.deepEqual(facts.invalidLineRefs, [
       "src/cli/cli.ts:1 (missing semantic anchor)",
     ]);
+  });
+});
+
+describe("extractLearningLoopEntries", () => {
+  it("preserves resolved footgun status for selector exclusion", () => {
+    const fs = stubFS(
+      {
+        ".goat-flow/footguns/auditor.md":
+          "---\ncategory: auditor\nlast_reviewed: 2026-05-16\n---\n\n## Footgun: active trap\n\n**Status:** active | **Created:** 2026-05-16 | **Evidence:** ACTUAL_MEASURED\n\n- `src/cli/cli.ts` (search: `quality`) - evidence.\n\n## Resolved Entries\n\n## Footgun: resolved trap\n\n**Status:** resolved | **Created:** 2026-05-15 | **Resolved:** 2026-05-16 | **Evidence:** ACTUAL_MEASURED\n\nOriginal symptoms.\n",
+        "src/cli/cli.ts": "const quality = true;\n",
+      },
+      {
+        ".goat-flow/footguns/": ["auditor.md"],
+        ".goat-flow/lessons/": [],
+        ".goat-flow/patterns/": [],
+        ".goat-flow/decisions/": [],
+      },
+    );
+    const entries = extractLearningLoopEntries(fs, stubConfig());
+
+    assert.equal(
+      entries.find((candidate) => candidate.title === "active trap")?.status,
+      "active",
+    );
+    assert.equal(
+      entries.find((candidate) => candidate.title === "resolved trap")?.status,
+      "resolved",
+    );
   });
 });
