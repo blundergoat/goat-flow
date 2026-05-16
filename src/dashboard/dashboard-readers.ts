@@ -326,6 +326,16 @@ function readStringRecord(value: unknown): Record<string, string> {
   return Object.fromEntries(entries);
 }
 
+/** Read a string-to-number map from raw payload data. */
+function readNumberRecord(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, number] => typeof entry[1] === "number",
+  );
+  return Object.fromEntries(entries);
+}
+
 /** Read one audit scope from raw payload data. */
 function readAuditScope(value: unknown, context: string): AuditScope {
   const payload = readRecord(value, context);
@@ -374,6 +384,88 @@ function readAuditConcern(value: unknown): AuditConcern | null {
   };
 }
 
+/** Read an enforcement capability status from raw payload data. */
+function readEnforcementStatus(
+  value: unknown,
+): EnforcementCapabilityStatus | null {
+  return value === "hard" ||
+    value === "limited" ||
+    value === "soft" ||
+    value === "missing" ||
+    value === "unknown"
+    ? value
+    : null;
+}
+
+/** Read one enforcement source label from raw payload data. */
+function readEnforcementSource(
+  value: unknown,
+): EnforcementCapabilitySource | null {
+  return value === "local-settings" ||
+    value === "local-hook" ||
+    value === "runtime-self-test" ||
+    value === "manifest" ||
+    value === "provider-docs" ||
+    value === "not-observed"
+    ? value
+    : null;
+}
+
+/** Read one advisory enforcement capability row. */
+function readEnforcementCapability(
+  value: unknown,
+): EnforcementCapability | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const label = readString(value.label);
+  const status = readEnforcementStatus(value.status);
+  const summary = readString(value.summary);
+  if (!id || !label || !status || !summary) return null;
+  return {
+    id,
+    label,
+    status,
+    sources: Array.isArray(value.sources)
+      ? value.sources
+          .map((source) => readEnforcementSource(source))
+          .filter(
+            (source): source is EnforcementCapabilitySource => source !== null,
+          )
+      : [],
+    summary,
+    evidence: readStringArray(value.evidence),
+  };
+}
+
+/** Read the advisory enforcement matrix for one agent. */
+function readAgentEnforcementCapability(
+  value: unknown,
+): AgentEnforcementCapability | null {
+  if (!isRecord(value)) return null;
+  const agent = readRunnerId(value.agent);
+  const name = readString(value.name);
+  if (!agent || !name || value.advisory !== true) return null;
+  const capabilities = Array.isArray(value.capabilities)
+    ? value.capabilities
+        .map((item) => readEnforcementCapability(item))
+        .filter((item): item is EnforcementCapability => item !== null)
+    : [];
+  return {
+    agent,
+    name,
+    advisory: true,
+    capabilities,
+    summary: {
+      hard: 0,
+      limited: 0,
+      soft: 0,
+      missing: 0,
+      unknown: 0,
+      ...readNumberRecord(value.summary),
+    },
+  };
+}
+
 /** Read one per-agent score from raw payload data. */
 function readAgentScore(value: unknown): AgentScore | null {
   if (!isRecord(value)) return null;
@@ -408,6 +500,7 @@ function readAgentScore(value: unknown): AgentScore | null {
     agent: readAuditScope(value.agent, "Audit response agent scope"),
     harness,
     concerns,
+    enforcement: readAgentEnforcementCapability(value.enforcement),
   };
 }
 

@@ -53,6 +53,17 @@ type HelperContext = {
           };
         }[];
       } | null;
+      enforcement: {
+        capabilities: {
+          id: string;
+          label: string;
+          status: string;
+          sources: string[];
+          summary: string;
+          evidence: string[];
+        }[];
+        summary: Record<string, number>;
+      } | null;
     }[];
   };
   readTaskState(value: unknown): {
@@ -284,6 +295,7 @@ describe("dashboard payload readers", () => {
             }),
           ]),
           concerns: null,
+          enforcement: null,
         },
       ],
     });
@@ -317,6 +329,62 @@ describe("dashboard payload readers", () => {
         100,
     );
     assert.equal(score, 50);
+  });
+
+  it("preserves advisory enforcement matrix rows", () => {
+    const helpers = loadHelpers();
+
+    const report = helpers.readDashboardReport({
+      status: "pass",
+      target: "/repo",
+      overall: { status: "pass" },
+      scopes: {
+        setup: scope(),
+        agent: scope(),
+        harness: scope(),
+      },
+      learningLoop: null,
+      recentLessons: [],
+      agentScores: [
+        {
+          id: "claude",
+          name: "Claude Code",
+          agent: scope(),
+          harness: scope(),
+          concerns: null,
+          enforcement: {
+            agent: "claude",
+            name: "Claude Code",
+            advisory: true,
+            summary: { hard: 1, limited: 0, soft: 0, missing: 0, unknown: 1 },
+            capabilities: [
+              {
+                id: "shell-dangerous",
+                label: "Dangerous shell commands",
+                status: "hard",
+                sources: ["local-hook"],
+                summary: "Deny mechanism blocks dangerous commands",
+                evidence: ["AgentFacts.hooks"],
+              },
+              {
+                id: "file-read-restrictions",
+                label: "General file-read restrictions",
+                status: "unknown",
+                sources: ["not-observed"],
+                summary: "Not inferred from secret-path coverage",
+                evidence: [],
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const enforcement = report.agentScores[0]?.enforcement;
+    assert.equal(enforcement?.agent, "claude");
+    assert.equal(enforcement?.capabilities.length, 2);
+    assert.equal(enforcement?.capabilities[1]?.status, "unknown");
+    assert.deepEqual(enforcement?.capabilities[0]?.sources, ["local-hook"]);
   });
 
   it("preserves task-state fields used by the Tasks view", () => {

@@ -2,6 +2,10 @@
  * Renderers for AuditReport: text (terminal), json (stable schema), markdown (PR comments).
  */
 import type {
+  AgentEnforcementCapability,
+  EnforcementCapabilityStatus,
+} from "./enforcement.js";
+import type {
   AuditConcernKey,
   AuditReport,
   AuditScope,
@@ -23,6 +27,46 @@ const RESET = "\x1b[0m";
 function statusBadge(status: "pass" | "fail" | "skipped"): string {
   if (status === "skipped") return `${YELLOW}SKIP${RESET}`;
   return status === "pass" ? `${GREEN}PASS${RESET}` : `${RED}FAIL${RESET}`;
+}
+
+const ENFORCEMENT_STATUS_LABELS: Record<EnforcementCapabilityStatus, string> = {
+  hard: "HARD",
+  limited: "LIMITED",
+  soft: "SOFT",
+  missing: "MISSING",
+  unknown: "UNKNOWN",
+};
+
+/** Render a non-gating enforcement status label. */
+function enforcementStatus(status: EnforcementCapabilityStatus): string {
+  if (status === "hard")
+    return `${GREEN}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
+  if (status === "missing") {
+    return `${RED}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
+  }
+  if (status === "limited" || status === "soft") {
+    return `${YELLOW}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
+  }
+  return `${DIM}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
+}
+
+/** Render the advisory enforcement matrix in terminal text format. */
+function renderEnforcementMatrix(matrix: AgentEnforcementCapability[]): string {
+  const lines: string[] = [];
+  lines.push(
+    `${BOLD}Agent Enforcement Matrix:${RESET}  ${DIM}advisory; does not affect audit status${RESET}`,
+  );
+  lines.push("");
+  for (const agent of matrix) {
+    lines.push(`  ${CYAN}${agent.name}${RESET}`);
+    for (const item of agent.capabilities) {
+      lines.push(
+        `    ${enforcementStatus(item.status)} ${item.label}: ${item.summary}`,
+      );
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
 }
 
 /** Render one audit scope in the terminal text format. */
@@ -67,6 +111,12 @@ export function renderAuditText(report: AuditReport): string {
   lines.push("");
 
   lines.push(`Result: ${statusBadge(report.status)}`);
+
+  const enforcement = report.enforcement ?? [];
+  if (enforcement.length > 0) {
+    lines.push("");
+    lines.push(renderEnforcementMatrix(enforcement));
+  }
 
   // Harness completeness concerns
   if (report.concerns && report.scopes.harness) {

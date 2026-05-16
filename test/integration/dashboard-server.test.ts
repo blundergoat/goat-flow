@@ -908,6 +908,15 @@ describe("dashboard /api/audit", () => {
       assert.ok(getKnownAgentIds().includes(id as AgentId));
       assert.equal(entry.name, getAgentProfileMap()[id as AgentId].name);
       assertAuditScope(entry.agent, "Dashboard report agentScores[].agent");
+      const enforcement = expectRecord(
+        entry.enforcement,
+        "Dashboard report agentScores[].enforcement",
+      );
+      assert.equal(enforcement.agent, id);
+      assert.ok(
+        Array.isArray(enforcement.capabilities),
+        "Dashboard report should include enforcement capabilities",
+      );
       if (entry.harness !== null) {
         assertAuditScope(
           entry.harness,

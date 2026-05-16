@@ -13,6 +13,7 @@ import {
   runAuditBatch,
   createAuditFactsView,
 } from "../../src/cli/audit/audit.js";
+import { renderAuditText } from "../../src/cli/audit/render.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
@@ -501,6 +502,7 @@ function makeAuditReport(
           : null,
     },
     concerns: null,
+    enforcement: [],
     drift: null,
     content: null,
     overall: { status },
@@ -1473,6 +1475,35 @@ describe("audit --harness", () => {
       !("qualityScore" in report.overall),
       "overall should not have qualityScore",
     );
+  });
+
+  it("exposes advisory enforcement capabilities without changing audit status", () => {
+    const projectPath = resolve(import.meta.dirname, "..", "..");
+    const fs = createFS(projectPath);
+    const report = runAudit(fs, projectPath, {
+      agentFilter: "claude",
+      harness: true,
+    });
+
+    assert.equal(report.status, report.overall.status);
+    assert.equal(report.enforcement.length, 1);
+    const [claude] = report.enforcement;
+    assert.equal(claude?.agent, "claude");
+    assert.equal(claude?.advisory, true);
+    assert.equal(
+      claude?.capabilities.find((item) => item.id === "file-read-restrictions")
+        ?.status,
+      "unknown",
+    );
+    assert.equal(
+      claude?.capabilities.find((item) => item.id === "hook-self-test")?.status,
+      "hard",
+    );
+
+    const output = renderAuditText(report);
+    assert.match(output, /Agent Enforcement Matrix/);
+    assert.match(output, /General file-read restrictions/);
+    assert.match(output, /does not affect audit status/);
   });
 });
 

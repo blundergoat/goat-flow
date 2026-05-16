@@ -23,7 +23,7 @@ npx goat-flow quality diff --agent gemini          # Compare the latest two save
 
 ## `goat-flow audit`
 
-Validates that the project's agent harness is structurally correct and complete. All checks are pass/fail.
+Validates that the project's agent harness is structurally correct and complete. All checks are pass/fail. Audit output also includes an advisory per-agent enforcement matrix so users can distinguish structural setup pass/fail from what local facts actually prove about command blocking, secret-path coverage, hook registration, and unknown broader file read/write enforcement.
 
 For the full deterministic inventory, including every check id and what it validates, see [Deterministic audit checks](audit-checks.md).
 
@@ -56,6 +56,12 @@ Checks are grouped by **scope**:
 - `agent-deny-dangerous` - selected agent has a deny mechanism, shell-hook syntax is valid, deny patterns exist, installed deny hook files match the workflow templates, and the smoke deny self-test passes when the script exists
 
 **Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx goat-flow manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
+
+### Enforcement matrix
+
+`audit` JSON and text output includes an advisory `enforcement` matrix per audited agent. It uses the status values `hard`, `limited`, `soft`, `missing`, and `unknown` with evidence sources such as `local-hook`, `local-settings`, `runtime-self-test`, `manifest`, or `not-observed`.
+
+This matrix is a readout, not a gate. It does not change audit pass/fail status. It also does not infer broad filesystem restrictions from narrower evidence: secret-path read coverage, deny-hook installation, or a passing setup check do not by themselves prove general file read/write enforcement.
 
 ### Harness mode (`--harness`)
 

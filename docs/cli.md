@@ -14,7 +14,7 @@ The menu can start the dashboard, copy/update goat-flow system files, generate a
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (17 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (17 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
 
 | Flag | Description |
 |------|-------------|
@@ -33,6 +33,8 @@ npx goat-flow audit . --agent claude       # Audit scoped to Claude
 npx goat-flow audit . --format json        # JSON output for CI
 npx goat-flow audit . --output report.json # Write to file
 ```
+
+The enforcement matrix is deliberately conservative. It reports local facts such as deny-hook registration, secret-path file-read coverage, secret shell-read blocking, and deny-hook self-test evidence. General file read/write restriction capability remains `unknown` unless goat-flow has explicit evidence; it is not inferred from setup success.
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 

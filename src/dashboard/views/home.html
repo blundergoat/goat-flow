@@ -538,6 +538,22 @@
         detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' — ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
       }));
     },
+    enforcementRows(agent) {
+      return agent?.enforcement?.capabilities || [];
+    },
+    enforcementBadge(row) {
+      if (row.status === 'hard') return 'Hard';
+      if (row.status === 'limited') return 'Lim';
+      if (row.status === 'soft') return 'Soft';
+      if (row.status === 'missing') return 'Miss';
+      return 'Unk';
+    },
+    enforcementBadgeClass(row) {
+      if (row.status === 'hard') return 'pass';
+      if (row.status === 'missing') return 'fail';
+      if (row.status === 'unknown') return 'skipped';
+      return 'warn';
+    },
     setupFixPrompt() {
       return [
         '/goat-plan implement goat-flow setup fixes for ' + activeRunner,
@@ -1002,6 +1018,23 @@
                       <div>
                         <strong x-text="check.name"></strong>
                         <p x-text="check.detail"></p>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+
+                <div class="detail-card">
+                  <h4>Enforcement Matrix</h4>
+                  <template x-for="row in enforcementRows(agent)" :key="row.id">
+                    <div class="detail-row">
+                      <span
+                        class="detail-status"
+                        :class="enforcementBadgeClass(row)"
+                        x-text="enforcementBadge(row)"
+                      ></span>
+                      <div>
+                        <strong x-text="row.label"></strong>
+                        <p x-text="row.summary"></p>
                       </div>
                     </div>
                   </template>

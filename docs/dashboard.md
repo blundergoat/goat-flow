@@ -22,7 +22,7 @@ utility actions.
 
 ### Home
 
-Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
+Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details, including an advisory enforcement matrix for hard, limited, soft, missing, and unknown local enforcement evidence. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
 
 ### Tasks
 
@@ -93,7 +93,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
-| `/api/audit` | GET | Run audit, return JSON results |
+| `/api/audit` | GET | Run audit, return JSON results including per-agent advisory enforcement matrices |
 | `/api/setup` | GET | Generate setup prompt |
 | `/api/setup/detect` | GET | Detect project stack and agents |
 | `/api/quality` | GET | Generate quality-assessment prompt |

@@ -9,6 +9,19 @@ type AuditCheckType = "integrity" | "advisory" | "metric";
 type AuditCheckImpact = "none" | "scope-fail" | "score-only";
 type AuditCheckEvidenceKind = "semantic" | "structural";
 type AuditCheckAssurance = "full" | "limited";
+type EnforcementCapabilityStatus =
+  | "hard"
+  | "limited"
+  | "soft"
+  | "missing"
+  | "unknown";
+type EnforcementCapabilitySource =
+  | "local-settings"
+  | "local-hook"
+  | "runtime-self-test"
+  | "manifest"
+  | "provider-docs"
+  | "not-observed";
 /** Dashboard-local runner union. Keep this aligned with `src/cli/types.ts`.
  *  Importing CLI types here causes the dashboard build to emit `src/cli/types.js`
  *  back into the source tree, which then poisons lint/format/drift gates. */
@@ -85,6 +98,25 @@ interface AuditConcern {
   metrics: number;
 }
 
+/** One advisory enforcement matrix row for an agent. */
+interface EnforcementCapability {
+  id: string;
+  label: string;
+  status: EnforcementCapabilityStatus;
+  sources: EnforcementCapabilitySource[];
+  summary: string;
+  evidence: string[];
+}
+
+/** Per-agent advisory enforcement matrix. */
+interface AgentEnforcementCapability {
+  agent: RunnerId;
+  name: string;
+  advisory: true;
+  capabilities: EnforcementCapability[];
+  summary: Record<EnforcementCapabilityStatus, number>;
+}
+
 /** Per-agent audit summary shown on the Home and Audit views. */
 interface AgentScore {
   id: RunnerId;
@@ -92,6 +124,7 @@ interface AgentScore {
   agent: AuditScope;
   harness: AuditScope | null;
   concerns: Record<string, AuditConcern> | null;
+  enforcement: AgentEnforcementCapability | null;
 }
 
 /** Named audit scopes included in the dashboard report payload. */

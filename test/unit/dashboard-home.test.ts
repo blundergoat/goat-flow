@@ -19,6 +19,9 @@ const HOME_VIEW_PATH = resolve(
 type HomeModel = {
   agentAllConcernsPassing(agent: Record<string, unknown>): boolean;
   agentScore(agent: Record<string, unknown>): number | null;
+  enforcementBadge(row: Record<string, unknown>): string;
+  enforcementBadgeClass(row: Record<string, unknown>): string;
+  enforcementRows(agent: Record<string, unknown>): Record<string, unknown>[];
   formatConcernSummary(agent: Record<string, unknown>, key: string): string;
   harnessAverage(): number | null;
   harnessPillDetail(): string;
@@ -151,5 +154,47 @@ describe("Home harness summary", () => {
       home.formatConcernSummary(agent, "verification"),
       "No post-turn hooks installed",
     );
+  });
+
+  it("exposes advisory enforcement rows for the detail panel", () => {
+    const agent = {
+      id: "claude",
+      name: "Claude Code",
+      agent: { status: "pass", checks: [] },
+      harness: { status: "pass", checks: [] },
+      concerns: {},
+      enforcement: {
+        capabilities: [
+          {
+            id: "shell-dangerous",
+            label: "Dangerous shell commands",
+            status: "hard",
+            summary: "Deny mechanism blocks dangerous commands",
+          },
+          {
+            id: "file-read-restrictions",
+            label: "General file-read restrictions",
+            status: "unknown",
+            summary: "Not inferred from secret-path coverage",
+          },
+        ],
+      },
+    };
+    const home = loadHomeModel({
+      scopes: {
+        setup: {
+          status: "pass",
+          checks: [{ id: "config-parses", status: "pass" }],
+        },
+      },
+      agentScores: [agent],
+    });
+
+    const rows = home.enforcementRows(agent);
+    assert.equal(rows.length, 2);
+    assert.equal(home.enforcementBadge(rows[0]!), "Hard");
+    assert.equal(home.enforcementBadgeClass(rows[0]!), "pass");
+    assert.equal(home.enforcementBadge(rows[1]!), "Unk");
+    assert.equal(home.enforcementBadgeClass(rows[1]!), "skipped");
   });
 });

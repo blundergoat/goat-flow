@@ -1021,6 +1021,8 @@ function buildDashboardReport(
         agent: pa.audit.scopes.agent,
         harness: pa.audit.scopes.harness,
         concerns: pa.audit.concerns,
+        enforcement:
+          pa.audit.enforcement.find((entry) => entry.agent === pa.id) ?? null,
       };
     }),
     status: auditRpt.status,

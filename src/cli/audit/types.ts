@@ -12,6 +12,7 @@ import type {
   ReadonlyFS,
 } from "../types.js";
 import type { LoadedConfig } from "../config/types.js";
+import type { AgentEnforcementCapability } from "./enforcement.js";
 import type { CheckEvidence } from "./provenance-types.js";
 
 // === JSON contract types (stable public API) ===
@@ -89,6 +90,8 @@ export interface AuditReport {
     harness: AuditScope | null;
   };
   concerns: Record<AuditConcernKey, AuditConcern> | null;
+  /** Advisory per-agent enforcement capability matrix. Does not affect status. */
+  enforcement: AgentEnforcementCapability[];
   /** Drift section, populated when --check-drift is set. */
   drift: DriftReport | null;
   /** Content-lint section, populated when --check-content is set. */

@@ -17,6 +17,7 @@ import { checkDrift } from "./check-drift.js";
 import { runContentQualityChecks } from "./check-content-quality.js";
 import { runFactualClaimChecks } from "./check-factual-claims.js";
 import { runSnapshotClaimChecks } from "./check-snapshot-claims.js";
+import { buildEnforcementMatrix } from "./enforcement.js";
 import { validateProvenance } from "./provenance-types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import type {
@@ -655,6 +656,10 @@ function runAuditFromContext(
   );
   const content = computeContentWithProfile(ctx, options, profileScope);
   const status = overallStatus(setupScope, agentScope, harness, drift, content);
+  const enforcement = buildEnforcementMatrix(ctx.agents, {
+    agentScope: agentScope,
+    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
+  });
 
   return {
     command: "audit",
@@ -667,6 +672,7 @@ function runAuditFromContext(
       harness: harness?.scope ?? null,
     },
     concerns: harness?.concerns ?? null,
+    enforcement,
     drift,
     content,
     overall: { status },
