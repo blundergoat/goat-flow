@@ -48,6 +48,7 @@ only real edits to frozen text.
 | v1.6.1 | `v1.6.1.json` | 7 skills, 14 setup + 4 agent + 16 harness = 34 checks, 9 dashboard views, 26 presets |
 | v1.6.2 | `v1.6.2.json` | 7 skills, 14 setup + 4 agent + 16 harness = 34 checks, 9 dashboard views, 26 presets |
 | v1.6.3 | `v1.6.3.json` | 7 skills, 14 setup + 4 agent + 16 harness = 34 checks, 9 dashboard views, 26 presets |
+| v1.7.0 | `v1.7.0.json` | 7 skills, 15 setup + 4 agent + 17 harness = 36 checks, 11 dashboard views, 26 presets |
 
 ## Adding a snapshot at release time
 

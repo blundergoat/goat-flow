@@ -1,7 +1,7 @@
 ---
 name: skill-with-references
 description: "Fixture skill used by reference-plumbing tests."
-goat-flow-skill-version: "1.6.4"
+goat-flow-skill-version: "1.7.0"
 ---
 # skill-with-references
 

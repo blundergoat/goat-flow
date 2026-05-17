@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.7.0 - unreleased
+## v1.7.0 - 2026-05-18
 
 - **Removed legacy `detectAgents` helper** - `src/cli/detect/agents.ts` no longer exports the unused `detectAgents` function; all callers route through the supported-agent registry directly.
 - **Dashboard Tasks view and active plan controls** - Dashboard now exposes `.goat-flow/tasks/` milestones through `/api/tasks`, adds a Tasks workspace view with milestone progress and plan preview, and supports setting the active task plan from the UI.
@@ -16,6 +16,7 @@
 - **Verification documentation refresh** - Verification lessons and related docs now capture the current evidence-before-claims, stale-test, and manifest-backed refactor prevention patterns from the May 16 work.
 - **Mutation testing helper** - Added an opt-in `scripts/mutation-test.sh` StrykerJS helper with an interactive target menu, local `@stryker-mutator/core` dev dependency, sandbox ignores for goat-flow local state, and a mutation-safe fast-suite dry run.
 - **SARIF audit output** - `goat-flow audit --format sarif` now exports deterministic audit findings as SARIF 2.1.0 for CI and code-scanning integrations, including stable rule metadata, acknowledged advisory suppressions, no-location fallback behavior, and optional drift/content findings without changing audit pass/fail semantics.
+- **Release propagation** - Package/config/manifest, instruction files, skill templates and installed mirrors, shared references, playbooks, fixtures, docs sample output, and manifest snapshot catalog bumped to 1.7.0. Manifest snapshot `v1.7.0.json` frozen.
 
 ## v1.6.4 - 2026-05-12
 

@@ -72,7 +72,7 @@ Configuration view. Manage registered project paths, dashboard preferences, and 
 
 Getting-started page for new users. Explains what goat-flow is, the audit/quality model, what skills and hooks do, the learning loop, and the execution loop. Accessible from the side menu or the header "?" button.
 
-### Coming Soon Destinations
+### Coming Soon
 
 Context, Constraints, Verification, Recovery, Feedback Loop, Playbooks, Hooks,
 Memory, and Telemetry are clickable side-menu destinations with lightweight

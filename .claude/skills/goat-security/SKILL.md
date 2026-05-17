@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Use when assessing security implications of code changes, architecture decisions, or new features."
-goat-flow-skill-version: "1.6.4"
+goat-flow-skill-version: "1.7.0"
 ---
 # /goat-security
 

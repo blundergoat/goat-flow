@@ -90,7 +90,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.6.4
+  Config:                 valid, version 1.7.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -100,7 +100,7 @@ Agent Setup:              PASS
 AI Harness Completeness:  PASS
   Context:                PASS (5/5)
   Constraints:            FAIL (3/4) - pipe-to-shell not blocked for codex
-  Verification:           PASS (3/3)
+  Verification:           PASS (4/4)
   Recovery:               PASS (2/2)
   Feedback Loop:          PASS (2/2)
 
