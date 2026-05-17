@@ -72,7 +72,7 @@ When Pass 3 runs, add to Review Integrity:
 
 ## Pre-flight Check
 
-Before spawning the refuter, verify the target refuter runtime is both installed and authenticated. These checks are target-runtime checks, not host checks; use the same commands from Claude, Codex, Copilot, or Gemini hosts.
+Before spawning the refuter, verify the target refuter runtime is both installed and authenticated. Host runtimes choose an external target: Claude Code usually targets Codex; Codex, Copilot, and Gemini usually target Claude. If that target is unavailable, use another authenticated non-host runtime only when the review output names it; otherwise skip Pass 3 and log `cross-model-refuter-failed`.
 ```bash
 # Before spawning Codex:
 command -v codex && codex login status

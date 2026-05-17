@@ -30,7 +30,7 @@ Order findings by severity, not by file or discovery order.
 ## Evidence Standard
 
 - Every live review finding MUST include file evidence. Prefer `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string). Line numbers are session-local navigation hints only.
-- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-playbooks/browser-use.md` and run `command -v browser-use && browser-use doctor` before claiming browser automation is unavailable.
+- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
 - Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
 - MUST NOT fabricate file paths, function names, or artifact content
 - Before presenting findings, re-read each cited file and semantic anchor to confirm accuracy
@@ -119,7 +119,7 @@ If Step 0 exceeds 5 reads without producing output or asking a question, checkpo
 
 ## Availability Check
 
-Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>` (plus `gh auth status` for `gh`, `browser-use doctor` for `browser-use` — see `.goat-flow/skill-playbooks/browser-use.md`). Verify audit tools (`npm audit`, `pip-audit`, `cargo audit`) before quoting results.
+Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>` (plus `gh auth status` for `gh`, browser diagnostics from `.goat-flow/skill-playbooks/browser-use.md`, and audit tools such as `npm audit`, `pip-audit`, or `cargo audit` before quoting results).
 
 If unavailable, take the documented fallback: ask before installing, fall back to manual evidence, or skip the step and record `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, and never paraphrase tool output you didn't capture in this session.
 

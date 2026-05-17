@@ -262,6 +262,7 @@ describe("ADR-023 word budget tiers", () => {
   const DISPATCHER_CAP = 555;
   const FUNCTIONAL_CAP = 2500;
   const ALWAYS_LOADED_CAP = 1500;
+  const AUTHORING_INDEX_CAP = 400;
   const PROGRESSIVE_CAP = 3000;
 
   const FUNCTIONAL_SKILLS = [
@@ -306,6 +307,19 @@ describe("ADR-023 word budget tiers", () => {
       assert.ok(
         words < ALWAYS_LOADED_CAP,
         `${path}: ${words} words meets or exceeds always-loaded cap ${ALWAYS_LOADED_CAP}`,
+      );
+    }
+  });
+
+  it("skill-quality-testing root index stays within the 400-word cap", () => {
+    for (const path of [
+      "workflow/skills/playbooks/skill-quality-testing.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing.md",
+    ]) {
+      const words = bodyWordCount(path);
+      assert.ok(
+        words < AUTHORING_INDEX_CAP,
+        `${path}: ${words} words meets or exceeds root index cap ${AUTHORING_INDEX_CAP}`,
       );
     }
   });

@@ -46,6 +46,35 @@ Use these labels when summarising existing TDD logs:
 
 If current logs do not meet `bulletproof`, say so directly. Do not backfill missing evidence by creating summary records; rerun the pressure tests instead.
 
+## Verification claim evidence
+
+Use this table when a skill or agent needs to substantiate a generic verification
+claim. The Excuse / Reality table in `skill-preamble.md` covers how the wrong
+claim slips out; this table covers what proof each claim requires.
+
+| Claim | Requires | Not Sufficient |
+|---|---|---|
+| Tests pass | Test output: 0 failures/errored plus suite summary from this session | Previous run, "should pass", partial run |
+| Linter / typecheck clean | Tool exit 0 and full output read in this session | Linter passing implies typecheck |
+| Build succeeds | Build command exit 0 and artifact written | Logs look good, last green CI |
+| Bug fixed | Original failing reproduction rerun and observed passing | Code changed, "probably fixed" |
+| Regression test works | RED -> revert fix -> RED -> restore -> GREEN | Test passes once after the fix |
+| Sub-agent finished | VCS diff shows expected changes, re-read by you | Agent self-report |
+| Requirements met | Line-by-line checklist against plan or milestone | Tests passing alone |
+
+## Consumer and API Skill Patterns
+
+For consumer-project domain skills, keep the root `SKILL.md` compact: trigger,
+Step 0, local constraints, and links to scoped subdomain references. Each
+subdomain section should name production-safe evidence commands and rollback or
+post-deploy checks when destructive work is possible.
+
+For API-backed skills, prefer the official SDK, name the auth env var, require
+source/citation fields where returned data will be reused, pin the API version
+the skill was authored against, and surface cost or rate-limit budgets before
+fan-out. goat-flow core treats these as authoring guardrails, not generic
+deterministic scorer rules.
+
 **RED phase - write failing test:**
 - [ ] Create pressure scenarios (3+ combined pressures for discipline skills)
 - [ ] Run scenarios WITHOUT skill - document baseline behaviour verbatim

@@ -163,11 +163,11 @@ If none detected, emit "No drift detected against M[NN]" so the reader knows the
 
 Triggers when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
 
-**Method:** spawn an opposite-model refuter (`codex exec` from Claude Code, `claude -p` from Codex). Pass the FINDINGS LIST, not the diff. The refuter verifies or challenges findings against the live repo. Full prompt template: `references/refuter-spec.md`.
+**Method:** Use an authenticated external refuter runtime, not the host model. Default host map: Claude -> `codex exec`; Codex/Copilot/Gemini -> `claude -p` unless a verified stronger opposite runtime is documented. Pass FINDINGS LIST, not the diff. Template: `references/refuter-spec.md`.
 
 **Synthesis:** REFUTER-CONFIRMED findings get `[CONFIRMED-CROSS-MODEL]` upgrade. REFUTER-REFUTED move to `## Refuted by Refuter` with reasoning preserved verbatim. REFUTER-UNRESOLVED keep original severity; add `cross-model-unresolved` to Review Integrity. Refuter leads do not become findings unless host verifies via Pass 2 rules.
 
-**Constraints:** MUST NOT run without an authenticated opposite runtime (`codex login status` for Codex, `claude auth status` for Claude Code; version-only commands do not count). MUST treat REFUTER-REFUTED as advisory. MUST emit `cross-model-refuter-failed` if refuter call errors. Requires cross-model infrastructure; opt-in at Step 0 or auto-triggered by the degradation conditions listed in Pass 3.
+**Constraints:** Run the target auth check from `references/refuter-spec.md` first; version-only commands do not count. If no authenticated refuter exists for the current host, skip Pass 3 and emit `cross-model-refuter-failed`. REFUTER-REFUTED stays advisory.
 
 ## Review Integrity (confidence signal)
 

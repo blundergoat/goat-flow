@@ -47,7 +47,7 @@ npm run typecheck
 npm test
 ```
 
-Situational: `preflight-checks.sh` (full gate), `bump-version.sh <ver>` (release), `test:full` (pre-release), `stats . --check` (learning-loop), `.codex/hooks/deny-dangerous.sh --self-test` (hook check).
+Situational: `preflight-checks.sh` (full gate), `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.codex/hooks/deny-dangerous.sh --self-test` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
