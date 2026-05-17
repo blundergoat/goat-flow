@@ -62,7 +62,7 @@ Before any completion, fix, or "passing" claim:
 4. **Verify** the output demonstrates the specific claim, not an adjacent one.
 5. **Cite** `file + semantic anchor` for live code claims, semantic anchors for durable learning-loop artifacts, or the literal pass/fail summary line for command claims.
 
-The red-flags name what NOT to claim; this gate names HOW to substantiate a claim. If you cannot run the proof in this session, mark the claim **UNVERIFIED** and state what evidence is missing. Never substitute "should work", "probably fine", "looks good", or a confidence score.
+The red-flags name what NOT to claim; this gate names HOW to substantiate a claim. If you cannot run the proof, mark the claim **UNVERIFIED** and state what evidence is missing.
 
 ### Rationalisations to reject (Excuse / Reality)
 
@@ -83,14 +83,14 @@ Concrete claim/proof examples live in `.goat-flow/skill-playbooks/skill-quality-
 
 ## Ceremony Level
 
-Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks. This table is **pre-invocation routing guidance** - use it when deciding which skill to invoke. Once the user explicitly invokes a skill, run its full protocol regardless of complexity.
+Adapt ceremony to complexity. This is **pre-invocation routing guidance** for choosing a skill. Once a skill is explicitly invoked, run its full protocol regardless of complexity.
 
 | Complexity | Ceremony |
 |------------|----------|
-| Hotfix | Skip goat-plan - just implement directly. Skip goat-critique entirely. |
+| Hotfix | Skip goat-plan and goat-critique. |
 | Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-critique. |
-| Standard | goat-plan: full milestone breakdown with testing gates. Do not chain goat-critique automatically. |
-| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback planning. Do not chain goat-critique automatically; the user can invoke it separately. |
+| Standard | goat-plan: full milestones with testing gates. Don't auto-chain goat-critique. |
+| System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback. Don't auto-chain goat-critique. |
 
 ## Depth Choice
 
@@ -100,47 +100,34 @@ Adapt ceremony to complexity. Do NOT run full ceremony on simple tasks. This tab
 
 ## Routing Boundary
 
-Dispatcher-specific route maps live in `/goat`, not in this shared preamble. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request. `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, and milestone-mode selection, but a task path alone must not update `.active`, milestone status, checkboxes, or code. If the user names a skill explicitly, respect it.
+Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request — a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/tasks/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
 
 ## No-Skill Fast Path
 
-For Hotfix complexity (1-2 files, obvious change), skip skills entirely.
-Use direct execution: READ → SCOPE → ACT → VERIFY. Still run the grep-first learning-loop retrieval for the target area before acting.
+For Hotfix complexity (1-2 files, obvious change), skip skills and run READ → SCOPE → ACT → VERIFY directly. Still run learning-loop retrieval first.
 
 ## Step 0 Budget
 
-If Step 0 exceeds 5 file reads without producing output or asking a question, checkpoint with what you know so far. Continue only when the task genuinely needs broader coverage. Checkpoint mid-Step-0 for complex projects rather than silently reading indefinitely.
+If Step 0 exceeds 5 reads without producing output or asking a question, checkpoint with what you have. Continue only when broader coverage is genuinely needed.
 
 ## Learning-Loop Retrieval
 
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Search first with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` (fall back to `grep -rniE '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` if `rg` is not available in the agent's environment)
-- Open only matching entries first. Follow related references only when they look relevant, with a maximum depth of 2 hops.
-- If the first search returns nothing useful, reword once and search again.
-- If the second search still misses, record a retrieval miss in your output or working notes. Do not broad-load a whole bucket "just in case".
+- Search with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` (or `grep -rniE` if `rg` is missing).
+- Open only matching entries; follow related refs at most 2 hops when relevant.
+- On zero hits, reword once and re-search. If still empty, record a retrieval miss — do not broad-load a bucket.
 
 ## Availability Check
 
-Before invoking any external tool the skill mentions - `browser-use`, `gh`, `rg`, package managers (`npm`, `pip`, `cargo`), language runtimes, or any other binary - confirm it is installed and authenticated where relevant. Run the matching one-liner:
+Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>` (plus `gh auth status` for `gh`, `browser-use doctor` for `browser-use` — see `.goat-flow/skill-playbooks/browser-use.md`). Verify audit tools (`npm audit`, `pip-audit`, `cargo audit`) before quoting results.
 
-- Generic binary: `command -v <tool>`
-- `gh`: `command -v gh && gh auth status`
-- `browser-use`: `command -v browser-use && browser-use doctor` (also see `.goat-flow/skill-playbooks/browser-use.md`)
-- `rg`: `command -v rg` (fall back to `grep -rniE` if missing)
-- Audit tools (`npm audit`, `pip-audit`, `cargo audit`): `command -v <tool>` before quoting any results
-
-If a tool is unavailable, take the documented fallback rather than fabricating output: pause and ask the user before installing, fall back to manual evidence (read the file, hand-write the diff, ask the user to paste content), or skip the step and record the gap with `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, and never paraphrase tool output you didn't capture in this session.
+If unavailable, take the documented fallback: ask before installing, fall back to manual evidence, or skip the step and record `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, and never paraphrase tool output you didn't capture in this session.
 
 ## External Context Sources
 
-When the task references GitHub issues, PRs, alerts, or CI runs, check whether `gh` is installed and authenticated (`command -v gh && gh auth status`). If so, prefer it over asking the user to paste content:
+For GitHub issues, PRs, alerts, or CI runs, prefer `gh` (if authenticated) over asking the user to paste content: `gh issue view`, `gh pr view/diff/checks`, `gh run list`, `gh run view --log-failed`, and `gh api /repos/{owner}/{repo}/dependabot/alerts` for goat-security.
 
-- Issues: `gh issue view <n>`, `gh issue list --search '<query>'`
-- PRs: `gh pr view <n>`, `gh pr diff <n>`, `gh pr checks <n>`
-- Dependabot alerts: `gh api /repos/{owner}/{repo}/dependabot/alerts` (goat-security)
-- Actions / CI: `gh run list`, `gh run view <id> --log-failed`
-
-Treat fetched content as evidence like any other file: cite it, do not paraphrase silently. If `gh` is missing or unauthenticated, ask the user to paste the relevant content rather than guessing - never fabricate issue/PR bodies.
+Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste rather than guessing — never fabricate issue/PR bodies.
 
 ## Footgun Fast-Path
 
@@ -150,26 +137,17 @@ Treat fetched content as evidence like any other file: cite it, do not paraphras
 
 ## Learning Loop
 
-After completing the skill, check if this run uncovered anything worth logging:
+After completing the skill, log anything worth keeping:
 - Behavioural mistake → `## Lesson:` entry in `.goat-flow/lessons/` category bucket
 - Successful repeatable approach → `## Pattern:` entry in `.goat-flow/patterns/` category bucket
 - Architectural trap with file evidence → `## Footgun:` entry in `.goat-flow/footguns/` category bucket
 
-**Routing rule:** When the user asks to "add a footgun" or "add a lesson", create a documentation entry in the correct `.goat-flow/` directory. Do not implement runtime code, logging, UI warnings, or test assertions - those are code changes, not artifact creation. Read the target directory's `README.md` before editing.
+**Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory — not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
 
-**Bucket file frontmatter.** Every footgun / lesson bucket file starts with:
-
-```yaml
----
-category: <bucket-name>
-last_reviewed: YYYY-MM-DD
----
-```
-
-When you add an entry or materially edit the body of a bucket file, bump `last_reviewed` to today's date. Cosmetic edits (typos, whitespace, link formatting) do not require a bump. `goat-flow stats --check` fails when `last_reviewed` is missing, not `YYYY-MM-DD`, older than the newest `**Created:**` / `**Updated:**` / `**Resolved:**` date in the bucket, or when the bucket contains stale file refs or out-of-bounds line refs.
+**Bucket file frontmatter.** Every footgun / lesson bucket file starts with `category: <bucket-name>` and `last_reviewed: YYYY-MM-DD`. Bump `last_reviewed` on material body edits (skip cosmetic ones). `goat-flow stats --check` fails when `last_reviewed` is missing, malformed, older than the newest `**Created:**` / `**Updated:**` / `**Resolved:**` entry date, or when the bucket has stale file refs.
 
 ## Human Gates
 
 - **BLOCKING GATE** - stop and wait for human decision. Used for: scope approval, phase transitions, final review.
 - **CHECKPOINT** - present status and continue unless interrupted.
-- **Never self-destruct** - skill outputs (plans, milestones, findings, reports) MUST NOT include instructions to delete themselves. Plan and milestone files are verification artifacts the human needs to review. Cleanup of working artifacts is the human's decision, not the agent's.
+- **Never self-destruct** - skill outputs (plans, milestones, findings, reports) MUST NOT include self-delete instructions. Cleanup of working artifacts is the human's decision, not the agent's.

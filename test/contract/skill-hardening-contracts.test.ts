@@ -250,3 +250,80 @@ describe("skill hardening contracts", () => {
     }
   });
 });
+
+// Body-only count (frontmatter stripped) to match the measurement basis ADR-023
+// uses for its tier table. wc -w and JS split-on-\s+ agree on stripped bodies.
+function bodyWordCount(path: string): number {
+  const stripped = read(path).replace(/^---\n[\s\S]*?\n---\n?/, "");
+  return stripped.split(/\s+/).filter(Boolean).length;
+}
+
+describe("ADR-023 word budget tiers", () => {
+  const DISPATCHER_CAP = 555;
+  const FUNCTIONAL_CAP = 2500;
+  const ALWAYS_LOADED_CAP = 1500;
+  const PROGRESSIVE_CAP = 3000;
+
+  const FUNCTIONAL_SKILLS = [
+    "goat-debug",
+    "goat-plan",
+    "goat-qa",
+    "goat-review",
+    "goat-critique",
+    "goat-security",
+  ] as const;
+
+  it("dispatcher /goat stays within the 555-word cap across all mirrors", () => {
+    for (const path of skillPaths("goat")) {
+      const words = bodyWordCount(path);
+      assert.ok(
+        words <= DISPATCHER_CAP,
+        `${path}: ${words} words exceeds dispatcher cap ${DISPATCHER_CAP}`,
+      );
+    }
+  });
+
+  it("functional skills stay within the 2500-word cap across all mirrors", () => {
+    for (const skill of FUNCTIONAL_SKILLS) {
+      for (const path of skillPaths(skill)) {
+        const words = bodyWordCount(path);
+        assert.ok(
+          words < FUNCTIONAL_CAP,
+          `${path}: ${words} words meets or exceeds functional cap ${FUNCTIONAL_CAP}`,
+        );
+      }
+    }
+  });
+
+  it("always-loaded shared references stay within the 1500-word cap", () => {
+    for (const path of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-reference/skill-preamble.md",
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-reference/skill-conventions.md",
+    ]) {
+      const words = bodyWordCount(path);
+      assert.ok(
+        words < ALWAYS_LOADED_CAP,
+        `${path}: ${words} words meets or exceeds always-loaded cap ${ALWAYS_LOADED_CAP}`,
+      );
+    }
+  });
+
+  it("progressive reference packs stay within the 3000-word cap per file", () => {
+    for (const path of [
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+      "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+      "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+      ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+    ]) {
+      const words = bodyWordCount(path);
+      assert.ok(
+        words < PROGRESSIVE_CAP,
+        `${path}: ${words} words meets or exceeds progressive cap ${PROGRESSIVE_CAP}`,
+      );
+    }
+  });
+});

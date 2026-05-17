@@ -16,7 +16,7 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Boundary:** goat-review owns code quality, style, correctness. goat-security owns threat models, compliance, CVEs, auth boundaries. If you find a security issue, flag it and suggest `/goat-security`.
 
-**NOT this skill:** OWASP assessment → /goat-security. Understanding code → /goat-debug. Generating tests → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Planning Route.
+**NOT this skill:** OWASP assessment → /goat-security. Understanding code → /goat-debug. Generating tests → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Route Map.
 
 ## Step 0 - Scope, Size, Spec
 
@@ -27,9 +27,9 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 - If vague, ask one follow-up covering: which files, what concerns you, diff / PR / audit.
 - Auto-detect scope: (1) explicit input, (2) staged changes, (3) unstaged changes, (4) PR-style when HEAD is on a non-default branch with commits ahead of the detected review base, (5) git diff.
 
-**PR mode (prefer PR link):** ask for PR URL/number first -- it collapses base, head, description, and linked issues into one input. Prompt: "PR URL or number? (e.g. `#123`) -- or say 'local' if the branch isn't pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body`; diff via `gh pr diff <ref>`. Record PR URL and base SHA in Review Integrity.
+**PR mode (prefer PR link):** ask for PR URL/number first — it collapses base, head, description, and linked issues into one input. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body`; diff via `gh pr diff <ref>`. Record PR URL and base SHA.
 
-**PR mode (base fallback):** when no PR link or `gh` unavailable, resolve base: (1) explicit user base, (2) `.goat-flow/config.yaml` `skills.goat-review.local_pr_base` (record `configured-base=<base>`; if unresolvable record `configured-base-unresolved=<base>` and continue), (3) `git symbolic-ref --short refs/remotes/origin/HEAD` or `git remote show origin`, (4) ask user, (5) last-resort fallback `main` with `base-detection-failed`. Run `git fetch origin <base> --quiet` (best-effort). Diff via `git diff origin/<base>...HEAD` (three-dot merge-base). If fetch fails, fall back to local `<base>` with `base-fetch-failed` flag. Record resolved base, source annotation, and short SHA in Review Integrity.
+**PR mode (base fallback):** when no PR link or `gh` unavailable, resolve base in order: (1) explicit user base, (2) `.goat-flow/config.yaml`'s `skills.goat-review.local_pr_base` (record `configured-base=<base>`, or `configured-base-unresolved=<base>` if unresolvable), (3) `git symbolic-ref --short refs/remotes/origin/HEAD` or `git remote show origin`, (4) ask user, (5) last-resort fallback `main` with `base-detection-failed`. Run `git fetch origin <base> --quiet`; diff via `git diff origin/<base>...HEAD`. On fetch failure, fall back to local `<base>` with `base-fetch-failed`. Record resolved base, source, and short SHA in Review Integrity.
 
 **Size sizing (before Pass 1):** measure the diff. If it exceeds **20 files OR 3000 changed lines**, propose chunking by file group and ask. If the user proceeds un-chunked, record as `large-diff-unchunked` for Review Integrity.
 
@@ -81,7 +81,7 @@ Scan for:
   - *Concurrency* - race windows, shared state, concurrent access
   - *Error handling* - timeouts, retries/backoff, silent exception swallowing
   - *Contract changes* - signature, return type, error channel, status code, event shape
-  - *Observability & DDT testability* - complex state transitions, background tasks, retry logic, or async flows without logging, telemetry, or surface-level signals. Ask: "can a human tell if this succeeded or failed without instrumenting it?" If no: `[SHOULD:needs-signal]` or `[MUST:needs-signal]` depending on risk
+  - *Observability & DDT testability* - state transitions, background tasks, retries, or async flows lacking logs, telemetry, or signals. Ask: "can a human tell if this succeeded without instrumenting it?" If no: `[SHOULD:needs-signal]` or `[MUST:needs-signal]` per risk
 
 Write raw suspicions with `file + semantic anchor` drawn from the diff. Do NOT verify, confirm, or dismiss in this pass. Over-capture is fine; Pass 2 filters.
 
@@ -139,9 +139,9 @@ Check each finding with targeted grep-first retrieval against `.goat-flow/footgu
 
 **BLOCKING GATE:** Present findings using Output Format below, then pause for human to drill in. After the human responds, evaluate Pass 3 auto-trigger conditions before presenting the Ship Verdict - do not skip the refuter when conditions are met.
 
-**Review DoD gate:** for reporting-only review, verify findings, cross-references, and scope boundaries. Do not imply implementation tests unless directly needed for a finding. If user says "implement", switch to instruction file's implementation DoD.
+**Review DoD gate:** for reporting-only review, verify findings, cross-references, and scope. No implementation tests unless a finding requires it. If user says "implement", switch to the instruction file's implementation DoD.
 
-**Proof Gate:** per `skill-preamble.md` -- re-read each `file + semantic anchor` fresh before presentation; downgrade unverifiable evidence to UNVERIFIED.
+**Proof Gate:** per `skill-preamble.md`.
 
 ## Area Audit (Full)
 
@@ -197,7 +197,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 **Both modes:**
 - MUST run external call-site grep for any contract-change suspicion before resolving (Blast Radius Rule); flag `coverage-degraded` if skipped
 - MUST tag every surfaced finding with `[SEVERITY:ACTION]`
-- MUST check each finding with targeted grep-first retrieval against `.goat-flow/footguns/`; omit the tag when no direct match after the allowed reword
+- MUST grep `.goat-flow/footguns/` per finding; omit the tag on no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order
 - MUST emit Review Integrity on every run
 - MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines

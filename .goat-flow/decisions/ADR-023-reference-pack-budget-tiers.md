@@ -77,3 +77,14 @@ The installed `.goat-flow/skill-playbooks/skill-quality-testing.md` file becomes
 - Future split work: if any of the three topical files exceeds 3000w, it splits further under the same model. `tdd-iteration.md` is the one to watch - it already sits at ~2800w carrying the bulk of the methodology, and any future content additions should be evaluated for whether they belong in a new topical file instead.
 
 **2026-05-02 amendment:** Dispatcher budget raised from <500 to ≤555. The dispatcher gained a structured Route Snapshot output contract, multi-intent decomposition protocol, GATHER checklist, and contract-test-mandated phrases (Proof Gate, "verification planning") that the original 500w budget didn't anticipate. The file was trimmed from 585w to 552w in the same pass - net reduction despite added features.
+
+**2026-05-17 measurement note:** The "Actual shipped state" table above (lines 16-20) and the "Under the new tiers" verdict (lines 42-46) reflect the 2026-04-20 baseline. Re-measured body word counts as of 2026-05-17:
+
+| File | 2026-04-20 baseline | 2026-05-17 measurement | Tier cap | Status |
+|------|---------------------|------------------------|----------|--------|
+| `skill-preamble.md` | 1181 | 1800 → trimmed to 1483 | <1500 | over → ✅ within |
+| `skill-conventions.md` | 977 | 1250 | <1500 | ✅ within |
+| `goat-review/SKILL.md` | — | 2537 → trimmed to 2495 | <2500 | over → ✅ within |
+| `tdd-iteration.md` | — | 3106 → trimmed to 2998 | <3000 | over → ✅ within |
+
+The preamble drifted 52% upward (1181→1800) between 2026-04-20 and 2026-05-17 with no enforcement check catching it. Three other files crossed their tier caps in the same period. Enforcement now lives in `test/contract/skill-hardening-contracts.test.ts` under `describe("ADR-023 word budget tiers", ...)` — failing tests now block budget regressions instead of waiting for quality-report runs to surface them.

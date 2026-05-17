@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.6.4"
 ---
 # Skill TDD Iteration
 
-The core TDD methodology for authoring and hardening goat-flow skills. Covers how to build skills that survive adversarial use: RED/GREEN/REFACTOR loop, pressure types, rationalisation capture, bulletproofing techniques, and the empirical budget.
+The core TDD methodology for authoring and hardening goat-flow skills: RED/GREEN/REFACTOR loop, pressure types, rationalisation capture, bulletproofing, and the empirical budget.
 
 Companion files in this pack:
 - `adversarial-framing.md` - review-class specific patterns (cynical-reviewer role, parallel reviewer, finding schema)
@@ -63,7 +63,7 @@ RED → GREEN → REFACTOR → STAY GREEN, adapted. Each phase is one Agent-tool
 | **REFACTOR** | Find the remaining holes | Re-run with additional pressure. Capture any new rationalisations. Add counters for each. |
 | **STAY GREEN** | Regression guard | After every later edit, re-run the highest-pressure scenario. Bulletproof = 3 consecutive passes without new rationalisations. |
 
-Baseline budget for a nontrivial discipline skill: **6 iterations, 10+ unique rationalisations** before GREEN converges. Fewer iterations risks un-tested pressure classes.
+Baseline budget for a nontrivial discipline skill: **6 iterations, 10+ unique rationalisations** before GREEN converges. Fewer risks un-tested pressure classes.
 
 ## Seven pressure types
 
@@ -240,7 +240,7 @@ A skill is **not bulletproof** if the agent:
 - Creates a "hybrid approach" that partially complies
 - Asks permission but argues strongly for violation
 
-Bulletproof threshold: **3 consecutive max-pressure scenarios without new rationalisations**. A single pass is not enough - rationalisation regression is common.
+Bulletproof threshold: **3 consecutive max-pressure scenarios without new rationalisations**. A single pass is not enough — regression is common.
 
 ## Meta-testing - ask the agent how to fix it
 
@@ -267,9 +267,9 @@ The response type names the fix:
 
 ## Iteration log
 
-Write the TDD log as a session log: `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`. The filename itself is the index - a skill named `goat-review` has its TDD history under `.goat-flow/logs/sessions/*-goat-review-tdd.md`. Session logs are gitignored in consumer projects by design; the log is evidence for the current checkout only.
+Write the TDD log as `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`. The filename is the index — `goat-review` history lives at `.goat-flow/logs/sessions/*-goat-review-tdd.md`. Session logs are gitignored in consumer projects by design.
 
-Do not add `tdd-log:` frontmatter to installed SKILL.md files. It leaks developer paths onto consumer installs where the log does not exist, and the filename convention above is already self-documenting for anyone searching `.goat-flow/logs/sessions/`.
+Do not add `tdd-log:` frontmatter to installed SKILL.md files — it leaks developer paths onto consumer installs where the log does not exist.
 
 Log shape:
 
@@ -330,16 +330,16 @@ Treat this as the rough budget for any nontrivial discipline skill.
 
 - superpowers' own TDD skill went through **6 RED–GREEN–REFACTOR iterations** before bulletproof (2025-10-03 worked example above).
 - Baseline RED typically captures **10+ unique rationalisations** per nontrivial skill.
-- Pressure-tested compliance rises from ~33% → ~72% - Meincke et al. (2025), N=28,000 AI conversations, p < .001.
+- Pressure-tested compliance rises from ~33% → ~72% — Meincke et al. (2025), N=28,000, p < .001.
 - A bulletproof skill passes **3 consecutive** max-pressure scenarios without new rationalisations.
 
 ## Description rule: trigger-only, never workflow-summary
 
 The `description:` frontmatter field decides when an agent loads the skill. It must describe **triggering conditions** ("Use when X happens"), never the skill's internal workflow ("Use when X — dispatches subagent then runs review between tasks").
 
-**Empirical observation:** when a skill's `description:` summarises the workflow, the loading agent may follow the description instead of reading the full skill body. A description that says "code review between tasks" can cause the agent to do one review even when the skill's flowchart shows two stages (spec compliance then code quality). Trimming the description to triggering conditions only ("Use when executing implementation plans with independent tasks") restores correct skill-body following.
+**Empirical observation:** workflow-summary descriptions cause the loading agent to follow the description instead of reading the body. "Code review between tasks" can cause one review when the body shows two stages. Trimming to triggering conditions restores correct skill-body following.
 
-This is not a style preference — it is a measurable failure mode where the description short-circuits the body. Apply when authoring or editing any skill. The deterministic scorer's `descriptionSummarizesWorkflow` check (see `src/cli/quality/skill-quality.ts`) is the in-repo signal; the rule is enforced by the scorer + the BAD/GOOD examples below.
+This is a measurable failure mode, not a style preference. The deterministic scorer's `descriptionSummarizesWorkflow` check (see `src/cli/quality/skill-quality.ts`) is the in-repo signal, alongside the BAD/GOOD examples below.
 
 ```yaml
 # BAD — workflow summary in description; agent will follow this instead of the body
@@ -355,7 +355,7 @@ description: "Use when executing implementation plans with independent tasks in 
 description: "Use when starting a non-trivial implementation that needs structured task breakdown with progress tracking."
 ```
 
-The deterministic skill-quality scorer surfaces a yellow advisory tip when the description (after stripping the `Use when …` prefix) contains procedural verbs (`dispatches`, `implements`, `executes`, `generates`, `runs`, `produces`, `creates`, `builds`, `writes`, `refactors`) or process connectives (`then`, `between`). The tip never deducts score — it surfaces alongside the metric so the author can decide whether the description is genuinely workflow-summarising or whether the verb is part of trigger context. Scorer source: `src/cli/quality/skill-quality.ts` (search: `descriptionSummarizesWorkflow`).
+The deterministic scorer surfaces a yellow advisory tip when the description (after stripping `Use when …`) contains procedural verbs (`dispatches`, `implements`, `executes`, `generates`, `runs`, `produces`, `creates`, `builds`, `writes`, `refactors`) or process connectives (`then`, `between`). The tip is advisory only — it doesn't deduct, so the author can judge whether the verb is genuine trigger context or workflow narration. Scorer source: `src/cli/quality/skill-quality.ts` (search: `descriptionSummarizesWorkflow`).
 
 ## Research citations
 

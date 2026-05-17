@@ -24,7 +24,7 @@ audit/
   check-factual-claims.ts  # Cold-path factual-claim extraction (skill/check counts, broken refs)
   check-snapshot-claims.ts # Snapshot-claim lint for CHANGELOG / release-frozen docs (M06b)
   provenance-types.ts      # Evidence-provenance schema for audit checks (M05)
-  harness/                 # 16 pass/fail completeness checks grouped by concern (5 files + helpers + index)
+  harness/                 # 17 checks grouped by concern (6 advisory, 9 integrity, 2 metric) across 5 files + helpers + index
   render.ts                # Output formatters (text, json, markdown)
   types.ts                 # Audit-specific types (AuditReport, CheckResult, AuditFailure)
 
