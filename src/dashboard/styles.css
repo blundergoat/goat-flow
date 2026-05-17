@@ -644,6 +644,10 @@ body {
   gap: 24px;
   overflow-y: auto;
   padding: 0 var(--workspace-rail-inset) 2px;
+  scrollbar-width: none;
+}
+.workspace-session-list-scroll::-webkit-scrollbar {
+  display: none;
 }
 .workspace-session-card-stack {
   display: flex;

@@ -1036,7 +1036,7 @@ function app() {
         },
         recovery: {
           title: "Recovery",
-          desc: "A focused Recovery dashboard is planned. For now, Tasks and Workspace expose active work state.",
+          desc: "A focused Recovery dashboard is planned. For now, Plans and Workspace expose active work state.",
         },
         "feedback-loop": {
           title: "Feedback Loop",
@@ -1210,12 +1210,12 @@ function app() {
         const state = readTaskState(payload);
         this.tasksState = state;
         this.selectedTaskPlan = state.selectedPlan;
-        this.showToast(`Active task plan set to ${planName}`);
+        this.showToast(`Active plan set to ${planName}`);
       } catch (err) {
         if (this.projectPath !== requestProjectPath) return;
         this.tasksError = err instanceof Error ? err.message : String(err);
         this.showToast(
-          this.tasksError || "Active task plan update failed",
+          this.tasksError || "Active plan update failed",
           true,
         );
       } finally {

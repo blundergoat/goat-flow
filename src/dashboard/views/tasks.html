@@ -1,4 +1,4 @@
-<!-- ═══ Tasks View ═══ -->
+<!-- ═══ Plans View ═══ -->
 <div
   x-show="activeView === 'tasks'"
   x-cloak
@@ -9,7 +9,7 @@
     <header class="gf-page-head">
       <div>
         <div class="gf-section-label">Recovery</div>
-        <h1>Tasks</h1>
+        <h1>Plans</h1>
         <p>
           Milestone state from <code>.goat-flow/tasks/</code> in the selected
           project, with active plan selection.
@@ -25,18 +25,18 @@
     </header>
 
     <div x-show="tasksLoading && !tasksState" class="gf-card gf-task-loading">
-      Loading tasks...
+      Loading plans...
     </div>
 
     <div x-show="tasksError" x-cloak class="gf-card gf-task-error" role="alert">
-      <div class="gf-text-primary">Tasks could not be loaded</div>
+      <div class="gf-text-primary">Plans could not be loaded</div>
       <p x-text="tasksError"></p>
     </div>
 
     <template x-if="tasksState && !tasksState.exists">
       <section class="gf-card gf-task-empty">
         <span class="gf-empty-mark">M00</span>
-        <h2>No task directory found</h2>
+        <h2>No plans directory found</h2>
         <p>
           <code x-text="tasksState.taskRoot"></code>
           does not exist for the selected project.
@@ -62,7 +62,7 @@
                   type="button"
                   class="gf-info-button gf-task-active-help"
                   @click.stop
-                  aria-label="What active task plan means"
+                  aria-label="What active plan means"
                   aria-describedby="task-active-plan-tip"
                 >
                   ?
@@ -86,7 +86,7 @@
 
           <div x-show="tasksState.plans.length === 0" class="gf-empty-state">
             <span class="gf-empty-mark">--</span>
-            <p>No task plans are present.</p>
+            <p>No plans are present.</p>
           </div>
 
           <div class="gf-task-plan-list">
@@ -101,7 +101,7 @@
                 <button
                   @click="$dispatch('gf-select-task-plan', { planName: plan.name })"
                   class="gf-task-plan-main"
-                  :aria-label="'View task plan ' + plan.name"
+                  :aria-label="'View plan ' + plan.name"
                 >
                   <span>
                     <strong x-text="plan.name"></strong>
