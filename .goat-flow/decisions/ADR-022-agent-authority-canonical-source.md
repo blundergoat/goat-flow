@@ -2,17 +2,18 @@
 
 **Date:** 2026-04-19
 **Status:** Accepted
+**Updated:** 2026-05-18 - stale file-line citations converted to semantic anchors; runtime tuple wording aligned with the shipped `KNOWN_AGENT_IDS` location.
 **Milestone:** M17-12 (quality-report follow-ups)
 
 ## Context
 
 The `AgentId` union (`"claude" | "codex" | "gemini" | "copilot"`) is duplicated across several surfaces:
 
-- `src/cli/types.ts:7` - the compile-time union itself.
-- `src/cli/agents/registry.ts:88` - `getKnownAgentIds()` returns the runtime tuple, derived from `loadManifest().agents` keys.
-- `src/cli/quality/schema.ts:490-495` - inline array `["claude", "codex", "gemini", "copilot"] satisfies readonly AgentId[]` used for runtime validation.
-- `src/cli/quality/history.ts:17` - a regex literal with the four agent names baked in.
-- `src/cli/prompt/compose-setup.ts:39-44` - `Record<AgentId, string>` whose keys repeat the same four names.
+- `src/cli/types.ts` (search: `export const KNOWN_AGENT_IDS`) - the compile-time tuple and derived union.
+- `src/cli/agents/registry.ts` (search: `export function getKnownAgentIds`) - `getKnownAgentIds()` returns manifest-backed agent ids.
+- `src/cli/quality/schema.ts` (search: `expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS)`) - runtime validation uses the shared tuple.
+- `src/cli/quality/history.ts` (search: `KNOWN_AGENT_IDS.join("|")`) - the quality-history filename regex derives from the shared tuple.
+- `src/cli/prompt/compose-setup.ts` (search: `const SETUP_FILES: Record<AgentId, string>`) - `Record<AgentId, string>` whose keys repeat the same four names under type enforcement.
 - `workflow/manifest.json` - the 4 agent blocks keyed by id.
 
 Adding a fifth agent means touching all six sites. The critique in M17-12 asked for a single canonical authority.
@@ -21,9 +22,9 @@ Adding a fifth agent means touching all six sites. The critique in M17-12 asked 
 
 **Hybrid authority with a single compile-time source of truth for identity and a single runtime source for the materialised tuple:**
 
-1. **`AgentId` union stays in `src/cli/types.ts`** as the compile-time authority. All TypeScript code that needs the union (including `Record<AgentId, X>` lookups) imports from here.
+1. **`KNOWN_AGENT_IDS` and the derived `AgentId` union stay in `src/cli/types.ts`** as the compile-time authority. All TypeScript code that needs the union (including `Record<AgentId, X>` lookups) imports from here.
 
-2. **`KNOWN_AGENT_IDS` const tuple lives in `src/cli/agents/registry.ts`** and becomes the runtime authority. Exported alongside the existing `getKnownAgentIds()` helper. The tuple is `as const` so its element types are literal-narrow.
+2. **`KNOWN_AGENT_IDS` is re-exported from `src/cli/agents/registry.ts`** for runtime consumers alongside the existing `getKnownAgentIds()` helper. The tuple is `as const` so its element types are literal-narrow.
 
 3. **`getKnownAgentIds()` continues to derive from `loadManifest().agents`** at runtime - that remains the cross-check between the compile-time union and the on-disk manifest.
 
@@ -42,7 +43,7 @@ Adding a fifth agent means touching all six sites. The critique in M17-12 asked 
 ## Consequences
 
 - Adding a fifth agent requires exactly two edits: `src/cli/types.ts` (extend the union) and `workflow/manifest.json` (add the agent block). Everything else flows from those.
-- `src/cli/quality/schema.ts` replaces its inline literal with `getKnownAgentIds()` - correctness-preserving refactor.
+- `src/cli/quality/schema.ts` replaces its inline literal with `KNOWN_AGENT_IDS` - correctness-preserving refactor.
 - `src/cli/quality/history.ts` builds the `QUALITY_HISTORY_FILENAME` regex dynamically from `KNOWN_AGENT_IDS` so it stays in sync.
-- `src/cli/prompt/compose-setup.ts:39-44` is already safe: `Record<AgentId, string>` forces TypeScript to require every union member. Keep as-is.
-- Dashboard-side `RunnerId` remains a manual mirror of `AgentId` (ambient `.d.ts`, can't import cross-module). Mirroring is documented at `src/dashboard/globals.d.ts:6-8` with a `keep in sync` pointer. Promoting the dashboard typings to a module (so it could `import type { AgentId }`) is deferred - out of M17-12 scope.
+- `src/cli/prompt/compose-setup.ts` (search: `const SETUP_FILES: Record<AgentId, string>`) is already safe: `Record<AgentId, string>` forces TypeScript to require every union member. Keep as-is.
+- Dashboard-side `RunnerId` remains a manual mirror of `AgentId` (ambient `.d.ts`, can't import cross-module). Mirroring is documented at `src/dashboard/globals.d.ts` (search: `type RunnerId`) with a sync pointer. Promoting the dashboard typings to a module (so it could `import type { AgentId }`) is deferred - out of M17-12 scope.

@@ -2,6 +2,7 @@
 
 **Date:** 2026-04-13
 **Status:** Accepted
+**Updated:** 2026-05-18 - removed drift-prone `compose-setup.ts` line-count claim; scanner removal rationale now cites the durable branching simplification.
 **Supersedes:** Earlier draft that proposed keeping both systems
 
 ## Context
@@ -149,7 +150,7 @@ setup --agent claude
 
 - goat-flow has one evaluation system: audit (build checks + quality checks)
 - Setup is driven by audit pass/fail for the specified agent
-- compose-setup.ts simplifies from ~1300 lines to the minimum needed for 3 routing modes
+- compose-setup.ts removes scanner-driven branching and routes setup through three audit/facts-backed states
 - `info rubrics` and `info anti-patterns` are removed
 - CONTRIBUTING.md, architecture.md, code-map.md, docs/cli.md all describe one system
 - No scanner vocabulary appears in any user-facing surface

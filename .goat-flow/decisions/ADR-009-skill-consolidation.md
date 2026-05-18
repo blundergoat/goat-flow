@@ -1,12 +1,12 @@
 # ADR-009: Skill consolidation and canonical-skill doctrine
 
 **Status:** Accepted
-**Updated:** 2026-05-18 - repaired absorbed-history references to now-removed `ADR-016-dispatcher-is-canonical-skill.md` and `ADR-017-consolidate-skills-9-to-6.md`.
+**Updated:** 2026-05-18 - repaired absorbed-history references and retargeted retired `docs/system-spec.md` citation to the current execution-loop successor.
 **Date:** 2026-04-06
 
 ## Context
 
-Extracted from `docs/system-spec.md` (being retired in v1.1.0) to preserve design history.
+Extracted from `docs/system-spec.md` (retired in v1.1.0) to preserve design history. Current execution-loop guidance lives in `workflow/setup/reference/execution-loop.md` (search: `READ -> SCOPE -> ACT -> VERIFY`).
 
 Early versions had 8-10 skills. Each skill consumed instruction budget when loaded and created maintenance burden. At the same time, rubric, facts, fragments, and docs were inconsistent about whether the dispatcher counted as a canonical skill at all.
 

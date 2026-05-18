@@ -2,10 +2,11 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
+**Updated:** 2026-05-18 - retired `docs/system-spec.md` citation retargeted to the current instruction-section successor.
 
 ## Context
 
-Extracted from `docs/system-spec.md` (being retired in v1.1.0) to preserve design reasoning.
+Extracted from `docs/system-spec.md` (retired in v1.1.0). Current instruction-section guidance lives in `workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`).
 
 Frontier models follow ~150-200 instructions reliably. Claude Code's system prompt consumes ~50, leaving ~100-150 for CLAUDE.md. Degradation is **uniform, not sequential** - too many instructions makes the model worse at ALL of them equally, not just the ones at the bottom.
 

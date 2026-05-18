@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-15
+**Updated:** 2026-05-18 - dead audit-doc reference and line-number citations converted to historical notes or semantic anchors.
 
 ## Context
 
@@ -12,12 +13,12 @@ Eight independent critiques (3 Claude Code, 5 Codex) reviewed the goat-flow v1.1
 The framework demands "real evidence only" and "MUST maintain cross-file consistency" but has no automated mechanism to verify these properties in cold-path documentation. The audit validates structure; preflight validates some counts; nothing validates content accuracy.
 
 Verified drift found by the critiques:
-- `docs/audit-and-critique.md` describes checks that no longer exist in code
+- `docs/audit-and-critique.md` (retired) described checks that no longer existed in code
 - `docs/coding-standards/conventions.md` claims zero runtime deps (false) and references a nonexistent file
 - `.goat-flow/glossary.md` points two entries at the wrong canonical file
 - `.goat-flow/code-map.md` lists a script under the wrong directory
 - `.goat-flow/footguns/docs-and-crossrefs.md` cited a stale line number (346 vs actual 397)
-- `.goat-flow/lessons/verification.md` cited a file:line past end of file (commit.md:12, file is 9 lines)
+- `.goat-flow/lessons/verification.md` cited a file-line reference past end of file (`commit.md`, line 12, file was 9 lines)
 - `scripts/stop-lint.sh` exists despite ADR-015 saying it was removed
 - `.goat-flow/tasks/.gitignore` ignores all new files while `/goat-plan` claims durable shared state
 - `src/cli/audit/check-agent-setup.ts` emits `rm -rf` howToFix that the deny hook blocks
@@ -47,7 +48,7 @@ The older evidence-lifecycle convention now folds into this ADR as the state mod
 - Add preflight check: doc check descriptions match exported check names from code
 - Add preflight check: convention claims (runtime deps, file existence) match reality
 - Extend path-integrity to cover code-map, glossary canonical-file paths, and fenced code blocks
-- Consider auto-generating `docs/audit-and-critique.md` from check code
+- Consider auto-generating `docs/harness-audit.md` from check code
 
 ### Tier 3 - Process changes
 - Change Step 01 early-stop rule to require content-drift checks, not just structural audit pass
@@ -58,7 +59,7 @@ The older evidence-lifecycle convention now folds into this ADR as the state mod
 
 - Manual maintenance of cold-path docs has provably failed: 8 independent reviewers found 20+ content-accuracy issues that had accumulated since the v1.1.0 work
 - The existing preflight validates some doc/code counts (build check totals) but not descriptions, claims, or cross-file consistency
-- The Step 01 early-stop rule (`workflow/setup/01-system-overview.md:12`) currently allows agents to stop when structural audit passes, hardening stale content into "done"
+- The Step 01 early-stop rule (`workflow/setup/01-system-overview.md` (search: `verify cold-path truth before stopping`)) guards against agents stopping when structural audit passes while cold-path content is stale
 - The framework's credibility depends on the cold-path surfaces (footguns, lessons, docs) being trustworthy - if agents are told to consult footguns before acting, those footguns must be accurate
 
 ## Consequences
