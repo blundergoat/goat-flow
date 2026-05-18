@@ -42,6 +42,10 @@ export interface CheckResult {
   evidenceKind?: CheckEvidenceKind;
   /** Assurance label for checks that pass with a known platform limitation. */
   assurance?: CheckAssurance;
+  /** M30: Structured per-check detail. Forwarded verbatim from
+   *  `HarnessCheckResult.details`; absent for build checks and for harness
+   *  checks that haven't been extended yet. */
+  details?: HarnessCheckDetails;
 }
 
 export interface AuditScope {
@@ -248,4 +252,77 @@ export interface HarnessCheckResult {
   displayStatus?: CheckDisplayStatus;
   /** Optional assurance label for checks that pass with caveats. */
   assurance?: CheckAssurance;
+  /** M30: Structured per-check detail for dashboard consumers. Discriminated by
+   *  the parent `HarnessCheck.id`; each consuming page reads the keys it knows.
+   *  Plain-text and markdown audit renderers ignore this block. */
+  details?: HarnessCheckDetails;
+}
+
+/** M30: Structured per-check detail union. Keyed by `HarnessCheck.id`.
+ *  Pages that consume the dashboard `/api/audit` response read the keys for
+ *  their concern; unknown keys are ignored. Keep this synced with the per-check
+ *  shapes declared in `.goat-flow/tasks/1.7.0/M30-audit-payload-structured-detail.md`. */
+export interface HarnessCheckDetails {
+  /** instruction-line-count */
+  lineCounts?: {
+    agent: AgentId;
+    actual: number;
+    target: number;
+    hardLimit: number;
+  }[];
+  /** execution-loop-present */
+  executionLoop?: {
+    agent: AgentId;
+    found: boolean;
+    sectionLabel: string;
+    missingSteps: string[];
+  }[];
+  /** doc-paths-resolve */
+  docPaths?: {
+    totalPaths: number;
+    resolvedCount: number;
+    unresolved: { ref: string; source: string }[];
+  };
+  /** instruction-sections-present */
+  sections?: {
+    agent: AgentId;
+    required: string[];
+    present: string[];
+    missing: string[];
+  }[];
+  /** boundary-guidance-present */
+  boundary?: {
+    agent: AgentId;
+    controllingWorkspace: boolean;
+    targetWorkspace: boolean;
+    boundaryHeading: boolean;
+  }[];
+  /** deny-covers-secrets / deny-blocks-dangerous / deny-blocks-pipe-to-shell / deny-hook-registered */
+  denyMatrix?: {
+    agent: AgentId;
+    missingPatterns: string[];
+    extraPatterns: string[];
+    hookRegistered: boolean;
+  }[];
+  /** hooks-registered / commit-guidance / evidence-before-claims / post-turn-hook-integrity */
+  verification?: {
+    agent: AgentId;
+    reason: string;
+    expected?: string;
+    actual?: string;
+  }[];
+  /** milestone-tracking / session-logs */
+  recovery?: {
+    agent: AgentId;
+    dir: string;
+    fileCount: number;
+    mostRecent?: string;
+  }[];
+  /** feedback-loop-active / decisions-tracked */
+  freshness?: {
+    agent: AgentId;
+    fresh: number;
+    aging: number;
+    stale: number;
+  }[];
 }

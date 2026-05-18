@@ -98,6 +98,7 @@
   ],
   "dependencies": {
     "js-yaml": "^4.1.0",
+    "markdown-it": "^14.1.1",
     "ws": "^8.20.0"
   },
   "optionalDependencies": {
@@ -106,6 +107,7 @@
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.1",
     "@types/js-yaml": "^4.0.9",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.6.0",
     "@types/ws": "^8.18.1",
     "@xterm/addon-fit": "^0.10.0",

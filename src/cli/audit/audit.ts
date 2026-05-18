@@ -366,6 +366,7 @@ function toCheckResult(
     acknowledged: acknowledged || undefined,
     evidenceKind: check.evidenceKind,
     assurance: result.assurance,
+    details: result.details,
   };
 }
 

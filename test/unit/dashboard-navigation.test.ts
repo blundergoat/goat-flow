@@ -49,7 +49,7 @@ describe("dashboard side navigation", () => {
     assert.match(sideMenu, /href="#gf-side-icon-home"/);
     assert.match(sideMenu, /class="gf-side-icon"/);
     assert.match(sideMenu, /aria-label="Primary navigation"/);
-    for (const label of ["Harness", "Managers", "Operations"]) {
+    for (const label of ["Managers", "Operations"]) {
       assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
     }
     assert.match(
@@ -58,32 +58,38 @@ describe("dashboard side navigation", () => {
     );
     assert.match(
       sideMenu,
-      />\s*Managers\s*<[\s\S]*>\s*Hooks\s*<[\s\S]*>\s*Memory\s*<[\s\S]*>\s*Playbooks\s*<[\s\S]*>\s*Skills\s*<[\s\S]*>\s*Plans\s*</,
+      />\s*Managers\s*<[\s\S]*>\s*Skill Evaluator\s*<[\s\S]*>\s*Plans\s*</,
     );
     assert.match(
       sideMenu,
-      />\s*Operations\s*<[\s\S]*>\s*Projects\s*<[\s\S]*>\s*Quality\s*<[\s\S]*>\s*Setup\s*<[\s\S]*>\s*Telemetry\s*</,
+      />\s*Operations\s*<[\s\S]*>\s*Projects\s*<[\s\S]*>\s*Quality\s*<[\s\S]*>\s*Setup\s*</,
     );
     for (const label of [
       "Home",
       "Prompts",
       "Workspace",
+      "Skill Evaluator",
+      "Plans",
+      "Projects",
+      "Quality",
+      "Setup",
+    ]) {
+      assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
+    }
+    for (const label of [
       "Context",
       "Constraints",
       "Verification",
       "Recovery",
       "Feedback Loop",
+      "Harness Overview",
+      "Harness",
       "Hooks",
       "Memory",
       "Playbooks",
-      "Skills",
-      "Plans",
-      "Projects",
-      "Quality",
-      "Setup",
       "Telemetry",
     ]) {
-      assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
+      assert.doesNotMatch(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
     }
     for (const label of ["Settings", "About"]) {
       assert.doesNotMatch(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
@@ -138,21 +144,44 @@ describe("dashboard side navigation", () => {
     assert.match(comingSoonView, /comingSoonMeta\(activeView\)/);
   });
 
-  it("maps unimplemented side-menu items to coming-soon metadata", () => {
+  it("keeps deferred dashboard pages out of coming-soon metadata", () => {
     const appSource = read(DASHBOARD_APP_PATH);
 
     for (const view of [
-      "context",
-      "constraints",
-      "verification",
-      "recovery",
-      "feedback-loop",
+      "harness",
       "playbooks",
       "hooks",
       "memory",
       "telemetry",
     ]) {
-      assert.match(appSource, new RegExp(`["']?${view}["']?\\s*:`));
+      assert.doesNotMatch(
+        appSource,
+        new RegExp(
+          `["']?${view}["']?\\s*:\\s*\\{\\s*title:\\s*["']`,
+          "u",
+        ),
+        `${view} is deferred; it should not appear in 1.7.0 comingSoonMeta`,
+      );
+    }
+  });
+
+  it("does not include deferred harness manager views", () => {
+    const html = read(DASHBOARD_INDEX_PATH);
+    for (const view of [
+      "harness",
+      "feedback-loop",
+      "context",
+      "constraints",
+      "verification",
+      "recovery",
+      "hooks",
+      "memory",
+      "playbooks",
+    ]) {
+      assert.doesNotMatch(
+        html,
+        new RegExp(`<!-- include: views\\/${view}\\.html -->`),
+      );
     }
   });
 });

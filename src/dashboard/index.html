@@ -400,119 +400,19 @@
             </button>
           </section>
 
-          <section class="gf-side-nav-group" aria-label="Harness">
-            <div class="gf-side-group-label">Harness</div>
-            <button
-              @click="activeView = 'context'"
-              class="gf-side-link"
-              :class="activeView === 'context' && 'gf-side-link-active'"
-              data-short="C"
-              aria-label="Context"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-context"></use>
-              </svg>
-              <span class="gf-side-link-label">Context</span>
-            </button>
-            <button
-              @click="activeView = 'constraints'"
-              class="gf-side-link"
-              :class="activeView === 'constraints' && 'gf-side-link-active'"
-              data-short="Ct"
-              aria-label="Constraints"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-constraints"></use>
-              </svg>
-              <span class="gf-side-link-label">Constraints</span>
-            </button>
-            <button
-              @click="activeView = 'verification'"
-              class="gf-side-link"
-              :class="activeView === 'verification' && 'gf-side-link-active'"
-              data-short="V"
-              aria-label="Verification"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-verification"></use>
-              </svg>
-              <span class="gf-side-link-label">Verification</span>
-            </button>
-            <button
-              @click="activeView = 'recovery'"
-              class="gf-side-link"
-              :class="activeView === 'recovery' && 'gf-side-link-active'"
-              data-short="R"
-              aria-label="Recovery"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-recovery"></use>
-              </svg>
-              <span class="gf-side-link-label">Recovery</span>
-            </button>
-            <button
-              @click="activeView = 'feedback-loop'"
-              class="gf-side-link"
-              :class="activeView === 'feedback-loop' && 'gf-side-link-active'"
-              data-short="F"
-              aria-label="Feedback Loop"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-feedback"></use>
-              </svg>
-              <span class="gf-side-link-label">Feedback Loop</span>
-            </button>
-          </section>
-
           <section class="gf-side-nav-group" aria-label="Managers">
             <div class="gf-side-group-label">Managers</div>
-            <button
-              @click="activeView = 'hooks'"
-              class="gf-side-link"
-              :class="activeView === 'hooks' && 'gf-side-link-active'"
-              data-short="Hk"
-              aria-label="Hooks"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-hooks"></use>
-              </svg>
-              <span class="gf-side-link-label">Hooks</span>
-            </button>
-            <button
-              @click="activeView = 'memory'"
-              class="gf-side-link"
-              :class="activeView === 'memory' && 'gf-side-link-active'"
-              data-short="M"
-              aria-label="Memory"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-memory"></use>
-              </svg>
-              <span class="gf-side-link-label">Memory</span>
-            </button>
-            <button
-              @click="activeView = 'playbooks'"
-              class="gf-side-link"
-              :class="activeView === 'playbooks' && 'gf-side-link-active'"
-              data-short="P"
-              aria-label="Playbooks"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-playbooks"></use>
-              </svg>
-              <span class="gf-side-link-label">Playbooks</span>
-            </button>
             <button
               @click="activeView = 'skills'"
               class="gf-side-link"
               :class="activeView === 'skills' && 'gf-side-link-active'"
               data-short="S"
-              aria-label="Skills"
+              aria-label="Skill Evaluator"
             >
               <svg class="gf-side-icon" aria-hidden="true">
                 <use href="#gf-side-icon-skills"></use>
               </svg>
-              <span class="gf-side-link-label">Skills</span>
+              <span class="gf-side-link-label">Skill Evaluator</span>
             </button>
             <button
               @click="activeView = 'tasks'"
@@ -565,18 +465,6 @@
                 <use href="#gf-side-icon-setup"></use>
               </svg>
               <span class="gf-side-link-label">Setup</span>
-            </button>
-            <button
-              @click="activeView = 'telemetry'"
-              class="gf-side-link"
-              :class="activeView === 'telemetry' && 'gf-side-link-active'"
-              data-short="Te"
-              aria-label="Telemetry"
-            >
-              <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-telemetry"></use>
-              </svg>
-              <span class="gf-side-link-label">Telemetry</span>
             </button>
           </section>
         </nav>
@@ -806,6 +694,8 @@
       </div>
     </div>
 
+    <script src="/assets/markdown-it.js"></script>
+    <script src="/assets/markdown.js"></script>
     <script src="/assets/dashboard-readers.js"></script>
     <script src="/assets/dashboard-setup-quality.js"></script>
     <script src="/assets/dashboard-projects.js"></script>

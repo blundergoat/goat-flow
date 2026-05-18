@@ -1,11 +1,16 @@
 /**
  * Shared helpers for harness completeness checks (deterministic pass/fail).
  */
-import type { HarnessCheckResult } from "../types.js";
+import type { HarnessCheckDetails, HarnessCheckResult } from "../types.js";
 
 /** Build a passing harness-check result. */
-export function pass(findings: string[]): HarnessCheckResult {
-  return { status: "pass", findings, recommendations: [] };
+export function pass(
+  findings: string[],
+  details?: HarnessCheckDetails,
+): HarnessCheckResult {
+  return details
+    ? { status: "pass", findings, recommendations: [], details }
+    : { status: "pass", findings, recommendations: [] };
 }
 
 /** Build a failing harness-check result with recommendations. */
@@ -13,8 +18,15 @@ export function fail(
   findings: string[],
   recommendations: string[],
   howToFix?: string[],
+  details?: HarnessCheckDetails,
 ): HarnessCheckResult {
-  return { status: "fail", findings, recommendations, howToFix };
+  return {
+    status: "fail",
+    findings,
+    recommendations,
+    ...(howToFix ? { howToFix } : {}),
+    ...(details ? { details } : {}),
+  };
 }
 
 /** Return true when a backtick token is technical prose, not a local repo path. */

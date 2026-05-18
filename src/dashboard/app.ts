@@ -1021,44 +1021,7 @@ function app() {
 
     // -- Navigation --
     comingSoonMeta(view: string): { title: string; desc: string } | null {
-      const meta: Record<string, { title: string; desc: string }> = {
-        context: {
-          title: "Context",
-          desc: "A focused Context dashboard is planned. For now, Home shows the current harness summary.",
-        },
-        constraints: {
-          title: "Constraints",
-          desc: "A focused Constraints dashboard is planned. For now, Home and Setup show current hook and guardrail status.",
-        },
-        verification: {
-          title: "Verification",
-          desc: "A focused Verification dashboard is planned. For now, Quality and Home show current verification signals.",
-        },
-        recovery: {
-          title: "Recovery",
-          desc: "A focused Recovery dashboard is planned. For now, Plans and Workspace expose active work state.",
-        },
-        "feedback-loop": {
-          title: "Feedback Loop",
-          desc: "A focused Feedback Loop dashboard is planned. For now, Home summarizes lessons and learning-loop health.",
-        },
-        playbooks: {
-          title: "Playbooks",
-          desc: "Playbook management is planned. Existing playbook content remains in the project files for now.",
-        },
-        hooks: {
-          title: "Hooks",
-          desc: "Hook management is planned. Setup and audit views remain the backed hook surfaces for now.",
-        },
-        memory: {
-          title: "Memory",
-          desc: "Memory management is planned. Existing lessons, footguns, patterns, and decisions remain file-backed for now.",
-        },
-        telemetry: {
-          title: "Telemetry",
-          desc: "Telemetry reporting is planned. Quality history remains the backed trend surface for now.",
-        },
-      };
+      const meta: Record<string, { title: string; desc: string }> = {};
       return meta[view] ?? null;
     },
     isComingSoonView(view?: string): boolean {

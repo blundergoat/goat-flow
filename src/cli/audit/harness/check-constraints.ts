@@ -163,30 +163,39 @@ const denyBlocksDangerous: HarnessCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
+    const denyMatrix: NonNullable<
+      import("../types.js").HarnessCheckDetails["denyMatrix"]
+    > = [];
     let anyFail = false;
     for (const af of ctx.agents) {
       const { denyBlocksRmRf, denyBlocksGitPush, denyBlocksChmod } = af.hooks;
-      if (denyBlocksRmRf && denyBlocksGitPush && denyBlocksChmod) {
+      const missingPatterns: string[] = [];
+      if (!denyBlocksRmRf) missingPatterns.push("rm -rf");
+      if (!denyBlocksGitPush) missingPatterns.push("git-push");
+      if (!denyBlocksChmod) missingPatterns.push("chmod");
+      denyMatrix.push({
+        agent: af.agent.id,
+        missingPatterns,
+        extraPatterns: [],
+        hookRegistered: af.hooks.denyIsRegistered,
+      });
+      if (missingPatterns.length === 0) {
         findings.push(`${af.agent.id}: deny blocks rm -rf, git-push, chmod`);
       } else {
         anyFail = true;
-        const missing: string[] = [];
-        if (!denyBlocksRmRf) missing.push("rm -rf");
-        if (!denyBlocksGitPush) missing.push("git-push");
-        if (!denyBlocksChmod) missing.push("chmod");
         findings.push(
-          `${af.agent.id}: deny missing coverage for ${missing.join(", ")}`,
+          `${af.agent.id}: deny missing coverage for ${missingPatterns.join(", ")}`,
         );
         recs.push(
-          `Add deny patterns for ${missing.join(", ")} to ${af.agent.id}`,
+          `Add deny patterns for ${missingPatterns.join(", ")} to ${af.agent.id}`,
         );
         fixes.push(
-          `Add deny patterns for ${missing.join(", ")} in ${af.agent.id} agent configuration.`,
+          `Add deny patterns for ${missingPatterns.join(", ")} in ${af.agent.id} agent configuration.`,
         );
       }
     }
-    if (anyFail) return fail(findings, recs, fixes);
-    return pass(findings);
+    if (anyFail) return fail(findings, recs, fixes, { denyMatrix });
+    return pass(findings, { denyMatrix });
   },
 };
 

@@ -72,12 +72,6 @@ Configuration view. Manage registered project paths, dashboard preferences, and 
 
 Getting-started page for new users. Explains what goat-flow is, the audit/quality model, what skills and hooks do, the learning loop, and the execution loop. Accessible from the side menu or the header "?" button.
 
-### Coming Soon
-
-Context, Constraints, Verification, Recovery, Feedback Loop, Playbooks, Hooks,
-Memory, and Telemetry are clickable side-menu destinations with lightweight
-Coming Soon pages until dedicated backed views are added.
-
 ## Terminal
 
 - Supports runners from `workflow/manifest.json`; terminal binary names, setup surfaces, and prompt invocation style are injected from the manifest-backed agent registry

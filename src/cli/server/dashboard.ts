@@ -93,8 +93,9 @@ interface DashboardServer {
   url: string;
 }
 
-/** Route inventory for the local privileged dashboard control plane. */
-const DASHBOARD_ROUTE_INVENTORY = [
+/** Route inventory for the local privileged dashboard control plane.
+ *  Exported for the route-classification test. */
+export const DASHBOARD_ROUTE_INVENTORY = [
   { method: "GET", path: "/", class: "bootstrap" },
   { method: "GET", path: "/assets/*", class: "static" },
   { method: "GET", path: "/api/health", class: "privileged-read" },
@@ -127,9 +128,22 @@ const DASHBOARD_ROUTE_INVENTORY = [
   { method: "GET", path: "/ws/terminal/:id", class: "privileged-websocket" },
 ] as const;
 
-void DASHBOARD_ROUTE_INVENTORY;
 
-const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
+/**
+ * Side-effectful API route registry (M31).
+ *
+ * Every POST/DELETE handler that mutates local state, executes a command, or
+ * could be CSRF-bait MUST appear in this set. The Origin/CSRF check fires via
+ * `isSideEffectfulApiRoute → SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)`;
+ * adding `class: "side-effectful"` to `DASHBOARD_ROUTE_INVENTORY` alone does
+ * NOT enable enforcement.
+ *
+ * Convention: register the exact route key `"<METHOD> <path>"` here whenever
+ * you add a side-effectful endpoint. The companion test
+ * `test/unit/route-classification.test.ts` flags drift between this set and
+ * the inventory at CI time.
+ */
+export const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
   "POST /api/projects/list",
   "POST /api/tasks",
   "POST /api/quality/evaluate",

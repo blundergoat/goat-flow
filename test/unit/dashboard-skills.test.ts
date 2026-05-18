@@ -27,8 +27,8 @@ describe("Skills dashboard view", () => {
     const source = readFileSync(SKILLS_VIEW_PATH, "utf-8");
     const indexSource = readFileSync(DASHBOARD_INDEX_PATH, "utf-8");
 
-    assert.match(indexSource, />\s*Skills\s*</);
-    assert.match(source, />\s*Skills\s*</);
+    assert.match(indexSource, />\s*Skill Evaluator\s*</);
+    assert.match(source, />\s*Skill Evaluator\s*</);
     assert.match(source, /Evaluate coding-agent skill drafts and bundles/);
     assert.match(source, /class="gf-skill-evaluator-panel"/);
     assert.match(

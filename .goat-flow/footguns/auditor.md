@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-05-05
+last_reviewed: 2026-05-18
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -33,7 +33,7 @@ Some harness checks can report a missing directory as present if they rely on `c
 
 **Evidence:**
 - `src/cli/facts/fs.ts` (search: `listDir(path: string)`) - catches `readdirSync` failures and returns `[]`.
-- `src/cli/audit/harness/check-recovery.ts` (search: `ctx.fs.listDir(logsDir)`) - uses `try/catch` around `listDir()` and therefore passes when the directory is missing.
+- `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.exists(logsDir))`) - the session-log check now guards existence before `listDir()`; future harness checks need the same pattern.
 - Runtime probe from 2026-05-05: `createFS("/home/hxdev/projects/feature/api-main").exists(".goat-flow/logs/sessions")` returned `false`, while `listDir(".goat-flow/logs/sessions")` returned `[]`.
 
 **Prevention:** Harness checks that need existence semantics must call `ctx.fs.exists(path)` first. Use `listDir()` only after existence is established, or explicitly document that missing and empty are equivalent for that check.

@@ -99,7 +99,12 @@ const instructionLineCount: HarnessCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
+    const lineCounts: NonNullable<
+      import("../types.js").HarnessCheckDetails["lineCounts"]
+    > = [];
     let anyFail = false;
+    const limit = ctx.config.config.lineLimits.limit;
+    const target = ctx.config.config.lineLimits.target;
     for (const af of ctx.agents) {
       if (!af.instruction.exists) {
         findings.push(`${af.agent.id}: no instruction file`);
@@ -107,11 +112,22 @@ const instructionLineCount: HarnessCheck = {
         fixes.push(
           `Create ${af.agent.instructionFile} by running \`goat-flow setup\`.`,
         );
+        lineCounts.push({
+          agent: af.agent.id,
+          actual: 0,
+          target,
+          hardLimit: limit,
+        });
         anyFail = true;
         continue;
       }
       const lines = af.instruction.lineCount;
-      const limit = ctx.config.config.lineLimits.limit;
+      lineCounts.push({
+        agent: af.agent.id,
+        actual: lines,
+        target,
+        hardLimit: limit,
+      });
       if (lines > limit) {
         findings.push(
           `${af.agent.id}: ${lines} lines (exceeds hard limit ${limit})`,
@@ -125,8 +141,8 @@ const instructionLineCount: HarnessCheck = {
         findings.push(`${af.agent.id}: ${lines} lines (within limit ${limit})`);
       }
     }
-    if (anyFail) return fail(findings, recs, fixes);
-    return pass(findings);
+    if (anyFail) return fail(findings, recs, fixes, { lineCounts });
+    return pass(findings, { lineCounts });
   },
 };
 
@@ -157,11 +173,20 @@ const executionLoopPresent: HarnessCheck = {
     const stepWords = ["read", "scope", "act", "verify"];
     const findings: string[] = [];
     const recs: string[] = [];
+    const executionLoop: NonNullable<
+      import("../types.js").HarnessCheckDetails["executionLoop"]
+    > = [];
     let anyFail = false;
 
     for (const af of ctx.agents) {
       if (!af.instruction.exists || !af.instruction.content) {
         findings.push(`${af.agent.id}: no instruction file to check`);
+        executionLoop.push({
+          agent: af.agent.id,
+          found: false,
+          sectionLabel: EXECUTION_LOOP_LABEL,
+          missingSteps: stepWords,
+        });
         anyFail = true;
         continue;
       }
@@ -180,15 +205,26 @@ const executionLoopPresent: HarnessCheck = {
         recs.push(
           `Add a "${EXECUTION_LOOP_LABEL}" heading with READ → SCOPE → ACT → VERIFY steps to ${af.agent.instructionFile}`,
         );
+        executionLoop.push({
+          agent: af.agent.id,
+          found: false,
+          sectionLabel: EXECUTION_LOOP_LABEL,
+          missingSteps: stepWords,
+        });
         anyFail = true;
         continue;
       }
       // Heading present - verify the four step words actually appear under it.
       const lower = executionLoopSection.toLowerCase();
-      const foundSteps = stepWords.filter((s) => lower.includes(s));
-      const missingSteps = stepWords.filter((s) => !foundSteps.includes(s));
+      const missingSteps = stepWords.filter((s) => !lower.includes(s));
       if (missingSteps.length === 0) {
         findings.push(`${af.agent.id}: execution loop has all 4 steps`);
+        executionLoop.push({
+          agent: af.agent.id,
+          found: true,
+          sectionLabel: EXECUTION_LOOP_LABEL,
+          missingSteps: [],
+        });
       } else {
         findings.push(
           `${af.agent.id}: execution loop heading present but missing step words inside the section (${missingSteps.join(", ")})`,
@@ -196,14 +232,25 @@ const executionLoopPresent: HarnessCheck = {
         recs.push(
           `Add READ, SCOPE, ACT, VERIFY steps under the "${EXECUTION_LOOP_LABEL}" heading in ${af.agent.instructionFile}`,
         );
+        executionLoop.push({
+          agent: af.agent.id,
+          found: true,
+          sectionLabel: EXECUTION_LOOP_LABEL,
+          missingSteps,
+        });
         anyFail = true;
       }
     }
     if (anyFail)
-      return fail(findings, recs, [
-        `Add an "${EXECUTION_LOOP_LABEL}" heading with READ, SCOPE, ACT, VERIFY steps to the instruction file.`,
-      ]);
-    return pass(findings);
+      return fail(
+        findings,
+        recs,
+        [
+          `Add an "${EXECUTION_LOOP_LABEL}" heading with READ, SCOPE, ACT, VERIFY steps to the instruction file.`,
+        ],
+        { executionLoop },
+      );
+    return pass(findings, { executionLoop });
   },
 };
 
@@ -212,6 +259,7 @@ function checkAllDocPaths(ctx: AuditContext) {
   let totalPaths = 0;
   let resolvedCount = 0;
   const findings: string[] = [];
+  const unresolved: { ref: string; source: string }[] = [];
 
   const countResolvedPaths = (file: string, paths: string[]) => {
     let resolved = 0;
@@ -222,10 +270,14 @@ function checkAllDocPaths(ctx: AuditContext) {
         localFindings.push(
           `${file}: line-number path \`${path}\` is brittle; use \`${lineRef.groups.file}\` plus a semantic anchor`,
         );
+        unresolved.push({ ref: path, source: file });
         continue;
       }
       if (ctx.fs.exists(path)) resolved++;
-      else localFindings.push(`${file}: unresolved \`${path}\``);
+      else {
+        localFindings.push(`${file}: unresolved \`${path}\``);
+        unresolved.push({ ref: path, source: file });
+      }
     }
     return { resolved, findings: localFindings };
   };
@@ -239,6 +291,9 @@ function checkAllDocPaths(ctx: AuditContext) {
       findings.push(
         `${af.agent.id}: ${af.router.unresolved.length} dead router paths`,
       );
+      for (const ref of af.router.unresolved) {
+        unresolved.push({ ref, source: af.agent.instructionFile });
+      }
     }
   }
 
@@ -283,7 +338,7 @@ function checkAllDocPaths(ctx: AuditContext) {
     if (resolved.findings.length > 0) findings.push(...resolved.findings);
   }
 
-  return { totalPaths, resolvedCount, findings };
+  return { totalPaths, resolvedCount, findings, unresolved };
 }
 
 const docPathsResolve: HarnessCheck = {
@@ -303,19 +358,27 @@ const docPathsResolve: HarnessCheck = {
   ),
   /** Run the Documentation paths resolve check. */
   run: (ctx) => {
-    const { totalPaths, resolvedCount, findings } = checkAllDocPaths(ctx);
+    const { totalPaths, resolvedCount, findings, unresolved } =
+      checkAllDocPaths(ctx);
+    const details = { docPaths: { totalPaths, resolvedCount, unresolved } };
 
     if (totalPaths === 0) {
       // Missing files still produce findings even when there were no path literals to inspect.
       if (findings.length > 0) {
-        return fail(findings, [
-          "Fix missing docs and add backtick-quoted file paths for drift detection",
-        ]);
+        return fail(
+          findings,
+          ["Fix missing docs and add backtick-quoted file paths for drift detection"],
+          undefined,
+          details,
+        );
       }
-      return pass(["No file path references found in docs to validate"]);
+      return pass(
+        ["No file path references found in docs to validate"],
+        details,
+      );
     }
     if (resolvedCount === totalPaths) {
-      return pass([`All ${totalPaths} doc file paths resolve`]);
+      return pass([`All ${totalPaths} doc file paths resolve`], details);
     }
     return fail(
       findings,
@@ -323,6 +386,7 @@ const docPathsResolve: HarnessCheck = {
       [
         "Update or remove dead paths in router table, architecture.md, and doc files.",
       ],
+      details,
     );
   },
 };
@@ -346,12 +410,22 @@ const instructionSectionsPresent: HarnessCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
+    const sections: NonNullable<
+      import("../types.js").HarnessCheckDetails["sections"]
+    > = [];
     let anyFail = false;
 
     const requiredSections = getRequiredInstructionSections();
+    const required = requiredSections.map((s) => s.label);
     for (const af of ctx.agents) {
       if (!af.instruction.exists || !af.instruction.content) {
         findings.push(`${af.agent.id}: no instruction file to check`);
+        sections.push({
+          agent: af.agent.id,
+          required,
+          present: [],
+          missing: required,
+        });
         anyFail = true;
         continue;
       }
@@ -359,6 +433,8 @@ const instructionSectionsPresent: HarnessCheck = {
       const missing = requiredSections
         .filter(({ pattern }) => !pattern.test(content))
         .map(({ label }) => label);
+      const present = required.filter((label) => !missing.includes(label));
+      sections.push({ agent: af.agent.id, required, present, missing });
       if (missing.length === 0) {
         findings.push(
           `${af.agent.id}: all ${requiredSections.length} required sections present`,
@@ -376,8 +452,8 @@ const instructionSectionsPresent: HarnessCheck = {
         anyFail = true;
       }
     }
-    if (anyFail) return fail(findings, recs, fixes);
-    return pass(findings);
+    if (anyFail) return fail(findings, recs, fixes, { sections });
+    return pass(findings, { sections });
   },
 };
 
@@ -408,14 +484,37 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
   run: (ctx) => {
     const findings: string[] = [];
     const missing: string[] = [];
+    const boundary: NonNullable<
+      import("../types.js").HarnessCheckDetails["boundary"]
+    > = [];
 
     for (const af of ctx.agents) {
       if (!af.instruction.exists || !af.instruction.content) {
         findings.push(`${af.agent.id}: no instruction file to check`);
         missing.push(`${af.agent.id} (${af.agent.instructionFile})`);
+        boundary.push({
+          agent: af.agent.id,
+          controllingWorkspace: false,
+          targetWorkspace: false,
+          boundaryHeading: false,
+        });
         continue;
       }
-      if (boundaryGuidancePresent(af.instruction.content)) {
+      const content = af.instruction.content;
+      const controllingWorkspace = CONTROLLING_WORKSPACE_PATTERNS.some((p) =>
+        p.test(content),
+      );
+      const targetWorkspace = TARGET_WORKSPACE_PATTERNS.some((p) =>
+        p.test(content),
+      );
+      const boundaryHeading = BOUNDARY_HEADING_PATTERN.test(content);
+      boundary.push({
+        agent: af.agent.id,
+        controllingWorkspace,
+        targetWorkspace,
+        boundaryHeading,
+      });
+      if (boundaryGuidancePresent(content)) {
         findings.push(
           `${af.agent.id}: instruction file distinguishes controlling workspace from selected target`,
         );
@@ -427,7 +526,7 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
       }
     }
 
-    if (missing.length === 0) return pass(findings);
+    if (missing.length === 0) return pass(findings, { boundary });
 
     const missingText = missing.join(", ");
     return fail(
@@ -438,6 +537,7 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
       [
         `Add wording that distinguishes the controlling goat-flow workspace from the selected target project in ${missingText}; do not hardcode machine-specific absolute paths.`,
       ],
+      { boundary },
     );
   },
 };
