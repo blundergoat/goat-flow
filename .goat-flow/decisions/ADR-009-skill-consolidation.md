@@ -1,6 +1,7 @@
 # ADR-009: Skill consolidation and canonical-skill doctrine
 
-**Status:** Accepted (updated 2026-04-18; absorbs the dispatcher-counting and 9→6 consolidation history previously split across ADR-016 and ADR-017)
+**Status:** Accepted
+**Updated:** 2026-05-18 - repaired absorbed-history references to now-removed `ADR-016-dispatcher-is-canonical-skill.md` and `ADR-017-consolidate-skills-9-to-6.md`.
 **Date:** 2026-04-06
 
 ## Context
@@ -33,14 +34,14 @@ The dispatcher **does** count as canonical when it is shipped as a `SKILL.md` su
 
 ### Consolidation history that now lives in this ADR
 
-**Dispatcher counting (from ADR-016):**
+**Dispatcher counting (from now-removed `ADR-016-dispatcher-is-canonical-skill.md`):**
 
 - The dispatcher is canonical because it has its own failure modes (ambiguous intent, incorrect routing, missing override handling)
 - It produces structured output (skill announcement and disambiguation)
 - It has distinct constraints (must announce, must not load two skills, must present disambiguation)
 - The original build rationale also remains part of the record: keyword-first intent mapping covers the easy cases, one clarification question handles the ambiguous boundary, and direct invocation remains available for power users
 
-**9 → 6 consolidation (from ADR-017):**
+**9 → 6 consolidation (from now-removed `ADR-017-consolidate-skills-9-to-6.md`):**
 
 | Removed | Merged Into | As |
 |---------|-------------|-----|

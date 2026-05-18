@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-21
 **Status:** Accepted
-**Updated:** 2026-04-18 - absorbs the disposition guidance that previously lived in ADR-010.
+**Updated:** 2026-05-18 - repaired absorbed-history reference to the now-removed `ADR-010-confusion-log-disposition.md`; the current ADR-010 covers setup file ownership.
 
 ## Context
 

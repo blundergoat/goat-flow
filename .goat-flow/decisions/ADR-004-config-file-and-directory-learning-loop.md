@@ -1,7 +1,7 @@
 # ADR-004: Config File and Directory-Based Learning Loop
 
 **Status:** Accepted
-**Updated:** 2026-04-18 - absorbs the category-bucket format decision that previously lived in ADR-021.
+**Updated:** 2026-05-18 - repaired absorbed-history reference to the now-removed `ADR-021-category-bucket-learning-loop.md`; the current ADR-021 covers goat-critique mode.
 **Date:** 2026-03-31
 
 ## Context

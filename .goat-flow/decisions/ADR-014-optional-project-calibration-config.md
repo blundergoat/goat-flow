@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-15
 **Status:** Implemented
-**Updated:** 2026-04-18 - absorbs the local-preference boundary previously split into ADR-026.
+**Updated:** 2026-05-18 - repaired absorbed-history reference to the now-removed `ADR-026-userRole-local-only.md`; the current ADR-026 covers workspace-boundary audit wording.
 
 ## Context
 

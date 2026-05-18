@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-05-11
+last_reviewed: 2026-05-18
 ---
 
 ## Footgun: Cross-reference fragility across docs
@@ -22,6 +22,23 @@ last_reviewed: 2026-05-11
 - ~~`.goat-flow/decisions/ADR-011-sbao-mob-core-features.md` → still referenced removed `05-install-skills.md` after the setup flow moved the install step to `workflow/setup/03-install-skills.md`~~ (resolved: now points to `workflow/setup/03-install-skills.md`)
 
 **Prevention:** After any file rename or move, grep the entire repo for the old path. Use `grep -r "old-filename" --include="*.md"` before declaring done. This is DoD gate #6.
+
+---
+
+## Footgun: ADR renumbering breaks cross-references
+
+**Status:** active | **Created:** 2026-05-18 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** ADR notes that say "absorbs ADR-NNN" or "supersedes ADR-NNN" can silently point at the wrong decision after ADR deletion and renumbering. The linked number still resolves, so a path-existence check misses the break while readers land on an unrelated topic.
+
+**Why it happens:** The ADR number is used as both identity and order. On 2026-04-18, historical ADR stubs were deleted and the surviving ADRs were compact-renumbered; old prose references kept the numeric labels but no longer named the deleted slug.
+
+**Evidence:**
+- `.goat-flow/decisions/ADR-001-remove-confusion-log.md` (search: `ADR-010-confusion-log-disposition.md`) - current ADR-010 is setup file ownership, not confusion-log disposition.
+- `.goat-flow/decisions/ADR-007-extract-skill-conventions.md` (search: `ADR-023-expand-inline-conventions.md`) - current ADR-023 is reference-pack budget tiers, not inline convention expansion.
+- `.goat-flow/decisions/ADR-009-skill-consolidation.md` (search: `ADR-016-dispatcher-is-canonical-skill.md`) - current ADR-016 is cold-path truth maintenance, not dispatcher canonical-skill counting.
+
+**Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not just the number. Then run a topic check: each remaining `ADR-NNN` reference must either match the current target title or explicitly say `now-removed ADR-NNN-slug`.
 
 ---
 
