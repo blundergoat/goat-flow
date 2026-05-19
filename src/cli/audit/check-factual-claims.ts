@@ -417,6 +417,7 @@ export function scanPathReferences(
       const candidate = match[1] ?? "";
       if (!looksLikeRepoPath(candidate)) continue;
       const cleaned = candidate.replace(/[)\].,;:]+$/, ""); // trim trailing punctuation
+      if (INTENTIONAL_LOCAL_STATE_PATHS.has(cleaned)) continue;
       if (ctx.fs.exists(cleaned)) continue;
       findings.push({
         severity: "info",
@@ -429,6 +430,8 @@ export function scanPathReferences(
   }
   return findings;
 }
+
+const INTENTIONAL_LOCAL_STATE_PATHS = new Set([".goat-flow/project-id"]);
 
 const REPO_PATH_PREFIXES = [
   "src/",

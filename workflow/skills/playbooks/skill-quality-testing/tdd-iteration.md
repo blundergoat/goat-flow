@@ -41,9 +41,9 @@ Different skill types need different tests. Don't pressure-test a reference skil
 | Type | Examples | Test with | Success criterion |
 |------|----------|-----------|-------------------|
 | **Discipline-enforcing** | TDD, verification-before-completion, "must gate before fix" | 3+ combined pressures; rationalisation capture; meta-testing | Agent follows rule under maximum pressure |
-| **Technique** | condition-based-waiting, root-cause-tracing | Application scenarios + variations; edge cases; missing-info checks | Agent applies technique correctly to a new scenario |
-| **Pattern** | reducing-complexity, information-hiding mental models | Recognition scenarios; application + counter-examples | Agent correctly identifies when/how to apply |
-| **Reference** | API docs, command refs | Retrieval + application scenarios; gap testing | Agent finds and correctly applies the reference |
+| **Technique** | condition-based-waiting, root-cause-tracing | Application scenarios + variations; edge cases; missing-info checks | Expected outcome in new scenario, with evidence |
+| **Pattern** | reducing-complexity, information-hiding mental models | Recognition scenarios; application + counter-examples | Trigger cases selected; counter-examples rejected |
+| **Reference** | API docs, command refs | Retrieval + application scenarios; gap testing | Relevant entry found; expected command/API/action produced |
 
 Skills to NOT pressure-test:
 - Pure reference (API docs, syntax guides)

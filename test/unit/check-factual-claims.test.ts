@@ -268,6 +268,16 @@ describe("scanPathReferences", () => {
     assert.equal(findings.length, 0);
   });
 
+  it("does not flag intentional gitignored local-state markers", () => {
+    const fs = stubFS(new Set());
+    const findings = scanPathReferences(
+      "docs/dashboard.md",
+      "Non-git projects use local `.goat-flow/project-id` dashboard state.",
+      stubCtx(fs),
+    );
+    assert.equal(findings.length, 0);
+  });
+
   it("skips glob patterns", () => {
     const fs = stubFS(new Set());
     const findings = scanPathReferences(

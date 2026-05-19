@@ -203,6 +203,11 @@ function dashboardQualityReportLogPrompt(
   const projectPathJson = JSON.stringify(projectPath);
   const modeJson = JSON.stringify(mode.id);
   const versionJson = JSON.stringify(window.__GOAT_FLOW_VERSION__ ?? "unknown");
+  const scopeJson = JSON.stringify(
+    mode.id === "process" || mode.id === "skills"
+      ? "framework-self"
+      : "consumer",
+  );
   const reportRootShell = dashboardQualityShellQuote(projectPath);
   const validatorRootShell = dashboardQualityShellQuote(
     dashboardQualityControllingWorkspace(),
@@ -230,7 +235,7 @@ function dashboardQualityReportLogPrompt(
     `  "project_path": ${projectPathJson},`,
     '  "run_date": "YYYY-MM-DD",',
     '  "audit_status": "pass | fail | unavailable",',
-    '  "scope": "framework-self | consumer",',
+    `  "scope": ${scopeJson},`,
     `  "rubric_version": ${versionJson},`,
     `  "quality_mode": ${modeJson},`,
     '  "scores": {',

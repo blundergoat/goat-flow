@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-05-10
+last_reviewed: 2026-05-19
 ---
 
 ## Footgun: Quality assessors recommend adding quick/lite modes to goat-critique
@@ -27,7 +27,7 @@ last_reviewed: 2026-05-10
 
 **Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but repo verification still fails. The remaining drift lives in `.github/skills/`, so `test/integration/audit-drift.test.ts` fails on the repo root even though the more obvious mirrors were updated.
 
-**Why it happens:** The installed skill surface is broader than the two local agent mirrors most edits remember. `workflow/manifest.json` includes a GitHub agent with `skills_dir: ".github/skills/"`, the manifest helper exposes that root to the drift fixture, and path-integrity checks treat it as a first-class installed mirror. A hand-written file list that omits `.github/skills/` is incomplete.
+**Why it happens:** The installed skill surface is broader than the two local agent mirrors most edits cover. `workflow/manifest.json` includes a GitHub agent with `skills_dir: ".github/skills/"`, the manifest helper exposes that root to the drift fixture, and path-integrity checks treat it as a first-class installed mirror. A hand-written file list that omits `.github/skills/` is incomplete.
 
 **Evidence:**
 - `workflow/manifest.json` (search: `"skills_dir": ".github/skills/"`) declares the GitHub agent skill root.

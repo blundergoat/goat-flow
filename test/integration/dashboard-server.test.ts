@@ -1639,7 +1639,10 @@ describe("dashboard /api/quality", () => {
     const data = expectRecord(body, "Quality mode response");
     assert.equal(data.command, "quality");
     assert.equal(data.agent, "claude");
-    assert.match(String(data.prompt), /Skill Suite Quality Assessment/);
+    assert.match(
+      String(data.prompt),
+      /# GOAT Flow Skills Assessment - Claude Code/,
+    );
     assert.match(String(data.prompt), /"quality_mode": "skills"/);
   });
 

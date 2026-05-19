@@ -11,11 +11,11 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 
 ## Agent Event Name Mapping
 
-| Purpose | Claude Code | Gemini CLI | Codex CLI |
-|---------|-------------|------------|-----------|
-| Block before tool runs | PreToolUse | BeforeTool | PreToolUse in `.codex/hooks.json` with the shipped deny hook matched to `Bash` |
-| Permission deny list | `.claude/settings.json` deny patterns | `.gemini/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hook |
-| Config format | JSON | JSON | TOML + JSON |
+| Purpose | Claude Code | Gemini CLI | Codex CLI | Copilot CLI |
+|---------|-------------|------------|-----------|-------------|
+| Block before tool runs | PreToolUse | BeforeTool | PreToolUse in `.codex/hooks.json` with the shipped deny hook matched to `Bash` | `preToolUse` in `.github/hooks/hooks.json` with the shipped deny hook |
+| Permission deny list | `.claude/settings.json` deny patterns | `.gemini/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hook | Script-only deny hook; no provider-native file-read/file-write deny layer is claimed |
+| Config format | JSON | JSON | TOML + JSON | JSON |
 
 ## Setup
 
@@ -24,6 +24,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Gemini: `agent-config/gemini.json` -> `.gemini/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
+   - Copilot: `agent-config/copilot-hooks.json` -> `.github/hooks/hooks.json`
 3. goat-flow core ships only the deny hook. Post-turn validation hooks are a project-specific concern - see the note below.
 
 All hook paths use `$(git rev-parse --show-toplevel)` so they work regardless of the agent's working directory.

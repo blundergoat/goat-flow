@@ -1,6 +1,18 @@
 ---
 category: verification-testing
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-19
+---
+
+## Lesson: Reference-pack wording fixes must check word budget immediately
+
+**Status:** active | **Created:** 2026-05-19
+
+**What happened:** While replacing vague `correctly` success criteria in the skill-quality TDD table, my first wording pushed `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` to 3022 words, then a partial trim still failed at 3008 words. The ADR-023 contract caught both failures before the change could ship.
+
+**Root cause:** I treated a content-lint cleanup as a tiny prose edit and did not account for the progressive reference-pack word cap before verification.
+
+**Prevention:** For topical files under `skill-quality-testing/`, make table criteria terse first and run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after wording edits. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Expected outcome in new scenario`).
+
 ---
 
 ## Lesson: Browser terminal fixes need live runner proof, not just timer-unit proof
