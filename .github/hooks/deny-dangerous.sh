@@ -720,6 +720,16 @@ is_git_destructive() {
   return 1
 }
 
+is_git_ls_files() {
+  __goat_git_strip_globals "$1" || return 1
+  [[ "$__goat_git_rest" =~ ^ls-files([[:space:]]|$) ]]
+}
+
+is_find_read_only() {
+  local c="$1"
+  ! [[ "$c" =~ (^|[[:space:]])-(delete|exec|execdir|ok|okdir)([[:space:]]|$) ]]
+}
+
 strip_one_assignment_prefix() {
   local c="$1"
   [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || return 1
@@ -1341,8 +1351,16 @@ check_segment() {
   if [[ "$touches_env_example" -eq 1 ]]; then
     local env_example_read_only=0
     case "$cmd_verb" in
-      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read)
+      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read|ls|stat|test)
         env_example_read_only=1 ;;
+      find)
+        if is_find_read_only "$cmd"; then
+          env_example_read_only=1
+        fi ;;
+      git)
+        if is_git_ls_files "$cmd"; then
+          env_example_read_only=1
+        fi ;;
       sed)
         if ! [[ "$cmd" =~ sed[[:space:]]+-[a-zA-Z]*i || "$cmd" =~ sed[[:space:]]+--in-place ]]; then
           env_example_read_only=1
@@ -1360,7 +1378,7 @@ check_segment() {
   fi
   if [[ "$has_redirect" -eq 0 && "$has_pipe" -eq 0 && "$touches_secret" -eq 0 ]]; then
     case "$cmd_verb" in
-      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read)
+      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read|ls|stat|test)
         return 0 ;;
       sed)
         # sed without -i/--in-place is read-only; sed -i or --in-place is a write operation

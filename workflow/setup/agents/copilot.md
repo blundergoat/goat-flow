@@ -24,7 +24,7 @@
 - `.github/copilot-instructions.md` is standalone and must not defer to `AGENTS.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Keep `.github/copilot-instructions.md` within the 150-line hard limit and 125-line target.
-- Commit guidance belongs at `.github/git-commit-instructions.md` when `.github/` exists.
+- Commit guidance belongs at `.github/git-commit-instructions.md` when `.github/` exists; `goat-flow install` seeds it from git history when missing, and manual setup follows the same detector in Step 02.
 - Keep a single Copilot hook config file at `.github/hooks/hooks.json`; do not split one file per event.
 - Do not create `.github/agents/` unless a future concrete gap justifies it.
 

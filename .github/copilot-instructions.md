@@ -44,9 +44,10 @@ shellcheck scripts/*.sh scripts/maintenance/*.sh
 bash -n scripts/*.sh scripts/maintenance/*.sh
 npm run typecheck
 npm test
+bash scripts/preflight-checks.sh
 ```
 
-Situational: `preflight-checks.sh` (full gate), `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.github/hooks/deny-dangerous.sh --self-test` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.github/hooks/deny-dangerous.sh --self-test` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 

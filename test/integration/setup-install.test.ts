@@ -17,6 +17,10 @@ import { spawnSync } from "node:child_process";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const disposables: string[] = [];
+const gitAvailable =
+  spawnSync("git", ["--version"], {
+    encoding: "utf-8",
+  }).status === 0;
 
 after(() => {
   for (const dir of disposables) {
@@ -44,6 +48,46 @@ function runInstaller(root: string, ...extraArgs: string[]) {
       timeout: 30000,
     },
   );
+}
+
+function runCliInstaller(root: string, ...extraArgs: string[]) {
+  return spawnSync(
+    "node",
+    [
+      "--import",
+      "tsx",
+      join(PROJECT_ROOT, "src", "cli", "cli.ts"),
+      "install",
+      root,
+      ...extraArgs,
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+      timeout: 30000,
+    },
+  );
+}
+
+function git(root: string, args: string[]): void {
+  const result = spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "GOAT Test",
+      GIT_AUTHOR_EMAIL: "goat@example.test",
+      GIT_COMMITTER_NAME: "GOAT Test",
+      GIT_COMMITTER_EMAIL: "goat@example.test",
+    },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+function addCommit(root: string, subject: string): void {
+  writeFileSync(join(root, "history.txt"), `${subject}\n`, { flag: "a" });
+  git(root, ["add", "history.txt"]);
+  git(root, ["commit", "-m", subject]);
 }
 
 describe("setup --apply installer", () => {
@@ -153,6 +197,31 @@ describe("setup --apply installer", () => {
     assert.doesNotMatch(gitignore, /^node_modules\/$/m);
     assert.match(gitignore, /^dist\/$/m);
   });
+
+  it(
+    "CLI install seeds missing GitHub commit instructions from target git history",
+    { skip: !gitAvailable },
+    () => {
+      const root = makeTempProject();
+      git(root, ["init"]);
+      git(root, ["config", "user.name", "GOAT Test"]);
+      git(root, ["config", "user.email", "goat@example.test"]);
+      for (let i = 0; i < 10; i += 1) {
+        addCommit(root, `feat(setup): add fixture ${i}`);
+      }
+
+      const result = runCliInstaller(root, "--agent", "copilot");
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+
+      const guidance = readFileSync(
+        join(root, ".github", "git-commit-instructions.md"),
+        "utf-8",
+      );
+      assert.match(guidance, /generated from recent git history/);
+      assert.match(guidance, /Use conventional commits/);
+      assert.match(result.stdout, /Git commit instructions:/);
+    },
+  );
 });
 
 // ── Bug 1: Config version stuck on upgrade ──────────────────────────────

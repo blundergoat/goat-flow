@@ -148,7 +148,7 @@ describe("dashboardGenerateSetupPrompt", () => {
 });
 
 describe("dashboardGenerateQuality", () => {
-  it("uses the fast quality endpoint for automatic page loads", async () => {
+  it("uses the audit-enriched quality endpoint by default", async () => {
     let requested = "";
     const helpers = loadHelpers(async (input: RequestInfo | URL) => {
       requested = String(input);
@@ -156,9 +156,9 @@ describe("dashboardGenerateQuality", () => {
         JSON.stringify({
           command: "quality",
           agent: "claude",
-          auditStatus: "unavailable",
-          auditSummary: "cache-only",
-          prompt: "fast quality prompt",
+          auditStatus: "pass",
+          auditSummary: "fresh audit",
+          prompt: "quality prompt",
         }),
         {
           status: 200,
@@ -168,16 +168,16 @@ describe("dashboardGenerateQuality", () => {
     });
     const ctx = makeContext();
 
-    await helpers.dashboardGenerateQuality(ctx, { fast: true });
+    await helpers.dashboardGenerateQuality(ctx);
 
-    assert.match(requested, /[?&]fast=true(?:&|$)/);
+    assert.doesNotMatch(requested, /[?&]fast=true(?:&|$)/);
     assert.doesNotMatch(requested, /[?&]fresh=true(?:&|$)/);
     assert.deepEqual(ctx.qualityResult, {
       command: "quality",
       agent: "claude",
-      auditStatus: "unavailable",
-      auditSummary: "cache-only",
-      prompt: "fast quality prompt",
+      auditStatus: "pass",
+      auditSummary: "fresh audit",
+      prompt: "quality prompt",
     });
     assert.equal(ctx.qualityLoading, false);
   });

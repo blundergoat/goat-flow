@@ -71,14 +71,15 @@ last_reviewed: 2026-05-19
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Codex starts but prints repeated warnings that configured filesystem path `:project_roots` and its nested entries are not recognized, then ignores the whole workspace permission subtree. The TOML still looks like it denies `.env`, `.ssh/**`, `.aws/**`, and credential roots, so static review can miss that the running Codex process discarded those rules.
+**Symptoms:** Codex starts but prints warnings or fails before shell startup when the permission profile names a workspace-root token or exact path the runtime cannot load. `:project_roots` is ignored by Codex 0.131.0, and exact entries such as `.env.example`, `.docker/config.json`, or `.kube/config` can break startup when those paths are absent. The TOML can still look like it denies `.env`, `.ssh/**`, `.aws/**`, and credential roots, so static review can miss that the running Codex process discarded or could not mount those rules.
 
-**Why it happens:** Codex CLI 0.131.0 recognizes the special workspace token as `:workspace_roots`, not `:project_roots`. Both inline `":workspace_roots" = { ... }` and nested `[permissions.<profile>.filesystem.":workspace_roots"]` TOML shapes load in 0.131.0, but the `:project_roots` token is treated as an unrecognized filesystem path and ignored.
+**Why it happens:** Codex CLI 0.131.0 recognizes the special workspace token as `:workspace_roots`, not `:project_roots`. Both inline `":workspace_roots" = { ... }` and nested `[permissions.<profile>.filesystem.":workspace_roots"]` TOML shapes load in 0.131.0, but the `:project_roots` token is treated as an unrecognized filesystem path and ignored. Exact workspace-root entries also have to name files that exist in the checkout; absent exact entries are not a safe way to pre-deny future files.
 
 **Evidence:**
-- `.codex/config.toml` (search: `":workspace_roots" = {`) - installed config now uses Codex 0.131.0's accepted token.
-- `workflow/hooks/agent-config/codex.toml` (search: `":workspace_roots" = {`) - install template mirrors the accepted token.
-- `src/cli/facts/agent/settings.ts` (search: `collectCodexDeniedWorkspaceRootPatterns`) - audit fact extraction requires the accepted workspace-root token before granting secret coverage.
+- `.codex/config.toml` (search: `absent exact`) - installed config now uses Codex 0.131.0's accepted token and omits absent exact entries from the base profile.
+- `workflow/hooks/agent-config/codex.toml` (search: `Exact entries must point at files`) - install template mirrors the accepted token and loadable base profile.
+- `src/cli/facts/agent/settings.ts` (search: `existingExactPathsAreDenied`) - audit fact extraction requires exact denies only for sensitive root files that exist in the checkout.
+- `src/cli/audit/check-agent-setup.ts` (search: `checkCodexWorkspaceRootExactPaths`) - agent settings audit fails when Codex config lists absent exact workspace-root paths.
 - Runtime capture from the 2026-05-19 Codex startup failure showed repeated `Configured filesystem path ':project_roots' is not recognized by this version of Codex and will be ignored` warnings for the unsupported token.
 - Local binary probe on 2026-05-19 found `:workspace_roots` in Codex 0.131.0's embedded schema strings and no `:project_roots` support.
 
@@ -86,7 +87,7 @@ last_reviewed: 2026-05-19
 1. Do not convert Codex workspace permissions back to `:project_roots`; that token is runtime-invalid on Codex 0.131.0.
 2. Verify Codex config changes with a TTY startup smoke (`codex` under a short timeout) as well as `codex doctor`; non-interactive commands can miss TUI startup warnings.
 3. Keep `.codex/config.toml`, `workflow/hooks/agent-config/codex.toml`, and `src/cli/facts/agent/settings.ts` in the same patch whenever Codex permission grammar changes.
-4. Treat Codex permission-profile secret coverage as an exact enumerated set, not a wildcard family. If a new `.env.<name>` or credential filename matters, add it to the template, parser expectation, and focused tests together.
+4. Treat Codex permission-profile secret coverage as a loadable set, not a future-file deny list. Use trailing `/**` subtree denies in the base template, and add exact root-file denies only when the file exists in the checkout.
 
 ---
 

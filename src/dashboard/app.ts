@@ -841,7 +841,7 @@ function app() {
           }, 10_000);
         }
         if (v === "quality") {
-          void this.generateQuality({ fast: true });
+          void this.generateQuality();
           this.scheduleQualityHistory();
         }
         if (v === "skills") {
@@ -857,7 +857,7 @@ function app() {
       });
       self.$watch("qualityAgent", () => {
         if (this.activeView === "quality") {
-          void this.generateQuality({ fast: true });
+          void this.generateQuality();
           this.scheduleQualityHistory();
         }
       });
@@ -881,7 +881,7 @@ function app() {
       });
       self.$watch("selectedQualityModeId", () => {
         if (this.activeView === "quality") {
-          void this.generateQuality({ fast: true });
+          void this.generateQuality();
           this.scheduleQualityHistory();
         }
       });
@@ -899,7 +899,7 @@ function app() {
           void this.reconnectTerminal();
           void this.updateSessionCount();
           if (this.activeView === "quality") {
-            void this.generateQuality({ fast: true });
+            void this.generateQuality();
             this.scheduleQualityHistory();
           }
           if (this.activeView === "setup") {

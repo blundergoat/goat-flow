@@ -56,7 +56,7 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-reference/` (meta) and `.goat-flow/skill-playbooks/` (tools) READ rules / Router Table rows from Step 02. If `.github/` exists, verify `.github/git-commit-instructions.md` exists with project-specific commit guidance.
+3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-reference/` (meta) and `.goat-flow/skill-playbooks/` (tools) READ rules / Router Table rows from Step 02. If `.github/` exists, verify `.github/git-commit-instructions.md` exists with project-specific commit guidance. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
 
 ## Duplicate surface check
 
@@ -106,7 +106,7 @@ Before finalising, add a gap report to the setup session log:
 - **Areas not assessed:** [list any parts of the codebase that setup didn't read or analyse]
 - **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
 - **Things skipped:** [list anything setup chose not to do, with reason]
-- **Harness-specific checks:** [confirm workspace boundary guidance, skill-reference snippets, and commit guidance were checked; list any exception]
+- **Harness-specific checks:** [confirm workspace boundary guidance, skill-reference snippets, and commit guidance were checked; list any exception, including generated insufficient-history commit-guidance stubs]
 
 For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun - do not create a footgun entry for missing tests. The gap report goes in the session log only.
 

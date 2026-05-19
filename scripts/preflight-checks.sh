@@ -860,6 +860,45 @@ function compareToml(templatePath, installedPath) {
     .map((line) => `$ missing ${line}`);
 }
 
+function parseTomlInlineStringTable(value) {
+  const entries = [];
+  const entryPattern = /"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/gu;
+  for (const match of value.matchAll(entryPattern)) {
+    entries.push({ pattern: match[1], mode: match[2] });
+  }
+  return entries;
+}
+
+function collectCodexWorkspaceRootEntries(file) {
+  const entries = [];
+  let section = "";
+  for (const rawLine of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      continue;
+    }
+    const inlineMatch = line.match(/^":workspace_roots"\s*=\s*(\{.*\})$/);
+    if (inlineMatch) {
+      entries.push(...parseTomlInlineStringTable(inlineMatch[1]));
+      continue;
+    }
+    if (section.endsWith('filesystem.":workspace_roots"')) {
+      entries.push(...parseTomlInlineStringTable(line));
+    }
+  }
+  return entries;
+}
+
+function collectMissingCodexExactWorkspaceRootPaths(installedPath) {
+  return collectCodexWorkspaceRootEntries(installedPath)
+    .map((entry) => entry.pattern)
+    .filter((pattern) => pattern && pattern !== "." && !pattern.includes("*"))
+    .filter((pattern) => !fs.existsSync(pattern));
+}
+
 function compareConfig(templatePath, installedPath) {
   if (templatePath.endsWith(".json")) return compareJson(templatePath, installedPath);
   if (templatePath.endsWith(".toml")) return compareToml(templatePath, installedPath);
@@ -908,6 +947,11 @@ for (const [agentId, agent] of Object.entries(manifest.agents || {})) {
     }
     try {
       const missing = compareConfig(spec.templatePath, spec.installedPath);
+      if (spec.agentId === "codex" && spec.installedPath.endsWith("config.toml")) {
+        for (const missingPath of collectMissingCodexExactWorkspaceRootPaths(spec.installedPath)) {
+          missing.push(`${spec.installedPath} lists absent exact workspace root ${missingPath}`);
+        }
+      }
       if (missing.length === 0) {
         emit(
           "PASS",

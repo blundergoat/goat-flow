@@ -21,6 +21,10 @@ import { getKnownAgentIds } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
 import { createFS } from "./facts/fs.js";
 import { buildInstallerInvocation } from "./install-invocation.js";
+import {
+  ensureGitCommitInstructions,
+  type CommitConventionDetection,
+} from "./prompt/commit-guidance.js";
 
 /** Current package version used in --version output */
 const PACKAGE_VERSION = getPackageVersion();
@@ -1145,6 +1149,27 @@ function collectInstallerFlags(options: ParsedCLI, agent: AgentId): string[] {
   return flags;
 }
 
+function commitGuidanceInstallSummary(
+  detection: CommitConventionDetection,
+): string {
+  if (detection.status === "insufficient-history") {
+    return detection.gitAvailable
+      ? `stub generated from ${detection.total} commits`
+      : "stub generated because git history was unavailable";
+  }
+  return `${detection.status} guidance generated from ${detection.total} commits`;
+}
+
+function emitCommitGuidanceInstallResult(projectPath: string): void {
+  const result = ensureGitCommitInstructions(projectPath);
+  if (result.status !== "written" || result.detection === null) return;
+  console.log("");
+  console.log("Git commit instructions:");
+  console.log(
+    `  ✓ ${result.path} (${commitGuidanceInstallSummary(result.detection)})`,
+  );
+}
+
 /** Handle deterministic install/update by delegating to the packaged installer. */
 function handleInstallCommand(options: ParsedCLI): void {
   if (!options.agent) {
@@ -1182,7 +1207,9 @@ function handleInstallCommand(options: ParsedCLI): void {
   }
   if (result.status !== 0) {
     process.exitCode = result.status ?? 1;
+    return;
   }
+  emitCommitGuidanceInstallResult(options.projectPath);
 }
 
 /** Write rendered output to file or stdout. */

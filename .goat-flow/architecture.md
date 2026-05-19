@@ -12,7 +12,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
 | Hook scripts | `workflow/hooks/` | Copyable hook scripts (`deny-dangerous.sh` + self-test sibling) + per-agent config templates |
-| Evaluation templates | `workflow/evaluation/` | Footguns/lessons templates |
+| Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 19 build checks (15 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, coming-soon, home, projects, prompts, quality, settings, setup, skills, tasks, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |

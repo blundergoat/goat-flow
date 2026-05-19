@@ -40,7 +40,14 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
 const CODEX_WORKSPACE_ROOT_ENTRIES = [
   '"." = "write"',
-  '".env.example" = "read"',
+  '"secrets/**" = "none"',
+  '".ssh/**" = "none"',
+  '".aws/**" = "none"',
+  '".docker/**" = "none"',
+  '".gnupg/**" = "none"',
+  '".kube/**" = "none"',
+];
+const CODEX_EXACT_ENV_DENY_ENTRIES = [
   '".env" = "none"',
   '".env.local" = "none"',
   '".env.development" = "none"',
@@ -48,15 +55,11 @@ const CODEX_WORKSPACE_ROOT_ENTRIES = [
   '".env.test" = "none"',
   '".env.staging" = "none"',
   '".envrc" = "none"',
-  '"secrets/**" = "none"',
+];
+const CODEX_EXACT_CREDENTIAL_DENY_ENTRIES = [
   '"credentials" = "none"',
-  '".ssh/**" = "none"',
-  '".aws/**" = "none"',
-  '".docker/config.json" = "none"',
-  '".gnupg/**" = "none"',
   '".npmrc" = "none"',
   '".pypirc" = "none"',
-  '".kube/config" = "none"',
 ];
 
 function codexWorkspaceRootsTable(
@@ -1333,7 +1336,32 @@ describe("codex settings feature flags", () => {
     assert.equal(facts.readDenyCoversSecrets, false);
   });
 
-  it("does not count Codex env coverage without the staging variant", () => {
+  it("does not count Codex env coverage without an existing staging variant", () => {
+    const facts = extractSettingsFacts(
+      stubFS({
+        exists: (path) =>
+          path === ".codex/config.toml" || path === ".env.staging",
+        readFile: (path) =>
+          path === ".codex/config.toml"
+            ? [
+                'default_permissions = "goat-flow"',
+                "[permissions.goat-flow.filesystem]",
+                codexWorkspaceRootsTable(
+                  [
+                    ...CODEX_WORKSPACE_ROOT_ENTRIES,
+                    ...CODEX_EXACT_ENV_DENY_ENTRIES,
+                  ].filter((entry) => !entry.startsWith('".env.staging"')),
+                ),
+              ].join("\n")
+            : null,
+      }),
+      PROFILES.codex,
+    );
+
+    assert.equal(facts.readDenyCoversSecrets, false);
+  });
+
+  it("does not require absent Codex exact-file denies for secret coverage", () => {
     const facts = extractSettingsFacts(
       stubFS({
         exists: (path) => path === ".codex/config.toml",
@@ -1342,11 +1370,26 @@ describe("codex settings feature flags", () => {
             ? [
                 'default_permissions = "goat-flow"',
                 "[permissions.goat-flow.filesystem]",
-                codexWorkspaceRootsTable(
-                  CODEX_WORKSPACE_ROOT_ENTRIES.filter(
-                    (entry) => !entry.startsWith('".env.staging"'),
-                  ),
-                ),
+                codexWorkspaceRootsTable(CODEX_WORKSPACE_ROOT_ENTRIES),
+              ].join("\n")
+            : null,
+      }),
+      PROFILES.codex,
+    );
+
+    assert.equal(facts.readDenyCoversSecrets, true);
+  });
+
+  it("requires Codex exact-file denies for existing root secret files", () => {
+    const facts = extractSettingsFacts(
+      stubFS({
+        exists: (path) => path === ".codex/config.toml" || path === ".env",
+        readFile: (path) =>
+          path === ".codex/config.toml"
+            ? [
+                'default_permissions = "goat-flow"',
+                "[permissions.goat-flow.filesystem]",
+                codexWorkspaceRootsTable(CODEX_WORKSPACE_ROOT_ENTRIES),
               ].join("\n")
             : null,
       }),
@@ -1413,6 +1456,32 @@ describe("codex settings feature flags", () => {
     );
 
     assert.equal(facts.readDenyCoversSecrets, false);
+  });
+
+  it("fails agent-settings when Codex permission profile names absent exact paths", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-settings")!;
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      agents: [
+        codexAgentFacts({
+          default_permissions: "goat-flow",
+          "features.hooks": true,
+          "permissions.goat-flow.filesystem.:workspace_roots":
+            codexWorkspaceRootsTable([
+              ...CODEX_WORKSPACE_ROOT_ENTRIES,
+              '".env.example" = "read"',
+            ]).replace(/^":workspace_roots" = /u, ""),
+        }),
+      ],
+      fs: stubFS({
+        exists: (path) => path === ".codex/config.toml",
+      }),
+    });
+    const result = check.run(ctx);
+
+    assert.notEqual(result, null);
+    assert.match(result!.message, /exact workspace-root paths/);
+    assert.match(result!.message, /\.env\.example/);
   });
 
   it("fails agent-settings when Codex config still uses codex_hooks", () => {

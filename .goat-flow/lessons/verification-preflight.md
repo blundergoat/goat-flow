@@ -109,6 +109,8 @@ last_reviewed: 2026-05-19
 
 **Recurrence update (2026-05-19):** The same closeout also added a dashboard markdown performance sanity test whose 500KB fixture was newline-heavy. Focused runs passed, but preflight's concurrent fast-suite runner exceeded the 100ms budget. The fixture still needed to be 500KB, but it needed to measure plain markdown throughput rather than line-break parsing stress.
 
+**Recurrence update (2026-05-19):** M01 commit-guidance work added a new helper and tests. Focused `npx tsc --noEmit` and the new test file passed, but the first full preflight failed in the TypeScript gate: `Knip: 2 unused exports/types`. The exported names were internal helper types, not public API. Removing the unnecessary `export` keywords fixed `npx knip`. Evidence anchors: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`), `test/unit/commit-guidance.test.ts` (search: `detects dominant conventional-commit history`).
+
 **Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite, keep fixtures representative of the named budget and stable under test concurrency. Evidence anchors: `package.json` (search: `test:fast`), `test/unit/dashboard-markdown.test.ts` (search: `MarkdownIt`), `knip.json` (search: `ignoreDependencies`).
 
 ---

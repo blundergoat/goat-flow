@@ -335,6 +335,12 @@ run_self_test() {
   run_case "cat command substitution .env" 'cat "$(printf .env)"' 2
   run_case "cat .envrc" "cat .envrc" 2
   run_case "cat .env.example" "cat .env.example" 0 smoke
+  run_case "ls .env.example" "ls .env.example" 0 smoke
+  run_case "stat .env.example" "stat .env.example" 0
+  run_case "test .env.example" "test -f .env.example" 0
+  run_case "git ls-files .env.example" "git ls-files -- .env.example" 0
+  run_case "find .env.example" "find . -name .env.example" 0
+  run_case "find delete .env.example" "find . -name .env.example -delete" 2
   run_case "cat ./.env.example" "cat ./.env.example" 0
   run_case "cat ../.env.example" "cat ../.env.example" 0
   run_case "cat .env.example.local" "cat .env.example.local" 2

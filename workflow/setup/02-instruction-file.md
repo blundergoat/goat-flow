@@ -68,7 +68,7 @@ Router Table row:
 
 Add a brief section documenting deployment platform, branch conventions, and required runtime versions - only if this information isn't already captured elsewhere in the project.
 
-If `.github/` exists, create or update `.github/git-commit-instructions.md` with this project's commit rules. Do not copy goat-flow's own commit policy into consumer projects. If the project has no special rules, write a short project-specific statement such as "Use concise conventional commits; no project-specific commit constraints are currently documented." The harness `commit-guidance` check expects commit guidance at `.github/git-commit-instructions.md` when `.github/` exists.
+If `.github/` exists, `.github/git-commit-instructions.md` must contain this project's commit rules. Do not copy goat-flow's own commit policy into consumer projects. When creating the file for the first time, use goat-flow's git-history detector: sample `git -C <target> log -n 100 --pretty=%s`, classify subjects as conventional commits, ticket-prefixed, or free-form, and only name a dominant style when one class is at least 70% of the sample. If the installer already generated the file, review and keep it. If history is unavailable or has fewer than 10 commits, keep the generated stub header (`goat-flow: generated stub - insufficient git history`) and note that the project owner should edit it later. The harness `commit-guidance` check expects commit guidance at `.github/git-commit-instructions.md` when `.github/` exists.
 
 ## Housekeeping
 
@@ -88,7 +88,7 @@ After writing/updating the instruction file:
 - [ ] Workspace boundary guidance distinguishes controlling goat-flow workspace from selected target project without hardcoded absolute paths
 - [ ] READ step keeps the canonical skill-playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-playbooks/`, and "Availability Check"
 - [ ] Router table includes the canonical `.goat-flow/skill-playbooks/` tool playbooks row
-- [ ] If `.github/` exists, `.github/git-commit-instructions.md` exists with project-specific commit guidance
+- [ ] If `.github/` exists, `.github/git-commit-instructions.md` exists with project-specific commit guidance or the generated insufficient-history stub header
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits
