@@ -27,6 +27,16 @@ set -euo pipefail
 VERSION=$(node -p "require('./package.json').version")
 echo "Publishing @blundergoat/goat-flow@${VERSION}"
 
+# Auth check
+echo "--- Auth check ---"
+if ! NPM_USER=$(npm whoami 2>/dev/null); then
+  echo "Error: not logged in to npm." >&2
+  echo "Run: npm login" >&2
+  exit 1
+fi
+echo "Logged in as: ${NPM_USER}"
+echo ""
+
 # Preflight
 echo "--- Preflight ---"
 npm run build

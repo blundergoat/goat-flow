@@ -116,7 +116,7 @@
       >
         <template x-for="p in filteredPresets" :key="'mock-preset-' + p.id">
           <div
-            @click="selectedPreset = p"
+            @click="selectPreset(p)"
             class="gf-card gf-prompt-list-card"
             :style="{
 	              ...(selectedPreset?.id === p.id ? { borderColor: 'var(--accent-border)', background: 'var(--accent-bg)' } : {}),
@@ -181,45 +181,71 @@
                   x-text="editingCustomPromptId ? 'Edit custom prompt' : 'New custom prompt'"
                 ></h3>
               </div>
-              <div class="gf-start-picker">
-                <button
-                  type="button"
-                  class="gf-btn gf-btn-sm gf-btn-text gf-start-picker-trigger"
-                  @click="showPromptStartPicker = !showPromptStartPicker"
-                  aria-controls="custom-prompt-start-picker"
-                  :aria-expanded="showPromptStartPicker ? 'true' : 'false'"
-                >
-                  Start from existing prompt ▾
-                </button>
-                <div
-                  x-show="showPromptStartPicker"
-                  x-cloak
-                  id="custom-prompt-start-picker"
-                  class="gf-start-picker-panel"
-                >
-                  <label class="sr-only" for="custom-prompt-start">
-                    Existing prompt
-                  </label>
-                  <select
-                    id="custom-prompt-start"
-                    x-model="customPromptStartId"
-                    class="gf-input"
-                  >
-                    <option value="">Choose a prompt...</option>
-                    <template
-                      x-for="p in allPresets.filter(p => !p.qualityMode && !p.internalOnly)"
-                      :key="'start-' + p.id"
-                    >
-                      <option :value="p.id" x-text="p.name"></option>
-                    </template>
-                  </select>
+              <div class="gf-custom-form-head-actions">
+                <div class="gf-start-picker">
                   <button
                     type="button"
-                    class="gf-btn gf-btn-sm gf-btn-secondary"
-                    @click="startCustomPromptFromPreset()"
-                    :disabled="!customPromptStartId"
+                    class="gf-btn gf-btn-sm gf-btn-text gf-start-picker-trigger"
+                    @click="showPromptStartPicker = !showPromptStartPicker"
+                    aria-controls="custom-prompt-start-picker"
+                    :aria-expanded="showPromptStartPicker ? 'true' : 'false'"
                   >
-                    Use prompt
+                    Start from existing prompt ▾
+                  </button>
+                  <div
+                    x-show="showPromptStartPicker"
+                    x-cloak
+                    id="custom-prompt-start-picker"
+                    class="gf-start-picker-panel"
+                  >
+                    <label class="sr-only" for="custom-prompt-start">
+                      Existing prompt
+                    </label>
+                    <select
+                      id="custom-prompt-start"
+                      x-model="customPromptStartId"
+                      class="gf-input"
+                    >
+                      <option value="">Choose a prompt...</option>
+                      <template
+                        x-for="p in allPresets.filter(p => !p.qualityMode && !p.internalOnly)"
+                        :key="'start-' + p.id"
+                      >
+                        <option :value="p.id" x-text="p.name"></option>
+                      </template>
+                    </select>
+                    <button
+                      type="button"
+                      class="gf-btn gf-btn-sm gf-btn-secondary"
+                      @click="startCustomPromptFromPreset()"
+                      :disabled="!customPromptStartId"
+                    >
+                      Use prompt
+                    </button>
+                  </div>
+                </div>
+                <div class="gf-custom-form-actions">
+                  <button
+                    type="button"
+                    @click="cancelCustomPromptEdit()"
+                    class="gf-btn gf-btn-md gf-btn-text"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="gf-btn gf-btn-md gf-btn-secondary gf-custom-save-secondary"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    @click="saveAndRunCustomPrompt()"
+                    :disabled="!activeRunner || launching || serverSessions.length >= serverMaxSessions"
+                    :title="!activeRunner ? 'Select a runner before launching' : (serverSessions.length >= serverMaxSessions ? 'Maximum sessions reached' : '')"
+                    class="gf-btn gf-btn-md gf-btn-primary gf-custom-run-primary"
+                  >
+                    Save and run with <span x-text="activeRunner"></span>
                   </button>
                 </div>
               </div>
@@ -555,31 +581,6 @@
                   </div>
                 </div>
               </aside>
-            </div>
-
-            <div class="gf-custom-form-footer">
-              <button
-                type="button"
-                @click="cancelCustomPromptEdit()"
-                class="gf-btn gf-btn-md gf-btn-text"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                class="gf-btn gf-btn-md gf-btn-secondary gf-custom-save-secondary"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                @click="saveAndRunCustomPrompt()"
-                :disabled="!activeRunner || launching || serverSessions.length >= serverMaxSessions"
-                :title="!activeRunner ? 'Select a runner before launching' : (serverSessions.length >= serverMaxSessions ? 'Maximum sessions reached' : '')"
-                class="gf-btn gf-btn-md gf-btn-primary gf-custom-run-primary"
-              >
-                Save and run with <span x-text="activeRunner"></span>
-              </button>
             </div>
           </form>
         </template>

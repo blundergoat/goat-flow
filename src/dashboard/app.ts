@@ -388,9 +388,23 @@ function app() {
     isFavorite(id: string): boolean {
       return dashboardIsFavorite(this, id);
     },
+    /** Select a prompt row and show its preview, leaving custom edit mode. */
+    selectPreset(preset: Preset) {
+      this.selectedPreset = preset;
+      this.showCustomPromptEditor = false;
+      this.editingCustomPromptId = null;
+      this.customPromptSubmitAttempted = false;
+      this.showPromptStartPicker = false;
+    },
     /** Move the preview selection up (-1) or down (1) in screen order, with wrap. */
     selectPresetByOffset(delta: number) {
       dashboardSelectPresetByOffset(this, delta);
+      if (this.selectedPreset) {
+        this.showCustomPromptEditor = false;
+        this.editingCustomPromptId = null;
+        this.customPromptSubmitAttempted = false;
+        this.showPromptStartPicker = false;
+      }
     },
     /** Return the preset category filters. */
     get presetCats(): PresetCategory[] {
@@ -861,7 +875,7 @@ function app() {
           void this.detectStack();
           this.scheduleSetupPrompt();
         }
-        if (v === "tasks") {
+        if (v === "plans") {
           void this.loadTasks();
         }
       });
@@ -919,7 +933,7 @@ function app() {
           if (this.activeView === "home") {
             void this.generateHomeQualitySummary();
           }
-          if (this.activeView === "tasks") {
+          if (this.activeView === "plans") {
             this.selectedTaskPlan = null;
             void this.loadTasks();
           }

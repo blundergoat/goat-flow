@@ -960,6 +960,24 @@ body {
   font-size: 16px;
   font-weight: 600;
 }
+.gf-custom-form-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.gf-custom-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.gf-custom-form-actions .gf-btn {
+  white-space: nowrap;
+}
 .gf-start-picker {
   position: relative;
   display: flex;
@@ -1364,18 +1382,6 @@ body {
   cursor: default;
 }
 .gf-custom-preview-card:hover {
-  background: var(--surface-base);
-}
-.gf-custom-form-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 12;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin: 0 -20px -18px;
-  padding: 12px 20px 0;
-  border-top: 1px solid var(--border-subtle);
   background: var(--surface-base);
 }
 .gf-custom-save-secondary {
@@ -2459,7 +2465,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Tasks and Coming Soon Pages
+   Plans and Coming Soon Pages
    ═══════════════════════════════════════════════════════════ */
 .gf-page-head,
 .gf-tasks-page,
@@ -3796,10 +3802,13 @@ body {
   .section-meta {
     white-space: normal;
   }
-  .gf-custom-form-head,
-  .gf-custom-form-footer {
+  .gf-custom-form-head {
     align-items: stretch;
     flex-direction: column;
+  }
+  .gf-custom-form-head-actions,
+  .gf-custom-form-actions {
+    justify-content: flex-start;
   }
   .gf-start-picker {
     justify-content: flex-start;
@@ -3809,13 +3818,7 @@ body {
     min-width: 0;
     grid-template-columns: 1fr;
   }
-  .gf-custom-form-footer {
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 0;
-    padding-right: 0;
-  }
-  .gf-custom-form-footer .gf-btn {
+  .gf-custom-form-actions .gf-btn {
     width: 100%;
   }
 }

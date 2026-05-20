@@ -11,12 +11,12 @@ const DASHBOARD_INDEX_PATH = resolve(
   "index.html",
 );
 const DASHBOARD_APP_PATH = resolve(PROJECT_ROOT, "src", "dashboard", "app.ts");
-const TASKS_VIEW_PATH = resolve(
+const PLANS_VIEW_PATH = resolve(
   PROJECT_ROOT,
   "src",
   "dashboard",
   "views",
-  "tasks.html",
+  "plans.html",
 );
 const COMING_SOON_VIEW_PATH = resolve(
   PROJECT_ROOT,
@@ -121,25 +121,25 @@ describe("dashboard side navigation", () => {
 
   it("keeps project switching in the header and includes Plans plus Coming Soon views", () => {
     const html = read(DASHBOARD_INDEX_PATH);
-    const tasksView = read(TASKS_VIEW_PATH);
+    const plansView = read(PLANS_VIEW_PATH);
     const comingSoonView = read(COMING_SOON_VIEW_PATH);
 
     assert.match(html, /@click="openBrowser\(\)"/);
-    assert.match(html, /<!-- include: views\/tasks\.html -->/);
+    assert.match(html, /<!-- include: views\/plans\.html -->/);
     assert.match(html, /<!-- include: views\/coming-soon\.html -->/);
-    assert.match(tasksView, /x-show="activeView === 'tasks'"/);
-    assert.match(tasksView, /loadTasks\(\)/);
+    assert.match(plansView, /x-show="activeView === 'plans'"/);
+    assert.match(plansView, /loadTasks\(\)/);
     assert.match(
-      tasksView,
+      plansView,
       /@gf-set-active-task-plan="setActiveTaskPlan\(\$event\.detail\.planName\)"/,
     );
     assert.match(
-      tasksView,
+      plansView,
       /\$dispatch\('gf-set-active-task-plan', \{ planName: plan\.name \}\)/,
     );
-    assert.match(tasksView, /What active plan means/);
-    assert.match(tasksView, /Active is the default work plan/);
-    assert.match(tasksView, /Set active plan/);
+    assert.match(plansView, /What active plan means/);
+    assert.match(plansView, /Active is the default work plan/);
+    assert.match(plansView, /Set active plan/);
     assert.match(comingSoonView, /x-show="isComingSoonView\(\)"/);
     assert.match(comingSoonView, /comingSoonMeta\(activeView\)/);
   });

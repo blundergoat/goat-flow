@@ -523,6 +523,33 @@ describe("preset prompt catalog", () => {
     assert.match(view, /id="custom-prompt-route"\s+tabindex="-1"/);
   });
 
+  it("switches from custom prompt editing to clicked prompt previews", () => {
+    const source = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+    const view = readFileSync(PROMPTS_VIEW_PATH, "utf-8");
+
+    assert.match(view, /@click="selectPreset\(p\)"/);
+    assert.doesNotMatch(view, /@click="selectedPreset = p"/);
+    assert.match(
+      source,
+      /selectPreset\(preset: Preset\)[\s\S]*this\.selectedPreset = preset;[\s\S]*this\.showCustomPromptEditor = false;/,
+    );
+  });
+
+  it("keeps custom prompt save actions in the form header", () => {
+    const view = readFileSync(PROMPTS_VIEW_PATH, "utf-8");
+    const headStart = view.indexOf('<div class="gf-custom-form-head">');
+    const bodyStart = view.indexOf('class="gf-validation-summary"');
+    assert.notEqual(headStart, -1);
+    assert.notEqual(bodyStart, -1);
+
+    const header = view.slice(headStart, bodyStart);
+    assert.match(header, /class="gf-custom-form-actions"/);
+    assert.match(header, /@click="cancelCustomPromptEdit\(\)"/);
+    assert.match(header, /type="submit"[\s\S]*>\s*Save\s*</);
+    assert.match(header, /@click="saveAndRunCustomPrompt\(\)"/);
+    assert.doesNotMatch(view, /class="gf-custom-form-footer"/);
+  });
+
   it("mounts internal quality presets on explicit quality-page modes", () => {
     const source = readFileSync(DASHBOARD_QUALITY_PATH, "utf-8");
     for (const mode of ["process", "agent-setup", "harness", "skills"]) {

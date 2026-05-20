@@ -421,7 +421,7 @@ describe("dashboard payload readers", () => {
     );
   });
 
-  it("preserves task-state fields used by the Tasks view", () => {
+  it("preserves task-state fields used by the Plans view", () => {
     const helpers = loadHelpers();
 
     const state = helpers.readTaskState({
@@ -443,7 +443,7 @@ describe("dashboard payload readers", () => {
         {
           filename: "M00-side-menu-navigation.md",
           path: "/repo/.goat-flow/tasks/1.7.0/M00-side-menu-navigation.md",
-          title: "M00: Side Menu Navigation and Tasks View",
+          title: "M00: Side Menu Navigation and Plans View",
           status: "in-progress",
           objective: "Build the side menu.",
           totalTasks: 13,

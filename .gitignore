@@ -13,6 +13,12 @@ _temp
 .codex/settings.local.toml
 .cursor/
 
+# Antigravity Agentic Coding Environment
+.antigravitycli/
+.gemini/settings.local.json
+.gemini/projects/
+.gemini/worktrees/
+.gemini/scheduled_tasks.lock
 
 # Repo-local tooling (preflight helpers)
 .tools/

@@ -54,7 +54,7 @@
         <path d="M9 20h6" />
         <path d="M12 16v4" />
       </symbol>
-      <symbol id="gf-side-icon-tasks" viewBox="0 0 24 24">
+      <symbol id="gf-side-icon-plans" viewBox="0 0 24 24">
         <path d="M9 6h11" />
         <path d="M9 12h11" />
         <path d="M9 18h11" />
@@ -415,14 +415,14 @@
               <span class="gf-side-link-label">Skill Evaluator</span>
             </button>
             <button
-              @click="activeView = 'tasks'"
+              @click="activeView = 'plans'"
               class="gf-side-link"
-              :class="activeView === 'tasks' && 'gf-side-link-active'"
+              :class="activeView === 'plans' && 'gf-side-link-active'"
               data-short="T"
               aria-label="Plans"
             >
               <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-tasks"></use>
+                <use href="#gf-side-icon-plans"></use>
               </svg>
               <span class="gf-side-link-label">Plans</span>
             </button>
@@ -680,7 +680,7 @@
           <!-- View fragments (assembled server-side) -->
           <!-- include: views/workspace.html -->
 
-          <!-- include: views/tasks.html -->
+          <!-- include: views/plans.html -->
           <!-- include: views/prompts.html -->
           <!-- include: views/quality.html -->
           <!-- include: views/skills.html -->

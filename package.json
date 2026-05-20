@@ -99,7 +99,7 @@
   "dependencies": {
     "js-yaml": "^4.1.0",
     "markdown-it": "^14.1.1",
-    "ws": "^8.20.0"
+    "ws": "^8.20.1"
   },
   "optionalDependencies": {
     "node-pty": "1.1.0"

@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-21
 ---
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
@@ -23,7 +23,7 @@ last_reviewed: 2026-05-20
 
 **2026-05-10 recurrence:** Manual v1.6.0 CLI release smoke hit the same class through `node dist/cli/cli.js audit . --check-content --format text`: `Cold-Path Content Lint` failed because `docs/dashboard.md` listed dashboard headings without the manifest-backed `skills` view. Adding the missing `### Skills` section changed the check to `Cold-Path Content Lint: PASS (0 warning(s), 9 info, 177 file(s) scanned)`.
 
-**2026-05-15 recurrence:** During M00 side-menu execution, the focused dashboard route test failed before reaching `/api/tasks` because `validateManifest` reported `facts.dashboard_views drift` after `src/dashboard/views/tasks.html` and `src/dashboard/views/coming-soon.html` were added. The fix was to add both view names to `workflow/manifest.json` and update the two dashboard view lists in `.goat-flow/architecture.md` before rerunning the route slice.
+**2026-05-15 recurrence:** During M00 side-menu execution, the focused dashboard route test failed before reaching `/api/tasks` because `validateManifest` reported `facts.dashboard_views drift` after the then-current tasks view and `src/dashboard/views/coming-soon.html` were added. The fix was to add both view names to `workflow/manifest.json` and update the two dashboard view lists in `.goat-flow/architecture.md` before rerunning the route slice. The tasks view route was later renamed to `src/dashboard/views/plans.html`.
 
 **2026-05-18 recurrence:** During the v1.7.0 version bump, `node --import tsx src/cli/cli.ts audit . --check-drift --check-content --format json` failed after the scripted version surfaces were already consistent. The remaining warnings were cold-path doc drift around the manifest-backed `coming-soon` view (`src/dashboard/views/coming-soon.html` (search: `Coming Soon Destinations`)) and `docs/audit-and-quality.md` (search: `Verification:           PASS (4/4)`) not being updated after the Verification harness concern grew to 4 checks. The fix was to align both doc claims, then rerun the content audit.
 
@@ -56,6 +56,18 @@ last_reviewed: 2026-05-20
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
+
+---
+
+## Lesson: Dashboard HTML source tests should not depend on attribute order
+
+**Status:** active | **Created:** 2026-05-21
+
+**What happened:** While fixing Prompts custom-editor selection, the first focused `test/unit/preset-prompts.test.ts` run failed because a new HTML source test searched for `<div class="gf-validation-summary"` even though the template puts `x-show` and `x-cloak` before the `class` attribute. The product change was correct; the test anchor assumed attribute order.
+
+**Root cause:** I used a tag-prefix source regex for a formatter-owned HTML template instead of anchoring on the semantic class/id token that mattered.
+
+**Prevention:** For dashboard HTML source tests, anchor on stable class/id tokens or parse a scoped slice instead of requiring tag attribute order. Evidence anchors: `test/unit/preset-prompts.test.ts` (search: `keeps custom prompt save actions in the form header`), `src/dashboard/views/prompts.html` (search: `gf-custom-form-actions`).
 
 ---
 
@@ -118,11 +130,11 @@ last_reviewed: 2026-05-20
 
 **Status:** active | **Created:** 2026-05-15
 
-**What happened:** While adding the Tasks active-plan toggle, the built dashboard browser smoke kept showing the old direct Alpine handlers after `npm run build:dashboard`. Clicking the flag wrote `.goat-flow/tasks/.active`, but the visible active marker stayed stale until I manually refreshed. The running dashboard process had cached the assembled HTML before the template-handler fix landed; after restarting `node dist/cli/cli.js dashboard .`, browser-use showed the new dispatched handlers and the active marker flipped immediately from `1.7.0` to `_archived` and back.
+**What happened:** While adding the Plans active-plan toggle, the built dashboard browser smoke kept showing the old direct Alpine handlers after `npm run build:dashboard`. Clicking the flag wrote `.goat-flow/tasks/.active`, but the visible active marker stayed stale until I manually refreshed. The running dashboard process had cached the assembled HTML before the template-handler fix landed; after restarting `node dist/cli/cli.js dashboard .`, browser-use showed the new dispatched handlers and the active marker flipped immediately from `1.7.0` to `_archived` and back.
 
-**Root cause:** `serveDashboard()` caches `assembleDashboardHtml(shellPath)` at startup when dev mode is off. Rebuilding `dist/dashboard/views/tasks.html` updates files on disk, but an already-running built dashboard server keeps serving the old assembled shell.
+**Root cause:** `serveDashboard()` caches `assembleDashboardHtml(shellPath)` at startup when dev mode is off. Rebuilding `dist/dashboard/views/plans.html` updates files on disk, but an already-running built dashboard server keeps serving the old assembled shell.
 
-**Prevention:** After changing dashboard HTML/view templates, run `npm run build:dashboard`, restart the built dashboard server, then repeat browser-use smoke against the new URL. Evidence anchors: `src/cli/server/dashboard.ts` (search: `let cachedTemplate`), `src/cli/server/dashboard.ts` (search: `assembleDashboardHtml(shellPath)`), `src/dashboard/views/tasks.html` (search: `gf-set-active-task-plan`).
+**Prevention:** After changing dashboard HTML/view templates, run `npm run build:dashboard`, restart the built dashboard server, then repeat browser-use smoke against the new URL. Evidence anchors: `src/cli/server/dashboard.ts` (search: `let cachedTemplate`), `src/cli/server/dashboard.ts` (search: `assembleDashboardHtml(shellPath)`), `src/dashboard/views/plans.html` (search: `gf-set-active-task-plan`).
 
 ---
 

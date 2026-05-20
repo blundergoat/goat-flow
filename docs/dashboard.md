@@ -30,11 +30,11 @@ Overview landing page. Shows an active-sessions strip, a four-pill rollup for in
 
 ### Plans
 
-Plans milestone browser for the selected project (route ID `tasks`; the side
-rail labels it "Plans"). Surfaces `.goat-flow/tasks/` plan directories,
-milestone status, and checkbox progress. The plan list can update
-`.goat-flow/tasks/.active` for the selected project. The `/api/tasks` backing
-endpoint and on-disk `.goat-flow/tasks/` directory keep their original names.
+Plans milestone browser for the selected project (route ID `plans`). Surfaces
+`.goat-flow/tasks/` plan directories, milestone status, and checkbox progress.
+The plan list can update `.goat-flow/tasks/.active` for the selected project.
+The `/api/tasks` backing endpoint and on-disk `.goat-flow/tasks/` directory
+keep their original names.
 
 ### Coming Soon
 

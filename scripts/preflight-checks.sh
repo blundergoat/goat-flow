@@ -321,7 +321,7 @@ phase_for() {
         "Deny Policy"|"ADR Enforcement") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
         "Skill Behavioral Contracts"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
-        "Tests") printf 'TESTS' ;;
+        "Tests"|"Dependency Audit") printf 'TESTS' ;;
         "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Skill Reference + Playbooks Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
         "Path Integrity"|"Markdown Links"|"Package README Links") printf 'LINKS' ;;
         *) printf 'OTHER' ;;
@@ -342,6 +342,7 @@ display_for() {
         "Instruction Parity Contract") printf 'Instruction parity' ;;
         "Instruction File Quality") printf 'Instruction quality' ;;
         "Tests") printf 'Test suite' ;;
+        "Dependency Audit") printf 'Dependency audit' ;;
         "GOAT Flow Audit") printf 'GOAT flow audit' ;;
         "Learning-Loop Schema") printf 'Learning-loop schema' ;;
         "Doc/Code Drift") printf 'Doc/code drift' ;;
@@ -368,6 +369,7 @@ collapsed_desc_for() {
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
         "Tests") printf 'fast suite + coverage' ;;
+        "Dependency Audit") printf 'npm audit' ;;
         "GOAT Flow Audit") printf 'all checks' ;;
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
         "Doc/Code Drift") printf 'arch counts · setup IDs · code-map' ;;
@@ -1501,6 +1503,23 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
         else
             note "Coverage summary unavailable (missing # end of coverage report)"
         fi
+    fi
+fi
+
+# ── Dependency Audit ─────────────────────────────────────────────────
+if [[ -f package.json ]]; then
+    section "Dependency Audit"
+    audit_output=$(npm audit 2>&1) && audit_exit=0 || audit_exit=$?
+    if [[ "$audit_exit" -eq 0 ]]; then
+        pass "npm audit (0 vulnerabilities)"
+    else
+        vuln_summary=$(printf '%s\n' "$audit_output" | grep -E '^[0-9]+ vulnerabilities? ' | tail -1 || true)
+        if [[ -n "$vuln_summary" ]]; then
+            fail "npm audit failed - $vuln_summary"
+        else
+            fail "npm audit failed (exit $audit_exit)"
+        fi
+        printf '%s\n' "$audit_output" | sed -n '1,20p' | details_pipe
     fi
 fi
 

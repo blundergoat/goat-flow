@@ -15,7 +15,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 19 build checks (15 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, coming-soon, home, projects, prompts, quality, settings, setup, skills, tasks, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -57,7 +57,7 @@ src/cli/
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.json  # Preset configurations
-  views/              # Page views (about, coming-soon, home, projects, prompts, quality, settings, setup, skills, tasks, workspace)
+  views/              # Page views (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
 
 ## Key Constraints

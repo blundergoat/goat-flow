@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-21
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -116,6 +116,20 @@ last_reviewed: 2026-05-20
 **Recurrence update (2026-05-19):** M01 commit-guidance work added a new helper and tests. Focused `npx tsc --noEmit` and the new test file passed, but the first full preflight failed in the TypeScript gate: `Knip: 2 unused exports/types`. The exported names were internal helper types, not public API. Removing the unnecessary `export` keywords fixed `npx knip`. Evidence anchors: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`), `test/unit/commit-guidance.test.ts` (search: `detects dominant conventional-commit history`).
 
 **Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite, keep fixtures representative of the named budget and stable under test concurrency. Evidence anchors: `package.json` (search: `test:fast`), `test/unit/dashboard-markdown.test.ts` (search: `MarkdownIt`), `knip.json` (search: `ignoreDependencies`).
+
+---
+
+## Lesson: New dependency-audit gates need a baseline audit first
+
+**Status:** active | **Created:** 2026-05-21
+
+**What happened:** While adding `npm audit` to preflight and CI, the first fresh audit failed on the existing direct `ws@8.20.0` dependency. The gate wiring was correct, but merging it alone would have made both local preflight and CI fail immediately.
+
+**Root cause:** I treated "add the gate" as separate from proving the current baseline satisfies the gate. Dependency-audit gates are different from pure syntax checks because their first run can reveal already-present supply-chain debt.
+
+**Fix:** Patch the direct dependency to the current non-vulnerable release, sync `package-lock.json`, then rerun `npm audit` and full preflight before claiming the new gate works. Evidence anchors: `scripts/preflight-checks.sh` (search: `Dependency Audit`), `package.json` (search: `"ws": "^8.20.1"`).
+
+**Prevention:** Before adding a repo-wide dependency-audit gate, run the raw audit command first. If it finds baseline vulnerabilities, either include the smallest compatible dependency update in the same change or stop and report the blocker before wiring a failing gate.
 
 ---
 
