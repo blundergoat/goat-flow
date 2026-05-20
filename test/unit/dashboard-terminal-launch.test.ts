@@ -112,6 +112,15 @@ type HelperContext = {
     runner?: string,
     options?: LaunchOptions,
   ): Promise<void>;
+  dashboardConnectTerminal(
+    ctx: LaunchContext,
+    sessionId: string,
+    wsUrl: string,
+  ): void;
+  dashboardOpenServerSession(
+    ctx: LaunchContext,
+    serverSession: Record<string, unknown>,
+  ): Promise<void>;
   dashboardEndSession(ctx: LaunchContext, sessionId: string): void;
   dashboardOutputLooksAwaitingInput(text: string): boolean;
   dashboardOutputLooksReadyForLaunchPrompt(
@@ -176,6 +185,7 @@ type TimerControls = {
 function loadHelpers(
   fetchImpl: typeof fetch,
   timers: TimerControls = { setTimeout, clearTimeout },
+  extraGlobals: Record<string, unknown> = {},
 ): HelperContext {
   const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
   const js = transpileModule(source, {
@@ -188,6 +198,8 @@ function loadHelpers(
     console,
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
+    setInterval,
+    clearInterval,
     WebSocket: { OPEN: 1 },
     readRecord: (value: unknown): unknown => value,
     readErrorMessage: (value: unknown): string | null =>
@@ -199,12 +211,15 @@ function loadHelpers(
         : null,
     readString: (value: unknown): string | null =>
       typeof value === "string" ? value : null,
+    ...extraGlobals,
   });
   runInContext(
     `${js}
 globalThis.__helpers = {
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
+  dashboardConnectTerminal,
+  dashboardOpenServerSession,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
   dashboardOutputLooksReadyForLaunchPrompt,
@@ -379,6 +394,145 @@ function createFakeTimers(): TimerControls & {
     },
     pending(): number {
       return timers.size;
+    },
+  };
+}
+
+class FakeTerminal {
+  cols = 80;
+  rows = 24;
+  _addonFit?: FakeFitAddon;
+  written: string[] = [];
+
+  loadAddon(addon: FakeFitAddon): void {
+    this._addonFit = addon;
+  }
+
+  open(): void {
+    return;
+  }
+
+  write(data: string): void {
+    this.written.push(data);
+  }
+
+  focus(): void {
+    return;
+  }
+
+  dispose(): void {
+    return;
+  }
+
+  attachCustomKeyEventHandler(): void {
+    return;
+  }
+
+  onData(): void {
+    return;
+  }
+
+  onResize(): void {
+    return;
+  }
+
+  hasSelection(): boolean {
+    return false;
+  }
+
+  getSelection(): string {
+    return "";
+  }
+
+  buffer = {
+    active: {
+      length: 0,
+      getLine(): null {
+        return null;
+      },
+    },
+  };
+}
+
+class FakeFitAddon {
+  fit(): void {
+    return;
+  }
+}
+
+class FakeResizeObserver {
+  observe(): void {
+    return;
+  }
+
+  disconnect(): void {
+    return;
+  }
+}
+
+class FakeDashboardWebSocket {
+  static OPEN = 1;
+  readyState = 1;
+  sent: string[] = [];
+  onopen?: () => void;
+  onmessage?: (event: { data: string }) => void;
+  onclose?: () => void;
+  onerror?: () => void;
+
+  constructor(
+    public readonly url: string,
+    public readonly instances: FakeDashboardWebSocket[],
+  ) {
+    instances.push(this);
+  }
+
+  send(payload: string): void {
+    this.sent.push(payload);
+  }
+
+  close(): void {
+    this.readyState = 3;
+    this.onclose?.();
+  }
+}
+
+function makeBrowserTerminalGlobals(): {
+  globals: Record<string, unknown>;
+  sockets: FakeDashboardWebSocket[];
+} {
+  const sockets: FakeDashboardWebSocket[] = [];
+  const WebSocketCtor = class extends FakeDashboardWebSocket {
+    constructor(url: string) {
+      super(url, sockets);
+    }
+  };
+  return {
+    sockets,
+    globals: {
+      window: {
+        Terminal: FakeTerminal,
+        FitAddon: { FitAddon: FakeFitAddon },
+        addEventListener(): void {
+          return;
+        },
+        removeEventListener(): void {
+          return;
+        },
+      },
+      document: {
+        getElementById(): { innerHTML: string; offsetWidth: number } {
+          return { innerHTML: "", offsetWidth: 80 };
+        },
+      },
+      location: { protocol: "http:", host: "127.0.0.1:31337" },
+      navigator: {
+        clipboard: {
+          readText: async (): Promise<string> => "",
+          writeText: async (): Promise<void> => {},
+        },
+      },
+      ResizeObserver: FakeResizeObserver,
+      WebSocket: WebSocketCtor,
     },
   };
 }
@@ -1333,6 +1487,49 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(fetchCount, 2);
   });
 
+  it("marks disconnected local sessions ended when refresh proves they are gone", async () => {
+    const timers = createFakeTimers();
+    const helpers = loadHelpers(
+      async () =>
+        ({
+          json: async () => ({
+            activeCount: 0,
+            maxSessions: 10,
+            sessions: [],
+          }),
+        }) as Response,
+      timers,
+    );
+    const session = {
+      id: "session-gone",
+      runner: "claude",
+      promptLabel: "Gone session",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      startTime: Date.now(),
+      lastInputTime: Date.now(),
+      connected: false,
+      ended: false,
+      awaitingInput: true,
+      outputTail: "Do you want to proceed?\n1. Yes\n2. No",
+      loadingPhase: "ready",
+      age: "",
+      presetId: null,
+    };
+    const ctx = makeContext({
+      sessions: [session],
+      _terminalRefs: { "session-gone": {} },
+    });
+
+    const refresh = helpers.dashboardUpdateSessionCount(ctx);
+    timers.tick(50);
+    await refresh;
+
+    assert.equal(session.ended, true);
+    assert.equal(session.awaitingInput, false);
+  });
+
   it("loading overlay escalates slow starts and clears on first output", () => {
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -1546,6 +1743,177 @@ describe("dashboard terminal launch flow", () => {
     ]);
   });
 
+  it("treats terminal WebSocket close as detach until an exit message arrives", () => {
+    const { globals, sockets } = makeBrowserTerminalGlobals();
+    const calls: string[] = [];
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout },
+      globals,
+    );
+    const session = {
+      id: "session-detach",
+      runner: "copilot",
+      promptLabel: "Detached session",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      startTime: Date.now(),
+      lastInputTime: Date.now(),
+      connected: false,
+      ended: false,
+      awaitingInput: true,
+      outputTail: "Do you want to run this command?\n1. Yes\n2. No",
+      loadingPhase: "ready",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
+      age: "",
+      presetId: null,
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-detach",
+      sessions: [session],
+      _terminalRefs: { "session-detach": {} },
+      async updateSessionCount(): Promise<void> {
+        calls.push("updateSessionCount");
+      },
+    });
+
+    helpers.dashboardConnectTerminal(
+      ctx,
+      "session-detach",
+      "/ws/terminal/session-detach",
+    );
+    const socket = sockets[0];
+    assert.ok(socket);
+    socket.onopen?.();
+    assert.equal(session.connected, true);
+
+    socket.onclose?.();
+
+    assert.equal(session.connected, false);
+    assert.equal(session.ended, false);
+    assert.equal(session.awaitingInput, true);
+    assert.deepStrictEqual(ctx.recentTerminalSessions, []);
+
+    socket.onmessage?.({
+      data: JSON.stringify({ type: "exit", code: 0, signal: null }),
+    });
+
+    assert.equal(session.ended, true);
+    assert.equal(session.connected, false);
+    assert.equal(session.awaitingInput, false);
+  });
+
+  it("treats missing-session WebSocket errors as true termination", () => {
+    const { globals, sockets } = makeBrowserTerminalGlobals();
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout },
+      globals,
+    );
+    const session = {
+      id: "session-missing",
+      runner: "claude",
+      promptLabel: "Missing session",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      startTime: Date.now(),
+      lastInputTime: Date.now(),
+      connected: false,
+      ended: false,
+      awaitingInput: true,
+      outputTail: "",
+      loadingPhase: "connecting",
+      loadingShowSlowHint: false,
+      loadingShowRetry: false,
+      age: "",
+      presetId: null,
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-missing",
+      sessions: [session],
+      _terminalRefs: { "session-missing": {} },
+    });
+
+    helpers.dashboardConnectTerminal(
+      ctx,
+      "session-missing",
+      "/ws/terminal/session-missing",
+    );
+    const socket = sockets[0];
+    assert.ok(socket);
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "error",
+        message: "Session not found or already terminated",
+      }),
+    });
+    socket.onclose?.();
+
+    assert.equal(session.ended, true);
+    assert.equal(session.connected, false);
+    assert.equal(session.awaitingInput, false);
+  });
+
+  it("reconnects server-active sessions when an ended local shell is stale", async () => {
+    const calls: string[] = [];
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const endedLocal = {
+      id: "session-live",
+      runner: "codex",
+      promptLabel: "Stale local session",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      startTime: Date.now(),
+      lastInputTime: Date.now(),
+      connected: false,
+      ended: true,
+      awaitingInput: false,
+      outputTail: "",
+      loadingPhase: "ready",
+      age: "",
+      presetId: null,
+    };
+    const ctx = makeContext({
+      activeSessionId: "session-live",
+      sessions: [endedLocal],
+      async loadXterm(): Promise<void> {
+        calls.push("loadXterm");
+      },
+      connectTerminal(sessionId: string, wsUrl: string): void {
+        calls.push(`connect:${sessionId}:${wsUrl}`);
+      },
+      async $nextTick(): Promise<void> {
+        calls.push("$nextTick");
+      },
+    });
+
+    await helpers.dashboardOpenServerSession(ctx, {
+      id: "session-live",
+      runner: "codex",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      lastInputAt: Date.now(),
+    });
+
+    assert.equal(ctx.sessions.length, 1);
+    assert.equal(ctx.sessions[0]?.id, "session-live");
+    assert.equal(ctx.sessions[0]?.ended, false);
+    assert.deepStrictEqual(calls, [
+      "loadXterm",
+      "$nextTick",
+      "connect:session-live:/ws/terminal/session-live",
+    ]);
+  });
+
   it("cleans up the backend session when xterm loading fails after creation", async () => {
     const calls: string[] = [];
     const helpers = loadHelpers(async (input, init) => {
@@ -1714,6 +2082,30 @@ describe("dashboard terminal launch flow", () => {
       ),
       true,
     );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Do you want to run this command?\n1. Yes\n2. Yes, and don't ask again for [...] in this repo\n3. No, and tell Copilot what to do differently (Esc to stop)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Allow execution of [bash]\n1. Allow once\n2. Allow for this session\n3. No, suggest changes (esc)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Would you like to run the following command?\n1. Yes, proceed\n2. Yes, and don't ask again for commands that start with '...'\n3. No, and tell Codex what to do differently\n(esc)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Bash command ...\nDo you want to proceed?\n1. Yes\n2. No\nEsc to cancel · Tab to amend · ctrl+e to explain",
+      ),
+      true,
+    );
   });
 
   it("clears awaiting-input state when later output resumes normally", () => {
@@ -1753,6 +2145,76 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(
       helpers.dashboardNextAwaitingInputState(true, prompt, "\n   "),
       true,
+    );
+  });
+
+  it("detects awaiting-input prompts split across terminal chunks", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        "Do you want to run this command?\n",
+        "1. Yes\n2. Yes, and don't ask again for [...] in this repo\n3. No, and tell Copilot what to do differently (Esc to stop)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        "Allow execution of [bash]\n",
+        "1. Allow once\n2. Allow for this session\n3. No, suggest changes (esc)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        "Would you like to run the following command?\n",
+        "1. Yes, proceed\n2. Yes, and don't ask again for commands that start with 'ls'\n3. No, and tell Codex what to do differently\n(esc)",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        "Bash command ...\nDo you want to proceed?\n",
+        "1. Yes\n2. No\nEsc to cancel · Tab to amend · ctrl+e to explain",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        true,
+        "Do you want to run this command?\n",
+        "1. Yes\n2. Yes, and don't ask again\n3. No",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        "Do you want to run this command?\n1. Yes\n",
+        "2. No\nEsc to cancel",
+      ),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        false,
+        [
+          "Do you want to run this command?",
+          "1. Yes",
+          "2. No",
+          "1",
+          "Running command...",
+          "Done.",
+        ].join("\n"),
+        "\nNext steps:\n1. Inspect the result\n2. Update the docs\n",
+      ),
+      false,
     );
   });
 
@@ -2082,6 +2544,22 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("keeps detached live sessions out of recent history", () => {
+    const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
+    assert.match(
+      source,
+      /const inactive = this\.serverSessions\.filter\(s => s\.status !== 'active'\)/,
+    );
+    assert.match(
+      source,
+      /const rows = \[\.\.\.this\.recentTerminalSessions, \.\.\.inactive\]/,
+    );
+    assert.doesNotMatch(
+      source,
+      /recentSessions\(\)[\s\S]{0,500}localSessionRows/,
+    );
+  });
+
   it("excludes waiting sessions from the Workspace running meter", () => {
     const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
     assert.match(source, /runningSessions\(\) \{/);
@@ -2207,6 +2685,12 @@ describe("dashboard terminal launch flow", () => {
       /session\.loadingPhase === "ready" \|\| session\.loadingPhase === "error"/,
     );
     assert.match(source, /return tail\.length === 0/);
+    assert.match(source, /get terminalDetached\(\): boolean/);
+    assert.match(source, /s\.id === session\.id && s\.status === "active"/);
+    assert.match(
+      source,
+      /s\.id === id && s\.ended !== true && s\.connected === true/,
+    );
   });
 
   it("renders the Waiting-for-runner badge in the workspace header", () => {
@@ -2227,6 +2711,8 @@ describe("dashboard terminal launch flow", () => {
     );
     assert.match(workspace, /class="terminal-session-shell"/);
     assert.match(workspace, /class="terminal-loading-overlay"/);
+    assert.match(workspace, /terminalDetached \|\| terminalEnded/);
+    assert.match(workspace, /Session detached/);
     assert.match(
       workspace,
       /x-show="!session\.ended && session\.loadingPhase !== 'ready'"/,

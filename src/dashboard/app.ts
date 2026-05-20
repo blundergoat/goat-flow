@@ -137,6 +137,14 @@ function app() {
     get terminalEnded(): boolean {
       return this._activeSession?.ended ?? false;
     },
+    /** Return whether the active terminal is detached from a live backend session. */
+    get terminalDetached(): boolean {
+      const session = this._activeSession;
+      if (!session || session.ended || session.connected) return false;
+      return this.serverSessions.some(
+        (s) => s.id === session.id && s.status === "active",
+      );
+    },
     /** Return whether the active terminal appears to be awaiting a user choice. */
     get terminalAwaitingInput(): boolean {
       return this._activeSession?.awaitingInput === true;
@@ -221,7 +229,9 @@ function app() {
     },
     /** Whether a backend session is currently bound to a local xterm instance. */
     isSessionBoundLocally(id: string): boolean {
-      return this.sessions.some((s) => s.id === id);
+      return this.sessions.some(
+        (s) => s.id === id && s.ended !== true && s.connected === true,
+      );
     },
 
     // --- Projects state ---

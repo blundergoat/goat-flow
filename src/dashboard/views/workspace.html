@@ -810,15 +810,18 @@
                   </span>
                 </div>
               </div>
-              <div x-show="terminalEnded" class="terminal-overlay">
+              <div
+                x-show="terminalDetached || terminalEnded"
+                class="terminal-overlay"
+              >
                 <div class="text-center space-y-3">
                   <p
                     class="text-white text-lg font-semibold"
-                    x-text="_projectSessions[projectPath] ? 'Session detached' : 'Session ended'"
+                    x-text="(terminalDetached || _projectSessions[projectPath]) ? 'Session detached' : 'Session ended'"
                   ></p>
                   <div class="flex gap-2 justify-center">
                     <button
-                      x-show="_projectSessions[projectPath]"
+                      x-show="terminalDetached || _projectSessions[projectPath]"
                       @click="reconnectTerminal()"
                       class="gf-btn gf-btn-md gf-btn-primary"
                     >

@@ -1,6 +1,6 @@
 ---
 category: dashboard
-last_reviewed: 2026-05-19
+last_reviewed: 2026-05-20
 ---
 
 ## Footgun: Project-browser modal is reachable only via header-span click, not from the add-project flow
@@ -150,21 +150,25 @@ last_reviewed: 2026-05-19
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** The Workspace header or terminal pane can show a session waiting while the summary meters still count it as running, or an active session can briefly show "Awaiting input" and then flip back to running while the terminal is still visibly blocked on a prompt.
+**Symptoms:** The Workspace header or terminal pane can show a session waiting while the summary meters still count it as running, or an active session can briefly show "Awaiting input" and then flip back to running while the terminal is still visibly blocked on a prompt. A browser-side terminal can also show "Session ended" while `/api/terminal/sessions` still lists the backend PTY as active and the terminal scrollback is visibly waiting on a runner permission prompt.
 
 **Evidence:**
 - `src/dashboard/views/workspace.html` (search: `runningSessions()`) excludes `sessionIsWaiting(s)` from the running meter after the 2026-05-19 fix. Before that, `meterRunning()` counted every `status === 'active'` session, including waiting sessions.
 - `src/dashboard/views/workspace.html` (search: `waitingForRunner: s.connected === true`) maps local loading/no-output sessions into the same waiting path used by the rail and meters.
 - `src/dashboard/dashboard-terminal.ts` (search: `dashboardNextAwaitingInputState`) keeps awaiting-input state latched across transient spinner/status redraws instead of clearing it on every non-empty output chunk.
 - `test/unit/dashboard-terminal-launch.test.ts` (search: `excludes waiting sessions from the Workspace running meter`) pins the meter split, and `test/unit/dashboard-terminal-launch.test.ts` (search: `"\r✻ Thinking…"`) pins redraw preservation.
+- `src/cli/server/terminal.ts` (search: `Detach on WebSocket close - session keeps running`) treats browser WebSocket close as detach; `src/dashboard/dashboard-terminal.ts` (search: `Handle the terminal WebSocket closing`) must not convert that detach into local `ended=true` unless `exit`, `shutdown`, a terminal-ending error, or a session refresh proves the backend session is gone.
+- `test/unit/dashboard-terminal-launch.test.ts` (search: `treats terminal WebSocket close as detach until an exit message arrives`) pins the detach-vs-ended contract, and `test/unit/dashboard-terminal-launch.test.ts` (search: `marks disconnected local sessions ended when refresh proves they are gone`) pins the true-termination reconciliation.
 
-**Why it happens:** `/api/terminal/sessions` only exposes lifecycle `status` (`active` / `terminated`) plus age and idle duration. Browser-only facts such as `awaitingInput`, loading/no-output state, and transient runner redraws live in `src/dashboard/dashboard-terminal.ts` and `src/dashboard/views/workspace.html`. If a new UI surface counts sessions directly from `status === 'active'`, or clears `awaitingInput` based on a single PTY output chunk instead of the still-visible terminal tail, the Workspace surfaces drift apart.
+**Why it happens:** `/api/terminal/sessions` only exposes lifecycle `status` (`active` / `terminated`) plus age and idle duration. Browser-only facts such as `awaitingInput`, loading/no-output state, transient runner redraws, and the distinction between a detached WebSocket and an ended PTY live in `src/dashboard/dashboard-terminal.ts`, `src/dashboard/app.ts`, and `src/dashboard/views/workspace.html`. If a new UI surface counts sessions directly from `status === 'active'`, clears `awaitingInput` based on a single PTY output chunk instead of the still-visible terminal tail, or treats browser WebSocket close as terminal exit, the Workspace surfaces drift apart.
 
 **Prevention:**
 1. For Workspace session summaries, derive running from "active and not waiting", never from `status === 'active'` alone.
 2. Keep waiting classification shared across expanded cards, collapsed pips, top meters, and the active terminal header.
 3. When changing terminal output heuristics, test redraw frames such as `\r✻ Thinking…` separately from real progress text like `Continuing...`.
 4. Do not assume the server can classify "waiting" unless the wire contract grows a durable field; today that state is browser-local.
+5. Treat browser WebSocket close as detached/disconnected until a backend `exit`, `shutdown`, terminal-ending error, or `/api/terminal/sessions` refresh proves the PTY is gone.
+6. When changing reconnect or local-session binding, test stale ended local shells separately from live disconnected shells so an old local overlay cannot block `openServerSession`.
 
 ---
 

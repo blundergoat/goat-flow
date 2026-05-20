@@ -198,24 +198,64 @@ function dashboardPreparePasteBody(text: string): string {
     .replace(BRACKETED_PASTE_MARKER_PATTERN, "");
 }
 
+/** Return the last permission prompt intro in plain terminal text. */
+function dashboardLastCommandPermissionPromptIndex(plain: string): number {
+  let lastIndex = -1;
+  const patterns = [
+    /\bdo\s+you\s+want\s+to\s+(?:proceed|continue|allow|approve|run\s+(?:this\s+)?command)\??/gi,
+    /\bwould\s+you\s+like\s+to\s+run\s+the\s+following\s+command\??/gi,
+    /\ballow\s+execution\s+of\b/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of plain.matchAll(pattern)) {
+      lastIndex = Math.max(lastIndex, match.index ?? -1);
+    }
+  }
+  return lastIndex;
+}
+
+/** Return true when the visible tail ends with a prompt that is not complete yet. */
+function dashboardOutputTailEndsWithAwaitingInputStart(text: string): boolean {
+  const plain = dashboardPlainTerminalText(text).slice(-1200).trimEnd();
+  const promptIndex = dashboardLastCommandPermissionPromptIndex(plain);
+  if (promptIndex < 0) return false;
+  const promptTail = plain.slice(promptIndex);
+  if (promptTail.length > 700) return false;
+  return !dashboardOutputLooksAwaitingInput(promptTail);
+}
+
 /** Heuristic for agent prompts waiting on a numbered human choice. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
   const numberedChoices =
-    /(^|\n)\s*1[.)]\s+\S[\s\S]{0,900}\n\s*2[.)]\s+\S[\s\S]{0,900}\n\s*3[.)]\s+\S/i.test(
+    /(^|\n)\s*(?:[›>]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>]\s*)?2[.)]\s+\S/i.test(
       plain,
     );
   const choicePrompt =
     /\b(?:choose|select|pick)\s+(?:an?\s+)?(?:option|choice)\b/i.test(plain) ||
     /\b(?:enter|type)\s+(?:the\s+)?(?:number|choice|option)\b/i.test(plain) ||
     /\bwhich option\b/i.test(plain);
+  const commandPermissionPrompt =
+    dashboardLastCommandPermissionPromptIndex(plain) >= 0;
   return (
-    /\bdo\s+you\s+want\s+to\s+(?:proceed|continue|allow|approve)\??/i.test(
-      plain,
-    ) ||
     /\bawaiting (?:input|confirmation|approval)\b/i.test(plain) ||
     /\bEsc\s+to\s+cancel\b[\s\S]{0,240}\bTab\s+to\s+amend\b/i.test(plain) ||
+    (commandPermissionPrompt && numberedChoices) ||
     (choicePrompt && numberedChoices)
+  );
+}
+
+/** Return true for chunks that complete a permission prompt started earlier. */
+function dashboardOutputLooksAwaitingInputContinuation(text: string): boolean {
+  const plain = dashboardPlainTerminalText(text);
+  return (
+    /(^|\n)\s*(?:[›>]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>]\s*)?2[.)]\s+\S/i.test(
+      plain,
+    ) ||
+    /(^|\n)\s*(?:[›>]\s*)?[23][.)]\s+\S/i.test(plain) ||
+    /\bEsc\s+to\s+(?:cancel|stop)\b/i.test(plain) ||
+    /\bPress enter to confirm\b/i.test(plain) ||
+    /\bAllow once\b/i.test(plain)
   );
 }
 
@@ -226,6 +266,14 @@ function dashboardOutputLooksTransientStatusRedraw(text: string): boolean {
   if (/^\r[^\n\r]*$/u.test(text)) return true;
   return /^[✻✢✳✶*•·]?\s*(?:Thinking|Processing|Checking|Reading|Searching)\b/iu.test(
     plain,
+  );
+}
+
+/** Return true when a server error proves the PTY session is no longer live. */
+function dashboardTerminalErrorEndsSession(message: string): boolean {
+  return (
+    /\bSession not found or already terminated\b/i.test(message) ||
+    /\bSession killed: idle timeout\b/i.test(message)
   );
 }
 
@@ -297,6 +345,14 @@ function dashboardNextAwaitingInputState(
   if (dashboardOutputLooksAwaitingInput(outputChunk)) return true;
   const tailStillAwaiting = dashboardOutputLooksAwaitingInput(nextTail);
   if (!chunkHasText) return previousAwaiting && tailStillAwaiting;
+  if (
+    tailStillAwaiting &&
+    (previousAwaiting ||
+      dashboardOutputTailEndsWithAwaitingInputStart(previousTail)) &&
+    dashboardOutputLooksAwaitingInputContinuation(outputChunk)
+  ) {
+    return true;
+  }
   if (
     previousAwaiting &&
     tailStillAwaiting &&
@@ -1049,6 +1105,17 @@ async function dashboardUpdateSessionCountImpl(
             projectName: ctx.displayNameFor(session.projectPath),
           }))
       : [];
+    const activeIds = new Set(ctx.serverSessions.map((session) => session.id));
+    for (const session of ctx.sessions) {
+      if (session.ended || session.connected || activeIds.has(session.id)) {
+        continue;
+      }
+      dashboardClearAwaitingInputTimer(ctx, session.id);
+      dashboardClearTerminalLoadingTimers(ctx, session.id);
+      session.ended = true;
+      session.awaitingInput = false;
+      ctx._forgetSavedSession(session.id);
+    }
   } catch {
     /* ignore */
   }
@@ -1356,7 +1423,6 @@ async function dashboardReconnectTerminal(
   ctx: DashboardTerminalContext,
 ): Promise<boolean> {
   const savedList = ctx._projectSessions[ctx.projectPath];
-  if (!savedList || savedList.length === 0) return false;
   const aliveMap = new Map<string, ServerSessionInfo>();
   try {
     const res = await dashboardFetch("/api/terminal/sessions");
@@ -1371,6 +1437,13 @@ async function dashboardReconnectTerminal(
     Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
     Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
     return false;
+  }
+  if (!savedList || savedList.length === 0) {
+    const activeId = ctx.activeSessionId;
+    const activeServerSession = activeId ? aliveMap.get(activeId) : null;
+    if (!activeServerSession) return false;
+    await ctx.openServerSession(activeServerSession);
+    return true;
   }
   const liveSaved = savedList.filter((sv) => aliveMap.has(sv.sessionId));
   if (liveSaved.length === 0) {
@@ -1673,6 +1746,7 @@ function dashboardConnectTerminal(
   /** Handle incoming terminal WebSocket messages. */
   ws.onmessage = (event: MessageEvent) => {
     try {
+      if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
       if (typeof event.data !== "string") return;
       const msg = readRecord(JSON.parse(event.data), "Terminal message");
       const type = readString(msg.type);
@@ -1756,6 +1830,7 @@ function dashboardConnectTerminal(
         }
         void ctx.updateSessionCount();
       } else if (type === "error" && typeof msg.message === "string") {
+        const terminalEnded = dashboardTerminalErrorEndsSession(msg.message);
         if (session.loadingPhase !== "ready") {
           dashboardSetTerminalLoadingPhase(
             ctx,
@@ -1764,6 +1839,19 @@ function dashboardConnectTerminal(
             "error",
             msg.message,
           );
+        }
+        if (terminalEnded) {
+          dashboardClearAwaitingInputTimer(ctx, sessionId);
+          dashboardClearPasteSubmitState(ctx, sessionId);
+          dashboardClearLaunchPrompt(ctx, sessionId);
+          dashboardClearTerminalLoadingTimers(ctx, sessionId);
+          dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
+            target.ended = true;
+            target.connected = false;
+            target.awaitingInput = false;
+          });
+          ctx._forgetSavedSession(sessionId);
+          void ctx.updateSessionCount();
         }
         term.write(`\r\n\x1b[31m${msg.message}\x1b[0m\r\n`);
       } else if (type === "shutdown") {
@@ -1783,13 +1871,15 @@ function dashboardConnectTerminal(
   };
   /** Handle the terminal WebSocket closing. */
   ws.onclose = () => {
+    if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
     dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
       target.connected = false;
-      if (!target.ended && !ctx._detaching) target.ended = true;
     });
+    void ctx.updateSessionCount();
   };
   /** Handle terminal WebSocket errors. */
   ws.onerror = () => {
+    if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
     if (session.loadingPhase !== "ready") {
       dashboardSetTerminalLoadingPhase(
         ctx,
@@ -1949,13 +2039,32 @@ async function dashboardOpenServerSession(
   ctx: DashboardTerminalContext,
   serverSession: ServerSessionInfo,
 ): Promise<void> {
-  const local = ctx.sessions.find((s) => s.id === serverSession.id);
+  const local = ctx.sessions.find((s) => s.id === serverSession.id && !s.ended);
   if (local) {
     ctx.activeSessionId = local.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
+    if (!local.connected) {
+      const refs = ctx._terminalRefs[local.id];
+      dashboardClearTerminalLoadingTimers(ctx, local.id);
+      if (refs?.cleanup) refs.cleanup();
+      ctx._terminalRefs[local.id] = {
+        ...ctx._terminalRefs[local.id],
+        retryPrompt: "",
+        retryPromptLabel: local.promptLabel,
+        retryPresetId: null,
+        retryCwdPath: local.cwd,
+        retryTargetPath: local.targetPath,
+      };
+      dashboardArmTerminalLoadingTimers(ctx, local.id, local);
+      const self = ctx as DashboardTerminalContext &
+        AlpineMagics<DashboardTerminalContext>;
+      await self.$nextTick();
+      ctx.connectTerminal(local.id, `/ws/terminal/${serverSession.id}`);
+    }
     return;
   }
+  ctx.sessions = ctx.sessions.filter((s) => s.id !== serverSession.id);
   const self = ctx as DashboardTerminalContext &
     AlpineMagics<DashboardTerminalContext>;
   await ctx.loadXterm();

@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-05-19
+last_reviewed: 2026-05-20
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -32,6 +32,8 @@ last_reviewed: 2026-05-19
 **Recurrence update (2026-05-19):** While fixing Workspace terminal waiting status, focused `test/unit/dashboard-terminal-launch.test.ts` passed but targeted `npx prettier --check src/dashboard/views/workspace.html src/dashboard/dashboard-terminal.ts test/unit/dashboard-terminal-launch.test.ts` failed on the touched test file after adding longer source-regex assertions. Running the same touched-file set through `npx prettier --write ...` fixed the local formatter blocker before rerunning the focused terminal test.
 
 **Recurrence update (2026-05-19):** While adding audit concern limit fields and terminal boundary tests, `npx prettier --check src/cli/audit/types.ts src/cli/server/types.ts src/cli/audit/audit.ts src/cli/audit/render.ts src/cli/prompt/compose-quality.ts src/dashboard/dashboard-setup-quality.ts src/dashboard/globals.d.ts src/dashboard/dashboard-readers.ts test/unit/audit-command.test.ts test/unit/quality-command.test.ts test/unit/preset-prompts.test.ts test/unit/dashboard-terminal-launch.test.ts test/unit/dashboard-home.test.ts` failed on the touched test files. Running the same touched-file set through `npx prettier --write ...` fixed the local formatter blocker before rerunning `npm run typecheck` and the targeted unit tests.
+
+**Recurrence update (2026-05-20):** During the M37 Workspace terminal waiting/detach double-check, focused `test/unit/dashboard-terminal-launch.test.ts` and `npm run typecheck` were clean, but targeted `npx prettier --check src/dashboard/dashboard-terminal.ts src/dashboard/app.ts src/dashboard/views/workspace.html test/unit/dashboard-terminal-launch.test.ts .goat-flow/footguns/dashboard.md .goat-flow/tasks/1.7.0/M37-workspace-terminal-waiting-and-detach.md` failed on `src/dashboard/dashboard-terminal.ts` and `test/unit/dashboard-terminal-launch.test.ts`. Running `npx prettier --write src/dashboard/dashboard-terminal.ts test/unit/dashboard-terminal-launch.test.ts` fixed the task-local formatter blocker before rerunning the focused unit test, typecheck, and Prettier check.
 
 **Prevention:**
 1. When preflight fails, immediately identify whether the failing files are in `git status` for the current task.
