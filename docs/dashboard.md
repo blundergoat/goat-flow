@@ -28,7 +28,7 @@ Dedicated harness and manager pages are deferred to 1.8.0.
 
 Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details, including an advisory enforcement matrix for hard, limited, soft, missing, and unknown local enforcement evidence. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
 
-### Tasks
+### Plans
 
 Plans milestone browser for the selected project (route ID `tasks`; the side
 rail labels it "Plans"). Surfaces `.goat-flow/tasks/` plan directories,

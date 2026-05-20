@@ -1,76 +1,18 @@
 # Changelog
 
-## Unreleased
-
-### Guardrails
-
-- **GitHub CLI read-only policy** - Deny hooks now block write-capable `gh` commands, including issue/PR comments, releases, workflow runs, repo edits, secrets/variables, and `gh api` write methods or body-field default POSTs, while preserving read-only discovery such as issue/PR views, checks, diffs, search, and explicit `gh api --method GET`. ADR-028 records the durable default that agents may read GitHub through `gh` but must not write to GitHub through `gh`.
-
-### Dashboard workspace
-
-- **Terminal awaiting-input detection for Claude TUI and OSC titles** - Dashboard terminal output parsing now normalises cursor-horizontal-absolute (`ESC[<n>G`) sequences to a separator and strips OSC envelopes before scanning, so Claude Code's column-laid `Esc to cancel · Tab to amend` footer and numbered-choice prompts no longer collapse into joined words that defeat word-boundary regexes. Awaiting-input also fires when codex/gemini broadcast `Action Required` or `[ ! ]` through the terminal title (OSC 0/1/2), and the numbered-choice marker class widens from `[›>]` to `[›>❯▶▸→]` so Claude's `❯` selection cursor is recognised. Regression fixtures pin the raw byte patterns captured from each runner.
 
 ## v1.7.0 - 2026-05-20
 
-Harness audit enrichment, dashboard Plans workspace, learning-loop bounding, and release-hardening fixes.
+GOAT Flow 1.7.0 makes releases easier to check and the dashboard easier to use.
 
-### Harness audit
-
-- **SARIF audit output** - `goat-flow audit --format sarif` now exports deterministic audit findings as SARIF 2.1.0 for CI and code-scanning integrations, including stable rule metadata, acknowledged advisory suppressions, no-location fallback behavior, and optional drift/content findings without changing audit pass/fail semantics.
-- **Agent enforcement capability matrix** - Audit JSON/text and dashboard agent detail panels now expose an advisory per-agent matrix for hard, limited, soft, missing, and unknown local enforcement evidence. The matrix separates deny-hook/setup facts from broader file read/write claims, which remain unknown unless evidence-backed, and it does not change audit pass/fail gates.
-- **Concern evidence limits** - Harness concerns now include non-gating `limits` alongside `findings`, `recommendations`, and scores. Score-only Verification failures and enforcement-matrix unknowns stay visible in JSON, text, Markdown, dashboard readers, and quality prompts without turning optional hooks, project-specific validation commands, or broad filesystem unknowns into hard audit failures.
-- **Aggregate selected-agent evidence label** - Aggregate `goat-flow audit . --harness` now records when agent-specific checks are skipped in aggregate mode and tells readers to rerun with `--agent <id>` for selected-agent runtime evidence instead of reading a normal aggregate PASS as complete per-agent proof.
-- **Structured audit detail payloads** - Harness check results now preserve structured `details` for line counts, execution-loop coverage, documentation path resolution, deny coverage, and recovery/session evidence so dashboard and JSON consumers can inspect detail without parsing finding strings.
-- **Mandatory shared reference/playbook audit** - The `instruction-file-skill-reference-pointer` setup check now owns the complete `.goat-flow/skill-reference/` and `.goat-flow/skill-playbooks/` pack instead of skipping when both directories are absent and letting `other-files` ignore named paths.
-- **Evidence envelope event log** - Added a shared `EvidenceEnvelope` contract that adapts audit provenance, dashboard session-trace producers for redacted local runtime events, `goat-flow events tail`, and setup routing for `.goat-flow/logs/events/*.jsonl`.
-- **Evidence-before-claims metric** - Harness adds `evidence-before-claims` as a score-only Verification metric covering red-flags coverage in all present agent instruction files.
-
-### Manifest, registry, and config
-
-- **Manifest-backed agent capabilities** - `workflow/manifest.json` now carries per-agent terminal binaries, setup surfaces, prompt invocation style, and skill-source classification; registry, manifest validation, setup/quality prompts, terminal launch hints, dashboard readers, custom prompts, and docs consume that data instead of parallel hardcoded lists.
-- **Agent allowlists no longer required in config** - The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` now read the supported-agent registry directly and always cover Claude, Codex, Gemini, and Copilot. Use `--agent <id>` when you intentionally want one agent. Legacy `agents:` entries in existing configs are accepted and ignored.
-- **Removed legacy `detectAgents` helper** - `src/cli/detect/agents.ts` no longer exports the unused `detectAgents` function; all callers route through the supported-agent registry directly.
-
-### Dashboard workspace
-
-- **Plans workspace view and active plan controls** - Dashboard now exposes `.goat-flow/tasks/` milestones through `/api/tasks`, adds a Plans workspace view with milestone progress and plan preview, and supports setting the active plan from the UI. The view, side-nav entry, error messages, and tests use "Plans" terminology consistently.
-- **Workspace session UI accessibility** - Workspace session list adds collapsed-rail tooltips, an active-session pip with status tone, per-agent class hooks, runner-aware tooltip metadata, and tighter session metadata layout.
-- **Workspace terminal waiting status** - Workspace session meters, collapsed pips, expanded cards, and the active terminal header now derive waiting/running state consistently. Waiting-for-runner sessions count as waiting, waiting sessions are excluded from the running meter, and Claude-style spinner/status redraws no longer squash an open awaiting-input prompt.
-- **Terminal workspace-boundary regression** - Terminal launch tests now assert the controlling runner `cwd` and selected target `targetPath` stay distinct in `/api/terminal/create` payloads and local session state, covering dashboard flows where goat-flow framework commands run from the controlling workspace while code evidence belongs to a selected target.
-- **Codex terminal startup hardening** - Codex permission profiles now avoid 0.131-rejected filename globs, keep workspace-root denies on Codex 0.131's accepted `:workspace_roots` token, reject legacy `:project_roots` as current secret coverage, and dashboard launch prompts are suppressed when a runner fails before reaching its composer.
-- **Drag-and-drop image attachments** - Workspace terminal sessions accept images dropped onto the terminal pane and attach them to the next prompt.
-- **Side navigation refresh** - Workspace navigation moved to a collapsible side rail with icon labels, responsive layout polish, collapsed-state tooltips, an active-plan tooltip, and clearer Projects / Prompts / New Prompt placement.
-- **Stable dashboard project identity** - Saved project titles, favorites, and project rows now migrate to identity-keyed records using git remote hash, local `.goat-flow/project-id` marker, then path fallback so dashboard state survives common repo moves and duplicate checkout paths.
-- **Hardened local-path validation** - Dashboard endpoints route project, prompt, and upload paths through a shared `LocalPathValidationError` contract with consistent rejection wording, stricter symlink handling, and explicit unit + integration coverage for missing, file-typed, and traversal paths.
-- **Dashboard scope trim for harness pages** - Placeholder side-menu destinations for Context, Constraints, Verification, Recovery, Feedback Loop, Hooks, Memory, Playbooks, and Telemetry were removed from 1.7.0. The dashboard now keeps only backed destinations in the rail: Home, Prompts, Workspace, Skill Evaluator, Plans, Projects, Quality, and Setup. Dedicated harness and manager pages are deferred to 1.8.0.
-- **Quality page passive-load performance** - Passive Quality view loads and the Home quality handoff now request cache-only audit enrichment so opening the page does not rerun the expensive harness audit. The explicit Regenerate action still requests a fresh audit, and `/api/quality` now returns `auditCacheStatus` (`hit`, `miss`, or `bypass`) so cache behavior is asserted structurally instead of through wall-clock timing.
-- **Dashboard view map alignment** - `.goat-flow/code-map.md` now lists all 11 view templates under `src/dashboard/views/`, including `coming-soon` and `tasks`.
-
-### Dashboard foundations
-
-- **Dashboard safe-exec foundation** - Added a shared allow-listed, no-shell, timeout-bounded command executor for future dashboard routes and exported the route inventory/side-effect registry with tests that catch missing CSRF classifications.
-- **Safe-exec release hardening** - The executor now caps decoded stdout/stderr at UTF-8 byte boundaries and defaults child processes to a minimal sanitized environment unless callers supply an explicit environment, preventing parent-process environment leakage into future dashboard-safe commands.
-- **Dashboard markdown renderer foundation** - Added the `markdown-it` dashboard dependency, build asset copy, and `window.renderMarkdown` wrapper with raw HTML disabled and simple frontmatter parsing for future Markdown-backed views.
-- **Markdown frontmatter correctness** - The dashboard renderer now strips leading `---` blocks only when YAML parsing returns a metadata object, so ordinary delimiter content remains visible.
-
-### Learning loop
-
-- **Bounded learning-loop context** - Quality prompts for setup and harness assessments now receive a deterministic `<goat-learning-loop>` block selected from parsed footguns, lessons, patterns, and decisions with per-kind caps, stale-ref filtering, and explicit budget metadata instead of broad-loading bucket files.
-- **Learning-loop auto-capture policy** - Config now exposes disabled-by-default `learning-loop.auto-capture` settings with strict validation, and setup references document Extract / Consolidate / Skip before any future automatic writer.
-- **Verification documentation refresh** - Verification lessons and related docs now capture the current evidence-before-claims, stale-test, and manifest-backed refactor prevention patterns from the May 16 work.
-
-### Engineering quality
-
-- **Deny-hook `.env.example` hardening** - `.env.example` read-only classification now rejects output redirection and mutating downstream pipeline consumers while preserving benign read-only pipelines. Canonical and mirrored deny-hook self-tests cover the reproduced bypasses.
-- **Deny-hook heredoc hardening** - Quoted heredoc bodies are masked for non-shell commands such as benign `node <<'NODE'` snippets, while shell stdin heredocs remain blocked so hidden shell commands still cannot bypass inspection.
-- **Skill workflow hardening** - `goat-critique` now requires auditable delegation evidence, `goat-qa` proceeds without redundant confirmation when invocation already answers Step 0, and `goat-review` documents `rg` fallback behavior in its Blast Radius Rule.
-- **Instruction boundary precision** - Ask First boundary labels now separate architecture, skill-reference, and skill-playbooks surfaces to match the Router Table.
-- **Preflight coverage reporting** - Preflight reports overall line/branch/function coverage from the fast test suite alongside pass/fail.
-- **Mutation testing helper** - Added an opt-in `scripts/mutation-test.sh` StrykerJS helper with an interactive target menu, local `@stryker-mutator/core` dev dependency, sandbox ignores for goat-flow local state, and a mutation-safe fast-suite dry run.
-
-### Release propagation
-
-- Package/config/manifest, instruction files, skill templates and installed mirrors, shared references, playbooks, fixtures, docs sample output, and manifest snapshot catalog bumped to 1.7.0. Manifest snapshot `v1.7.0.json` frozen.
+- **Clearer audits** - `audit --format sarif` adds CI-friendly output, and audit reports now say what is proven, limited, or agent-specific.
+- **Agent settings from the manifest** - Agent setup now comes from `workflow/manifest.json`; aggregate audit covers Claude, Codex, Gemini, and Copilot by default.
+- **Dashboard Plans** - New Plans view reads `.goat-flow/tasks/`, previews milestones, tracks progress, and sets the active plan.
+- **More reliable workspace** - Terminal sessions better handle waiting/running/detached states, keep the selected project separate from the goat-flow workspace, improve Codex startup, support image drops, and detect input prompts from Claude and terminal titles.
+- **Safer dashboard basics** - Path checks, command execution, Markdown rendering, uploads, assets, project identity, navigation, and Quality page loading were tightened.
+- **Shorter prompt context** - Quality and setup prompts now get selected lessons, footguns, patterns, and decisions instead of whole files, with stale items filtered out.
+- **Stronger guardrails** - Deny hooks block GitHub writes through `gh`, tighten `.env.example` and heredoc checks, and expand self-tests across agent mirrors.
+- **Skill and release cleanup** - `goat-critique`, `goat-qa`, and `goat-review` now ask for clearer evidence; package/config/manifest/docs/templates/fixtures were synced to 1.7.0.
 
 ## v1.6.4 - 2026-05-12
 
