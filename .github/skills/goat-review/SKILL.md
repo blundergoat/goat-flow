@@ -92,7 +92,7 @@ Write raw suspicions with `file + semantic anchor` drawn from the diff. Do NOT v
 Now read full files for context. For each Pass-1 suspicion:
 
 - **Try to DISPROVE it** (negative verification). Re-read the `file + semantic anchor`, look for a guard, an upstream check, a framework mitigation, or a contract that removes the risk.
-- **Blast Radius Rule:** if a suspicion involves a contract change (signature, payload shape, exported type, event shape, error channel, status code), MUST execute `rg -n '<symbol>' -t ts -t js -t py -t php -t go -t rust` to locate external call-sites before resolving. Verify at least one consumer. If skipped, stays UNRESOLVED and gets `coverage-degraded`.
+- **Blast Radius Rule:** if a suspicion involves a contract change (signature, payload shape, exported type, event shape, error channel, status code), MUST run an external call-site search before resolving. Prefer `rg -n '<symbol>' -t ts -t js -t py -t php -t go -t rust`; if shell `rg` is unavailable, use the host search tool or `grep -rniE '<symbol>'` and record the fallback. Verify at least one consumer. If skipped, stays UNRESOLVED and gets `coverage-degraded`.
 - Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**.
 - **Refutation Ledger:** REFUTED suspicions are not silently dropped. Write a ledger to `.goat-flow/scratchpad/goat-review-refutations.<random>.txt`. Each entry: original suspicion (verbatim), refuting evidence (`file + semantic anchor`), one-sentence rationale. Refuted suspicions do not appear in final output; the ledger is the audit trail.
 - Add findings that only became visible with file context (integration breakage, call-site contract mismatch, regression in a sibling file).
@@ -195,7 +195,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - Pre-existing issues ARE in scope
 
 **Both modes:**
-- MUST run external call-site grep for any contract-change suspicion before resolving (Blast Radius Rule); flag `coverage-degraded` if skipped
+- MUST run external call-site search for any contract-change suspicion before resolving (Blast Radius Rule); prefer `rg`, fall back to host search or `grep -rniE`, and flag `coverage-degraded` if skipped
 - MUST tag every surfaced finding with `[SEVERITY:ACTION]`
 - MUST grep `.goat-flow/footguns/` per finding; omit the tag on no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order

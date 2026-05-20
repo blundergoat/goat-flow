@@ -1,6 +1,18 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-05-17
+last_reviewed: 2026-05-20
+---
+
+## Lesson: Audit check skip semantics need both unit and integration fixture updates
+
+**Status:** active | **Created:** 2026-05-20
+
+**What happened:** While making `instruction-file-skill-reference-pointer` fail when the shared reference/playbook pack is absent, the focused unit test was updated but the first full `npm test` run still failed four `test/integration/audit-build.test.ts` cases. The integration fixture still asserted `skillReferenceCheck.skip?.(ctx)` was `false` or `true`; the production check was now correctly non-skippable and returned `undefined`.
+
+**Root cause:** I treated the unit audit report contract as the only caller. Integration tests also assert the lower-level `BuildCheck` shape, including optional `skip` behavior. Removing the skip gate also left unused directory constants that `npm run typecheck` caught before the full suite.
+
+**Prevention:** When changing an audit check from optional/skippable to mandatory, grep for both the check id and `skip?.` before verification. Update unit report expectations and integration `BuildCheck` assertions in the same edit, then run `npm run typecheck` before `npm test`. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `instruction-file-skill-reference-pointer`), `test/unit/audit-command.test.ts` (search: `fails when the project has no skill-reference or skill-playbooks pack`), `test/integration/audit-build.test.ts` (search: `fails when the project has no shared reference/playbook pack`).
+
 ---
 
 ## Lesson: Additive audit report fields need renderer defaults

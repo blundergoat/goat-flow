@@ -21,7 +21,7 @@ c) Autonomy Tiers
    - Always: read files, run validation, edit within declared scope, and write continuity notes only when useful.
    - Ask First: before touching risky boundaries, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
    - Never: freeze writes first if interrupted or told no changes; do not edit secrets; do not push/commit unless asked; do not overwrite without checking destination.
-   - Group Ask First boundaries by category: instruction files, workflow/templates, architecture/playbooks, runtime code, agent configs, CI/hooks, add/remove/rename, and 3+ docs/scripts.
+   - Group Ask First boundaries by category: instruction files, workflow/templates, architecture, skill reference, skill playbooks, runtime code, agent configs, CI/hooks, add/remove/rename, and 3+ docs/scripts.
    - New Never/Ask First rules must trace to a real incident, current file evidence, or a documented footgun/lesson - not hypothetical best practices.
 
 d) Hard Rules

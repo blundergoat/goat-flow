@@ -117,7 +117,7 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Before evaluating clarification questions, write Phase 1-3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - sub-agent summaries, comparison matrix, cross-examination outcomes. This runs regardless of whether Phase 3 took the early-exit branch.
+**Persist before gate:** Write Phase 1-3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - delegation evidence (ids/handles, calls/limit, unavailable markers), summaries, matrix, cross-exams. Runs even on Phase 3 early exit.
 
 Before synthesising, present the unresolved items to the human conversationally.
 
@@ -188,6 +188,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.
 - MUST enforce max 5 tool calls per sub-agent.
+- MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
 - MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
 - MUST Check sub-agent completeness: verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
@@ -202,6 +203,7 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ```markdown
 ## Verdict  <!-- includes Gate: BLOCK|CONCERNS|CLEAN + Meta-score -->
+## Delegation Evidence  <!-- ids/handles + tool-call counts or unavailable markers -->
 ## Critique Rubric
 ## Sub-Agent Comparison Matrix
 ## Sub-Agent Rankings

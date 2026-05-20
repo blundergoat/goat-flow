@@ -11,6 +11,7 @@ Harness audit enrichment, dashboard Plans workspace, learning-loop bounding, and
 - **Concern evidence limits** - Harness concerns now include non-gating `limits` alongside `findings`, `recommendations`, and scores. Score-only Verification failures and enforcement-matrix unknowns stay visible in JSON, text, Markdown, dashboard readers, and quality prompts without turning optional hooks, project-specific validation commands, or broad filesystem unknowns into hard audit failures.
 - **Aggregate selected-agent evidence label** - Aggregate `goat-flow audit . --harness` now records when agent-specific checks are skipped in aggregate mode and tells readers to rerun with `--agent <id>` for selected-agent runtime evidence instead of reading a normal aggregate PASS as complete per-agent proof.
 - **Structured audit detail payloads** - Harness check results now preserve structured `details` for line counts, execution-loop coverage, documentation path resolution, deny coverage, and recovery/session evidence so dashboard and JSON consumers can inspect detail without parsing finding strings.
+- **Mandatory shared reference/playbook audit** - The `instruction-file-skill-reference-pointer` setup check now owns the complete `.goat-flow/skill-reference/` and `.goat-flow/skill-playbooks/` pack instead of skipping when both directories are absent and letting `other-files` ignore named paths.
 - **Evidence envelope event log** - Added a shared `EvidenceEnvelope` contract that adapts audit provenance, dashboard session-trace producers for redacted local runtime events, `goat-flow events tail`, and setup routing for `.goat-flow/logs/events/*.jsonl`.
 - **Evidence-before-claims metric** - Harness adds `evidence-before-claims` as a score-only Verification metric covering red-flags coverage in all present agent instruction files.
 
@@ -33,6 +34,7 @@ Harness audit enrichment, dashboard Plans workspace, learning-loop bounding, and
 - **Hardened local-path validation** - Dashboard endpoints route project, prompt, and upload paths through a shared `LocalPathValidationError` contract with consistent rejection wording, stricter symlink handling, and explicit unit + integration coverage for missing, file-typed, and traversal paths.
 - **Dashboard scope trim for harness pages** - Placeholder side-menu destinations for Context, Constraints, Verification, Recovery, Feedback Loop, Hooks, Memory, Playbooks, and Telemetry were removed from 1.7.0. The dashboard now keeps only backed destinations in the rail: Home, Prompts, Workspace, Skill Evaluator, Plans, Projects, Quality, and Setup. Dedicated harness and manager pages are deferred to 1.8.0.
 - **Quality page passive-load performance** - Passive Quality view loads and the Home quality handoff now request cache-only audit enrichment so opening the page does not rerun the expensive harness audit. The explicit Regenerate action still requests a fresh audit, and `/api/quality` now returns `auditCacheStatus` (`hit`, `miss`, or `bypass`) so cache behavior is asserted structurally instead of through wall-clock timing.
+- **Dashboard view map alignment** - `.goat-flow/code-map.md` now lists all 11 view templates under `src/dashboard/views/`, including `coming-soon` and `tasks`.
 
 ### Dashboard foundations
 
@@ -50,6 +52,9 @@ Harness audit enrichment, dashboard Plans workspace, learning-loop bounding, and
 ### Engineering quality
 
 - **Deny-hook `.env.example` hardening** - `.env.example` read-only classification now rejects output redirection and mutating downstream pipeline consumers while preserving benign read-only pipelines. Canonical and mirrored deny-hook self-tests cover the reproduced bypasses.
+- **Deny-hook heredoc hardening** - Quoted heredoc bodies are masked for non-shell commands such as benign `node <<'NODE'` snippets, while shell stdin heredocs remain blocked so hidden shell commands still cannot bypass inspection.
+- **Skill workflow hardening** - `goat-critique` now requires auditable delegation evidence, `goat-qa` proceeds without redundant confirmation when invocation already answers Step 0, and `goat-review` documents `rg` fallback behavior in its Blast Radius Rule.
+- **Instruction boundary precision** - Ask First boundary labels now separate architecture, skill-reference, and skill-playbooks surfaces to match the Router Table.
 - **Preflight coverage reporting** - Preflight reports overall line/branch/function coverage from the fast test suite alongside pass/fail.
 - **Mutation testing helper** - Added an opt-in `scripts/mutation-test.sh` StrykerJS helper with an interactive target menu, local `@stryker-mutator/core` dev dependency, sandbox ignores for goat-flow local state, and a mutation-safe fast-suite dry run.
 

@@ -198,7 +198,7 @@ describe("audit build: skill-reference discoverability", () => {
       instructionContent: "# CLAUDE.md\n",
     });
 
-    assert.equal(skillReferenceCheck.skip?.(ctx), false);
+    assert.equal(skillReferenceCheck.skip, undefined);
     const result = skillReferenceCheck.run(ctx);
 
     assert.notEqual(result, null);
@@ -215,7 +215,7 @@ describe("audit build: skill-reference discoverability", () => {
         "# CLAUDE.md\n\n## Ask First\n\nBoundary: .goat-flow/skill-reference/\n",
     });
 
-    assert.equal(skillReferenceCheck.skip?.(ctx), false);
+    assert.equal(skillReferenceCheck.skip, undefined);
     const result = skillReferenceCheck.run(ctx);
 
     assert.notEqual(result, null);
@@ -229,17 +229,23 @@ describe("audit build: skill-reference discoverability", () => {
       instructionContent: compliantSkillReferenceInstruction(),
     });
 
-    assert.equal(skillReferenceCheck.skip?.(ctx), false);
+    assert.equal(skillReferenceCheck.skip, undefined);
     assert.equal(skillReferenceCheck.run(ctx), null);
   });
 
-  it("skips when the project has no skill-reference directory", () => {
+  it("fails when the project has no shared reference/playbook pack", () => {
     const ctx = makeSkillReferenceCtx({
       dirPresent: false,
       instructionContent: "# CLAUDE.md\n",
     });
 
-    assert.equal(skillReferenceCheck.skip?.(ctx), true);
+    assert.equal(skillReferenceCheck.skip, undefined);
+    const result = skillReferenceCheck.run(ctx);
+
+    assert.notEqual(result, null);
+    assert.match(result!.message, /Shared reference\/playbook pack/);
+    assert.match(result!.message, /\.goat-flow\/skill-reference\/README\.md/);
+    assert.equal(result!.evidence, ".goat-flow/skill-reference/README.md");
   });
 
   it("fails when the skill-reference directory has no README index", () => {

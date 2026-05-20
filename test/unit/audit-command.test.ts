@@ -716,7 +716,7 @@ describe("audit skill-reference pointer rule", () => {
     }
   });
 
-  it("skips when the project has no skill-reference directory", async () => {
+  it("fails when the project has no skill-reference or skill-playbooks pack", async () => {
     const project = await makeTempProject((root) =>
       writeAuditSetupFixture(root, {
         skillReferenceDir: false,
@@ -732,12 +732,16 @@ describe("audit skill-reference pointer rule", () => {
         (entry) => entry.id === "instruction-file-skill-reference-pointer",
       );
 
-      assert.equal(
-        report.scopes.setup.status,
-        "pass",
-        `Expected pass but got: ${JSON.stringify(report.scopes)}`,
+      assert.equal(report.status, "fail");
+      assert.equal(check?.status, "fail");
+      assert.match(
+        check?.failure?.message ?? "",
+        /Shared reference\/playbook pack/,
       );
-      assert.equal(check?.status, "skipped");
+      assert.match(
+        check?.failure?.message ?? "",
+        /\.goat-flow\/skill-reference\/README\.md/,
+      );
     } finally {
       await project.cleanup();
     }

@@ -3,7 +3,7 @@
  * 15 setup-scope checks that validate project structure:
  *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
  *             decisions, session-logs, tasks, scratchpad)
- * + 1 conditional skill-reference / skill-playbooks discoverability check
+ * + 1 skill-reference / skill-playbooks completeness and discoverability check
  * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
@@ -63,8 +63,6 @@ const NAMED_PATHS = new Set([
 // Optional exclusions from the manifest catch-all setup gate.
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
-const SKILL_REFERENCE_DIR = ".goat-flow/skill-reference";
-const SKILL_PLAYBOOKS_DIR = ".goat-flow/skill-playbooks";
 const READ_RULE_PATTERNS = [
   /Before declaring any tool(?: or capability)? unavailable/i,
   /\.goat-flow\/skill-playbooks\//,
@@ -477,8 +475,6 @@ const instructionFileSkillReferencePointer: BuildCheck = {
     "workflow/skills/reference/README.md",
     "workflow/skills/playbooks/README.md",
   ]),
-  skip: (ctx) =>
-    !ctx.fs.exists(SKILL_REFERENCE_DIR) && !ctx.fs.exists(SKILL_PLAYBOOKS_DIR),
   /** Run the Instruction file skill-playbooks pointer check. */
   run: (ctx) => {
     const missingReferenceFiles = REQUIRED_SKILL_REFERENCE_FILES.filter(

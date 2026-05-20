@@ -414,6 +414,64 @@ check_command_segments() {
   done
 }
 
+heredoc_opener_executes_shell() {
+  local opener="$1"
+  local before_heredoc="${opener%%<<*}"
+  local normalized
+  local first_word
+  local pipe_shell_re
+
+  normalized=$(normalize_command_candidate "$before_heredoc")
+  first_word=$(first_word_base "$normalized")
+  case "$first_word" in
+    bash|sh|dash|zsh|ksh|fish|pwsh|powershell|cmd)
+      return 0 ;;
+  esac
+
+  pipe_shell_re='[|][[:space:]]*(env[[:space:]]+)?([^[:space:]/]+/)*(bash|sh|dash|zsh|ksh|fish|pwsh|powershell|cmd)([[:space:]]|$)'
+  [[ "$opener" =~ $pipe_shell_re ]]
+}
+
+mask_safe_quoted_heredoc_bodies() {
+  local input="$1"
+  local output=""
+  local line=""
+  local delimiter=""
+  local in_body=0
+  local mask_body=0
+  local single_quoted_re="<<-?[[:space:]]*'([^']+)'"
+  local double_quoted_re='<<-?[[:space:]]*"([^"]+)"'
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if (( in_body )); then
+      if [[ "$line" == "$delimiter" ]]; then
+        output+="$line"$'\n'
+        in_body=0
+        mask_body=0
+        delimiter=""
+      elif (( mask_body )); then
+        output+="__goat_quoted_heredoc_body__"$'\n'
+      else
+        output+="$line"$'\n'
+      fi
+      continue
+    fi
+
+    output+="$line"$'\n'
+    if [[ "$line" =~ $single_quoted_re ]] || [[ "$line" =~ $double_quoted_re ]]; then
+      delimiter="${BASH_REMATCH[1]}"
+      if heredoc_opener_executes_shell "$line"; then
+        mask_body=0
+      else
+        mask_body=1
+      fi
+      in_body=1
+    fi
+  done <<< "$input"
+
+  printf '%s' "${output%$'\n'}"
+}
+
 check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
@@ -1696,14 +1754,16 @@ fi
 # always either a benchmark or a payload trying to exhaust the parser.
 # Uses the same quote-aware splitter the rule checks use, so semicolons
 # inside quoted strings (`echo 'a;b;c;...'`) don't trip the cap.
+COMMAND_POLICY=$(mask_safe_quoted_heredoc_bodies "$COMMAND")
+
 declare -a _goat_chain_segments=()
-split_command_segments_into _goat_chain_segments "$COMMAND"
+split_command_segments_into _goat_chain_segments "$COMMAND_POLICY"
 if (( ${#_goat_chain_segments[@]} > 50 )); then
   block "Command has more than 50 chained segments; review and run manually if intended."
 fi
 unset _goat_chain_segments
 
-check_command_segments "$COMMAND" 0
+check_command_segments "$COMMAND_POLICY" 0
 
 # --- Default: allow -----------------------------------------------------------
 exit 0
