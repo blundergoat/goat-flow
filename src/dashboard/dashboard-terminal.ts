@@ -183,12 +183,39 @@ function dashboardSessionTitle(
 /** Strip common terminal control codes before scanning output text. */
 function dashboardPlainTerminalText(text: string): string {
   return text
+    // OSC (title / hyperlink / progress): ESC ] ... BEL or ESC ] ... ESC \.
+    // Title text is captured separately via dashboardTerminalTitlesFromOutput.
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
     .replace(/\x1b\[(\d+)C/g, (_sequence, count: string) =>
       " ".repeat(Math.min(Number.parseInt(count, 10), 240)),
     )
     .replace(/\x1b\[C/g, " ")
+    // CHA (cursor horizontal absolute). Replace with a single space so
+    // column-laid words (Claude Code's "Esc to cancel · Tab to amend" footer
+    // and numbered choices) keep a token boundary instead of collapsing.
+    .replace(/\x1b\[\d*G/g, " ")
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/\r/g, "\n");
+}
+
+/** Extract OSC 0/1/2 title payloads from raw terminal output. */
+function dashboardTerminalTitlesFromOutput(text: string): string[] {
+  const titles: string[] = [];
+  const pattern = /\x1b\][012];([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+  for (const match of text.matchAll(pattern)) {
+    const payload = match[1]?.trim();
+    if (payload) titles.push(payload);
+  }
+  return titles;
+}
+
+/** Return true when an OSC title signals the runner is blocked on user input. */
+function dashboardTerminalTitleSuggestsAwaitingInput(title: string): boolean {
+  return (
+    /\baction required\b/i.test(title) ||
+    /\[\s*!\s*\]/.test(title) ||
+    /\bawaiting (?:input|confirmation|approval)\b/i.test(title)
+  );
 }
 
 /** Prepare user prompt text for one bracketed-paste payload. */
@@ -227,8 +254,11 @@ function dashboardOutputTailEndsWithAwaitingInputStart(text: string): boolean {
 /** Heuristic for agent prompts waiting on a numbered human choice. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
+  const titleSignal = dashboardTerminalTitlesFromOutput(text).some(
+    dashboardTerminalTitleSuggestsAwaitingInput,
+  );
   const numberedChoices =
-    /(^|\n)\s*(?:[›>]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>]\s*)?2[.)]\s+\S/i.test(
+    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→]\s*)?2[.)]\s+\S/i.test(
       plain,
     );
   const choicePrompt =
@@ -238,6 +268,7 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const commandPermissionPrompt =
     dashboardLastCommandPermissionPromptIndex(plain) >= 0;
   return (
+    titleSignal ||
     /\bawaiting (?:input|confirmation|approval)\b/i.test(plain) ||
     /\bEsc\s+to\s+cancel\b[\s\S]{0,240}\bTab\s+to\s+amend\b/i.test(plain) ||
     (commandPermissionPrompt && numberedChoices) ||
@@ -249,10 +280,10 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
 function dashboardOutputLooksAwaitingInputContinuation(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
   return (
-    /(^|\n)\s*(?:[›>]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>]\s*)?2[.)]\s+\S/i.test(
+    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→]\s*)?2[.)]\s+\S/i.test(
       plain,
     ) ||
-    /(^|\n)\s*(?:[›>]\s*)?[23][.)]\s+\S/i.test(plain) ||
+    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?[23][.)]\s+\S/i.test(plain) ||
     /\bEsc\s+to\s+(?:cancel|stop)\b/i.test(plain) ||
     /\bPress enter to confirm\b/i.test(plain) ||
     /\bAllow once\b/i.test(plain)

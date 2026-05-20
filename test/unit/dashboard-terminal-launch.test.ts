@@ -2108,6 +2108,88 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("detects awaiting-input when Claude Code lays out the footer with CHA cursor-absolute jumps", () => {
+    // Real Claude Code TUI fragment: it positions every word of the
+    // "Esc to cancel · Tab to amend" footer with CHA (ESC[<col>G).
+    // Before the parser fix the words collapsed to "Esctocanceltoamend"
+    // and every word-boundary regex failed.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const claudeFooter =
+      "\x1b[2G\x1b[38;5;246mEsc\x1b[6Gto\x1b[9Gcancel\x1b[16G·" +
+      "\x1b[18GTab\x1b[22Gto\x1b[25Gamend\x1b[31G·\x1b[33Gctrl+e\x1b[40Gto\x1b[43Gexplain";
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(claudeFooter), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", claudeFooter),
+      true,
+    );
+  });
+
+  it("detects awaiting-input when Claude Code marks numbered choices with ❯ and CHA layout", () => {
+    // Real Claude Code permission prompt: marker is U+276F (❯), not [›>],
+    // and the words inside each option are positioned by CHA. Even after
+    // CHA is normalised to spaces the marker class must accept ❯.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const claudePrompt = [
+      "Do you want to proceed?",
+      "❯\x1b[4G\x1b[38;5;246m1.\x1b[7G\x1b[38;5;153mYes",
+      "",
+      " \x1b[4G\x1b[38;5;246m2.\x1b[7G\x1b[38;5;153mNo",
+    ].join("\n");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(claudePrompt), true);
+  });
+
+  it("detects awaiting-input when a runner broadcasts an Action Required OSC title", () => {
+    // codex and gemini signal blocked state through the terminal title bar
+    // (OSC 0). The dashboard never reads xterm's title, so the OSC payload
+    // itself is the only signal we get in outputTail.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const codexBell =
+      "Running tool…\n\x1b]0;[ ! ] Action Required | goat-flow\x07";
+    const geminiBell =
+      "Waiting on user…\n\x1b]0;✋  Action Required (goat-flow)\x07";
+    const explicitAwaiting =
+      "Idle\n\x1b]0;awaiting confirmation — copilot\x07";
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(codexBell), true);
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(geminiBell), true);
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(explicitAwaiting),
+      true,
+    );
+    // ESC \ string-terminator form must work too.
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "tool running\n\x1b]0;[ ! ] Action Required\x1b\\",
+      ),
+      true,
+    );
+  });
+
+  it("does not trip awaiting-input on benign OSC titles or text containing 'action required'", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    // Plain working title — no awaiting signal.
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "\x1b]0;~/projects/goat-flow\x07All checks passing.",
+      ),
+      false,
+    );
+    // "Action Required" inside body prose, no title, no numbered prompt.
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(
+        "Reading ticket: Action Required by Friday.\nDone.",
+      ),
+      false,
+    );
+  });
+
   it("clears awaiting-input state when later output resumes normally", () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
