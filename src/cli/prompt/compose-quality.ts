@@ -37,12 +37,15 @@ interface QualityInput {
   agent: AgentId;
   projectPath: string;
   auditReport: AuditReport | null;
+  auditUnavailableReason?: AuditUnavailableReason;
   priorReport?: QualityHistoryEntry | null;
   qualityMode?: QualityMode;
   selectedProjectPath?: string;
   runDate?: string;
   sharedFacts?: SharedFacts | null;
 }
+
+type AuditUnavailableReason = "audit-failed" | "fast-cache-only";
 
 interface QualityPayload {
   command: "quality";
@@ -132,8 +135,33 @@ function renderAuditSummary(report: AuditReport): string {
   return lines.join("\n");
 }
 
+/** Render the summary text returned when no audit report is embedded. */
+function renderAuditUnavailableSummary(reason: AuditUnavailableReason): string {
+  if (reason === "fast-cache-only") {
+    return "Audit data not loaded (fast cache-only mode had no cached report).";
+  }
+  return "Audit data unavailable (audit could not complete).";
+}
+
+/** Render the heading used when no audit report is embedded. */
+function renderAuditUnavailableHeading(reason: AuditUnavailableReason): string {
+  if (reason === "fast-cache-only") {
+    return "**Audit: NOT LOADED (FAST CACHE-ONLY MODE)**";
+  }
+  return "**Audit: UNAVAILABLE**";
+}
+
 /** Render the fallback note used when audit data is unavailable. */
-function renderDegradedNote(): string {
+function renderDegradedNote(reason: AuditUnavailableReason): string {
+  if (reason === "fast-cache-only") {
+    return [
+      "",
+      "> **Note:** The dashboard requested a fast quality prompt and no cached audit report was available.",
+      "> This does not mean the audit failed. Run the Re-audit action or `goat-flow audit . --harness --agent <id>` for live audit status.",
+      "> Continue the assessment, but do not infer setup failure from this cache miss.",
+      "",
+    ].join("\n");
+  }
   return [
     "",
     "> **Note:** The automated audit could not complete on this project.",
@@ -778,6 +806,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     agent,
     projectPath,
     auditReport,
+    auditUnavailableReason = "audit-failed",
     priorReport = null,
     qualityMode = "agent-setup",
     runDate = formatLocalDate(),
@@ -802,7 +831,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
 
   const auditSummaryText = auditReport
     ? renderAuditSummary(auditReport)
-    : "Audit data unavailable (audit could not complete).";
+    : renderAuditUnavailableSummary(auditUnavailableReason);
 
   const skillFacts = loadManifest().facts.skills;
   const skillList = skillFacts.names
@@ -821,7 +850,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   );
   lines.push("");
   lines.push(
-    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
+    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
   );
   lines.push("");
 
@@ -938,8 +967,8 @@ export function composeQuality(input: QualityInput): QualityPayload {
       );
     }
   } else {
-    lines.push("**Audit: UNAVAILABLE**");
-    lines.push(renderDegradedNote());
+    lines.push(renderAuditUnavailableHeading(auditUnavailableReason));
+    lines.push(renderDegradedNote(auditUnavailableReason));
   }
   lines.push("");
 

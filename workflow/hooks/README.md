@@ -6,7 +6,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 
 | Script | Event | Required? | Purpose |
 |--------|-------|-----------|---------|
-| `deny-dangerous.sh` | PreToolUse | Required | Runtime hook. Blocks rm -rf, all git push (ADR-025), GitHub writes via `gh`, chmod 777, pipe-to-shell, .env edits, --no-verify |
+| `deny-dangerous.sh` | PreToolUse | Required | Runtime hook. Blocks broad recursive deletion, all git push (ADR-025), GitHub writes via `gh`, chmod 777, pipe-to-shell, .env edits, --no-verify |
 | `deny-dangerous.self-test.sh` | Self-test helper | Required with `deny-dangerous.sh` | Sourced by `deny-dangerous.sh --self-test`; keeps the runtime hook smaller without weakening the verification corpus |
 
 ## Agent Event Name Mapping

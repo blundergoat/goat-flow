@@ -11,7 +11,7 @@ Read `.goat-flow/skill-reference/skill-preamble.md` and `.goat-flow/skill-refere
 
 ## When to Use
 
-Use when a concrete artifact deserves multi-perspective critique before shipping. Takes ANY input artifact: a plan, security assessment, debug hypothesis set, review findings, test strategy, architecture proposal, or refactor approach.
+Use when a concrete artifact deserves multi-perspective critique before shipping: plan, security assessment, debug hypotheses, review findings, test strategy, architecture proposal, or refactor approach.
 
 **Use when:**
 - The stakes justify structured critique before shipping
@@ -37,14 +37,14 @@ Use when a concrete artifact deserves multi-perspective critique before shipping
 
 ## Step 0 - Intake
 
-goat-critique runs in one mode: full delegated, Phases 1-5 plus mandatory post-synthesis steps (5.5 meta-audit, 5.6 outcome capture), three critique sub-agents plus one lightweight meta-agent in 5.5. If an agent suggests adding a lighter mode, that suggestion is the failure this design prevents.
+goat-critique runs in one mode: full delegated, Phases 1-5 plus 5.5 meta-audit and 5.6 outcome capture, three critique sub-agents plus one lightweight meta-agent. Lighter-mode suggestions are the failure this design prevents.
 
 **Intake checklist:**
 - Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
 - Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`; record explicit misses instead of broad-loading buckets.
 - Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
-- **Differential mode detection:** Check `.goat-flow/logs/critiques/` for prior critiques of the same artifact slug within 30 days. If found, offer differential mode: sub-agents A and B receive the prior critique log + artifact diff; Agent C stays cold. Phase 5 Verdict adds a delta block (Resolved/Regressed/New/Unchanged counts). Tag log as `[diff-of: <prior-uuid>]`.
+- **Differential mode detection:** Check `.goat-flow/logs/critiques/` for prior critiques of the same artifact slug within 30 days. If found, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
 - **Read context map:** Read the selected rubric's context map (see `references/rubric-examples.md`) and pass to each sub-agent's spawn directive.
 
 ## Phase 1 - Generate Competing Critiques
@@ -87,7 +87,7 @@ Each sub-agent MUST return 3-7 findings, each with: title, severity, evidence (f
 
 Execute in this order:
 
-**1. Context leak scan.** Grep Agent C's output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references that do NOT appear in the input artifact Agent C received - quoting terms from the artifact is expected, not a leak. Any match that cannot be traced to the artifact text = CONTEXT LEAK; discard and re-spawn with stricter isolation. **Framework-self exemption:** when the artifact path is within `.goat-flow/`, a `skills/goat-*` directory, or is a goat-flow instruction file, skip the term-match scan for `.goat-flow/` and `goat-*` (these are expected vocabulary). Instead check only for *structural navigation leaks*: Agent C referencing specific file paths, config keys, or architecture sections NOT present in the artifact it received.
+**1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
 
 **1b. Completeness gate.** Verify each sub-agent returned required fields (see Constraints). Incomplete → re-spawn once.
 
@@ -183,11 +183,11 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 ## Constraints
 
-- MUST run in one mode: full delegated, Phases 1-5 plus mandatory post-synthesis steps (5.5, 5.6), three critique sub-agents plus one meta-agent in 5.5. Phase 5.5 runs before the human gate; Phase 5.6 runs after the human responds. Quick/lite modes were tried and removed - a single reviewer running lens passes in one context is self-talk under three labels, not multi-perspective critique.
+- MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent. 5.5 runs before the human gate; 5.6 after the human responds. Quick/lite modes were removed: single-context lenses are self-talk, not multi-perspective critique.
 - Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
 - MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.
-- MUST enforce max 5 tool calls per sub-agent.
+- MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.
 - MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
 - MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
 - MUST Check sub-agent completeness: verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.

@@ -1997,6 +1997,8 @@ export function createDashboardRouteHandlers(
         agent: params.agent,
         projectPath,
         auditReport,
+        auditUnavailableReason:
+          audit.report === null && params.fast ? "fast-cache-only" : undefined,
         priorReport,
         qualityMode: params.qualityMode,
         selectedProjectPath,

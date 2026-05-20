@@ -238,7 +238,7 @@ const denyBlocksDangerous: HarnessCheck = {
     for (const af of ctx.agents) {
       const { denyBlocksRmRf, denyBlocksGitPush, denyBlocksChmod } = af.hooks;
       const missingPatterns: string[] = [];
-      if (!denyBlocksRmRf) missingPatterns.push("rm -rf");
+      if (!denyBlocksRmRf) missingPatterns.push("broad rm -r");
       if (!denyBlocksGitPush) missingPatterns.push("git-push");
       if (!denyBlocksChmod) missingPatterns.push("chmod");
       denyMatrix.push({
@@ -248,7 +248,9 @@ const denyBlocksDangerous: HarnessCheck = {
         hookRegistered: af.hooks.denyIsRegistered,
       });
       if (missingPatterns.length === 0) {
-        findings.push(`${af.agent.id}: deny blocks rm -rf, git-push, chmod`);
+        findings.push(
+          `${af.agent.id}: deny blocks broad rm -r, git-push, chmod`,
+        );
       } else {
         anyFail = true;
         findings.push(

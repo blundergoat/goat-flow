@@ -350,8 +350,8 @@ export function buildAgentEnforcementCapability(
       af.hooks.denyBlocksRmRf &&
         af.hooks.denyBlocksGitPush &&
         af.hooks.denyBlocksChmod,
-      "Deny mechanism blocks rm -rf, git push, and chmod 777 patterns",
-      "Deny mechanism does not prove coverage for rm -rf, git push, and chmod 777",
+      "Deny mechanism blocks broad recursive deletion, git push, and chmod 777 patterns",
+      "Deny mechanism does not prove coverage for broad recursive deletion, git push, and chmod 777",
     ),
     shellCapability(
       af,

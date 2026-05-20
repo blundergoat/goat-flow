@@ -109,7 +109,7 @@
             "name": "How does goat-flow prevent AI agents from making dangerous changes?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches destructive filesystem commands like rm -rf, all git push, direct literal secret-path reads, subshell escapes, and database truncation. These are tool-layer boundaries rather than prompt-only guidance."
+              "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches unsafe recursive deletion, all git push, direct literal secret-path reads, subshell escapes, and database truncation. These are tool-layer boundaries rather than prompt-only guidance."
             }
           },
           {

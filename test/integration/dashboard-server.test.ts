@@ -1658,7 +1658,8 @@ describe("dashboard /api/quality", () => {
       assert.equal(data.command, "quality");
       assert.equal(data.agent, "claude");
       assert.equal(data.auditStatus, "unavailable");
-      assert.match(String(data.prompt), /Audit: UNAVAILABLE/);
+      assert.match(String(data.prompt), /Audit: NOT LOADED/);
+      assert.match(String(data.prompt), /fast quality prompt/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

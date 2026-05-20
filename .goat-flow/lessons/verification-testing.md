@@ -25,6 +25,8 @@ last_reviewed: 2026-05-20
 
 **Prevention:** For topical files under `skill-quality-testing/`, make table criteria terse first and run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after wording edits. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Expected outcome in new scenario`).
 
+**Recurrence 2026-05-20:** Shared-reference wording hit the same trap when `skill-preamble.md` exceeded the 1500-word cap before focused contract verification caught it. Check enforced caps immediately after shared prose edits. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+
 ---
 
 ## Lesson: Browser terminal fixes need live runner proof, not just timer-unit proof

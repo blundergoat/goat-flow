@@ -137,10 +137,12 @@ Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavai
 
 ## Learning Loop
 
-After completing the skill, log anything worth keeping:
-- Behavioural mistake → `## Lesson:` entry in `.goat-flow/lessons/` category bucket
-- Successful repeatable approach → `## Pattern:` entry in `.goat-flow/patterns/` category bucket
-- Architectural trap with file evidence → `## Footgun:` entry in `.goat-flow/footguns/` category bucket
+Update durable learning only when VERIFY caught a failure, you corrected course, or the user asks:
+- Behavioural mistake → `## Lesson:` in `.goat-flow/lessons/`
+- Repeatable approach → `## Pattern:` in `.goat-flow/patterns/`
+- Architectural trap with file evidence → `## Footgun:` in `.goat-flow/footguns/`
+
+Routine success needs no durable write; gitignored logs/scratchpad/critiques/quality reports/tasks stay local.
 
 **Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory — not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
 

@@ -55,7 +55,10 @@ prompt/
   compose-quality.ts       # Generates quality-assessment prompts for agents (prompt mode only)
 
 quality/
+  candidacy.ts             # Scores installed artifacts as skill-quality candidates
   schema.ts                # Strict quality-report parser for agent-written JSON reports
+  quality-config.ts        # Per-project skill-quality rubric overrides
+  skill-quality.ts         # Deterministic skill/reference quality scoring engine
   ids.ts                   # Positional finding-id generation (`type:file-slug:line-or-_`)
   history.ts               # Loads agent-written reports, renders history, and derives diffs
 

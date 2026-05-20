@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-20
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -54,24 +54,25 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 ---
 
-## Footgun: Quality prompt generation pays full per-agent audit cost on every load
+## Footgun: Quality prompt generation pays full per-agent audit cost on fresh loads
 
-**Status:** active | **Created:** 2026-04-29 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-04-29 | **Updated:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
 
-The dashboard quality page can feel slow even when quality-history loading and prompt composition are effectively free. The hot path is the live per-agent harness audit that runs before the prompt is composed.
+The dashboard quality page has two audit-enrichment paths. Fast view changes use cache-only enrichment and must not imply the audit failed when no cached report exists. Explicit fresh/non-fast quality generation still can feel slow even when quality-history loading and prompt composition are effectively free, because the hot path is the live per-agent harness audit that runs before the prompt is composed.
 
-**Why it happens:** `handleQualityRequest` always calls `runAudit(fs, projectPath, { agentFilter: agent, harness: true })` before reading prior quality history or composing the prompt. In the real bash-enabled dashboard path, current-session timings measured fresh `/api/quality` requests at about 30,573 ms and 30,182 ms, with a cached repeat at about 5 ms after a short-lived per-agent cache was added. That means the new cache fixes repeat loads, but the first quality-page load still pays the full deny-hook/runtime evidence cost. Unlike the Home summary route, the quality route intentionally keeps full deny-hook/runtime evidence instead of downgrading to presence-only checks.
+**Why it happens:** The dashboard calls `generateQuality({ fast: true })` for default quality view changes. `handleQualityRequest` passes that through `getOrRunQualityAudit(..., { cacheOnly: params.fast })`, so a fast cache miss returns no audit report instead of running `runAudit`. Explicit fresh/non-fast requests still call `runAudit(fs, projectPath, { agentFilter: agent, harness: true })` before composing the prompt. In the real bash-enabled dashboard path, current-session timings measured fresh `/api/quality` requests at about 30,573 ms and 30,182 ms, with a cached repeat at about 5 ms after a short-lived per-agent cache was added. That means fast/cache-only routing fixes default loads and repeat loads, but fresh quality generation still pays the full deny-hook/runtime evidence cost.
 
 **Evidence:**
-- `src/cli/server/dashboard-routes.ts` (search: `handleQualityRequest`) - runs `runAudit(fs, projectPath, { agentFilter: agent, harness: true })` before `findLatestQualityReport(...)` and `composeQuality(...)`.
-- `src/dashboard/dashboard-setup-quality.ts` (search: `/api/quality?path=`) - entering the quality view or changing agent/mode always fetches `/api/quality`.
-- `src/cli/server/dashboard-routes.ts` (search: `readQualityAuditCache(projectPath, agent, fresh)`) - repeat requests can reuse the short-lived per-agent audit cache, but only after one fresh audit has already completed.
+- `src/dashboard/app.ts` (search: `generateQuality({ fast: true })`) - entering the quality view and changing agent/mode request the fast cache-only path.
+- `src/cli/server/dashboard-routes.ts` (search: `getOrRunQualityAudit`) - cache-only requests return a null report on cache miss instead of running audit.
+- `src/cli/server/dashboard-routes.ts` (search: `runAudit(fs, projectPath, {`) - fresh/non-fast quality requests still run the live per-agent harness audit before composing the prompt.
 - `src/cli/server/dashboard-routes.ts` (search: `"present-only" : "full"`) - the summary-only evidence downgrade exists on `/api/audit`, not on `/api/quality`.
 
 **Prevention:**
-1. Profile `/api/quality` before touching history parsing or prompt rendering; those are easy suspects and were not the bottleneck here.
-2. Treat route-level caching as a repeat-load improvement, not a first-load fix. If faster initial paint matters more than live audit grounding, split the route into cheap cached context plus an explicit "refresh full audit evidence" action.
-3. If the full audit contract must stay on page load, optimize the underlying hook self-test itself; the cache cannot remove the first-run cost.
+1. Label fast cache misses as "audit not loaded" rather than "audit unavailable" so quality agents do not infer setup failure.
+2. Profile fresh `/api/quality` before touching history parsing or prompt rendering; those are easy suspects and were not the bottleneck here.
+3. Keep the distinction explicit: fast/cache-only paths are for responsive prompt generation; fresh/non-fast paths are for live audit grounding and may still pay the full runtime-evidence cost.
+4. If fresh quality generation must become faster, optimize the underlying hook self-test itself; cache-only routing cannot remove the explicit fresh-run cost.
 
 ---
 

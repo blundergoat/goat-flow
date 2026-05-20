@@ -153,6 +153,12 @@ describe("quality prompt content", () => {
       "Should forbid patches and implementation",
     );
     assert.ok(
+      result.prompt.includes(
+        "Do NOT use /goat-review or any goat skill as the wrapper for this assessment",
+      ),
+      "Should forbid wrapping agent-setup assessment in a goat skill",
+    );
+    assert.ok(
       result.prompt.includes("tracked files"),
       "Should scope the restriction to tracked files (gitignored build output is allowed)",
     );
@@ -574,6 +580,29 @@ describe("quality with audit data", () => {
     assert.ok(
       result.prompt.includes("audit could not complete"),
       "Should include degraded context note",
+    );
+  });
+
+  it("distinguishes fast cache-only audit misses from audit failures", () => {
+    const result = composeQuality({
+      agent: "claude",
+      projectPath: "/tmp/nonexistent",
+      auditReport: null,
+      auditUnavailableReason: "fast-cache-only",
+    });
+
+    assert.equal(result.auditStatus, "unavailable");
+    assert.ok(
+      result.prompt.includes("Audit: NOT LOADED (FAST CACHE-ONLY MODE)"),
+      "Should distinguish cache-only misses from audit execution failures",
+    );
+    assert.ok(
+      result.prompt.includes("does not mean the audit failed"),
+      "Should warn agents not to infer audit failure from a cache miss",
+    );
+    assert.ok(
+      !result.prompt.includes("audit could not complete"),
+      "Should not claim the audit failed to complete when it was not loaded",
     );
   });
 });
