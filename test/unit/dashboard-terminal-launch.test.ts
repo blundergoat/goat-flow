@@ -2364,6 +2364,273 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  // Per-runner fixture-driven tests. Each fixture is captured under node-pty
+  // from the live runner; see .goat-flow/scratchpad/capture-*.mjs and the
+  // M00-workspace-terminal-waiting-status milestone for capture procedure.
+  // Positive fixtures pin the prompts the heuristic must catch; negative
+  // fixtures pin the running-state output the heuristic must NOT false-fire on.
+  const AWAITING_FIXTURE_DIR = resolve(
+    PROJECT_ROOT,
+    "test",
+    "unit",
+    "__fixtures__",
+    "awaiting-input",
+  );
+  function loadFixture(name: string): string {
+    return readFileSync(resolve(AWAITING_FIXTURE_DIR, name), "utf-8");
+  }
+
+  it("detects Claude Code workspace trust prompt from captured PTY bytes", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("claude-trust.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      true,
+    );
+    // A transient redraw frame after the prompt must keep the state on.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, bytes, "\r✻ Thinking…"),
+      true,
+    );
+  });
+
+  it("detects Claude Code in-session Bash approval prompt from captured PTY bytes", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("claude-bash-approval.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, bytes, "\r✻ Thinking…"),
+      true,
+    );
+  });
+
+  it("detects Codex workspace trust prompt from captured PTY bytes (CUP layout)", () => {
+    // Codex lays each word out with `ESC[r;cH` (CUP) instead of CHA, and never
+    // emits an inter-line `\r\n`. Without the CUP→newline normalisation the
+    // numbered-choices regex never sees a newline between `1.` and `2.`.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("codex-startup.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      true,
+    );
+  });
+
+  it("detects Copilot workspace trust prompt from captured PTY bytes (boxed layout)", () => {
+    // Copilot renders the prompt inside a `│ ... │` border. Without the
+    // box-drawing strip the numbered-choices regex never sees `\n\s*1.`.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("copilot-startup.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      true,
+    );
+  });
+
+  it("detects Gemini workspace trust prompt from captured PTY bytes (● bullet + box)", () => {
+    // Gemini uses `●` as the selection bullet (not `❯`) and wraps the menu in
+    // a `│ ... │` border. The fix extends the bullet class and strips box.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("gemini-startup.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), true);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      true,
+    );
+  });
+
+  it("does NOT false-fire on captured running output from Claude Code", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("claude-running.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), false);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      false,
+    );
+  });
+
+  it("does NOT false-fire on captured running output from Codex", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("codex-running.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), false);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      false,
+    );
+  });
+
+  it("does NOT false-fire on captured running output from Copilot", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("copilot-running.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), false);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      false,
+    );
+  });
+
+  it("does NOT false-fire on captured running output from Gemini", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const bytes = loadFixture("gemini-running.txt");
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bytes), false);
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(false, "", bytes),
+      false,
+    );
+  });
+
+  it("keeps awaiting state across Claude Code's lone-bullet spinner frame", () => {
+    // Live investigation (browser console, 2026-05-21) traced the M00 badge
+    // failure to this exact chunk: Claude Code paints a single `●` (U+25CF)
+    // in dim grey via CHA/CUP cursor walks about twice per second while a
+    // prompt is visible. Before the fix the chunk had `chunkHasText === true`
+    // (the lone `●` survives ANSI stripping and trim), fell through every
+    // classifier in `dashboardNextAwaitingInputState`, and the message
+    // handler's else-branch cleared the 1200ms reveal timer — so the badge
+    // never appeared even though the prompt was clearly on screen.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const prompt =
+      "Do you want to proceed?\n❯ 1. Yes\n  2. No\n\nEsc to cancel · Tab to amend · ctrl+e to explain";
+    const bulletOn =
+      "\r\x1b[25A\x1b[38;5;246m●\x1b[39m\r" +
+      "\r\n".repeat(25) +
+      "\x1b[1C\x1b[4A\x1b[1D\x1b[4B";
+    const bulletOff =
+      "\r\x1b[25A\x1b[38;5;246m \x1b[39m\r" +
+      "\r\n".repeat(25) +
+      "\x1b[1C\x1b[4A\x1b[1D\x1b[4B";
+    // Sanity: the lone-bullet chunk on its own is a transient redraw.
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(bulletOn), false);
+    // The bullet-on frame must KEEP the awaiting state when prompt is in tail.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, bulletOn),
+      true,
+    );
+    // The bullet-off frame (already empty after stripping) keeps state too.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, bulletOff),
+      true,
+    );
+    // Alternating bullet frames simulating ~2 seconds of spinner ticks must
+    // never knock the state down.
+    let state = true;
+    let tail = prompt;
+    for (let i = 0; i < 8; i += 1) {
+      const chunk = i % 2 === 0 ? bulletOn : bulletOff;
+      state = helpers.dashboardNextAwaitingInputState(state, tail, chunk);
+      tail = (tail + chunk).slice(-5000);
+      assert.equal(state, true, `spinner frame ${i} cleared the state`);
+    }
+    // Genuine "moved on" output (the user pressed 1, Claude continues) still
+    // clears: the chunk is non-bullet text without prompt markers.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        true,
+        prompt,
+        "\nRunning command...\nDone.\n",
+      ),
+      false,
+    );
+    // Real running output starting with `●` followed by text is NOT a lone
+    // bullet — it must still be classifiable as non-redraw so the badge does
+    // clear when Claude prints status lines like `● Now let me read…`.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        true,
+        prompt,
+        "● Now let me read the remaining skills and check key supporting docs.",
+      ),
+      false,
+    );
+  });
+
+  it("keeps awaiting state across Codex's lone-bullet spinner frame (◦ U+25E6)", () => {
+    // Round-3 live trace (2026-05-21): after the round-2 fix Claude was stable
+    // but Codex still flickered. Codex's idle-spinner glyph is `◦` (U+25E6
+    // WHITE BULLET), painted via `CUP \x1b[28;1H\x1b[2m` dim. The round-2
+    // class `[●✻✢✳✶*•·]` did not include `◦`, so every spinner tick still
+    // returned false from `dashboardNextAwaitingInputState` and the badge
+    // flickered set→clear within ~100ms on a 2.4s cadence. Also exercised
+    // braille spinners (U+2800–U+28FF) used by many other CLIs.
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const prompt =
+      "Would you like to run the following command?\n› 1. Yes, proceed\n  2. No, suggest changes\nPress enter to confirm or esc to cancel";
+    const codexBullet =
+      "\r\x1b[28;1H\x1b[2m\x1b[39;49m◦\x1b[39m\x1b[49m\x1b[0m\x1b[?25l\x1b[?2026l";
+    const codexBulletOff =
+      "\r\x1b[28;1H\x1b[2m\x1b[39;49m \x1b[39m\x1b[49m\x1b[0m\x1b[?25l\x1b[?2026l";
+    const brailleFrame = "\r\x1b[2m⠋\x1b[0m";
+    // Sanity: each frame on its own is not awaiting input.
+    assert.equal(helpers.dashboardOutputLooksAwaitingInput(codexBullet), false);
+    assert.equal(
+      helpers.dashboardOutputLooksAwaitingInput(brailleFrame),
+      false,
+    );
+    // The Codex bullet, the off frame, and the braille tick must all KEEP
+    // the awaiting state when the prompt is still in the tail.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, codexBullet),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, codexBulletOff),
+      true,
+    );
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(true, prompt, brailleFrame),
+      true,
+    );
+    // 8-tick simulation alternating Codex bullet-on / bullet-off must never
+    // knock state down (the actual flicker reproducer).
+    let state = true;
+    let tail = prompt;
+    for (let i = 0; i < 8; i += 1) {
+      const chunk = i % 2 === 0 ? codexBullet : codexBulletOff;
+      state = helpers.dashboardNextAwaitingInputState(state, tail, chunk);
+      tail = (tail + chunk).slice(-5000);
+      assert.equal(state, true, `codex tick ${i} cleared the state`);
+    }
+    // Real Codex status output starting with `◦` followed by text must still
+    // clear so the badge drops when the user has answered.
+    assert.equal(
+      helpers.dashboardNextAwaitingInputState(
+        true,
+        prompt,
+        "◦ Running shell command: ls /tmp",
+      ),
+      false,
+    );
+  });
+
   it("detects freshly launched runner readiness before sending launch prompts", () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
@@ -2606,8 +2873,7 @@ describe("dashboard terminal launch flow", () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
     );
-    const longDetail =
-      "Error loading configuration: " + "x".repeat(500);
+    const longDetail = "Error loading configuration: " + "x".repeat(500);
     const detail = helpers.dashboardExtractRunnerStartupError(longDetail);
     assert.ok(detail !== null);
     assert.ok(detail!.length <= 303);
@@ -2760,6 +3026,39 @@ describe("dashboard terminal launch flow", () => {
       source,
       /meterRunning\(\) \{ return this\.runningSessions\(\)\.length; \}/,
     );
+  });
+
+  it("wires all four Workspace waiting surfaces to a single awaitingInput field", () => {
+    // M00 contract: when LocalSession.awaitingInput flips true, the header
+    // status dot, the "Awaiting input" pill, the left-rail card style, and
+    // the top meterWaiting() count must all flip together. Each surface must
+    // derive from the same field so the heuristic fix is reflected uniformly.
+    const workspace = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
+    const app = readFileSync(DASHBOARD_APP_PATH, "utf-8");
+    // (1) Active terminal header dot reads terminalAwaitingInput (or waiting-for-runner).
+    assert.match(
+      workspace,
+      /:class="\(terminalWaitingForRunner \|\| terminalAwaitingInput\) \? 'gf-status-waiting'/,
+    );
+    // (2) "Awaiting input" pill is x-show on terminalAwaitingInput.
+    assert.match(workspace, /x-show="terminalAwaitingInput"/);
+    assert.match(workspace, />Awaiting input</);
+    // (3) Left-rail card adds the is-waiting class via sessionIsWaiting(s).
+    assert.match(workspace, /'is-waiting': sessionIsWaiting\(s\)/);
+    // (4) sessionIsWaiting derives from awaitingInput so the meter, dot, and
+    //     left-rail share one source of truth.
+    assert.match(
+      workspace,
+      /sessionIsWaiting\(s\) \{[\s\S]{0,200}s\.awaitingInput === true/,
+    );
+    // app.ts must define terminalAwaitingInput off the same field.
+    assert.match(
+      app,
+      /get terminalAwaitingInput\(\): boolean \{[\s\S]{0,120}_activeSession\?\.awaitingInput === true/,
+    );
+    // localSessionRows passes awaitingInput through unchanged so the rail
+    // and meters see the same value the header sees.
+    assert.match(workspace, /awaitingInput: s\.awaitingInput === true/);
   });
 
   it("warms xterm when the workspace or setup view opens", () => {

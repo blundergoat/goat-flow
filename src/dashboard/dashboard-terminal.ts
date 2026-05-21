@@ -191,11 +191,22 @@ function dashboardPlainTerminalText(text: string): string {
         " ".repeat(Math.min(Number.parseInt(count, 10), 240)),
       )
       .replace(/\x1b\[C/g, " ")
+      // CUP / HVP (cursor position). Codex lays out every word with `ESC[r;cH`
+      // and never emits `\r\n` between rows; without this normalisation those
+      // positionings collapse `1. Yes\x1b[9;3H2. No` onto one line, breaking
+      // the numbered-choices regex that requires a newline between options.
+      // Replace with `\n ` so cross-row positionings produce line breaks and
+      // intra-row positionings still leave a token boundary.
+      .replace(/\x1b\[\d*(?:;\d*)?[Hf]/g, "\n ")
       // CHA (cursor horizontal absolute). Replace with a single space so
       // column-laid words (Claude Code's "Esc to cancel · Tab to amend" footer
       // and numbered choices) keep a token boundary instead of collapsing.
       .replace(/\x1b\[\d*G/g, " ")
       .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+      // Unicode box-drawing characters. Copilot and Gemini wrap their approval
+      // dialogs in `│ ... │` borders; the leading `│` prevents `numberedChoices`
+      // from matching `\n\s*1.` since `│` is not in `\s`. Replace with a space.
+      .replace(/[─-╿]/g, " ")
       .replace(/\r/g, "\n")
   );
 }
@@ -234,6 +245,12 @@ function dashboardLastCommandPermissionPromptIndex(plain: string): number {
     /\bdo\s+you\s+want\s+to\s+(?:proceed|continue|allow|approve|run\s+(?:this\s+)?command)\??/gi,
     /\bwould\s+you\s+like\s+to\s+run\s+the\s+following\s+command\??/gi,
     /\ballow\s+execution\s+of\b/gi,
+    // Trust dialogs: every runner shows one on first launch in a fresh cwd.
+    // Codex/Copilot/Gemini phrase it as "Do you trust …"; Claude Code shows
+    // "Is this a project you created or one you trust?".
+    /\bdo\s+you\s+trust\s+(?:the\s+)?(?:files|contents|this\s+(?:folder|directory))\b/gi,
+    /\bis\s+this\s+a\s+project\s+you\s+(?:created|trust)\b/gi,
+    /\bconfirm\s+folder\s+trust\b/gi,
   ];
   for (const pattern of patterns) {
     for (const match of plain.matchAll(pattern)) {
@@ -253,6 +270,20 @@ function dashboardOutputTailEndsWithAwaitingInputStart(text: string): boolean {
   return !dashboardOutputLooksAwaitingInput(promptTail);
 }
 
+/**
+ * Footer pattern that signals "we are parked on a confirmation prompt."
+ * Covers Claude Code's trust dialog (`Enter to confirm`), Codex's trust dialog
+ * (`Press enter to continue`), and Copilot's selection menu
+ * (`↑/↓ to navigate · enter to select · esc to cancel`).
+ */
+function dashboardOutputHasConfirmFooter(plain: string): boolean {
+  return (
+    /\bPress\s+enter\s+to\s+(?:continue|confirm|select)\b/i.test(plain) ||
+    /\bEnter\s+to\s+(?:confirm|select|continue)\b/i.test(plain) ||
+    /\benter\s+to\s+select\b/i.test(plain)
+  );
+}
+
 /** Heuristic for agent prompts waiting on a numbered human choice. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
@@ -260,7 +291,7 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
     dashboardTerminalTitleSuggestsAwaitingInput,
   );
   const numberedChoices =
-    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→]\s*)?2[.)]\s+\S/i.test(
+    /(^|\n)\s*(?:[›>❯▶▸→●]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→●]\s*)?2[.)]\s+\S/i.test(
       plain,
     );
   const choicePrompt =
@@ -269,12 +300,14 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
     /\bwhich option\b/i.test(plain);
   const commandPermissionPrompt =
     dashboardLastCommandPermissionPromptIndex(plain) >= 0;
+  const confirmFooter = dashboardOutputHasConfirmFooter(plain);
   return (
     titleSignal ||
     /\bawaiting (?:input|confirmation|approval)\b/i.test(plain) ||
     /\bEsc\s+to\s+cancel\b[\s\S]{0,240}\bTab\s+to\s+amend\b/i.test(plain) ||
     (commandPermissionPrompt && numberedChoices) ||
-    (choicePrompt && numberedChoices)
+    (choicePrompt && numberedChoices) ||
+    (confirmFooter && numberedChoices)
   );
 }
 
@@ -282,12 +315,13 @@ function dashboardOutputLooksAwaitingInput(text: string): boolean {
 function dashboardOutputLooksAwaitingInputContinuation(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
   return (
-    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→]\s*)?2[.)]\s+\S/i.test(
+    /(^|\n)\s*(?:[›>❯▶▸→●]\s*)?1[.)]\s+\S[\s\S]{0,900}\n\s*(?:[›>❯▶▸→●]\s*)?2[.)]\s+\S/i.test(
       plain,
     ) ||
-    /(^|\n)\s*(?:[›>❯▶▸→]\s*)?[23][.)]\s+\S/i.test(plain) ||
+    /(^|\n)\s*(?:[›>❯▶▸→●]\s*)?[23][.)]\s+\S/i.test(plain) ||
     /\bEsc\s+to\s+(?:cancel|stop)\b/i.test(plain) ||
-    /\bPress enter to confirm\b/i.test(plain) ||
+    /\bPress\s+enter\s+to\s+(?:confirm|continue|select)\b/i.test(plain) ||
+    /\bEnter\s+to\s+(?:confirm|select|continue)\b/i.test(plain) ||
     /\bAllow once\b/i.test(plain)
   );
 }
@@ -297,7 +331,14 @@ function dashboardOutputLooksTransientStatusRedraw(text: string): boolean {
   const plain = dashboardPlainTerminalText(text).trim();
   if (!plain) return true;
   if (/^\r[^\n\r]*$/u.test(text)) return true;
-  return /^[✻✢✳✶*•·]?\s*(?:Thinking|Processing|Checking|Reading|Searching)\b/iu.test(
+  // Bare spinner-glyph frame emitted ~2 Hz while a prompt is visible. Claude
+  // Code paints `●` (U+25CF), Codex paints `◦` (U+25E6), other runners use
+  // braille patterns (U+2800–U+28FF). Without this branch every other spinner
+  // tick fell through the classifier and killed the 1200ms reveal timer, so
+  // the badge never fired. Match the glyph in isolation, optionally repeated,
+  // with no other text.
+  if (/^[●✻✢✳✶*•·◦◯○◎⊙◌⠀-⣿]+$/u.test(plain)) return true;
+  return /^[●✻✢✳✶*•·◦◯○◎⊙◌]?\s*(?:Thinking|Processing|Checking|Reading|Searching|Working|Loading|Generating)\b/iu.test(
     plain,
   );
 }
@@ -360,7 +401,8 @@ function dashboardExtractRunnerStartupError(text: string): string | null {
     const match = tail.match(pattern);
     if (match) {
       const detail = match[0].trim();
-      const truncated = detail.length > 300 ? `${detail.slice(0, 300)}...` : detail;
+      const truncated =
+        detail.length > 300 ? `${detail.slice(0, 300)}...` : detail;
       return truncated;
     }
   }

@@ -1,0 +1,666 @@
+[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [38;5;231mhi, reply with just the word: ok[7m[39m [27m                                                                                    [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[36G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+                                                                                                        [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [38;5;231mhi, reply with just the word: ok[39m                                                                                     [49m
+[48;5;240m                                                                                                                        [49m
+[?25l
+
+ [38;5;183m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G]0;✦  Working… (goat-flow-run-gemini-aUxX69)                                       [4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠸[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;147m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;147m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;147m⠦[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;147m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;147m⠇[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 0s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;153m⠸[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠦[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠇[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;152m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;158m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;158m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠸[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 1s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠦[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;194m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;230m⠇[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;230m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;230m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;230m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;230m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;229m⠸[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;229m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;229m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠦[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 2s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠇[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;223m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;217m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;217m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;217m⠙[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;217m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠹[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠸[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠼[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠴[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠦[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;218m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;182m⠧[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠇[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 3s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠏[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 4s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+
+ [38;5;183m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 4s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[38;5;183m✦ [38;5;231mok[39m
+
+
+ [38;5;183m⠋[39m [3m[38;5;231mThinking...[23m[39m [38;5;248m(esc to cancel, 4s)[39m                                                                      [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G[4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[38;5;183m✦ [38;5;231mok[39m
+[?25l
+
+                                                                                                        [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G]0;◇  Ready (goat-flow-run-gemini-aUxX69)                                          [4B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+ [38;5;229mPress Ctrl+C again to exit.[39m
+                                                                                                        [38;5;248m? for shortcuts[39m
+[2m[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[39m[22m
+ [38;5;248mShift+Tab to accept edits[39m
+[48;5;240m                                                                                                                        [49m
+[48;5;240m [38;5;183m> [7m[39m [27m[38;5;248m Type your message or @path/to/file[39m                                                                                 [49m
+[48;5;240m                                                                                                                        [49m
+ [38;5;248mworkspace (/directory)[39m                            [38;5;248msandbox[39m                     [38;5;248m/model[39m                             [38;5;248mquota[39m
+ [38;5;231m/tmp/goat-flow-run-gemini-aUxX69[39m                  [38;5;217mno sandbox[39m                  [38;5;231mAuto (Gemini 3)[39m                  0% used
+[4A[4G
