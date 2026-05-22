@@ -27,6 +27,7 @@ const requiredSkillReferenceFiles = [
   // Standalone playbooks
   ".goat-flow/skill-playbooks/README.md",
   ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/observability.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/skill-quality-testing.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",

@@ -52,6 +52,14 @@ const INSTALLED_BROWSER_USE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-playbooks/browser-use.md",
 );
+const TEMPLATE_OBSERVABILITY = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/observability.md",
+);
+const INSTALLED_OBSERVABILITY = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-playbooks/observability.md",
+);
 const TEMPLATE_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/page-capture.md",
@@ -143,6 +151,20 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_BROWSER_USE, INSTALLED_BROWSER_USE),
       0,
       "browser-use.md: template and installed should match",
+    );
+  });
+
+  it("template and installed observability.md match", () => {
+    if (
+      !existsSync(TEMPLATE_OBSERVABILITY) ||
+      !existsSync(INSTALLED_OBSERVABILITY)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_OBSERVABILITY, INSTALLED_OBSERVABILITY),
+      0,
+      "observability.md: template and installed should match",
     );
   });
 

@@ -176,6 +176,38 @@ describe("skill hardening contracts", () => {
     }
   });
 
+  it("keeps report-only finding outputs aligned with the shared proof-class contract", () => {
+    const proofClasses =
+      /RUNTIME\s*\|\s*CONTRACT-GREP\s*\|\s*STATIC\s*\|\s*NOT-REPRODUCED/;
+
+    for (const path of skillPaths("goat-security")) {
+      const body = read(path);
+      assert.match(body, proofClasses, path);
+      assert.match(body, /S-NN:[^\n]+proof-class/, path);
+      assert.match(body, /Proof classes:/, path);
+    }
+
+    for (const path of skillPaths("goat-qa")) {
+      const body = read(path);
+      assert.match(body, proofClasses, path);
+      assert.match(
+        body,
+        /\| File \| Lines Changed[^\n]+\| Proof Class \|/,
+        path,
+      );
+      assert.match(body, /\| Code Change \| Risk[^\n]+\| Proof Class \|/, path);
+      assert.match(body, /Proof classes:/, path);
+    }
+
+    for (const path of skillPaths("goat-critique")) {
+      const body = read(path);
+      assert.match(body, proofClasses, path);
+      assert.match(body, /Each sub-agent MUST return[^\n]+Proof class/, path);
+      assert.match(body, /Validated Findings[^\n]+proof class/, path);
+      assert.match(body, /Recommended Changes[^\n]+proof class/, path);
+    }
+  });
+
   it("keeps goat-critique direct invocation as delegation consent", () => {
     for (const path of skillPaths("goat-critique")) {
       const body = read(path);

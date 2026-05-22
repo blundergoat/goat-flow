@@ -36,17 +36,32 @@ function stubFS(existsSet: Set<string>): ReadonlyFS {
 }
 
 function stubFSFromFiles(files: Record<string, string>): ReadonlyFS {
+  const listDir = (dir: string): string[] => {
+    const prefix = dir.replace(/\/$/u, "") + "/";
+    return [
+      ...new Set(
+        Object.keys(files)
+          .filter((path) => path.startsWith(prefix))
+          .map((path) => path.slice(prefix.length).split("/")[0])
+          .filter((entry): entry is string => entry !== undefined),
+      ),
+    ];
+  };
   const fs = {
     exists: (p: string) => Object.prototype.hasOwnProperty.call(files, p),
     readFile: (p: string) => files[p] ?? null,
     lineCount: (p: string) => (files[p] ?? "").split(/\r?\n/).length,
     readJson: () => null,
-    listDir: () => [],
+    listDir,
     isExecutable: () => false,
     glob: (pattern: string) =>
       pattern === "docs/*.md"
         ? Object.keys(files).filter((path) => /^docs\/[^/]+\.md$/u.test(path))
-        : [],
+        : pattern === "src/dashboard/views/*.html"
+          ? Object.keys(files).filter((path) =>
+              /^src\/dashboard\/views\/[^/]+\.html$/u.test(path),
+            )
+          : [],
   };
   return {
     ...fs,
@@ -352,6 +367,54 @@ describe("runFactualClaimChecks", () => {
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));
     assert.ok(findings.some((f) => f.rule === "code-map-state-drift"));
+  });
+
+  it("flags stale dashboard view summaries in code-map", () => {
+    const fs = stubFSFromFiles({
+      ".goat-flow/code-map.md":
+        "views/ # HTML view templates (about, home, tasks)\n",
+      "src/dashboard/views/about.html": "",
+      "src/dashboard/views/home.html": "",
+      "src/dashboard/views/plans.html": "",
+    });
+    const { findings } = runFactualClaimChecks(stubCtx(fs));
+    assert.ok(findings.some((f) => f.rule === "code-map-dashboard-view-drift"));
+  });
+
+  it("flags top-level skill playbooks omitted from architecture and code-map inventories", () => {
+    const fs = stubFSFromFiles({
+      ".goat-flow/architecture.md":
+        "Standalone playbooks: browser-use.md, page-capture.md, skill-quality-testing.md\n",
+      ".goat-flow/code-map.md": [
+        "views/ # HTML view templates (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)",
+        "skill-playbooks/",
+        "  browser-use.md",
+        "  page-capture.md",
+        "  skill-quality-testing.md",
+      ].join("\n"),
+      ".goat-flow/skill-playbooks/README.md": "# Index\n",
+      ".goat-flow/skill-playbooks/browser-use.md": "# Browser\n",
+      ".goat-flow/skill-playbooks/observability.md": "# Observability\n",
+      ".goat-flow/skill-playbooks/page-capture.md": "# Capture\n",
+      ".goat-flow/skill-playbooks/skill-quality-testing.md": "# Quality\n",
+    });
+    const { findings } = runFactualClaimChecks(stubCtx(fs));
+    assert.ok(
+      findings.some(
+        (f) =>
+          f.rule === "skill-playbook-inventory-drift" &&
+          f.path === ".goat-flow/architecture.md" &&
+          f.message.includes("observability.md"),
+      ),
+    );
+    assert.ok(
+      findings.some(
+        (f) =>
+          f.rule === "skill-playbook-inventory-drift" &&
+          f.path === ".goat-flow/code-map.md" &&
+          f.message.includes("observability.md"),
+      ),
+    );
   });
 
   it("flags stale dashboard session-cap claims", () => {

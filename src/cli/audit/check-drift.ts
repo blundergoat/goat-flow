@@ -16,6 +16,7 @@
  *   - Standalone playbooks (template → installed in .goat-flow/skill-playbooks/):
  *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
  *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
+ *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-playbooks/observability.md
  *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
  *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-playbooks/skill-quality-testing.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
@@ -137,6 +138,10 @@ const SHARED_FILES: SharedFileSpec[] = [
   {
     template: "workflow/skills/playbooks/browser-use.md",
     installed: ".goat-flow/skill-playbooks/browser-use.md",
+  },
+  {
+    template: "workflow/skills/playbooks/observability.md",
+    installed: ".goat-flow/skill-playbooks/observability.md",
   },
   {
     template: "workflow/skills/playbooks/page-capture.md",

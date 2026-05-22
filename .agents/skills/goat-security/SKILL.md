@@ -151,7 +151,7 @@ Re-read `file + semantic anchor` for Critical/High. Does the code or config stil
 
 **Dependency audit:** If the project uses dependency management, run the appropriate audit tool when available. If it is missing, note the gap with the install command. Do NOT fabricate results.
 
-**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file + semantic anchor` re-read in this session, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
+**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file + semantic anchor` re-read in this session, every finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
 
 If `PROBABLE > CONFIRMED`, suggest `/goat-critique` cross-examination before closing. If the user declines, close with those clusters marked PROBABLE and list the evidence needed to promote or kill each one.
 
@@ -187,7 +187,7 @@ For compliance checks, present gaps as: non-compliant, partially compliant, or n
 ## Threat Surface / Risky Buckets
 ## Findings
 ### CONFIRMED
-- S-NN: `file + semantic anchor` | asset | entry→sink | trust boundary | preconditions | severity | blast radius | proof-of-fix
+- S-NN: `file + semantic anchor` | asset | entry→sink | trust boundary | preconditions | severity | proof-class | blast radius | proof-of-fix
 ### PROBABLE
 ### THEORETICAL
 ## Attack Path Summary  <!-- top 3 chained attack paths -->
@@ -197,6 +197,7 @@ For compliance checks, present gaps as: non-compliant, partially compliant, or n
 - Surfaces scanned: [list] | Surfaces skipped: [list or "none"]
 - Scanner tools: [used] | Unavailable: [list or "none"]
 - Evidence: <N> OBSERVED / <M> INFERRED
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
 - Confidence: <N> CONFIRMED / <M> PROBABLE / <K> THEORETICAL
 - Degradation flags: [list or "none"]
 - Conclusion: confident | coverage-degraded | tool-limited

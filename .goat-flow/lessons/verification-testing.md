@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-22
 ---
 
 ## Lesson: Cache-behaviour tests need observable contracts
@@ -19,13 +19,11 @@ last_reviewed: 2026-05-21
 
 **Status:** active | **Created:** 2026-05-19
 
-**What happened:** While replacing vague `correctly` success criteria in the skill-quality TDD table, my first wording pushed `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` to 3022 words, then a partial trim still failed at 3008 words. The ADR-023 contract caught both failures before the change could ship.
+**What happened:** Wording/schema edits repeatedly breached ADR-023 word caps: `skill-quality-testing/tdd-iteration.md` hit 3022/3008 words, `skill-preamble.md` exceeded 1500, and on 2026-05-22 proof-class fields pushed `goat-qa/SKILL.md` to 2578+.
 
-**Root cause:** I treated a content-lint cleanup as a tiny prose edit and did not account for the progressive reference-pack word cap before verification.
+**Root cause:** Treated prose edits as tiny while changing files governed by hard word-budget contracts.
 
-**Prevention:** For topical files under `skill-quality-testing/`, make table criteria terse first and run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after wording edits. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Expected outcome in new scenario`).
-
-**Recurrence 2026-05-20:** Shared-reference wording hit the same trap when `skill-preamble.md` exceeded the 1500-word cap before focused contract verification caught it. Check enforced caps immediately after shared prose edits. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+**Prevention:** For any skill/reference/playbook wording change, measure the affected file before broad validation and budget wording cuts in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/goat-qa/SKILL.md` (search: `Proof classes:`).
 
 ---
 

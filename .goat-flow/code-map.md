@@ -90,7 +90,7 @@ globals.d.ts               # Global type declarations for the frontend bundle
 index.html                 # Dashboard HTML entry point
 preset-prompts.json        # Built-in prompt templates for quality and setup modes
 styles.css                 # Dashboard stylesheet
-views/                     # HTML view templates (about, coming-soon, home, projects, prompts, quality, settings, setup, skills, tasks, workspace)
+views/                     # HTML view templates (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
 
 ## workflow/ -- Setup templates, skills, and reference docs
@@ -115,7 +115,7 @@ skills/
   goat-security/SKILL.md   # Security assessment skill template
   goat-qa/SKILL.md         # Testing gap analysis skill template
   reference/               # Meta-reference templates: skill-preamble.md, skill-conventions.md
-  playbooks/               # Standalone playbook templates: browser-use.md, page-capture.md, skill-quality-testing.md + topical skill-quality-testing/*
+  playbooks/               # Standalone playbook templates: browser-use.md, observability.md, page-capture.md, skill-quality-testing.md + topical skill-quality-testing/*
 
 hooks/                     # Hook templates (deny-dangerous.sh + self-test sibling, etc.)
 evaluation/                # Quality-assessment prompt templates
@@ -192,6 +192,7 @@ skill-reference/           # Shared skill doctrine (committed, install-copied fr
 
 skill-playbooks/           # Standalone tool/capability playbooks (committed, copied from workflow/skills/playbooks/)
   browser-use.md           # Browser evidence capture and availability checks
+  observability.md         # Instrumentation discipline for logs, metrics, spans, and sensitive-data rules
   page-capture.md          # Playwright page-capture usage tiers and installation checks
   skill-quality-testing.md # Index for the authoring methodology (points at topical files below)
   skill-quality-testing/   # Topical authoring files loaded on demand per ADR-023

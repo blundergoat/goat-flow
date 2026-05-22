@@ -629,7 +629,7 @@ echo ""
 # 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
 #    The `skill-reference/` dir was split into:
 #      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
-#      - skill-playbooks/   (browser-use.md, page-capture.md, skill-quality-testing.md + topical dir)
+#      - skill-playbooks/   (browser-use.md, observability.md, page-capture.md, skill-quality-testing.md + topical dir)
 #    On upgrade, sweep the legacy locations so the installed layout matches.
 # ==========================================================================
 legacy_reference_files=(
@@ -666,6 +666,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goa
 echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-playbooks/observability.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-playbooks/skill-quality-testing.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md"

@@ -79,7 +79,7 @@ Full directives: `references/sub-agent-directives.md`.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
 - **C (Fresh Eyes):** No project context. Flags unstated assumptions. ISOLATION RULE enforced.
 
-Each sub-agent MUST return 3-7 findings, each with: title, severity, evidence (file + semantic anchor), confidence, Proof attempt, Evidence quality (OBSERVED/INFERRED/UNVERIFIED), SKEPTIC/ANALYST/STRATEGIST lines, and rubric dimensions covered. Plus: overall assessment (STRONG/ADEQUATE/WEAK/FLAWED) and one thing the artifact gets RIGHT.
+Each sub-agent MUST return 3-7 findings, each with: title, severity, evidence (file + semantic anchor), confidence, Proof attempt, Proof class (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`), Evidence quality (OBSERVED/INFERRED/UNVERIFIED), SKEPTIC/ANALYST/STRATEGIST lines, and rubric dimensions covered. Plus: overall assessment (STRONG/ADEQUATE/WEAK/FLAWED) and one thing the artifact gets RIGHT.
 
 **Lens-finding floor:** each lens must surface >= 1 finding per sub-agent or re-run once; convergence allowed after one re-run. See anti-fabrication constraint. Full floor spec in the sub-agent directives reference pack.
 
@@ -154,7 +154,7 @@ Then the full critique:
 
 **Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Must never be empty.
 
-**Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion.
+**Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
 **Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (budget: 2 tool calls, no context beyond the draft Phase 5 output). Audit the critique for internal consistency against the 10-point rubric in `references/rubric-examples.md`. If issues found, insert an `## Auto-Detected Issues` block before presenting. Verdict block updated with `Meta-score: N/100`.
 
@@ -190,10 +190,10 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.
 - MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
 - MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
-- MUST Check sub-agent completeness: verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, rubric dimensions, overall assessment, and preservation note. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
+- MUST Check sub-agent completeness: verify each sub-agent returned 3-7 findings plus required lens fields, severity, evidence, confidence, proof class, rubric dimensions, overall assessment, and preservation note. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
-- MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
+- MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding and preserve one proof class tag (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`) on each. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
 - MUST NOT fabricate findings. Do not fabricate findings to meet the lens-finding floor; convergence allowed after one re-run.
 - Universal constraints from skill-preamble.md apply.
 
@@ -209,13 +209,13 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 ## Sub-Agent Rankings
 ## Rubric Coverage Gaps
 ## Control Group Delta
-## Validated Findings  <!-- source pool for Recommended Changes -->
+## Validated Findings  <!-- source pool for Recommended Changes; every finding includes proof class -->
 ## Cross-Examination Results
 ## Auto-Detected Issues  <!-- from Phase 5.5 meta-audit, if any -->
 ## Retracted Findings
 ## Human Decisions
 ## Strengths
-## Recommended Changes  <!-- subset of Validated Findings; ordered by severity; each with concrete action -->
+## Recommended Changes  <!-- subset of Validated Findings; ordered by severity; each with concrete action and proof class -->
 ## Open Questions
 ## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation -->
 ## What Wasn't Critiqued

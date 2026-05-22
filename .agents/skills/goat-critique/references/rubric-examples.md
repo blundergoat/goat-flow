@@ -53,6 +53,7 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 - **Severity:** HIGH | **Confidence:** HIGH
 - **Evidence:** Milestone plan excerpt (search: "Phase 2 additions") - Phase 2 additions depend on Phase 1 extraction completing first
 - **Proof attempt:** Read the milestone plan excerpt, confirmed extraction must precede additions
+- **Proof class:** STATIC
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** If extraction doesn't reclaim enough words, Phase 2 additions blow the 2500 cap
 - **ANALYST:** Current 2532w minus ~100w extraction gives ~80w budget for additions; tight but feasible
@@ -67,6 +68,7 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 - **Severity:** CRITICAL | **Confidence:** HIGH
 - **Evidence:** `src/api/handler.ts` (search: "database query") - user input passed directly to database query
 - **Proof attempt:** Read handler.ts around the database query, confirmed no sanitization before query construction
+- **Proof class:** STATIC
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** SQL injection vector; worst case is full database compromise
 - **ANALYST:** Direct string interpolation in query; parameterised queries would eliminate the risk at zero performance cost
@@ -79,7 +81,7 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 The meta-agent scores the draft critique against these 10 points:
 
 1. **Gate-finding match** - Gate value matches highest surviving severity
-2. **Evidence quality per finding** - every finding has Proof attempt + Evidence quality fields
+2. **Evidence quality per finding** - every finding has Proof attempt + Proof class + Evidence quality fields
 3. **Rubric coverage completeness** - no unaddressed mandatory dimensions
 4. **Rec-changes actionability** - every recommendation has a concrete next step
 5. **No orphan retractions** - every retracted finding has rationale

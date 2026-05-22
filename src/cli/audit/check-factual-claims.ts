@@ -521,6 +521,90 @@ function driftCodeMapClassifyState(
   ];
 }
 
+/** Extract comma-separated dashboard view names from the code-map views line. */
+function readCodeMapDashboardViews(codeMap: string): string[] | null {
+  const line = codeMap
+    .split(/\r?\n/)
+    .find((entry) => entry.includes("views/") && entry.includes("HTML view"));
+  const raw = line?.match(/\(([^)]+)\)/)?.[1];
+  if (raw === undefined) return null;
+  return raw
+    .split(",")
+    .map((name) => name.trim().replace(/\.html$/u, ""))
+    .filter(Boolean)
+    .sort();
+}
+
+/** Read live dashboard view files, falling back to manifest facts in stubs. */
+function readDashboardViewFiles(ctx: AuditContext): string[] {
+  const files = ctx.fs.glob("src/dashboard/views/*.html");
+  if (files.length === 0)
+    return [...loadManifest().facts.dashboard_views.names];
+  return files
+    .map(
+      (file) =>
+        file
+          .split("/")
+          .at(-1)
+          ?.replace(/\.html$/u, "") ?? "",
+    )
+    .filter(Boolean)
+    .sort();
+}
+
+/** Drift: code-map.md dashboard view enumeration doesn't match live view files. */
+function driftCodeMapDashboardViews(
+  codeMap: string,
+  ctx: AuditContext,
+): ContentFinding[] {
+  const claimed = readCodeMapDashboardViews(codeMap);
+  const actual = readDashboardViewFiles(ctx);
+  if (claimed !== null && claimed.join("|") === actual.join("|")) return [];
+
+  return [
+    {
+      severity: "warning",
+      rule: "code-map-dashboard-view-drift",
+      path: ".goat-flow/code-map.md",
+      message: `Code map lists dashboard views as ${claimed?.join(", ") ?? "none"}, but src/dashboard/views has ${actual.join(", ")}.`,
+      suggestion:
+        "Update the src/dashboard/views/ summary in .goat-flow/code-map.md to match the live .html view files.",
+    },
+  ];
+}
+
+/** Top-level committed playbooks, excluding README.md because it is the index. */
+function readTopLevelSkillPlaybooks(ctx: AuditContext): string[] {
+  return ctx.fs
+    .listDir(".goat-flow/skill-playbooks")
+    .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
+    .sort();
+}
+
+/** Drift: committed skill-playbook inventories omit live top-level playbooks. */
+function driftSkillPlaybookInventory(
+  path: ".goat-flow/architecture.md" | ".goat-flow/code-map.md",
+  text: string,
+  ctx: AuditContext,
+): ContentFinding[] {
+  const actual = readTopLevelSkillPlaybooks(ctx);
+  if (actual.length === 0) return [];
+
+  const missing = actual.filter((name) => !text.includes(name));
+  if (missing.length === 0) return [];
+
+  return [
+    {
+      severity: "warning",
+      rule: "skill-playbook-inventory-drift",
+      path,
+      message: `${path} omits top-level skill playbook(s): ${missing.join(", ")}. Live playbooks are ${actual.join(", ")}.`,
+      suggestion:
+        "Update the committed skill-playbooks inventory to include every top-level .goat-flow/skill-playbooks/*.md playbook except README.md.",
+    },
+  ];
+}
+
 /** Drift: docs/dashboard.md session-cap claims don't match MAX_SESSIONS.
  *  Matches both the rail phrasing (`up to N`) and the hard-cap phrasing
  *  (`Maximum N concurrent sessions`). Every claim that disagrees with the live
@@ -836,8 +920,24 @@ function scanSemanticDrift(ctx: AuditContext): {
   };
 
   const codeMap = readAndTrack(".goat-flow/code-map.md");
-  if (codeMap !== null)
+  if (codeMap !== null) {
     findings.push(...driftCodeMapClassifyState(codeMap, ctx));
+    findings.push(...driftCodeMapDashboardViews(codeMap, ctx));
+    findings.push(
+      ...driftSkillPlaybookInventory(".goat-flow/code-map.md", codeMap, ctx),
+    );
+  }
+
+  const architecture = readAndTrack(".goat-flow/architecture.md");
+  if (architecture !== null) {
+    findings.push(
+      ...driftSkillPlaybookInventory(
+        ".goat-flow/architecture.md",
+        architecture,
+        ctx,
+      ),
+    );
+  }
 
   const dashboard = readAndTrack("docs/dashboard.md");
   if (dashboard !== null) {
