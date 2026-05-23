@@ -20,8 +20,8 @@
 # Exit codes:
 #   0  success
 #   1  not running in WSL
-#   2  systemd just enabled in /etc/wsl.conf — wsl --shutdown required
-#   3  systemd configured but not PID 1 — restart WSL
+#   2  systemd just enabled in /etc/wsl.conf - wsl --shutdown required
+#   3  systemd configured but not PID 1 - restart WSL
 #   4  no user dbus session available
 #   5  login keyring creation failed
 #   6  secret-tool missing after install
@@ -160,7 +160,7 @@ systemd_enabled_in_conf() {
 }
 
 if ! systemd_enabled_in_conf; then
-    log "systemd not enabled in $WSL_CONF — appending [boot] section"
+    log "systemd not enabled in $WSL_CONF - appending [boot] section"
     run_as_root tee -a "$WSL_CONF" >/dev/null <<'EOF'
 
 [boot]
@@ -226,7 +226,7 @@ mkdir -p "$KEYRING_DIR"
 LOGIN_KEYRING="$KEYRING_DIR/login.keyring"
 
 if [[ ! -f "$LOGIN_KEYRING" ]]; then
-    log "No login keyring found — creating with empty password (unencrypted)"
+    log "No login keyring found - creating with empty password (unencrypted)"
     # --daemonize: fork to background
     # --login: create/unlock login keyring using password from stdin
     # --components: register SecretService only; do not replace the user's SSH agent.
@@ -242,7 +242,7 @@ if [[ ! -f "$LOGIN_KEYRING" ]]; then
     if [[ -f "$LOGIN_KEYRING" ]]; then
         success "Created $LOGIN_KEYRING"
     else
-        error "Expected $LOGIN_KEYRING after creation — daemon may have failed silently."
+        error "Expected $LOGIN_KEYRING after creation - daemon may have failed silently."
         error "Try: pgrep -u \"\$USER\" -a gnome-keyring-daemon"
         exit 5
     fi
@@ -303,7 +303,7 @@ fi
 step "Verifying SecretService round-trip"
 
 if ! command -v secret-tool >/dev/null 2>&1; then
-    error "secret-tool not found — should have been installed via libsecret-tools."
+    error "secret-tool not found - should have been installed via libsecret-tools."
     exit 6
 fi
 
@@ -314,7 +314,7 @@ if echo "$TEST_VALUE" | secret-tool store \
         --label="$TEST_LABEL" verify-key "$TEST_LABEL" 2>/dev/null; then
     success "Wrote test secret"
 else
-    error "secret-tool store failed — SecretService not reachable."
+    error "secret-tool store failed - SecretService not reachable."
     error "Try: wsl --shutdown, reopen, re-run this script."
     exit 7
 fi
@@ -344,7 +344,7 @@ Next steps:
   1. Open a fresh terminal (or 'source ~/.bashrc')
   2. Run: agy
   3. Complete the browser OAuth flow once
-  4. Close and reopen the terminal — agy should NOT re-prompt
+  4. Close and reopen the terminal - agy should NOT re-prompt
 
 If agy still re-prompts, capture this diagnostic and file an issue:
   pgrep -u "$USER" -a gnome-keyring-daemon

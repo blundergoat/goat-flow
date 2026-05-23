@@ -7,7 +7,7 @@
  * Origin/CSRF check never fires because the exact-match set was not updated.
  *
  * Routes marked "privileged-websocket" or with parameter segments (`:id`) are
- * intentionally exempt — they have their own enforcement paths.
+ * intentionally exempt - they have their own enforcement paths.
  */
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";

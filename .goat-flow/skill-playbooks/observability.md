@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.7.1"
+goat-flow-reference-version: "1.8.0"
 ---
 # Observability
 

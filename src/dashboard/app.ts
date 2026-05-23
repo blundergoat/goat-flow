@@ -1390,7 +1390,7 @@ function app() {
         }
       }
     },
-    /** Re-run the inventory + prefetch from scratch — used by the page-level
+    /** Re-run the inventory + prefetch from scratch - used by the page-level
      *  "Re-audit all" button. */
     async reauditAllSkills() {
       this.skillQualityReport = null;
@@ -1475,7 +1475,7 @@ function app() {
       for (const r of reports) sum += this.skillReportPct(r);
       return sum / reports.length;
     },
-    /** Headline summary for the skills detail panel — derives a one-sentence
+    /** Headline summary for the skills detail panel - derives a one-sentence
      *  conclusion from the recommendation + warn/fail counts so the buried
      *  "two non-blocking issues" line gets promoted into a banner. */
     skillSummaryBanner(report: SkillQualityReport | null): {
@@ -1526,7 +1526,7 @@ function app() {
      *
      *  The headline title softens its tone to match the recommendation: a
      *  `needs-human-review` verdict says "needs review before keeping", not
-     *  "block ship" — "block ship" is reserved for verdicts that the engine
+     *  "block ship" - "block ship" is reserved for verdicts that the engine
      *  is genuinely confident about (retire / consider-revision). Mismatch
      *  between pill and copy was confusing readers about how confident the
      *  engine actually is. */
@@ -1560,7 +1560,7 @@ function app() {
       } else if (failCount > 0) {
         const tail = isHardVerdict
           ? "block ship"
-          : "— needs review before keeping";
+          : "- needs review before keeping";
         title = `${failCount} failing metric${failCount > 1 ? "s" : ""} ${tail}`;
       } else if (warnCount > 0) {
         title = `${warnCount} non-blocking warning${warnCount > 1 ? "s" : ""}`;
@@ -1677,7 +1677,7 @@ function app() {
       const lines: string[] = [];
       const pct = Math.round(this.skillReportPct(r) * 100);
       const grade = this.skillLetterGrade(this.skillReportPct(r));
-      lines.push(`# ${r.artifact.name} — ${grade} ${pct}%`);
+      lines.push(`# ${r.artifact.name} - ${grade} ${pct}%`);
       lines.push(`Slug: \`${this.skillEvaluatorSlug(r)}\``);
       lines.push(
         `Subtype: ${r.subtype} (${Math.round(r.classification.confidence * 100)}% ${r.classification.detectedSubtype})`,
@@ -1816,19 +1816,19 @@ function app() {
       input.value = "";
     },
 
-    /** dragover handler — keep the dropzone visually active. */
+    /** dragover handler - keep the dropzone visually active. */
     skillEvaluatorDragOver(event: DragEvent) {
       event.preventDefault();
       this.skillEvaluatorDragActive = true;
     },
-    /** dragleave handler — only clear when leaving the evaluator panel itself. */
+    /** dragleave handler - only clear when leaving the evaluator panel itself. */
     skillEvaluatorDragLeave(event: DragEvent) {
       const related = event.relatedTarget as Node | null;
       const target = event.currentTarget as Node | null;
       if (target && related && target.contains(related)) return;
       this.skillEvaluatorDragActive = false;
     },
-    /** drop handler — read every dropped .md file and append to the list. */
+    /** drop handler - read every dropped .md file and append to the list. */
     skillEvaluatorDrop(event: DragEvent) {
       event.preventDefault();
       this.skillEvaluatorDragActive = false;

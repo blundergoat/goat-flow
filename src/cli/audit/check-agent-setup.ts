@@ -45,7 +45,7 @@ function uniquePaths(paths: string[]): string[] {
 
 /** Returns true if goat-flow-specific artifacts exist for an agent.
  *  A bare agent directory (e.g. `.claude/` from Claude Code) with only a
- *  settings file does NOT count — we require goat-flow skill directories
+ *  settings file does NOT count - we require goat-flow skill directories
  *  or the deny hook script to distinguish goat-flow installs from the
  *  agent's own config. */
 function agentArtifactsExist(

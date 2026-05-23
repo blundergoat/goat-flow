@@ -27,7 +27,7 @@ const IMAGE_MAGIC_BYTES: Array<{ ext: string; bytes: number[] }> = [
   { ext: ".png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
   { ext: ".jpg", bytes: [0xff, 0xd8, 0xff] },
   { ext: ".gif", bytes: [0x47, 0x49, 0x46, 0x38] },
-  // WEBP: "RIFF....WEBP" — checked separately because of the 4-byte gap
+  // WEBP: "RIFF....WEBP" - checked separately because of the 4-byte gap
 ];
 
 interface AcceptedUpload {

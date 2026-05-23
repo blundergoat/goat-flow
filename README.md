@@ -1,8 +1,10 @@
 # GOAT Flow
 
-**A dashboard for auditing, configuring, and running your AI coding agents.**
+**An AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Gemini CLI, and GitHub Copilot.**
 
-One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, Codex, Gemini CLI, and Copilot CLI.
+GOAT Flow helps teams find and fix weak AI-agent setup: it audits agent instructions, installs guardrails and deny hooks, provides structured `/goat-*` workflows, preserves a learning loop, and runs supported coding agents from one local dashboard.
+
+One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, OpenAI Codex, Gemini CLI, and GitHub Copilot/Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 

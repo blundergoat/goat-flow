@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { runCandidacyCheck } from "../../src/cli/quality/candidacy.js";
 
-describe("runCandidacyCheck — draft mode", () => {
+describe("runCandidacyCheck - draft mode", () => {
   it("recommends skill (workflow) when ## Step 0 and ## Verification are present", () => {
     const result = runCandidacyCheck({
       kind: "draft",
@@ -175,7 +175,7 @@ describe("runCandidacyCheck — draft mode", () => {
   });
 });
 
-describe("runCandidacyCheck — description mode", () => {
+describe("runCandidacyCheck - description mode", () => {
   it("recommends skill (workflow) for workflow-shaped descriptions", () => {
     const result = runCandidacyCheck({
       kind: "description",
@@ -295,7 +295,7 @@ describe("runCandidacyCheck — description mode", () => {
   });
 });
 
-describe("runCandidacyCheck — reasoning + nextSteps", () => {
+describe("runCandidacyCheck - reasoning + nextSteps", () => {
   it("includes at least one reasoning entry for every result", () => {
     const result = runCandidacyCheck({
       kind: "description",

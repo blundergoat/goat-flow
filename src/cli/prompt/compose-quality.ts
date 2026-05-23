@@ -605,7 +605,7 @@ function appendComposedFromInstruction(
     ? ` Structural signals from referenced files count toward your assessment: content documented in \`${exampleReferenced}\` is part of the ${kindLower}, not bonus material.`
     : "";
   lines.push(
-    `Assess the ${kindLower} **${artifact.name}**. Read every file in **Composed from** below — the engine composes ${composedFrom.length} file${composedFrom.length === 1 ? "" : "s"} into the runtime surface (\`${composedFrom.join("`, `")}\`).${exampleClause}`,
+    `Assess the ${kindLower} **${artifact.name}**. Read every file in **Composed from** below - the engine composes ${composedFrom.length} file${composedFrom.length === 1 ? "" : "s"} into the runtime surface (\`${composedFrom.join("`, `")}\`).${exampleClause}`,
   );
   lines.push("");
   lines.push(
@@ -686,7 +686,7 @@ export function composeArtifactQualityPrompt(
   lines.push("## Anti-Bias Guidance");
   lines.push("");
   lines.push(
-    'Score against absolute criteria, not relative to other artifacts you have reviewed. Do not let one strong dimension halo over a weak one — score each dimension independently. Recent sections of the file should not weigh more than earlier ones; read everything before scoring. If you are tempted to round up because the artifact "seems okay," round down — leniency is the most common failure mode of this rubric.',
+    'Score against absolute criteria, not relative to other artifacts you have reviewed. Do not let one strong dimension halo over a weak one - score each dimension independently. Recent sections of the file should not weigh more than earlier ones; read everything before scoring. If you are tempted to round up because the artifact "seems okay," round down - leniency is the most common failure mode of this rubric.',
   );
   lines.push("");
 
@@ -696,19 +696,19 @@ export function composeArtifactQualityPrompt(
     'Score each applicable dimension on a 1-5 scale. For every dimension provide: (a) the score, (b) one sentence of evidence, (c) the lowest-quality span supporting any deduction, cited as `path/file (search: "semantic-anchor")`. If a dimension is legitimately `n/a` for this subtype, mark it `n/a`, justify why, and exclude it from `semanticMax`.',
   );
   lines.push("");
-  lines.push("- **Clarity (1-5)** — instruction precision, imperative voice,");
+  lines.push("- **Clarity (1-5)** - instruction precision, imperative voice,");
   lines.push(
     "  ambiguity, technical-term grounding. Can a fresh reader execute the workflow without guessing?",
   );
-  lines.push("- **Examples (1-5)** —");
+  lines.push("- **Examples (1-5)** -");
   for (const line of renderExamplesDimensionCriteria(subtype)) {
     lines.push(line);
   }
   lines.push(
-    '- **Focus (1-5)** — single purpose vs kitchen-sink. Apply the "describe in one sentence" test: if the artifact\'s purpose needs three clauses joined by AND, focus is weak.',
+    '- **Focus (1-5)** - single purpose vs kitchen-sink. Apply the "describe in one sentence" test: if the artifact\'s purpose needs three clauses joined by AND, focus is weak.',
   );
   lines.push(
-    "- **Coherence (1-5)** — does the bundle (SKILL.md + references) tell one coherent story, or do parts contradict, drift, or duplicate?",
+    "- **Coherence (1-5)** - does the bundle (SKILL.md + references) tell one coherent story, or do parts contradict, drift, or duplicate?",
   );
   lines.push("");
   lines.push(
@@ -738,7 +738,7 @@ export function composeArtifactQualityPrompt(
     "5. **What was not verified:** State any aspects you could not assess from a file read.",
   );
   lines.push(
-    '6. **Scope check:** Write a one-sentence summary of what this artifact does. If you cannot, that is a Clarity finding (record in semantic dimensions). If your sentence describes 3+ distinct concerns ("formats code AND evaluates it AND documents it"), recommend splitting and propose the boundaries. Note: this answers "is the scope right within the assigned subtype?" — distinct from the structural `consider-reclassifying` recommendation, which answers "is the subtype right?"',
+    '6. **Scope check:** Write a one-sentence summary of what this artifact does. If you cannot, that is a Clarity finding (record in semantic dimensions). If your sentence describes 3+ distinct concerns ("formats code AND evaluates it AND documents it"), recommend splitting and propose the boundaries. Note: this answers "is the scope right within the assigned subtype?" - distinct from the structural `consider-reclassifying` recommendation, which answers "is the subtype right?"',
   );
   lines.push("");
 
@@ -749,13 +749,13 @@ export function composeArtifactQualityPrompt(
   );
   lines.push("");
   lines.push(
-    "- **ship** — deterministic recommendation is `keep-skill` OR `reference-playbook`, AND `semanticPct >= 0.8`, AND no applicable dimension scores below 3.",
+    "- **ship** - deterministic recommendation is `keep-skill` OR `reference-playbook`, AND `semanticPct >= 0.8`, AND no applicable dimension scores below 3.",
   );
   lines.push(
-    "- **revise** — deterministic recommendation is `keep-skill` / `reference-playbook` AND (`semanticPct < 0.8` OR any applicable dimension < 3); OR deterministic recommendation is `consider-revision` AND `semanticPct >= 0.5` AND no applicable dimension equals 1.",
+    "- **revise** - deterministic recommendation is `keep-skill` / `reference-playbook` AND (`semanticPct < 0.8` OR any applicable dimension < 3); OR deterministic recommendation is `consider-revision` AND `semanticPct >= 0.5` AND no applicable dimension equals 1.",
   );
   lines.push(
-    "- **block** — deterministic recommendation is `needs-human-review` / `retire` / `consider-reclassifying`; OR `semanticPct < 0.5`; OR any applicable dimension equals 1.",
+    "- **block** - deterministic recommendation is `needs-human-review` / `retire` / `consider-reclassifying`; OR `semanticPct < 0.5`; OR any applicable dimension equals 1.",
   );
   lines.push("");
   lines.push(

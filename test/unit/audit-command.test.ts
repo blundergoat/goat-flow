@@ -81,7 +81,7 @@ import type {
 } from "../../src/cli/config/types.js";
 
 // ---------------------------------------------------------------------------
-// Cached repo audits — shared across describes that audit this repo with
+// Cached repo audits - shared across describes that audit this repo with
 // identical inputs. Each fresh audit is ~7–12s; lazy-caching cuts ~30s off
 // this file's suite time. Tests must treat the returned report as read-only.
 // ---------------------------------------------------------------------------

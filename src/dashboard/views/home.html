@@ -535,7 +535,7 @@
         acknowledged: check.acknowledged,
         evidenceKind: check.evidenceKind,
         assurance: check.assurance,
-        detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' — ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
+        detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' - ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
       }));
     },
     enforcementRows(agent) {

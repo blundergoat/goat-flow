@@ -9,7 +9,7 @@
  *
  * Every mode runs through `runCandidacyCheck` first. If the recommendation is
  * not a skill or playbook reference, the command prints the result and stops
- * — it never silently scaffolds against the wrong artifact type.
+ * - it never silently scaffolds against the wrong artifact type.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -52,7 +52,7 @@ Use when [describe the trigger condition for this skill].
 
 State the intake context:
 - Goal: [one-line goal]
-- Mode: [Read-Only | File-Write — defaults to Read-Only]
+- Mode: [Read-Only | File-Write - defaults to Read-Only]
 - Read first: [files this skill will load]
 
 ## Phase 1 - [Title]
@@ -106,14 +106,14 @@ Use when the user's intent matches one of the routes below. This skill does not 
 
 ## How It Works
 
-This skill is a router. It reads user intent, matches it against the route map, and dispatches to the appropriate sibling skill. No file writes happen at this layer — the dispatched skill owns its own gates and verification.
+This skill is a router. It reads user intent, matches it against the route map, and dispatches to the appropriate sibling skill. No file writes happen at this layer - the dispatched skill owns its own gates and verification.
 
 ## Route Map
 
 | User intent | Route to |
 |---|---|
-| [intent A — describe] | [/skill-name-a] |
-| [intent B — describe] | [/skill-name-b] |
+| [intent A - describe] | [/skill-name-a] |
+| [intent B - describe] | [/skill-name-b] |
 | Unknown intent | Ask the user to clarify before dispatching |
 
 ## Read First
@@ -135,9 +135,9 @@ Always read \`.goat-flow/skill-reference/skill-preamble.md\` (Proof Gate, eviden
 
 ## When to Use
 
-Use when [describe the assessment trigger — audit, review, scan].
+Use when [describe the assessment trigger - audit, review, scan].
 
-**NOT this skill:** [list distinctly different intents — for instance, this is reporting-only; if writes are required, route elsewhere].
+**NOT this skill:** [list distinctly different intents - for instance, this is reporting-only; if writes are required, route elsewhere].
 
 ## Read First
 
@@ -158,8 +158,8 @@ Reports findings as structured markdown:
 \`\`\`markdown
 ## Findings
 
-- **CONFIRMED**: [finding] — evidence: [OBSERVED file + semantic anchor]
-- **SUSPECTED**: [finding] — evidence: [INFERRED reasoning]
+- **CONFIRMED**: [finding] - evidence: [OBSERVED file + semantic anchor]
+- **SUSPECTED**: [finding] - evidence: [INFERRED reasoning]
 \`\`\`
 
 ## Constraints
@@ -202,7 +202,7 @@ If the tool is unavailable, use the [Fallback / Troubleshooting](#fallback--trou
 
 ### Step 2: [Verify]
 
-[How to confirm the action succeeded — what file appears, what output is expected.]
+[How to confirm the action succeeded - what file appears, what output is expected.]
 
 ## Fallback / Troubleshooting
 
@@ -213,7 +213,7 @@ If the tool is unavailable or fails:
 
 ## When to Load
 
-Skills load this playbook when [describe the trigger — e.g., when user evidence requires browser interaction].
+Skills load this playbook when [describe the trigger - e.g., when user evidence requires browser interaction].
 `;
 
 const TEMPLATES_BY_SUBTYPE: Record<string, string> = {

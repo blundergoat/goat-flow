@@ -63,7 +63,7 @@ interface ClassificationAlternative {
 
 interface ClassificationResult {
   detectedSubtype: ArtifactSubtype;
-  /** 0-1 — how strongly the top subtype dominates alternatives. */
+  /** 0-1 - how strongly the top subtype dominates alternatives. */
   confidence: number;
   alternatives: ClassificationAlternative[];
   reasoning: string[];
@@ -520,7 +520,7 @@ function composeArtifactContent(
         sources.push(entry.name);
       }
     } catch {
-      // Directory unreadable: ignore — composition continues with what we have.
+      // Directory unreadable: ignore - composition continues with what we have.
     }
   }
 
@@ -644,7 +644,7 @@ function subtypeConfidence(
  * subtype is incompatible (wrong kind or vetoed by a `mustNotHave` heading).
  *
  * Scoring rules:
- *  - Name match: +SUBTYPE_NAME_MATCH_SCORE (unconditional — preserves the M07
+ *  - Name match: +SUBTYPE_NAME_MATCH_SCORE (unconditional - preserves the M07
  *    OR semantics where `goat-security` is a report regardless of Step 0).
  *  - Heading match: +SUBTYPE_HEADING_MATCH_SCORE per match, vetoed by
  *    `mustNotHave`. Heading-only matches that trigger `mustNotHave` return 0.
@@ -1002,7 +1002,7 @@ function detectArtifactShape(
  *  summarizes`): when a description names *what the skill does internally*
  *  (procedural verbs, "X then Y" connectives) rather than *when to trigger*,
  *  agents tend to follow the description and skip the skill body. Detected as
- *  a yellow signal only — emits a tip via the trigger-clarity detail string;
+ *  a yellow signal only - emits a tip via the trigger-clarity detail string;
  *  never deducts score. Verb list narrowed to keep <10% false-positive rate
  *  on the in-tree `.claude/skills` corpus. */
 const WORKFLOW_VERB_RE =
@@ -1016,7 +1016,7 @@ function descriptionSummarizesWorkflow(content: string): boolean {
   if (!match) return false;
   const description = match[1];
   if (!description) return false;
-  // Skip the trigger preamble — `Use when X, Y` — and inspect the rest of the
+  // Skip the trigger preamble - `Use when X, Y` - and inspect the rest of the
   // description. If the trailing portion contains procedural verbs or process
   // connectives, the description is summarising workflow rather than naming
   // triggering conditions.
@@ -1046,7 +1046,7 @@ const triggerClarity: MetricScorer = (input) => {
     if (hasWhenToUse) score += 5;
     else notes.push('missing "When to Use" signal');
     if (subtype === "dispatcher") {
-      // Dispatchers disambiguate by routing, not by an exclusion list — award
+      // Dispatchers disambiguate by routing, not by an exclusion list - award
       // the third 5-point bucket when they expose a Route Map (their structural
       // equivalent of "NOT this skill"). Mirrors the dispatcher branch of
       // skillReferenceFit (search: `subtype === "dispatcher" && signals.hasRouteMap`).
@@ -1747,7 +1747,7 @@ const TIP_RULES: Array<{
     metric: "trigger-clarity",
     match: /description summarizes workflow rather than triggering conditions/,
     message:
-      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body — see `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
+      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body - see `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
     alwaysFire: true,
   },
   {
@@ -1778,7 +1778,7 @@ const TIP_RULES: Array<{
     metric: "workflow-completeness",
     match: /no checkpoint or blocking gate stops/,
     message:
-      "Add a phase-stop marker between phases — `CHECKPOINT:` or `BLOCKING GATE:` — to gate human review before continuing.",
+      "Add a phase-stop marker between phases - `CHECKPOINT:` or `BLOCKING GATE:` - to gate human review before continuing.",
   },
   {
     metric: "workflow-completeness",
@@ -1868,7 +1868,7 @@ const TIP_RULES: Array<{
     metric: "token-cost",
     match: /sub-references loaded/,
     message:
-      "Sub-reference count is high — review whether some can be merged or moved into a shared playbook.",
+      "Sub-reference count is high - review whether some can be merged or moved into a shared playbook.",
   },
   {
     metric: "tool-deps",
@@ -1904,7 +1904,7 @@ const TIP_RULES: Array<{
     metric: "skill-reference-fit",
     match: /weak skill identity/,
     message:
-      "Strengthen the skill identity — add the frontmatter `name`, `## Step 0`, and `CHECKPOINT` markers so it reads as a skill rather than a doc.",
+      "Strengthen the skill identity - add the frontmatter `name`, `## Step 0`, and `CHECKPOINT` markers so it reads as a skill rather than a doc.",
   },
   {
     metric: "skill-reference-fit",
@@ -1916,7 +1916,7 @@ const TIP_RULES: Array<{
     metric: "skill-reference-fit",
     match: /strong reference signals - consider demoting/,
     message:
-      "Strong reference-shape signals — if this is supposed to be a skill, drop the playbook framing and add Step 0 / phases / gates.",
+      "Strong reference-shape signals - if this is supposed to be a skill, drop the playbook framing and add Step 0 / phases / gates.",
   },
   {
     metric: "skill-reference-fit",
@@ -2035,8 +2035,8 @@ interface EvaluateBundleInput {
 
 /**
  * Score a multi-file uploaded skill bundle (no file IO). Picks a primary file
- * — `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
- * — and treats the remaining files as sibling `.md` files appended to the
+ * - `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
+ * - and treats the remaining files as sibling `.md` files appended to the
  * composed surface. The same composition recipe applies as for on-disk skills:
  * preamble + conventions are still pulled in if available, and the bundle
  * surface contributes to gate/evidence/tool-deps scoring. `composedFrom` lists

@@ -2170,7 +2170,7 @@ export function createDashboardRouteHandlers(
     res.setHeader("Link", '</api/quality/evaluate>; rel="successor-version"');
   }
 
-  /** POST /api/quality/evaluate — score uploaded markdown and return tips.
+  /** POST /api/quality/evaluate - score uploaded markdown and return tips.
    * Also handles `POST /api/quality/analyse` as a deprecated alias (responds
    * with `Deprecation: true` and `Link: <…/evaluate>; rel="successor-version"`
    * headers; the response body is identical).
@@ -2179,7 +2179,7 @@ export function createDashboardRouteHandlers(
    * Returns the full SkillQualityReport plus an `tips` array with actionable
    * improvement suggestions derived from failing/warning metrics.
    *
-   * Read-only — does not write any file. The "side-effectful" classification
+   * Read-only - does not write any file. The "side-effectful" classification
    * is conservative: even though no IO happens, the endpoint is POST so the
    * Origin check applies, and the body cap keeps the engine from being abused
    * as a CPU sink. */

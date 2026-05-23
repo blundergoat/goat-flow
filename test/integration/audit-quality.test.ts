@@ -20,7 +20,7 @@ import {
 } from "../fixtures/projects/index.js";
 
 // ---------------------------------------------------------------------------
-// Cached repo audits — this file runs 4 audits against the goat-flow repo
+// Cached repo audits - this file runs 4 audits against the goat-flow repo
 // itself (1× build-only, 3× harness). Each audit is ~6–12s; lazy-caching by
 // (agent, harness) key prevents repeats. Tests must treat reports as read-only.
 // ---------------------------------------------------------------------------

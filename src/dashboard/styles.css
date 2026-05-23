@@ -2167,7 +2167,7 @@ body {
   font-size: 0;
   box-shadow: none;
 }
-/* Tooltips on collapsed side-nav icons — uses aria-label for content
+/* Tooltips on collapsed side-nav icons - uses aria-label for content
    so it stays in sync with the screen-reader name. */
 .gf-side-collapsed .gf-side-link::after {
   content: attr(aria-label);
@@ -4222,7 +4222,7 @@ body {
   gap: 4px;
 }
 /* Grade letter colour escalation: A green, B paler green, C amber, D
-   orange, F red. D is "in trouble but salvageable" — must not look the same
+   orange, F red. D is "in trouble but salvageable" - must not look the same
    as F ("broken"). */
 .gf-skill-sidebar-score.is-a {
   color: var(--status-pass);
@@ -4268,7 +4268,7 @@ body {
   color: var(--text-primary);
 }
 
-/* Three pill families — distinct visual style each.
+/* Three pill families - distinct visual style each.
    Type pill defaults to indigo (dispatcher) and varies by skill subtype so
    the eye can sort skills by shape at a glance. */
 .gf-pill-type {
@@ -4895,9 +4895,9 @@ body {
   gap: 8px;
 }
 
-/* Verdict banner — colour is deterministic by recommendation name, not by
+/* Verdict banner - colour is deterministic by recommendation name, not by
    metric-failure count. Severity is communicated in the title text; the pill
-   answers "what should I do next?" — that answer is the same regardless of
+   answers "what should I do next?" - that answer is the same regardless of
    how many metrics are failing. */
 .gf-verdict-banner {
   border-radius: 8px;
@@ -5175,7 +5175,7 @@ body {
   font-size: 11px;
 }
 
-/* Modal result footer — slug only.
+/* Modal result footer - slug only.
    Save-to-drafts and Re-run-with-edits are deferred until the persistence
    route lands; the copy action lives in the header. */
 .gf-modal-result-footer {

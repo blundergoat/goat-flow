@@ -401,7 +401,7 @@ function decodeEvaluateFiles(
 /** Decode and validate a `POST /api/quality/evaluate` request body (also
  *  accepted via the deprecated `/api/quality/analyse` alias). Accepts either a
  *  single `content` string (paste / textarea) or a `files` array (multi-file
- *  drag-drop) — exactly one must be set. */
+ *  drag-drop) - exactly one must be set. */
 export function decodeEvaluateBody(body: string): DecodeResult<EvaluateBody> {
   const parsed = parseJson(body, "body");
   if (!parsed.ok) return parsed;

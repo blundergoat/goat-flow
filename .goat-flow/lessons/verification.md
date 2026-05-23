@@ -9,18 +9,18 @@ last_reviewed: 2026-05-17
 
 **What happened:** Updated six milestone files across `.goat-flow/tasks/1.7.0/` and `.goat-flow/tasks/1.8.0/`: bumped five milestones (M02, M06, M15, M16, M17) and reframed M11 from "observer event trail" to "evidence envelope + dashboard session trace". For each touched milestone I edited the Status/Depends-on header and (for M11) the Objective + Tasks, but left the rest of the body untouched. A subsequent Codex review caught five contradictions I should have caught before claiming done:
 
-- **M09** got a new `**Status:** planned, conditional (doc-only)` header, but the Tasks list still required `assertAutoCaptureAllowed` helper, the Exit Criteria still demanded helper-bound enforcement, and the Manual Testing Gate still asked for helper-rejection scenarios — sending implementers in the opposite direction from the header.
-- **M14** still said `Depends on: none` even though it writes/removes files in agent skill mirror directories — clearly M13 (path validation) and M05 (manifest-backed capabilities) territory.
-- **M17** Depends-on said "M17 wraps M14" but Scope kept "out of scope: CLI skill-management commands from M14" and Deferred kept "CLI `goat-flow skill list/add/remove` commands from M14" — treating M14 as parallel/future work in the same file that named M14 as a prerequisite.
+- **M09** got a new `**Status:** planned, conditional (doc-only)` header, but the Tasks list still required `assertAutoCaptureAllowed` helper, the Exit Criteria still demanded helper-bound enforcement, and the Manual Testing Gate still asked for helper-rejection scenarios - sending implementers in the opposite direction from the header.
+- **M14** still said `Depends on: none` even though it writes/removes files in agent skill mirror directories - clearly M13 (path validation) and M05 (manifest-backed capabilities) territory.
+- **M17** Depends-on said "M17 wraps M14" but Scope kept "out of scope: CLI skill-management commands from M14" and Deferred kept "CLI `goat-flow skill list/add/remove` commands from M14" - treating M14 as parallel/future work in the same file that named M14 as a prerequisite.
 - **M16** retained a `confidence` field in the insight schema, directly violating ADR-018 / AGENTS.md red-flag #4 (numeric confidence is itself a hedge). Values weren't numeric (`derived|inferred|observed`) but the field name invites the violation. Renamed to `evidenceBasis` with `direct|derived|heuristic`.
-- **M11** content was rewritten in full but the filename `M11-local-observer-event-trail.md` retained the abandoned framing — a slow-burn revival hazard for the next reader (the file is now `M11-evidence-envelope-dashboard-session-trace.md`).
+- **M11** content was rewritten in full but the filename `M11-local-observer-event-trail.md` retained the abandoned framing - a slow-burn revival hazard for the next reader (the file is now `M11-evidence-envelope-dashboard-session-trace.md`).
 
-**Root cause:** Treated the Status/Depends-on header as if it *were* the scope change. When a milestone's scope shifts — status, dependency, framing, doctrine alignment — the change ripples through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, sometimes the filename, and any field names that survived from the original spec. A header-only edit leaves the body pointing implementers in the opposite direction from the new header. This is the planning-doc surface variant of "Behavior-scope changes need assertion updates before the first focused run" (below): same pattern, different artifact.
+**Root cause:** Treated the Status/Depends-on header as if it *were* the scope change. When a milestone's scope shifts - status, dependency, framing, doctrine alignment - the change ripples through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, sometimes the filename, and any field names that survived from the original spec. A header-only edit leaves the body pointing implementers in the opposite direction from the new header. This is the planning-doc surface variant of "Behavior-scope changes need assertion updates before the first focused run" (below): same pattern, different artifact.
 
 **Prevention:** When applying a scope change to a milestone or planning doc:
 1. Re-read the entire file end-to-end *after* the header edit, not just the area you changed.
 2. Grep within the file for the old scope's keywords (helper, deferred-as-future, dependency-name) and confirm each hit still makes sense after the change.
-3. Check the file's name — does it match the new scope, or is it a slow-burn revival hazard?
+3. Check the file's name - does it match the new scope, or is it a slow-burn revival hazard?
 4. Check for doctrine violations (`confidence` numeric-hedge field names, `file:line` evidence, etc.) that may have been in the original spec and survived the bump untouched.
 5. In the completion summary, list each touched milestone with *what was changed where* (header / scope / tasks / exit criteria), so a reviewer can do their own sweep without re-reading every file from scratch.
 
@@ -32,9 +32,9 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 
 **Status:** active | **Created:** 2026-05-09
 
-**What happened:** Verifying the new dashboard skill-quality workbench in a browser, ran `npx goat-flow dashboard .` to launch the dashboard. The Quality view loaded but the Skill Quality artifact list was empty — `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
+**What happened:** Verifying the new dashboard skill-quality workbench in a browser, ran `npx goat-flow dashboard .` to launch the dashboard. The Quality view loaded but the Skill Quality artifact list was empty - `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
 
-**Root cause:** `npx goat-flow ...` resolves the published `@blundergoat/goat-flow` from `~/.npm/_npx/...`, not the local source tree. The dashboard CLI from the published package bundles the package's own compiled assets — local source edits to `src/dashboard/app.ts` are invisible to it.
+**Root cause:** `npx goat-flow ...` resolves the published `@blundergoat/goat-flow` from `~/.npm/_npx/...`, not the local source tree. The dashboard CLI from the published package bundles the package's own compiled assets - local source edits to `src/dashboard/app.ts` are invisible to it.
 
 **Fix:** Use `npm run dev` (which runs `tsc && npm run build:dashboard && node dist/cli/cli.js dashboard . --dev`) to build and serve the local source. After that, `curl ... /assets/app.js | grep -c loadSkillQualityInventory` returned `2` and the workbench rendered correctly.
 

@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.7.1"
+goat-flow-reference-version: "1.8.0"
 ---
 # Skill Playbooks
 
-This directory holds **standalone playbooks for tools and capabilities available to coding agents** in this project. Each playbook is self-contained — no skill composes them in. They are loaded on-demand by skills (or by you) when a tool is named.
+This directory holds **standalone playbooks for tools and capabilities available to coding agents** in this project. Each playbook is self-contained - no skill composes them in. They are loaded on-demand by skills (or by you) when a tool is named.
 
 For shared meta-references composed into every skill (preamble, conventions), see the sibling `skill-reference/` directory.
 
@@ -35,6 +35,6 @@ When you add a new tool to the project that future agents need to discover:
 
 ## Why this index exists (provenance)
 
-A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-reference/browser-use.md` (now `.goat-flow/skill-playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` — the tool was always installed.
+A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-reference/browser-use.md` (now `.goat-flow/skill-playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` - the tool was always installed.
 
 This index plus a Router Table pointer in every supported instruction file is the structural fix: agents must read project-local capability playbooks before treating harness-tool absence as capability absence.

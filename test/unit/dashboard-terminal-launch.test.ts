@@ -2218,7 +2218,7 @@ describe("dashboard terminal launch flow", () => {
       "Running tool…\n\x1b]0;[ ! ] Action Required | goat-flow\x07";
     const geminiBell =
       "Waiting on user…\n\x1b]0;✋  Action Required (goat-flow)\x07";
-    const explicitAwaiting = "Idle\n\x1b]0;awaiting confirmation — copilot\x07";
+    const explicitAwaiting = "Idle\n\x1b]0;awaiting confirmation - copilot\x07";
     assert.equal(helpers.dashboardOutputLooksAwaitingInput(codexBell), true);
     assert.equal(helpers.dashboardOutputLooksAwaitingInput(geminiBell), true);
     assert.equal(
@@ -2238,7 +2238,7 @@ describe("dashboard terminal launch flow", () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
     );
-    // Plain working title — no awaiting signal.
+    // Plain working title - no awaiting signal.
     assert.equal(
       helpers.dashboardOutputLooksAwaitingInput(
         "\x1b]0;~/projects/goat-flow\x07All checks passing.",
@@ -2510,7 +2510,7 @@ describe("dashboard terminal launch flow", () => {
     // prompt is visible. Before the fix the chunk had `chunkHasText === true`
     // (the lone `●` survives ANSI stripping and trim), fell through every
     // classifier in `dashboardNextAwaitingInputState`, and the message
-    // handler's else-branch cleared the 1200ms reveal timer — so the badge
+    // handler's else-branch cleared the 1200ms reveal timer - so the badge
     // never appeared even though the prompt was clearly on screen.
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
@@ -2558,7 +2558,7 @@ describe("dashboard terminal launch flow", () => {
       false,
     );
     // Real running output starting with `●` followed by text is NOT a lone
-    // bullet — it must still be classifiable as non-redraw so the badge does
+    // bullet - it must still be classifiable as non-redraw so the badge does
     // clear when Claude prints status lines like `● Now let me read…`.
     assert.equal(
       helpers.dashboardNextAwaitingInputState(
@@ -2573,7 +2573,7 @@ describe("dashboard terminal launch flow", () => {
   it("keeps the badge on across unknown chunks while the session is awaiting", () => {
     // M00 round-6 contract: output chunks NEVER clear the badge. Spinner
     // glyphs, OSC updates, mode toggles, future runner glyphs are all
-    // benign — only user input (term.onData / sendToTerminalSession) or
+    // benign - only user input (term.onData / sendToTerminalSession) or
     // session lifecycle (exit / terminating error) clears the awaiting
     // state. Rounds 1-5 tried five different chunk-classification or
     // tail-window strategies, each defeated by runner output we hadn't
@@ -2740,7 +2740,7 @@ describe("dashboard terminal launch flow", () => {
   it("keeps the badge on for Codex's sustained-CUP idle state held by OSC title alone", () => {
     // Round-5 finding (browser-extension live trace): in a long-running Codex
     // session in steady-state waiting, CUP positioning escapes fill the tail
-    // so the visible plain-text content is ~100 chars — the question phrase
+    // so the visible plain-text content is ~100 chars - the question phrase
     // and numbered choices are NOT in the window. The signal that holds the
     // badge is Codex's window-title broadcast `[ ! ] Action Required`. The
     // R4 tail check MUST pass raw bytes so the OSC title is extracted by
@@ -2820,7 +2820,7 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
-  it("badge persists across arbitrary output volume — only user input clears", () => {
+  it("badge persists across arbitrary output volume - only user input clears", () => {
     // Round-6 contract: output chunks can NEVER clear the awaiting badge.
     // Five rounds of trying to classify chunks (glyph allowlists, tail-end
     // heuristics, OSC-title preservation) failed because runners emit
@@ -2879,7 +2879,7 @@ describe("dashboard terminal launch flow", () => {
     timers.tick(1500);
     assert.equal(session.awaitingInput, true);
 
-    // A LARGE block of output arrives — under the round-6 contract this
+    // A LARGE block of output arrives - under the round-6 contract this
     // must NOT clear the badge. Pre-round-6, this output would push the
     // prompt out of the visible tail window and the badge would clear.
     const bigOutput = "Tool output line " + "x".repeat(8000);
@@ -2889,7 +2889,7 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(
       session.awaitingInput,
       true,
-      "badge must persist across large output — only user input or lifecycle clears",
+      "badge must persist across large output - only user input or lifecycle clears",
     );
 
     // Many spinner cycles accumulate.
@@ -2963,7 +2963,7 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(session.awaitingInput, true);
 
     // User answers via xterm. dashboardSendToTerminalSession is the dashboard
-    // path that simulates the same effect as term.onData — both clear the
+    // path that simulates the same effect as term.onData - both clear the
     // badge by directly mutating session.awaitingInput.
     const sent = helpers.dashboardSendToTerminalSession(
       ctx,
@@ -3109,7 +3109,7 @@ describe("dashboard terminal launch flow", () => {
     timers.tick(1500);
     assert.equal(session.awaitingInput, true);
 
-    // PTY exits before user answers — lifecycle MUST clear the badge,
+    // PTY exits before user answers - lifecycle MUST clear the badge,
     // otherwise terminated sessions would render as "Waiting" forever.
     socket.onmessage?.({
       data: JSON.stringify({ type: "exit", code: 0, signal: null }),

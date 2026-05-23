@@ -1928,14 +1928,14 @@ function dashboardConnectTerminal(
         // accumulate over time, pushing the prompt content out of any bounded
         // tail window. The badge is now cleared only by signals that
         // unambiguously mean "user moved on":
-        //   1. `term.onData` — user typed in the dashboard xterm
-        //   2. Ctrl+V paste from `attachCustomKeyEventHandler` — clipboard
+        //   1. `term.onData` - user typed in the dashboard xterm
+        //   2. Ctrl+V paste from `attachCustomKeyEventHandler` - clipboard
         //      input goes straight to the WebSocket and bypasses `term.onData`,
         //      so it shares `markUserInputSent()` with the keystroke path
-        //   3. `dashboardSendToTerminalSession` — programmatic input from a
+        //   3. `dashboardSendToTerminalSession` - programmatic input from a
         //      preset launch (line ~943)
         //   4. Session lifecycle (exit, terminal-ending error, refresh proves
-        //      gone, detach-as-end) — multiple paths in this handler
+        //      gone, detach-as-end) - multiple paths in this handler
         // If the runner is answered out-of-band (e.g. via Claude's remote
         // control), the badge stays on until session exit. That trade-off is
         // explicit and acceptable: a stuck badge after out-of-band answer is
@@ -1943,7 +1943,7 @@ function dashboardConnectTerminal(
         // the bug we shipped five rounds trying to fix. See
         // .goat-flow/lessons/design-decisions.md (search: `Three rounds of
         // the same fix shape`) and .goat-flow/patterns/architecture.md
-        // (search: `Asymmetric trust — set state from output`).
+        // (search: `Asymmetric trust - set state from output`).
         term.write(msg.data);
       } else if (type === "exit") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);

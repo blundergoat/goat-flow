@@ -1,6 +1,18 @@
 ---
 category: filesystem-io
-last_reviewed: 2026-05-17
+last_reviewed: 2026-05-23
+---
+
+## Lesson: UTF-8 punctuation sweeps need post-replacement grep
+
+**Status:** active | **Created:** 2026-05-23
+
+**What happened:** During a repo-wide em-dash-to-hyphen replacement, the first command exited zero but changed nothing because Perl's default byte-mode input did not match the Unicode codepoint pattern.
+
+**Root cause:** I treated a successful bulk-rewrite command as evidence that a UTF-8 character replacement happened before checking the target character again.
+
+**Prevention:** After any repo-wide Unicode punctuation rewrite, immediately run the exact target-character grep across tracked files. If using Perl in byte mode, match UTF-8 bytes such as `\xE2\x80\x94` for em dash, or use an explicitly UTF-8-aware command. Evidence anchors: original no-op command (search: `s/\x{2014}/-/g`), verification grep (search: `git ls-files -z | xargs -0 rg -n $'\u2014'`), corrected byte replacement (search: `s/\xE2\x80\x94/-/g`).
+
 ---
 
 ## Lesson: Non-fatal filesystem tests should assert behavior before errno text

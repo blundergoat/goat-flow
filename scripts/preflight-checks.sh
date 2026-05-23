@@ -313,7 +313,7 @@ details_pipe() {
 # ── Phase mapping (centralised) ──────────────────────────────────────
 # In live rendering, the phase heading prints whenever the phase
 # changes between two consecutive sections. There's no precomputed
-# phase order — sections appear in execution order, and a phase's
+# phase order - sections appear in execution order, and a phase's
 # heading may repeat if its sections aren't contiguous.
 phase_for() {
     case "$1" in
@@ -384,7 +384,7 @@ collapsed_desc_for() {
 
 # ── Live renderer ────────────────────────────────────────────────────
 # Each section's collapsed row (and any auto-expansion on FAIL/WARN)
-# is printed when the section completes — i.e. when the next section()
+# is printed when the section completes - i.e. when the next section()
 # call fires, or when _on_exit runs for the last section. The header
 # prints once, lazily, on the first section() call. Phase headings
 # print whenever the phase changes between two consecutive sections.
@@ -1106,7 +1106,7 @@ if manifest_agent_lines=$(node -e "const m=require('./workflow/manifest.json');f
         [[ -f "$af" ]] && agent_files+=("$af")
     done <<< "$manifest_agent_lines"
 else
-    warn "Could not read agent profiles from workflow/manifest.json — instruction-file checks will be skipped"
+    warn "Could not read agent profiles from workflow/manifest.json - instruction-file checks will be skipped"
 fi
 
 # ── Version Consistency ──────────────────────────────────────────────
@@ -1201,7 +1201,7 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
         pass "Execution loops consistent across ${#agent_files[@]} agent files"
     fi
 
-    # Router Table path parity (path-based, not label-based — labels drift
+    # Router Table path parity (path-based, not label-based - labels drift
     # across agents but .goat-flow/ paths are consistent)
     router_parity_output=$(
         node - "${agent_files[@]}" <<'NODE'
@@ -1311,7 +1311,7 @@ for ifile in "${agent_files[@]}"; do
     fi
 done
 
-# Encyclopedia guard (advisory — downstream projects may have edge cases)
+# Encyclopedia guard (advisory - downstream projects may have edge cases)
 encyclopedia_patterns="database schema|api reference|endpoint list|table definition|historical background|architecture history|full project overview"
 enc_ok=true
 for ifile in "${agent_files[@]}"; do
