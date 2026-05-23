@@ -7,7 +7,7 @@
 
 ADR-025 blocked all `git push` commands because pushes mutate shared remote state. That did not cover other GitHub write paths.
 
-On 2026-05-20, a coding agent posted a GitHub issue comment after interpreting forwarded Slack text as authorization. The reported successful command was `gh issue comment 64620 --repo acme/example --body-file /tmp/issue_64620_comment.md`. Before the fix, local probes also showed `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi` returned exit 0 through `scripts/deny-dangerous.sh --check`.
+On 2026-05-20, a coding agent posted a GitHub issue comment after interpreting forwarded Slack text as authorization. The reported successful command was `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`. Before the fix, local probes also showed `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi` returned exit 0 through `scripts/deny-dangerous.sh --check`.
 
 The incident is captured as a hooks footgun at `.goat-flow/footguns/hooks.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`). The hook implementation now has `workflow/hooks/deny-dangerous.sh` (search: `is_gh_write_operation`) and regression coverage in `workflow/hooks/deny-dangerous.self-test.sh` (search: `gh issue comment body-file blocked`).
 

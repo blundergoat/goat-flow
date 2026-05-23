@@ -227,21 +227,21 @@ run_self_test() {
   run_case "git -c log" "git -c core.x=y log --oneline" 0
   run_case "git log pipe grep push" 'git log --oneline | grep push' 0
   # GitHub remote writes through gh must block while read-only gh stays usable.
-  run_case "gh issue comment body-file blocked" "gh issue comment 64620 --repo acme/example --body-file /tmp/issue_64620_comment.md" 2 smoke
+  run_case "gh issue comment body-file blocked" "gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md" 2 smoke
   run_case "gh pr comment blocked" "gh pr comment 123 --body hi" 2
   run_case "gh api explicit post blocked" "gh api repos/owner/repo/issues/1/comments -X POST -f body=hi" 2 smoke
   run_case "gh api default post fields blocked" "gh api repos/owner/repo/issues/1/comments -f body=hi" 2
   run_case "gh api explicit get fields allowed" "gh api repos/owner/repo/issues --method GET -f state=open" 0 smoke
-  run_case "gh issue view allowed" "gh issue view 64620 --repo acme/example --comments" 0 smoke
+  run_case "gh issue view allowed" "gh issue view 64620 --repo owner/repo --comments" 0 smoke
   run_case "gh pr checks allowed" "gh pr checks 123" 0
   run_case "gh release upload blocked" "gh release upload v1.0 artifact.tgz" 2
   run_case "gh workflow run blocked" "gh workflow run deploy.yml" 2
-  run_case "gh global repo issue comment blocked" "gh --repo acme/example issue comment 64620 --body-file /tmp/issue_64620_comment.md" 2
-  run_case "gh topic repo issue comment blocked" "gh issue --repo acme/example comment 64620 --body-file /tmp/issue_64620_comment.md" 2 smoke
-  run_case "gh topic short repo pr review blocked" "gh pr -R acme/example review 123 --approve" 2
+  run_case "gh global repo issue comment blocked" "gh --repo owner/repo issue comment 64620 --body-file /tmp/issue_64620_comment.md" 2
+  run_case "gh topic repo issue comment blocked" "gh issue --repo owner/repo comment 64620 --body-file /tmp/issue_64620_comment.md" 2 smoke
+  run_case "gh topic short repo pr review blocked" "gh pr -R owner/repo review 123 --approve" 2
   run_case "pipe gh issue comment blocked" "printf '%s\n' body | gh issue comment 64620 --body-file -" 2 smoke
   run_case "xargs gh issue comment blocked" "printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}" 2 smoke
-  run_case "gh topic repo issue view allowed" "gh issue --repo acme/example view 64620 --comments" 0
+  run_case "gh topic repo issue view allowed" "gh issue --repo owner/repo view 64620 --comments" 0
   # Bypass regression: process substitution, quoted -c values, subshell grouping
   run_case "process subst git push" 'cat <(git push origin main)' 2 smoke
   run_case "quoted -c spaces push" "git -c 'core.sshCommand=ssh -o StrictHostKeyChecking=no' push origin main" 2

@@ -37,9 +37,9 @@ last_reviewed: 2026-05-21
 **Why it happens:** The deny hook historically treated `gh` as an ordinary command unless it contained an already-blocked shell pattern. GitHub issue comments, PR reviews, releases, workflow runs, secrets/variables, and `gh api` POST/PATCH/PUT/DELETE calls mutate shared systems without using `git push`, so push-only GitHub protection is incomplete. CLI parsers also accept option placement and wrapper forms that are not obvious from the original incident command.
 
 **Evidence:**
-- Reported incident: an assistant posted a GitHub issue comment to `acme/example#64620` from forwarded Slack text; the user deleted the comment and reported the command was `gh issue comment 64620 --repo acme/example --body-file /tmp/issue_64620_comment.md`.
-- Runtime probes before the fix returned exit 0 for `bash scripts/deny-dangerous.sh --check "gh issue comment 64620 --repo acme/example --body-file /tmp/issue_64620_comment.md"` and `bash scripts/deny-dangerous.sh --check "gh api repos/owner/repo/issues/1/comments -X POST -f body=hi"`.
-- Runtime probes before the second fix returned exit 0 for `bash scripts/deny-dangerous.sh --check "gh issue --repo acme/example comment 64620 --body hi"` and `bash scripts/deny-dangerous.sh --check "printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}"`.
+- Reported incident: an assistant posted a GitHub issue comment to `owner/repo#64620` from forwarded Slack text; the user deleted the comment and reported the command was `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`.
+- Runtime probes before the fix returned exit 0 for `bash scripts/deny-dangerous.sh --check "gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md"` and `bash scripts/deny-dangerous.sh --check "gh api repos/owner/repo/issues/1/comments -X POST -f body=hi"`.
+- Runtime probes before the second fix returned exit 0 for `bash scripts/deny-dangerous.sh --check "gh issue --repo owner/repo comment 64620 --body hi"` and `bash scripts/deny-dangerous.sh --check "printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}"`.
 - `workflow/hooks/deny-dangerous.sh` (search: `is_gh_write_operation`) - classifies known GitHub-mutating `gh` subcommands and `gh api` write/default-body POST forms.
 - `workflow/hooks/deny-dangerous.self-test.sh` (search: `gh issue comment body-file blocked`) - locks the original `--body-file` path plus `gh api` write and read-only allow cases.
 
