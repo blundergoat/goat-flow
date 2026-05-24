@@ -89,7 +89,7 @@ function auditPassInstallLine(
     return "- Audit: all build checks passing";
   }
   const label = evidenceLevel === "present-only" ? "presence-only" : "static";
-  return `- Audit: ${label} setup checks passing; runtime deny-hook self-test not run`;
+  return `- Audit: ${label} setup checks passing; runtime deny-hook probes not run`;
 }
 
 // ----------------------------------------------------------------

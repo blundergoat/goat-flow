@@ -3,7 +3,7 @@
  * 4 checks that validate per-agent installation: instruction, skills, settings, deny hook.
  * All checks require --agent and skip in aggregate mode (except orphaned-artifacts detection).
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
@@ -816,6 +816,78 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+function runtimeSmokePayload(agentId: string): {
+  input: string;
+  expectedStatus: number;
+  expectedStream: "stdout" | "stderr";
+  expectedPattern: RegExp;
+} {
+  if (agentId === "copilot") {
+    return {
+      input:
+        '{"toolName":"bash","toolArgs":{"command":"git push origin main"}}',
+      expectedStatus: 0,
+      expectedStream: "stdout",
+      expectedPattern: /"permissionDecision"\s*:\s*"deny"/,
+    };
+  }
+  return {
+    input:
+      '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}',
+    expectedStatus: 2,
+    expectedStream: "stderr",
+    expectedPattern: /BLOCKED:/,
+  };
+}
+
+function registeredDenyRelPath(
+  af: AuditContext["agents"][number],
+): string | null {
+  if (af.hooks.denyRegisteredPath) return af.hooks.denyRegisteredPath;
+  if (!af.agent.hooksDir) return null;
+  return join(af.agent.hooksDir, "deny-dangerous.sh");
+}
+
+function runHookRuntimeSmoke(
+  ctx: AuditContext,
+  af: AuditContext["agents"][number],
+  denyRelPath: string,
+): boolean {
+  const smoke = runtimeSmokePayload(af.agent.id);
+  const result = spawnSync("bash", [join(ctx.projectPath, denyRelPath)], {
+    cwd: ctx.projectPath,
+    encoding: "utf8",
+    input: smoke.input,
+    timeout: 5000,
+  });
+
+  const status = result.status ?? (result.error ? -1 : 0);
+  const stream =
+    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
+  return status === smoke.expectedStatus && smoke.expectedPattern.test(stream);
+}
+
+/** Run a runtime-shaped blocked payload through the installed deny hook. */
+function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
+  for (const af of ctx.agents) {
+    const denyRelPath = registeredDenyRelPath(af);
+    if (denyRelPath === null) continue;
+    const content = ctx.fs.readFile(denyRelPath);
+    if (content === null) continue;
+
+    if (runHookRuntimeSmoke(ctx, af, denyRelPath)) continue;
+
+    return {
+      check: "Agent deny mechanism",
+      message: `registered deny hook runtime smoke failed for ${af.agent.id}`,
+      evidence: evidencePath(denyRelPath),
+      howToFix:
+        "Run the registered deny hook with a runtime-shaped Bash payload and confirm it denies `git push origin main`.",
+    };
+  }
+  return null;
+}
+
 const agentDenyMechanism: BuildCheck = {
   id: "agent-deny-dangerous",
   name: "Agent deny mechanism",
@@ -847,7 +919,9 @@ const agentDenyMechanism: BuildCheck = {
       return staticFailure;
     }
 
-    return staticFailure ?? checkHookSelfTest(ctx);
+    return (
+      staticFailure ?? checkHookSelfTest(ctx) ?? checkHookRuntimeSmoke(ctx)
+    );
   },
 };
 

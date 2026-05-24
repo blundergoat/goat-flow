@@ -286,7 +286,7 @@ function hookSelfTestCapability(
       "hook-self-test",
       "hard",
       ["runtime-self-test"],
-      "Deny hook smoke self-test passed in this audit run",
+      "Deny hook self-test and runtime-shaped payload smoke passed in this audit run",
       ["agent-deny-dangerous"],
     );
   }

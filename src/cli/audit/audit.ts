@@ -552,7 +552,7 @@ function enforcementLimitSummary(
   const totalLimitedEvidence = unknown + limited;
   const capabilityLabel =
     totalLimitedEvidence === 1 ? "capability" : "capabilities";
-  return `Constraint score covers verified deny patterns only; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
+  return `Constraint score covers verified deny patterns only, not broad filesystem enforcement; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
 }
 
 function addNonGatingEvidenceLimits(

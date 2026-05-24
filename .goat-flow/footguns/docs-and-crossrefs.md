@@ -47,7 +47,7 @@ Two playbooks (`code-comments.md`, `observability.md`) shipped earlier in this P
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
-**Why it happens:** Documentation files reference each other by relative path. The project has 229 committed markdown files with dense cross-referencing (`git ls-files '*.md' | wc -l`, measured 2026-05-24). Renaming one file can break references in 5-10 others.
+**Why it happens:** Documentation files reference each other by relative path. The project has hundreds of committed markdown files with dense cross-referencing; use `git ls-files '*.md' | wc -l` for the current count instead of trusting an embedded number. Renaming one file can break references in 5-10 others.
 
 **Evidence:**
 - `.goat-flow/glossary.md` → the Canonical File column is a dense pointer map into workflow/setup, skill-reference, and skill files. A single rename can invalidate multiple glossary entries at once.

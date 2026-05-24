@@ -132,6 +132,10 @@ describe("agent enforcement capability matrix", () => {
       assert.equal(byId(matrix, "secret-shell-read").status, "hard");
       assert.equal(byId(matrix, "hook-registration").status, "hard");
       assert.equal(byId(matrix, "hook-self-test").status, "hard");
+      assert.match(
+        byId(matrix, "hook-self-test").summary,
+        /runtime-shaped payload smoke passed/,
+      );
       assert.equal(
         byId(matrix, "provider-native-enforcement").status,
         "limited",

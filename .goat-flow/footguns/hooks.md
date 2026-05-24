@@ -1,9 +1,9 @@
 ---
 category: hooks
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
-**Last independent review:** 2026-05-04 - The five active entries present at review time were checked against current anchors and hook self-tests. Targeted `rg` checks resolved every cited semantic anchor; workflow, Claude, GitHub, Codex, and Gemini deny-hook self-tests each returned `PASS: deny-dangerous.sh self-test`. The direct `cat .env` probe was blocked by the active PreToolUse guard before script execution, so this review relies on self-test coverage plus live harness blocking for that command shape. Later entries are covered by their own evidence blocks until the next independent review.
+**Last independent review:** 2026-05-24 - Active entries re-verified against current anchors and hook self-tests. Workflow, Claude, GitHub, Codex, and Antigravity deny-hook self-tests each return `PASS: deny-dangerous.sh self-test`. The direct `cat .env` probe is blocked by the active PreToolUse guard before script execution; coverage relies on self-test cases plus live harness blocking for that command shape.
 
 ## Footgun: File-read deny does not bind Bash shell reads of secret files
 
@@ -181,9 +181,6 @@ last_reviewed: 2026-05-21
 
 > Historical record. These entries are no longer active traps.
 
-- **Notification/compact hook was silently dead** (resolved 2026-04-19) - Claude Code's hook events are `PreCompact` / `PostCompact`; `Notification` + matcher `"compact"` was never a real event, so the hook's echo-state-after-compaction command never fired. M17-2 removed the entire compaction-hook machinery from settings files, scanner (`detectCompactionHookExists`, `compactionHookExists` fact, `compaction_support` capability), harness check (`check-recovery.ts` `compactionHook`), tests, and docs. The recovery concern now has two checks: `milestone-tracking` and `session-logs`.
-- **Codex has no compaction notification hook** (resolved 2026-04-19) - rolled up into the Notification/compact removal above. Platform-parity gap is moot now that no agent registers a compaction hook.
-- **Post-turn hook swallows failures with `|| true`** (resolved 2026-04-14) - goat-flow removed `stop-lint.sh` from core in v1.1.0 per ADR-015; post-turn lint hooks are project-specific. Consumer projects on pre-v1.1 installs should update their local `stop-lint.sh` to default `GOAT_LINT_ENFORCE=1`. Originally surfaced by Codex critiques on downstream consumer projects (the-summit-chatroom and blundergoat-platform) where `|| true` after lint commands hid failures; goat-flow itself never shipped the trap.
 - **git diff --stat is unreliable for scope detection** (resolved 2026-04-03) - Skill templates rewritten in M17; auto-detect now uses staged changes first, then falls back to unstaged and full diff.
 - **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) - Hook scripts now ship in enforce mode by default (`GOAT_LINT_ENFORCE` defaults to 1).
 - **Codex hooks registered in config.toml instead of hooks.json** (resolved 2026-04-15) - Moved hook definitions to `.codex/hooks.json` per official Codex docs; TOML hook sections were silently ignored.

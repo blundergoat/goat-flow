@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
 ## Footgun: Quality assessors recommend adding quick/lite modes to goat-critique
@@ -172,20 +172,6 @@ last_reviewed: 2026-05-21
 5. Integration tests: `test/integration/preamble-sync.test.ts` covers shared docs; `test/integration/audit-drift.test.ts` covers the CLI path with tmpdir fixtures.
 
 **Original evidence (historical):** The shared preamble (template at `workflow/skills/reference/skill-preamble.md`, installed at `.goat-flow/skill-reference/skill-preamble.md`) diverged between template and installed copy around a single-line change; discovered 2026-04-15 by multi-agent critique. Exact line numbers from that incident are no longer recorded here because the file has been edited since.
-
----
-
-## Footgun: Agent rewrites shared docs with agent-specific vocabulary
-
-**Status:** resolved | **Created:** 2026-03-21 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
-
-Moved to resolved: all evidence is from retired v1.1.0 files and current shared docs were verified multi-agent as of 2026-04-15. The behavioral pattern (agents replacing rather than adding) is documented as a lesson, not a current architectural trap. If the pattern recurs in current files, re-activate with fresh evidence.
-
-**Prevention (retained):**
-- Agent-specific files (`workflow/setup/agents/`, `.claude/`, `.gemini/`) - edits fine
-- Shared docs (`docs/`, `workflow/`) - MUST remain agent-neutral or list all agents
-- When adding agent support: ADD to tables and examples, never DELETE or REPLACE existing agent references
-- Setup prompts MUST include explicit scope constraints: "Do NOT modify files outside `.gemini/` and `GEMINI.md`"
 
 ---
 

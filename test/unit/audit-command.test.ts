@@ -675,7 +675,7 @@ describe("audit skill-reference pointer rule", () => {
     }
     assert.match(
       instructionStep,
-      /Tool playbooks \(CLI\/MCP availability checks: browser-use, page-capture, skill-quality-testing\)/,
+      /Tool playbooks \(README index for CLI\/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing\)/,
     );
     assert.match(
       instructionStep,
@@ -2022,6 +2022,49 @@ describe("agent deny hook template comparison", () => {
     assert.equal(denyCheck.run(ctx), null);
   });
 
+  it("passes registered-hook runtime smoke for Copilot JSON payloads", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const template = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
+      "utf-8",
+    );
+    const selfTestTemplate = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.self-test.sh"),
+      "utf-8",
+    );
+    const ctx = makeCtx({
+      agentFilter: "copilot",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.copilot,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".github/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: (path) => {
+          if (path === ".github/hooks/deny-dangerous.sh") return template;
+          if (path === ".github/hooks/deny-dangerous.self-test.sh") {
+            return selfTestTemplate;
+          }
+          return null;
+        },
+      }),
+    });
+
+    assert.equal(denyCheck.run(ctx), null);
+  });
+
   it("fails when the split deny hook self-test sibling is missing", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const template = readFileSync(
@@ -2777,7 +2820,7 @@ describe("composeSetup routing", () => {
       assert.ok(output, "composeSetup should return setup text");
       assert.match(output, /Dashboard setup checks pass\./);
       assert.doesNotMatch(output, /All audit checks pass\./);
-      assert.match(output, /runtime deny-hook self-test not run/);
+      assert.match(output, /runtime deny-hook probes not run/);
       assert.match(output, /Run `goat-flow audit .+ --harness --agent codex`/);
     } finally {
       await project.cleanup();
