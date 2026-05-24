@@ -271,7 +271,19 @@ NODE
   for stale_reference in "${stale_references[@]}"; do
     [[ -n "$stale_reference" ]] || continue
     case "$stale_reference" in
-      references/*.md) ;;
+      *..*|*"//"*)
+        echo "ERROR: refusing to prune path with traversal: $stale_reference" >&2
+        exit 1
+        ;;
+      references/*)
+        case "$stale_reference" in
+          *.md) ;;
+          *)
+            echo "ERROR: refusing to prune non-markdown reference: $stale_reference" >&2
+            exit 1
+            ;;
+        esac
+        ;;
       *)
         echo "ERROR: refusing to prune unexpected path shape: $stale_reference" >&2
         exit 1
