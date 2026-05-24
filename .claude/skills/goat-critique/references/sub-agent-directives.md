@@ -31,7 +31,7 @@ goat-flow-reference-version: "1.8.0"
 Every finding MUST include:
 
 - **Proof attempt:** exact command/read executed in sub-agent's tool budget, or "N/A - purely structural"
-- **Proof class:** RUNTIME / CONTRACT-GREP / STATIC / NOT-REPRODUCED
+- **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
 - **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED
 - Title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file + semantic anchor or artifact section reference), confidence (HIGH/MEDIUM/LOW)
 - **SKEPTIC:** one line - what could go wrong, worst case (or "N/A - [reason]" if genuinely inapplicable)
