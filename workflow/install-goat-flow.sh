@@ -168,9 +168,18 @@ while IFS=$'\t' read -r key value; do
   esac
 done <<< "$PROFILE_DATA"
 
-if [[ -z "${SKILLS_DIR:-}" || -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
+if [[ -z "${SKILLS_DIR:-}" ]]; then
   echo "ERROR: manifest profile for '$AGENT' is incomplete"
   exit 1
+fi
+
+HOOKS_ENABLED=false
+if [[ -n "${HOOKS_DIR:-}" || -n "${DENY_HOOK_DST:-}" || -n "${HOOK_CONFIG_DST:-}" || -n "${HOOK_CONFIG_SRC:-}" ]]; then
+  if [[ -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
+    echo "ERROR: manifest hook profile for '$AGENT' is incomplete"
+    exit 1
+  fi
+  HOOKS_ENABLED=true
 fi
 
 if [[ -n "${SETTINGS_DST:-}" && -z "${SETTINGS_SRC:-}" ]]; then
@@ -692,7 +701,7 @@ echo ""
 # 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
 #    The `skill-reference/` dir was split into:
 #      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
-#      - skill-playbooks/   (browser-use.md, observability.md, page-capture.md, skill-quality-testing.md + topical dir)
+#      - skill-playbooks/   (browser-use.md, changelog.md, code-comments.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical dir)
 #    On upgrade, sweep the legacy locations so the installed layout matches.
 # ==========================================================================
 legacy_reference_files=(
@@ -729,8 +738,11 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goa
 echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-playbooks/code-comments.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-playbooks/observability.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-playbooks/changelog.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-playbooks/release-notes.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-playbooks/skill-quality-testing.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md"
@@ -785,14 +797,19 @@ fi
 # ==========================================================================
 # 6. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
-echo "Hooks → $HOOKS_DIR/:"
-copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$DENY_HOOK_DST"
-DENY_SELF_TEST_DST="$(dirname "$DENY_HOOK_DST")/deny-dangerous.self-test.sh"
-copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.self-test.sh" "$DENY_SELF_TEST_DST"
-chmod +x "$DENY_HOOK_DST" "$DENY_SELF_TEST_DST"
-if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
-  echo "Hooks config:"
-  copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+if $HOOKS_ENABLED; then
+  echo "Hooks → $HOOKS_DIR/:"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$DENY_HOOK_DST"
+  DENY_SELF_TEST_DST="$(dirname "$DENY_HOOK_DST")/deny-dangerous.self-test.sh"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.self-test.sh" "$DENY_SELF_TEST_DST"
+  chmod +x "$DENY_HOOK_DST" "$DENY_SELF_TEST_DST"
+  if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
+    echo "Hooks config:"
+    copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+  fi
+else
+  echo "Hooks:"
+  echo "  · no hook files for $AGENT"
 fi
 echo ""
 
@@ -918,7 +935,7 @@ echo "DONE: $COPIED files installed, $SKIPPED skipped, $REMOVED stale removed"
 echo ""
 
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)
-if $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
+if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
   echo "⚠ Settings file was preserved (not overwritten)."
   echo "  The deny hook at $DENY_HOOK_DST was installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"

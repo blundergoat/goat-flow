@@ -89,7 +89,23 @@ function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "code-comments.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "observability.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "changelog.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, "workflow", "skills", "playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "release-notes.md"),
     SHARED_STUB,
   );
   writeFileSync(
@@ -151,7 +167,23 @@ function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "code-comments.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "observability.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "changelog.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, ".goat-flow", "skill-playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "release-notes.md"),
     SHARED_STUB,
   );
   writeFileSync(
@@ -335,7 +367,11 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    assert.equal(report.checked, expectedSkillComparisons + 10);
+    const expectedSharedComparisons = 14;
+    assert.equal(
+      report.checked,
+      expectedSkillComparisons + expectedSharedComparisons,
+    );
   });
 });
 

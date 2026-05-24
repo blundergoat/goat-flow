@@ -52,6 +52,14 @@ const INSTALLED_BROWSER_USE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-playbooks/browser-use.md",
 );
+const TEMPLATE_CODE_COMMENTS = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/code-comments.md",
+);
+const INSTALLED_CODE_COMMENTS = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-playbooks/code-comments.md",
+);
 const TEMPLATE_OBSERVABILITY = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/observability.md",
@@ -67,6 +75,22 @@ const TEMPLATE_PAGE_CAPTURE = resolve(
 const INSTALLED_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-playbooks/page-capture.md",
+);
+const TEMPLATE_RELEASE_NOTES = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/release-notes.md",
+);
+const INSTALLED_RELEASE_NOTES = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-playbooks/release-notes.md",
+);
+const TEMPLATE_CHANGELOG = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/changelog.md",
+);
+const INSTALLED_CHANGELOG = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-playbooks/changelog.md",
 );
 const TEMPLATE_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
@@ -154,6 +178,20 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
+  it("template and installed code-comments.md match", () => {
+    if (
+      !existsSync(TEMPLATE_CODE_COMMENTS) ||
+      !existsSync(INSTALLED_CODE_COMMENTS)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_CODE_COMMENTS, INSTALLED_CODE_COMMENTS),
+      0,
+      "code-comments.md: template and installed should match",
+    );
+  });
+
   it("template and installed observability.md match", () => {
     if (
       !existsSync(TEMPLATE_OBSERVABILITY) ||
@@ -179,6 +217,31 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_PAGE_CAPTURE, INSTALLED_PAGE_CAPTURE),
       0,
       "page-capture.md: template and installed should match",
+    );
+  });
+
+  it("template and installed release-notes.md match", () => {
+    if (
+      !existsSync(TEMPLATE_RELEASE_NOTES) ||
+      !existsSync(INSTALLED_RELEASE_NOTES)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_RELEASE_NOTES, INSTALLED_RELEASE_NOTES),
+      0,
+      "release-notes.md: template and installed should match",
+    );
+  });
+
+  it("template and installed changelog.md match", () => {
+    if (!existsSync(TEMPLATE_CHANGELOG) || !existsSync(INSTALLED_CHANGELOG)) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG),
+      0,
+      "changelog.md: template and installed should match",
     );
   });
 

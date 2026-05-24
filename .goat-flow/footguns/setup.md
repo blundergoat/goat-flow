@@ -21,6 +21,22 @@ last_reviewed: 2026-05-24
 3. Permission-shape checks MUST be scoped to the relevant section. Regex against full file content treats unrelated tables as configuration errors.
 4. Migration that rewrites a whole section drops everything inside the original section that is not in the canonical block - whole-section rewrites are only safe when the canonical block is a strict superset of every shape users are allowed to add.
 
+## Footgun: Hookless agent profiles break when installer treats hooks as universal
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** The installer round-trip test can fail for an otherwise valid agent profile with `ERROR: manifest profile for 'antigravity' is incomplete`. PR #44 hit this in `test/integration/audit-drift.test.ts` (search: `install for ${agentId} should pass`) because the round-trip installs every manifest agent, including Antigravity.
+
+**Why it happens:** `workflow/manifest.json` allows capability-limited agents whose hook fields are absent, but the Bash installer previously required `hooks_dir` and `deny_hook` for every profile before copying shared files and skills. That made "no upstream hook mechanism documented yet" indistinguishable from a corrupt manifest profile.
+
+**Evidence:**
+- `src/cli/manifest/types.ts` (search: `agents whose upstream CLI exists`) documents optional `deny_mechanism` and `hook_events`.
+- `workflow/setup/agents/antigravity.md` (search: `No deny-hook mechanism is wired`) documents Antigravity's current hookless status.
+- `workflow/install-goat-flow.sh` (search: `HOOKS_ENABLED=false`) now gates hook copying separately from skills/reference installation.
+- `test/integration/audit-drift.test.ts` (search: `install for ${agentId} should pass`) proves every manifest agent still participates in install round-trip coverage.
+
+**Prevention:** Installer profile validation must require `skills_dir` for every agent, but hook fields only when any hook-related destination is present. Do not fix hookless-agent failures by removing the agent from round-trip coverage; that hides installer regressions for capability-limited profiles.
+
 ---
 
 ## Resolved Entries

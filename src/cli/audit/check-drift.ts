@@ -16,8 +16,11 @@
  *   - Standalone playbooks (template → installed in .goat-flow/skill-playbooks/):
  *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
  *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
+ *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-playbooks/code-comments.md
  *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-playbooks/observability.md
+ *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-playbooks/changelog.md
  *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
+ *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-playbooks/release-notes.md
  *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-playbooks/skill-quality-testing.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
  *     name is not in SKILL_NAMES. Names that appear in manifest.stale_names
@@ -140,12 +143,24 @@ const SHARED_FILES: SharedFileSpec[] = [
     installed: ".goat-flow/skill-playbooks/browser-use.md",
   },
   {
+    template: "workflow/skills/playbooks/code-comments.md",
+    installed: ".goat-flow/skill-playbooks/code-comments.md",
+  },
+  {
     template: "workflow/skills/playbooks/observability.md",
     installed: ".goat-flow/skill-playbooks/observability.md",
   },
   {
+    template: "workflow/skills/playbooks/changelog.md",
+    installed: ".goat-flow/skill-playbooks/changelog.md",
+  },
+  {
     template: "workflow/skills/playbooks/page-capture.md",
     installed: ".goat-flow/skill-playbooks/page-capture.md",
+  },
+  {
+    template: "workflow/skills/playbooks/release-notes.md",
+    installed: ".goat-flow/skill-playbooks/release-notes.md",
   },
   {
     template: "workflow/skills/playbooks/skill-quality-testing.md",

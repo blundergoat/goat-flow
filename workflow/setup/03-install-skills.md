@@ -40,8 +40,11 @@ Install the meta references from `workflow/skills/reference/`:
 Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-playbooks/README.md` from `workflow/skills/playbooks/README.md` - index for tool/capability playbooks and availability-check discipline
 - `.goat-flow/skill-playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
+- `.goat-flow/skill-playbooks/changelog.md` from `workflow/skills/playbooks/changelog.md` - changelog writing discipline for Keep a Changelog, SemVer, breaking markers, and version-surface sync
+- `.goat-flow/skill-playbooks/code-comments.md` from `workflow/skills/playbooks/code-comments.md` - inline comment, docstring, TODO/FIXME/HACK, and annotation discipline
 - `.goat-flow/skill-playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
 - `.goat-flow/skill-playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
+- `.goat-flow/skill-playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
 - `.goat-flow/skill-playbooks/skill-quality-testing.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -90,8 +93,11 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-reference/skill-conventions.md` exists
 - [ ] `.goat-flow/skill-playbooks/README.md` exists
 - [ ] `.goat-flow/skill-playbooks/browser-use.md` exists
+- [ ] `.goat-flow/skill-playbooks/changelog.md` exists
+- [ ] `.goat-flow/skill-playbooks/code-comments.md` exists
 - [ ] `.goat-flow/skill-playbooks/observability.md` exists
 - [ ] `.goat-flow/skill-playbooks/page-capture.md` exists
+- [ ] `.goat-flow/skill-playbooks/release-notes.md` exists
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing.md` exists
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` exists

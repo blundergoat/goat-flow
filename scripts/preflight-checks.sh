@@ -1746,6 +1746,33 @@ if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-p
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill-playbooks/code-comments.md ]]; then
+    if diff -q workflow/skills/playbooks/code-comments.md .goat-flow/skill-playbooks/code-comments.md >/dev/null 2>&1; then
+        pass "code-comments.md: template and installed copy match"
+    else
+        fail "code-comments.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "code-comments.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-playbooks/observability.md ]]; then
+    if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-playbooks/observability.md >/dev/null 2>&1; then
+        pass "observability.md: template and installed copy match"
+    else
+        fail "observability.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "observability.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-playbooks/changelog.md ]]; then
+    if diff -q workflow/skills/playbooks/changelog.md .goat-flow/skill-playbooks/changelog.md >/dev/null 2>&1; then
+        pass "changelog.md: template and installed copy match"
+    else
+        fail "changelog.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "changelog.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-playbooks/page-capture.md ]]; then
     if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-playbooks/page-capture.md >/dev/null 2>&1; then
         pass "page-capture.md: template and installed copy match"
@@ -1754,6 +1781,15 @@ if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-
     fi
 else
     skip "page-capture.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill-playbooks/release-notes.md ]]; then
+    if diff -q workflow/skills/playbooks/release-notes.md .goat-flow/skill-playbooks/release-notes.md >/dev/null 2>&1; then
+        pass "release-notes.md: template and installed copy match"
+    else
+        fail "release-notes.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "release-notes.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-playbooks/skill-quality-testing.md ]]; then
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-playbooks/skill-quality-testing.md >/dev/null 2>&1; then

@@ -277,5 +277,5 @@ If a comment fails any of these, fix it before merging.
 
 - `observability.md` - sibling discipline playbook; same documentary structure.
 - `.goat-flow/decisions/ADR-024-semantic-anchors-over-line-numbers.md` - the durability principle (line numbers and ephemeral positions rot) applies to comments too.
-- Project instruction files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`) - may declare a comment-policy section that points here as the canonical source. This playbook expands on whatever default the project's instruction file sets.
+- Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) - may declare a comment-policy section that points here as the canonical source. This playbook expands on whatever default the project's instruction file sets.
 - `conventional-comments.md` (when it exists) - review-comment taxonomy for PR threads. Different audience, different surface; do not confuse with this playbook, which is about comments inside source files.
