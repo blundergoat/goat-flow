@@ -1,6 +1,6 @@
 ---
 category: dashboard
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 ## Footgun: Project-browser modal is reachable only via header-span click, not from the add-project flow
@@ -109,6 +109,27 @@ last_reviewed: 2026-05-20
 
 ---
 
+## Footgun: Dashboard terminal helper tests can leak event-loop handles
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A dashboard terminal helper test suite prints passing assertions but the Node test process keeps running until an outer timeout or CI job limit kills it. In GitHub Actions this presents as the `Test` step staying in progress long after setup, install, and build completed.
+
+**Evidence:**
+- `src/dashboard/dashboard-terminal.ts` (search: `ageInterval = setInterval`) starts a session age/update interval when the browser WebSocket opens.
+- `test/unit/dashboard-terminal-launch.test.ts` (search: `dashboardConnectTerminal`) opens fake browser terminal sessions that exercise the same lifecycle code.
+- `test/unit/dashboard-terminal-launch.test.ts` (search: `type TimerControls`) must include both timeout and interval functions when loading helpers into `node:vm`.
+- Repro from 2026-05-24: `timeout 35s node --import tsx --test --test-reporter=spec test/unit/dashboard-terminal-launch.test.ts` printed a passing `dashboard terminal launch flow` suite, then exited via the outer timeout instead of naturally.
+
+**Why it happens:** The dashboard terminal browser helper owns long-lived lifecycle resources: WebSocket bindings, resize observers, loading timers, paste-submit timers, launch-prompt timers, and the age-update interval. VM-loaded tests can fake only part of that environment. If `setInterval` remains real while the test controls only `setTimeout`, a fake socket open can leave a real interval in the host event loop even when every assertion has finished.
+
+**Prevention:**
+1. When loading `src/dashboard/dashboard-terminal.ts` through `node:vm`, inject `setInterval` and `clearInterval` from the same fake timer harness as `setTimeout` and `clearTimeout`.
+2. For tests that intentionally use real timers, call the helper cleanup path or simulate terminal lifecycle messages that clear timer state before the test returns.
+3. Verify terminal helper suites with an outer timeout command at least once after lifecycle/timer changes; a green assertion summary alone does not prove Node can exit.
+
+---
+
 ## Footgun: Dashboard terminal prompts can be dropped before browser attachment
 
 **Status:** active | **Created:** 2026-05-10 | **Evidence:** ACTUAL_MEASURED
@@ -164,7 +185,7 @@ last_reviewed: 2026-05-20
 - `src/dashboard/dashboard-terminal.ts` (search: `Unicode box-drawing characters`) replaces `│ ... │` border glyphs with spaces so Copilot and Gemini bordered menus expose `\n\s*1.` to the numbered-choices regex.
 - `src/dashboard/dashboard-terminal.ts` (search: `dashboardOutputHasConfirmFooter`) adds `Enter to confirm`, `Press enter to continue`, and `enter to select` as a `(confirmFooter && numberedChoices)` clause so the trust dialogs (which lack the in-session `Esc to cancel · Tab to amend` footer) still fire the badge.
 - `test/unit/dashboard-terminal-launch.test.ts` (search: `wires all four Workspace waiting surfaces to a single awaitingInput field`) pins the header dot, the "Awaiting input" pill, the left-rail `is-waiting` class, and `meterWaiting()` against `LocalSession.awaitingInput` so a future surface cannot silently diverge.
-- `src/dashboard/dashboard-terminal.ts` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`) is the canonical fix after FIVE rounds of output-driven clearing strategies failed: glyph allowlists (R2 added `●` for Claude, R3 added `◦` and braille for Codex, plus circular variants for future runners), tail-end heuristics with a normalized slice (R4 reviewer fix), raw-byte slice that preserves OSC titles (R5 to fix Codex sustained-CUP). Each round passed its tests but a new runner pattern always defeated it. Round 6 removes the output-driven clear entirely: the badge is now cleared only by input-side authoritative signals - `term.onData` (search: `term.onData` at line ~2070), `dashboardSendToTerminalSession` (search: `function dashboardSendToTerminalSession`), and lifecycle paths (exit, terminating error, detach-as-end). The badge stays on across arbitrary output until one of those fires. Pattern reference: `.goat-flow/patterns/architecture.md` (search: `Asymmetric trust - set state from output, clear state from input`). Lesson reference: `.goat-flow/lessons/design-decisions.md` (search: `Three rounds of the same fix shape`). Defense-in-depth: spinner-glyph transient classification at (search: `spinner-glyph frame`) and the trust-prompt heuristic remain for SETTING the badge correctly - they just no longer participate in clearing.
+- `src/dashboard/dashboard-terminal.ts` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`) is the canonical fix after FIVE rounds of output-driven clearing strategies failed: glyph allowlists (R2 added `●` for Claude, R3 added `◦` and braille for Codex, plus circular variants for future runners), tail-end heuristics with a normalized slice (R4 reviewer fix), raw-byte slice that preserves OSC titles (R5 to fix Codex sustained-CUP). Each round passed its tests but a new runner pattern always defeated it. Round 6 removes the output-driven clear entirely: the badge is now cleared only by input-side authoritative signals - the `term.onData((data: string) =>` keystroke path, `dashboardSendToTerminalSession` (search: `function dashboardSendToTerminalSession`), and lifecycle paths (exit, terminating error, detach-as-end). The badge stays on across arbitrary output until one of those fires. Pattern reference: `.goat-flow/patterns/architecture.md` (search: `Asymmetric trust - set state from output, clear state from input`). Lesson reference: `.goat-flow/lessons/design-decisions.md` (search: `Three rounds of the same fix shape`). Defense-in-depth: spinner-glyph transient classification at (search: `spinner-glyph frame`) and the trust-prompt heuristic remain for SETTING the badge correctly - they just no longer participate in clearing.
 - `test/unit/dashboard-terminal-launch.test.ts` (search: `keeps the badge on across unknown chunks`) pins the rearchitecture with a synthetic future-runner glyph (`⚡`) that is intentionally not in any classifier - 8 chunks of it must NOT clear the badge while the prompt is in tail. (search: `keeps the badge on across unknown chunks for ANSI-heavy prompt tails`) pins the normalized-tail requirement with a real Gemini fixture whose raw last 1500 bytes miss the visible prompt. (search: `clears the badge once runner output pushes the prompt`) pins the inverse: 1700+ chars of fresh output do clear the badge. (search: `keeps awaiting state across Claude Code's lone-bullet spinner frame`) and (search: `keeps awaiting state across Codex's lone-bullet spinner frame`) cover the still-shipped glyph-level fast path.
 
 **Why it happens:** `/api/terminal/sessions` only exposes lifecycle `status` (`active` / `terminated`) plus age and idle duration. Browser-only facts such as `awaitingInput`, loading/no-output state, transient runner redraws, and the distinction between a detached WebSocket and an ended PTY live in `src/dashboard/dashboard-terminal.ts`, `src/dashboard/app.ts`, and `src/dashboard/views/workspace.html`. If a new UI surface counts sessions directly from `status === 'active'`, clears `awaitingInput` based on a single PTY output chunk instead of the still-visible terminal tail, or treats browser WebSocket close as terminal exit, the Workspace surfaces drift apart. Runner-specific rendering quirks compound the problem: Codex positions every word with CUP (`ESC[r;cH`) and never emits `\r\n` between rows, Copilot and Gemini wrap menus in box-drawing borders (`│ … │`), and Gemini uses `●` as its selection bullet - each of which silently defeats text-based regex unless the plain-text normaliser strips and accommodates them.

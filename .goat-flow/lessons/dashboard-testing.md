@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
@@ -56,6 +56,18 @@ last_reviewed: 2026-05-21
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
+
+---
+
+## Lesson: VM helper timer harnesses must fake every timer primitive they exercise
+
+**Status:** active | **Created:** 2026-05-24
+
+**What happened:** PR #44's CI `Test` step stayed in progress far past the usual runtime even after the dashboard terminal unit suite had printed its passing suite summary locally. The local minimised repro was `timeout 35s node --import tsx --test --test-reporter=spec test/unit/dashboard-terminal-launch.test.ts`: the suite body completed, then Node stayed alive until the external timeout killed it.
+
+**Root cause:** The VM-loaded dashboard helper tests injected fake `setTimeout` / `clearTimeout`, but still passed real `setInterval` / `clearInterval` into the VM. Tests that called `dashboardConnectTerminal()` exercised the production age-update interval and left a live event-loop handle behind. Node's test runner waits for live handles, so this converted "test assertions finished" into an unbounded CI wait.
+
+**Prevention:** When a VM-loaded browser helper test exercises lifecycle code, fake or explicitly clean up every timer primitive the helper can use (`setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`). For terminal helper tests specifically, prefer the shared fake timer harness and assert the focused file exits under a short outer `timeout`, not just that the suite prints passing assertions. Evidence anchors: `test/unit/dashboard-terminal-launch.test.ts` (search: `type TimerControls`), `test/unit/dashboard-terminal-launch.test.ts` (search: `createFakeTimers`), `src/dashboard/dashboard-terminal.ts` (search: `ageInterval = setInterval`).
 
 ---
 

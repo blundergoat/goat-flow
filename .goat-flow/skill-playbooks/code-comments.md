@@ -213,7 +213,7 @@ The next reader can't use these. Don't write them; if you see them while you're 
 
 **Generated code.** A header marking the file as generated is mandatory, not optional:
 
-```
+```text
 // AUTO-GENERATED FROM <source> - DO NOT EDIT
 ```
 

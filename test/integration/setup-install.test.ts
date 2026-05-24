@@ -435,6 +435,113 @@ describe("codex config migration", () => {
     assert.match(config, /":workspace_roots"\s*=\s*\{/);
   });
 
+  it("preserves a custom valid /** deny entry when no invalid entries are present", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none", "private/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /"private\/\*\*"\s*=\s*"none"/);
+    assert.doesNotMatch(
+      result.stdout,
+      /migrated:.*invalid filesystem permissions/,
+    );
+  });
+
+  it("migrates invalid globs inside an inline :workspace_roots table", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "*.pem" = "none", "secrets/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.doesNotMatch(config, /"\*\.pem"/);
+    assert.match(config, /":workspace_roots"\s*=\s*\{[^}]*"secrets\/\*\*"/);
+    assert.match(result.stdout, /migrated:.*invalid filesystem permissions/);
+  });
+
+  it("does not treat comment-only :project_roots references as legacy anchors", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        "# legacy :project_roots anchor was replaced with :workspace_roots",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /# legacy :project_roots anchor was replaced/);
+    assert.doesNotMatch(
+      result.stdout,
+      /migrated:.*invalid filesystem permissions/,
+    );
+  });
+
+  it("post-install validator does not flag a glob 'none' entry in an unrelated table", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none" }',
+        "",
+        "[my_custom_section]",
+        '"*.pem" = "none"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(
+      result.stderr,
+      /still has invalid Codex permission entries/,
+    );
+  });
+
   it("removes deprecated codex_hooks when hooks is already present", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

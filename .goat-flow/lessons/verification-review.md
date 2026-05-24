@@ -1,6 +1,6 @@
 ---
 category: verification-review
-last_reviewed: 2026-05-03
+last_reviewed: 2026-05-24
 ---
 
 ## Lesson: Multi-agent critique finds findings single reviewers miss - but synthesis is the expensive part
@@ -117,5 +117,26 @@ last_reviewed: 2026-05-03
 - "Looks correct to me" - structural inspection is not verification. If the red-flag demands output, reading code is not output.
 
 **Fix:** The Proof Gate in `skill-preamble.md` names the positive procedure (identify → run fresh → read → verify → cite). This lesson names the negative counterpart: the rationalization patterns that specifically defeat the red-flags. Before any completion, fix, or "passing" claim, check whether the next sentence you are about to write matches one of the patterns above. If it does, stop and satisfy the Proof Gate instead - or downgrade the claim to UNVERIFIED and state what evidence is still missing.
+
+---
+
+## Lesson: External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings
+
+**Status:** active | **Created:** 2026-05-24
+
+**What happened:** Triaging bot review feedback on PR #44, CodeRabbit raised three findings tagged Critical 🔴 / Major 🟠 across multiple inline comments:
+- `npm run typecheck` exits non-zero with `TS2307: Cannot find module 'node:fs'` (cited as "blocks acceptance" on three different files).
+- `npm test` fails immediately with `ERR_MODULE_NOT_FOUND: Cannot find package 'tsx'`.
+- `scripts/preflight-checks.sh` fails shellcheck SC2329 because `_on_exit` and `_emit_footer` are "never invoked".
+
+All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 833/833, `shellcheck` v0.9.0 on the cited script exits 0. `_on_exit` is registered with `trap '_on_exit' EXIT` at line 242 and calls `_emit_footer` at line 233 - both clearly used. Same PR also had Codex bot findings about the Codex install migration regex (search: `invalidNoneEntryPattern`) that were all correct on inspection.
+
+**Root cause:** CodeRabbit runs verification commands in an ephemeral sandbox without the project's dev dependencies (`@types/node`, `tsx`) and reports the missing-module output as a project failure. Its shellcheck pass may also be a different version or invoked without project context, so it cannot see the `trap '_on_exit' EXIT` registration that satisfies SC2329.
+
+**Prevention:**
+1. Triage bot review findings into two buckets: (a) "bot read the code and named a defect" → verify by reading the code; (b) "bot ran a command and reported failure" → rerun the command locally before accepting. On PR #44 every category-a finding from the Codex bot held up; every category-b finding from CodeRabbit was wrong.
+2. Hallucination red-flag #1 in CLAUDE.md ("do not claim tests pass without the literal pass/fail line") cuts both ways - do not accept a bot's failure claim either without re-running and quoting the line yourself.
+3. Bot environment claims about project-wide tooling (typecheck, test, lint) are systematically unreliable because the bot's environment is not the project's environment. Treat the finding as "worth running the command yourself" not as evidence of a defect.
+4. Stale bot findings: bots reviewing commit-at-a-time produce findings that were valid at that snapshot but stale by the time of triage. Always check the current HEAD before acting (e.g. PR #44's `acme/example` and "v1.7.1 / v1.8.0 mismatch" findings were both already fixed in later commits).
 
 ---

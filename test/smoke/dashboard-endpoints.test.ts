@@ -305,16 +305,21 @@ describe("terminal exports", () => {
     };
     internals.nodePtyAvailable = true;
 
-    await manager.create("review this", PROJECT_ROOT, "claude");
-    spawned.emitData("runner banner\n");
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-    spawned.emitData("runner prompt\n");
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+    try {
+      await manager.create("review this", PROJECT_ROOT, "claude");
+      spawned.emitData("runner banner\n");
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      spawned.emitData("runner prompt\n");
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
 
-    assert.deepStrictEqual(spawned.writes, []);
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
-    assert.deepStrictEqual(spawned.writes, ["\x1b[200~review this\x1b[201~\r"]);
-    manager.shutdown();
+      assert.deepStrictEqual(spawned.writes, []);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
+      assert.deepStrictEqual(spawned.writes, [
+        "\x1b[200~review this\x1b[201~\r",
+      ]);
+    } finally {
+      manager.shutdown();
+    }
   });
 
   it("uses the fallback deadline when runner output keeps updating", async () => {
@@ -327,16 +332,19 @@ describe("terminal exports", () => {
     };
     internals.nodePtyAvailable = true;
 
-    await manager.create("review this", PROJECT_ROOT, "claude");
-    const interval = setInterval(
-      () => spawned.emitData("status redraw\n"),
-      100,
-    );
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 5300));
-    clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    try {
+      await manager.create("review this", PROJECT_ROOT, "claude");
+      interval = setInterval(() => spawned.emitData("status redraw\n"), 100);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 5600));
 
-    assert.deepStrictEqual(spawned.writes, ["\x1b[200~review this\x1b[201~\r"]);
-    manager.shutdown();
+      assert.deepStrictEqual(spawned.writes, [
+        "\x1b[200~review this\x1b[201~\r",
+      ]);
+    } finally {
+      if (interval) clearInterval(interval);
+      manager.shutdown();
+    }
   });
 
   it("sends a typed error and closes when attaching to a missing session", () => {

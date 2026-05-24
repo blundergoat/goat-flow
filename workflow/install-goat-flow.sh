@@ -464,8 +464,19 @@ if (hadFinalNewline) lines.pop();
 const filesystemSectionPattern =
   /^\s*\[\s*permissions\.goat-flow\.filesystem(?:\..+)?\s*\]\s*$/u;
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
-const invalidNoneEntryPattern =
-  /^\s*"(?:[^"]*\*[^"/]*\.[A-Za-z0-9_*-]+|[^"]*\*\*[^"/]*|[^"/]*\*[^"/]*)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const noneEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
+const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
+const legacyProjectRootsPattern = /":project_roots"/u;
+
+// Single source of truth: a "none" key is only invalid if it contains a glob
+// metacharacter AND is not a trailing-/** subtree. Codex accepts exact paths
+// and trailing /** subtrees but rejects other glob shapes. Must match the
+// validator's isInvalidNoneKey in validate_codex_settings_after_install.
+function isInvalidNoneKey(key) {
+  if (!key.includes("*")) return false;
+  return !key.endsWith("/**");
+}
 
 const regions = [];
 let i = 0;
@@ -489,8 +500,18 @@ let hasInvalidEntry = false;
 let usesLegacyAnchor = false;
 for (const region of regions) {
   for (let j = region.start; j < region.end; j += 1) {
-    if (/:project_roots/u.test(lines[j])) usesLegacyAnchor = true;
-    if (invalidNoneEntryPattern.test(lines[j])) hasInvalidEntry = true;
+    const line = lines[j];
+    if (legacyProjectRootsPattern.test(line)) usesLegacyAnchor = true;
+    const noneMatch = line.match(noneEntryPattern);
+    if (noneMatch && isInvalidNoneKey(noneMatch[1])) {
+      hasInvalidEntry = true;
+    }
+    const inlineMatch = line.match(inlineTablePattern);
+    if (inlineMatch) {
+      for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        if (isInvalidNoneKey(entry[1])) hasInvalidEntry = true;
+      }
+    }
   }
 }
 
@@ -551,32 +572,60 @@ if (!fs.existsSync(path)) {
 const content = fs.readFileSync(path, "utf8");
 const problems = new Set();
 
+// Single source of truth: must match isInvalidNoneKey in
+// migrate_codex_filesystem_permissions. A key is invalid only if it contains a
+// glob metacharacter AND is not a trailing-/** subtree.
 function isInvalidNoneKey(key) {
   if (!key.includes("*")) return false;
   return !key.endsWith("/**");
 }
 
-const sectionEntryPattern =
-  /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/gmu;
-for (const match of content.matchAll(sectionEntryPattern)) {
-  if (isInvalidNoneKey(match[1])) {
-    problems.add(`section entry "${match[1]}" with access="none"`);
+const filesystemSectionPattern =
+  /^\s*\[\s*permissions\.goat-flow\.filesystem(?:\..+)?\s*\]\s*$/u;
+const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
+const sectionEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const inlineTablePattern = /":workspace_roots"\s*=\s*\{([^}]*)\}/gu;
+const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
+const legacyProjectRootsPattern = /":project_roots"/u;
+
+const lines = content.split(/\r?\n/u);
+
+// Build filesystem section regions so we only flag entries that actually live
+// under [permissions.*.filesystem*]. A bare "*.pem" = "none" in some unrelated
+// custom table is not a Codex filesystem error.
+const regions = [];
+let i = 0;
+while (i < lines.length) {
+  if (filesystemSectionPattern.test(lines[i])) {
+    const start = i;
+    i += 1;
+    while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
+    regions.push({ start, end: i });
+  } else {
+    i += 1;
   }
 }
 
-const inlineTablePattern = /:workspace_roots"\s*=\s*\{([^}]*)\}/gu;
-for (const match of content.matchAll(inlineTablePattern)) {
-  const body = match[1];
-  const entryPattern = /"([^"]+)"\s*=\s*"none"/gu;
-  for (const entry of body.matchAll(entryPattern)) {
-    if (isInvalidNoneKey(entry[1])) {
-      problems.add(`inline entry "${entry[1]}" with access="none"`);
+for (const region of regions) {
+  for (let j = region.start; j < region.end; j += 1) {
+    const line = lines[j];
+    const match = line.match(sectionEntryPattern);
+    if (match && isInvalidNoneKey(match[1])) {
+      problems.add(`section entry "${match[1]}" with access="none"`);
+    }
+    if (legacyProjectRootsPattern.test(line)) {
+      problems.add("legacy :project_roots anchor still present");
     }
   }
 }
 
-if (/:project_roots/.test(content)) {
-  problems.add("legacy :project_roots anchor still present");
+for (const match of content.matchAll(inlineTablePattern)) {
+  const body = match[1];
+  for (const entry of body.matchAll(inlineEntryPattern)) {
+    if (isInvalidNoneKey(entry[1])) {
+      problems.add(`inline entry "${entry[1]}" with access="none"`);
+    }
+  }
 }
 
 if (problems.size > 0) {

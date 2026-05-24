@@ -1,6 +1,26 @@
 ---
 category: setup
-last_reviewed: 2026-04-20
+last_reviewed: 2026-05-24
+---
+
+## Footgun: Codex install migration matcher and post-install validator use different "invalid glob" definitions
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Two paths in `workflow/install-goat-flow.sh` decide whether a `"<key>" = "none"` entry under `[permissions.goat-flow.filesystem]` is invalid: the migration matcher (search: `invalidNoneEntryPattern`) decides whether to rewrite the section, and the post-install validator (search: `function isInvalidNoneKey`) decides whether to abort. Three divergences observed on PR #44:
+
+1. The matcher's `[^"]*\*\*[^"/]*` alternative matches valid subtree-denies like `"secrets/**" = "none"` that the validator correctly skips (because they end in `/**`). Migration then rewrites the section to the canonical block, silently dropping any user-added valid entries (e.g. `"private/**" = "none"`) - data loss that weakens the user's filesystem deny-list.
+2. The matcher's `^...$` anchors miss invalid globs inside inline-table forms (`":workspace_roots" = { "*.pem" = "none" }`). The validator's `inlineTablePattern` catches them - so install aborts with `still has invalid Codex permission entries` instead of self-healing the legacy shape.
+3. The validator's `:project_roots` check is `/:project_roots/.test(content)` (raw substring against full file). A comment like `# legacy :project_roots removed` blocks the install. The `sectionEntryPattern` similarly scans every `"..." = "none"` line in the file with no section context, treating unrelated `"*.pem" = "none"` entries in custom tables as filesystem errors.
+
+**Why it happens:** Matcher and validator were authored separately - one to spot lines that need canonicalising, the other to ratify the final shape. When the matcher is too broad, valid customs are silently flattened. When it is too narrow, the validator becomes the only line of defence and the install fails for users that migration could have fixed in place.
+
+**Prevention:**
+1. Migration and validator must call ONE predicate (`isInvalidNoneKey`-shape). Do not duplicate the rule across two regexes.
+2. Any TOML-shape check that needs to ignore comments or inline tables MUST parse keys, not substring-scan raw text.
+3. Permission-shape checks MUST be scoped to the relevant section. Regex against full file content treats unrelated tables as configuration errors.
+4. Migration that rewrites a whole section drops everything inside the original section that is not in the canonical block - whole-section rewrites are only safe when the canonical block is a strict superset of every shape users are allowed to add.
+
 ---
 
 ## Resolved Entries

@@ -3,15 +3,17 @@ category: verification
 last_reviewed: 2026-05-24
 ---
 
-## Lesson: Content validators can require explicit inventories despite README pointers
+## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
 **Status:** active | **Created:** 2026-05-24
 
 **What happened:** While implementing M07, I changed `.goat-flow/architecture.md` to point at `.goat-flow/skill-playbooks/README.md` instead of explicitly listing every top-level playbook. The targeted audit then failed with `skill-playbook-inventory-drift`, because `src/cli/audit/check-factual-claims.ts` (search: `driftSkillPlaybookInventory`) checks whether `.goat-flow/architecture.md` and `.goat-flow/code-map.md` include each live top-level `.goat-flow/skill-playbooks/*.md` filename.
 
-**Root cause:** I optimized for low-drift prose without reading the live content validator that owns this inventory contract. The README pointer was human-useful but did not satisfy the machine-readable cross-doc check.
+**Same-session recurrence:** I then changed the instruction-file Key Resources line to point only at the README index. `bash scripts/preflight-checks.sh` failed the `Instruction parity` gate because `scripts/check-instruction-parity.mjs` (search: `tool-playbook Key Resources`) requires the exact browser-use/page-capture example paths and the phrase `read BEFORE declaring a tool unavailable`.
 
-**Prevention:** Before replacing an explicit inventory with an index pointer in architecture or code-map docs, grep the content-quality/factual-claims checks for that inventory surface. If a validator checks direct filename inclusion, keep the explicit names and update the source-of-truth prose instead of relying on an indirect README pointer.
+**Root cause:** I optimized for low-drift prose without reading the live validators that own those text contracts. The README pointer was human-useful but did not satisfy the machine-readable cross-doc checks.
+
+**Prevention:** Before replacing an explicit inventory or required phrase with an index pointer, grep the content-quality, factual-claims, parity, and preflight checks for that surface. If a validator checks direct filename or phrase inclusion, keep the explicit words and add the README pointer around them instead of relying on an indirect reference alone.
 
 ---
 

@@ -182,11 +182,18 @@ type HelperContext = {
 type TimerControls = {
   setTimeout: typeof setTimeout;
   clearTimeout: typeof clearTimeout;
+  setInterval: typeof setInterval;
+  clearInterval: typeof clearInterval;
 };
 
 function loadHelpers(
   fetchImpl: typeof fetch,
-  timers: TimerControls = { setTimeout, clearTimeout },
+  timers: TimerControls = {
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+  },
   extraGlobals: Record<string, unknown> = {},
 ): HelperContext {
   const source = readFileSync(DASHBOARD_TERMINAL_PATH, "utf-8");
@@ -200,8 +207,8 @@ function loadHelpers(
     console,
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
-    setInterval,
-    clearInterval,
+    setInterval: timers.setInterval,
+    clearInterval: timers.clearInterval,
     WebSocket: { OPEN: 1 },
     readRecord: (value: unknown): unknown => value,
     readErrorMessage: (value: unknown): string | null =>
@@ -362,7 +369,11 @@ function createFakeTimers(): TimerControls & {
 } {
   let now = 0;
   let nextId = 1;
-  const timers = new Map<number, { at: number; callback: () => void }>();
+  const timers = new Map<
+    number,
+    { at: number; callback: () => void; intervalMs?: number }
+  >();
+  const cancelled = new Set<number>();
   const fakeSetTimeout = ((
     callback: (...args: unknown[]) => void,
     ms?: number,
@@ -377,11 +388,32 @@ function createFakeTimers(): TimerControls & {
     return id as unknown as ReturnType<typeof setTimeout>;
   }) as typeof setTimeout;
   const fakeClearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
-    timers.delete(Number(handle));
+    const id = Number(handle);
+    if (!timers.delete(id)) cancelled.add(id);
   }) as typeof clearTimeout;
+  const fakeSetInterval = ((
+    callback: (...args: unknown[]) => void,
+    ms?: number,
+    ...args: unknown[]
+  ) => {
+    const id = nextId;
+    nextId += 1;
+    timers.set(id, {
+      at: now + (ms ?? 0),
+      callback: () => callback(...args),
+      intervalMs: ms ?? 0,
+    });
+    return id as unknown as ReturnType<typeof setInterval>;
+  }) as typeof setInterval;
+  const fakeClearInterval = ((handle?: ReturnType<typeof setInterval>) => {
+    const id = Number(handle);
+    if (!timers.delete(id)) cancelled.add(id);
+  }) as typeof clearInterval;
   return {
     setTimeout: fakeSetTimeout,
     clearTimeout: fakeClearTimeout,
+    setInterval: fakeSetInterval,
+    clearInterval: fakeClearInterval,
     tick(ms: number): void {
       const target = now + ms;
       while (true) {
@@ -393,6 +425,10 @@ function createFakeTimers(): TimerControls & {
         timers.delete(id);
         now = timer.at;
         timer.callback();
+        if (timer.intervalMs !== undefined && !cancelled.has(id)) {
+          timers.set(id, { ...timer, at: now + timer.intervalMs });
+        }
+        cancelled.delete(id);
       }
       now = target;
     },
@@ -1811,9 +1847,10 @@ describe("dashboard terminal launch flow", () => {
   it("treats terminal WebSocket close as detach until an exit message arrives", () => {
     const { globals, sockets } = makeBrowserTerminalGlobals();
     const calls: string[] = [];
+    const timers = createFakeTimers();
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
-      { setTimeout, clearTimeout },
+      timers,
       globals,
     );
     const session = {
@@ -1872,9 +1909,10 @@ describe("dashboard terminal launch flow", () => {
 
   it("treats missing-session WebSocket errors as true termination", () => {
     const { globals, sockets } = makeBrowserTerminalGlobals();
+    const timers = createFakeTimers();
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
-      { setTimeout, clearTimeout },
+      timers,
       globals,
     );
     const session = {
