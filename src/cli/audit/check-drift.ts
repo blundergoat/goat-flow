@@ -17,6 +17,7 @@
  *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
  *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
  *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-playbooks/code-comments.md
+ *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-playbooks/gruff-code-quality.md
  *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-playbooks/observability.md
  *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-playbooks/changelog.md
  *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
@@ -48,23 +49,35 @@ import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding, DriftReport } from "./types.js";
 
 /** Remove nullish values from nested data before comparing manifests. */
-function stripNullish(value: unknown): unknown {
-  if (value === null || value === undefined) return undefined;
-  if (Array.isArray(value)) {
-    return value.map(stripNullish).filter((v) => v !== undefined);
+function stripNullish(frontmatterValue: unknown): unknown {
+  if (frontmatterValue === null || frontmatterValue === undefined) {
+    return undefined;
   }
-  if (typeof value === "object") {
+  if (Array.isArray(frontmatterValue)) {
+    return frontmatterValue.map(stripNullish).filter((v) => v !== undefined);
+  }
+  if (typeof frontmatterValue === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(
+      frontmatterValue as Record<string, unknown>,
+    )) {
       const cleaned = stripNullish(v);
       if (cleaned !== undefined) out[k] = cleaned;
     }
     return out;
   }
-  return value;
+  return frontmatterValue;
 }
 
-/** Parse YAML frontmatter and body text from a markdown file. */
+/**
+ * Parse YAML frontmatter and body text from a markdown file.
+ *
+ * The parser swallows malformed YAML into a sentinel object and never throws so
+ * drift checks can report content mismatch without aborting the whole audit.
+ *
+ * @param raw - Full markdown file contents, including optional YAML frontmatter.
+ * @returns Parsed frontmatter plus body text after the closing marker.
+ */
 export function parseMarkdownFrontmatter(raw: string): {
   frontmatter: unknown;
   body: string;
@@ -88,17 +101,44 @@ function normalizeBody(body: string): string {
   return body.replace(/^\n+/, "").trimEnd() + "\n";
 }
 
-/** True if two skill-markdown strings are semantically equivalent. */
+/**
+ * Compare skill markdown using goat-flow's drift semantics.
+ *
+ * Installed skill copies can reorder YAML keys or trim trailing whitespace
+ * during setup; those edits are not functional drift, but body or frontmatter
+ * value changes still are.
+ *
+ * @param expected - Template markdown content from `workflow/skills`.
+ * @param existing - Installed markdown content from an agent or skill-reference tree.
+ * @returns True when normalized frontmatter and body content match.
+ */
 export function skillContentsEquivalent(
   expected: string,
   existing: string,
 ): boolean {
-  const a = parseMarkdownFrontmatter(expected);
-  const b = parseMarkdownFrontmatter(existing);
-  if (!isDeepStrictEqual(a.frontmatter, b.frontmatter)) return false;
-  return normalizeBody(a.body) === normalizeBody(b.body);
+  const expectedMarkdown = parseMarkdownFrontmatter(expected);
+  const existingMarkdown = parseMarkdownFrontmatter(existing);
+  if (
+    !isDeepStrictEqual(
+      expectedMarkdown.frontmatter,
+      existingMarkdown.frontmatter,
+    )
+  ) {
+    return false;
+  }
+  return (
+    normalizeBody(expectedMarkdown.body) ===
+    normalizeBody(existingMarkdown.body)
+  );
 }
 
+/**
+ * Runtime dependencies for `checkDrift`.
+ *
+ * The filesystem is rooted at the audited project, while `templateRoot` points
+ * at goat-flow's package layout; separating them keeps consumer-project audits
+ * from accidentally reading templates from the target project.
+ */
 interface CheckDriftOptions {
   /** ReadonlyFS rooted at the project being audited (for installed-copy reads). */
   fs: ReadonlyFS;
@@ -112,6 +152,12 @@ interface CheckDriftOptions {
   templateRoot?: string;
 }
 
+/**
+ * Pair one canonical workflow file with its installed project copy.
+ *
+ * Shared references and playbooks are not per-skill directories, so the drift
+ * audit keeps this explicit map in lockstep with the setup manifest.
+ */
 interface SharedFileSpec {
   /** Relative to templateRoot. */
   template: string;
@@ -145,6 +191,10 @@ const SHARED_FILES: SharedFileSpec[] = [
   {
     template: "workflow/skills/playbooks/code-comments.md",
     installed: ".goat-flow/skill-playbooks/code-comments.md",
+  },
+  {
+    template: "workflow/skills/playbooks/gruff-code-quality.md",
+    installed: ".goat-flow/skill-playbooks/gruff-code-quality.md",
   },
   {
     template: "workflow/skills/playbooks/observability.md",
@@ -184,7 +234,13 @@ const SHARED_FILES: SharedFileSpec[] = [
   },
 ];
 
-/** Read a workflow template file relative to the package root. */
+/**
+ * Read a workflow template file relative to the package root.
+ *
+ * Missing or unreadable templates return null; this swallows file-read failures
+ * so callers can report the exact drift finding path instead of turning one
+ * filesystem failure into an exception that hides the rest of the audit.
+ */
 function readTemplate(templateRoot: string, relative: string): string | null {
   const abs = resolvePath(templateRoot, relative);
   if (!existsSync(abs)) return null;
@@ -292,7 +348,14 @@ function compareSharedFiles(
   return checked;
 }
 
-/** Find installed skill directories that are no longer canonical. */
+/**
+ * Find installed skill directories that are no longer canonical.
+ *
+ * This branch-heavy scan exists because agent skill roots can contain editor
+ * files, docs, or partially-created directories. The SKILL.md guard avoids
+ * false positives. The function reports deprecated manifest names separately
+ * from unexpected orphans so cleanup messaging stays actionable.
+ */
 function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
   const canonical = new Set<string>(SKILL_NAMES);
   const stale = getStaleSkillNames();
@@ -385,7 +448,12 @@ function compareHooks(
   return checked;
 }
 
-/** Run all drift comparisons and return a consolidated report. */
+/**
+ * Run all drift comparisons and return a consolidated report.
+ *
+ * @param options - Project filesystem plus optional goat-flow template root.
+ * @returns Drift status, findings, and count of compared template/install pairs.
+ */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
   const { fs } = options;
   const templateRoot = options.templateRoot ?? getTemplatePath("");

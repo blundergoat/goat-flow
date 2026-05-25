@@ -14,14 +14,13 @@ import {
   validateLocalPath,
 } from "./local-paths.js";
 
-/** Maximum bytes per uploaded image file (raw, post-base64-decode). */
-const TERMINAL_UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MiB
-/** Maximum number of files accepted in a single upload request. */
-export const TERMINAL_UPLOAD_MAX_FILES = 5;
-/** Maximum total raw request body size (base64 inflates by ~4/3). */
-export const TERMINAL_UPLOAD_MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MiB
+const TERMINAL_UPLOAD_MAX_FILE_BYTES = 10 * 1024 * 1024; // File-size limit: 10 MiB keeps screenshots useful without letting one paste dominate disk.
+export const TERMINAL_UPLOAD_MAX_FILES = 5; // Request limit: five images covers common before/after batches without flooding one terminal paste.
+export const TERMINAL_UPLOAD_MAX_BODY_BYTES = 25 * 1024 * 1024; // Body limit: 25 MiB accounts for base64 inflation while bounding JSON memory.
 
 const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+const WEBP_RIFF_BYTES = [0x52, 0x49, 0x46, 0x46] as const;
+const WEBP_FORMAT_BYTES = [0x57, 0x45, 0x42, 0x50] as const;
 
 /** Magic-byte prefixes for accepted image formats. */
 const IMAGE_MAGIC_BYTES: Array<{ ext: string; bytes: number[] }> = [
@@ -31,6 +30,7 @@ const IMAGE_MAGIC_BYTES: Array<{ ext: string; bytes: number[] }> = [
   // WEBP: "RIFF....WEBP" - checked separately because of the 4-byte gap
 ];
 
+/** Upload metadata returned only after bytes have been written inside the session upload directory. */
 interface AcceptedUpload {
   originalName: string;
   savedName: string;
@@ -39,23 +39,31 @@ interface AcceptedUpload {
   bytes: number;
 }
 
+/** Per-file rejection shown to the caller while other valid files in the same request may continue. */
 interface RejectedUpload {
   originalName: string;
   reason: string;
 }
 
+/** Batch result that keeps accepted and rejected files separate for partial-success responses. */
 interface UploadResult {
   accepted: AcceptedUpload[];
   rejected: RejectedUpload[];
 }
 
+/** Validated session upload directory plus the real target root used for containment checks. */
 interface UploadDirectory {
   absPath: string;
   relPath: string;
   realRootPath: string;
 }
 
-/** Strip directory components and unsafe characters from an upload filename. */
+/**
+ * Strip directory components and unsafe characters from an upload filename.
+ *
+ * @param rawName Browser-provided filename, which may include fake path components.
+ * @returns Safe basename plus an allowed extension, or an empty extension when unsupported.
+ */
 export function sanitizeUploadFilename(rawName: string): {
   base: string;
   ext: string;
@@ -70,41 +78,52 @@ export function sanitizeUploadFilename(rawName: string): {
   return { base: safeBase, ext: safeExt };
 }
 
-/** Detect image format by magic bytes; returns the canonical extension or null. */
-// eslint-disable-next-line complexity -- linear scan over each format's signature; splitting per format hides the table-driven match
+/** Compare a decoded file prefix against one magic-byte signature. */
+function hasByteSignature(
+  bytes: Uint8Array,
+  signature: readonly number[],
+): boolean {
+  return (
+    bytes.length >= signature.length &&
+    signature.every((byte, index) => bytes[index] === byte)
+  );
+}
+
+/** WEBP stores its format marker after the RIFF length field, so prefix matching is insufficient. */
+function hasWebpSignature(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    hasByteSignature(bytes.subarray(0, 4), WEBP_RIFF_BYTES) &&
+    hasByteSignature(bytes.subarray(8, 12), WEBP_FORMAT_BYTES)
+  );
+}
+
+/**
+ * Detect image format by magic bytes because client MIME types and extensions are not trusted.
+ *
+ * @param bytes Decoded file bytes from the upload body.
+ * @returns Canonical extension for supported image bytes, or null when the content is unsupported.
+ */
 export function detectImageExtension(bytes: Uint8Array): string | null {
   for (const candidate of IMAGE_MAGIC_BYTES) {
-    if (bytes.length < candidate.bytes.length) continue;
-    let matches = true;
-    for (let i = 0; i < candidate.bytes.length; i += 1) {
-      if (bytes[i] !== candidate.bytes[i]) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) return candidate.ext;
+    if (hasByteSignature(bytes, candidate.bytes)) return candidate.ext;
   }
-  // WEBP: "RIFF" at 0..4, "WEBP" at 8..12
-  if (
-    bytes.length >= 12 &&
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
+  if (hasWebpSignature(bytes)) {
     return ".webp";
   }
   return null;
 }
 
-/** Compose the upload directory path for one terminal session.
- *  Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and
- *  asserted to remain inside `targetPath` to prevent path traversal via
- *  the session id. */
+/**
+ * Compose the upload directory path for one terminal session.
+ * Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and asserted to remain inside
+ * `targetPath` to prevent path traversal via the session id.
+ *
+ * @param targetPath Selected target project path that owns upload evidence.
+ * @param sessionId Terminal session id used as the upload subdirectory.
+ * @returns Absolute and relative upload paths plus the real target root.
+ * @throws Error when the session id is not a simple path segment.
+ */
 export function uploadDirForSession(
   targetPath: string,
   sessionId: string,
@@ -136,7 +155,13 @@ function buildSavedName(
   return `${stamp}-${random}-${index.toString().padStart(2, "0")}-${base}${ext}`;
 }
 
-/** Validate one base64 image payload and decode it to bytes. */
+/**
+ * Validate one base64 image payload and decode it to bytes.
+ *
+ * @param rawName Browser-provided filename used for extension and saved-name hints.
+ * @param base64 Base64 file body from the upload request.
+ * @returns Decoded bytes with sanitized filename metadata, or a caller-safe rejection reason.
+ */
 export function decodeUploadFile(
   rawName: string,
   base64: string,
@@ -185,8 +210,16 @@ export function decodeUploadFile(
   return { ok: true, bytes, sanitized };
 }
 
-/** Persist accepted uploads to disk and return their saved metadata.
- *  Caller is responsible for upstream session/path validation. */
+/**
+ * Persist accepted uploads to disk and return their saved metadata.
+ * Caller is responsible for upstream session/path validation.
+ *
+ * @param uploadDir Validated session upload directory.
+ * @param files Browser-provided file payloads from one upload request.
+ * @param options Test seams for deterministic saved filenames.
+ * @returns Accepted file metadata and per-file rejection reasons.
+ * @throws Error when the created upload directory escapes the real target root.
+ */
 export function persistUploads(
   uploadDir: { absPath: string; relPath: string; realRootPath?: string },
   files: Array<{ name: string; data: string }>,
@@ -196,14 +229,14 @@ export function persistUploads(
   const rejected: RejectedUpload[] = [];
   const now = options.now ?? Date.now;
 
-  let dirCreated = false;
+  let hasCreatedUploadDir = false;
   for (const [index, file] of files.entries()) {
     const decoded = decodeUploadFile(file.name, file.data);
     if (!decoded.ok) {
       rejected.push({ originalName: file.name, reason: decoded.reason });
       continue;
     }
-    if (!dirCreated) {
+    if (!hasCreatedUploadDir) {
       mkdirSync(uploadDir.absPath, { recursive: true });
       if (
         uploadDir.realRootPath !== undefined &&
@@ -211,7 +244,7 @@ export function persistUploads(
       ) {
         throw new Error("Upload path escapes session target directory");
       }
-      dirCreated = true;
+      hasCreatedUploadDir = true;
     }
     const savedName = buildSavedName(
       index,
@@ -233,8 +266,13 @@ export function persistUploads(
   return { accepted, rejected };
 }
 
-/** Build the terminal-paste note that announces saved upload paths.
- *  Callers paste this into the active PTY; it is plain text only. */
+/**
+ * Build the terminal-paste note that announces saved upload paths.
+ * Callers paste this into the active PTY; it is plain text only.
+ *
+ * @param accepted Files that were saved for the active terminal session.
+ * @returns Plain text note to paste into the PTY, or an empty string when nothing was accepted.
+ */
 export function buildAttachmentNote(accepted: AcceptedUpload[]): string {
   if (accepted.length === 0) return "";
   const first = accepted[0];

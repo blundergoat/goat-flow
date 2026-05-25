@@ -60,7 +60,7 @@ type LaunchContext = {
       xterm?: { focus(): void };
       awaitingInputTimer?: ReturnType<typeof setTimeout>;
       pasteSubmitTimer?: ReturnType<typeof setTimeout>;
-      pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
+      pasteSubmitQueue?: Array<{ data: string; shouldDelaySubmit: boolean }>;
       pasteSubmitOutputTail?: string;
       pasteSubmitAwaitingCommit?: boolean;
       pasteSubmitFallbackSubmitted?: boolean;
@@ -78,81 +78,170 @@ type LaunchContext = {
     }
   >;
   showMaxSessionsModal: boolean;
+  /**
+   * Keeps runner-specific prompt rewriting injectable so payload tests can opt
+   * into raw terminal bytes with `{ adapt: false }`.
+   */
   adaptPrompt(prompt: string, runner?: string): string;
+  /**
+   * Captures dashboard toast side effects without coupling terminal tests to
+   * Alpine's notification DOM.
+   */
   showToast(msg: string, isError?: boolean): void;
+  /**
+   * Mirrors the dashboard path label helper used when terminal titles fall back
+   * to the selected project or target path.
+   */
   displayNameFor(path: string): string;
+  /**
+   * Removes saved browser-side session state when lifecycle tests end a shell.
+   */
   _forgetSavedSession(sessionId: string): void;
+  /**
+   * Resolves once xterm assets are ready; launch ordering tests deliberately
+   * delay or reject this hook.
+   */
   loadXterm(): Promise<void>;
+  /**
+   * Attaches the browser terminal to an already-created backend session.
+   */
   connectTerminal(sessionId: string, wsUrl: string): void;
+  /**
+   * Refreshes server terminal counts after create, reconnect, and end flows.
+   */
   updateSessionCount(): Promise<void>;
+  /**
+   * Re-enters the launch flow when retrying a failed terminal session.
+   */
   launchInTerminal(
     prompt: string,
     runner?: string,
     options?: LaunchOptions,
   ): Promise<void>;
+  /**
+   * Stores display titles separately from mutable backend session records.
+   */
   rememberSessionTitle(
     sessionId: string,
     title: string | null | undefined,
   ): void;
+  /**
+   * Moves ended sessions into the recent-session rail with a UI-safe shape.
+   */
   rememberRecentSession(session: Record<string, unknown>): void;
+  /**
+   * Derives the visible session title when the backend record lacks one.
+   */
   sessionTitleFor(session: Record<string, unknown> | null): string;
+  /**
+   * Emulates Alpine's post-render scheduling point before terminal attachment.
+   */
   $nextTick(): Promise<void>;
 };
 
 type HelperContext = {
+  /**
+   * Sends text through an existing terminal WebSocket, including bracketed-paste
+   * and delayed-submit behaviour.
+   */
   dashboardSendToTerminalSession(
     ctx: LaunchContext,
     sessionId: string,
     text: string,
     options?: { adapt?: boolean },
   ): boolean;
+  /**
+   * Drives the full create/load/connect path used by dashboard launch buttons.
+   */
   dashboardLaunchInTerminal(
     ctx: LaunchContext,
     prompt: string,
     runner?: string,
     options?: LaunchOptions,
   ): Promise<void>;
+  /**
+   * Wires a browser WebSocket and xterm instance to an existing local session.
+   */
   dashboardConnectTerminal(
     ctx: LaunchContext,
     sessionId: string,
     wsUrl: string,
   ): void;
+  /**
+   * Rehydrates a server-active terminal session into the browser session list.
+   */
   dashboardOpenServerSession(
     ctx: LaunchContext,
     serverSession: Record<string, unknown>,
   ): Promise<void>;
+  /**
+   * Ends a local session and records the recent-session fallback title.
+   */
   dashboardEndSession(ctx: LaunchContext, sessionId: string): void;
+  /**
+   * Detects runner output that should display the Workspace awaiting-input badge.
+   */
   dashboardOutputLooksAwaitingInput(text: string): boolean;
+  /**
+   * Detects the first safe point to paste a queued launch prompt into a runner.
+   */
   dashboardOutputLooksReadyForLaunchPrompt(
     text: string,
     runner?: string,
   ): boolean;
+  /**
+   * Detects startup failures where a queued prompt would otherwise land in a shell.
+   */
   dashboardOutputLooksRunnerStartupFailure(
     text: string,
     runner?: string,
   ): boolean;
+  /**
+   * Extracts the most useful runner-startup error detail for the loading banner.
+   */
   dashboardExtractRunnerStartupError(text: string): string | null;
+  /**
+   * Formats startup failure output for a user-visible retry/error message.
+   */
   dashboardRunnerStartupFailureMessage(text: string): string;
+  /**
+   * Updates awaiting-input state from a new PTY output chunk and prior tail.
+   */
   dashboardNextAwaitingInputState(
     previousAwaiting: boolean,
     previousTail: string,
     outputChunk: string,
   ): boolean;
+  /**
+   * Queues a launch prompt until the runner composer is safe to receive input.
+   */
   dashboardScheduleLaunchPrompt(
     ctx: LaunchContext,
     sessionId: string,
     prompt: string,
   ): void;
+  /**
+   * Feeds fresh PTY output into queued-launch readiness and fallback timers.
+   */
   dashboardHandleLaunchPromptOutput(
     ctx: LaunchContext,
     sessionId: string,
   ): void;
+  /**
+   * Handles collapsed pasted-text echoes before sending the final Enter.
+   */
   dashboardHandlePasteSubmitOutput(
     ctx: LaunchContext,
     sessionId: string,
     output: string,
   ): void;
+  /**
+   * Clears delayed paste state when a session ends or a submit completes.
+   */
   dashboardClearPasteSubmitState(ctx: LaunchContext, sessionId: string): void;
+  /**
+   * Applies loading overlay state while preserving the fallback session object.
+   */
   dashboardSetTerminalLoadingPhase(
     ctx: LaunchContext,
     sessionId: string,
@@ -160,11 +249,17 @@ type HelperContext = {
     phase: "connecting" | "loading" | "ready" | "error",
     error?: string,
   ): void;
+  /**
+   * Arms the slow-start and retry affordance timers for a launching session.
+   */
   dashboardArmTerminalLoadingTimers(
     ctx: LaunchContext,
     sessionId: string,
     fallback: Record<string, unknown>,
   ): void;
+  /**
+   * Marks a session ready on first useful output without leaking loading timers.
+   */
   dashboardMarkTerminalLoadingReady(
     ctx: LaunchContext,
     sessionId: string,
@@ -172,10 +267,16 @@ type HelperContext = {
     previousTail: string,
     output: string,
   ): void;
+  /**
+   * Retries a failed launch from the prompt and path metadata stored on the ref.
+   */
   dashboardRetryTerminalSession(
     ctx: LaunchContext,
     sessionId: string,
   ): Promise<void>;
+  /**
+   * Debounces terminal count refreshes so bursty lifecycle events share one fetch.
+   */
   dashboardUpdateSessionCount(ctx: LaunchContext): Promise<void>;
 };
 
@@ -271,36 +372,46 @@ function makeContext(
     activeSessionId: null,
     _terminalRefs: {},
     showMaxSessionsModal: false,
+    // Default contexts assert raw payloads, so prompt adaptation is opt-in per test.
     adaptPrompt(prompt: string): string {
       return prompt;
     },
+    // Match dashboard fallback labels without pulling in the full project reader.
     displayNameFor(path: string): string {
       return path.split("/").filter(Boolean).pop() || path;
     },
+    // Most tests do not care about saved-session cleanup; override when they do.
     _forgetSavedSession(): void {
       return;
     },
+    // Launch tests override this to delay or fail asset loading.
     async loadXterm(): Promise<void> {
       return;
     },
+    // Browser socket wiring is exercised by makeBrowserTerminalGlobals instead.
     connectTerminal(): void {
       return;
     },
+    // Count refresh is asserted only in tests that install a fetch-backed override.
     async updateSessionCount(): Promise<void> {
       return;
     },
+    // Retry tests replace this hook to capture the relaunch payload.
     async launchInTerminal(): Promise<void> {
       return;
     },
+    // Titles are cached outside session records because recent-session tests trim records.
     rememberSessionTitle(
       sessionId: string,
       title: string | null | undefined,
     ): void {
       if (title) this.sessionTitles[sessionId] = title;
     },
+    // The recent rail preserves ended sessions after dashboardEndSession removes them.
     rememberRecentSession(session: Record<string, unknown>): void {
       this.recentTerminalSessions.push(session);
     },
+    // Title fallback order mirrors the UI path: cached title, prompt label, runner default.
     sessionTitleFor(session: Record<string, unknown> | null): string {
       if (!session) return "Runner session";
       return (
@@ -309,9 +420,11 @@ function makeContext(
         "claude session"
       );
     },
+    // Alpine schedules terminal attachment after DOM rendering; default tests are synchronous.
     async $nextTick(): Promise<void> {
       return;
     },
+    // Toasts are test-observable side effects, not real dashboard notifications.
     showToast(msg: string, isError = false): void {
       toasts.push({ msg, isError });
     },
@@ -321,6 +434,10 @@ function makeContext(
   return ctx;
 }
 
+/**
+ * Keeps queued-launch tests on the same local session shape so they differ
+ * only by runner output and timer behaviour.
+ */
 function makeLaunchPromptContext(): ReturnType<typeof makeContext> & {
   sent: string[];
 } {
@@ -347,24 +464,36 @@ function makeLaunchPromptContext(): ReturnType<typeof makeContext> & {
     ],
     _terminalRefs: {
       "launch-session": {
-        ws: {
-          readyState: 1,
-          send(payload: string): void {
-            sent.push(payload);
-          },
-        },
+        ws: makeCapturingWebSocket(sent),
       },
     },
   });
   return Object.assign(ctx, { sent });
 }
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+/**
+ * Uses real timers for behaviours that intentionally exercise production delays.
+ */
+async function delay(durationMs: number): Promise<void> {
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, durationMs));
 }
 
+/**
+ * Provides one fake clock for VM-loaded helpers because timeout and interval
+ * cleanup must be verified together; otherwise this focused file can pass
+ * assertions and still hang until an outer timeout kills it.
+ *
+ * Invariant: callbacks scheduled for earlier timestamps run before later
+ * callbacks, and an interval cleared during its own callback must not reschedule.
+ */
 function createFakeTimers(): TimerControls & {
-  tick(ms: number): void;
+  /**
+   * Advances all due timeout and interval callbacks in timestamp order.
+   */
+  tick(durationMs: number): void;
+  /**
+   * Reports outstanding timers so tests can catch leaked fallback work.
+   */
   pending(): number;
 } {
   let now = 0;
@@ -387,6 +516,8 @@ function createFakeTimers(): TimerControls & {
     });
     return id as unknown as ReturnType<typeof setTimeout>;
   }) as typeof setTimeout;
+  // Fired intervals can be cleared by their own callback; cancelled keeps that
+  // clear from being lost after the callback returns.
   const fakeClearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
     const id = Number(handle);
     if (!timers.delete(id)) cancelled.add(id);
@@ -405,6 +536,8 @@ function createFakeTimers(): TimerControls & {
     });
     return id as unknown as ReturnType<typeof setInterval>;
   }) as typeof setInterval;
+  // Shares cancellation bookkeeping with timeouts because browser helpers use
+  // both APIs through the same VM-injected fake clock.
   const fakeClearInterval = ((handle?: ReturnType<typeof setInterval>) => {
     const id = Number(handle);
     if (!timers.delete(id)) cancelled.add(id);
@@ -414,8 +547,12 @@ function createFakeTimers(): TimerControls & {
     clearTimeout: fakeClearTimeout,
     setInterval: fakeSetInterval,
     clearInterval: fakeClearInterval,
-    tick(ms: number): void {
-      const target = now + ms;
+    /**
+     * Invariant: one tick drains every callback due at or before the target
+     * before moving the fake clock to the target timestamp.
+     */
+    tick(durationMs: number): void {
+      const target = now + durationMs;
       while (true) {
         const due = [...timers.entries()]
           .filter(([, timer]) => timer.at <= target)
@@ -432,6 +569,7 @@ function createFakeTimers(): TimerControls & {
       }
       now = target;
     },
+    // A non-zero pending count after a scenario catches leaked fallback work.
     pending(): number {
       return timers.size;
     },
@@ -444,30 +582,60 @@ class FakeTerminal {
   _addonFit?: FakeFitAddon;
   written: string[] = [];
 
+  /**
+   * Stores the fit addon so terminal setup can run without loading xterm.
+   */
   loadAddon(addon: FakeFitAddon): void {
     this._addonFit = addon;
   }
 
+  /**
+   * DOM mounting is outside these tests; the method only satisfies xterm's API.
+   */
   open(): void {}
 
+  /**
+   * Mutates `written` by appending output that helpers would write into xterm.
+   */
   write(data: string): void {
     this.written.push(data);
   }
 
+  /**
+   * Focus changes are not observable in this harness.
+   */
   focus(): void {}
 
+  /**
+   * Disposal side effects are asserted through session refs, not xterm internals.
+   */
   dispose(): void {}
 
+  /**
+   * Keyboard shortcut wiring is not under test in this launch-focused suite.
+   */
   attachCustomKeyEventHandler(): void {}
 
+  /**
+   * Tests drive input through dashboardSendToTerminalSession instead of xterm events.
+   */
   onData(): void {}
 
+  /**
+   * Resize paths are triggered through the fake ResizeObserver when needed.
+   */
   onResize(): void {}
 
+  /**
+   * Keeps paste tests on the no-selection branch unless a test overrides xterm.
+   */
   hasSelection(): boolean {
     return false;
   }
 
+  /**
+   * Mirrors xterm's empty-selection return value for clipboard tests.
+   */
   getSelection(): string {
     return "";
   }
@@ -475,6 +643,9 @@ class FakeTerminal {
   buffer = {
     active: {
       length: 0,
+      /**
+       * Forces helpers to rely on session outputTail, the state these tests set.
+       */
       getLine(): null {
         return null;
       },
@@ -483,12 +654,21 @@ class FakeTerminal {
 }
 
 class FakeFitAddon {
+  /**
+   * Layout measurements are not meaningful in the VM harness.
+   */
   fit(): void {}
 }
 
 class FakeResizeObserver {
+  /**
+   * Observed elements are static fake DOM nodes, so no callback is needed.
+   */
   observe(): void {}
 
+  /**
+   * Disconnect is present so terminal cleanup can call the browser API shape.
+   */
   disconnect(): void {}
 }
 
@@ -501,6 +681,9 @@ class FakeDashboardWebSocket {
   onclose?: () => void;
   onerror?: () => void;
 
+  /**
+   * Registers constructed sockets so tests can drive open/message/close events.
+   */
   constructor(
     public readonly url: string,
     public readonly instances: FakeDashboardWebSocket[],
@@ -508,22 +691,55 @@ class FakeDashboardWebSocket {
     instances.push(this);
   }
 
+  /**
+   * Records browser-to-server terminal payloads for assertions.
+   */
   send(payload: string): void {
     this.sent.push(payload);
   }
 
+  /**
+   * Simulates browser close semantics and notifies the dashboard helper.
+   */
   close(): void {
     this.readyState = 3;
     this.onclose?.();
   }
 }
 
+/**
+ * Creates the mutable WebSocket double used by tests that only assert terminal
+ * wire payloads; `readyState` stays writable for retry and reconnect scenarios.
+ */
+function makeCapturingWebSocket(sent: string[]): {
+  readyState: number;
+  /**
+   * Mutates the provided array with raw browser wire payloads.
+   */
+  send(payload: string): void;
+} {
+  return {
+    readyState: 1,
+    // Side effect: appends raw browser wire payloads for order-sensitive checks.
+    send(payload: string): void {
+      sent.push(payload);
+    },
+  };
+}
+
+/**
+ * Creates the minimum browser global surface needed by dashboard-terminal.ts
+ * because these tests load the classic dashboard script in a VM, not a browser.
+ */
 function makeBrowserTerminalGlobals(): {
   globals: Record<string, unknown>;
   sockets: FakeDashboardWebSocket[];
 } {
   const sockets: FakeDashboardWebSocket[] = [];
   const WebSocketCtor = class extends FakeDashboardWebSocket {
+    /**
+     * Binds the browser-facing constructor to this test's socket registry.
+     */
     constructor(url: string) {
       super(url, sockets);
     }
@@ -534,14 +750,17 @@ function makeBrowserTerminalGlobals(): {
       window: {
         Terminal: FakeTerminal,
         FitAddon: { FitAddon: FakeFitAddon },
+        // Dashboard helpers register listeners, but these tests invoke events directly.
         addEventListener(): void {
           return;
         },
+        // Cleanup calls this even though the fake window has no listener registry.
         removeEventListener(): void {
           return;
         },
       },
       document: {
+        // Stable dimensions let terminal setup run without a real layout engine.
         getElementById(): { innerHTML: string; offsetWidth: number } {
           return { innerHTML: "", offsetWidth: 80 };
         },
@@ -641,20 +860,10 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.upload.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent.upload),
         },
         "session-active": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.active.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent.active),
         },
       },
     });
@@ -713,12 +922,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -775,12 +979,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -837,12 +1036,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -895,12 +1089,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -954,12 +1143,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1033,12 +1217,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1099,12 +1278,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1146,12 +1320,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1215,12 +1384,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1263,12 +1427,7 @@ describe("dashboard terminal launch flow", () => {
       timers,
     );
     const sent: string[] = [];
-    const ws = {
-      readyState: 1,
-      send(payload: string): void {
-        sent.push(payload);
-      },
-    };
+    const websocket = makeCapturingWebSocket(sent);
     const ctx = makeContext({
       activeSessionId: "session-upload",
       sessions: [
@@ -1290,7 +1449,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws,
+          ws: websocket,
         },
       },
     });
@@ -1306,12 +1465,12 @@ describe("dashboard terminal launch flow", () => {
     );
 
     assert.equal(sent.length, 1);
-    ws.readyState = 0;
+    websocket.readyState = 0;
     timers.tick(15000);
     assert.equal(sent.length, 1);
     assert.equal(timers.pending(), 1);
 
-    ws.readyState = 1;
+    websocket.readyState = 1;
     timers.tick(300);
     assert.deepStrictEqual(JSON.parse(sent[1] ?? "{}"), {
       type: "input",
@@ -1350,12 +1509,7 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-upload": {
-          ws: {
-            readyState: 1,
-            send(payload: string): void {
-              sent.push(payload);
-            },
-          },
+          ws: makeCapturingWebSocket(sent),
         },
       },
     });
@@ -1474,17 +1628,22 @@ describe("dashboard terminal launch flow", () => {
       } as Response;
     });
     const ctx = makeContext({
+      // Holding xterm readiness open proves backend create can start before
+      // the browser terminal assets finish loading.
       async loadXterm(): Promise<void> {
         calls.push("loadXterm");
         await xtermReady;
         calls.push("loadXterm:ready");
       },
+      // The attach call is order-sensitive: it must happen after loadXterm and $nextTick.
       connectTerminal(sessionId: string, wsUrl: string): void {
         calls.push(`connect:${sessionId}:${wsUrl}`);
       },
+      // Count refresh is only evidence here that the successful launch path completed.
       async updateSessionCount(): Promise<void> {
         calls.push("updateSessionCount");
       },
+      // Terminal attach must wait for Alpine to render the workspace container.
       async $nextTick(): Promise<void> {
         calls.push("$nextTick");
       },
@@ -1781,11 +1940,13 @@ describe("dashboard terminal launch flow", () => {
           retryPresetId: "preset-setup",
           retryCwdPath: "/tmp/example",
           retryTargetPath: "/tmp/target",
+          // Retry must clean up the failed backend shell before relaunching.
           cleanup(): void {
             calls.push("cleanup:session-error");
           },
         },
       },
+      // Capture retry metadata without starting a second real terminal session.
       async launchInTerminal(
         prompt: string,
         runner?: string,
@@ -1858,6 +2019,7 @@ describe("dashboard terminal launch flow", () => {
       activeSessionId: "session-detach",
       sessions: [session],
       _terminalRefs: { "session-detach": {} },
+      // Detach should refresh counts without converting the local session to ended.
       async updateSessionCount(): Promise<void> {
         calls.push("updateSessionCount");
       },
@@ -1967,12 +2129,15 @@ describe("dashboard terminal launch flow", () => {
     const ctx = makeContext({
       activeSessionId: "session-live",
       sessions: [endedLocal],
+      // Reconnect should reopen xterm for the server-active session.
       async loadXterm(): Promise<void> {
         calls.push("loadXterm");
       },
+      // Captures the fresh WebSocket URL chosen for the rehydrated session.
       connectTerminal(sessionId: string, wsUrl: string): void {
         calls.push(`connect:${sessionId}:${wsUrl}`);
       },
+      // Mirrors Alpine's render boundary before reconnecting stale local state.
       async $nextTick(): Promise<void> {
         calls.push("$nextTick");
       },
@@ -2014,13 +2179,16 @@ describe("dashboard terminal launch flow", () => {
       return { json: async () => ({ ok: true }) } as Response;
     });
     const ctx = makeContext({
+      // Throws after backend create so the failure path must delete that shell.
       async loadXterm(): Promise<void> {
         calls.push("loadXterm");
         throw new Error("xterm.js load failed");
       },
+      // Count refresh proves the failure path reconciles server state.
       async updateSessionCount(): Promise<void> {
         calls.push("updateSessionCount");
       },
+      // Included so the failed path can still reach the normal attach boundary.
       async $nextTick(): Promise<void> {
         calls.push("$nextTick");
       },
@@ -2088,14 +2256,17 @@ describe("dashboard terminal launch flow", () => {
       ],
       _terminalRefs: {
         "session-3": {
+          // Ending a session must release browser-side terminal resources.
           cleanup(): void {
             calls.push("cleanup:session-3");
           },
         },
       },
+      // Saved session state should be removed alongside the backend delete call.
       _forgetSavedSession(sessionId: string): void {
         calls.push(`forget:${sessionId}`);
       },
+      // Recent history keeps only fields the UI needs after the live record is gone.
       rememberRecentSession(session: Record<string, unknown>): void {
         this.recentTerminalSessions.push({
           id: session.id,
@@ -2395,6 +2566,9 @@ describe("dashboard terminal launch flow", () => {
     "__fixtures__",
     "awaiting-input",
   );
+  /**
+   * Loads captured PTY bytes so prompt detection is pinned to real runner output.
+   */
   function loadFixture(name: string): string {
     return readFileSync(resolve(AWAITING_FIXTURE_DIR, name), "utf-8");
   }
@@ -2591,14 +2765,10 @@ describe("dashboard terminal launch flow", () => {
   });
 
   it("keeps the badge on across unknown chunks while the session is awaiting", () => {
-    // M00 round-6 contract: output chunks NEVER clear the badge. Spinner
-    // glyphs, OSC updates, mode toggles, future runner glyphs are all
-    // benign - only user input (term.onData / sendToTerminalSession) or
-    // session lifecycle (exit / terminating error) clears the awaiting
-    // state. Rounds 1-5 tried five different chunk-classification or
-    // tail-window strategies, each defeated by runner output we hadn't
-    // anticipated; round 6 stops trying to read chunks for "user moved
-    // on" and trusts user input as the only authoritative signal.
+    // Output chunks never prove the user moved on. Earlier fixes tried
+    // glyph allowlists, OSC preservation, and tail-window heuristics, but
+    // each failed on a real runner redraw pattern; only user input or
+    // lifecycle events can clear the awaiting state.
     const { globals, sockets } = makeBrowserTerminalGlobals();
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -2689,6 +2859,10 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  /*
+   * Fixture covers the ANSI-heavy prompt-tail regression where the visible
+   * question can disappear from a too-short raw tail window.
+   */
   it("keeps the badge on across unknown chunks for ANSI-heavy prompt tails", () => {
     // Gemini/Copilot captured prompts contain enough ANSI and box drawing
     // bytes that raw tail.slice(-1500) can miss the visible prompt. R4's
@@ -2738,6 +2912,8 @@ describe("dashboard terminal launch flow", () => {
     socket.onmessage?.({
       data: JSON.stringify({
         type: "output",
+        // Fixture purpose: Gemini's ANSI-heavy prompt previously pushed the
+        // visible question outside the raw 1500-byte tail window.
         data: loadFixture("gemini-startup.txt"),
       }),
     });
@@ -2841,7 +3017,7 @@ describe("dashboard terminal launch flow", () => {
   });
 
   it("badge persists across arbitrary output volume - only user input clears", () => {
-    // Round-6 contract: output chunks can NEVER clear the awaiting badge.
+    // Regression guard: output chunks can never clear the awaiting badge.
     // Five rounds of trying to classify chunks (glyph allowlists, tail-end
     // heuristics, OSC-title preservation) failed because runners emit
     // continuous spinner/redraw cycles that vary by version and accumulate
@@ -2930,8 +3106,8 @@ describe("dashboard terminal launch flow", () => {
   });
 
   it("badge clears when the user types in the dashboard xterm (term.onData)", () => {
-    // The round-6 contract: the AUTHORITATIVE clear signal is user input.
-    // term.onData fires for any keystroke routed through the xterm widget.
+    // User input is the authoritative clear signal; term.onData fires for
+    // any keystroke routed through the xterm widget.
     const { globals, sockets } = makeBrowserTerminalGlobals();
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -3010,6 +3186,10 @@ describe("dashboard terminal launch flow", () => {
       timers,
       globals,
     );
+    /**
+     * Builds sessions that differ only by id/runner so the test isolates
+     * per-session awaitingInput mutation.
+     */
     function makeAwaitingSession(id: string, runner: "claude" | "codex") {
       return {
         id,
@@ -3652,10 +3832,9 @@ describe("dashboard terminal launch flow", () => {
   });
 
   it("wires all four Workspace waiting surfaces to a single awaitingInput field", () => {
-    // M00 contract: when LocalSession.awaitingInput flips true, the header
-    // status dot, the "Awaiting input" pill, the left-rail card style, and
-    // the top meterWaiting() count must all flip together. Each surface must
-    // derive from the same field so the heuristic fix is reflected uniformly.
+    // All Workspace waiting surfaces derive from LocalSession.awaitingInput
+    // so the header dot, pill, left-rail style, and meter count cannot drift
+    // when the terminal heuristic changes.
     const workspace = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
     const app = readFileSync(DASHBOARD_APP_PATH, "utf-8");
     // (1) Active terminal header dot reads terminalAwaitingInput (or waiting-for-runner).

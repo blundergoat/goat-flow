@@ -1,7 +1,69 @@
 ---
 category: verification
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-25
 ---
+
+## Lesson: New polymorphic classes ship with silent bugs without integration tests at parity
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened (external — mini-swe-agent PR #777, 2026-03-10):** `ContreeEnvironment.execute()` had two `self.session.run(...)` calls back-to-back; every command ran twice with no integration tests to catch it. The fix added 10 unit tests at parity with sibling env classes; the duplicate surfaced immediately. Evidence: `.goat-flow/scratchpad/related/mini-swe-agent/src/minisweagent/environments/extra/contree.py`.
+
+**Prevention:** Every new audit check, harness check, agent profile, environment-style class, or hook script must land with parametrized tests at the same scenario surface as its siblings. Mini's `model_factory` parametrizes every agent test across three action formats; goat-flow's equivalent runs across all four agent harness configs in `test/integration/`. Code review for new polymorphic classes must include "show me the integration tests at parity with sibling X."
+
+---
+
+## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** During the gruff docs cleanup, the first pass on `src/cli/server/decoders.ts` added comments that explained the intent to a maintainer, but `npx gruff-ts analyse src/cli/server/decoders.ts` still reported `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, and `docs.missing-why-for-complex-code`. The comments did not use analyzer-recognised language for limits, reporting behavior, or why complex control flow exists. A second pass, after checking the gruff rule vocabulary, cleared the docs findings.
+
+**Recurrence 2026-05-25:** During the same cleanup, a naming improvement in `src/dashboard/dashboard-terminal.ts` changed queued paste metadata from `delayed` to `shouldDelaySubmit`. Focused gruff and runtime tests passed, but `npm run typecheck` caught stale ambient and VM-test helper shapes in `src/dashboard/globals.d.ts` and `test/unit/dashboard-terminal-launch.test.ts`. Comment cleanup can still touch type surfaces when a rename is the better comment.
+
+**Root cause:** I treated "this comment makes sense to me" as enough before checking whether the actual analyzer accepted it, and later treated a local rename as complete before checking parallel ambient declarations. The `code-comments.md` playbook gives the quality bar, but gruff's docs rules also have concrete vocabulary expectations that must be verified with the targeted command.
+
+**Prevention:** For gruff-driven comment work, read `.goat-flow/skill-playbooks/code-comments.md`, patch one file or cohesive cluster, then immediately rerun `npx gruff-ts analyse <path>`. If docs findings remain, tighten the comment around the exact rule remediation instead of moving on. When a rename is part of making a comment unnecessary, grep the old identifier and run `npm run typecheck` before declaring the pass done. Evidence anchors: `src/cli/server/decoders.ts` (search: `Parse JSON; reports malformed bodies`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
+
+## Lesson: Harness fixture counts must match the reported unit
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
+
+**Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
+
+**Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
+
+## Lesson: Tests that monkeypatch the function under test mask empty production paths
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** awslabs/cli-agent-orchestrator PR #245 shipped `_get_terminal_context()` returning `{"cwd": None, ...}` with a comment claiming dynamic tmux resolution but no resolution was wired. All 65 tests passed because they monkeypatched `_get_terminal_context` itself, never exercising the empty production code path. Production silently routed every `project`-scoped memory store into the global container. Caught at code review by reading the code, not by tests (P0-A in haofeif's 2 P0 / 3 P1 / 6 P2 tally).
+
+**Root cause:** Replacing the system-under-test with a stub means tests measure the stub's behaviour, not the production code. The hole is invisible to coverage tools because the stubbed function appears to "run" in tests.
+
+**Prevention:**
+1. When stubbing for tests, stub the function's *dependencies* (DB, network, tmux helpers), not the function itself.
+2. For any helper that reads from environment state (tmux, env vars, system queries), the production-path test must call the real function with the *environment* mocked. CAO's fix added `TestTerminalContextResolution` (P3-B) that stubs `SessionLocal` and the tmux helper but exercises the real `_get_terminal_context`.
+3. If a specific scenario genuinely needs to monkeypatch the SUT, add at least one production-path test that doesn't.
+
+Related principle: replacing the subject of measurement with a stub or shortcut - the function under test here, a peer verifier doing only half the checks elsewhere - means the measurement no longer covers what was claimed.
+
+## Lesson: CLI must enforce every constraint the service silently applies
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** awslabs/cli-agent-orchestrator PR #245 P2-E shipped a CLI key validator that checked charset (`^[a-z0-9-]+$`) but not length, while the downstream `MemoryService._sanitize_key` silently truncated keys to 60 chars. Users could store a 100-char key via the CLI; downstream lookup truncated and never found it. The length constraint existed - only one of two boundary layers enforced it. Fix added a `len(key) > _MAX_KEY_LENGTH` check at the CLI boundary mirroring the service's silent ceiling.
+
+**Root cause:** The CLI deferred to the service for validation, the service deferred to its sanitiser, the sanitiser silently fixed bad input. Each layer assumed someone else would reject. No layer rejected; data became unrecoverable.
+
+**Prevention:**
+1. Every public boundary that accepts an identifier (CLI arg, HTTP query param, MCP tool argument) MUST enforce charset, length, and reserved-name rules at the boundary - not delegate them downstream.
+2. Mirror existing discipline: `src/cli/server/safe-exec.ts` (search: `security boundary, not`) - explicit allowlists at the call site, not `command -v` lookups at the inner layer.
+3. When adding a sanitiser that silently truncates or rewrites input, audit existing callers and ensure every boundary that may pass input to it rejects what the sanitiser would silently mutate.
+
+**Applies to:** any goat-flow CLI command that accepts a slug, key, or path component (skill names in `src/cli/cli.ts`, project labels in `src/cli/server/dashboard-routes.ts`, custom prompt IDs surfaced by dashboard custom-prompts UI). Verification: grep for user-supplied identifiers becoming file/directory components and confirm each has a boundary validator at the public surface, not only at the inner layer.
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
@@ -292,5 +354,23 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 **Root cause:** Treated the installed Copilot hook config as the only file needing the UX copy change. The workflow template is the parity source for installed agent configs, so any installed hook-message change needs the template change in the same patch.
 
 **Prevention:** When changing `.github/hooks/hooks.json`, grep `workflow/hooks/agent-config/` for the same hook payload and update the matching template before the first preflight run. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+
+---
+
+## Lesson: Verify a fix by re-running the original reproducer, not just the test suite
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened (external — stanfordnlp/dspy PR #9741):** `Module.load_state` walked `named_parameters()` and applied each value in place. If parameter N raised mid-loop, parameters 0..N-1 were already overwritten — the module passed `isinstance` checks, looked structurally valid, but served inference from a mix of saved demos and fresh defaults. Users attributed weeks of silent degradation to "model drift." Three closed predecessor PRs (`#9590`, `#9657`, `#9655` — all verified `CLOSED`, none merged) each shipped a "fix" that validated keys/structure first then applied — and ran the existing test suite to confirm. None ever ran the issue's reproducer end-to-end. The bug was specifically about mid-loop *value* corruption, not key/structure corruption, so structural validation passed and the suite stayed green while the bug remained. #9741's author wrote in the PR body: "I have been following this thread since the issue was filed and reviewed all three closed PRs before writing this," and added a deepcopy dry-run pass that reproduces the entire mutation against a sidecar before touching `self`. Evidence: `.goat-flow/scratchpad/related/dspy/dspy/primitives/base_module.py` (search: `_apply(self.deepcopy())  # trial run raises before self is touched`).
+
+**Root cause across the three failed PRs:** "Fix verified by passing the test suite" is not "fix verified." The bug authored a test (the reproducer in the issue); the team authored a test (the existing suite). The reproducer was the specific test that surfaced this specific failure mode. Skipping it three times in a row produced three closed PRs and weeks of degradation in the field.
+
+**Prevention:** When fixing any bug whose original report includes a reproducer:
+1. Run the reproducer once *before* the fix to confirm it still fails in the current environment (proves the harness surfaces the bug).
+2. Apply the fix.
+3. Run the *same* reproducer to confirm it now passes — separately from the test suite.
+4. Only then run the full test suite as regression coverage.
+
+"Test suite passes" is necessary but not sufficient evidence of a bug fix. Reinforces CLAUDE.md's "Fix verification" hallucination red-flag ("Do not claim a fix works without running the reproduction steps that originally demonstrated the bug. 'Looks correct' is not verification."). The dspy case is concrete cost evidence: three failed PRs over weeks of repeated review cycles, traceable to skipping step 3.
 
 ---

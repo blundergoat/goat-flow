@@ -1,6 +1,28 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-25
+---
+
+## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
+
+**Created:** 2026-05-25
+
+**What happened:** User ran `npx gruff-ts summary` in `/home/devgoat/projects/goat-flow` and asked the agent to "deeply analyse these findings and tell me what you agree that should be fixed." The summary reported 1643 findings (0 error, 276 warning, 1367 advisory) and a Score of 12.9 (F). The agent's analysis produced three tiers - Tier 1 "Fix these", Tier 2 "Investigate", and Tier 3 "Tune the config, don't fix" - and recommended `enabled: false` in `.gruff-ts.yaml` for nine high-volume advisory rules (`docs.missing-function-doc`, `naming.boolean-prefix`, `naming.short-variable`, `test-quality.setup-bloat`, `naming.identifier-quality`, `test-quality.loop-in-test`, `test-quality.magic-number-assertion`, `docs.missing-interface-doc`, and the test-file majority of `modernisation.non-null-assertion`). The agent framed this as resolving a conflict between gruff-ts rules and CLAUDE.md's "default to no comments" stance. The user replied in capitals: *"DONT SET ANYTHING TO ENABLED FALSE!!"*
+
+**Root cause:** The agent treated high-volume advisory findings as configuration noise to mute rather than signal to act on or threshold-tune. The framing "the rule fights your stated philosophy" used a real project norm (CLAUDE.md "default to no comments") to justify silencing a tool, but a tool-vs-norm conflict is never resolved by disabling the tool - it is resolved by satisfying the rule selectively, tuning via threshold/allowlist/path-filter, or accepting the noise while triaging. The agent also misread the score: F (12.9) on a scale where 0 errors trip is not a quality emergency, and dropping advisory volume by disabling rules would produce a higher score without changing the codebase - exactly the gaming behaviour the analyser is designed to prevent.
+
+**Why it matters:** Disabling a rule erases its signal permanently. A future agent running `gruff-ts summary` will see fewer findings and conclude the codebase is clean in that dimension when in reality the rule was silenced. Worse, the user has explicitly committed to the gruff-ts rule set as the project's quality vocabulary - proposing disablement is proposing to weaken the contract the user picked. The cost of being wrong is one-directional: a wrongly-disabled rule stays disabled until someone notices, while a wrongly-noisy rule prompts a real conversation about thresholds.
+
+**Prevention:**
+
+1. **Never propose `enabled: false` for any gruff-ts rule in `.gruff-ts.yaml`**, regardless of finding volume, severity, or apparent conflict with project norms. This is a hard rule for this project.
+2. **Group findings as Fix / Investigate / Tune - never as Disable.** "Tune" means rule options the rule itself exposes: `threshold`, allowlists (`acceptedAbbreviations`, `booleanPrefixes`, `placeholderNames`, etc.), or `paths.ignore` for genuinely off-target subtrees. The rule stays on.
+3. **When a rule conflicts with a project norm, satisfy the rule anyway.** If `docs.missing-function-doc` flags 268 functions and CLAUDE.md says "default to no comments", the correct response is to add the missing docs (or raise the norm, or argue the norm change in an ADR) - not to silence the rule.
+4. **Treat the rule set as fixed; the codebase is what changes.** The analyser's controlled vocabulary is the contract. The agent's job is to help the codebase satisfy the contract, not to renegotiate the contract by attrition.
+5. **Read score in the right order: errors > warnings > advisory.** A 0-error report with thousands of advisories is not a quality emergency - it is a triage queue. F-on-a-letter-grade is misleading when severity-0 is empty.
+
+Related memory: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
+
 ---
 
 ## Lesson: Agent parsed "use X to find Y" as "audit X for Y" when X was a CLI tool

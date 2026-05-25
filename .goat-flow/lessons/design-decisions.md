@@ -1,6 +1,29 @@
 ---
 category: design-decisions
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-25
+---
+
+## Lesson: Contract changes need a canary surface before propagating
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened (external — mini-swe-agent PR #683 → revert `1ce8e917`, 7 days):** PR #683 (merged 2026-01-05) changed the submit-marker position from first-line to last-line across the agent's whole environment surface — 8 environment files + 4 benchmark configs + multiple tests, all in one PR. The PR was well-reasoned (it addressed a real bug from issue #659: agent could submit when the command failed). On 2026-01-12, direct commit `1ce8e917` reverted the position swap across the same 15 files. The revert commit message is just "Revert back to COMPLETE_TASK_.. preceding final submission" with no reason given. The complementary fix from issue #659 (explicit `returncode == 0` check) landed months later in a tangentially-related PR #747.
+
+**Root cause:** The contract change propagated to every consumer in the same PR. When real-world LM diversity revealed the new shape's symptom, the revert had to touch the same 15-file surface. There was no canary consumer that could have absorbed the failure visibly before the change spread. The lesson is verifiable independently of the *why* of the revert: a contract change shipped breadth-first will revert breadth-first, and any cross-file refactor that lacks a canary surface inherits this cost.
+
+**Goat-flow translation:** Goat-flow has several cross-file contracts that share this shape:
+- `CheckResult` / `HarnessCheckResult` schemas in `src/cli/audit/types.ts` — consumed by every audit check, every renderer, every dashboard route.
+- Manifest schema in `workflow/manifest.json` and `src/cli/manifest/manifest.ts` — referenced by setup, drift detection, audit, install.
+- Skill composition contract (`composeSkill`-like logic in `src/cli/audit/check-drift.ts` plus everywhere skill content is assembled) — consumed by every skill consumer.
+- Hook event-kind naming (per `.goat-flow/tasks/1.18.0/M01-hook-programme-foundation.md`) — once event names are standardized, renaming them ripples through every hook.
+
+**Prevention:**
+1. When changing a cross-file contract, identify the smallest canary consumer that exercises the change end-to-end. Apply the change to that consumer only first. Land it. Run it for at least one work cycle.
+2. Only after the canary survives one cycle, propagate to remaining consumers. The canary cost is one extra PR + one extra cycle; the saved cost is the breadth-first revert.
+3. "Smallest canary" usually means: one audit check, not all of them. One environment class, not all five. One skill, not all six. One agent harness config, not all four.
+4. Document the canary choice in the contract-change PR description so reviewers can verify the smaller surface is truly representative. If the canary doesn't share the failure mode with peers, it's not a canary.
+5. Reverting a breadth-first contract change is structurally expensive even when the per-file revert is trivial — the PR is large, the diff is noisy, the test surface to re-prove parity is wide. The canary pattern caps that downside.
+
 ---
 
 ## Lesson: Doer-verifier is theater in single-agent context

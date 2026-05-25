@@ -24,6 +24,7 @@
     ".goat-flow/skill-playbooks/browser-use.md",
     ".goat-flow/skill-playbooks/changelog.md",
     ".goat-flow/skill-playbooks/code-comments.md",
+    ".goat-flow/skill-playbooks/gruff-code-quality.md",
     ".goat-flow/skill-playbooks/observability.md",
     ".goat-flow/skill-playbooks/page-capture.md",
     ".goat-flow/skill-playbooks/release-notes.md",
@@ -64,7 +65,7 @@
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
     ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
-    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
@@ -94,7 +95,11 @@
         "references/rubric-examples.md",
         "references/sub-agent-directives.md"
       ],
-      "goat-review": ["references/examples.md", "references/refuter-spec.md"],
+      "goat-review": [
+        "references/examples.md",
+        "references/refuter-spec.md",
+        "references/automated-review.md"
+      ],
       "goat-security": [
         "references/common-threats.md",
         "references/identity-and-data.md",

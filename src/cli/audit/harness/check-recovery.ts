@@ -29,6 +29,12 @@ function recoveryProvenance(
   };
 }
 
+/**
+ * Count markdown checkbox markers without interpreting task completion.
+ *
+ * Recovery checks only report whether milestone notes contain local workflow
+ * state; they intentionally avoid scoring incomplete checkboxes as failures.
+ */
 function countTaskMarkers(content: string): number {
   return content.match(/- \[[ xX]\]/g)?.length ?? 0;
 }
@@ -73,8 +79,8 @@ const milestoneTracking: HarnessCheck = {
       );
     }
     const markerCounts: number[] = [];
-    for (const f of allMdFiles) {
-      const content = ctx.fs.readFile(f);
+    for (const markdownFile of allMdFiles) {
+      const content = ctx.fs.readFile(markdownFile);
       if (content) markerCounts.push(countTaskMarkers(content));
     }
     const totalMarkers = markerCounts.reduce((sum, count) => sum + count, 0);
@@ -119,7 +125,7 @@ const sessionLogs: HarnessCheck = {
     try {
       fileCount = ctx.fs
         .listDir(logsDir)
-        .filter((f) => f.endsWith(".md")).length;
+        .filter((fileName) => fileName.endsWith(".md")).length;
     } catch {
       return fail(
         ["Session logs path exists but is not readable as a directory"],

@@ -12,6 +12,7 @@ import {
   scanConcernCountClaims,
   scanPathReferences,
   scanRemovedCommands,
+  scanLifetimeClaimEvidence,
   runFactualClaimChecks,
 } from "../../src/cli/audit/check-factual-claims.js";
 import { SKILL_NAMES } from "../../src/cli/constants.js";
@@ -335,6 +336,68 @@ describe("scanPathReferences", () => {
       "architecture.md",
       "See `src/cli/cli.ts`, and so on.",
       stubCtx(fs),
+    );
+    assert.equal(findings.length, 0);
+  });
+});
+
+describe("scanLifetimeClaimEvidence", () => {
+  it("flags a lifetime claim with no enforcing-code anchor as INFO", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      "Session memories are retained for 14 days.",
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.rule, "lifetime-claim-evidence-missing");
+    assert.equal(findings[0]?.severity, "info");
+    assert.match(findings[0]?.message ?? "", /retained for 14 days/);
+  });
+
+  it("passes when a backtick repo path anchor sits on the same line", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      "Sessions are retained for 14 days, enforced by `src/services/cleanup.ts`.",
+    );
+    assert.equal(findings.length, 0);
+  });
+
+  it("passes when a (search:) anchor sits on the same line", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      'Project memories expire after 90 days (search: "SCOPE_RETENTION_DAYS").',
+    );
+    assert.equal(findings.length, 0);
+  });
+
+  it("skips lifetime phrases inside fenced code blocks", () => {
+    const text = [
+      "```",
+      "expires after 90 days",
+      "```",
+      "Normal prose with no lifetime phrase.",
+    ].join("\n");
+    const findings = scanLifetimeClaimEvidence("docs/memory.md", text);
+    assert.equal(findings.length, 0);
+  });
+
+  it("flags TTL, ceiling, max-of, and limit-of variants", () => {
+    const text = [
+      "TTL 7 days for ephemera.",
+      "Ceiling of 60 chars for slugs.",
+      "Maximum of 10 sessions per host.",
+      "Limit of 100 lines per file.",
+    ].join("\n");
+    const findings = scanLifetimeClaimEvidence("docs/example.md", text);
+    assert.equal(findings.length, 4);
+    for (const finding of findings) {
+      assert.equal(finding.rule, "lifetime-claim-evidence-missing");
+    }
+  });
+
+  it("does not flag generic phrases without lifetime prefixes", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/dashboard.md",
+      "Up to 10 concurrent sessions. 480-minute idle timeout (8 hours).",
     );
     assert.equal(findings.length, 0);
   });

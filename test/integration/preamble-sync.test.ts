@@ -60,6 +60,14 @@ const INSTALLED_CODE_COMMENTS = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-playbooks/code-comments.md",
 );
+const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/gruff-code-quality.md",
+);
+const INSTALLED_GRUFF_CODE_QUALITY = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
+);
 const TEMPLATE_OBSERVABILITY = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/observability.md",
@@ -189,6 +197,20 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_CODE_COMMENTS, INSTALLED_CODE_COMMENTS),
       0,
       "code-comments.md: template and installed should match",
+    );
+  });
+
+  it("template and installed gruff-code-quality.md match", () => {
+    if (
+      !existsSync(TEMPLATE_GRUFF_CODE_QUALITY) ||
+      !existsSync(INSTALLED_GRUFF_CODE_QUALITY)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_GRUFF_CODE_QUALITY, INSTALLED_GRUFF_CODE_QUALITY),
+      0,
+      "gruff-code-quality.md: template and installed should match",
     );
   });
 

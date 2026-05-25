@@ -12,13 +12,18 @@
 import { loadConfig } from "../config/reader.js";
 import { getAgentProfiles } from "../agents/registry.js";
 
+/** Top-level artifact categories that the skill-quality engine scores. */
 export type ArtifactKind = "skill" | "shared-reference";
+
+/** Discovery provenance preserved in reports so mirrors and templates stay distinct. */
 export type ArtifactSource =
   | "workflow"
   | "installed"
   | "agent-mirror"
   | "github-mirror"
   | "shared-reference";
+
+/** Rubric subtype selected after detection; each subtype owns a separate score profile. */
 export type ArtifactSubtype =
   | "workflow"
   | "dispatcher"
@@ -26,6 +31,8 @@ export type ArtifactSubtype =
   | "playbook"
   | "index"
   | "meta";
+
+/** Stable metric keys used by scoring output, fixtures, and config overrides. */
 export type MetricName =
   | "trigger-clarity"
   | "workflow-completeness"
@@ -37,11 +44,13 @@ export type MetricName =
   | "write-risk"
   | "skill-reference-fit";
 
+/** Directory to crawl plus the source label carried into artifact reports. */
 interface WalkRoot {
   dir: string;
   source: ArtifactSource;
 }
 
+/** Ordered matching rules that assign an artifact to a rubric subtype. */
 export interface SubtypeDetection {
   /** Artifact kinds this subtype applies to. Empty array = any. */
   kinds: ArtifactKind[];
@@ -53,6 +62,7 @@ export interface SubtypeDetection {
   mustNotHave: string[];
 }
 
+/** Detection rule and metric weights for one artifact subtype. */
 interface SubtypeProfile {
   /** Detection rules in priority order; first matching subtype wins. */
   detection: SubtypeDetection;
@@ -62,6 +72,7 @@ interface SubtypeProfile {
   notes: string;
 }
 
+/** Shared-reference composition settings used before an artifact is scored. */
 interface CompositionConfig {
   /** Path to the shared preamble loaded by every skill (relative to project root). */
   skillPreamblePath: string | null;
@@ -73,6 +84,7 @@ interface CompositionConfig {
   maxComposedBytes: number;
 }
 
+/** Configurable regex vocabulary for the gate-quality metric. */
 interface GateVocabularyConfig {
   /** Patterns that count as a verification-gate signal (+5 points). */
   verificationGate: string[];
@@ -82,6 +94,7 @@ interface GateVocabularyConfig {
   humanStop: string[];
 }
 
+/** Normalized quality configuration after defaults and user YAML are merged. */
 export interface QualityConfig {
   /** Walk roots for artifact discovery, in priority order. */
   walkRoots: { skills: WalkRoot[]; references: WalkRoot[] };
@@ -292,19 +305,23 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
 };
 
 /** Narrow unknown values to plain object records. */
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
   return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
+    candidate !== null &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate) === false
   );
 }
 
-function stringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  return value.filter((v): v is string => typeof v === "string");
+/** Return only string entries from a user-provided array; invalid containers fall back. */
+function stringArray(candidate: unknown): string[] | null {
+  if (!Array.isArray(candidate)) return null;
+  return candidate.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
 }
 
+/** Validate regex sources; RegExp syntax errors use a `false` fallback instead of failing scoring. */
 function isValidRegexSource(source: string, flags = "i"): boolean {
   try {
     new RegExp(source, flags);
@@ -314,16 +331,18 @@ function isValidRegexSource(source: string, flags = "i"): boolean {
   }
 }
 
-function regexArray(value: unknown, fallback: string[]): string[] {
-  const strings = stringArray(value);
+/** Merge a regex-source array while dropping invalid expressions individually. */
+function regexArray(candidatePatterns: unknown, fallback: string[]): string[] {
+  const strings = stringArray(candidatePatterns);
   if (strings === null) return fallback;
   return strings.filter((source) => isValidRegexSource(source));
 }
 
-function mergeWalkRoot(value: unknown, fallback: WalkRoot[]): WalkRoot[] {
-  if (!Array.isArray(value)) return fallback;
+/** Normalize string and object walk-root entries into source-tagged crawl roots. */
+function mergeWalkRoot(rawRoots: unknown, fallback: WalkRoot[]): WalkRoot[] {
+  if (!Array.isArray(rawRoots)) return fallback;
   const result: WalkRoot[] = [];
-  for (const entry of value) {
+  for (const entry of rawRoots) {
     if (typeof entry === "string") {
       result.push({ dir: entry, source: "installed" });
       continue;
@@ -338,101 +357,112 @@ function mergeWalkRoot(value: unknown, fallback: WalkRoot[]): WalkRoot[] {
 }
 
 function mergeComposition(
-  value: unknown,
+  rawComposition: unknown,
   fallback: CompositionConfig,
 ): CompositionConfig {
-  if (!isRecord(value)) return fallback;
+  if (!isRecord(rawComposition)) return fallback;
   return {
     skillPreamblePath:
-      typeof value["skill-preamble-path"] === "string"
-        ? value["skill-preamble-path"]
-        : value["skill-preamble-path"] === null
+      typeof rawComposition["skill-preamble-path"] === "string"
+        ? rawComposition["skill-preamble-path"]
+        : rawComposition["skill-preamble-path"] === null
           ? null
           : fallback.skillPreamblePath,
     skillConventionsPath:
-      typeof value["skill-conventions-path"] === "string"
-        ? value["skill-conventions-path"]
-        : value["skill-conventions-path"] === null
+      typeof rawComposition["skill-conventions-path"] === "string"
+        ? rawComposition["skill-conventions-path"]
+        : rawComposition["skill-conventions-path"] === null
           ? null
           : fallback.skillConventionsPath,
     skillReferencePattern:
-      typeof value["skill-reference-pattern"] === "string" &&
-      isValidRegexSource(value["skill-reference-pattern"], "g")
-        ? value["skill-reference-pattern"]
+      typeof rawComposition["skill-reference-pattern"] === "string" &&
+      isValidRegexSource(rawComposition["skill-reference-pattern"], "g")
+        ? rawComposition["skill-reference-pattern"]
         : fallback.skillReferencePattern,
     maxComposedBytes:
-      typeof value["max-composed-bytes"] === "number" &&
-      value["max-composed-bytes"] > 0
-        ? value["max-composed-bytes"]
+      typeof rawComposition["max-composed-bytes"] === "number" &&
+      rawComposition["max-composed-bytes"] > 0
+        ? rawComposition["max-composed-bytes"]
         : fallback.maxComposedBytes,
   };
 }
 
 function mergeGateVocabulary(
-  value: unknown,
+  rawVocabulary: unknown,
   fallback: GateVocabularyConfig,
 ): GateVocabularyConfig {
-  if (!isRecord(value)) return fallback;
+  if (!isRecord(rawVocabulary)) return fallback;
   return {
     verificationGate: regexArray(
-      value["verification-gate"],
+      rawVocabulary["verification-gate"],
       fallback.verificationGate,
     ),
-    explicitPass: regexArray(value["explicit-pass"], fallback.explicitPass),
-    humanStop: regexArray(value["human-stop"], fallback.humanStop),
+    explicitPass: regexArray(
+      rawVocabulary["explicit-pass"],
+      fallback.explicitPass,
+    ),
+    humanStop: regexArray(rawVocabulary["human-stop"], fallback.humanStop),
   };
 }
 
 function mergeSubtypeDetection(
-  value: unknown,
+  rawDetection: unknown,
   fallback: SubtypeDetection,
 ): SubtypeDetection {
-  if (!isRecord(value)) return fallback;
-  const kinds = stringArray(value.kinds);
+  if (!isRecord(rawDetection)) return fallback;
+  const kinds = stringArray(rawDetection.kinds);
   return {
     kinds: kinds ? (kinds as ArtifactKind[]) : fallback.kinds,
-    namePatterns: stringArray(value["name-patterns"]) ?? fallback.namePatterns,
+    namePatterns:
+      stringArray(rawDetection["name-patterns"]) ?? fallback.namePatterns,
     headingPatterns: regexArray(
-      value["heading-patterns"],
+      rawDetection["heading-patterns"],
       fallback.headingPatterns,
     ),
-    mustNotHave: regexArray(value["must-not-have"], fallback.mustNotHave),
+    mustNotHave: regexArray(
+      rawDetection["must-not-have"],
+      fallback.mustNotHave,
+    ),
   };
 }
 
 function mergeSubtypeProfile(
-  value: unknown,
+  rawProfile: unknown,
   fallback: SubtypeProfile,
 ): SubtypeProfile {
-  if (!isRecord(value)) return fallback;
+  if (!isRecord(rawProfile)) return fallback;
   const profile: Record<MetricName, number> = { ...fallback.profile };
-  if (isRecord(value.profile)) {
+  if (isRecord(rawProfile.profile)) {
     for (const key of Object.keys(profile) as MetricName[]) {
-      const v = value.profile[key];
-      if (typeof v === "number" && v >= 0) profile[key] = v;
+      const scoreValue = rawProfile.profile[key];
+      if (typeof scoreValue === "number" && scoreValue >= 0) {
+        profile[key] = scoreValue;
+      }
     }
   }
   return {
-    detection: mergeSubtypeDetection(value.detection, fallback.detection),
+    detection: mergeSubtypeDetection(rawProfile.detection, fallback.detection),
     profile,
-    notes: typeof value.notes === "string" ? value.notes : fallback.notes,
+    notes:
+      typeof rawProfile.notes === "string" ? rawProfile.notes : fallback.notes,
   };
 }
 
 function mergeSubtypes(
-  value: unknown,
+  rawSubtypes: unknown,
   fallback: Record<ArtifactSubtype, SubtypeProfile>,
 ): Record<ArtifactSubtype, SubtypeProfile> {
-  if (!isRecord(value)) return fallback;
+  if (!isRecord(rawSubtypes)) return fallback;
   const merged: Record<ArtifactSubtype, SubtypeProfile> = { ...fallback };
   for (const key of Object.keys(merged) as ArtifactSubtype[]) {
-    if (key in value) {
-      merged[key] = mergeSubtypeProfile(value[key], fallback[key]);
+    if (key in rawSubtypes) {
+      merged[key] = mergeSubtypeProfile(rawSubtypes[key], fallback[key]);
     }
   }
   return merged;
 }
 
+/** Read installed agent profiles so default skill roots follow the current manifest. */
 function manifestSkillWalkRoots(): WalkRoot[] {
   const roots = new Map<string, ArtifactSource>();
   for (const profile of getAgentProfiles()) {
@@ -444,6 +474,7 @@ function manifestSkillWalkRoots(): WalkRoot[] {
   return Array.from(roots, ([dir, source]) => ({ dir, source }));
 }
 
+/** Clone calibrated defaults and replace hardcoded skill roots with manifest-derived roots. */
 function defaultQualityConfig(): QualityConfig {
   const defaults = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
   defaults.walkRoots.skills = manifestSkillWalkRoots();
@@ -452,7 +483,12 @@ function defaultQualityConfig(): QualityConfig {
 
 /**
  * Merge a raw quality config (read from YAML) on top of `DEFAULT_QUALITY_CONFIG`.
- * Returns the original defaults if the input is null or invalid.
+ *
+ * Each section falls back independently because project YAML is user-authored:
+ * one invalid override should not discard unrelated valid rubric settings.
+ *
+ * @param raw - Parsed `quality` block from `.goat-flow/config.yaml`.
+ * @returns Normalized quality config with defaults filled in for missing or invalid fields.
  */
 export function mergeQualityConfig(raw: unknown): QualityConfig {
   if (!isRecord(raw)) return defaultQualityConfig();
@@ -493,7 +529,12 @@ export function mergeQualityConfig(raw: unknown): QualityConfig {
   };
 }
 
-/** Deep-clone the default config so callers can mutate it safely. */
+/**
+ * Deep-clone a quality config so callers can mutate nested arrays safely.
+ *
+ * @param config - Normalized quality config to clone.
+ * @returns Independent copy with no shared mutable arrays or nested objects.
+ */
 export function cloneQualityConfig(config: QualityConfig): QualityConfig {
   return {
     walkRoots: {
@@ -532,6 +573,9 @@ export function cloneQualityConfig(config: QualityConfig): QualityConfig {
  * Load `.goat-flow/config.yaml` and return its merged `quality` section,
  * falling back to `DEFAULT_QUALITY_CONFIG` if the file is missing or has
  * no `quality` block.
+ *
+ * @param projectRoot - Project root that may contain `.goat-flow/config.yaml`.
+ * @returns Normalized quality config for the project.
  */
 export function loadQualityConfig(projectRoot: string): QualityConfig {
   const loaded = loadConfig(projectRoot);
@@ -539,7 +583,12 @@ export function loadQualityConfig(projectRoot: string): QualityConfig {
   return mergeQualityConfig(raw);
 }
 
-/** Compile an array of regex sources into a single OR'd RegExp. */
+/**
+ * Compile an array of regex sources into a single OR'd RegExp.
+ *
+ * @param patterns - Valid regex sources to combine.
+ * @returns Case-insensitive matcher, or a never-match regex when the list is empty.
+ */
 export function compilePatternList(patterns: string[]): RegExp {
   if (patterns.length === 0) {
     return /(?!)/; // never matches
@@ -547,7 +596,13 @@ export function compilePatternList(patterns: string[]): RegExp {
   return new RegExp(patterns.join("|"), "i");
 }
 
-/** Compute the profile-max total for a subtype. */
+/**
+ * Compute the maximum possible score for a subtype profile.
+ *
+ * @param config - Normalized quality config containing subtype profiles.
+ * @param subtype - Subtype whose metric weights should be summed.
+ * @returns Sum of all metric maxima for the subtype.
+ */
 export function profileMaxForSubtype(
   config: QualityConfig,
   subtype: ArtifactSubtype,

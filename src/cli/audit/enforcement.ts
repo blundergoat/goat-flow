@@ -7,6 +7,7 @@
 import type { AgentFacts } from "../types.js";
 import type { AuditScope, CheckResult } from "./types.js";
 
+/** Non-gating strength labels for evidence the local audit can observe about an agent. */
 export type EnforcementCapabilityStatus =
   | "hard"
   | "limited"
@@ -33,6 +34,7 @@ type EnforcementCapabilityId =
   | "file-write-restrictions"
   | "provider-native-enforcement";
 
+/** One advisory row describing a single enforcement surface and the evidence behind it. */
 interface EnforcementCapability {
   id: EnforcementCapabilityId;
   label: string;
@@ -42,6 +44,7 @@ interface EnforcementCapability {
   evidence: string[];
 }
 
+/** Per-agent enforcement summary attached to audit output without affecting pass/fail status. */
 export interface AgentEnforcementCapability {
   agent: string;
   name: string;
@@ -52,6 +55,7 @@ export interface AgentEnforcementCapability {
 
 type DenyMechanismEvidenceLevel = "full" | "static" | "present-only";
 
+/** Evidence-mode switches from the audit runner that affect how strongly hook checks can be claimed. */
 interface BuildOptions {
   agentScope?: AuditScope;
   denyMechanismEvidenceLevel?: DenyMechanismEvidenceLevel;
@@ -86,6 +90,7 @@ function capability(
   };
 }
 
+/** Initialize every status counter so dashboard readers never infer missing keys as zero silently. */
 function emptySummary(): Record<EnforcementCapabilityStatus, number> {
   return { hard: 0, limited: 0, soft: 0, missing: 0, unknown: 0 };
 }
@@ -94,32 +99,34 @@ function summarize(
   capabilities: EnforcementCapability[],
 ): Record<EnforcementCapabilityStatus, number> {
   const summary = emptySummary();
-  for (const item of capabilities) {
-    summary[item.status]++;
+  for (const enforcementCapability of capabilities) {
+    summary[enforcementCapability.status]++;
   }
   return summary;
 }
 
-function hasActiveMechanicalDeny(af: AgentFacts): boolean {
-  if (af.hooks.denyIsConfigBased) return true;
+/** Treat settings and registered hooks as active deny mechanisms; a present script alone is not enough. */
+function hasActiveMechanicalDeny(agentFacts: AgentFacts): boolean {
+  if (agentFacts.hooks.denyIsConfigBased) return true;
   if (
-    af.agent.denyMechanism &&
-    af.agent.denyMechanism.type !== "deny-script" &&
-    af.settings.hasDenyPatterns
+    agentFacts.agent.denyMechanism &&
+    agentFacts.agent.denyMechanism.type !== "deny-script" &&
+    agentFacts.settings.hasDenyPatterns
   ) {
     return true;
   }
-  return af.hooks.denyIsRegistered;
+  return agentFacts.hooks.denyIsRegistered;
 }
 
 function shellCapability(
-  af: AgentFacts,
+  agentFacts: AgentFacts,
   id: "shell-dangerous" | "shell-pipe-to-shell",
   covered: boolean,
   coveredSummary: string,
   missingSummary: string,
 ): EnforcementCapability {
-  const denyExists = af.hooks.denyExists || af.hooks.denyIsConfigBased;
+  const denyExists =
+    agentFacts.hooks.denyExists || agentFacts.hooks.denyIsConfigBased;
   if (!denyExists) {
     return capability(id, "missing", ["not-observed"], missingSummary, []);
   }
@@ -128,7 +135,7 @@ function shellCapability(
       "AgentFacts.hooks",
     ]);
   }
-  if (hasActiveMechanicalDeny(af)) {
+  if (hasActiveMechanicalDeny(agentFacts)) {
     return capability(id, "hard", ["local-hook"], coveredSummary, [
       "AgentFacts.hooks",
     ]);
@@ -142,8 +149,11 @@ function shellCapability(
   );
 }
 
-function secretFileReadCapability(af: AgentFacts): EnforcementCapability {
-  if (af.hooks.readDenyCoversSecrets) {
+/** Report file-tool secret protection separately because Bash commands bypass file-read denies. */
+function secretFileReadCapability(
+  agentFacts: AgentFacts,
+): EnforcementCapability {
+  if (agentFacts.hooks.readDenyCoversSecrets) {
     return capability(
       "secret-file-read",
       "hard",
@@ -152,7 +162,7 @@ function secretFileReadCapability(af: AgentFacts): EnforcementCapability {
       ["AgentFacts.hooks.readDenyCoversSecrets"],
     );
   }
-  if (af.agent.denyMechanism?.type === "deny-script") {
+  if (agentFacts.agent.denyMechanism?.type === "deny-script") {
     return capability(
       "secret-file-read",
       "limited",
@@ -170,8 +180,11 @@ function secretFileReadCapability(af: AgentFacts): EnforcementCapability {
   );
 }
 
-function secretShellReadCapability(af: AgentFacts): EnforcementCapability {
-  if (!af.hooks.bashDenyCoversSecrets) {
+/** Report shell secret protection separately because settings-level read denies do not bind Bash. */
+function secretShellReadCapability(
+  agentFacts: AgentFacts,
+): EnforcementCapability {
+  if (!agentFacts.hooks.bashDenyCoversSecrets) {
     return capability(
       "secret-shell-read",
       "missing",
@@ -180,7 +193,7 @@ function secretShellReadCapability(af: AgentFacts): EnforcementCapability {
       ["AgentFacts.hooks.bashDenyCoversSecrets"],
     );
   }
-  if (hasActiveMechanicalDeny(af)) {
+  if (hasActiveMechanicalDeny(agentFacts)) {
     return capability(
       "secret-shell-read",
       "hard",
@@ -198,8 +211,11 @@ function secretShellReadCapability(af: AgentFacts): EnforcementCapability {
   );
 }
 
-function hookRegistrationCapability(af: AgentFacts): EnforcementCapability {
-  if (!af.hooks.denyExists && !af.hooks.denyIsConfigBased) {
+/** Distinguish hook existence from registration so static files are not mistaken for active runtime wiring. */
+function hookRegistrationCapability(
+  agentFacts: AgentFacts,
+): EnforcementCapability {
+  if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
     return capability(
       "hook-registration",
       "missing",
@@ -208,7 +224,7 @@ function hookRegistrationCapability(af: AgentFacts): EnforcementCapability {
       [],
     );
   }
-  if (af.hooks.denyIsConfigBased && !af.hooks.denyExists) {
+  if (agentFacts.hooks.denyIsConfigBased && !agentFacts.hooks.denyExists) {
     return capability(
       "hook-registration",
       "soft",
@@ -217,8 +233,8 @@ function hookRegistrationCapability(af: AgentFacts): EnforcementCapability {
       ["AgentFacts.hooks.denyIsConfigBased"],
     );
   }
-  const preToolEvent = af.agent.hookEvents?.preTool ?? "pre-tool";
-  if (af.hooks.denyIsRegistered) {
+  const preToolEvent = agentFacts.agent.hookEvents?.preTool ?? "pre-tool";
+  if (agentFacts.hooks.denyIsRegistered) {
     return capability(
       "hook-registration",
       "hard",
@@ -245,10 +261,10 @@ function denyCheck(
 }
 
 function hookSelfTestCapability(
-  af: AgentFacts,
+  agentFacts: AgentFacts,
   options: BuildOptions,
 ): EnforcementCapability {
-  if (!af.hooks.denyExists) {
+  if (!agentFacts.hooks.denyExists) {
     return capability(
       "hook-self-test",
       "missing",
@@ -299,8 +315,11 @@ function hookSelfTestCapability(
   );
 }
 
-function providerNativeCapability(af: AgentFacts): EnforcementCapability {
-  if (af.agent.denyMechanism === null) {
+/** Keep provider-native breadth advisory because manifest capability does not prove runtime enforcement. */
+function providerNativeCapability(
+  agentFacts: AgentFacts,
+): EnforcementCapability {
+  if (agentFacts.agent.denyMechanism === null) {
     return capability(
       "provider-native-enforcement",
       "missing",
@@ -309,7 +328,7 @@ function providerNativeCapability(af: AgentFacts): EnforcementCapability {
       ["AgentProfile.denyMechanism"],
     );
   }
-  const mechanism = af.agent.denyMechanism.type;
+  const mechanism = agentFacts.agent.denyMechanism.type;
   if (mechanism === "deny-script") {
     return capability(
       "provider-native-enforcement",
@@ -349,47 +368,59 @@ function broadFilesystemCapability(
   );
 }
 
-/** Build the advisory enforcement matrix for one agent. */
+/**
+ * Build the advisory enforcement matrix for one agent.
+ *
+ * @param agentFacts Extracted local facts for the audited agent.
+ * @param options Evidence-mode switches from the current audit run.
+ * @returns Non-gating enforcement capability report for audit and dashboard output.
+ */
 export function buildAgentEnforcementCapability(
-  af: AgentFacts,
+  agentFacts: AgentFacts,
   options: BuildOptions = {},
 ): AgentEnforcementCapability {
   const capabilities: EnforcementCapability[] = [
     shellCapability(
-      af,
+      agentFacts,
       "shell-dangerous",
-      af.hooks.denyBlocksRmRf &&
-        af.hooks.denyBlocksGitPush &&
-        af.hooks.denyBlocksChmod,
+      agentFacts.hooks.denyBlocksRmRf &&
+        agentFacts.hooks.denyBlocksGitPush &&
+        agentFacts.hooks.denyBlocksChmod,
       "Deny mechanism blocks broad recursive deletion, git push, and chmod 777 patterns",
       "Deny mechanism does not prove coverage for broad recursive deletion, git push, and chmod 777",
     ),
     shellCapability(
-      af,
+      agentFacts,
       "shell-pipe-to-shell",
-      af.hooks.denyBlocksPipeToShell,
+      agentFacts.hooks.denyBlocksPipeToShell,
       "Deny mechanism blocks curl|bash and wget|sh style pipe-to-shell patterns",
       "Deny mechanism does not prove pipe-to-shell blocking",
     ),
-    secretFileReadCapability(af),
-    secretShellReadCapability(af),
-    hookRegistrationCapability(af),
-    hookSelfTestCapability(af, options),
+    secretFileReadCapability(agentFacts),
+    secretShellReadCapability(agentFacts),
+    hookRegistrationCapability(agentFacts),
+    hookSelfTestCapability(agentFacts, options),
     broadFilesystemCapability("file-read-restrictions"),
     broadFilesystemCapability("file-write-restrictions"),
-    providerNativeCapability(af),
+    providerNativeCapability(agentFacts),
   ];
 
   return {
-    agent: af.agent.id,
-    name: af.agent.name,
+    agent: agentFacts.agent.id,
+    name: agentFacts.agent.name,
     advisory: true,
     capabilities,
     summary: summarize(capabilities),
   };
 }
 
-/** Build the advisory enforcement matrix for every audited agent. */
+/**
+ * Build the advisory enforcement matrix for every audited agent.
+ *
+ * @param agents Extracted local facts for all agents included in the audit.
+ * @param options Evidence-mode switches from the current audit run.
+ * @returns Non-gating enforcement reports in the same order as the input agents.
+ */
 export function buildEnforcementMatrix(
   agents: AgentFacts[],
   options: BuildOptions = {},

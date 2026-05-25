@@ -1,3 +1,10 @@
+/**
+ * Curates a bounded slice of learning-loop memory for generated prompts.
+ *
+ * Full learning-loop validation belongs to `goat-flow stats --check`; this
+ * module only selects enough recent evidence to steer the next agent without
+ * broad-loading footgun, lesson, pattern, or decision buckets.
+ */
 import type {
   LearningLoopEntryFact,
   LearningLoopEntryKind,
@@ -11,11 +18,13 @@ type LearningLoopContextSurface =
   | "setup"
   | "maintenance";
 
+/** Per-kind caps keep one noisy learning-loop bucket from consuming the prompt. */
 interface KindBudget {
   maxBytes: number;
   maxEntries: number;
 }
 
+/** Caller-tunable selection policy for a prompt surface. */
 export interface LearningLoopContextOptions {
   surface?: LearningLoopContextSurface;
   maxBytes?: number;
@@ -26,6 +35,7 @@ export interface LearningLoopContextOptions {
   perKind?: Partial<Record<LearningLoopEntryKind, Partial<KindBudget>>>;
 }
 
+/** Entry excerpt selected for the compact prompt block. */
 interface SelectedLearningLoopEntry {
   sourcePath: string;
   kind: LearningLoopEntryKind;
@@ -36,6 +46,7 @@ interface SelectedLearningLoopEntry {
   invalidLineRefs: string[];
 }
 
+/** Final selection plus accounting metadata embedded in the prompt wrapper. */
 export interface LearningLoopContextSelection {
   entries: SelectedLearningLoopEntry[];
   budgetUsed: number;
@@ -45,6 +56,7 @@ export interface LearningLoopContextSelection {
   zeroHit: boolean;
 }
 
+/** Options after surface defaults and per-kind overrides have been applied. */
 interface ResolvedLearningLoopOptions {
   includeStale: boolean;
   includeDecisions: boolean;
@@ -70,14 +82,16 @@ const KIND_RANK: Record<LearningLoopEntryKind, number> = {
 
 const OVERSIZED_BUCKET_BYTES = 40_000;
 
-function byteLength(value: string): number {
-  return Buffer.byteLength(value, "utf8");
+/** Measure prompt budget in UTF-8 bytes so caps match the rendered block. */
+function byteLength(content: string): number {
+  return Buffer.byteLength(content, "utf8");
 }
 
-function truncateBytes(value: string, maxBytes: number): string {
-  if (byteLength(value) <= maxBytes) return value;
+/** Truncate excerpts without splitting multibyte characters. */
+function truncateBytes(content: string, maxBytes: number): string {
+  if (byteLength(content) <= maxBytes) return content;
   let out = "";
-  for (const char of value) {
+  for (const char of content) {
     const next = out + char;
     if (byteLength(next + "...") > maxBytes) break;
     out = next;
@@ -85,10 +99,12 @@ function truncateBytes(value: string, maxBytes: number): string {
   return `${out.trimEnd()}...`;
 }
 
+/** Use updated dates first so recently revised incidents outrank old original dates. */
 function entryDate(entry: LearningLoopEntryFact): string {
   return entry.updated ?? entry.created ?? "";
 }
 
+/** Treat stale references and invalid line refs as maintenance-only warning context. */
 function isStaleOrInvalid(entry: LearningLoopEntryFact): boolean {
   return entry.staleRefs.length > 0 || entry.invalidLineRefs.length > 0;
 }
@@ -104,16 +120,19 @@ function mergedKindBudgets(
   };
 }
 
+/** Tune total context budget by prompt surface; maintenance prompts need more evidence. */
 function defaultMaxBytes(surface: LearningLoopContextSurface): number {
   if (surface === "maintenance") return 3_200;
   if (surface === "quality-process") return 2_600;
   return 2_200;
 }
 
-function includeDecisionEntries(_surface: LearningLoopContextSurface): boolean {
+/** Include ADRs by default because setup and quality prompts both need policy context. */
+function includeDecisionEntries(): boolean {
   return true;
 }
 
+/** Permit oversized buckets only for surfaces that explicitly evaluate learning-loop quality. */
 function allowOversizedBuckets(surface: LearningLoopContextSurface): boolean {
   return surface.startsWith("quality-") || surface === "maintenance";
 }
@@ -124,8 +143,7 @@ function resolveLearningLoopOptions(
   const surface = options.surface ?? "quality-agent-setup";
   return {
     includeStale: options.includeStale ?? surface === "maintenance",
-    includeDecisions:
-      options.includeDecisions ?? includeDecisionEntries(surface),
+    includeDecisions: options.includeDecisions ?? includeDecisionEntries(),
     includeOversized:
       options.includeOversized ?? allowOversizedBuckets(surface),
     budgetMax: options.maxBytes ?? defaultMaxBytes(surface),
@@ -134,6 +152,7 @@ function resolveLearningLoopOptions(
   };
 }
 
+/** Explain why a selected excerpt is relevant to the receiving prompt. */
 function reasonFor(entry: LearningLoopEntryFact): string {
   if (isStaleOrInvalid(entry)) {
     return "surfaced for learning-loop maintenance despite stale or invalid refs";
@@ -147,6 +166,7 @@ function reasonFor(entry: LearningLoopEntryFact): string {
   return "decision included for setup or policy context";
 }
 
+/** Rank durable warnings before softer context so scarce prompt budget favours footguns. */
 function entryRank(entry: LearningLoopEntryFact): number {
   const staleOffset = isStaleOrInvalid(entry) ? 10 : 0;
   const anchorBoost = entry.kind === "footgun" && entry.hasValidAnchor ? 0 : 1;
@@ -188,6 +208,7 @@ function allowedEntry(
   return true;
 }
 
+/** Render stale-reference counts compactly without inlining every broken path. */
 function flagText(entry: SelectedLearningLoopEntry): string {
   const flags = [
     entry.staleRefs.length > 0 ? `stale refs: ${entry.staleRefs.length}` : "",
@@ -198,6 +219,7 @@ function flagText(entry: SelectedLearningLoopEntry): string {
   return flags.length === 0 ? "" : ` Flags: ${flags.join(", ")}.`;
 }
 
+/** Render one selected excerpt as a single prompt bullet. */
 function renderEntry(entry: SelectedLearningLoopEntry): string {
   return `- [${entry.kind}] ${entry.title} (\`${entry.sourcePath}\`) - ${entry.reasonSelected}.${flagText(entry)} ${entry.excerpt}`;
 }
@@ -251,7 +273,13 @@ function finalizeSelection(
   return selection;
 }
 
-/** Select deterministic, size-bounded learning-loop context from shared facts. */
+/**
+ * Select deterministic, size-bounded learning-loop context from shared facts.
+ *
+ * @param sharedFacts - Extracted project facts containing learning-loop entries.
+ * @param options - Surface-specific caps and inclusion overrides.
+ * @returns Prompt-ready selection and budget accounting.
+ */
 export function selectLearningLoopContext(
   sharedFacts: Pick<SharedFacts, "learningLoopEntries">,
   options: LearningLoopContextOptions = {},
@@ -300,7 +328,12 @@ export function selectLearningLoopContext(
   );
 }
 
-/** Render the selected entries as a compact prompt block. */
+/**
+ * Render the selected entries as a compact prompt block.
+ *
+ * @param selection - Selection returned by `selectLearningLoopContext`.
+ * @returns XML-like prompt block, or an empty string when no entries were selected.
+ */
 export function renderLearningLoopContext(
   selection: LearningLoopContextSelection,
 ): string {

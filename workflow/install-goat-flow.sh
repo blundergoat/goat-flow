@@ -713,7 +713,7 @@ echo ""
 # 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
 #    The `skill-reference/` dir was split into:
 #      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
-#      - skill-playbooks/   (browser-use.md, changelog.md, code-comments.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical dir)
+#      - skill-playbooks/   (browser-use.md, changelog.md, code-comments.md, gruff-code-quality.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical dir)
 #    On upgrade, sweep the legacy locations so the installed layout matches.
 # ==========================================================================
 legacy_reference_files=(
@@ -751,6 +751,7 @@ echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-playbooks/code-comments.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-playbooks/gruff-code-quality.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-playbooks/observability.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-playbooks/changelog.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"

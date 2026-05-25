@@ -39,6 +39,7 @@ const DISPATCHER_NAME = "goat";
 const PROMPT_INVOCATION_STYLES = new Set(["slash", "dollar"]);
 const SKILL_SOURCES = new Set(["installed", "agent-mirror", "github-mirror"]);
 
+/** Raw capability block narrowed from JSON before manifest validation reports field errors. */
 interface AgentCapabilityCandidate {
   terminal_binary?: unknown;
   setup_surfaces?: unknown;
@@ -77,7 +78,14 @@ function validateOneSkillReference(
   return findings;
 }
 
-/** Validate skill reference schema. */
+/**
+ * Validate optional skill-reference metadata before consumers read it.
+ *
+ * Throws `ManifestValidationError` on malformed references because stale or
+ * misspelled reference lists change what the installer copies.
+ *
+ * @param json - Parsed manifest JSON to validate.
+ */
 export function validateSkillReferenceSchema(json: ManifestJson): void {
   const references: unknown = json.skills.references;
   if (references === undefined) return;
@@ -165,7 +173,7 @@ function validateAgentCapabilityFields(
   return findings;
 }
 
-/** Validate stable agent capability metadata consumed by runtime surfaces. */
+/** Reports capability metadata errors so `validateManifest` can aggregate them with drift findings. */
 function validateAgentCapabilities(json: ManifestJson): string[] {
   const findings: string[] = [];
   for (const [agentId, agent] of Object.entries(json.agents)) {
@@ -180,7 +188,7 @@ function validateAgentCapabilities(json: ManifestJson): string[] {
   return findings;
 }
 
-/** Enumerate dashboard view names by listing `src/dashboard/views/*.html`. */
+/** Enumerate dashboard view names; invariant: manifest view facts mirror these HTML files. */
 function readDashboardViewNames(): string[] {
   const dir = getTemplatePath(join("src", "dashboard", "views"));
   if (!existsSync(dir)) return [];
@@ -196,7 +204,7 @@ const PRESET_CATALOG_PATHS = [
   join("dist", "dashboard", "preset-prompts.json"),
 ] as const;
 
-/** Count preset objects in the dashboard preset catalog JSON file. */
+/** Count preset objects in the dashboard preset catalog; throws when no usable catalog exists. */
 function countPresetsFromSource(): number {
   let absolute: string;
   try {
@@ -236,27 +244,31 @@ function computeSkills(
 }
 
 /** Compute derived check counts from the three check arrays. */
-function computeChecks(o: ObservedFacts): CheckFacts {
+function computeChecks(observed: ObservedFacts): CheckFacts {
   return {
-    setup: o.setupChecks,
-    agent: o.agentChecks,
-    harness: o.harnessChecks,
-    total: o.setupChecks + o.agentChecks + o.harnessChecks,
+    setup: observed.setupChecks,
+    agent: observed.agentChecks,
+    harness: observed.harnessChecks,
+    total: observed.setupChecks + observed.agentChecks + observed.harnessChecks,
   };
 }
 
-/** Compare two string arrays for set-equality after sorting. */
-function sameSortedSet(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort();
-  const sb = [...b].sort();
-  for (let i = 0; i < sa.length; i++) {
-    if (sa[i] !== sb[i]) return false;
+/** Compare string arrays as sets; invariant: manifest order is not semantically meaningful. */
+function sameSortedSet(
+  leftValues: readonly string[],
+  rightValues: readonly string[],
+): boolean {
+  if (leftValues.length !== rightValues.length) return false;
+  const sortedLeft = [...leftValues].sort();
+  const sortedRight = [...rightValues].sort();
+  for (let i = 0; i < sortedLeft.length; i++) {
+    if (sortedLeft[i] !== sortedRight[i]) return false;
   }
   return true;
 }
 
-/** Validate manifest facts against the values observed from live code.
+/**
+ * Validate manifest facts against the values observed from live code.
  *
  *  In packaged installs the `src/` tree isn't shipped (package.json `files`
  *  ships only `dist/` + `workflow/`), so source-derived drift checks for
@@ -264,7 +276,11 @@ function sameSortedSet(a: readonly string[], b: readonly string[]): boolean {
  *  values. That fact was validated at publish time - here we trust the
  *  manifest and skip it. Preset count is derived from the shipped preset
  *  catalog, and skill-canonical drift is still checked because `SKILL_NAMES`
- *  ships in `dist/`. */
+ *  ships in `dist/`.
+ *
+ * @param json - Parsed manifest JSON from `workflow/manifest.json`.
+ * @param observed - Facts observed from the current source or packaged install.
+ */
 export function validateManifest(
   json: ManifestJson,
   observed: ObservedFacts,
@@ -303,7 +319,13 @@ export function validateManifest(
   }
 }
 
-/** Compose the resolved manifest from validated JSON and observed facts. */
+/**
+ * Compose the resolved manifest from validated JSON and observed facts.
+ *
+ * @param json - Manifest JSON that has already passed `validateManifest`.
+ * @param observed - Current facts used to fill derived fields.
+ * @returns Resolved manifest used by CLI, dashboard, and prompt composers.
+ */
 export function composeManifest(
   json: ManifestJson,
   observed: ObservedFacts,
@@ -355,7 +377,12 @@ export function getRequiredInstructionSections(): {
   }));
 }
 
-/** Return the canonical template-file list for one skill. */
+/**
+ * Return the canonical template-file list for one skill.
+ *
+ * @param name - Canonical skill name from `SKILL_NAMES`.
+ * @returns `SKILL.md` plus manifest-declared reference files for that skill.
+ */
 export function getSkillFiles(name: string): string[] {
   const references = loadManifest().skills.references ?? {};
   const files = references[name];
@@ -367,7 +394,11 @@ export function getSkillFiles(name: string): string[] {
   ];
 }
 
-/** Return unique installed skill roots declared by the manifest-backed agents. */
+/**
+ * Return unique installed skill roots declared by the manifest-backed agents.
+ *
+ * @returns Deduplicated skill-root paths with trailing slashes removed.
+ */
 export function getInstalledSkillRoots(): string[] {
   return [
     ...new Set(
@@ -380,7 +411,11 @@ export function getInstalledSkillRoots(): string[] {
 
 let cached: Manifest | null = null;
 
-/** Load, validate, and cache the resolved workflow manifest. */
+/**
+ * Load, validate, and cache the resolved workflow manifest.
+ *
+ * @returns Resolved manifest for the current package/workspace.
+ */
 export function loadManifest(): Manifest {
   if (cached) return cached;
   const json = readManifestJson();
@@ -403,7 +438,14 @@ export function resetManifestCache(): void {
   cached = null;
 }
 
-/** Run internal consistency check and return a report. Used by `goat-flow manifest --check`. */
+/**
+ * Run internal consistency validation for `goat-flow manifest --check`.
+ *
+ * Reports `ManifestValidationError` because the CLI needs a structured result;
+ * unexpected errors still throw so operational failures are not hidden.
+ *
+ * @returns Pass/fail report with manifest-drift findings.
+ */
 export function checkManifest(): ManifestCheckReport {
   try {
     loadManifest();
@@ -422,12 +464,17 @@ export function checkManifest(): ManifestCheckReport {
   }
 }
 
-/** Render the resolved manifest as a compact Markdown table. Used by `goat-flow manifest`. */
-export function renderManifestMarkdown(m: Manifest): string {
+/**
+ * Render the resolved manifest as a compact Markdown table. Used by `goat-flow manifest`.
+ *
+ * @param manifest - Resolved manifest to present.
+ * @returns Markdown summary of derived facts and agent surfaces.
+ */
+export function renderManifestMarkdown(manifest: Manifest): string {
   const lines: string[] = [];
   lines.push("# goat-flow manifest");
   lines.push("");
-  lines.push(`**Version:** ${m.facts.version}`);
+  lines.push(`**Version:** ${manifest.facts.version}`);
   lines.push(
     "**Agent registry authority:** `workflow/manifest.json` rendered through `src/cli/agents/registry.ts`",
   );
@@ -435,35 +482,35 @@ export function renderManifestMarkdown(m: Manifest): string {
   lines.push("| Fact | Value | Source |");
   lines.push("|------|-------|--------|");
   lines.push(
-    `| Setup checks | ${m.facts.checks.setup} | derived: \`SETUP_CHECKS.length\` |`,
+    `| Setup checks | ${manifest.facts.checks.setup} | derived: \`SETUP_CHECKS.length\` |`,
   );
   lines.push(
-    `| Agent checks | ${m.facts.checks.agent} | derived: \`AGENT_CHECKS.length\` |`,
+    `| Agent checks | ${manifest.facts.checks.agent} | derived: \`AGENT_CHECKS.length\` |`,
   );
   lines.push(
-    `| Harness checks | ${m.facts.checks.harness} | derived: \`HARNESS_CHECKS.length\` |`,
+    `| Harness checks | ${manifest.facts.checks.harness} | derived: \`HARNESS_CHECKS.length\` |`,
   );
   lines.push(
-    `| Total checks | ${m.facts.checks.total} | derived: sum of above |`,
+    `| Total checks | ${manifest.facts.checks.total} | derived: sum of above |`,
   );
   lines.push(
-    `| Skills (total) | ${m.facts.skills.total} | derived: \`SKILL_NAMES.length\` |`,
+    `| Skills (total) | ${manifest.facts.skills.total} | derived: \`SKILL_NAMES.length\` |`,
   );
   lines.push(
-    `| Skills (functional) | ${m.facts.skills.functional_count} | derived: \`SKILL_NAMES\` minus dispatcher |`,
+    `| Skills (functional) | ${manifest.facts.skills.functional_count} | derived: \`SKILL_NAMES\` minus dispatcher |`,
   );
   lines.push(
-    `| Dispatcher | \`${m.facts.skills.dispatcher}\` | architectural constant |`,
+    `| Dispatcher | \`${manifest.facts.skills.dispatcher}\` | architectural constant |`,
   );
   lines.push(
-    `| Dashboard views | ${m.facts.dashboard_views.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/views/\`) |`,
+    `| Dashboard views | ${manifest.facts.dashboard_views.count} | static: \`workflow/manifest.json\` (validated against \`src/dashboard/views/\`) |`,
   );
   lines.push(
-    `| Presets | ${m.facts.presets.count} | derived: preset catalog JSON length |`,
+    `| Presets | ${manifest.facts.presets.count} | derived: preset catalog JSON length |`,
   );
   lines.push("");
   lines.push(
-    `**Skills:** ${m.facts.skills.names.map((n) => `\`${n}\``).join(", ")}`,
+    `**Skills:** ${manifest.facts.skills.names.map((n) => `\`${n}\``).join(", ")}`,
   );
   lines.push("");
   lines.push("## Agents");
@@ -474,14 +521,14 @@ export function renderManifestMarkdown(m: Manifest): string {
   lines.push(
     "|------|-------------|----------|-------------|-------|--------|",
   );
-  for (const [id, agent] of Object.entries(m.agents)) {
+  for (const [id, agent] of Object.entries(manifest.agents)) {
     lines.push(
       `| \`${id}\` (${agent.name}) | \`${agent.instruction_file}\` | \`${agent.settings ?? "n/a"}\` | \`${agent.hook_config_file ?? agent.settings ?? "n/a"}\` | \`${agent.hooks_dir ?? "n/a"}\` | \`${agent.skills_dir}\` |`,
     );
   }
   lines.push("");
   lines.push(
-    `**Dashboard views:** ${m.facts.dashboard_views.names.map((n) => `\`${n}\``).join(", ")}`,
+    `**Dashboard views:** ${manifest.facts.dashboard_views.names.map((n) => `\`${n}\``).join(", ")}`,
   );
   return lines.join("\n");
 }

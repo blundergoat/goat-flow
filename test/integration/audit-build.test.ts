@@ -24,6 +24,7 @@ const requiredSkillReferenceFiles = [
   ".goat-flow/skill-playbooks/browser-use.md",
   ".goat-flow/skill-playbooks/changelog.md",
   ".goat-flow/skill-playbooks/code-comments.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
   ".goat-flow/skill-playbooks/observability.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/release-notes.md",

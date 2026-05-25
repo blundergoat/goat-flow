@@ -1,9 +1,21 @@
 ---
 category: workflow
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-25
 ---
 
-## Pattern: Blocked ≠ impossible
+## Pattern: Phase-boundary PR template for oversize work
+**Context:** A change exceeds practical PR review size (~3000 lines or 20+ files, or GitHub's "exceeds 20,000 lines" Copilot cap) or naturally divides into phases (foundation -> hardening -> automation -> polish). Single-PR review collapses under the volume; reviewers skim or defer.
+**Approach:** Split into a sequence of phase-boundary PRs. Each PR body MUST include three explicit sections:
+
+1. **What's in this PR** - shipped scope, named features, line/file count.
+2. **What's explicitly NOT in this PR** - each deferred item names its destination PR with a one-line rationale (e.g. `SQLite metadata layer -> PR #2 (Phase 2)`).
+3. **Manual contract until automation lands** - any instruction-file or doc edits that paper over the gap until the next phase ships. If Phase 1 ships primitives without the auto-driver, the agent profile gets a section telling agents to invoke the primitive explicitly until the driver PR lands.
+
+Cross-link the full phase plan from PR #1 so reviewers can trace the sequence without hunting. Each subsequent PR repeats the structure with the cumulative "still deferred" list shrinking.
+
+Trigger checklist: (1) GitHub returns "exceeds 20,000 lines"; (2) reviewer asks to chunk; (3) two unrelated concerns landing together (e.g. storage layer + auto-injection hooks); (4) a CodeQL/Copilot finding count that swamps the diff. Reference: awslabs/cli-agent-orchestrator #179 was split into 8 phase-boundary PRs starting with #245; the structure made independent review per phase possible where the monolith was unreviewable.
+
+## Pattern: Blocked != impossible
 **Context:** A deny hook blocks a command.
 **Approach:** Deny hooks block dangerous patterns, not all operations. When a command is blocked, spend 2 seconds thinking about the safe alternative before asking the user or giving up. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`.
 
@@ -30,3 +42,7 @@ last_reviewed: 2026-05-24
 9. **`## Related References`.** Cross-links to sibling playbooks, external standards (semver.org, keepachangelog.com, OTel docs), and project-internal docs (CLAUDE.md, ADRs).
 
 Add the new playbook to all 13 surfaces named in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Adding a skill-playbook requires lock-step updates`) before declaring done. Skipping the body sections (3) and (4) is the most common defect - playbooks without an Availability Check fail their own purpose; playbooks without an Intent become reference walls of text with no decision-shape.
+
+## Pattern: Gruff docs cleanup is a tight analyzer loop
+**Context:** Fixing `gruff-ts` documentation findings by adding maintainer comments, especially `docs.missing-*`, `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, or `docs.missing-why-for-complex-code`.
+**Approach:** Read `.goat-flow/skill-playbooks/code-comments.md` first, patch one file or one cohesive cluster, then rerun `npx gruff-ts analyse <path>` before moving on. Treat remaining docs findings as comment-quality feedback, not as noise. The useful comment still has to explain WHY, but gruff's docs rules also need unambiguous terms: error handling comments should name reports/throws/fallbacks; complex-control comments should name the compatibility reason, tradeoff, invariant, or "because"; threshold comments should say limit/cap/budget/default near the value. For side-effect findings, name the actual mutation boundary instead of adding a generic marker: local scanner cursor, local accumulator, shared cache, filesystem, process state, or network. Evidence from 2026-05-25: `src/cli/server/decoders.ts` (search: `Parse JSON; reports malformed bodies`) and `src/cli/server/decoders.ts` (search: `This stays explicit because`) cleared docs findings that survived earlier semantically plausible but analyzer-ambiguous comments. The same loop cleared side-effect wording in `src/cli/audit/check-goat-flow.ts` (search: `local RegExp cursor`) and `src/cli/audit/harness/check-context.ts` (search: `unresolved-path accumulator`) by documenting what mutates and what remains external-contract stable.

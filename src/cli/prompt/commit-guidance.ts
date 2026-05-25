@@ -1,3 +1,8 @@
+/**
+ * Generate project-local commit guidance from recent git history.
+ * The detector prefers existing project convention over goat-flow defaults so installed guidance
+ * helps future agents write useful commit subjects instead of generic "improve/clarify" summaries.
+ */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,12 +17,14 @@ type CommitGuidanceStatus =
   | "mixed"
   | "insufficient-history";
 
+/** Subject-style tallies from the recent commit sample used to choose a dominant convention. */
 interface CommitConventionCounts {
   conventional: number;
   ticketPrefixed: number;
   freeForm: number;
 }
 
+/** Observed commit-history style and metadata rendered into `.github/git-commit-instructions.md`. */
 export interface CommitConventionDetection {
   status: CommitGuidanceStatus;
   total: number;
@@ -32,12 +39,14 @@ export interface CommitConventionDetection {
   gitAvailable: boolean;
 }
 
+/** Outcome from trying to create commit guidance without overwriting user-maintained instructions. */
 export interface CommitGuidanceWriteResult {
   status: "written" | "skipped-no-github" | "skipped-existing";
   path: string;
   detection: CommitConventionDetection | null;
 }
 
+/** Parsed git log record after separating the first-line subject from the optional body. */
 interface ParsedCommitMessage {
   subject: string;
   body: string;
@@ -49,6 +58,7 @@ const CONVENTIONAL_SUBJECT_RE =
 const TICKET_SUBJECT_RE =
   /^(?:\[(?<bracketKey>[A-Z][A-Z0-9]+-\d+)\]|(?<plainKey>[A-Z][A-Z0-9]+-\d+))(?::|\s)\s*.+/u;
 
+/** Build the fallback detection used when git history cannot support a project-specific rule. */
 function emptyDetection(gitAvailable: boolean): CommitConventionDetection {
   return {
     status: "insufficient-history",
@@ -65,12 +75,14 @@ function emptyDetection(gitAvailable: boolean): CommitConventionDetection {
   };
 }
 
+/** Classify one commit subject before aggregate style detection chooses a dominant convention. */
 function classifySubject(subject: string): CommitSubjectKind {
   if (CONVENTIONAL_SUBJECT_RE.test(subject)) return "conventional";
   if (TICKET_SUBJECT_RE.test(subject)) return "ticket-prefixed";
   return "free-form";
 }
 
+/** Parse `git log --format=%B%x1e` output while preserving commit bodies for trailer detection. */
 function parseMessages(output: string): ParsedCommitMessage[] {
   return output
     .split("\x1e")
@@ -88,6 +100,7 @@ function parseMessages(output: string): ParsedCommitMessage[] {
     .filter((message) => message.subject.length > 0);
 }
 
+/** Stable p95 subject-length helper; one extreme commit must not set generated guidance. */
 function percentile95(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -95,6 +108,7 @@ function percentile95(values: number[]): number | null {
   return sorted[index] ?? null;
 }
 
+/** Mutates a local frequency map, then returns deterministic conventional types for generated examples. */
 function conventionalTypes(messages: ParsedCommitMessage[]): string[] {
   const counts = new Map<string, number>();
   for (const message of messages) {
@@ -108,6 +122,7 @@ function conventionalTypes(messages: ParsedCommitMessage[]): string[] {
     .map(([type]) => type);
 }
 
+/** Reads the ticket project key without baking one tracker name into the regex. */
 function ticketPrefix(subject: string): string | null {
   const match = TICKET_SUBJECT_RE.exec(subject);
   const ticket = match?.groups?.bracketKey ?? match?.groups?.plainKey;
@@ -127,6 +142,7 @@ function collectTicketPrefixes(
   return prefixes;
 }
 
+/** Infer a narrow ticket prefix only when history consistently uses one project key. */
 function ticketPrefixPattern(messages: ParsedCommitMessage[]): string | null {
   const prefixes = collectTicketPrefixes(messages);
   if (prefixes.size === 0) return null;
@@ -149,6 +165,7 @@ function dominantStatus(
   return "mixed";
 }
 
+/** Count classified subjects once so rendering and dominance decisions use the same sample. */
 function countsFor(messages: ParsedCommitMessage[]): CommitConventionCounts {
   return messages.reduce<CommitConventionCounts>(
     (counts, message) => {
@@ -225,6 +242,7 @@ export function detectCommitConventions(
   };
 }
 
+/** Render style counts as evidence so generated guidance is reviewable instead of opaque. */
 function renderCounts(detection: CommitConventionDetection): string[] {
   return [
     `- Conventional commits: ${detection.counts.conventional}`,
@@ -249,6 +267,7 @@ function renderObservedMetadata(
   return lines;
 }
 
+/** Render editable fallback guidance when history is unavailable or too small to trust. */
 function renderStub(detection: CommitConventionDetection): string {
   const reason = detection.gitAvailable
     ? `only ${detection.total} recent commits found`

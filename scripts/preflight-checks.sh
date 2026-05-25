@@ -1755,6 +1755,15 @@ if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill
 else
     skip "code-comments.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/skill-playbooks/gruff-code-quality.md ]]; then
+    if diff -q workflow/skills/playbooks/gruff-code-quality.md .goat-flow/skill-playbooks/gruff-code-quality.md >/dev/null 2>&1; then
+        pass "gruff-code-quality.md: template and installed copy match"
+    else
+        fail "gruff-code-quality.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "gruff-code-quality.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-playbooks/observability.md ]]; then
     if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-playbooks/observability.md >/dev/null 2>&1; then
         pass "observability.md: template and installed copy match"

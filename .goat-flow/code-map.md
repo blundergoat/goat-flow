@@ -115,7 +115,7 @@ skills/
   goat-security/SKILL.md   # Security assessment skill template
   goat-qa/SKILL.md         # Testing gap analysis skill template
   reference/               # Meta-reference templates: skill-preamble.md, skill-conventions.md
-  playbooks/               # Standalone playbook templates: browser-use.md, changelog.md, code-comments.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical skill-quality-testing/*
+  playbooks/               # Standalone playbook templates: browser-use.md, changelog.md, code-comments.md, gruff-code-quality.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical skill-quality-testing/*
 
 hooks/                     # Hook templates (deny-dangerous.sh + self-test sibling, etc.)
 evaluation/                # Quality-assessment prompt templates
@@ -193,6 +193,7 @@ skill-reference/           # Shared skill doctrine (committed, install-copied fr
 skill-playbooks/           # Standalone tool/capability playbooks (committed, copied from workflow/skills/playbooks/)
   browser-use.md           # Browser evidence capture and availability checks
   code-comments.md         # Commenting discipline for inline comments, docstrings, TODO/FIXME/HACK markers
+  gruff-code-quality.md           # Gruff analyzer triage, fix loop, and verification discipline across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py
   observability.md         # Instrumentation discipline for logs, metrics, spans, and sensitive-data rules
   changelog.md             # Discipline for writing CHANGELOG.md entries (Keep a Changelog, SemVer, BREAKING markers)
   page-capture.md          # Playwright page-capture usage tiers and installation checks

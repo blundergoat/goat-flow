@@ -16,7 +16,7 @@ const BAND_LABEL: Record<string, string> = {
   unknown: "unknown",
 };
 
-/** Format the days. */
+/** Use `-` for unknown ages so text and Markdown renderers share the same missing-age marker. */
 function formatDays(days: number | null): string {
   return days === null ? "-" : `${days}d`;
 }
@@ -28,7 +28,7 @@ function padRight(value: string, width: number): string {
     : value + " ".repeat(width - value.length);
 }
 
-/** Render the section text. */
+/** Render one learning-loop bucket section with fixed-width rows for scan-friendly terminal output. */
 function renderSectionText(name: string, section: BucketSection): string {
   if (!section.exists) {
     return `${name} (${section.path}) - directory missing\n`;
@@ -61,7 +61,12 @@ function basename(path: string): string {
   return idx === -1 ? path : path.slice(idx + 1);
 }
 
-/** Render the stats report as human-readable text. */
+/**
+ * Render the stats report as human-readable terminal text.
+ *
+ * @param report Learning-loop stats payload from `buildStatsReport`.
+ * @returns Text format optimized for local inspection, not a stable machine contract.
+ */
 export function renderStatsText(report: StatsReport): string {
   return (
     renderSectionText("Footguns", report.footguns) +
@@ -71,12 +76,22 @@ export function renderStatsText(report: StatsReport): string {
   );
 }
 
-/** Render the stats report as JSON (stable shape for CI). */
+/**
+ * Render the stats report as JSON.
+ *
+ * @param report Learning-loop stats payload from `buildStatsReport`.
+ * @returns Pretty JSON; the object shape is the CI/API contract, not the text renderer.
+ */
 export function renderStatsJson(report: StatsReport): string {
   return JSON.stringify(report, null, 2);
 }
 
-/** Render the stats report as markdown (PR-comment friendly). */
+/**
+ * Render the stats report as Markdown for PR comments and release notes.
+ *
+ * @param report Learning-loop stats payload from `buildStatsReport`.
+ * @returns Markdown summary that preserves the same section ordering as text output.
+ */
 export function renderStatsMarkdown(report: StatsReport): string {
   const sections = [
     markdownSection("Footguns", report.footguns),
@@ -86,6 +101,7 @@ export function renderStatsMarkdown(report: StatsReport): string {
   return ["# Learning-loop stats", "", ...sections].join("\n");
 }
 
+/** Render ADR warnings in the compact text format used beside footguns and lessons. */
 function renderDecisionsText(section: DecisionsSection): string {
   if (!section.exists) {
     return `Decisions (${section.path}) - directory missing\n`;
@@ -104,6 +120,7 @@ function renderDecisionsText(section: DecisionsSection): string {
   ].join("\n");
 }
 
+/** Render ADR warnings and counts as a Markdown section while preserving warning rule ids. */
 function markdownDecisions(section: DecisionsSection): string {
   if (!section.exists) {
     return `## Decisions\n\n_Directory missing: \`${section.path}\`_\n`;
@@ -158,22 +175,30 @@ function markdownSection(name: string, section: BucketSection): string {
   ].join("\n");
 }
 
-/** Render a `--check` verdict as text suitable for CI logs. */
+/**
+ * Render a `--check` verdict as text suitable for CI logs.
+ *
+ * @param check Pass/fail report produced by `checkStats`.
+ * @returns Stable text with findings before warnings and remediation hints on frontmatter failures.
+ */
 export function renderStatsCheckText(check: StatsCheckReport): string {
   if (check.status === "pass") return renderStatsCheckPass(check);
   return renderStatsCheckFailure(check);
 }
 
+/** Pluralize count labels in `--check` summaries without pulling in a formatter dependency. */
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+/** Append warning counts only when a passing or failing check actually has advisory warnings. */
 function warningSuffix(check: StatsCheckReport): string {
   return check.warnings.length > 0
     ? ` (${plural(check.warnings.length, "warning")})`
     : "";
 }
 
+/** Render a passing check, including warning details because warnings affect review attention. */
 function renderStatsCheckPass(check: StatsCheckReport): string {
   if (check.warnings.length === 0) return "stats --check: PASS\n";
   return [
@@ -183,6 +208,7 @@ function renderStatsCheckPass(check: StatsCheckReport): string {
   ].join("\n");
 }
 
+/** Render a failing check with actionable findings first and advisory warnings second. */
 function renderStatsCheckFailure(check: StatsCheckReport): string {
   const lines = [
     `stats --check: FAIL (${plural(check.findings.length, "finding")}${check.warnings.length > 0 ? `, ${plural(check.warnings.length, "warning")}` : ""})`,

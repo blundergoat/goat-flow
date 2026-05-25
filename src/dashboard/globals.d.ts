@@ -22,9 +22,8 @@ type EnforcementCapabilitySource =
   | "manifest"
   | "provider-docs"
   | "not-observed";
-/** Dashboard-local runner union. Keep this aligned with `src/cli/types.ts`.
- *  Importing CLI types here causes the dashboard build to emit `src/cli/types.js`
- *  back into the source tree, which then poisons lint/format/drift gates. */
+/** Dashboard-local runner union. Keep this aligned with `AgentId` in `src/cli/types.ts`.
+ *  Do not import CLI types here; the dashboard ambient build must stay browser-only. */
 type RunnerId = "claude" | "codex" | "antigravity" | "copilot";
 type PromptInvocationStyle = "slash" | "dollar";
 type SkillSource = "installed" | "agent-mirror" | "github-mirror";
@@ -195,6 +194,7 @@ interface BrowseDir {
 /** Project entry shown in the dashboard Projects view. */
 type ProjectIdentitySource = "git-remote" | "goat-marker" | "path";
 
+/** Saved project identity plus install-state summary shown in the Projects view. */
 interface ProjectEntry {
   path: string;
   paths?: string[];
@@ -297,6 +297,7 @@ interface ServerSessionInfo {
 /** Local terminal session tracked by the frontend Alpine state. */
 type TerminalLoadingPhase = "connecting" | "loading" | "ready" | "error";
 
+/** Alpine-reactive terminal session state; xterm/WebSocket handles live in TerminalRefs. */
 interface LocalSession {
   id: string;
   runner: RunnerId;
@@ -327,7 +328,7 @@ interface TerminalRefs {
   ageInterval?: ReturnType<typeof setInterval>;
   awaitingInputTimer?: ReturnType<typeof setTimeout>;
   pasteSubmitTimer?: ReturnType<typeof setTimeout>;
-  pasteSubmitQueue?: Array<{ data: string; delayed: boolean }>;
+  pasteSubmitQueue?: Array<{ data: string; shouldDelaySubmit: boolean }>;
   pasteSubmitOutputTail?: string;
   pasteSubmitAwaitingCommit?: boolean;
   pasteSubmitFallbackSubmitted?: boolean;
@@ -439,24 +440,28 @@ interface CustomPromptDraft {
   notes: string;
 }
 
+/** Route option shown in the custom-prompt editor dropdown. */
 interface CustomPromptRouteOption {
   id: string;
   label: string;
   desc: string;
 }
 
+/** One boolean custom-prompt setting and its editor copy. */
 interface CustomPromptFlagOption {
   field: keyof CustomPromptDraft;
   label: string;
   title: string;
 }
 
+/** Grouping for custom-prompt flags so related prerequisites render together. */
 interface CustomPromptFlagGroup {
   id: "prerequisites" | "permissions" | "compatibility";
   label: string;
   flags: CustomPromptFlagOption[];
 }
 
+/** Validation message tied to a specific custom-prompt form field and anchor. */
 interface CustomPromptValidationError {
   field: string;
   message: string;
@@ -477,6 +482,7 @@ type SkillQualityRecommendation =
   | "needs-human-review";
 type SkillQualityMetricSeverity = "ok" | "warn" | "fail" | "n/a";
 
+/** Dashboard mirror of a scored skill-quality artifact; paths stay project-relative. */
 interface SkillQualityArtifact {
   id: string;
   name: string;
@@ -487,6 +493,7 @@ interface SkillQualityArtifact {
   missingMirrors?: string[];
 }
 
+/** One skill-quality metric row after subtype caps and severity mapping. */
 interface SkillQualityMetric {
   metric: string;
   label: string;
@@ -496,11 +503,13 @@ interface SkillQualityMetric {
   detail: string;
 }
 
+/** Lower-ranked subtype match shown when quality classification is ambiguous. */
 interface ClassificationAlternative {
   subtype: string;
   score: number;
 }
 
+/** Applied skill-quality profile plus evidence for why that subtype won. */
 interface ClassificationResult {
   detectedSubtype: string;
   /** 0-1: how strongly the detected subtype dominates alternatives. */
@@ -509,6 +518,7 @@ interface ClassificationResult {
   reasoning: string[];
 }
 
+/** Full skill-quality report consumed by the Skills view and evaluate modal. */
 interface SkillQualityReport {
   artifact: SkillQualityArtifact;
   totalScore: number;
@@ -526,12 +536,14 @@ interface SkillQualityReport {
   prompt?: string;
 }
 
+/** One dashboard remediation tip generated from a skill-quality metric detail. */
 interface SkillEvaluateTip {
   metric: string;
   severity: SkillQualityMetricSeverity;
   message: string;
 }
 
+/** Uploaded-skill evaluation result with metric-tied remediation tips. */
 interface SkillEvaluateResult extends SkillQualityReport {
   tips: SkillEvaluateTip[];
 }
@@ -585,25 +597,36 @@ interface SetupData {
 
 /** Minimal xterm.js Terminal instance surface used by `app.ts`. */
 interface XTermBufferLine {
+  /** Return visible buffer text; optional trim matches xterm's public API. */
   translateToString(trimRight?: boolean): string;
 }
 
+/** Scrollback buffer facade used when collecting terminal output tails. */
 interface XTermBuffer {
   length: number;
-  getLine(y: number): XTermBufferLine | undefined;
+  /** Read one zero-based buffer row; missing rows occur after terminal resize/trim. */
+  getLine(rowIndex: number): XTermBufferLine | undefined;
 }
 
+/** Minimal xterm.js terminal API; invariant: keep only methods used by dashboard scripts. */
 interface XTermInstance {
   cols: number;
   rows: number;
   _addonFit?: FitAddonInstance;
   buffer: { active: XTermBuffer };
+  /** Attach the terminal to an already-rendered container element. */
   open(container: HTMLElement): void;
-  write(data: string): void;
+  /** Writes server output into xterm without mutating Alpine session state. */
+  write(outputChunk: string): void;
+  /** Release DOM/listener resources when a dashboard session closes. */
   dispose(): void;
+  /** Move browser focus into the terminal input surface. */
   focus(): void;
+  /** Report whether xterm has an active text selection for copy shortcuts. */
   hasSelection(): boolean;
+  /** Return the selected terminal text for clipboard helpers. */
   getSelection(): string;
+  /** Load the fit addon created from the separately injected xterm addon bundle. */
   loadAddon(addon: FitAddonInstance): void;
   onData(callback: (data: string) => void): void;
   onResize(callback: (size: { cols: number; rows: number }) => void): void;
@@ -612,6 +635,7 @@ interface XTermInstance {
 
 /** Minimal xterm.js fit addon surface used by the dashboard. */
 interface FitAddonInstance {
+  /** Recompute terminal rows/cols from the current container geometry. */
   fit(): void;
 }
 

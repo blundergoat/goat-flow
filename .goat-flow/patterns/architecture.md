@@ -1,6 +1,74 @@
 ---
 category: architecture
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-25
+---
+
+## Pattern: UNSET sentinel + recursive merge for layered CLI overlays
+
+**Context:** A CLI exposes options that override values in N configuration layers (default config file, project config file, user config file, command-line flags). Each layer's "I didn't set this" must yield to the next layer's value, but layers that DO set a value — including legitimate falsy values like `0`, `""`, `false` — must not be dropped by the merge.
+
+**Approach:** Define an `UNSET` sentinel object that survives type checks (`typeof UNSET === "object"` so it's distinguishable from `null`/`undefined`). At each layer, emit either the user-supplied value or `UNSET`, never `undefined` for absent. The merge function walks the resulting layered dicts and skips `UNSET` entries entirely, so layer N's silence falls back to layer N-1's value without ambiguity. Compare with [footguns/config.md](../footguns/config.md) (search: `value || DEFAULT silently drops`) — the alternative `value || DEFAULT` shape silently overrides explicit falsy intent.
+
+**Evidence (external — mini-swe-agent):** PR #684 (merged 2026-01-05, `klieret`) introduced this across all v2 CLI scripts. In `src/minisweagent/utils/serialize.py` (search: `recursive_merge`), the merge function skips `UNSET` values:
+
+```python
+UNSET = object()
+
+def recursive_merge(*dictionaries: dict | None) -> dict:
+    result: dict[str, Any] = {}
+    for d in dictionaries:
+        if d is None: continue
+        for key, value in d.items():
+            if value is UNSET: continue
+            # ... recurse for nested dicts, otherwise overwrite ...
+    return result
+```
+
+CLI shape in `src/minisweagent/run/mini.py` (search: `cost_limit if cost_limit is not None else UNSET`):
+
+```python
+configs.append({
+    "agent": {
+        "cost_limit": cost_limit if cost_limit is not None else UNSET,
+        # ...
+    },
+})
+config = recursive_merge(*configs)
+```
+
+The explicit `is not None` check is load-bearing — using `cost_limit or UNSET` would drop `--cost-limit 0` (see footguns/config.md).
+
+**Goat-flow application:**
+- TypeScript port: `const UNSET = Symbol("UNSET")` for a strong sentinel. Merge function skips any key whose value is `UNSET`.
+- Use for any future option layering where current `||` / `??` patterns get awkward (Zod default merging, audit option overrides, hook config layering).
+- The explicit form must be `value === undefined ? UNSET : value` (or `value ?? UNSET`), never `value || UNSET`.
+
+**When NOT to use:** If there are only 1-2 config layers and no falsy-value contracts, plain `??` is enough. The UNSET sentinel earns its complexity when there are 3+ layers AND falsy values are legitimate intents.
+
+## Pattern: Hot-import deferral for slow CLI dependencies
+
+**Context:** A CLI invocation pays for every top-level `import`/`require` of every module it loads, even when the user only runs `--help` or a fast subcommand. Heavy dependencies (TUI libraries, ML frameworks, large parsers) impose hundreds of milliseconds of startup latency that the user sees on every invocation, regardless of whether the heavy code path actually runs.
+
+**Approach:** Move heavy imports OUT of module scope and INTO function scope, so they only load when the function that needs them is called. The pattern is a trivial-looking refactor with outsized impact on CLI feel.
+
+**Evidence (external — mini-swe-agent):** PR #749 (merged 2026-02-19, `klieret`, "Enh: Improve startup time of mini"). Moved `from prompt_toolkit import prompt` out of `src/minisweagent/run/utilities/config.py` module scope and into a function:
+
+```python
+def prompt(*args, **kwargs):
+    # Defer import to avoid slow import module
+    from prompt_toolkit.shortcuts.prompt import prompt as _prompt
+    return _prompt(*args, **kwargs)
+```
+
+`prompt_toolkit` is a large dependency; loading it at module scope meant every `mini-extra <any-subcommand>` invocation paid its import cost. Now only subcommands that actually call `prompt()` (interactive setup) pay it. The PR also extracted multiline-prompt logic into `src/minisweagent/agents/utils/prompt_user.py` so the interactive agent doesn't drag `prompt_toolkit` into module imports of non-interactive code paths.
+
+**Goat-flow application:**
+- `npx @blundergoat/goat-flow@<version>` startup is user-visible. Audit `src/cli/cli.ts` and top-level imports — anything CLI-only that's only needed for specific subcommands (the dashboard server, AG-UI, large parsers, image processors) belongs behind a lazy `await import("./heavy-module.js")` inside the subcommand handler, not at the top of `cli.ts`.
+- Same pattern for hook scripts in `workflow/hooks/`: any `node` hook that imports heavy modules at top should defer them, since hooks may fire on every tool call.
+- Measurement: run `node --prof dist/cli/cli.js --help`, compare baseline vs after-deferral. If `--help` startup gets faster, the deferral was worthwhile.
+
+**When NOT to use:** For modules whose import cost is genuinely small (< 10ms), the deferral adds noise without payoff. Save it for modules that contribute measurably to startup latency.
+
 ---
 
 ## Pattern: Use POSIX-shape paths for every user-visible string

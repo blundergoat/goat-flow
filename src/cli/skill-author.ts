@@ -227,6 +227,7 @@ const TEMPLATES_BY_SUBTYPE: Record<string, string> = {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Input contract for the three mutually exclusive `skill new` modes. */
 interface SkillNewOptions {
   /** A natural-language description of the skill (description mode). */
   description?: string;
@@ -244,6 +245,7 @@ interface SkillNewOptions {
   stdinAnswers?: string[];
 }
 
+/** Result returned by `skill new`, including dry-run output when no file is written. */
 interface SkillNewResult {
   candidacy: CandidacyResult;
   /** Absolute path the scaffold was (or would be) written to. */
@@ -261,19 +263,23 @@ interface SkillNewResult {
 const SKILL_DIR = ".claude/skills";
 const PLAYBOOK_DIR = ".goat-flow/skill-playbooks";
 
+/** User-facing validation error for invalid `skill new` mode combinations. */
 export class SkillNewInputError extends Error {
+  /** Preserve the custom error name so the CLI can classify input failures. */
   constructor(message: string) {
     super(message);
     this.name = "SkillNewInputError";
   }
 }
 
+/** Resolved scaffold target and template after candidacy chooses an artifact kind. */
 interface ResolvedScaffold {
   template: string;
   proposedPath: string;
   isReference: boolean;
 }
 
+/** Replace scaffold placeholders after candidacy has selected a concrete artifact. */
 function fillTemplate(template: string, vars: Record<string, string>): string {
   return Object.entries(vars).reduce(
     (acc, [key, value]) => acc.replaceAll(`{{${key}}}`, value),
@@ -315,6 +321,7 @@ function resolveScaffold(
   return { template, proposedPath, isReference: choice.isReference };
 }
 
+/** Return the explicitly selected input modes so ambiguous invocations fail before prompting. */
 function selectedInputModes(options: SkillNewOptions): string[] {
   const modes: string[] = [];
   if ((options.description ?? "").trim().length > 0) modes.push("description");
@@ -323,6 +330,7 @@ function selectedInputModes(options: SkillNewOptions): string[] {
   return modes;
 }
 
+/** Throws on mixed modes because description, draft, and interactive flows branch early. */
 function assertSingleInputMode(options: SkillNewOptions): void {
   const modes = selectedInputModes(options);
   if (modes.length <= 1) return;
@@ -331,6 +339,7 @@ function assertSingleInputMode(options: SkillNewOptions): void {
   );
 }
 
+/** Validate scaffold names against filesystem-safe kebab-case skill paths. */
 function isValidSkillName(name: string): boolean {
   return /^[a-z][a-z0-9-]{1,40}$/.test(name);
 }
@@ -344,15 +353,22 @@ async function promptLine(
   return (await rl.question(question)).trim();
 }
 
+/** Prompt adapter lets tests drive interactive flows without touching real stdin. */
 interface InteractivePrompts {
+  /** Read the natural-language skill description. */
   promptDescription(): Promise<string>;
+  /** Read or accept the suggested kebab-case name. */
   promptName(suggested: string): Promise<string>;
+  /** Confirm the write after showing a scaffold preview. */
   confirmWrite(path: string, scaffold: string): Promise<boolean>;
+  /** Release any prompt resources once the mode finishes. */
   close(): void;
 }
 
+/** Deterministic prompt adapter for tests; answers are consumed in call order. */
 function fakePrompts(answers: string[]): InteractivePrompts {
   let i = 0;
+  /** Return the next scripted answer, defaulting to an empty response. */
   const next = () => answers[i++] ?? "";
   return {
     promptDescription: () => Promise.resolve(next()),
@@ -367,14 +383,22 @@ function fakePrompts(answers: string[]): InteractivePrompts {
   };
 }
 
+/** Real readline-backed prompt adapter for interactive CLI use. */
 function readlinePrompts(): InteractivePrompts {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
   return {
     promptDescription: () =>
-      promptLine(rl, "Describe the skill you want to create:\n> ", undefined),
+      promptLine(
+        readline,
+        "Describe the skill you want to create:\n> ",
+        undefined,
+      ),
     promptName: async (suggested) =>
       (await promptLine(
-        rl,
+        readline,
         `Name (kebab-case, default ${suggested}): `,
         undefined,
       )) || suggested,
@@ -382,11 +406,11 @@ function readlinePrompts(): InteractivePrompts {
       process.stdout.write(`\nProposed file: ${path}\n`);
       const preview = scaffold.split("\n").slice(0, 12).join("\n");
       process.stdout.write(`---\n${preview}\n…\n---\n`);
-      const answer = await rl.question("Write this file? (y/N) ");
+      const answer = await readline.question("Write this file? (y/N) ");
       return /^y/i.test(answer.trim());
     },
     close: () => {
-      rl.close();
+      readline.close();
     },
   };
 }
@@ -430,6 +454,7 @@ function describeArtifact(
   }
 }
 
+/** Render candidacy guidance when the request should not create a skill/playbook. */
 function nonScaffoldOutput(candidacy: CandidacyResult): string[] {
   return [
     `Candidacy: ${describeArtifact(candidacy.recommendedArtifact)} (confidence ${Math.round(

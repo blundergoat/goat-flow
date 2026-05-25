@@ -93,6 +93,10 @@ function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "gruff-code-quality.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, "workflow", "skills", "playbooks", "observability.md"),
     SHARED_STUB,
   );
@@ -168,6 +172,10 @@ function setupFixture(): string {
   );
   writeFileSync(
     join(root, ".goat-flow", "skill-playbooks", "code-comments.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "gruff-code-quality.md"),
     SHARED_STUB,
   );
   writeFileSync(
@@ -367,7 +375,7 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    const expectedSharedComparisons = 14;
+    const expectedSharedComparisons = 15;
     assert.equal(
       report.checked,
       expectedSkillComparisons + expectedSharedComparisons,

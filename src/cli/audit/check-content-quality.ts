@@ -22,6 +22,12 @@ import type { ContentFinding, ContentSeverity } from "./types.js";
 import { SKILL_NAMES } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
 
+/**
+ * Regex detector descriptor for one prose-quality rule.
+ *
+ * The matcher only sees one non-code-block line at a time, so each rule owns
+ * both the stable audit id and the remediation text needed for that local hit.
+ */
 interface PatternRule {
   rule: string;
   /** Compiled regex (case-insensitive, word-boundary handled inside the pattern). */
@@ -59,6 +65,7 @@ const STATIC_QUALITY_TARGETS = [
   // Standalone playbooks (loaded on-demand by skills/agents)
   ".goat-flow/skill-playbooks/README.md",
   ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/skill-quality-testing.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
@@ -297,9 +304,17 @@ function scanLine(
   }
 }
 
-/** Scan one file. Returns zero or more findings, skipping fenced code blocks.
- *  Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
- *  on incident-description prose. */
+/**
+ * Scan one file, skipping fenced code blocks before applying prose detectors.
+ *
+ * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
+ * on incident-description prose while still rejecting generic instructions.
+ *
+ * @param path - Repo-relative path used in emitted findings and mode-specific rules.
+ * @param text - Markdown or instruction-file content to scan.
+ * @param mode - Detector set to apply for the target surface.
+ * @returns Content-quality findings found outside fenced code blocks.
+ */
 export function scanContentQuality(
   path: string,
   text: string,
@@ -320,7 +335,13 @@ export function scanContentQuality(
   return findings;
 }
 
-/** List current ADR files. */
+/**
+ * List current ADR files in a deterministic order.
+ *
+ * ADR content is a stable truth surface, and discovering `ADR-NNN-*.md` files
+ * at runtime keeps new decisions inside content-quality coverage without
+ * requiring a second hard-coded target list.
+ */
 function listDecisionMarkdown(ctx: AuditContext): string[] {
   if (!ctx.fs.exists(DECISIONS_DIR)) return [];
   return ctx.fs
@@ -330,7 +351,13 @@ function listDecisionMarkdown(ctx: AuditContext): string[] {
     .map((name) => `${DECISIONS_DIR}${name}`);
 }
 
-/** Full list of target paths, including every installed skill SKILL.md. */
+/**
+ * Resolve the full scan target list.
+ *
+ * The target set is assembled here because static truth surfaces, current ADRs,
+ * and every installed skill file are maintained by different setup paths; a
+ * single de-duped resolver avoids coverage drift between those sources.
+ */
 function resolveTargets(ctx: AuditContext): string[] {
   const targets = new Set<string>([
     ...STATIC_QUALITY_TARGETS,
@@ -356,7 +383,16 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
     .map((name) => `${dir}${name}`);
 }
 
-/** Run content-quality checks across the configured documentation targets. */
+/**
+ * Run content-quality checks across the configured documentation targets.
+ *
+ * Missing files and unreadable targets are skipped; the function reports prose
+ * findings for available surfaces instead of failing the whole audit on
+ * optional buckets.
+ *
+ * @param ctx - Audit context containing the read-only project filesystem.
+ * @returns Findings plus the count of files that were actually scanned.
+ */
 export function runContentQualityChecks(ctx: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;

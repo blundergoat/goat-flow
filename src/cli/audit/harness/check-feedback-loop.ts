@@ -32,19 +32,29 @@ function feedbackProvenance(
   };
 }
 
+/**
+ * Build per-agent freshness rows from project-level learning-loop facts.
+ *
+ * Footguns and lessons are shared project memory, but the harness renderer
+ * expects details keyed by agent so every check can use one details shape.
+ */
 function learningLoopFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
   const buckets = [
     ...ctx.facts.shared.footguns.buckets,
     ...ctx.facts.shared.lessons.buckets,
   ];
-  const count = (band: "fresh" | "aging" | "stale") =>
-    buckets.filter((bucket) => bucket.freshnessBand === band).length;
-  const fresh = count("fresh");
-  const aging = count("aging");
-  const stale = count("stale");
+  const fresh = buckets.filter(
+    (bucket) => bucket.freshnessBand === "fresh",
+  ).length;
+  const aging = buckets.filter(
+    (bucket) => bucket.freshnessBand === "aging",
+  ).length;
+  const stale = buckets.filter(
+    (bucket) => bucket.freshnessBand === "stale",
+  ).length;
   return {
-    freshness: ctx.agents.map((af) => ({
-      agent: af.agent.id,
+    freshness: ctx.agents.map((agentFacts) => ({
+      agent: agentFacts.agent.id,
       fresh,
       aging,
       stale,
@@ -52,11 +62,17 @@ function learningLoopFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
   };
 }
 
+/**
+ * Build the decision-log freshness row for each audited agent.
+ *
+ * ADRs are also shared project memory, but repeating the same counts per agent
+ * preserves the dashboard/table contract used by every harness concern.
+ */
 function decisionsFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
   const { decisions } = ctx.facts.shared;
   return {
-    freshness: ctx.agents.map((af) => ({
-      agent: af.agent.id,
+    freshness: ctx.agents.map((agentFacts) => ({
+      agent: agentFacts.agent.id,
       fresh: decisions.dirExists ? decisions.fileCount : 0,
       aging: 0,
       stale: decisions.dirExists ? 0 : 1,

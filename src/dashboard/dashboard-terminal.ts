@@ -3,21 +3,21 @@
  * The Alpine app owns view state; this file owns xterm/WebSocket mechanics.
  */
 
-const TERMINAL_REFIT_RETRY_DELAY_MS = 50;
-const TERMINAL_REFIT_MAX_ATTEMPTS = 20;
+const TERMINAL_REFIT_RETRY_DELAY_MS = 50; // Retry budget: one render tick before measuring xterm again.
+const TERMINAL_REFIT_MAX_ATTEMPTS = 20; // Retry cap: one second is enough for hidden panels to become measurable.
 const TERMINAL_INITIAL_FIT_DELAYS_MS = [50, 200, 500] as const;
-const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000;
-const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000;
-const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500;
-const TERMINAL_PASTE_COMMIT_DELAY_MS = 1200;
-const TERMINAL_PASTE_COMMIT_FALLBACK_DELAY_MS = 15000;
-const TERMINAL_PASTE_FALLBACK_RELEASE_DELAY_MS = 5000;
-const TERMINAL_PASTE_POST_SUBMIT_RETRY_DELAY_MS = 2500;
-const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300;
-const TERMINAL_PASTE_SUBMIT_MAX_RETRIES = 5;
+const TERMINAL_LAUNCH_PROMPT_NO_OUTPUT_FALLBACK_DELAY_MS = 6000; // Fallback delay: silent runner startup can precede the first composer prompt.
+const TERMINAL_LAUNCH_PROMPT_AFTER_OUTPUT_FALLBACK_DELAY_MS = 2000; // Fallback budget: after output appears, wait for a recognised composer marker.
+const TERMINAL_LAUNCH_PROMPT_QUIET_DELAY_MS = 500; // Quiet budget: send after output pauses to avoid racing TUI redraws.
+const TERMINAL_PASTE_COMMIT_DELAY_MS = 1200; // Commit budget: Claude/Antigravity need a quiet window after pasted-text echoes.
+const TERMINAL_PASTE_COMMIT_FALLBACK_DELAY_MS = 15000; // Fallback budget: runners without paste echoes still need eventual Enter submission.
+const TERMINAL_PASTE_FALLBACK_RELEASE_DELAY_MS = 5000; // Release budget: do not hold queued paste state forever after fallback submission.
+const TERMINAL_PASTE_POST_SUBMIT_RETRY_DELAY_MS = 2500; // Retry budget: pasted-text echoes can arrive after a fallback Enter.
+const TERMINAL_PASTE_SUBMIT_RETRY_DELAY_MS = 300; // Retry budget: keep Enter retries responsive without flooding the PTY.
+const TERMINAL_PASTE_SUBMIT_MAX_RETRIES = 5; // Retry cap: bounded Enter retries avoid stuck composer state without spamming input.
 const AWAITING_INPUT_VISIBLE_DELAY_MS = 1200;
-const TERMINAL_LOADING_SLOW_HINT_MS = 3000;
-const TERMINAL_LOADING_RETRY_MS = 10000;
+const TERMINAL_LOADING_SLOW_HINT_MS = 3000; // Hint delay: normal xterm startup should finish before slow-load copy appears.
+const TERMINAL_LOADING_RETRY_MS = 10000; // Retry budget: give asset loading and socket attach time before offering retry.
 // Coalesce bursty launch/route refreshes without delaying user-visible state.
 const SESSION_REFRESH_DEBOUNCE_MS = 50;
 const BRACKETED_PASTE_MARKER_PATTERN = /\x1b\[(?:200|201)~/g;
@@ -27,11 +27,13 @@ let xtermLoadPromise: Promise<void> | null = null;
 let sessionRefreshPromise: Promise<void> | null = null;
 let sessionRefreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Pending bracketed-paste payload waiting for the runner to commit or echo it. */
 interface DashboardQueuedPaste {
   data: string;
-  delayed: boolean;
+  shouldDelaySubmit: boolean;
 }
 
+/** Stable Alpine state schema and terminal methods consumed by browser-side helpers. */
 interface DashboardTerminalContext {
   projectPath: string;
   activeView: string;
@@ -63,11 +65,17 @@ interface DashboardTerminalContext {
   terminalAwaitingInput: boolean;
   terminalSessionId: string | null;
   terminalEnded: boolean;
+  /** Format a project path for UI labels without exposing full path noise. */
   displayNameFor(path: string): string;
+  /** Apply runner-specific prompt adaptation before sending text to a terminal. */
   adaptPrompt(prompt: string, runner?: RunnerId): string;
+  /** Surface terminal errors through the shared dashboard toast channel. */
   showToast(msg: string, isError?: boolean): void;
+  /** Check whether a backend session has a browser terminal tab in this project. */
   isSessionBoundLocally(id: string): boolean;
+  /** Send text to the active browser terminal connection. */
   sendToTerminal(text: string, options?: { adapt?: boolean }): boolean;
+  /** Rehydrate a server-active terminal session into the browser UI. */
   openServerSession(serverSession: ServerSessionInfo): Promise<void>;
   launchInTerminal(
     prompt: string,
@@ -79,17 +87,25 @@ interface DashboardTerminalContext {
       targetPath?: string | null;
     },
   ): Promise<void>;
+  /** Load xterm assets once before a browser terminal attaches. */
   loadXterm(): Promise<void>;
+  /** Attach one browser terminal tab to a backend WebSocket session. */
   connectTerminal(sessionId: string, wsUrl: string): void;
+  /** Refresh backend session counts and max-session state. */
   updateSessionCount(): Promise<void>;
+  /** Remove one session id from persisted reconnect state. */
   _forgetSavedSession(sessionId: string): void;
   rememberSessionTitle(
     sessionId: string,
     title: string | null | undefined,
   ): void;
+  /** Keep a terminated local session visible briefly after the backend drops it. */
   rememberRecentSession(session: LocalSession): void;
+  /** Resolve the stable display title for local and backend terminal rows. */
   sessionTitleFor(session: ServerSessionInfo | LocalSession | null): string;
+  /** Terminate a backend session and release browser-side terminal resources. */
   endSession(sessionId: string): void;
+  /** Download the scrollback for one browser terminal tab. */
   exportSession(sessionId: string): void;
 }
 
@@ -99,8 +115,8 @@ function dashboardControllingWorkspace(): string {
 }
 
 /** Return a POSIX-shell-safe single-quoted string for command examples. */
-function dashboardShellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+function dashboardShellQuote(commandText: string): string {
+  return `'${commandText.replace(/'/g, "'\\''")}'`;
 }
 
 /** Remove generic labels that hide the actual session identity. */
@@ -284,7 +300,7 @@ function dashboardOutputHasConfirmFooter(plain: string): boolean {
   );
 }
 
-/** Heuristic for agent prompts waiting on a numbered human choice. */
+/** Heuristic for runner approval prompts because each agent renders choices differently. */
 function dashboardOutputLooksAwaitingInput(text: string): boolean {
   const plain = dashboardPlainTerminalText(text);
   const titleSignal = dashboardTerminalTitlesFromOutput(text).some(
@@ -772,7 +788,7 @@ function dashboardSendBracketedPaste(
   const refs = ctx._terminalRefs[sessionId];
   if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) return;
   refs.ws.send(JSON.stringify({ type: "input", data: paste.data }));
-  if (paste.delayed) {
+  if (paste.shouldDelaySubmit) {
     refs.pasteSubmitAwaitingCommit = true;
     refs.pasteSubmitFallbackSubmitted = false;
     dashboardArmPasteSubmitTimer(ctx, sessionId, {
@@ -880,7 +896,7 @@ function dashboardGlobalLaunchContext(
   ].join("\n");
 }
 
-/** Read the loaded xterm.js constructors from window globals. */
+/** Read loaded xterm.js constructors; throws if asset loading did not attach globals. */
 function getXtermConstructors(): {
   Terminal: NonNullable<Window["Terminal"]>;
   FitAddon: new () => FitAddonInstance;
@@ -929,7 +945,7 @@ function dashboardSendToTerminalSession(
     isMultiLinePaste;
   dashboardSendOrQueueBracketedPaste(ctx, sessionId, {
     data: pasteData,
-    delayed: delayedSubmit,
+    shouldDelaySubmit: delayedSubmit,
   });
   dashboardClearAwaitingInputTimer(ctx, sessionId);
   target.lastInputTime = Date.now();
@@ -1364,6 +1380,7 @@ function waitForAssetElement(
   });
 }
 
+/** Load xterm CSS once, reusing an existing tag so reconnects do not duplicate assets. */
 async function loadXtermStylesheet(): Promise<void> {
   const existing = document.querySelector<HTMLLinkElement>(
     'link[rel="stylesheet"][href="/assets/xterm.css"]',
@@ -1380,6 +1397,7 @@ async function loadXtermStylesheet(): Promise<void> {
   await loaded;
 }
 
+/** Load one xterm script asset, waiting for existing tags when another tab started first. */
 async function loadXtermScript(src: string, label: string): Promise<void> {
   const existing = document.querySelector<HTMLScriptElement>(
     `script[src="${src}"]`,

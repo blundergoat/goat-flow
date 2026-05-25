@@ -13,6 +13,7 @@
     "src/dashboard/globals.d.ts"
   ],
   "ignoreDependencies": [
+    "@blundergoat/gruff-ts",
     "@stryker-mutator/core",
     "@xterm/addon-fit",
     "@xterm/xterm"

@@ -54,6 +54,7 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-playbooks/browser-use.md",
   ".goat-flow/skill-playbooks/changelog.md",
   ".goat-flow/skill-playbooks/code-comments.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
   ".goat-flow/skill-playbooks/observability.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/release-notes.md",
@@ -86,6 +87,7 @@ const REQUIRED_SKILL_REFERENCE_FILES = [
   ".goat-flow/skill-playbooks/browser-use.md",
   ".goat-flow/skill-playbooks/changelog.md",
   ".goat-flow/skill-playbooks/code-comments.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
   ".goat-flow/skill-playbooks/observability.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/release-notes.md",
@@ -107,6 +109,12 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!skill-playbooks/**",
 ];
 
+/**
+ * Markdown heading slice used by instruction-file section checks.
+ *
+ * Offsets are JavaScript string indexes, not line numbers, because the audit
+ * slices the original content and must preserve LF/CRLF handling.
+ */
 interface MarkdownHeading {
   index: number;
   end: number;
@@ -123,6 +131,13 @@ function presentInstructionFiles(
   return [...new Set(paths)].filter((path) => ctx.fs.exists(path));
 }
 
+/**
+ * Parse ATX headings from instruction markdown without a full Markdown parser.
+ *
+ * The audit only needs section boundaries for AGENTS/CLAUDE/Copilot files, so a
+ * small deterministic parser avoids adding a runtime dependency to setup checks.
+ * The scan mutates only the local RegExp cursor used for this string.
+ */
 function markdownHeadings(content: string): MarkdownHeading[] {
   const headingPattern = /^(#{1,6})\s+(.+?)\s*$/gm;
   const headings: MarkdownHeading[] = [];
@@ -138,6 +153,12 @@ function markdownHeadings(content: string): MarkdownHeading[] {
   return headings;
 }
 
+/**
+ * Return the first content offset after a heading line.
+ *
+ * CRLF and LF both appear in installed instruction files; normalizing the start
+ * offset here keeps section extraction from carrying the heading newline.
+ */
 function sectionStartOffset(content: string, headingEnd: number): number {
   if (content.slice(headingEnd, headingEnd + 2) === "\r\n")
     return headingEnd + 2;
@@ -145,6 +166,12 @@ function sectionStartOffset(content: string, headingEnd: number): number {
   return headingEnd;
 }
 
+/**
+ * Extract one markdown section by heading title.
+ *
+ * The end boundary is the next heading at the same or higher level because READ
+ * can be nested under Execution Loop without swallowing sibling steps.
+ */
 function markdownSection(content: string, heading: RegExp): string | null {
   const headings = markdownHeadings(content);
   const headingIndex = headings.findIndex((entry) => heading.test(entry.title));
@@ -160,6 +187,14 @@ function markdownSection(content: string, heading: RegExp): string | null {
     .trim();
 }
 
+/**
+ * Extract AGENTS-style bold execution-loop steps.
+ *
+ * Some installed instruction files encode READ/SCOPE/ACT/VERIFY as bold list
+ * labels instead of headings; this fallback preserves compatibility with that
+ * shape while keeping the skill-reference rule scoped to the Execution Loop.
+ * The helper reads the provided string only; it does not touch project files.
+ */
 function boldStepSection(content: string, step: string): string | null {
   const pattern = new RegExp(
     String.raw`(?:^|\n)\s*(?:[-*]\s*)?\*\*${step}\*\*[\s:–-]*(?<body>[\s\S]*?)(?=\n\s*(?:[-*]\s*)?\*\*(?:READ|SCOPE|ACT|VERIFY)\*\*[\s:–-]*|\n##\s|\n###\s|$)`,
@@ -168,6 +203,12 @@ function boldStepSection(content: string, step: string): string | null {
   return pattern.exec(content)?.groups?.body?.trim() ?? null;
 }
 
+/**
+ * Check that READ tells agents to consult playbooks before declaring tools absent.
+ *
+ * The scan is scoped to the Execution Loop so incidental references elsewhere
+ * do not satisfy the setup contract.
+ */
 function hasSkillReferenceReadRule(content: string): boolean {
   const executionLoop = markdownSection(content, /^Execution Loop\b/i);
   if (!executionLoop) return false;
@@ -178,6 +219,12 @@ function hasSkillReferenceReadRule(content: string): boolean {
   return READ_RULE_PATTERNS.every((pattern) => pattern.test(readSection));
 }
 
+/**
+ * Check that the Router Table exposes the skill-reference/playbook paths.
+ *
+ * Keeping this in Router Table makes the discovery path explicit for future
+ * agents instead of relying on a one-off mention in surrounding prose.
+ */
 function hasSkillReferenceRouterPointer(content: string): boolean {
   const routerTable = markdownSection(content, /^Router Table\b/i);
   if (!routerTable) return false;

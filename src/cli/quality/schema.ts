@@ -39,11 +39,13 @@ type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
 type QualityEvidenceQuality = (typeof QUALITY_EVIDENCE_QUALITIES)[number];
 type QualityEvidenceMethod = (typeof QUALITY_EVIDENCE_METHODS)[number];
 type QualityScope = (typeof QUALITY_SCOPES)[number];
+/** Quality workflow mode used to keep history and diffs within comparable report families. */
 export type QualityMode = (typeof QUALITY_MODES)[number];
 type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
 type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
 
+/** Setup-side quality rubric scores; axis values must sum to `total`. */
 interface QualitySetupScores {
   total: number;
   accuracy: QualityAxisScore;
@@ -52,6 +54,7 @@ interface QualitySetupScores {
   friction: QualityAxisScore;
 }
 
+/** System-side quality rubric scores; axis values must sum to `total`. */
 interface QualitySystemScores {
   total: number;
   usefulness: QualityAxisScore;
@@ -60,11 +63,13 @@ interface QualitySystemScores {
   learnability: QualityAxisScore;
 }
 
+/** Paired score groups used by quality history and dashboard trend views. */
 interface QualityScores {
   setup: QualitySetupScores;
   system: QualitySystemScores;
 }
 
+/** One current agent-emitted quality finding before deterministic IDs are attached. */
 export interface QualityFinding {
   type: QualityFindingType;
   severity: QualityFindingSeverity;
@@ -86,10 +91,12 @@ export interface QualityFinding {
   delta_tag: QualityDeltaTag | null;
 }
 
+/** Persisted quality finding with a deterministic history/diff ID. */
 export interface SavedQualityFinding extends QualityFinding {
   id: string;
 }
 
+/** Agent-emitted quality report schema accepted by `quality validate`. */
 export interface QualityReport {
   report_kind: typeof QUALITY_REPORT_KIND;
   goat_flow_version: string;
@@ -113,19 +120,25 @@ export interface QualityReport {
   findings: QualityFinding[];
 }
 
+/** Saved quality report schema after `attachFindingIds` has materialized finding IDs. */
 export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
   findings: SavedQualityFinding[];
 }
 
 type ParseResult<T> = { ok: true; report: T } | { ok: false; error: string };
 
+/** Parse strictness switch for current emissions versus legacy history files. */
 interface QualityReportParseOptions {
   requireCurrentFields?: boolean;
 }
 
-/** Check whether a value is a record. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Check whether parsed JSON is an object before inspecting schema keys. */
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
 /** Reject unknown keys. */
@@ -383,7 +396,7 @@ function parseScores(
 }
 
 /** Parse one quality finding payload. */
-// eslint-disable-next-line complexity -- finding validation is intentionally explicit so every rejected field gets a precise path-specific error
+// eslint-disable-next-line complexity -- intentional because finding validation stays explicit so every rejected field gets a precise path-specific error.
 function parseFinding(
   raw: unknown,
   index: number,
@@ -569,7 +582,7 @@ function parseFinding(
 }
 
 /** Parse a quality report with optional finding IDs. */
-// eslint-disable-next-line complexity -- report validation stays fully expanded so schema errors name the exact failing field
+// eslint-disable-next-line complexity -- intentional because report validation stays fully expanded so schema errors name the exact failing field.
 function parseReportInternal(
   raw: unknown,
   allowFindingId: boolean,
@@ -760,7 +773,13 @@ function parseReportInternal(
   };
 }
 
-/** Parse the quality report. */
+/**
+ * Parse a current agent-emitted quality report.
+ *
+ * @param raw - Unknown JSON value to validate.
+ * @param options - Optional strictness override for legacy compatibility.
+ * @returns Parsed quality report or a path-specific schema error.
+ */
 export function parseQualityReport(
   raw: unknown,
   options: QualityReportParseOptions = { requireCurrentFields: true },
@@ -770,7 +789,13 @@ export function parseQualityReport(
   return { ok: true, report: result.report };
 }
 
-/** Parse the saved quality report. */
+/**
+ * Parse a persisted quality report that already includes finding IDs.
+ *
+ * @param raw - Unknown JSON value to validate.
+ * @param options - Optional strictness override for legacy compatibility.
+ * @returns Parsed saved quality report or a path-specific schema error.
+ */
 export function parseSavedQualityReport(
   raw: unknown,
   options: QualityReportParseOptions = {},

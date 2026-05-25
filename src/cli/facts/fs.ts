@@ -13,7 +13,7 @@ import {
 import { resolve, relative, join } from "node:path";
 import type { ReadonlyFS } from "../types.js";
 
-/** Read directory entries, returning an empty list when the path is missing. */
+/** Read directory entries; swallows readdir errors so glob walkers treat missing trees as no matches. */
 function readDirEntries(path: string): Dirent[] {
   try {
     return readdirSync(path, { withFileTypes: true });
@@ -192,12 +192,20 @@ function walkGlobSegmentExists(
   return false;
 }
 
-/** Create a read-only filesystem abstraction rooted at the given path. */
+/**
+ * Create a read-only filesystem abstraction rooted at the given path.
+ * The adapter centralizes defensive filesystem handling because audit callers need stable null,
+ * false, or empty-list results instead of platform-specific errno throws.
+ *
+ * @param rootPath Directory that relative fact reads resolve against.
+ * @returns Cached, non-mutating filesystem helpers for audit and fact extraction.
+ */
 export function createFS(rootPath: string): ReadonlyFS {
   const root = resolve(rootPath);
 
-  function resolvePath(p: string): string {
-    return resolve(root, p);
+  /** Resolve caller-supplied relative paths under the adapter root. */
+  function resolvePath(relativePath: string): string {
+    return resolve(root, relativePath);
   }
 
   // Request-scoped caches - discarded when the FS instance is discarded.
@@ -206,6 +214,7 @@ export function createFS(rootPath: string): ReadonlyFS {
   const listDirCache = new Map<string, string[]>();
   const globCache = new Map<string, string[]>();
 
+  /** Cache UTF-8 file reads; swallows read errors as null for missing or unreadable files. */
   function cachedReadFile(path: string): string | null {
     const resolved = resolvePath(path);
     const cached = contentCache.get(resolved);
@@ -221,6 +230,7 @@ export function createFS(rootPath: string): ReadonlyFS {
   }
 
   return {
+    /** Return cached path existence; swallows stat errors and reports inaccessible paths as false. */
     exists(path: string): boolean {
       const resolved = resolvePath(path);
       const cached = existsCache.get(resolved);
@@ -235,16 +245,19 @@ export function createFS(rootPath: string): ReadonlyFS {
       }
     },
 
+    /** Read a UTF-8 file, returning null when the file is missing or unreadable. */
     readFile(path: string): string | null {
       return cachedReadFile(path);
     },
 
+    /** Count lines from cached content so repeated audit checks do not reread the same file. */
     lineCount(path: string): number {
       const content = cachedReadFile(path);
       if (content === null) return 0;
       return content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
     },
 
+    /** Parse JSON defensively; missing or malformed files recover to null. */
     readJson(path: string): unknown {
       const content = cachedReadFile(path);
       if (content === null) return null;
@@ -255,6 +268,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       }
     },
 
+    /** List directory names; swallows readdir errors as [] by design. */
     listDir(path: string): string[] {
       const resolved = resolvePath(path);
       const cached = listDirCache.get(resolved);
@@ -272,6 +286,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       }
     },
 
+    /** Check executability; swallows access errors and falls back to shebang detection on Windows. */
     isExecutable(path: string): boolean {
       try {
         accessSync(resolvePath(path), constants.X_OK);
@@ -285,6 +300,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       }
     },
 
+    /** Expand the custom glob syntax and return a copy so callers cannot mutate the cache. */
     glob(pattern: string): string[] {
       const cached = globCache.get(pattern);
       if (cached !== undefined) return [...cached];
@@ -295,6 +311,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       return [...results];
     },
 
+    /** Check whether a glob has any match without materializing results when nothing is cached. */
     existsGlob(pattern: string): boolean {
       const cached = globCache.get(pattern);
       if (cached !== undefined) return cached.length > 0;

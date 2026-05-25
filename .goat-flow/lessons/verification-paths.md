@@ -1,6 +1,6 @@
 ---
 category: verification-paths
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-25
 ---
 
 ## Lesson: Do not cite gitignored task files from durable artifacts
@@ -117,6 +117,8 @@ last_reviewed: 2026-05-18
 **Root cause:** Verified runtime behavior first and only learned about tooling drift at the end. File deletions and new exports change cold-path tool surfaces (`knip.json`, unused-export analysis) even when app behavior and tests are correct.
 
 **Evidence:** Current repository state no longer supports the old deleted-file wording: `src/dashboard/dashboard-custom-prompts.ts` exists and `knip.json` still carries that path (`knip.json` (search: `dashboard-custom-prompts.ts`)). The verified historical knip cleanup example is commit `f7159fb`, where `knip.json` changed an old dashboard preset ignore to the renamed preset module after a preset rename; the dead historical filenames are intentionally omitted because `stats --check` validates literal file refs even in historical examples. The unused-export half of the lesson remains anchored at `src/cli/detect/project-stack.ts` (search: `interface SetupStackSummary`).
+
+**Recurrence 2026-05-25:** `stats --check` failed on newly added footgun buckets because external mini-swe-agent paths were backticked like repo-local paths, and one real goat-flow anchor still searched for `class TerminalSession` after the implementation used `interface TerminalSession`. The repair kept external paths as prose with only semantic search anchors in backticks, then updated the local terminal anchor to the current symbol. Evidence anchors: `.goat-flow/footguns/agent-output-trust.md` (search: `external mini-swe-agent path`), `.goat-flow/footguns/cleanup-layering.md` (search: `interface TerminalSession`), `.goat-flow/footguns/config.md` (search: `external mini-swe-agent paths`).
 
 **Fix:** Remove the stale Knip ignore entry, de-export the setup-summary interface, then rerun `npx knip` before the final preflight pass.
 

@@ -27,7 +27,7 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 - If vague, ask one follow-up covering files, concerns, and diff / PR / audit.
 - Auto-detect scope: (1) explicit input, (2) staged changes, (3) unstaged changes, (4) PR-style when HEAD is on a non-default branch with commits ahead of the detected review base, (5) git diff.
 
-**PR mode (prefer PR link):** ask for PR URL/number first; it collapses base, head, description, and linked issues. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body`; diff via `gh pr diff <ref>`. Record PR URL and base SHA.
+**PR mode (prefer PR link):** ask for PR URL/number first; it collapses base, head, description, and linked issues. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body,reviews,comments`; diff via `gh pr diff <ref>`. Record PR URL and base SHA. See `references/automated-review.md` for overlap-tagging protocol.
 
 **PR mode (base fallback):** when no PR link or `gh` unavailable, resolve base in order: (1) explicit user base, (2) `.goat-flow/config.yaml`'s `skills.goat-review.local_pr_base` (record `configured-base=<base>`, or `configured-base-unresolved=<base>` if unresolvable), (3) `git symbolic-ref --short refs/remotes/origin/HEAD` or `git remote show origin`, (4) ask user, (5) last-resort fallback `main` with `base-detection-failed`. Run `git fetch origin <base> --quiet`; diff via `git diff origin/<base>...HEAD`. On fetch failure, fall back to local `<base>` with `base-fetch-failed`. Record resolved base, source, and short SHA in Review Integrity.
 
