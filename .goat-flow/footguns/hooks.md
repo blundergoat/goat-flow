@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-25
 ---
 
 **Last independent review:** 2026-05-24 - Active entries re-verified against current anchors and hook self-tests. Workflow, Claude, GitHub, Codex, and Antigravity deny-hook self-tests each return `PASS: deny-dangerous.sh self-test`. The direct `cat .env` probe is blocked by the active PreToolUse guard before script execution; coverage relies on self-test cases plus live harness blocking for that command shape.
@@ -174,6 +174,27 @@ last_reviewed: 2026-05-24
 1. Recursive hook paths MUST call `check_command_segments`, not `check_segment`, unless the caller has already split shell control operators.
 2. Every nested execution feature (`bash -c`, `$()`, `<()`) needs at least one chained-danger self-test, not only a single-danger command body.
 3. When a hook edit touches read-only whitelisting or recursive parsing, run the hook self-test before syncing copies so failures point at the canonical template.
+
+---
+
+## Footgun: Heredoc masking can hide executable shell lines
+
+**Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Fixing heredoc false positives by masking quoted heredoc bodies is correct for inert report JSON/prose, but unsafe if the masker does not exactly mirror Bash delimiter semantics. A masker that misses `<<-` tab-indented terminators can keep treating later shell lines as heredoc data, while a masker that is too broad can let inert JSON/prose trip the chain-count cap.
+
+**Why it happens:** `deny-dangerous.sh` is a policy parser, not Bash. It has to preserve the heredoc opener, ignore safe quoted bodies for chain-counting, keep shell-fed heredocs (`bash <<'EOF'`) inspectable, and resume normal command scanning immediately after the real delimiter. Those responsibilities are coupled: false-positive fixes and bypass fixes both live in the same boundary.
+
+**Evidence:**
+- Runtime probe before the 2026-05-25 fix returned exit 0 for a `cat <<-'EOF' ... EOF` command followed by `rm -rf /`, because the tab-indented delimiter was not recognized and the later `rm` line was masked as body data.
+- `workflow/hooks/deny-dangerous.sh` (search: `mask_safe_quoted_heredoc_bodies`) - central heredoc masking helper now strips leading tabs only for `<<-` delimiters.
+- `workflow/hooks/deny-dangerous.self-test.sh` (search: `fp quality report heredoc allowed`) - locks the Copilot quality-report false-positive case with a large quoted JSON heredoc.
+- `workflow/hooks/deny-dangerous.self-test.sh` (search: `rb19h indented quoted heredoc then rm`) - locks the post-heredoc executable-line bypass.
+
+**Prevention:**
+1. Any heredoc masking edit must test both sides of the boundary: safe quoted report data is allowed, shell-fed heredoc bodies stay inspectable, and commands after `<<-` tab-indented delimiters are scanned.
+2. Self-test helpers must exercise the same policy path as runtime, including the 50-segment cap; testing only `check_command_segments` misses chain-cap false positives.
+3. Keep workflow, `scripts/`, and installed agent hook mirrors byte-identical after heredoc policy changes.
 
 ---
 

@@ -613,7 +613,7 @@ interface XTermInstance {
   cols: number;
   rows: number;
   _addonFit?: FitAddonInstance;
-  buffer: { active: XTermBuffer };
+  buffer: { active: XTermBuffer; normal: XTermBuffer; alternate: XTermBuffer };
   /** Attach the terminal to an already-rendered container element. */
   open(container: HTMLElement): void;
   /** Writes server output into xterm without mutating Alpine session state. */

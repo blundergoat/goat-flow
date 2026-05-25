@@ -1796,6 +1796,7 @@ function dashboardConnectTerminal(
     cursorBlink: true,
     fontSize: 14,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    scrollback: 10000,
     theme: {
       background: "#0f1729",
       foreground: "#f3f4f6",
@@ -2070,7 +2071,15 @@ function dashboardConnectTerminal(
         .readText()
         .then((text) => {
           if (text && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "input", data: text }));
+            // Bracketed-paste markers tell runners "this is one paste, do not
+            // submit on internal newlines." Copilot in particular submits on
+            // every '\n' without these markers, so multi-line clipboard text
+            // gets fragmented across queries. Claude / Codex / Antigravity
+            // composers tolerate raw multi-line text but still benefit from
+            // the explicit marker, so wrap unconditionally.
+            const prepared = dashboardPreparePasteBody(text);
+            const data = "\x1b[200~" + prepared + "\x1b[201~";
+            ws.send(JSON.stringify({ type: "input", data }));
             markUserInputSent();
           }
         })

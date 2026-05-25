@@ -439,15 +439,24 @@ mask_safe_quoted_heredoc_bodies() {
   local delimiter=""
   local in_body=0
   local mask_body=0
-  local single_quoted_re="<<-?[[:space:]]*'([^']+)'"
-  local double_quoted_re='<<-?[[:space:]]*"([^"]+)"'
+  local strip_tabs=0
+  local stripped_line=""
+  local single_quoted_re="(<<-?)[[:space:]]*'([^']+)'"
+  local double_quoted_re='(<<-?)[[:space:]]*"([^"]+)"'
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     if (( in_body )); then
-      if [[ "$line" == "$delimiter" ]]; then
+      stripped_line="$line"
+      if (( strip_tabs )); then
+        while [[ "$stripped_line" == $'\t'* ]]; do
+          stripped_line="${stripped_line#$'\t'}"
+        done
+      fi
+      if [[ "$line" == "$delimiter" || "$stripped_line" == "$delimiter" ]]; then
         output+="$line"$'\n'
         in_body=0
         mask_body=0
+        strip_tabs=0
         delimiter=""
       elif (( mask_body )); then
         output+="__goat_quoted_heredoc_body__"$'\n'
@@ -459,7 +468,9 @@ mask_safe_quoted_heredoc_bodies() {
 
     output+="$line"$'\n'
     if [[ "$line" =~ $single_quoted_re ]] || [[ "$line" =~ $double_quoted_re ]]; then
-      delimiter="${BASH_REMATCH[1]}"
+      strip_tabs=0
+      [[ "${BASH_REMATCH[1]}" == "<<-" ]] && strip_tabs=1
+      delimiter="${BASH_REMATCH[2]}"
       if heredoc_opener_executes_shell "$line"; then
         mask_body=0
       else

@@ -2063,13 +2063,32 @@ function app() {
     exportSession(sessionId: string) {
       const refs = this._terminalRefs[sessionId];
       if (!refs?.xterm) return;
-      const buf = refs.xterm.buffer.active;
-      const lines: string[] = [];
-      for (let i = 0; i < buf.length; i++) {
-        const line = buf.getLine(i);
-        if (line) lines.push(line.translateToString(true));
+      const xterm = refs.xterm;
+      const dumpBuffer = (buf: XTermBuffer): string => {
+        const lines: string[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          const line = buf.getLine(i);
+          if (line) lines.push(line.translateToString(true));
+        }
+        while (lines.length > 0 && lines[lines.length - 1] === "") {
+          lines.pop();
+        }
+        return lines.join("\n");
+      };
+      const normalText = dumpBuffer(xterm.buffer.normal);
+      const altActive = xterm.buffer.active === xterm.buffer.alternate;
+      const altText = altActive ? dumpBuffer(xterm.buffer.alternate) : "";
+      const parts: string[] = [];
+      if (normalText) parts.push(normalText);
+      if (altText) {
+        parts.push(
+          "",
+          "--- alternate screen (current TUI view) ---",
+          "",
+          altText,
+        );
       }
-      const text = lines.join("\n");
+      const text = parts.join("\n");
       const session = this.sessions.find(
         (s: LocalSession) => s.id === sessionId,
       );
