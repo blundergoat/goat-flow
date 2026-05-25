@@ -3,6 +3,32 @@ category: verification
 last_reviewed: 2026-05-25
 ---
 
+## Pattern: Cross-runner quality-report triage by convergence
+
+**Context:** `goat-flow quality` runs produce a JSON report per runner. When the same project is reviewed by multiple runners (Claude / Codex / Antigravity / Copilot) in a session, the resulting set of findings overlap unevenly: some issues land in every report, some only in one. Acting on every finding linearly is expensive when one finding is real and another is hallucinated. The triage discipline is to read all reports together and let the agreement shape guide verification order.
+
+**Approach:** Group findings across reports into three triage tiers before opening any code:
+
+1. **Convergent (N-of-N runners flagged it):** The signal is high. The finding usually corresponds to something the system has loud evidence for — a failing preflight gate, a contradiction visible in any reading of the surface, a Status tag mismatch. Verify once (because all runners might still be wrong, e.g., reading outdated state), fix, and treat as the load-bearing item.
+2. **Multi-runner (2..N-1 flagged it):** The signal is suggestive. Two independent agents converging on the same artifact usually means a real issue, but the specifics can disagree; verify against the live code for each runner's framing of it.
+3. **Singleton (1-of-N flagged it):** The finding is a HYPOTHESIS, not a fact. The other runners did not see it. Three sub-cases: (a) a real issue only one runner happened to notice (rare but valuable — typically with a specific file:line anchor), (b) a hallucinated fact the agent invented (e.g., a reference to a file that does not exist), (c) a defensible design tradeoff one runner misread. Per-finding verification is mandatory before any action; reject (b) and document (c) as defensible rather than fixing.
+
+**Evidence (2026-05-25 quality session, framework-self):** Four runners reviewed goat-flow at 20:06-20:18.
+- Convergent (4-of-4): `verification.md` lessons bucket exceeded 39KB schema gate. Verified by running preflight (failed at `Learning-loop schema` exit 1) and `wc -c` (41,323 bytes). Real and load-bearing — split-out of external-PR lessons into `external-pr-learnings.md` reduced it to 33,325 bytes, preflight green.
+- Singleton-real (1-of-4, Codex): `footguns/setup.md:10` cites search anchor `invalidNoneEntryPattern` that no longer exists in `workflow/install-goat-flow.sh`. Verified by `rg invalidNoneEntryPattern workflow/install-goat-flow.sh` returning zero hits and `rg isInvalidNoneKey workflow/install-goat-flow.sh` returning lines 497 + 599. Real and actionable.
+- Singleton-hallucination (1-of-4, Antigravity): `.agents/skills/goat-critique/SKILL.md` references `references/refuter-spec.md` that does not exist. Verified by `grep refuter-spec .{agents,claude,github}/skills/goat-critique/SKILL.md workflow/skills/goat-critique/SKILL.md` returning zero hits across all four mirrors. `refuter-spec.md` exists only under `goat-review/references/`. False positive — the agent confused which skill it was reviewing.
+- Singleton-defensible (1-of-4, Claude, persisted): `CLAUDE.md:38` lists only 2 of 9 playbook examples on the Tool playbooks hot-path hint. Defensible design — the line says "examples" and the README is the named index; the v1.4.1 parity check requires `browser-use` + `page-capture` specifically. Persisted finding worth documenting as a tradeoff, not fixing.
+
+**Goat-flow application:**
+- When a user pastes one or more quality reports, the first action is the triage pass: parse the findings, bucket by convergence, decide order of attack. Convergent first (cheapest validation), then real-singletons (cite-the-file-then-grep), then defensible/hallucination skipped or documented.
+- Convergent does not mean "skip verification" — all runners can read outdated state simultaneously (e.g., reports captured before a fix landed). Confirm the issue still exists in the live tree before acting. The 2026-05-25 verification.md finding was already fixed mid-session when the user pasted the reports; the triage pass surfaces "already fixed" as a fast no-op for the convergent tier.
+- Hallucinations are not failures of the reporting agent's character — they are a property of LM review under uncertainty. Treat them as a routine 5-10% rate per report and design the triage discipline around that rate, not against it.
+- When a singleton-real finding is acted on, audit whether the OTHER runners had blind spots (the same evidence was present and they missed it) or different framing (one runner had access to a tool the others didn't). The "why only one runner saw this" question informs future rubric tuning.
+
+**When NOT to use:** Single-runner sessions (only one agent reviewed) cannot use convergence triage — every finding is a singleton. In that case the discipline collapses to per-finding verification, weighted by evidence quality (`evidence_method` + `evidence_command` fields in the JSON report) rather than by cross-runner agreement.
+
+---
+
 ## Pattern: Auto-detect required runtime in CI, skip cleanly when absent
 
 **Context:** Tests that depend on an external runtime (container engine, language runtime, native binary) may be valuable in some CI environments but unrunnable in others. Hard-coding the runtime makes the suite fail on platforms that have an equivalent alternative; hard-coding "skip if missing" prevents partial-coverage runs. The right shape is auto-detect, prefer-first, set-env, fall-through-skip.

@@ -3,6 +3,24 @@ category: docs-and-crossrefs
 last_reviewed: 2026-05-25
 ---
 
+## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
+
+**Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes a code shape that no longer exists. Search anchors in the Symptoms paragraph resolve to nothing — `grep` on the live tree returns zero hits for the identifier the footgun says to look at. Future agents following the anchor either chase a ghost incident (looking for a regex that's been refactored away) or distrust the entire footgun bucket because one entry is verifiably wrong.
+
+**Why it happens:** Footguns get created when an incident hits. When the bug is fixed, the fixer often updates code + tests + changelog but does not update the footgun text. The Status tag stays `active` because the *principle* (e.g., "two paths checking the same shape must call one predicate") is still valid — but the *evidence* (the specific identifier the Symptoms paragraph names) is now stale. The Prevention rules and the Symptoms paragraph live at different lifecycles, and no single check enforces that they stay in sync.
+
+**Evidence:** Caught by the Codex quality report `.goat-flow/logs/quality/2026-05-25-2006-codex-jqclh.json` flagging `.goat-flow/footguns/setup.md` (search: `Codex install migration matcher and post-install validator use different`). That entry's Symptoms paragraph names search anchor `invalidNoneEntryPattern`, but `rg invalidNoneEntryPattern workflow/install-goat-flow.sh` returns zero hits — the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The Prevention rules in that entry are still correct, but anyone following the Symptoms anchor finds nothing.
+
+**Prevention:**
+1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
+2. When reviewing a footgun bucket, treat zero-hit search anchors as a SEV signal: either the anchor was always wrong (find the right one) or the underlying bug was fixed (rewrite or resolve). A footgun that fails `rg <anchor>` is documentation rot, not a guard.
+3. `stats --check` validates `last_reviewed` dates and bucket size but does not verify that semantic anchors in footgun bodies resolve to real symbols. The check that catches this today is human review — usually a quality report or a downstream agent following the anchor. Until automated, treat persisted footgun findings in quality reports as higher-priority than newly-flagged ones because they survived a prior review pass.
+4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
+
+---
+
 ## Footgun: Adding a skill-playbook requires lock-step updates across 13+ surfaces
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
