@@ -1,7 +1,59 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
-# guard-destructive-shell.sh - PreToolUse hook for destructive shell commands.
-# Blocks unsafe recursive deletion, chmod 777, pipe-to-shell, truncation, destructive DB/cloud commands, npm token deletion, and opaque destructive execution.
+
+# guard-destructive-shell.sh
+#
+# Purpose:
+#   PreToolUse hook that blocks shell commands likely to cause
+#   irreversible damage. Sources guard-common.sh for payload parsing,
+#   command normalization, and segment splitting, then evaluates each
+#   command segment against the destructive patterns below.
+#
+# Blocks:
+#   - Unscoped recursive deletion: `rm -r` / `-R` / `--recursive` without
+#     an explicit safe target, with path traversal (`..`), or against an
+#     absolute or `~`-rooted path (a small allowlist permits scoped
+#     paths like `node_modules`, `dist`, `build`, `coverage`, etc.).
+#   - World-writable mode (`chmod 777`).
+#   - Pipe-to-shell and pipe-to-interpreter (`curl|bash`, `wget|python`,
+#     `curl|node`, ...).
+#   - Direct lockfile writes (`package-lock.json`, `pnpm-lock.yaml`,
+#     `composer.lock`, `Cargo.lock`, `yarn.lock` via `>`, `>>`, `tee`, or
+#     `sed -i`).
+#   - File-truncating redirects: bare `> file`, `:> file`, `true > file`,
+#     `>| file`, empty `printf` / `echo` to file, and `truncate`.
+#   - Destructive database commands via mysql/mariadb/psql/sqlite3/
+#     mongosh/cqlsh (`DROP`, `TRUNCATE`, `DELETE`, mongo `.drop()` /
+#     `.deleteMany()`, `-f script.sql` file-fed runs).
+#   - `npm token delete` / `npm token revoke`.
+#   - Interpreter `-c` / `-e` invocations that call shell-execution
+#     primitives (`os.system`, `subprocess`, `child_process`, `exec(...)`,
+#     `popen`, `shell_exec`, ...).
+#   - Shell-stdin smuggling: `bash <<<`, `bash <<EOF`.
+#   - PowerShell destructive verbs (Remove-Item, Clear-Disk,
+#     Format-Volume, Stop-Computer, Restart-Computer, Set-ExecutionPolicy
+#     Unrestricted/Bypass) and any `-EncodedCommand`.
+#   - `cmd.exe /c` (or `/k`) with del / erase / rmdir / rd / format.
+#   - `sudo` package-manager mutation (apt/dnf/yum/pacman/brew install /
+#     remove / upgrade / update).
+#   - Cloud / infrastructure destructive commands: `docker push`,
+#     `terraform destroy`, `terraform apply -auto-approve`, `aws s3 rm`,
+#     `aws ec2 terminate`.
+#   - `eval` and chain-style download-then-execute
+#     (`curl ... && bash file`).
+#
+# Usage:
+#   Wired in to the agent's PreToolUse hook for shell tools. Payload is
+#   read from stdin (JSON) in production; the `--check` form is used by
+#   guardrails-self-test.sh and for manual verification.
+#
+#     bash guard-destructive-shell.sh --check="rm -rf /"
+#     echo '<agent-payload-json>' | bash guard-destructive-shell.sh
+#     bash guard-destructive-shell.sh --self-test=smoke
+#
+# Exit:
+#   0 to allow, 2 to block (stderr-exit mode). In Copilot / Antigravity
+#   payload mode, exits 0 with a deny JSON document on stdout instead.
 
 set -uo pipefail
 

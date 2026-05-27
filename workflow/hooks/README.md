@@ -11,7 +11,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | `guard-secret-paths.sh` | PreToolUse | Required | Blocks direct literal shell access to `.env`, credentials, key material, and common secret directories |
 | `guard-repository-writes.sh` | PreToolUse | Required | Blocks `git commit`, all git push (ADR-025), destructive git flags, and GitHub writes via `gh` |
 | `guardrails-self-test.sh` | Self-test helper | Required with guardrails | Central smoke/full self-test for all three guardrails |
-| `gruff-code-quality.sh` | PostToolUse | Optional | Runs the matching `gruff-* analyse <file>` command after Edit/Write/MultiEdit when enabled |
+| `gruff-code-quality.sh` | PostToolUse | Optional | Runs the matching `gruff-*` analyzer after Edit/Write/MultiEdit and surfaces findings whose reported line intersects changed lines |
 
 ## Agent Event Name Mapping
 

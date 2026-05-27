@@ -23,7 +23,7 @@ export interface HookSpec {
 }
 
 const GRUFF_ANTIGRAVITY_UNSUPPORTED_REASON =
-  "Antigravity PostToolUse hooks do not expose the completed tool's edited file path; gruff-code-quality requires that file path to run per-file checks.";
+  "Antigravity PostToolUse hooks do not expose the completed tool's edited file path; gruff-code-quality requires that file path to run changed-line checks.";
 
 const HOOKS: HookSpec[] = [
   {
@@ -68,7 +68,8 @@ const HOOKS: HookSpec[] = [
   {
     id: "gruff-code-quality",
     displayName: "gruff code quality",
-    description: "Run gruff-* on each edited file and surface findings inline.",
+    description:
+      "Run gruff-* on each edited file and surface findings on changed lines inline.",
     event: "PostToolUse",
     matcher: "Edit|Write|MultiEdit",
     scriptFiles: ["gruff-code-quality.sh"],

@@ -1,5 +1,38 @@
 #!/usr/bin/env bash
-# Central self-test for goat-flow guardrail hooks.
+
+# guardrails-self-test.sh
+#
+# Purpose:
+#   Central self-test runner for the goat-flow guardrail hooks
+#   (guard-destructive-shell, guard-repository-writes,
+#   guard-secret-paths). Drives each hook with curated commands that
+#   MUST block and MUST allow, exercises the Copilot and Antigravity
+#   JSON payload shapes end-to-end, and verifies the fail-closed
+#   behaviour when guard-common.sh is missing from a hook's directory.
+#
+#   Each guard hook re-execs into this script when invoked with
+#   `--self-test[=mode]`, so `guard-foo.sh --self-test` is equivalent to
+#   `guardrails-self-test.sh --self-test --hook guard-foo`.
+#
+# Usage:
+#   bash guardrails-self-test.sh [--self-test[=smoke|full]] [--hook <name>]
+#
+#   Examples:
+#     bash guardrails-self-test.sh                          # smoke, all hooks
+#     bash guardrails-self-test.sh --self-test=full         # full, all hooks
+#     bash guardrails-self-test.sh --hook guard-secret-paths
+#
+# Modes:
+#   smoke   Fast coverage of the canonical block/allow cases per hook,
+#           plus the missing-guard-common fail-closed checks. Default.
+#   full    Smoke plus comprehensive per-hook block/allow coverage and
+#           Copilot/Antigravity JSON payload checks.
+#
+# Exit:
+#   0 when every executed assertion passes; prints a PASS summary line.
+#   1 when any assertion fails or an unsupported mode is requested.
+#   Each failure is printed as `FAIL: <label>` to stderr, followed by a
+#   FAIL summary line.
 
 set -euo pipefail
 

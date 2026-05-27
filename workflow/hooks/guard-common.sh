@@ -1,6 +1,48 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
-# guard-common.sh - shared payload parsing, shell normalization, command splitting, and runner for goat-flow guard hooks.
+
+# guard-common.sh
+#
+# Purpose:
+#   Shared helper library sourced by the three goat-flow guardrail hooks
+#   (guard-destructive-shell, guard-repository-writes, guard-secret-paths).
+#   Provides the runtime they share: cross-agent payload parsing
+#   (Claude / Codex / Antigravity / Copilot), command-line normalization
+#   (sudo, env, time, nohup, nice, variable-assignment prefixes, command
+#   and process substitution, heredoc body masking), shell-aware segment
+#   splitting on `;`, `&&`, `||`, and pipes, and the block/allow
+#   primitives that emit the correct decision shape for the detected
+#   agent.
+#
+# Usage:
+#   Not executed directly. Each thin guard:
+#     1. Sets GOAT_GUARD_NAME and GOAT_GUARD_SCOPE.
+#     2. Sources this file.
+#     3. Defines a `check_segment <cmd> <depth>` callback.
+#     4. Calls `main "$@"`.
+#
+#   `main` accepts:
+#     --check=<command>      test one command (stderr-exit mode)
+#     --check <command>      same with split args
+#     --self-test[=mode]     re-exec into guardrails-self-test.sh
+#     <command>              bare positional command for testing
+#     (no args)              read agent JSON payload from stdin
+#
+# Output modes (auto-detected from the stdin payload):
+#   copilot-json       payload has `toolName` -> permissionDecision JSON
+#                      on stdout, exit 0
+#   antigravity-json   payload has `toolCall` -> decision JSON on stdout,
+#                      exit 0
+#   stderr-exit        default for --check, bare args, and Claude/Codex
+#                      payloads -> "BLOCKED:" line on stderr, exit 2
+#
+# Exit:
+#   0 to allow (or to deliver a fail-closed JSON deny in copilot-json /
+#   antigravity-json mode), 2 to block in stderr-exit mode.
+#
+# Requirements:
+#   - bash 4.4+ (the thin guards enforce this before sourcing).
+#   - jq optional; falls back to bash regex parsing when absent.
 
 read_payload() {
   if [[ -n "$CHECK_COMMAND" ]]; then

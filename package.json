@@ -113,7 +113,7 @@
     "node-pty": "1.1.0"
   },
   "devDependencies": {
-    "@blundergoat/gruff-ts": "^0.1.1",
+    "@blundergoat/gruff-ts": "^0.2.0",
     "@stryker-mutator/core": "^9.6.1",
     "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.1.2",

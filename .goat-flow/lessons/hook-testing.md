@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-05-27
+last_reviewed: 2026-05-28
 ---
 
 ## Lesson: Restoring coverage by cloning a monolith is not a real split
@@ -31,7 +31,7 @@ last_reviewed: 2026-05-27
 
 **Root cause:** I treated the source directive as enough without checking it against the exact lint invocation used by preflight and CI.
 
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in each thin policy hook. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/guard-common.sh` (search: `guard-common.sh - shared payload parsing`) and `workflow/hooks/guard-destructive-shell.sh` (search: `shellcheck disable=SC1090,SC1091`).
+**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in each thin policy hook. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/guard-common.sh` (search: `Shared helper library sourced`) and `workflow/hooks/guard-destructive-shell.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
 **Updated 2026-05-27:** M12 moved git parsing into `guard-common.sh`, but ShellCheck still warned in thin hooks with SC2154 because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/guard-repository-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/guard-secret-paths.sh` (search: `__goat_git_rest=""`).
 

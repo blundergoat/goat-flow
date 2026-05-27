@@ -1,7 +1,53 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
-# guard-secret-paths.sh - PreToolUse hook for direct literal secret-path access.
-# Blocks direct literal access to .env files, credentials, key material, and common secret directories.
+
+# guard-secret-paths.sh
+#
+# Purpose:
+#   PreToolUse hook that blocks direct literal access to files known to
+#   carry secrets. Applies to shell commands (Bash tool) AND, uniquely
+#   among the guardrails, to agent file-operation tools (Read / View /
+#   Edit / Write / MultiEdit / Replace) on payload shapes that route
+#   file ops through this hook. Sources guard-common.sh for payload
+#   parsing and command normalization.
+#
+# Blocks:
+#   - `.env` and any `.env*` variant other than `.env.example` (including
+#     `.envrc`, `.env.local`, `.env.production`, `./.env`, `../.env`,
+#     split-quoted forms like `'.'env`).
+#   - `~/.ssh/`, `~/.aws/`, `~/.config/gcloud/`, `~/.gnupg/`,
+#     `~/.docker/config.json`, `~/.kube/config`, and `secrets/` trees.
+#   - GCP `application_default_credentials.json`.
+#   - Generic key material by extension: `*.pem`, `*.key`, `*.pfx`.
+#   - Literal references to `credentials`, `.npmrc`, `.pypirc`.
+#   - Pattern-file inputs to grep/rg (`-f file`, `--file=file`,
+#     `-ffile`, `--file=file`) that point at any of the above.
+#   - `.env.example` writes (`>`, `>>`, `>|`, `tee`, `sed -i`) or pipes
+#     to a non-read-only consumer.
+#
+# Allows:
+#   - `.env.example` for strictly read-only operations:
+#       grep / egrep / fgrep / rg / ag / ack / cat / head / tail / less /
+#       more / wc / file / diff / printf / echo / read / ls / stat /
+#       test; `find` without `-delete` / `-exec` / `-execdir` / `-ok` /
+#       `-okdir`; `git ls-files`; `sed` without `-i` / `--in-place`;
+#     with no redirect and no pipe to a non-read-only consumer.
+#   - Quoted-literal occurrences of secret paths inside grep/rg search
+#     arguments (e.g. `grep -n 'JWT_KEY=.env.local' config/app.yaml`).
+#   - Bare `echo` / `printf` that mention the path but do not touch it.
+#
+# Usage:
+#   Wired in to the agent's PreToolUse hook. Payload is read from stdin
+#   (JSON) in production; the `--check` form is used by
+#   guardrails-self-test.sh and for manual verification.
+#
+#     bash guard-secret-paths.sh --check="cat .env"
+#     echo '<agent-payload-json>' | bash guard-secret-paths.sh
+#     bash guard-secret-paths.sh --self-test=smoke
+#
+# Exit:
+#   0 to allow, 2 to block (stderr-exit mode). In Copilot / Antigravity
+#   payload mode, exits 0 with a deny JSON document on stdout instead.
 
 set -uo pipefail
 

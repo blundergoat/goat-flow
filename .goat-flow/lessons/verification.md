@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-27
+last_reviewed: 2026-05-28
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -26,6 +26,16 @@ last_reviewed: 2026-05-27
 **Root cause:** I treated "this comment makes sense to me" as enough before checking whether the actual analyzer accepted it, and later treated a local rename as complete before checking parallel ambient declarations. The `code-comments.md` playbook gives the quality bar, but gruff's docs rules also have concrete vocabulary expectations that must be verified with the targeted command.
 
 **Prevention:** For gruff-driven comment work, read `.goat-flow/skill-playbooks/code-comments.md`, patch one file or cohesive cluster, then immediately rerun `npx gruff-ts analyse <path>`. If docs findings remain, tighten the comment around the exact rule remediation instead of moving on. When a rename is part of making a comment unnecessary, grep the old identifier and run `npm run typecheck` before declaring the pass done. Evidence anchors: `src/cli/server/decoders.ts` (search: `Parse JSON; reports malformed bodies`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
+
+## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
+
+**Status:** active | **Created:** 2026-05-28
+
+**What happened:** While verifying `workflow/hooks/gruff-code-quality.sh` against `/home/devgoat/projects/gruff-workspace/gruff-go`, `gruff-php`, `gruff-py`, and `gruff-rs`, the first hook-shaped probes failed or produced no output for reasons unrelated to JSON compatibility. Placeholder `.gruff-*.yaml` files such as `rules: {}` were invalid or too incomplete for several analyzers, and the Rust probe replaced `PATH` with only gruff binary directories plus `/usr/bin:/bin`, hiding `cargo` from `gruff-rs/bin/gruff-rs`.
+
+**Root cause:** I treated sibling gruff CLIs as interchangeable binaries but skipped two runtime surfaces that are part of the hook contract: schema-bearing project config files and wrapper-script dependencies inherited from the caller's normal `PATH`.
+
+**Prevention:** When testing `gruff-code-quality.sh` against sibling gruff implementations, copy or reference each project's real `.gruff-*.yaml`, preserve the normal `PATH` while prefixing local gruff binaries, and run both checks: direct `analyse --format json` schema probes and hook-shaped probes with changed ranges. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `discover_binary`), `.goat-flow/tasks/1.8.0/M14-gruff-changed-line-hook-filter.md` (search: `gruff family hook probes`).
 
 ## Lesson: Harness fixture counts must match the reported unit
 
