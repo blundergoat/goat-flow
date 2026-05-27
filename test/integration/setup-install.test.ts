@@ -439,6 +439,38 @@ describe("codex config migration", () => {
     assert.match(config, /":workspace_roots"\s*=\s*\{/);
   });
 
+  it("migrates the active custom Codex permission profile", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "custom"',
+        "",
+        "[permissions.custom.filesystem]",
+        "glob_scan_max_depth = 3",
+        "",
+        '[permissions.custom.filesystem.":project_roots"]',
+        '"." = "write"',
+        '"*.pem" = "none"',
+        '"secrets/**" = "none"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /default_permissions = "custom"/);
+    assert.match(config, /\[permissions\.custom\.filesystem\]/);
+    assert.doesNotMatch(config, /\[permissions\.goat-flow\.filesystem\]/);
+    assert.doesNotMatch(config, /:project_roots/);
+    assert.doesNotMatch(config, /"\*\.pem"/);
+    assert.match(result.stdout, /migrated:.*invalid filesystem permissions/);
+  });
+
   it("preserves a custom valid /** deny entry when no invalid entries are present", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

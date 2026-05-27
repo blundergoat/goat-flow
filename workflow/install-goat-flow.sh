@@ -515,13 +515,46 @@ const hadFinalNewline = /\r?\n$/u.test(content);
 const lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
 
-const filesystemSectionPattern =
-  /^\s*\[\s*permissions\.goat-flow\.filesystem(?:\..+)?\s*\]\s*$/u;
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
 const noneEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
 const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
 const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
 const legacyProjectRootsPattern = /":project_roots"/u;
+
+function parseTomlBasicString(value) {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch {
+    return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
+  }
+}
+
+function readActivePermissionProfile(configLines) {
+  for (const line of configLines) {
+    const basicMatch = line.match(
+      /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
+    );
+    if (basicMatch) {
+      const profile = parseTomlBasicString(basicMatch[1]).trim();
+      if (profile) return profile;
+    }
+    const literalMatch = line.match(
+      /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
+    );
+    if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
+  }
+  return "goat-flow";
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+const activeProfile = readActivePermissionProfile(lines);
+const filesystemSectionPattern = new RegExp(
+  `^\\s*\\[\\s*permissions\\.${escapeRegExp(activeProfile)}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+  "u",
+);
 
 // Single source of truth: a "none" key is only invalid if it contains a glob
 // metacharacter AND is not a trailing-/** subtree. Codex accepts exact paths
@@ -575,7 +608,7 @@ if (!hasInvalidEntry && !usesLegacyAnchor) {
 }
 
 const canonicalBlock = [
-  "[permissions.goat-flow.filesystem]",
+  `[permissions.${activeProfile}.filesystem]`,
   "glob_scan_max_depth = 3",
   '# Codex 0.131 accepts exact paths and trailing "/**" subtrees here.',
   "# Exact entries must point at files that exist in the target checkout; absent",
@@ -634,19 +667,51 @@ function isInvalidNoneKey(key) {
   return !key.endsWith("/**");
 }
 
-const filesystemSectionPattern =
-  /^\s*\[\s*permissions\.goat-flow\.filesystem(?:\..+)?\s*\]\s*$/u;
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
 const sectionEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
-const inlineTablePattern = /":workspace_roots"\s*=\s*\{([^}]*)\}/gu;
+const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
 const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
 const legacyProjectRootsPattern = /":project_roots"/u;
 
+function parseTomlBasicString(value) {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch {
+    return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
+  }
+}
+
+function readActivePermissionProfile(configLines) {
+  for (const line of configLines) {
+    const basicMatch = line.match(
+      /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
+    );
+    if (basicMatch) {
+      const profile = parseTomlBasicString(basicMatch[1]).trim();
+      if (profile) return profile;
+    }
+    const literalMatch = line.match(
+      /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
+    );
+    if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
+  }
+  return "goat-flow";
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 const lines = content.split(/\r?\n/u);
+const activeProfile = readActivePermissionProfile(lines);
+const filesystemSectionPattern = new RegExp(
+  `^\\s*\\[\\s*permissions\\.${escapeRegExp(activeProfile)}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+  "u",
+);
 
 // Build filesystem section regions so we only flag entries that actually live
-// under [permissions.*.filesystem*]. A bare "*.pem" = "none" in some unrelated
-// custom table is not a Codex filesystem error.
+// under the active [permissions.<default_permissions>.filesystem*] profile. A
+// bare "*.pem" = "none" in an unrelated table is not a Codex filesystem error.
 const regions = [];
 let i = 0;
 while (i < lines.length) {
@@ -670,14 +735,13 @@ for (const region of regions) {
     if (legacyProjectRootsPattern.test(line)) {
       problems.add("legacy :project_roots anchor still present");
     }
-  }
-}
-
-for (const match of content.matchAll(inlineTablePattern)) {
-  const body = match[1];
-  for (const entry of body.matchAll(inlineEntryPattern)) {
-    if (isInvalidNoneKey(entry[1])) {
-      problems.add(`inline entry "${entry[1]}" with access="none"`);
+    const inlineMatch = line.match(inlineTablePattern);
+    if (inlineMatch) {
+      for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        if (isInvalidNoneKey(entry[1])) {
+          problems.add(`inline entry "${entry[1]}" with access="none"`);
+        }
+      }
     }
   }
 }
