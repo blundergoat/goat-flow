@@ -5,7 +5,7 @@
 
 ## Context
 
-goat-flow shipped `stop-lint.sh` as a post-turn hook across all three agents (Claude Stop, Gemini AfterAgent, Codex Stop). The script ran shellcheck on changed `.sh` files and `tsc --noEmit` on changed `.ts` files after every agent turn.
+goat-flow shipped `stop-lint.sh` as a post-turn hook across the then-supported agents (Claude Stop, the old fourth-runtime AfterAgent hook, and Codex Stop). The script ran shellcheck on changed `.sh` files and `tsc --noEmit` on changed `.ts` files after every agent turn.
 
 Problems:
 
@@ -17,7 +17,7 @@ Problems:
 
 Remove `stop-lint.sh` from goat-flow core for v1.1.0:
 
-1. Delete all `stop-lint.sh` files (`.claude/hooks/`, `.gemini/hooks/`, `.codex/hooks/`, `scripts/`).
+1. Delete all `stop-lint.sh` files from agent hook dirs and `scripts/`.
 2. Remove Stop/AfterAgent hook registrations from all agent settings files.
 3. Remove the "Hook enforcement mode" section from setup docs.
 4. Keep the audit's post-turn hook detection code (`check-verification.ts`, `hooks.ts`) - consumer projects may have their own post-turn hooks.

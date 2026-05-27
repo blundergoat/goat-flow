@@ -12,12 +12,12 @@ describe("agent registry", () => {
     assert.deepEqual(getKnownAgentIds(), [
       "claude",
       "codex",
-      "gemini",
+      "antigravity",
       "copilot",
     ]);
     assert.deepEqual(
       getAgentProfiles().map((agent) => agent.id),
-      ["claude", "codex", "gemini", "copilot"],
+      ["claude", "codex", "antigravity", "copilot"],
     );
   });
 
@@ -25,7 +25,7 @@ describe("agent registry", () => {
     const codex = getAgentProfile("codex");
     assert.equal(codex.settingsFile, ".codex/config.toml");
     assert.equal(codex.hookConfigFile, ".codex/hooks.json");
-    assert.equal(codex.denyHookFile, ".codex/hooks/deny-dangerous.sh");
+    assert.equal(codex.denyHookFile, ".codex/hooks/guard-repository-writes.sh");
     assert.equal(codex.hookEvents.postTurn, "Stop");
   });
 
@@ -33,8 +33,23 @@ describe("agent registry", () => {
     const copilot = getAgentProfile("copilot");
     assert.equal(copilot.settingsFile, null);
     assert.equal(copilot.hookConfigFile, ".github/hooks/hooks.json");
-    assert.equal(copilot.denyHookFile, ".github/hooks/deny-dangerous.sh");
+    assert.equal(
+      copilot.denyHookFile,
+      ".github/hooks/guard-repository-writes.sh",
+    );
     assert.equal(copilot.skillsDir, ".github/skills");
+  });
+
+  it("exposes Antigravity project-local hook wiring", () => {
+    const antigravity = getAgentProfile("antigravity");
+    assert.equal(antigravity.settingsFile, null);
+    assert.equal(antigravity.hookConfigFile, ".agents/hooks.json");
+    assert.equal(antigravity.hooksDir, ".agents/hooks");
+    assert.equal(
+      antigravity.denyHookFile,
+      ".agents/hooks/guard-repository-writes.sh",
+    );
+    assert.equal(antigravity.hookEvents?.preTool, "PreToolUse");
   });
 
   it("translates manifest deny mechanisms into runtime profiles", () => {
@@ -42,14 +57,20 @@ describe("agent registry", () => {
     assert.deepEqual(claude.denyMechanism, {
       type: "both",
       settingsPath: ".claude/settings.json",
-      scriptPath: ".claude/hooks/deny-dangerous.sh",
+      scriptPath: ".claude/hooks/guard-repository-writes.sh",
     });
 
     const codex = getAgentProfile("codex");
     assert.deepEqual(codex.denyMechanism, {
       type: "both",
       settingsPath: ".codex/config.toml",
-      scriptPath: ".codex/hooks/deny-dangerous.sh",
+      scriptPath: ".codex/hooks/guard-repository-writes.sh",
+    });
+
+    const antigravity = getAgentProfile("antigravity");
+    assert.deepEqual(antigravity.denyMechanism, {
+      type: "deny-script",
+      path: ".agents/hooks/guard-repository-writes.sh",
     });
   });
 
@@ -58,7 +79,7 @@ describe("agent registry", () => {
     assert.deepEqual(Object.keys(profiles), [
       "claude",
       "codex",
-      "gemini",
+      "antigravity",
       "copilot",
     ]);
     for (const profile of Object.values(profiles)) {
@@ -66,6 +87,7 @@ describe("agent registry", () => {
       assert.ok(!profile.skillsDir.endsWith("/"));
     }
     assert.equal(profiles.claude.hooksDir, ".claude/hooks");
+    assert.equal(profiles.antigravity.hooksDir, ".agents/hooks");
     assert.equal(profiles.copilot.skillsDir, ".github/skills");
   });
 });

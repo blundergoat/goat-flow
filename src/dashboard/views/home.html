@@ -183,7 +183,7 @@
       return [
         { label: 'Agent instruction files present', ok: this.allAgentsPassCheck('agent-instruction'), detail: this.agentCheckDetail('agent-instruction') },
         { label: 'Agent skills installed and current', ok: this.allAgentsPassCheck('agent-skills'), detail: this.agentCheckDetail('agent-skills') },
-        { label: 'Agent deny-dangerous hooks enabled', ok: this.allAgentsPassCheck('agent-deny-dangerous'), detail: this.agentCheckDetail('agent-deny-dangerous') },
+        { label: 'Agent guardrails hooks enabled', ok: this.allAgentsPassCheck('agent-guardrails'), detail: this.agentCheckDetail('agent-guardrails') },
         { label: 'Footguns and lessons tracked', ok: this.setupCheckPass('footguns') && this.setupCheckPass('lessons'), detail: this.setupCheckDetail('footguns') || this.setupCheckDetail('lessons') },
         { label: 'Verification gates configured', ok: this.setupCheckPass('config-parses') && this.setupCheckPass('config-version') && this.allAgentsPassCheck('agent-settings'), detail: this.verificationGateDetail() }
       ];
@@ -535,7 +535,7 @@
         acknowledged: check.acknowledged,
         evidenceKind: check.evidenceKind,
         assurance: check.assurance,
-        detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' — ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
+        detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' - ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
       }));
     },
     enforcementRows(agent) {

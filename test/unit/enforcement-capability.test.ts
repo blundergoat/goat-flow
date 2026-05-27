@@ -13,7 +13,7 @@ function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
     status: status === "fail" ? "fail" : "pass",
     checks: [
       {
-        id: "agent-deny-dangerous",
+        id: "agent-guardrails",
         name: "Agent deny mechanism",
         status,
         displayStatus: status === "skipped" ? "skipped" : status,
@@ -28,7 +28,7 @@ function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
           ? {
               failure: {
                 check: "Agent deny mechanism",
-                message: "deny-dangerous.sh --self-test=smoke failed",
+                message: "guard-repository-writes.sh --self-test=smoke failed",
               },
             }
           : {}),
@@ -122,7 +122,7 @@ function byId(
 
 describe("agent enforcement capability matrix", () => {
   it("derives fact-backed statuses for all supported agents", () => {
-    for (const agent of [PROFILES.claude, PROFILES.codex, PROFILES.gemini]) {
+    for (const agent of [PROFILES.claude, PROFILES.codex]) {
       const matrix = buildAgentEnforcementCapability(facts(agent), {
         agentScope: agentScope("pass"),
         denyMechanismEvidenceLevel: "full",
@@ -132,6 +132,10 @@ describe("agent enforcement capability matrix", () => {
       assert.equal(byId(matrix, "secret-shell-read").status, "hard");
       assert.equal(byId(matrix, "hook-registration").status, "hard");
       assert.equal(byId(matrix, "hook-self-test").status, "hard");
+      assert.match(
+        byId(matrix, "hook-self-test").summary,
+        /runtime-shaped payload smoke passed/,
+      );
       assert.equal(
         byId(matrix, "provider-native-enforcement").status,
         "limited",
@@ -192,7 +196,7 @@ describe("agent enforcement capability matrix", () => {
   });
 
   it("downgrades self-test proof when dashboard summary evidence skips runtime checks", () => {
-    const matrix = buildAgentEnforcementCapability(facts(PROFILES.gemini), {
+    const matrix = buildAgentEnforcementCapability(facts(PROFILES.claude), {
       agentScope: agentScope("pass"),
       denyMechanismEvidenceLevel: "present-only",
     });

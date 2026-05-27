@@ -1,24 +1,7 @@
 ---
 category: skills
-last_reviewed: 2026-05-19
+last_reviewed: 2026-05-27
 ---
-
-## Footgun: Quality assessors recommend adding quick/lite modes to goat-critique
-
-**Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Quality assessment agents recommend "quick critique mode" or "allow lightweight critique for smaller artifacts" as a Top 5 Improvement. If implemented, this would re-introduce the exact failure that ADR-021 was written to prevent: single-context self-talk disguised as multi-perspective critique.
-
-**Why it happens:** Assessing agents see that goat-critique spawns 3 sub-agents for every invocation regardless of artifact size and pattern-match this as over-engineering. They do not read ADR-021 unless directed to, so they miss that Quick mode was tried, produced structurally misleading output, and was intentionally removed.
-
-**Evidence:**
-- `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) documents the decision and four rejected alternatives including "Default to Full, keep Quick as opt-in."
-- `.goat-flow/lessons/agent-routing.md` (search: `Never override explicit skill invocation`) documents the 2026-04-27 incident where bypassing the full protocol produced a worse result than running it.
-- `src/cli/prompt/compose-quality.ts` (search: `Do NOT recommend adding quick/lite/reduced modes`) now explicitly tells assessment agents to respect ADR-decided skill mode choices.
-
-**Prevention:**
-1. The quality assessment prompt now includes an explicit constraint against recommending reduced skill modes.
-2. ADR-021 remains the authoritative source. If this recommendation resurfaces, point the assessor at the ADR, not at the skill file alone.
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
 
@@ -53,21 +36,44 @@ last_reviewed: 2026-05-19
 - `scripts/preflight-checks.sh` (search: `Skill Reference + Playbooks Sync`) fails when shared reference and playbook templates and installed copies differ.
 - `src/cli/audit/check-drift.ts` (search: `workflow/skills/reference/skill-preamble.md`) also checks shared-reference template/install parity through the audit path.
 
-**Prevention:** When changing `skill-preamble.md`, `skill-conventions.md`, `skill-quality-testing.md`, or topical files under `skill-quality-testing/`, edit the workflow template and installed copy together. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
+**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks such as `skill-quality-testing.md`, update the matching `workflow/skills/playbooks/` and `.goat-flow/skill-playbooks/` surfaces instead. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
 
-## Footgun: Weak retrieval cues cause learning-loop misses
+## Footgun: Skill reference-pack merges can leave stale installed files behind
 
-**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-05-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A grep-first retrieval returns zero hits even though a relevant footgun exists, because the first query uses roadmap or abstraction language instead of the concrete failure class stored in the bucket.
+**Symptoms:** A target project upgraded to the current goat-flow release has current `SKILL.md` files and current manifest-listed references, but old per-skill Markdown reference files remain beside them. Agents that grep the `references/` directory can read superseded guidance with old `goat-flow-reference-version` frontmatter even though setup and agent-skill audit checks pass.
 
-**Why it happens:** The learning-loop buckets index real incidents and failure classes, not milestone names. Queries like "support matrix" or "registry canonicality" sound precise in planning context but do not match the actual wording of stored hook/platform incidents.
+**Why it happens:** Skill installation overwrites files listed by `workflow/manifest.json` `skills.references`, but a reference merge or rename removes files from the manifest. A copy-only upgrade does not delete files that are no longer listed, so old files survive unless the installer or audit explicitly treats unlisted references as stale.
 
 **Evidence:**
-- `.goat-flow/skill-reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) hard-codes the mitigation: derive 2-4 terms from target area + symptom + named file/tool, reword once, open only matching entries, then record a miss instead of broad-loading the bucket.
-- `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) holds the template source that the installer copies from.
+- `workflow/install-goat-flow.sh` (search: `prune_unlisted_skill_references`) now removes unlisted Markdown files from canonical skill `references/` directories before copying current templates.
+- `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails the `agent-skills` check when installed goat skill references are not listed in the manifest.
+- Downstream gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after those files were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` reference set.
 
-**Prevention:** Seed first-pass retrieval terms with the concrete symptom, platform, or file/tool name rather than milestone titles or abstract design labels. One reword is allowed; if the second query still misses, record the retrieval miss explicitly and move on. Broad-loading the bucket to compensate defeats the protocol.
+**Prevention:** After any per-skill reference merge, rename, or deletion, update `workflow/manifest.json` `skills.references`, run an installer round-trip test that starts with a stale reference file, and run `node --import tsx src/cli/cli.ts audit <target> --agent <id>` against a target containing the stale file to prove audit fails before reinstall and passes after reinstall.
+
+## Footgun: Bash-prescribed slash-command or skill bodies break under per-block tool isolation
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A SKILL.md or slash-command body grows past one or two `!cmd` invocations into a multi-block bash program. The agent runtime treats each bash block as an independent tool invocation. Variables defined in block N are gone in block N+1; heredocs with substitution, `BASH_REMATCH`, associative arrays, and `$(tool …)` substitution all become unreliable because the shell state is reset between blocks. The command starts producing parse errors or silently does the wrong thing.
+
+**Why it happens:** Authors write a skill body the way they'd write a shell script — top to bottom, with variables shared across steps. Claude Code (and Codex/Gemini) treat each fenced bash block as a separate `Bash` tool call. The slash-command body should describe steps declaratively for the agent to execute; it should not prescribe an exact multi-block bash program. The cost is hidden until the body crosses ~10 lines or ~2 blocks — short skills look fine.
+
+**Evidence:**
+- External: `kennyjpowers/claude-flow` PR #2 ("feat: add feedback workflow command" follow-up, MERGED 2025-11-21, 1,691 additions / 3,174 deletions). The original `feedback.md` shipped in PR #1 had 26+ bash blocks using `BASH_REMATCH`, heredocs with substitution, and `$(stm list …)` substitution. The PR #2 feedback log in the external specs/add-feedback-workflow-command/05-feedback.md file (search: `Variable Persistence Problem: Bash variables don't persist between separate Bash tool invocations`) names the root cause: *"The command tries to prescribe exact bash scripts instead of providing declarative guidance for Claude to follow."* Fix: declarative steps + direct `!claudekit status stm` invocations replacing `$(claudekit status stm)` substitution.
+- External, follow-up: the same defect remained in sibling `decompose.md` (16 bash blocks) until a second feedback cycle. Same author, same codebase, same fix needed twice. Reinforces "when refactoring is the right answer, do the same refactor across sibling files."
+- Goat-flow surfaces at risk: every `workflow/skills/*/SKILL.md`, especially the dispatcher (`goat`) and any skill that orchestrates multi-step shell work. Verification: `rg -c '^```bash' workflow/skills/*/SKILL.md` lists current bash-block counts per skill.
+
+**Prevention:**
+1. If a SKILL.md body contains a bash block longer than ~10 lines OR more than 2 bash blocks total, refactor to declarative steps that name the tool and the inputs but let the agent pick the invocation.
+2. Use direct `!` tool invocations (e.g. `!goat-flow audit`) not `$(goat-flow audit)` substitution — the substitution form forces a subshell whose state doesn't persist beyond the block.
+3. Replace heredocs-with-substitution and associative-array tricks with a single file write + read, or with prose that asks the agent to track the value across steps.
+4. Validate by reading the SKILL.md as if a fresh agent ran each bash block in isolation: if any block expects a variable from a prior block, the body is prescriptive — refactor before shipping.
+5. When a sibling skill has the same shape (multiple skills wrapping the same kind of tool orchestration), audit them together. The kennyjpowers PR #2/decompose.md pattern shows that fixing only the one that bit leaves the rest as latent traps.
+
+Applies wherever goat-flow ships a SKILL.md or command body that orchestrates multi-step bash work. Cross-reference: `.goat-flow/footguns/skills.md` (search: `Skill parity edits can miss`) for the parallel concern about edits not propagating across installed mirrors — a bash-heavy skill compounds that risk because each block must remain byte-identical across all four installed copies.
 
 ## Footgun: Release-version bumps can break skill-rename work through stale fixtures and hardcoded current-version routing
 
@@ -82,6 +88,45 @@ last_reviewed: 2026-05-19
 - `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
 
 **Prevention:** When a skill rename ships with a version bump, treat version-sensitive helpers as part of the rename surface. Update current-version classifiers, shared config fixtures, install-script version discovery, and setup-routing tests in the same change before trusting `npm test`.
+
+## Footgun: New skill proposals can be configuration systems shaped around one workflow rather than general-purpose tools
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+
+**Symptoms:** A thoughtful, first-person, well-written proposal lands for an eighth canonical skill. It solves a real problem the author actually had. On read-through it turns out the skill is parameterised by the proposer's working style (multi-domain isolation, per-project keyword auto-loading, session-locked context, personal taxonomy) rather than by a structural property of any goat-flow project. Accepting it grows the canonical skill set and forces every downstream consumer (and every audit pass that scores skill quality) to carry weight for a workflow most projects do not have.
+
+**Why it happens:** goat-flow has no prose document defining what makes a skill belong in `workflow/manifest.json` (search: `"canonical"`) vs in an out-of-tree plugin. ADR-009 (search: `Skill consolidation and canonical-skill doctrine`) records the *historical* doctrine of consolidating skills, and ADR-021 (search: `goat-critique runs in one mode: full delegated`) records the rejection of one over-narrow mode, but neither serves as a forward-facing scoping checklist for new skill proposals. `docs/skill-authoring.md` covers how to write a skill once accepted, not whether to accept one. Without that gate, well-intentioned skill PRs are evaluated on craft (which they often pass) rather than scope (where they should fail).
+
+**Evidence:**
+- `workflow/manifest.json` (search: `"canonical"`) enumerates the seven canonical skills; an eighth grows the surface area of every per-harness mirror, every audit check, and every parity script.
+- `.goat-flow/decisions/ADR-009-skill-consolidation.md` (search: `Skill consolidation and canonical-skill doctrine`) records the doctrine but does not encode it as an authoring-time gate.
+- `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) is the closest prior art for rejecting a configuration-flavored alternative; it lives as a per-skill decision, not a generic test.
+- `docs/skill-authoring.md` (search: `Decide First`) is structured as scaffold / validate / interactive / dashboard / authoring checks; none of the sections gate on general-purpose vs. workflow-specific.
+- External corroboration: obra/superpowers PR #1571 ("feat: add context-management skill with domain isolation") was closed with the maintainer comment "the skill as designed is shaped around your specific multi-domain workflow ... that's a configuration system, not [a skill]." Superpowers and goat-flow share the same risk because both maintain a small canonical-skill surface.
+
+**Prevention:**
+1. Before adding any skill to `workflow/manifest.json` `skills.canonical`, write a one-paragraph "general-purpose justification" answering: would a project with no overlap to the proposer's workflow still benefit? Record it in the corresponding ADR.
+2. Treat skill-shaped configuration (per-domain context auto-loading, session-locked taxonomies, opinion-locked keyword maps) as a signal that the work belongs in a downstream plugin or `.goat-flow/skill-playbooks/` rather than a new canonical skill.
+3. If the proposal is craft-strong but scope-narrow, route to `.goat-flow/skill-playbooks/` (which agents can opt into per project) rather than `workflow/skills/` (which every harness installs).
+
+## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+
+**Symptoms:** An automated tool (security scanner, prompt-injection detector, prose linter) flags a phrase or framing inside a canonical SKILL.md - `**EXTREMELY IMPORTANT**`-style emphasis, the Excuse | Reality tables, a forceful "Iron Law" line, the deliberate "your AI partner" phrasing. A well-meaning PR rewrites the flagged language to "comply" with the tool's guidance. The rewrite passes the tool, passes typecheck, passes structural skill-quality scoring (`src/cli/quality/skill-quality.ts` — search: `Scores one artifact`), and silently degrades the skill's behaviour-shaping power because the flagged phrasing was load-bearing.
+
+**Why it happens:** Excuse | Reality tables and forceful framing exist precisely *because* they shift agent behaviour under pressure. They look like editorial emphasis to an external tool (and to agents reading them cold) but they are the persuasion mechanism the skill depends on. goat-flow's existing structural scorer measures shape (presence of gates, table rows, frontmatter) but not behaviour, so a "compliance" rewrite passes every CI check while quietly weakening the runtime contract. The trap is structural: load-bearing prose has no machine-distinguishable signature from decorative prose.
+
+**Evidence:**
+- `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` (search: `cynical reviewer with zero patience`, `Zero-findings HALT rule`) documents that specific phrasing in review-class skills is the mechanism, not the message.
+- `src/cli/quality/skill-quality.ts` (search: `Scores one artifact`, `without executing agent prompts`) — the docstring is explicit that the scorer is structural only; a "compliance" rewrite that preserves shape passes scoring.
+- `.claude/skills/goat-plan/SKILL.md` (search: `Excuse`, `Reality`) — the Excuse | Reality table is the persuasion surface most likely to attract a "this is unprofessional / aggressive / could be softened" rewrite suggestion.
+- External corroboration: obra/superpowers PR #1608 ("fix(skill): remove prompt-injection marker") was closed as slop. The maintainer's comment: "the framing the scanner flagged is intentional — it's the mechanism that makes Superpowers actually shape agent behavior." Same shape of trap applies here.
+
+**Prevention:**
+1. Mark known-load-bearing prose surfaces (Excuse | Reality tables, hard gates, forceful framing lines, the `your AI partner` term) as protected in `docs/skill-authoring.md` so authors know rewording requires evidence.
+2. Treat any PR that rewords skill text in response to *tool output* (scanner, linter, model review) as requiring before/after behavioural eval evidence, not just passing structural checks. When the M10 behavioural eval harness lands, this becomes enforceable.
+3. CI rule (cheap, valuable): fail PRs whose bodies match canned scanner output patterns (`Risk score:`, `Matched signals:`, `pre-flight guardrails passed`) unless an explicit `[manual-review]` marker is present in the body.
 
 ---
 
@@ -98,7 +143,7 @@ last_reviewed: 2026-05-19
 **Resolution:** All ADR references removed from installed skill files in v1.4.0 (goat-critique excuse table, goat-qa regression guard and constraints). Rules are now self-contained with inline rationale. Verified: `rg 'ADR-\d+' workflow/skills/` returns zero matches.
 
 **Prevention (retained):**
-1. Skill SKILL.md files and their reference packs must be self-contained. The rule and its rationale must be stated inline — never behind an ADR citation the consumer doesn't have.
+1. Skill SKILL.md files and their reference packs must be self-contained. The rule and its rationale must be stated inline - never behind an ADR citation the consumer doesn't have.
 2. ADR references are fine in framework-internal files (footguns, lessons, architecture, code-map, instruction files) because those live in the framework repo. The boundary is: if the file gets copied to consumer projects by the installer, it must not reference framework ADRs.
 3. When adding a rule to a skill that came from an ADR, state the rule and a one-line "why" inline. Cross-reference the ADR only in the framework's own learning-loop artifacts.
 
@@ -157,20 +202,6 @@ last_reviewed: 2026-05-19
 5. Integration tests: `test/integration/preamble-sync.test.ts` covers shared docs; `test/integration/audit-drift.test.ts` covers the CLI path with tmpdir fixtures.
 
 **Original evidence (historical):** The shared preamble (template at `workflow/skills/reference/skill-preamble.md`, installed at `.goat-flow/skill-reference/skill-preamble.md`) diverged between template and installed copy around a single-line change; discovered 2026-04-15 by multi-agent critique. Exact line numbers from that incident are no longer recorded here because the file has been edited since.
-
----
-
-## Footgun: Agent rewrites shared docs with agent-specific vocabulary
-
-**Status:** resolved | **Created:** 2026-03-21 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
-
-Moved to resolved: all evidence is from retired v1.1.0 files and current shared docs were verified multi-agent as of 2026-04-15. The behavioral pattern (agents replacing rather than adding) is documented as a lesson, not a current architectural trap. If the pattern recurs in current files, re-activate with fresh evidence.
-
-**Prevention (retained):**
-- Agent-specific files (`workflow/setup/agents/`, `.claude/`, `.gemini/`) - edits fine
-- Shared docs (`docs/`, `workflow/`) - MUST remain agent-neutral or list all agents
-- When adding agent support: ADD to tables and examples, never DELETE or REPLACE existing agent references
-- Setup prompts MUST include explicit scope constraints: "Do NOT modify files outside `.gemini/` and `GEMINI.md`"
 
 ---
 

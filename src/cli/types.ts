@@ -7,7 +7,7 @@
 export const KNOWN_AGENT_IDS = [
   "claude",
   "codex",
-  "gemini",
+  "antigravity",
   "copilot",
 ] as const;
 
@@ -24,7 +24,11 @@ type SkillSource = "installed" | "agent-mirror" | "github-mirror";
 
 /**
  * Describes an agent's file layout and enforcement mechanisms.
- * One profile per supported agent (Claude, Codex, Gemini, Copilot).
+ * One profile per supported agent (Claude, Codex, Antigravity, Copilot).
+ *
+ * `denyMechanism` and `hookEvents` are nullable to model agents whose upstream
+ * runtime has no project-local hook wiring for a given capability; consumers
+ * MUST guard for the null case.
  */
 export interface AgentProfile {
   id: AgentId;
@@ -42,12 +46,14 @@ export interface AgentProfile {
   skillsDir: string;
   // Null when the agent has no hook directory
   hooksDir: string | null;
-  denyMechanism: DenyMechanism;
+  // Null when the agent has no documented project-local deny mechanism.
+  denyMechanism: DenyMechanism | null;
   // Null when the agent has no on-disk deny hook script.
   denyHookFile: string | null;
   // Glob pattern for agent-specific local instruction files
   localPattern: string;
-  hookEvents: HookEvents;
+  // Null when the agent has no documented project-local hook-event names.
+  hookEvents: HookEvents | null;
 }
 
 /**
@@ -73,7 +79,7 @@ export interface ProjectFacts {
   // Absolute path to the project root
   root: string;
   stack: StackInfo;
-  // One entry per detected agent (Claude, Codex, Gemini, Copilot)
+  // One entry per detected agent (Claude, Codex, Antigravity, Copilot)
   agents: AgentFacts[];
   shared: SharedFacts;
 }
@@ -132,6 +138,7 @@ export interface BucketFreshness {
   lineCount: number;
 }
 
+/** Learning-loop artifact kinds in the order the retrieval and stats pipelines understand. */
 export type LearningLoopEntryKind =
   | "footgun"
   | "lesson"
@@ -155,7 +162,7 @@ export interface LearningLoopEntryFact {
   order: number;
 }
 
-/** Facts shared across all agents (project-wide files and directories) */
+/** Stable project-wide fact schema shared by audits, stats, setup prompts, and dashboard APIs. */
 export interface SharedFacts {
   footguns: {
     exists: boolean;
@@ -207,7 +214,6 @@ export interface SharedFacts {
   ignoreFiles: {
     copilotignore: boolean;
     cursorignore: boolean;
-    geminiignore: boolean;
   };
   gitignore: { exists: boolean; hasRequiredEntries: boolean };
   preflightScript: { exists: boolean };
@@ -346,17 +352,25 @@ export interface AgentFacts {
 // === Filesystem Abstraction ===
 
 /**
- * Read-only filesystem interface for the scan engine.
- * Allows swapping real FS for in-memory FS during testing.
+ * Stable read-only filesystem schema for the scan engine.
+ * Allows swapping real FS for in-memory FS during testing while preserving non-throwing read semantics.
  */
 export interface ReadonlyFS {
+  /** Return path existence; implementations should report inaccessible paths as false. */
   exists(path: string): boolean;
+  /** Read UTF-8 text or return null when the file is missing or unreadable. */
   readFile(path: string): string | null;
+  /** Count text lines, returning 0 when the file cannot be read. */
   lineCount(path: string): number;
+  /** Parse JSON defensively, returning null for missing, unreadable, or malformed files. */
   readJson(path: string): unknown;
+  /** List child names; missing and unreadable directories intentionally return an empty list. */
   listDir(path: string): string[];
+  /** Report whether a file can be executed by the current platform. */
   isExecutable(path: string): boolean;
+  /** Expand goat-flow's small relative glob syntax into matching POSIX-shaped paths. */
   glob(pattern: string): string[];
+  /** Check whether a glob has any match without requiring callers to materialize every path. */
   existsGlob(pattern: string): boolean;
 }
 

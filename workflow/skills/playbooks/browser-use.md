@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # Browser Evidence Reference
 
@@ -74,12 +74,12 @@ Use `--headed` when headless output is ambiguous. Do not use `connect`, `--profi
 
 ### When `browser-use connect` fails
 
-If `connect` cannot find a running Chrome with remote debugging, do not silently fall back. Surface the choice to the user with both options and let them pick — installed-Chrome and managed-Chromium are not equivalent because each touches different state:
+If `connect` cannot find a running Chrome with remote debugging, do not silently fall back. Surface the choice to the user with both options and let them pick - installed-Chrome and managed-Chromium are not equivalent because each touches different state:
 
 1. **Use the user's real Chrome.** They must enable remote debugging first: open `chrome://inspect/#remote-debugging` or relaunch Chrome with `--remote-debugging-port=9222`. Then retry `browser-use connect`.
 2. **Use managed Chromium with a Chrome profile.** Run `browser-use profile list` to show available profiles, ask which one, then run `browser-use --profile "ProfileName" open <url>`. This launches a separate Chromium instance with the chosen profile (cookies, logins, extensions); no Chrome relaunch needed.
 
-Both paths require explicit user approval — they read login state. Never pick one autonomously.
+Both paths require explicit user approval - they read login state. Never pick one autonomously.
 
 ## Navigation and Sessions
 

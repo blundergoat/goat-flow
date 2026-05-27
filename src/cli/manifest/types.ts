@@ -39,7 +39,11 @@ export type ManifestDenyMechanism =
   | { type: "deny-script"; path: string }
   | { type: "both"; settings_path: string; script_path: string };
 
-/** The manifest-backed framework-support record for one agent runtime. */
+/** The manifest-backed framework-support record for one agent runtime.
+ *
+ *  `deny_mechanism` and `hook_events` are optional to model agents whose
+ *  upstream runtime has no documented project-local hook wiring for a given
+ *  capability; enforcement/audit code must guard for the null case. */
 export interface AgentProfile {
   name: string;
   instruction_file: string;
@@ -49,9 +53,9 @@ export interface AgentProfile {
   settings?: string;
   hook_config_file?: string;
   deny_hook?: string;
-  deny_mechanism: ManifestDenyMechanism;
+  deny_mechanism?: ManifestDenyMechanism;
   local_pattern: string;
-  hook_events: ManifestHookEvents;
+  hook_events?: ManifestHookEvents;
   hooks?: string[];
 }
 

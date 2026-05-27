@@ -15,7 +15,7 @@ This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScri
 - Prompt types in `src/cli/prompt/types.ts` (Fragment, ComposedPrompt, PromptVariables)
 - Strict mode: no implicit any, strict null checks, strict property initialization
 - No `any`. Use `unknown` and narrow with type guards. Minimize `as` casts.
-- Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'gemini' | 'copilot'`
+- Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'antigravity' | 'copilot'`
 - `Record<string, unknown>` over `any` for parsed JSON
 
 ## Testing

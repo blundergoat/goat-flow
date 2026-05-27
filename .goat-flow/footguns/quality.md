@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-05-19
+last_reviewed: 2026-05-27
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -21,7 +21,7 @@ last_reviewed: 2026-05-19
 2. If the agent replied with a fenced JSON block instead of writing a file, ask it to save the block to the expected path using its filesystem tool before closing the session.
 3. Only after the file exists on disk is `quality history` / `quality diff` meaningful - both silently return empty when nothing is saved, so a missing save looks identical to "no prior runs."
 
-See `.goat-flow/lessons/design-decisions.md` (2026-04-19 amendment under "Don't carve I/O side-effect exceptions into prompts that forbid I/O") for the historical thread that led here.
+See `.goat-flow/patterns/refactoring.md` (search: `Put prompt side effects on the CLI side`) for the durable boundary rule that came out of this incident.
 
 ---
 
@@ -41,6 +41,64 @@ See `.goat-flow/lessons/design-decisions.md` (2026-04-19 amendment under "Don't 
 
 **Prevention:** When adding or changing a non-gating audit caveat, update every audit consumer in the same patch: core type, JSON reader types, text/Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
 
+
+## Footgun: Structural validation passes while content is still unanswerable
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** An audit reports PASS — every required section is present, every heading matches, every structural check is green — but the artifact still has unresolved open questions, unanswered specification ambiguities, or placeholder values that prevent downstream work. A fresh agent or maintainer reads the artifact and can't proceed; the audit signal was true but unhelpful. The gap between "structurally valid" and "implementation-ready" is invisible to the structural checks because they don't read inside the sections.
+
+**Why it happens:** Structural checks (does the section exist? does the heading match? does the file have N required H2s?) are cheap to write and easy to make deterministic, so they accumulate first. Content-level checks (does each open question have an answer? is each placeholder resolved? is each decision recorded?) require parsing inside sections and detecting domain-specific markers. Skipping the content-level layer leaves a gap that nothing in the build-mode audit fills. The baseline already names this as pain point #2 ("Scanner compliance vs quality divergence"), but goat-flow's response to date routes it to inferential critique rather than to a deterministic content check.
+
+**Evidence:**
+- External: `kennyjpowers/claude-flow` PR #6 ("Feat: spec open questions workflow", MERGED 2025-11-22, 5,502 additions). The motivating statement is in the external PR's specs/spec-open-questions-workflow/02-specification.md file (search: `only checks structural completeness (18 required sections), not whether open questions have been answered. There's a gap between "structurally valid" and "implementation-ready."`). The PR added an entire workflow command whose only job is to detect unresolved `?` questions inside an otherwise valid spec — re-parse on each run, detect already-resolved entries by `Answer:` keyword presence, prompt only for unresolved.
+- Goat-flow committed direction: `src/cli/audit/check-content-quality.ts` (search: `runContentQualityChecks`) is the deterministic content-quality layer that should own unresolved-content markers instead of relying on structural setup checks alone.
+- Related committed pattern: `.goat-flow/patterns/verification.md` (search: `Non-gating audit gaps belong in explicit limits`) maps over-interpreted audit evidence to explicit caveats; extend the same deterministic-content path before treating a green structural audit as implementation-ready.
+- Goat-flow surfaces at risk: `src/cli/audit/check-goat-flow.ts` (search: `15 setup-scope checks`) currently asserts structural presence of `.goat-flow/architecture.md`, `code-map.md`, etc. — but does not inspect their content for unresolved questions. Same applies to milestone files in `.goat-flow/tasks/**`.
+
+**Prevention:**
+1. For any audit that gates "ready" status on an artifact (spec, plan, critique report, ADR draft, milestone file), pick one content marker (`?`, `TBD`, `Answer:`, `Resolved:`) and add a check that counts unresolved instances separately from structural integrity.
+2. Don't conflate "structural pass" with "ready to ship." A structurally valid spec with five unanswered questions should not block on the structural check; it should surface as a distinct `unresolved-content: 5` finding alongside the green structural result.
+3. Treat content markers as deliberate: pick the marker word once, enforce it in the audit, so re-running detects the same resolved items every time and the workflow becomes resumable. This is the kennyjpowers PR #6 mechanism — `Answer:` is the load-bearing keyword.
+4. When goat-flow's own audit reports green but a downstream agent still can't proceed, capture the specific missing content check as a new harness concern or a new build-mode check before treating the failure as "user error."
+
+Applies to: any goat-flow audit that gates progress on artifact completeness — `src/cli/audit/check-goat-flow.ts` for setup artifacts, `src/cli/audit/harness/check-*.ts` for harness concerns, and future content-level checks proposed by M14. Cross-reference: existing footgun "Audit score tempering fields must survive every renderer" (above) for the parallel concern about caveats; this footgun is about caveats that should *exist* in the first place, not about preserving caveats already present.
+
+## Footgun: Audit checks must not prescribe machine-specific shared content
+
+**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A deterministic audit check can be technically satisfiable but push users toward committed content that is wrong for other developers, machines, or checkouts.
+
+**Why it happens:** Checks that validate "presence of guidance" sometimes encode remediation examples too concretely. The original workspace-boundary guidance encouraged hardcoded absolute paths in version-controlled instruction files, which made the files stale anywhere except the author's checkout.
+
+**Evidence:** `.goat-flow/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md` (search: `path-agnostic`) records the current contract: the boundary concept stays, but remediation must be portable and current paths belong in runtime prompts.
+
+**Prevention:** Before adding an audit check, ask whether the user can satisfy it with content that remains true across machines and checkouts. If not, redesign the check or the remediation wording before shipping.
+
+## Footgun: Advisory warnings without enforcement train users to ignore output
+
+**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A command emits the same wall of warnings on every run, but the warnings never fail the gate and have no migration path. Users and agents learn to scroll past them, including warnings that might matter later.
+
+**Why it happens:** Advisory metadata checks are easy to add, but if the existing corpus is not backfilled and no deadline is set, the warning stream becomes permanent noise.
+
+**Evidence:** `stats --check` previously emitted decision-metadata warnings for every ADR missing optional Author(s) and Ticket/Context fields. The current stats warning pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing unavoidable warnings.
+
+**Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed. A warning that fires on 100% of the corpus is not a safety net.
+
+## Footgun: YAML heredocs can break tooling before shell execution
+
+**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A GitHub Actions workflow looks valid as shell, but YAML-aware tools such as Knip fail after an unindented heredoc is embedded inside a `run: |` block.
+
+**Why it happens:** The heredoc delimiter must satisfy both YAML indentation and shell parsing. Shell-focused review can miss that the workflow document itself is malformed or tool-hostile.
+
+**Evidence:** `.github/workflows/ci.yml` (search: `run: |`) and `.github/actions/goat-flow-audit/action.yml` (search: `run: |`) are the current YAML `run` block surfaces where heredoc edits would need YAML-aware validation. `scripts/preflight-checks.sh` (search: `Knip`) is the tooling gate that previously exposed workflow-shape drift.
+
+**Prevention:** For generated multi-line files inside workflow `run: |` blocks, prefer `printf '%s\n' ... > file` unless the heredoc indentation has been validated against both the YAML parser and the shell.
 
 ## Resolved Entries
 

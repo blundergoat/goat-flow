@@ -5,6 +5,9 @@
  */
 
 type ProjectSortKey = "name" | "state" | "action" | "details";
+type HookFilter = "all" | "enabled" | "disabled" | "drift";
+type HookSection = "safety" | "git" | "quality";
+type HookTone = "danger" | "warning" | "neutral";
 
 /** Alpine.js data factory for the dashboard shell. */
 function app() {
@@ -248,6 +251,14 @@ function app() {
     tasksActivePlanSaving: null as string | null,
     tasksError: "",
     selectedTaskPlan: null as string | null,
+
+    // --- Hooks state ---
+    hooksState: [] as HookState[],
+    hooksLoading: false,
+    hooksError: "",
+    hookSavingId: null as string | null,
+    hooksFilter: "all" as HookFilter,
+    hooksSearch: "",
 
     // --- Quality state ---
     qualityAgent: defaultRunner,
@@ -878,6 +889,9 @@ function app() {
         if (v === "plans") {
           void this.loadTasks();
         }
+        if (v === "hooks") {
+          void this.loadHooks();
+        }
       });
       self.$watch("qualityAgent", () => {
         if (this.activeView === "quality") {
@@ -936,6 +950,9 @@ function app() {
           if (this.activeView === "plans") {
             this.selectedTaskPlan = null;
             void this.loadTasks();
+          }
+          if (this.activeView === "hooks") {
+            void this.loadHooks();
           }
           this.skillQualityAbortController?.abort();
           this.skillQualityAbortController = null;
@@ -1227,6 +1244,153 @@ function app() {
       return date.toLocaleString();
     },
 
+    // -- Hooks --
+    async loadHooks() {
+      this.hooksLoading = true;
+      this.hooksError = "";
+      const requestProjectPath = this.projectPath;
+      try {
+        const res = await dashboardFetch(
+          `/api/hooks?path=${encodeURIComponent(requestProjectPath)}`,
+        );
+        const payload = readRecord(await res.json(), "Hooks response");
+        const error = readErrorMessage(payload);
+        if (error) throw new Error(error);
+        if (this.projectPath !== requestProjectPath) return;
+        this.hooksState = Array.isArray(payload.hooks)
+          ? (payload.hooks as HookState[])
+          : [];
+      } catch (err) {
+        if (this.projectPath !== requestProjectPath) return;
+        this.hooksState = [];
+        this.hooksError = err instanceof Error ? err.message : String(err);
+      } finally {
+        if (this.projectPath === requestProjectPath) this.hooksLoading = false;
+      }
+    },
+    hookAgents(hook: HookState): Array<[RunnerId, HookAgentState]> {
+      return this.supportedAgents.map((agent) => [
+        agent.id,
+        hook.agents[agent.id] ?? {
+          supported: false,
+          installed: false,
+          scriptPath: null,
+          configPath: null,
+          reason: "Agent state unavailable.",
+        },
+      ]);
+    },
+    hookSectionFor(hook: HookState): HookSection {
+      if (hook.id === "guard-repository-writes") return "git";
+      if (hook.id === "gruff-code-quality") return "quality";
+      return "safety";
+    },
+    hookTone(hook: HookState): HookTone {
+      const section = this.hookSectionFor(hook);
+      if (section === "git") return "warning";
+      if (section === "quality") return "neutral";
+      return "danger";
+    },
+    hookHasDrift(hook: HookState): boolean {
+      return Object.values(hook.agents).some((state) => Boolean(state.drift));
+    },
+    hookInstalledSurfaceCount(hook: HookState): number {
+      return this.hookAgents(hook).filter(([, state]) => state.installed)
+        .length;
+    },
+    hooksEnabledCount(): number {
+      return this.hooksState.filter((hook) => hook.enabled).length;
+    },
+    hooksDriftCount(): number {
+      return this.hooksState.filter((hook) => this.hookHasDrift(hook)).length;
+    },
+    hooksInstalledSurfaceCount(): number {
+      return this.hooksState.reduce(
+        (total, hook) => total + this.hookInstalledSurfaceCount(hook),
+        0,
+      );
+    },
+    hookMatchesFilter(hook: HookState, filter: HookFilter): boolean {
+      if (filter === "enabled") return hook.enabled;
+      if (filter === "disabled") return !hook.enabled;
+      if (filter === "drift") return this.hookHasDrift(hook);
+      return true;
+    },
+    hookFilterCount(filter: HookFilter): number {
+      return this.hooksState.filter((hook) =>
+        this.hookMatchesFilter(hook, filter),
+      ).length;
+    },
+    filteredHooks(): HookState[] {
+      const query = this.hooksSearch.trim().toLowerCase();
+      return this.hooksState.filter((hook) => {
+        if (!this.hookMatchesFilter(hook, this.hooksFilter)) return false;
+        if (!query) return true;
+        return [hook.name, hook.id, hook.description].some((value) =>
+          value.toLowerCase().includes(query),
+        );
+      });
+    },
+    hooksForSection(section: HookSection): HookState[] {
+      return this.filteredHooks().filter(
+        (hook) => this.hookSectionFor(hook) === section,
+      );
+    },
+    hookSectionCount(section: HookSection): number {
+      return this.hooksForSection(section).length;
+    },
+    hookAgentStatusLabel(state: HookAgentState): string {
+      if (!state.supported) return "not for this hook";
+      if (state.drift === "desired-on-actual-off") return "drift: missing";
+      if (state.drift === "desired-off-actual-on") return "drift: installed";
+      return state.installed ? "installed" : "not installed";
+    },
+    hookAgentStatusClass(state: HookAgentState): string {
+      if (!state.supported) return "gf-hook-status-muted";
+      if (state.drift) return "gf-hook-status-warn";
+      return state.installed ? "gf-hook-status-ok" : "gf-hook-status-muted";
+    },
+    async toggleHook(hook: HookState, enabled: boolean) {
+      if (!hook.togglable || this.hookSavingId) return;
+      if (!enabled && hook.requiresConfirmDialog) {
+        const confirmed = window.confirm(
+          `Disabling ${hook.name} removes the guardrail. Continue?`,
+        );
+        if (!confirmed) return;
+      }
+      this.hookSavingId = hook.id;
+      this.hooksError = "";
+      const requestProjectPath = this.projectPath;
+      try {
+        const res = await dashboardFetch(
+          `/api/hooks/${encodeURIComponent(hook.id)}/toggle?path=${encodeURIComponent(requestProjectPath)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+          },
+        );
+        const payload = readRecord(await res.json(), "Hook toggle response");
+        const error = readErrorMessage(payload);
+        if (error) throw new Error(error);
+        if (this.projectPath !== requestProjectPath) return;
+        const nextHook = payload.hook as HookState;
+        this.hooksState = this.hooksState.map((item) =>
+          item.id === nextHook.id ? nextHook : item,
+        );
+        this.showToast(`${nextHook.name} ${enabled ? "enabled" : "disabled"}`);
+      } catch (err) {
+        if (this.projectPath !== requestProjectPath) return;
+        this.hooksError = err instanceof Error ? err.message : String(err);
+        this.showToast(this.hooksError || "Hook update failed", true);
+      } finally {
+        if (this.hookSavingId === hook.id) this.hookSavingId = null;
+      }
+    },
+    async resyncHook(hook: HookState) {
+      await this.toggleHook(hook, hook.enabled);
+    },
+
     // -- Setup --
     async detectStack() {
       await dashboardDetectStack(this);
@@ -1390,7 +1554,7 @@ function app() {
         }
       }
     },
-    /** Re-run the inventory + prefetch from scratch — used by the page-level
+    /** Re-run the inventory + prefetch from scratch - used by the page-level
      *  "Re-audit all" button. */
     async reauditAllSkills() {
       this.skillQualityReport = null;
@@ -1475,7 +1639,7 @@ function app() {
       for (const r of reports) sum += this.skillReportPct(r);
       return sum / reports.length;
     },
-    /** Headline summary for the skills detail panel — derives a one-sentence
+    /** Headline summary for the skills detail panel - derives a one-sentence
      *  conclusion from the recommendation + warn/fail counts so the buried
      *  "two non-blocking issues" line gets promoted into a banner. */
     skillSummaryBanner(report: SkillQualityReport | null): {
@@ -1526,7 +1690,7 @@ function app() {
      *
      *  The headline title softens its tone to match the recommendation: a
      *  `needs-human-review` verdict says "needs review before keeping", not
-     *  "block ship" — "block ship" is reserved for verdicts that the engine
+     *  "block ship" - "block ship" is reserved for verdicts that the engine
      *  is genuinely confident about (retire / consider-revision). Mismatch
      *  between pill and copy was confusing readers about how confident the
      *  engine actually is. */
@@ -1560,7 +1724,7 @@ function app() {
       } else if (failCount > 0) {
         const tail = isHardVerdict
           ? "block ship"
-          : "— needs review before keeping";
+          : "- needs review before keeping";
         title = `${failCount} failing metric${failCount > 1 ? "s" : ""} ${tail}`;
       } else if (warnCount > 0) {
         title = `${warnCount} non-blocking warning${warnCount > 1 ? "s" : ""}`;
@@ -1677,7 +1841,7 @@ function app() {
       const lines: string[] = [];
       const pct = Math.round(this.skillReportPct(r) * 100);
       const grade = this.skillLetterGrade(this.skillReportPct(r));
-      lines.push(`# ${r.artifact.name} — ${grade} ${pct}%`);
+      lines.push(`# ${r.artifact.name} - ${grade} ${pct}%`);
       lines.push(`Slug: \`${this.skillEvaluatorSlug(r)}\``);
       lines.push(
         `Subtype: ${r.subtype} (${Math.round(r.classification.confidence * 100)}% ${r.classification.detectedSubtype})`,
@@ -1816,19 +1980,19 @@ function app() {
       input.value = "";
     },
 
-    /** dragover handler — keep the dropzone visually active. */
+    /** dragover handler - keep the dropzone visually active. */
     skillEvaluatorDragOver(event: DragEvent) {
       event.preventDefault();
       this.skillEvaluatorDragActive = true;
     },
-    /** dragleave handler — only clear when leaving the evaluator panel itself. */
+    /** dragleave handler - only clear when leaving the evaluator panel itself. */
     skillEvaluatorDragLeave(event: DragEvent) {
       const related = event.relatedTarget as Node | null;
       const target = event.currentTarget as Node | null;
       if (target && related && target.contains(related)) return;
       this.skillEvaluatorDragActive = false;
     },
-    /** drop handler — read every dropped .md file and append to the list. */
+    /** drop handler - read every dropped .md file and append to the list. */
     skillEvaluatorDrop(event: DragEvent) {
       event.preventDefault();
       this.skillEvaluatorDragActive = false;
@@ -2063,13 +2227,32 @@ function app() {
     exportSession(sessionId: string) {
       const refs = this._terminalRefs[sessionId];
       if (!refs?.xterm) return;
-      const buf = refs.xterm.buffer.active;
-      const lines: string[] = [];
-      for (let i = 0; i < buf.length; i++) {
-        const line = buf.getLine(i);
-        if (line) lines.push(line.translateToString(true));
+      const xterm = refs.xterm;
+      const dumpBuffer = (buf: XTermBuffer): string => {
+        const lines: string[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          const line = buf.getLine(i);
+          if (line) lines.push(line.translateToString(true));
+        }
+        while (lines.length > 0 && lines[lines.length - 1] === "") {
+          lines.pop();
+        }
+        return lines.join("\n");
+      };
+      const normalText = dumpBuffer(xterm.buffer.normal);
+      const altActive = xterm.buffer.active === xterm.buffer.alternate;
+      const altText = altActive ? dumpBuffer(xterm.buffer.alternate) : "";
+      const parts: string[] = [];
+      if (normalText) parts.push(normalText);
+      if (altText) {
+        parts.push(
+          "",
+          "--- alternate screen (current TUI view) ---",
+          "",
+          altText,
+        );
       }
-      const text = lines.join("\n");
+      const text = parts.join("\n");
       const session = this.sessions.find(
         (s: LocalSession) => s.id === sessionId,
       );

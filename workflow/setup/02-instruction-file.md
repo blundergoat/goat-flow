@@ -1,6 +1,6 @@
 # Step 02 - Instruction File
 
-Create or update the agent's instruction file (CLAUDE.md / AGENTS.md / GEMINI.md / `.github/copilot-instructions.md`).
+Create or update the agent's instruction file (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`).
 
 ## First: detect the stack
 
@@ -25,7 +25,7 @@ Read it completely before changing anything. Then:
 2. **Add a goat-flow section at the top** with any missing required sections from the list below. The existing content stays below it unchanged. Top-of-file survives context compaction.
 3. If the existing file mixes project/domain knowledge into the hot path, move that material to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`. Keep behavioral rules in the instruction file.
 4. If it IS an existing goat-flow instruction file (has execution loop, autonomy tiers, router table already), update it in place - fix stale paths, update version header, add missing sections.
-5. **If the existing Execution Loop uses legacy steps**, rewrite it. Specifically: if the section lists `CLASSIFY` or trailing `LOG` (the v1.0 `READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG` pattern), replace the whole Execution Loop block with the current four-step version from `workflow/setup/reference/execution-loop.md` (`READ → SCOPE → ACT → VERIFY`). This is the canonical v1.2 loop every goat-* skill assumes. Applies to ALL instruction files - CLAUDE.md, AGENTS.md, GEMINI.md, and `.github/copilot-instructions.md` - no agent keeps the legacy loop. After rewriting, grep the rest of the file for residual `CLASSIFY` / `LOG` references in Router Table, DoD, or prose and remove them.
+5. **If the existing Execution Loop uses legacy steps**, rewrite it. Specifically: if the section lists `CLASSIFY` or trailing `LOG` (the v1.0 `READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG` pattern), replace the whole Execution Loop block with the current four-step version from `workflow/setup/reference/execution-loop.md` (`READ → SCOPE → ACT → VERIFY`). This is the canonical v1.2 loop every goat-* skill assumes. Applies to ALL instruction files - CLAUDE.md, AGENTS.md, and `.github/copilot-instructions.md` - no agent keeps the legacy loop. After rewriting, grep the rest of the file for residual `CLASSIFY` / `LOG` references in Router Table, DoD, or prose and remove them.
 6. **If the existing file references legacy task-state files**, remove those references. goat-flow uses `.goat-flow/logs/sessions/` for session state - not legacy task-state files.
 7. **After adding goat-flow sections, check total length.** If over 125 lines, compress: move domain knowledge to `.goat-flow/architecture.md` and/or `.goat-flow/glossary.md`, remove redundant sections, tighten prose. "Compress" means relocate verbose material, not delete it - the user's content is preserved in `.goat-flow/` files, just not in the hot-path instruction file.
 8. Do NOT create "original-*" backup files. Git history preserves the original.
@@ -62,7 +62,7 @@ Router Table row:
 
 | Resource | Path |
 |----------|------|
-| Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-playbooks/` - read BEFORE declaring a tool unavailable |
 
 ## Optional: project infrastructure
 

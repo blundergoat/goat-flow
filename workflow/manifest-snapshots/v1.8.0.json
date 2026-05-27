@@ -1,0 +1,316 @@
+{
+  "_snapshot_note": "Frozen copy of workflow/manifest.json as it shipped at v1.8.0 release. Immutable. CHANGELOG lint compares version-tagged numeric claims against this file, not the live manifest. The live source of truth stays at workflow/manifest.json. See workflow/manifest-snapshots/README.md for the frozen-copy contract.",
+  "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
+  "version": "1.8.0",
+
+  "required_files": [
+    ".goat-flow/.gitignore",
+    ".goat-flow/config.yaml",
+    ".goat-flow/tasks/.gitignore",
+    ".goat-flow/tasks/README.md",
+    ".goat-flow/logs/quality/README.md",
+    ".goat-flow/logs/events/README.md",
+    ".goat-flow/logs/critiques/README.md",
+    ".goat-flow/logs/security/README.md",
+    ".goat-flow/scratchpad/.gitignore",
+    ".goat-flow/scratchpad/README.md",
+    ".goat-flow/lessons/README.md",
+    ".goat-flow/footguns/README.md",
+    ".goat-flow/decisions/README.md",
+    ".goat-flow/logs/sessions/.gitkeep",
+    ".goat-flow/skill-reference/README.md",
+    ".goat-flow/skill-reference/skill-preamble.md",
+    ".goat-flow/skill-reference/skill-conventions.md",
+    ".goat-flow/skill-playbooks/README.md",
+    ".goat-flow/skill-playbooks/browser-use.md",
+    ".goat-flow/skill-playbooks/changelog.md",
+    ".goat-flow/skill-playbooks/code-comments.md",
+    ".goat-flow/skill-playbooks/gruff-code-quality.md",
+    ".goat-flow/skill-playbooks/observability.md",
+    ".goat-flow/skill-playbooks/page-capture.md",
+    ".goat-flow/skill-playbooks/release-notes.md",
+    ".goat-flow/skill-playbooks/skill-quality-testing.md",
+    ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+    ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+    ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+    ".goat-flow/architecture.md",
+    ".goat-flow/code-map.md",
+    ".goat-flow/glossary.md",
+    ".goat-flow/patterns/README.md"
+  ],
+
+  "required_dirs": [
+    ".goat-flow/decisions/",
+    ".goat-flow/footguns/",
+    ".goat-flow/lessons/",
+    ".goat-flow/patterns/",
+    ".goat-flow/logs/sessions/",
+    ".goat-flow/logs/quality/",
+    ".goat-flow/logs/events/",
+    ".goat-flow/logs/critiques/",
+    ".goat-flow/logs/security/",
+    ".goat-flow/scratchpad/",
+    ".goat-flow/skill-reference/",
+    ".goat-flow/skill-playbooks/",
+    ".goat-flow/tasks/"
+  ],
+
+  "directory_purposes": {
+    ".goat-flow/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
+    ".goat-flow/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
+    ".goat-flow/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
+    ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed.",
+    ".goat-flow/logs/quality/": "Workspace-local, gitignored-by-design quality report history. Saved agent quality reports (JSON) and their captured prose companions (MD); feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. Only README.md is committed.",
+    ".goat-flow/logs/events/": "Workspace-local, gitignored-by-design evidence envelope event log. Dashboard and future runtime producers append redacted JSONL records for local continuity; durable project knowledge must be promoted to lessons/, footguns/, or decisions/. Only README.md is committed.",
+    ".goat-flow/logs/critiques/": "Workspace-local, gitignored-by-design critique run history. Phase 3 snapshots from `/goat-critique` runs persisted before the Phase 4 blocking gate so work survives session interruptions. Only README.md is committed.",
+    ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
+    ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
+    ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
+    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
+  },
+
+  "optional_files": {
+    "_note": "Optional files created when the project needs them, not during base setup.",
+    ".cursorignore": "Excludes secret/sensitive paths from Cursor context."
+  },
+
+  "never_create": [],
+
+  "skills": {
+    "canonical": [
+      "goat",
+      "goat-debug",
+      "goat-plan",
+      "goat-review",
+      "goat-critique",
+      "goat-security",
+      "goat-qa"
+    ],
+    "references": {
+      "goat-plan": [
+        "references/milestone-examples.md",
+        "references/issue-format.md"
+      ],
+      "goat-critique": [
+        "references/rubric-examples.md",
+        "references/sub-agent-directives.md"
+      ],
+      "goat-review": [
+        "references/examples.md",
+        "references/refuter-spec.md",
+        "references/automated-review.md"
+      ],
+      "goat-security": [
+        "references/common-threats.md",
+        "references/identity-and-data.md",
+        "references/file-upload-and-paths.md",
+        "references/supply-chain-and-cicd.md",
+        "references/project-policy-template.md"
+      ]
+    },
+    "stale_names": [
+      "goat-audit",
+      "goat-investigate",
+      "goat-onboard",
+      "goat-reflect",
+      "goat-resume",
+      "goat-context",
+      "goat-simplify",
+      "goat-refactor",
+      "goat-preflight",
+      "goat-research",
+      "goat-sbao",
+      "goat-test"
+    ]
+  },
+
+  "agents": {
+    "claude": {
+      "name": "Claude Code",
+      "instruction_file": "CLAUDE.md",
+      "skills_dir": ".claude/skills/",
+      "capabilities": {
+        "terminal_binary": "claude",
+        "setup_surfaces": ["CLAUDE.md", ".claude/settings.json"],
+        "prompt_invocation_style": "slash",
+        "skill_source": "installed"
+      },
+      "hooks_dir": ".claude/hooks/",
+      "settings": ".claude/settings.json",
+      "hook_config_file": ".claude/settings.json",
+      "deny_hook": ".claude/hooks/guard-repository-writes.sh",
+      "deny_mechanism": {
+        "type": "both",
+        "settings_path": ".claude/settings.json",
+        "script_path": ".claude/hooks/guard-repository-writes.sh"
+      },
+      "local_pattern": "*/CLAUDE.md",
+      "hook_events": {
+        "pre_tool": "PreToolUse",
+        "post_turn": "Stop"
+      },
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
+    },
+    "codex": {
+      "name": "Codex",
+      "instruction_file": "AGENTS.md",
+      "skills_dir": ".agents/skills/",
+      "capabilities": {
+        "terminal_binary": "codex",
+        "setup_surfaces": [
+          "AGENTS.md",
+          ".codex/config.toml",
+          ".codex/hooks.json"
+        ],
+        "prompt_invocation_style": "dollar",
+        "skill_source": "agent-mirror"
+      },
+      "hooks_dir": ".codex/hooks/",
+      "settings": ".codex/config.toml",
+      "hook_config_file": ".codex/hooks.json",
+      "deny_hook": ".codex/hooks/guard-repository-writes.sh",
+      "deny_mechanism": {
+        "type": "both",
+        "settings_path": ".codex/config.toml",
+        "script_path": ".codex/hooks/guard-repository-writes.sh"
+      },
+      "local_pattern": ".github/instructions/*.md",
+      "hook_events": {
+        "pre_tool": "PreToolUse",
+        "post_turn": "Stop"
+      },
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
+    },
+    "antigravity": {
+      "name": "Antigravity",
+      "instruction_file": "AGENTS.md",
+      "skills_dir": ".agents/skills/",
+      "capabilities": {
+        "terminal_binary": "agy",
+        "setup_surfaces": [
+          "AGENTS.md",
+          ".agents/skills/",
+          ".agents/hooks.json",
+          ".agents/hooks/"
+        ],
+        "prompt_invocation_style": "slash",
+        "skill_source": "agent-mirror"
+      },
+      "hooks_dir": ".agents/hooks/",
+      "hook_config_file": ".agents/hooks.json",
+      "deny_hook": ".agents/hooks/guard-repository-writes.sh",
+      "deny_mechanism": {
+        "type": "deny-script",
+        "path": ".agents/hooks/guard-repository-writes.sh"
+      },
+      "local_pattern": "*/AGENTS.md",
+      "hook_events": {
+        "pre_tool": "PreToolUse",
+        "post_turn": "Stop"
+      },
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
+    },
+    "copilot": {
+      "name": "Copilot CLI",
+      "instruction_file": ".github/copilot-instructions.md",
+      "skills_dir": ".github/skills/",
+      "capabilities": {
+        "terminal_binary": "copilot",
+        "setup_surfaces": [
+          ".github/copilot-instructions.md",
+          ".github/instructions/**/*.instructions.md",
+          ".github/hooks/hooks.json"
+        ],
+        "prompt_invocation_style": "slash",
+        "skill_source": "github-mirror"
+      },
+      "hooks_dir": ".github/hooks/",
+      "hook_config_file": ".github/hooks/hooks.json",
+      "deny_hook": ".github/hooks/guard-repository-writes.sh",
+      "deny_mechanism": {
+        "type": "deny-script",
+        "path": ".github/hooks/guard-repository-writes.sh"
+      },
+      "local_pattern": ".github/instructions/**/*.instructions.md",
+      "hook_events": {
+        "pre_tool": "preToolUse",
+        "post_turn": null
+      },
+      "hooks": [
+        "hooks.json",
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
+    }
+  },
+
+  "instruction_file": {
+    "line_target": 125,
+    "line_limit": 150,
+    "required_sections": [
+      "Truth Order",
+      "Autonomy Tiers",
+      "Hard Rules",
+      "Key Resources",
+      "Essential Commands",
+      "Execution Loop",
+      "Definition of Done",
+      "Artifact Routing",
+      "Router Table"
+    ],
+    "version_header_pattern": "# {FILE} - v{VERSION} ({DATE})"
+  },
+
+  "facts": {
+    "_note": "Static facts only. Derived facts (check counts, skill names, version, presets count) are computed by src/cli/manifest/manifest.ts at load time. `goat-flow manifest --check` validates static facts against observed state (src/dashboard/views/*.html).",
+    "dashboard_views": [
+      "about",
+      "coming-soon",
+      "home",
+      "hooks",
+      "projects",
+      "prompts",
+      "quality",
+      "settings",
+      "setup",
+      "skills",
+      "plans",
+      "workspace"
+    ]
+  },
+
+  "snapshot_facts": {
+    "_note": "Numeric facts as shipped at v1.8.0 release. Used by CHANGELOG lint to validate claims inside the v1.8.0 section of CHANGELOG.md.",
+    "skills_total": 7,
+    "skills_functional_count": 6,
+    "checks_setup": 15,
+    "checks_agent": 4,
+    "checks_build": 19,
+    "checks_harness": 17,
+    "checks_total": 36,
+    "dashboard_views_count": 12,
+    "presets_count": 26
+  }
+}

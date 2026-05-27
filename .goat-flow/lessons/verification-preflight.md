@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-27
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -99,6 +99,8 @@ last_reviewed: 2026-05-21
 
 **Root cause:** I treated focused unit tests, typecheck, and fast-suite results as enough after changing a prompt helper and test fixture. The slow installer round-trip runs repo preflight inside a copied checkout, so it catches lint and format debt that focused tests do not.
 
+**Recurrence update (2026-05-24):** Adding registered deny-hook runtime smoke coverage passed focused audit tests and typecheck, but the first full `bash scripts/preflight-checks.sh` failed in the TypeScript gate because `src/cli/audit/check-agent-setup.ts` (search: `checkHookRuntimeSmoke`) exceeded ESLint complexity by one branch. Splitting path selection and smoke execution into helpers (`search: runHookRuntimeSmoke`) cleared `npx eslint src/cli/audit/check-agent-setup.ts` and the rerun preflight TypeScript gate.
+
 **Prevention:** Before rerunning `npm run test:slow` after prompt/test changes, run `npx eslint src/cli src/dashboard` and `npm run format:check` locally. If the slow round-trip preflight fails, reproduce the reported gate directly in the source checkout before changing installer or drift logic.
 
 ---
@@ -113,9 +115,11 @@ last_reviewed: 2026-05-21
 
 **Recurrence update (2026-05-19):** The same closeout also added a dashboard markdown performance sanity test whose 500KB fixture was newline-heavy. Focused runs passed, but preflight's concurrent fast-suite runner exceeded the 100ms budget. The fixture still needed to be 500KB, but it needed to measure plain markdown throughput rather than line-break parsing stress.
 
+**Recurrence update (2026-05-26):** The same `test/unit/dashboard-markdown.test.ts` performance sanity test passed standalone and in `npm test`, but failed under preflight's `npm run test:coverage` because Node's coverage instrumentation and full-suite concurrency pushed the 500KB render over hard 100ms/250ms budgets (`expected <100ms, got 115ms` and later `159ms`; the full preflight still needed the retry path at 250ms). The test now uses one coverage-stable sanity budget because the coverage flag was not visible inside the `tsx` test process.
+
 **Recurrence update (2026-05-19):** M01 commit-guidance work added a new helper and tests. Focused `npx tsc --noEmit` and the new test file passed, but the first full preflight failed in the TypeScript gate: `Knip: 2 unused exports/types`. The exported names were internal helper types, not public API. Removing the unnecessary `export` keywords fixed `npx knip`. Evidence anchors: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`), `test/unit/commit-guidance.test.ts` (search: `detects dominant conventional-commit history`).
 
-**Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite, keep fixtures representative of the named budget and stable under test concurrency. Evidence anchors: `package.json` (search: `test:fast`), `test/unit/dashboard-markdown.test.ts` (search: `MarkdownIt`), `knip.json` (search: `ignoreDependencies`).
+**Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite and preflight coverage suite, keep fixtures representative of the named budget and set a threshold that is stable under coverage instrumentation instead of tuning to a focused local run. Evidence anchors: `package.json` (search: `test:fast`), `test/unit/dashboard-markdown.test.ts` (search: `const budgetMs = 750`), `knip.json` (search: `ignoreDependencies`).
 
 ---
 
@@ -165,10 +169,62 @@ last_reviewed: 2026-05-21
 
 **Created:** 2026-04-21
 
-**What happened:** A `deny-dangerous.sh` hardening pass looked correct after the first edit, but the canonical self-test immediately failed because `BASH_REMATCH` was reused after a recursive `check_segment` call inside the new command-substitution helper. After fixing that, the hook copies all passed their own `--self-test`, yet full `bash scripts/preflight-checks.sh` still failed because `scripts/deny-dangerous.sh` is linted under the stricter repo-wide `shellcheck scripts/*.sh` profile, which does not exclude `SC2016` the way the hook-directory check does. The installer round-trip fixture failed for the same reason because it clones the current checkout before running temp-repo preflight.
+**What happened:** A guardrail-hook hardening pass looked correct after the first edit, but the canonical self-test immediately failed because `BASH_REMATCH` was reused after a recursive command-check helper. After fixing that, the hook copies all passed their own `--self-test`, yet full `bash scripts/preflight-checks.sh` still failed because the repo-wide shellcheck profile was stricter than the hook-local path. The installer round-trip fixture failed for the same reason because it clones the current checkout before running temp-repo preflight.
 
 **Prevention:**
 1. In Bash regex helpers, copy `BASH_REMATCH[n]` into local variables before any recursive call or nested regex operation that can overwrite it.
-2. For shared hook templates, do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh` and full `bash scripts/preflight-checks.sh`, because `scripts/deny-dangerous.sh` and fixture clones exercise stricter paths than the hook directories.
+2. For shared hook templates, do not stop at `bash workflow/hooks/guardrails-self-test.sh --self-test=full`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh workflow/hooks/*.sh` and full `bash scripts/preflight-checks.sh`, because fixture clones exercise stricter paths than isolated hook runs.
+
+---
+
+## Lesson: Hook renames must include learning-loop and router-table drift
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** The M10 split from the old command-safety hook to three guardrail hooks passed focused hook self-tests and the fast test suite, but `bash scripts/preflight-checks.sh` still failed. The failures were not in hook execution: stale learning-loop evidence pointed at deleted files, `.goat-flow/code-map.md` listed hook scripts under `scripts/`, `.goat-flow/architecture.md` omitted the new `hooks` dashboard view from the exact view inventory, and `.github/copilot-instructions.md` still routed to the old Copilot hook path.
+
+**Recurrence update (2026-05-26):** A follow-up double-check used `rg` with the milestone exclusions and returned no hits, but the exact M10 `git grep` acceptance command still found tracked stale references in `.gemini/settings.json`, `.github/git-commit-instructions.md`, and `.goat-flow/decisions/`. The issue was not hook behavior; the search tool choice under-counted tracked files hidden by ignore rules.
+
+**Recurrence update (2026-05-27):** M12 hook hardening passed functional hook checks, but the stale-name closeout grep still found active references to the old gruff hook id in `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and `.goat-flow/lessons/dashboard-testing.md` after the hook had already been renamed to `gruff-code-quality`. The remaining exact old-id hits are now limited to the migration alias and its regression tests.
+
+**Prevention:** After hook file renames, run the full preflight before declaring the rename done and treat drift failures as part of the hook change, not documentation cleanup. For the final old-name proof, use the milestone's exact `git grep` command over tracked files, then optionally run `rg --hidden --no-ignore` only to find local ignored residue. Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), `.github/copilot-instructions.md` (search: `guardrails-self-test.sh`).
+
+---
+
+## Lesson: New harness checks need count locks and provenance date proof
+
+**Status:** active | **Created:** 2026-05-16 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Adding the `evidence-before-claims` harness metric passed focused check tests, but the full suite still failed because a provenance-schema count lock expected the old registered-check total. The self-audit JSON also showed the new check using the old default `verified_on` date until its provenance was explicitly set.
+
+**Root cause:** Visible count docs and type-distribution tests were updated, but deeper provenance-count locks and JSON evidence freshness were not checked.
+
+**Prevention:** After adding or removing any audit check, grep for `registered build and harness checks`, `HARNESS_CHECKS.length`, the old total count, and the new check id across `test/` and `docs/`. Then run a JSON audit parse that prints the new check's `id`, `type`, `impact`, and `provenance.verified_on`.
+
+## Lesson: Learning-loop content gates need tracked, durable paths
+
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Multiple verification failures came from citing paths that were not durable repo truth: gitignored task files in ADRs, ignored `.goat-flow` paths hidden by normal `rg`, unresolved optional skill-path examples, and fake external PR paths formatted as repo-local code spans.
+
+**Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
+
+**Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
+
+**Prevention:** Before closing add/rename/delete or learning-loop edits, run both a tracked-state check (`git status --short` / `git ls-files --error-unmatch <path>`) and the relevant old-pattern grep. Include source-owned provenance and detector metadata in the grep, not only markdown artifacts. Use `rg -uu` when ignored `.goat-flow` workspace state is the target. In durable artifacts, cite committed repo files, public URLs, or prose descriptions for external paths; do not backtick fake repo-local examples. When documenting deleted paths in a durable artifact, name the old filename or quote the failing command output in the milestone, but do not write the deleted path as if it still resolves. Evidence anchors: `src/cli/audit/harness/check-context.ts` (search: `boundary-guidance-present`) and `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`).
+
+---
+
+## Lesson: Pipe input cannot share stdin with heredoc scripts
+
+**Status:** active | **Created:** 2026-05-24
+
+**What happened:** While adding npm override review logic to `scripts/dependency-update.sh`, the first verification run failed ShellCheck with `SC2259` because the code piped `npm view ... --json` into `node --input-type=module - ... <<'NODE'`. The heredoc supplied Node's stdin for the script body, so the piped registry JSON would not have reached `process.stdin`.
+
+**Root cause:** I treated heredoc script input and piped data input as independent streams. For `node -`, they compete for stdin; the heredoc wins and discards the pipe.
+
+**Fix:** Store the command output in a variable and feed it with a here-string to a `node --eval` script, or pass data through a file descriptor explicitly. Evidence anchor: `scripts/dependency-update.sh` (search: `latest_dependencies="$(npm view`).
+
+**Prevention:** After adding shell code that combines pipes, heredocs, or process substitutions, run `shellcheck` before smoke testing the behavior. Treat `SC2259` as a correctness failure, not style noise.
 
 ---

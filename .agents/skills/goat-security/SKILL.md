@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Use when assessing security implications of code changes, architecture decisions, or new features."
-goat-flow-skill-version: "1.7.0"
+goat-flow-skill-version: "1.8.0"
 ---
 # /goat-security
 
@@ -59,7 +59,7 @@ Scan only the categories that fit the repo:
 - dependency/supply chain, install scripts, lockfiles, unpinned actions
 - CI/CD workflows, shell entrypoints, release automation
 - local HTTP/WebSocket/PTY runtime: bind address, Host/Origin checks, session IDs, browser-to-terminal input paths, workspace/cwd boundaries, terminal runner prompts
-- agent surfaces: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.github/instructions/**`, installed skill copies (`.claude/**`, `.agents/**`, `.github/**`), hooks, prompts, templates
+- agent surfaces: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.github/instructions/**`, installed skill copies (`.claude/**`, `.agents/**`, `.github/**`), hooks, prompts, templates
 
 For diff/PR mode, bucket changed files explicitly:
 - `.github/workflows/**`, release automation, and other CI/CD files
@@ -151,7 +151,7 @@ Re-read `file + semantic anchor` for Critical/High. Does the code or config stil
 
 **Dependency audit:** If the project uses dependency management, run the appropriate audit tool when available. If it is missing, note the gap with the install command. Do NOT fabricate results.
 
-**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file + semantic anchor` re-read in this session, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
+**Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file + semantic anchor` re-read in this session, every finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
 
 If `PROBABLE > CONFIRMED`, suggest `/goat-critique` cross-examination before closing. If the user declines, close with those clusters marked PROBABLE and list the evidence needed to promote or kill each one.
 
@@ -187,7 +187,7 @@ For compliance checks, present gaps as: non-compliant, partially compliant, or n
 ## Threat Surface / Risky Buckets
 ## Findings
 ### CONFIRMED
-- S-NN: `file + semantic anchor` | asset | entry→sink | trust boundary | preconditions | severity | blast radius | proof-of-fix
+- S-NN: `file + semantic anchor` | asset | entry→sink | trust boundary | preconditions | severity | proof-class | blast radius | proof-of-fix
 ### PROBABLE
 ### THEORETICAL
 ## Attack Path Summary  <!-- top 3 chained attack paths -->
@@ -197,6 +197,7 @@ For compliance checks, present gaps as: non-compliant, partially compliant, or n
 - Surfaces scanned: [list] | Surfaces skipped: [list or "none"]
 - Scanner tools: [used] | Unavailable: [list or "none"]
 - Evidence: <N> OBSERVED / <M> INFERRED
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
 - Confidence: <N> CONFIRMED / <M> PROBABLE / <K> THEORETICAL
 - Degradation flags: [list or "none"]
 - Conclusion: confident | coverage-degraded | tool-limited

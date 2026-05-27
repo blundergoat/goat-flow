@@ -59,6 +59,10 @@ Commands:
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
+  hooks list        List registered hook state for this project
+  hooks enable      Enable one registered hook and sync agent configs
+  hooks disable     Disable one registered hook and sync agent configs
+  hooks sync        Re-apply config.yaml hook truth to agent configs
 Arguments:
   project-path    Target project directory (default: .)
 
@@ -73,6 +77,7 @@ Flags:
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
+  --json            Hooks: emit machine-readable JSON (alias for --format json)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --force           Install/setup --apply: overwrite settings, config, and remove deprecated skills
   --update-config-version  Install: update only the version field in existing config.yaml
@@ -101,6 +106,9 @@ Examples:
   goat-flow quality validate <path>    Schema-check a freshly written report (exit 2 on any error)
   goat-flow manifest                   Print the resolved manifest
   goat-flow manifest --check           Verify the manifest is consistent with code
+  goat-flow hooks list --json          Print hook state as JSON
+  goat-flow hooks enable gruff-code-quality
+  goat-flow hooks sync                 Re-apply hook toggles from config.yaml
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
@@ -130,11 +138,14 @@ type Command =
   | "quality"
   | "events"
   | "skill"
+  | "hooks"
   | "manifest"
   | "stats";
 
 type SkillSubcommand = "new";
 type EventsSubcommand = "tail";
+type HookSubcommand = "list" | "enable" | "disable" | "sync";
+const HOOK_SUBCOMMANDS = new Set<string>(["list", "enable", "disable", "sync"]);
 
 type QualitySubcommand =
   | "prompt"
@@ -170,6 +181,7 @@ interface ParsedArgValues {
   interactive?: boolean;
   name?: string;
   yes?: boolean;
+  json?: boolean;
   help?: boolean;
   version?: boolean;
 }
@@ -186,6 +198,7 @@ const COMMANDS: Command[] = [
   "quality",
   "events",
   "skill",
+  "hooks",
   "manifest",
   "stats",
 ];
@@ -258,6 +271,8 @@ export interface ParsedCLI extends CLIOptions {
   skillSkipConfirm: boolean;
   eventsSubcommand: EventsSubcommand | null;
   eventsLimit: number;
+  hookSubcommand: HookSubcommand | null;
+  hookId: string | null;
   all: boolean;
 }
 
@@ -484,6 +499,54 @@ function parseEventsPositionals(positionals: string[]): {
   };
 }
 
+/** Parse hooks subcommand positionals. */
+function parseHooksPositionals(positionals: string[]): {
+  hookSubcommand: HookSubcommand;
+  hookId: string | null;
+  projectPath: string;
+} {
+  const [first, second, third, ...rest] = positionals;
+  if (!first || !HOOK_SUBCOMMANDS.has(first)) {
+    throw new CLIError(
+      'hooks requires subcommand "list", "enable", "disable", or "sync".',
+      2,
+    );
+  }
+  const subcommand = first as HookSubcommand;
+  if (subcommand === "enable" || subcommand === "disable")
+    return parseHookTogglePositionals(subcommand, second, third, rest);
+  if (third !== undefined || rest.length > 0) {
+    throw new CLIError(
+      `hooks ${subcommand} accepts at most one project path.`,
+      2,
+    );
+  }
+  return {
+    hookSubcommand: subcommand,
+    hookId: null,
+    projectPath: resolve(second ?? "."),
+  };
+}
+
+function parseHookTogglePositionals(
+  subcommand: "enable" | "disable",
+  hookId: string | undefined,
+  projectPath: string | undefined,
+  rest: string[],
+): { hookSubcommand: HookSubcommand; hookId: string; projectPath: string } {
+  if (hookId === undefined || rest.length > 0) {
+    throw new CLIError(
+      `hooks ${subcommand} requires <hook-id> [project-path].`,
+      2,
+    );
+  }
+  return {
+    hookSubcommand: subcommand,
+    hookId,
+    projectPath: resolve(projectPath ?? "."),
+  };
+}
+
 /** Return the project path and quality-specific positionals for a command. */
 function parseCommandPositionals(
   command: Command,
@@ -496,6 +559,14 @@ function parseCommandPositionals(
     return {
       qualitySubcommand: "prompt",
       projectPath: parseSkillPositionals(positionals).projectPath,
+      qualityDiffPair: null,
+      qualityValidatePath: null,
+      candidacyInput: null,
+    };
+  if (command === "hooks")
+    return {
+      qualitySubcommand: "prompt",
+      projectPath: parseHooksPositionals(positionals).projectPath,
       qualityDiffPair: null,
       qualityValidatePath: null,
       candidacyInput: null,
@@ -769,6 +840,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       interactive: { type: "boolean", default: false },
       name: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
+      json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
     },
@@ -786,10 +858,20 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command === "events"
       ? parseEventsPositionals(positionals)
       : { eventsSubcommand: null, projectPath: qualityPositionals.projectPath };
+  const hooksPositionals =
+    command === "hooks"
+      ? parseHooksPositionals(positionals)
+      : {
+          hookSubcommand: null,
+          hookId: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   const projectPath =
     command === "events"
       ? eventsPositionals.projectPath
-      : qualityPositionals.projectPath;
+      : command === "hooks"
+        ? hooksPositionals.projectPath
+        : qualityPositionals.projectPath;
   const skillPositionals: SkillPositionals =
     command === "skill"
       ? parseSkillPositionals(positionals)
@@ -812,7 +894,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   return {
     command,
     projectPath,
-    format: parseFormatArg(parsedValues.format),
+    format: parseFormatArg(parsedValues.json ? "json" : parsedValues.format),
     agent: parseAgentArg(parsedValues.agent),
     verbose: parsedValues.verbose === true,
     output: resolveOutputPath(parsedValues.output, projectPath),
@@ -833,6 +915,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ...skillFields,
     eventsSubcommand: eventsPositionals.eventsSubcommand,
     eventsLimit: parseEventsLimitArg(parsedValues.limit),
+    hookSubcommand: hooksPositionals.hookSubcommand,
+    hookId: hooksPositionals.hookId,
     all: parsedValues.all === true,
     dev: parsedValues.dev === true,
     help: parsedValues.help === true,
@@ -1602,6 +1686,99 @@ async function handleManifestCommand(options: ParsedCLI): Promise<void> {
   writeOutput(options, renderManifestMarkdown(manifest));
 }
 
+/** Render hook state as a compact terminal table. */
+function renderHooksText(hooks: Array<Record<string, unknown>>): string {
+  const lines = ["Hook state", ""];
+  for (const hook of hooks) {
+    const agents =
+      hook.agents && typeof hook.agents === "object"
+        ? (hook.agents as Record<string, Record<string, unknown>>)
+        : {};
+    const agentBits = Object.entries(agents).map(([agentId, state]) => {
+      if (state.supported === false) return `${agentId}: not-supported`;
+      const installed = state.installed === true ? "installed" : "missing";
+      const drift = typeof state.drift === "string" ? ` (${state.drift})` : "";
+      return `${agentId}: ${installed}${drift}`;
+    });
+    lines.push(
+      `${String(hook.id)}  ${hook.enabled === true ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/** Handle hook registry/list/toggle/sync commands. */
+async function handleHooksCommand(options: ParsedCLI): Promise<void> {
+  const {
+    applyHookState,
+    HookRegistrarError,
+    readAllHookStates,
+    syncHookStates,
+  } = await import("./server/hook-registrar.js");
+
+  try {
+    switch (options.hookSubcommand) {
+      case "list":
+        renderHooksResult(options, {
+          hooks: readAllHookStates(options.projectPath),
+        });
+        return;
+      case "sync":
+        renderHooksResult(options, {
+          hooks: syncHookStates(options.projectPath),
+        });
+        return;
+      case "enable":
+      case "disable":
+        renderHookToggleResult(
+          options,
+          applyHookState(
+            requireHookId(options),
+            options.hookSubcommand === "enable",
+            options.projectPath,
+          ),
+        );
+        return;
+    }
+  } catch (err) {
+    if (err instanceof HookRegistrarError) {
+      throw new CLIError(err.message, err.statusCode === 404 ? 2 : 1);
+    }
+    throw err;
+  }
+
+  throw new CLIError(
+    "Usage: goat-flow hooks <list|sync|enable <hook-id>|disable <hook-id>> [path]",
+    2,
+  );
+}
+
+function requireHookId(options: ParsedCLI): string {
+  if (options.hookId) return options.hookId;
+  throw new CLIError(`hooks ${options.hookSubcommand} requires <hook-id>.`, 2);
+}
+
+function renderHooksResult(
+  options: ParsedCLI,
+  result: { hooks: unknown[] },
+): void {
+  writeOutput(
+    options,
+    options.format === "json"
+      ? JSON.stringify(result, null, 2)
+      : renderHooksText(result.hooks as Array<Record<string, unknown>>),
+  );
+}
+
+function renderHookToggleResult(options: ParsedCLI, hook: unknown): void {
+  writeOutput(
+    options,
+    options.format === "json"
+      ? JSON.stringify({ hook }, null, 2)
+      : renderHooksText([hook] as Array<Record<string, unknown>>),
+  );
+}
+
 /** Run the default `setup` command pipeline: facts + audit + compose. */
 async function runSetupPipeline(options: ParsedCLI): Promise<void> {
   const { createFS } = await import("./facts/fs.js");
@@ -1639,6 +1816,7 @@ const COMMAND_HANDLERS: Partial<
   audit: handleAuditCommand,
   quality: handleQualityCommand,
   events: handleEventsCommand,
+  hooks: handleHooksCommand,
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,

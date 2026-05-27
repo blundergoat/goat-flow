@@ -84,7 +84,7 @@ The installed `.goat-flow/skill-playbooks/skill-quality-testing.md` file becomes
 |------|---------------------|------------------------|----------|--------|
 | `skill-preamble.md` | 1181 | 1800 → trimmed to 1483 | <1500 | over → ✅ within |
 | `skill-conventions.md` | 977 | 1250 | <1500 | ✅ within |
-| `goat-review/SKILL.md` | — | 2537 → trimmed to 2495 | <2500 | over → ✅ within |
-| `tdd-iteration.md` | — | 3106 → trimmed to 2998 | <3000 | over → ✅ within |
+| `goat-review/SKILL.md` | - | 2537 → trimmed to 2495 | <2500 | over → ✅ within |
+| `tdd-iteration.md` | - | 3106 → trimmed to 2998 | <3000 | over → ✅ within |
 
-The preamble drifted 52% upward (1181→1800) between 2026-04-20 and 2026-05-17 with no enforcement check catching it. Three other files crossed their tier caps in the same period. Enforcement now lives in `test/contract/skill-hardening-contracts.test.ts` under `describe("ADR-023 word budget tiers", ...)` — failing tests now block budget regressions instead of waiting for quality-report runs to surface them.
+The preamble drifted 52% upward (1181→1800) between 2026-04-20 and 2026-05-17 with no enforcement check catching it. Three other files crossed their tier caps in the same period. Enforcement now lives in `test/contract/skill-hardening-contracts.test.ts` under `describe("ADR-023 word budget tiers", ...)` - failing tests now block budget regressions instead of waiting for quality-report runs to surface them.

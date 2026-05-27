@@ -10,7 +10,7 @@ function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-author-"));
 }
 
-describe("skill new — description mode", () => {
+describe("skill new - description mode", () => {
   it("scaffolds a workflow SKILL.md when the description is workflow-shaped", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
@@ -174,7 +174,7 @@ describe("skill new — description mode", () => {
   });
 });
 
-describe("skill new — draft mode", () => {
+describe("skill new - draft mode", () => {
   it("validates a workflow draft against its expected location", async () => {
     const projectRoot = makeTempProject();
     const draftPath = join(projectRoot, "draft.md");
@@ -246,7 +246,7 @@ describe("skill new — draft mode", () => {
   });
 });
 
-describe("skill new — interactive mode", () => {
+describe("skill new - interactive mode", () => {
   it("prompts for description and name in interactive mode", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({

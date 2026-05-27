@@ -2,6 +2,7 @@
 
 **Date:** 2026-04-12
 **Status:** Accepted
+**Updated:** 2026-05-27 - the "15 to 26" count is historical; the current audit distribution is tracked in code and ADR-026-era updates, with 17 harness checks rather than the scanner-era total.
 
 ## Context
 

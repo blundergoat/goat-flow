@@ -9,6 +9,7 @@ import { getAgentProfiles } from "../agents/registry.js";
 
 const AGENT_PROFILES = getAgentProfiles();
 
+/** Existing goat-flow surfaces shown as setup-view checkboxes. */
 interface ExistingArtifacts {
   skills: boolean;
   instructionsRepoWide: boolean;
@@ -18,6 +19,7 @@ interface ExistingArtifacts {
   config: boolean;
 }
 
+/** Command slots inferred for the generated setup prompt. */
 interface SetupCommands {
   test: string;
   lint: string;
@@ -25,6 +27,7 @@ interface SetupCommands {
   format: string;
 }
 
+/** Lightweight stack summary used before the full quality/audit paths run. */
 interface FastSetupStack {
   languages: string[];
   frameworks: string[];
@@ -71,7 +74,12 @@ function detectScaffoldedAgents(projectPath: string): Record<string, boolean> {
   );
 }
 
-/** Detect existing goat-flow artifacts (skills, instructions, lessons, footguns, config). */
+/**
+ * Detect existing goat-flow artifacts for setup prefill.
+ *
+ * Swallows unreadable skill roots because setup detection is advisory and
+ * should not block the dashboard from rendering a recovery prompt.
+ */
 function detectExistingArtifacts(projectPath: string): ExistingArtifacts {
   const existing: ExistingArtifacts = {
     skills: false,
@@ -157,7 +165,7 @@ function readRootJson(
   }
 }
 
-/** Read one root text file. Missing files return an empty string. */
+/** Read one root text file; missing or unreadable files fallback to an empty string. */
 function readRootText(projectPath: string, filename: string): string {
   try {
     return readFileSync(join(projectPath, filename), "utf-8");
@@ -166,10 +174,12 @@ function readRootText(projectPath: string, filename: string): string {
   }
 }
 
+/** Check one root-level marker without recursing into large project trees. */
 function rootExists(projectPath: string, filename: string): boolean {
   return existsSync(join(projectPath, filename));
 }
 
+/** Match one root directory entry; swallows unreadable roots as no match. */
 function rootMatches(projectPath: string, pattern: RegExp): boolean {
   try {
     return readdirSync(projectPath).some((entry) => pattern.test(entry));
@@ -178,6 +188,7 @@ function rootMatches(projectPath: string, pattern: RegExp): boolean {
   }
 }
 
+/** Probe only known setup-relevant directories; stat failures fallback to false. */
 function hasBoundedSetupDir(projectPath: string, dirname: string): boolean {
   if (!BOUNDED_SETUP_DIRS.includes(dirname)) return false;
   try {
@@ -187,12 +198,17 @@ function hasBoundedSetupDir(projectPath: string, dirname: string): boolean {
   }
 }
 
-function objectAt(value: unknown): Record<string, string> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+/** Return string-valued object entries from package-manager metadata. */
+function objectAt(candidate: unknown): Record<string, string> {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
     return {};
   }
   return Object.fromEntries(
-    Object.entries(value).filter(
+    Object.entries(candidate).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
@@ -226,18 +242,19 @@ function composerScriptCommand(
   keys: readonly string[],
 ): string {
   for (const key of keys) {
-    const value = scripts[key];
-    if (typeof value === "string") return value;
+    const commandValue = scripts[key];
+    if (typeof commandValue === "string") return commandValue;
     if (
-      Array.isArray(value) &&
-      value.every((entry) => typeof entry === "string")
+      Array.isArray(commandValue) &&
+      commandValue.every((entry) => typeof entry === "string")
     ) {
-      return value.join(" && ");
+      return commandValue.join(" && ");
     }
   }
   return "";
 }
 
+/** Ignore scaffold placeholder scripts that would fail before exercising the project. */
 function isPlaceholderScript(command: string): boolean {
   const trimmed = command.trim();
   return (
@@ -303,6 +320,7 @@ function collectNodeSetup(
   };
 }
 
+/** Return Composer scripts only when the metadata is an object map. */
 function composerScripts(composer: JsonObject): JsonObject {
   const scripts = composer["scripts"];
   return typeof scripts === "object" &&
@@ -447,6 +465,7 @@ function collectJavaSetup(
   }
 }
 
+/** Detect shell support from root scripts or a bounded `scripts/` directory. */
 function collectShellSetup(projectPath: string, languages: string[]): void {
   if (
     rootMatches(projectPath, /^.+\.sh$/) ||
@@ -496,7 +515,12 @@ function detectFastSetupStack(projectPath: string): FastSetupStack {
   return { languages, frameworks, commands };
 }
 
-/** Build the full `/api/setup/detect` payload for one project path. */
+/**
+ * Build the full `/api/setup/detect` payload for one project path.
+ *
+ * @param projectPath - Target project root selected in the dashboard.
+ * @returns Setup-view payload with fast stack hints, agents, and existing surfaces.
+ */
 export function buildSetupDetectPayload(projectPath: string): {
   languages: string[];
   frameworks: string[];
@@ -516,7 +540,15 @@ export function buildSetupDetectPayload(projectPath: string): {
   };
 }
 
-/** Heuristically treat a directory as a project when it has common repo markers. */
+/**
+ * Heuristically treat a directory as a project when it has common repo markers.
+ *
+ * Swallows marker stat failures as non-matches because browse results
+ * should survive unreadable children.
+ *
+ * @param dirPath - Candidate directory path from the browser route.
+ * @returns True when any supported project or agent marker exists.
+ */
 export function isProjectDirectory(dirPath: string): boolean {
   return [
     "package.json",

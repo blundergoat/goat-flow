@@ -1,6 +1,23 @@
 ---
 category: coordination
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-25
+---
+
+## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened (external — mini-swe-agent PR #755, merged 2026-02-19, plus the conftest fixture pattern):** Tests modifying global state via env vars contaminated each other when CI ran in parallel. Mini's fix at `.goat-flow/scratchpad/related/mini-swe-agent/tests/conftest.py` wraps tests that touch `GLOBAL_MODEL_STATS` (a module-level singleton) with a threading lock + reset before AND after each test. PR #755 specifically — "Fix tests because of env var overwrite" — addressed tests setting `MSWEA_DOCKER_EXECUTABLE`, `MSWEA_SILENT_STARTUP`, etc. leaking into siblings that depended on those vars being unset. The flakiness was rank-ordering-dependent and invisible until a CI run reordered the affected pair.
+
+**Root cause:** Globals are shared across the test process. Pytest's per-test isolation does not extend to module-level state. Without explicit teardown, any test that writes a global leaks to every subsequent test in the same process. Parallel test runners that share a process surface this faster.
+
+**Goat-flow applicability:** vitest isolates per-file but not per-test for module-level state. Exposed surfaces: `process.env` mutations in CLI-option tests, singletons in `src/cli/server/` (WebSocket server, session managers, project registry), module-level caches in audit / quality (`let cached: X | undefined` at module scope).
+
+**Prevention:**
+1. Audit `src/` for module-level mutable state. For every test that touches one, add a fixture/beforeEach that resets it (mini's `reset_global_stats` is the model — threading lock + reset before AND after).
+2. For env var-driven behavior, prefer explicit dependency injection in tests (`runWithEnv({ KEY: "value" }, () => { ... })`) over `process.env.KEY = "value"`. Injection auto-cleans; direct mutation does not.
+3. When a test starts flapping rank-order-dependent, the root cause is almost always global state contamination — fix at the global, not at the test.
+
 ---
 
 ## Lesson: Phase 0 normalisation catches council false findings before they create work

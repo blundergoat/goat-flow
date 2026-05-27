@@ -1,0 +1,463 @@
+# Config-schema version. Required as of gruff-ts 0.1.4. See ADR-004 (decision log).
+schemaVersion: gruff-ts.config.v0.1
+
+# Per-command default for `--fail-on`. CLI flag > this block > binary default.
+# `dashboard` is intentionally NOT a valid key - it has no --fail-on flag. See ADR-004.
+#
+# Values:
+#   error    - exit non-zero only when an error-severity finding fires (strictest gate).
+#   warning  - exit non-zero on warning or error findings (advisory findings pass).
+#   advisory - exit non-zero on any finding at all (advisory, warning, or error).
+#   none     - never exit non-zero from findings (use for raw reporting / baseline generation).
+minimumSeverity:
+  analyse: advisory
+  summary: advisory
+  report: none
+
+paths:
+  # Recursive scans already respect .gitignore plus built-in default directories
+  # such as .git, node_modules, dist, coverage, generated, tmp, and vendor.
+  # Add project-specific generated or local outputs here when Git does not ignore them.
+  # Examples:
+  #   - "out/**"
+  #   - ".next/**"
+  #   - "src/generated/**"
+  ignore: []
+
+allowlists:
+  acceptedAbbreviations:
+    - age
+    - app
+    - cb
+    - db
+    - fn
+    - fs
+    - id
+    - io
+    - key
+    - log
+    - max
+    - min
+    - now
+    - raw
+    - rx
+    - tx
+    - ui
+    - url
+  secretPreviews: []
+  # Names that trigger naming.generic-function. Each key replaces the built-in
+  # default when present; an empty list disables that rule's blacklist branch.
+  # Default: [process, handle, doit, run, execute, manage]
+  # bannedGenericNames: [process, handle, doit, run, execute, manage]
+  # Accepted prefixes for boolean identifiers. Names without one of these
+  # prefixes trigger naming.boolean-prefix.
+  # Default: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
+  # booleanPrefixes: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
+  # Hungarian type-style prefixes flagged by naming.hungarian-notation.
+  # Default: [str, obj, arr, bool, int, num]
+  # hungarianPrefixes: [str, obj, arr, bool, int, num]
+  # Placeholder words flagged as generic by naming.identifier-quality. The
+  # numbered-suffix branch (foo1, value2) stays active even when this is empty.
+  # Default: [foo, bar, baz, tmp, temp, thing, stuff, data, value, item]
+  # placeholderNames: [foo, bar, baz, tmp, temp, thing, stuff, data, value, item]
+  # Negative-framed boolean names that should NOT trigger naming.negative-boolean.
+  # Defaults are HTTP-header conventions; add project terms as needed.
+  # Default: [nostore, nofollow, noreferrer, noscript, noindex]
+  # negativeBooleanAllowed: [nostore, nofollow, noreferrer, noscript, noindex]
+  # Known acronyms whose mixed casings trigger naming.acronym-case. Stored
+  # case-insensitively; match is against canonical lowercase.
+  # Default: [url, http, https, id, xml, json, html, css, api, sql, db, io, ui, uuid, ip, tcp, udp, ast, cli, npm]
+  # knownAcronyms: [url, http, https, id, xml, json, html, css, api, sql, db, io, ui, uuid, ip, tcp, udp, ast, cli, npm]
+
+rules:
+  # complexity/warning: Flags functions with high combined branch and nesting complexity.
+  complexity.cognitive:
+    enabled: true
+    threshold: 15
+    severity: warning
+  # complexity/warning: Flags functions with many independent branch paths.
+  complexity.cyclomatic:
+    enabled: true
+    threshold: 15
+    severity: warning
+  # complexity/warning: Flags functions with high approximate NPath complexity.
+  complexity.npath:
+    enabled: true
+    threshold: 200
+    severity: warning
+  # dead-code/advisory: Flags private methods without an apparent same-file call site.
+  dead-code.unused-private-method:
+    enabled: true
+  # design/warning: Flags simple relative import cycles inside the discovered source set.
+  design.circular-import:
+    enabled: true
+  # design/advisory: Flags relative imports that climb too many parent directories.
+  design.deep-relative-import:
+    enabled: true
+    threshold: 2
+    severity: advisory
+  # design/warning: Flags functions that are both long and complex.
+  design.god-function:
+    enabled: true
+  # design/advisory: Flags a production module that dominates project source lines.
+  design.large-module-concentration:
+    enabled: true
+    threshold: 55
+    severity: advisory
+    options:
+      minFiles: 4
+      minLines: 80
+  # design/warning: Flags package bin entries that point at missing files.
+  design.package-bin-missing:
+    enabled: true
+  # design/warning: Flags package bin targets that are not executable.
+  design.package-bin-not-executable:
+    enabled: true
+  # documentation/advisory: Flags large or scanner-relevant fixtures without a nearby purpose comment.
+  docs.fixture-purpose-missing:
+    enabled: true
+  # documentation/advisory: Flags threshold-like numeric values without a nearby rationale comment.
+  docs.magic-threshold-without-rationale:
+    enabled: true
+  # documentation/advisory: Flags commented functions whose error behavior is not described.
+  docs.missing-error-behavior-doc:
+    enabled: true
+  # documentation/warning: Flags exported functions without a leading maintainer comment.
+  docs.missing-exported-function-doc:
+    enabled: true
+  # documentation/advisory: Flags source files without a top-of-file purpose comment.
+  docs.missing-file-overview:
+    enabled: true
+  # documentation/advisory: Flags interfaces without a leading maintainer comment.
+  docs.missing-interface-doc:
+    enabled: true
+  # documentation/advisory: Flags internal helper functions without a leading maintainer comment.
+  docs.missing-internal-function-doc:
+    enabled: true
+  # documentation/advisory: Flags commented declarations that own schema, fingerprint, baseline, or determinism contracts without saying so.
+  docs.missing-invariant-doc:
+    enabled: true
+  # documentation/advisory: Flags documented exports with parameters missing @param tags.
+  docs.missing-param-tag:
+    enabled: true
+  # documentation/advisory: Flags exported class, type, and enum APIs without a nearby doc comment.
+  docs.missing-public-doc:
+    enabled: true
+  # documentation/advisory: Flags documented non-void exports without @returns.
+  docs.missing-return-tag:
+    enabled: true
+  # documentation/advisory: Flags commented functions that perform observable side effects without naming them.
+  docs.missing-side-effect-doc:
+    enabled: true
+  # documentation/advisory: Flags comments on complex functions that do not explain why the shape exists.
+  docs.missing-why-for-complex-code:
+    enabled: true
+  # documentation/advisory: Flags comments that reference missing files, unknown rules, stale CLI flags, or the wrong declaration.
+  docs.stale-comment:
+    enabled: true
+  # documentation/advisory: Flags @param tags for parameters no longer in the signature.
+  docs.stale-param-tag:
+    enabled: true
+  # documentation/advisory: Flags lint, formatter, coverage, or tool suppressions without a maintainer rationale.
+  docs.suppression-without-rationale:
+    enabled: true
+  # documentation/advisory: Flags TODO, FIXME, HACK, and XXX comments without tracking context.
+  docs.todo-without-tracking:
+    enabled: true
+  # documentation/advisory: Flags comments or docblocks that only restate the symbol name.
+  docs.useless-docblock:
+    enabled: true
+  # modernisation/advisory: Flags verbose current-time expressions that can use Date.now().
+  modernisation.date-now-candidate:
+    enabled: true
+  # modernisation/warning: Flags casts through unknown or any into another type.
+  modernisation.double-cast:
+    enabled: true
+  # modernisation/advisory: Flags loose equality comparisons that may coerce values.
+  modernisation.loose-equality:
+    enabled: true
+  # modernisation/warning: Flags non-null assertions that bypass null checks.
+  modernisation.non-null-assertion:
+    enabled: true
+  # modernisation/advisory: Flags || fallbacks that may erase valid falsy values.
+  modernisation.nullish-coalescing-candidate:
+    enabled: true
+  # modernisation/advisory: Flags Object.assign({}, ...) cloning that can use object spread.
+  modernisation.object-spread-candidate:
+    enabled: true
+  # modernisation/advisory: Flags repeated guard-and-property access patterns.
+  modernisation.optional-chaining-candidate:
+    enabled: true
+  # modernisation/advisory: Flags public class properties that expose representation.
+  modernisation.public-property:
+    enabled: true
+  # modernisation/advisory: Flags class properties that appear readonly-worthy.
+  modernisation.readonly-property-candidate:
+    enabled: true
+  # modernisation/warning: Flags TypeScript suppression comments without a rationale.
+  modernisation.ts-comment-without-rationale:
+    enabled: true
+  # modernisation/warning: Flags tsconfig files without exactOptionalPropertyTypes enabled.
+  modernisation.tsconfig-exact-optional-disabled:
+    enabled: true
+  # modernisation/warning: Flags tsconfig files without noUncheckedIndexedAccess enabled.
+  modernisation.tsconfig-index-safety-disabled:
+    enabled: true
+  # modernisation/warning: Flags tsconfig files without strict mode enabled.
+  modernisation.tsconfig-strict-disabled:
+    enabled: true
+  # modernisation/advisory: Flags var declarations.
+  modernisation.var-declaration:
+    enabled: true
+  # naming/advisory: Flags mixed casings of a known acronym in one file.
+  naming.acronym-case:
+    enabled: true
+  # naming/advisory: Flags boolean names without intent-revealing prefixes on declarations, function parameters (typed `: boolean` or with `= true|false` default), and interface/type-literal fields.
+  naming.boolean-prefix:
+    enabled: true
+  # naming/advisory: Flags exported classes whose name differs from the file name.
+  naming.class-file-mismatch:
+    enabled: true
+  # naming/advisory: Flags generic function names that hide intent.
+  naming.generic-function:
+    enabled: true
+  # naming/advisory: Flags placeholder parameter names in multi-parameter, long, exported, or complex functions.
+  naming.generic-parameter:
+    enabled: true
+    options:
+      minCyclomatic: 8
+      minLineCount: 30
+      minParameters: 3
+  # naming/advisory: Flags identifiers named after storage type prefixes.
+  naming.hungarian-notation:
+    enabled: true
+  # naming/advisory: Flags placeholder or numbered identifiers on declarations, function parameters, and destructured locals.
+  naming.identifier-quality:
+    enabled: true
+  # naming/advisory: Flags the same canonical identifier appearing in two different surface forms (for example CONSTANT_CASE and camelCase) in one file.
+  naming.inconsistent-casing:
+    enabled: true
+  # naming/advisory: Flags boolean identifiers framed as a negation on declarations, parameters, and interface fields.
+  naming.negative-boolean:
+    enabled: true
+  # naming/advisory: Flags very short variable names outside common loop counters; covers declarations, function parameters, and destructured locals.
+  naming.short-variable:
+    enabled: true
+  # security/warning: Flags async callbacks passed to forEach.
+  security.async-foreach:
+    enabled: true
+  # security/error: Flags code that disables TLS certificate verification.
+  security.disabled-tls-verification:
+    enabled: true
+  # security/warning: Flags document.write usage.
+  security.document-write:
+    enabled: true
+  # security/warning: Flags external input used to construct regular expressions.
+  security.dynamic-regexp:
+    enabled: true
+  # security/error: Flags eval() dynamic code execution.
+  security.eval-call:
+    enabled: true
+  # security/warning: Flags promise-like calls without await, return, or void.
+  security.floating-promise:
+    enabled: true
+  # security/warning: Flags GitHub Actions workflows that grant broad write permissions.
+  security.github-actions-broad-permissions:
+    enabled: true
+  # security/warning: Flags pull_request_target workflows paired with risky execution or trust context.
+  security.github-actions-pull-request-target:
+    enabled: true
+  # security/warning: Flags workflow run steps that pipe remote downloads to a shell.
+  security.github-actions-remote-shell:
+    enabled: true
+  # security/warning: Flags pull request workflows that reference GitHub secrets.
+  security.github-actions-secrets-in-pr:
+    enabled: true
+  # security/warning: Flags third-party GitHub Actions that are not pinned to a full commit SHA.
+  security.github-actions-unpinned-action:
+    enabled: true
+  # security/warning: Flags innerHTML assignment.
+  security.inner-html:
+    enabled: true
+  # security/warning: Flags Math.random usage in source.
+  security.insecure-random:
+    enabled: true
+  # security/error: Flags javascript: URL literals that execute script.
+  security.javascript-url:
+    enabled: true
+  # security/error: Flags Function constructor dynamic code execution.
+  security.new-function:
+    enabled: true
+  # security/warning: Flags external input sent to redirect or navigation sinks.
+  security.open-redirect-candidate:
+    enabled: true
+  # security/warning: Flags external input sent to filesystem path sinks.
+  security.path-traversal-candidate:
+    enabled: true
+  # security/warning: Flags child-process execution calls.
+  security.process-exec:
+    enabled: true
+  # security/warning: Flags direct __proto__ access that can enable prototype pollution.
+  security.proto-access:
+    enabled: true
+  # security/error: Flags package scripts that pipe remote content to a shell.
+  security.remote-install-script:
+    enabled: true
+  # security/warning: Flags package lifecycle scripts that run automatically.
+  security.risky-lifecycle-script:
+    enabled: true
+  # security/warning: Flags SQL text composed with runtime string interpolation.
+  security.sql-concatenation:
+    enabled: true
+  # security/warning: Flags external input sent to network request sinks.
+  security.ssrf-candidate:
+    enabled: true
+  # security/warning: Flags string callbacks passed to timers.
+  security.string-timer:
+    enabled: true
+  # security/warning: Flags thrown non-Error values.
+  security.throw-non-error:
+    enabled: true
+  # security/warning: Flags dependencies installed from URL or git specs.
+  security.url-dependency:
+    enabled: true
+  # security/warning: Flags weak crypto primitives such as md5, sha1, or createCipher.
+  security.weak-crypto:
+    enabled: true
+  # sensitive-data/error: Flags vendor API key patterns.
+  sensitive-data.api-key-pattern:
+    enabled: true
+  # sensitive-data/error: Flags AWS access key looking values.
+  sensitive-data.aws-access-key:
+    enabled: true
+  # sensitive-data/error: Flags database URLs that include passwords.
+  sensitive-data.database-url-password:
+    enabled: true
+  # sensitive-data/error: Flags environment-style secret values committed in text.
+  sensitive-data.hardcoded-env-value:
+    enabled: true
+    threshold: 16
+    severity: error
+  # sensitive-data/error: Flags high-entropy string literals that may be secrets.
+  sensitive-data.high-entropy-string:
+    enabled: true
+    threshold: 32
+    severity: error
+  # sensitive-data/error: Flags JWT-looking token literals.
+  sensitive-data.jwt-token:
+    enabled: true
+  # sensitive-data/error: Flags PII-like identifier patterns.
+  sensitive-data.pii-pattern:
+    enabled: true
+  # sensitive-data/error: Flags private key block markers.
+  sensitive-data.private-key:
+    enabled: true
+  # size/warning: Flags files longer than the configured threshold.
+  size.file-length:
+    enabled: true
+    threshold: 750
+    severity: warning
+  # size/warning: Flags functions longer than the configured threshold.
+  size.function-length:
+    enabled: true
+    threshold: 200
+    severity: warning
+  # size/warning: Flags functions with too many parameters.
+  size.parameter-count:
+    enabled: true
+    threshold: 7
+    severity: warning
+  # size/warning: Flags stylesheets longer than the configured threshold.
+  size.stylesheet-length:
+    enabled: true
+    threshold: 1500
+    severity: warning
+  # test-quality/advisory: Flags tests with conditional logic.
+  test-quality.conditional-logic:
+    enabled: true
+  # test-quality/advisory: Flags tests that only assert exception type.
+  test-quality.exception-type-only:
+    enabled: true
+  # test-quality/warning: Flags tests mutating process or global runtime state.
+  test-quality.global-state-mutation:
+    enabled: true
+  # test-quality/advisory: Flags loops inside test bodies.
+  test-quality.loop-in-test:
+    enabled: true
+  # test-quality/advisory: Flags assertions against unexplained numeric literals.
+  test-quality.magic-number-assertion:
+    enabled: true
+  # test-quality/advisory: Flags exported production files without nearby tests.
+  test-quality.missing-nearby-test:
+    enabled: true
+  # test-quality/advisory: Flags tests that only verify mock interaction.
+  test-quality.mock-only-test:
+    enabled: true
+  # test-quality/warning: Flags tests without apparent assertions.
+  test-quality.no-assertions:
+    enabled: true
+  # test-quality/advisory: Flags tests that only assert code does not throw.
+  test-quality.no-throw-only-test:
+    enabled: true
+  # test-quality/advisory: Flags focused or skipped test markers.
+  test-quality.only-skip:
+    enabled: true
+  # test-quality/advisory: Flags tests with too much setup before the first assertion.
+  test-quality.setup-bloat:
+    enabled: true
+    threshold: 12
+    severity: advisory
+  # test-quality/advisory: Flags sleeps in tests.
+  test-quality.sleep-in-test:
+    enabled: true
+  # test-quality/advisory: Flags tests that rely only on snapshots.
+  test-quality.snapshot-only-test:
+    enabled: true
+  # test-quality/warning: Flags tautological assertions.
+  test-quality.trivial-assertion:
+    enabled: true
+  # test-quality/advisory: Flags mocks created but not used.
+  test-quality.unused-mock:
+    enabled: true
+  # maintainability/warning: Flags any type usage.
+  waste.any-type:
+    enabled: true
+  # maintainability/advisory: Flags broad runtime dependency version ranges.
+  waste.broad-runtime-version:
+    enabled: true
+  # maintainability/advisory: Flags comments that appear to contain disabled code.
+  waste.commented-out-code:
+    enabled: true
+  # maintainability/advisory: Flags console log/debug calls in source.
+  waste.console-log:
+    enabled: true
+  # maintainability/advisory: Flags functions with no executable body.
+  waste.empty-function:
+    enabled: true
+  # maintainability/warning: Flags exported APIs exposing any.
+  waste.exported-any:
+    enabled: true
+  # maintainability/advisory: Flags redundant boolean casts in condition expressions.
+  waste.redundant-boolean-cast:
+    enabled: true
+  # maintainability/advisory: Flags variables returned immediately after assignment.
+  waste.redundant-variable:
+    enabled: true
+  # maintainability/warning: Flags empty catch blocks.
+  waste.swallowed-catch:
+    enabled: true
+  # maintainability/warning: Flags statements after terminating statements.
+  waste.unreachable-code:
+    enabled: true
+  # maintainability/advisory: Flags named imports with no apparent usage.
+  waste.unused-import:
+    enabled: true
+  # maintainability/advisory: Flags parameters with no apparent usage.
+  waste.unused-parameter:
+    enabled: true
+  # maintainability/advisory: Flags catch blocks that only rethrow the caught value.
+  waste.useless-catch:
+    enabled: true
+  # maintainability/advisory: Flags terminal bare return statements in void functions.
+  waste.useless-return:
+    enabled: true

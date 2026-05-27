@@ -68,63 +68,69 @@ function dashboardClearLaunchToken(): void {
 
 dashboardClearLaunchToken();
 
-/** Check whether a value is a plain object record. */
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Treat arrays as invalid records because dashboard API payloads use named fields. */
+function isRecord(candidate: unknown): candidate is JsonRecord {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
-/** Read a plain object record from raw dashboard payload data. */
-function readRecord(value: unknown, context: string): JsonRecord {
-  if (!isRecord(value)) {
+/** Read a required object record; throws when a top-level API payload is malformed. */
+function readRecord(rawPayload: unknown, context: string): JsonRecord {
+  if (!isRecord(rawPayload)) {
     throw new Error(`${context} returned an invalid payload`);
   }
-  return value;
+  return rawPayload;
 }
 
 /** Read a string value with a safe fallback for invalid payload fields. */
-function readString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
+function readString(rawValue: unknown, fallback = ""): string {
+  return typeof rawValue === "string" ? rawValue : fallback;
 }
 
 /** Read a string array from raw payload data. */
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
+function readStringArray(rawValue: unknown): string[] {
+  return Array.isArray(rawValue)
+    ? rawValue.filter((entry): entry is string => typeof entry === "string")
     : [];
 }
 
 /** Read a `{ [key: string]: string }` map, silently dropping invalid entries. */
-function readStringMap(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {};
+function readStringMap(rawValue: unknown): Record<string, string> {
+  if (!isRecord(rawValue)) return {};
   const result: Record<string, string> = {};
-  for (const [k, v] of Object.entries(value)) {
+  for (const [k, v] of Object.entries(rawValue)) {
     if (typeof v === "string" && v.length > 0) result[k] = v;
   }
   return result;
 }
 
 /** Read an audit status from raw payload data. */
-function readAuditStatus(value: unknown): AuditStatus | null {
-  return value === "pass" || value === "fail" || value === "skipped"
-    ? value
+function readAuditStatus(rawValue: unknown): AuditStatus | null {
+  return rawValue === "pass" || rawValue === "fail" || rawValue === "skipped"
+    ? rawValue
     : null;
 }
 
 /** Read a dashboard display status from raw payload data. */
-function readAuditDisplayStatus(value: unknown): AuditDisplayStatus | null {
-  return value === "pass" ||
-    value === "fail" ||
-    value === "warn" ||
-    value === "info" ||
-    value === "skipped"
-    ? value
+function readAuditDisplayStatus(rawValue: unknown): AuditDisplayStatus | null {
+  return rawValue === "pass" ||
+    rawValue === "fail" ||
+    rawValue === "warn" ||
+    rawValue === "info" ||
+    rawValue === "skipped"
+    ? rawValue
     : null;
 }
 
 /** Read a check impact label from raw payload data. */
-function readAuditCheckImpact(value: unknown): AuditCheckImpact | null {
-  return value === "none" || value === "scope-fail" || value === "score-only"
-    ? value
+function readAuditCheckImpact(rawValue: unknown): AuditCheckImpact | null {
+  return rawValue === "none" ||
+    rawValue === "scope-fail" ||
+    rawValue === "score-only"
+    ? rawValue
     : null;
 }
 
@@ -160,22 +166,24 @@ function readInjectedRunnerIds(): string[] {
 
 /** Read a runner ID from raw payload data. Unknown values narrow to null so
  *  the server's wire contract isn't silently widened to arbitrary strings. */
-function readRunnerId(value: unknown): RunnerId | null {
-  const runner = readString(value).trim();
+function readRunnerId(rawValue: unknown): RunnerId | null {
+  const runner = readString(rawValue).trim();
   return readInjectedRunnerIds().includes(runner) ? (runner as RunnerId) : null;
 }
 
+/** Read prompt invocation style from server-provided runner metadata. */
 function readPromptInvocationStyle(
-  value: unknown,
+  rawValue: unknown,
 ): PromptInvocationStyle | null {
-  return value === "slash" || value === "dollar" ? value : null;
+  return rawValue === "slash" || rawValue === "dollar" ? rawValue : null;
 }
 
-function readSkillSource(value: unknown): SkillSource | null {
-  return value === "installed" ||
-    value === "agent-mirror" ||
-    value === "github-mirror"
-    ? value
+/** Read the source bucket for installed or mirrored runner skills. */
+function readSkillSource(rawValue: unknown): SkillSource | null {
+  return rawValue === "installed" ||
+    rawValue === "agent-mirror" ||
+    rawValue === "github-mirror"
+    ? rawValue
     : null;
 }
 
@@ -193,9 +201,11 @@ function buildDefaultSetupAgents(
 }
 
 /** Read a terminal-session status from raw payload data. */
-function readSessionStatus(value: unknown): SessionStatus | null {
-  return value === "starting" || value === "active" || value === "terminated"
-    ? value
+function readSessionStatus(rawValue: unknown): SessionStatus | null {
+  return rawValue === "starting" ||
+    rawValue === "active" ||
+    rawValue === "terminated"
+    ? rawValue
     : null;
 }
 
@@ -210,29 +220,34 @@ function getProjectDisplayName(path: string): string {
 }
 
 /** Read one audit failure record from raw payload data. */
-function readAuditFailure(value: unknown): AuditFailure | null {
-  if (!isRecord(value)) return null;
-  const check = readString(value.check);
-  const message = readString(value.message);
+function readAuditFailure(rawFailure: unknown): AuditFailure | null {
+  if (!isRecord(rawFailure)) return null;
+  const check = readString(rawFailure.check);
+  const message = readString(rawFailure.message);
   if (!check || !message) return null;
 
   const failure: AuditFailure = { check, message };
-  const evidence = readString(value.evidence);
-  const howToFix = readString(value.howToFix);
+  const evidence = readString(rawFailure.evidence);
+  const howToFix = readString(rawFailure.howToFix);
   if (evidence) failure.evidence = evidence;
   if (howToFix) failure.howToFix = howToFix;
   return failure;
 }
 
-/** Read one audit check record from raw payload data. */
-function readAuditCheck(value: unknown): AuditCheck | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const name = readString(value.name);
-  const status = readAuditStatus(value.status);
+/**
+ * Read one audit check while preserving score-critical discriminants.
+ *
+ * This stays explicit because dashboard scoring branches on `type`, `impact`,
+ * `displayStatus`, and acknowledgement fields after decoding the API payload.
+ */
+function readAuditCheck(rawCheck: unknown): AuditCheck | null {
+  if (!isRecord(rawCheck)) return null;
+  const id = readString(rawCheck.id);
+  const name = readString(rawCheck.name);
+  const status = readAuditStatus(rawCheck.status);
   if (!id || !name || !status) return null;
 
-  const provenanceValue = value.provenance;
+  const provenanceValue = rawCheck.provenance;
   if (!isRecord(provenanceValue)) return null;
   const sourceType = readString(provenanceValue.source_type);
   const verifiedOn = readString(provenanceValue.verified_on);
@@ -289,47 +304,47 @@ function readAuditCheck(value: unknown): AuditCheck | null {
     },
   };
   if (
-    value.type === "integrity" ||
-    value.type === "advisory" ||
-    value.type === "metric"
+    rawCheck.type === "integrity" ||
+    rawCheck.type === "advisory" ||
+    rawCheck.type === "metric"
   ) {
-    check.type = value.type;
+    check.type = rawCheck.type;
   }
-  if (value.acknowledged === true) check.acknowledged = true;
+  if (rawCheck.acknowledged === true) check.acknowledged = true;
   check.displayStatus =
-    readAuditDisplayStatus(value.displayStatus) ??
+    readAuditDisplayStatus(rawCheck.displayStatus) ??
     defaultDisplayStatus(status, check.type, check.acknowledged === true);
   check.impact =
-    readAuditCheckImpact(value.impact) ??
+    readAuditCheckImpact(rawCheck.impact) ??
     defaultCheckImpact(status, check.type, check.acknowledged === true);
   if (
-    value.evidenceKind === "semantic" ||
-    value.evidenceKind === "structural"
+    rawCheck.evidenceKind === "semantic" ||
+    rawCheck.evidenceKind === "structural"
   ) {
-    check.evidenceKind = value.evidenceKind;
+    check.evidenceKind = rawCheck.evidenceKind;
   }
-  if (value.assurance === "full" || value.assurance === "limited") {
-    check.assurance = value.assurance;
+  if (rawCheck.assurance === "full" || rawCheck.assurance === "limited") {
+    check.assurance = rawCheck.assurance;
   }
-  const failure = readAuditFailure(value.failure);
+  const failure = readAuditFailure(rawCheck.failure);
   if (failure) check.failure = failure;
-  if (isRecord(value.details)) check.details = value.details;
+  if (isRecord(rawCheck.details)) check.details = rawCheck.details;
   return check;
 }
 
 /** Read a string-to-string map from raw payload data. */
-function readStringRecord(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {};
+function readStringRecord(rawValue: unknown): Record<string, string> {
+  if (!isRecord(rawValue)) return {};
 
-  const entries = Object.entries(value).filter(
+  const entries = Object.entries(rawValue).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string",
   );
   return Object.fromEntries(entries);
 }
 
-/** Read one audit scope from raw payload data. */
-function readAuditScope(value: unknown, context: string): AuditScope {
-  const payload = readRecord(value, context);
+/** Read one audit scope; throws when required scope status is missing or invalid. */
+function readAuditScope(rawScope: unknown, context: string): AuditScope {
+  const payload = readRecord(rawScope, context);
   const status = readAuditStatus(payload.status);
   if (!status) {
     throw new Error(`${context} returned an invalid audit status`);
@@ -352,46 +367,46 @@ function readAuditScope(value: unknown, context: string): AuditScope {
 }
 
 /** Read one harness concern from raw payload data. */
-function readAuditConcern(value: unknown): AuditConcern | null {
-  if (!isRecord(value)) return null;
-  const status = readAuditStatus(value.status);
-  if (!status || typeof value.score !== "number") return null;
+function readAuditConcern(rawConcern: unknown): AuditConcern | null {
+  if (!isRecord(rawConcern)) return null;
+  const status = readAuditStatus(rawConcern.status);
+  if (!status || typeof rawConcern.score !== "number") return null;
 
   /** Read a numeric counter from raw payload data. */
   const readCount = (v: unknown): number => (typeof v === "number" ? v : 0);
 
   return {
     status,
-    score: value.score,
-    findings: readStringArray(value.findings),
-    limits: readStringArray(value.limits),
-    recommendations: readStringArray(value.recommendations),
-    howToFix: readStringArray(value.howToFix),
-    integrityPass: readCount(value.integrityPass),
-    integrityFail: readCount(value.integrityFail),
-    advisoryPass: readCount(value.advisoryPass),
-    advisoryFail: readCount(value.advisoryFail),
-    advisoryAcknowledged: readCount(value.advisoryAcknowledged),
-    metrics: readCount(value.metrics),
+    score: rawConcern.score,
+    findings: readStringArray(rawConcern.findings),
+    limits: readStringArray(rawConcern.limits),
+    recommendations: readStringArray(rawConcern.recommendations),
+    howToFix: readStringArray(rawConcern.howToFix),
+    integrityPass: readCount(rawConcern.integrityPass),
+    integrityFail: readCount(rawConcern.integrityFail),
+    advisoryPass: readCount(rawConcern.advisoryPass),
+    advisoryFail: readCount(rawConcern.advisoryFail),
+    advisoryAcknowledged: readCount(rawConcern.advisoryAcknowledged),
+    metrics: readCount(rawConcern.metrics),
   };
 }
 
 /** Read an enforcement capability status from raw payload data. */
 function readEnforcementStatus(
-  value: unknown,
+  rawValue: unknown,
 ): EnforcementCapabilityStatus | null {
-  return value === "hard" ||
-    value === "limited" ||
-    value === "soft" ||
-    value === "missing" ||
-    value === "unknown"
-    ? value
+  return rawValue === "hard" ||
+    rawValue === "limited" ||
+    rawValue === "soft" ||
+    rawValue === "missing" ||
+    rawValue === "unknown"
+    ? rawValue
     : null;
 }
 
 /** Read only the known enforcement status counters from raw payload data. */
 function readEnforcementSummary(
-  value: unknown,
+  rawSummary: unknown,
 ): Record<EnforcementCapabilityStatus, number> {
   const summary: Record<EnforcementCapabilityStatus, number> = {
     hard: 0,
@@ -400,8 +415,8 @@ function readEnforcementSummary(
     missing: 0,
     unknown: 0,
   };
-  if (!isRecord(value)) return summary;
-  for (const [key, count] of Object.entries(value)) {
+  if (!isRecord(rawSummary)) return summary;
+  for (const [key, count] of Object.entries(rawSummary)) {
     const status = readEnforcementStatus(key);
     if (status && typeof count === "number") summary[status] = count;
   }
@@ -410,54 +425,54 @@ function readEnforcementSummary(
 
 /** Read one enforcement source label from raw payload data. */
 function readEnforcementSource(
-  value: unknown,
+  rawValue: unknown,
 ): EnforcementCapabilitySource | null {
-  return value === "local-settings" ||
-    value === "local-hook" ||
-    value === "runtime-self-test" ||
-    value === "manifest" ||
-    value === "provider-docs" ||
-    value === "not-observed"
-    ? value
+  return rawValue === "local-settings" ||
+    rawValue === "local-hook" ||
+    rawValue === "runtime-self-test" ||
+    rawValue === "manifest" ||
+    rawValue === "provider-docs" ||
+    rawValue === "not-observed"
+    ? rawValue
     : null;
 }
 
 /** Read one advisory enforcement capability row. */
 function readEnforcementCapability(
-  value: unknown,
+  rawCapability: unknown,
 ): EnforcementCapability | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const label = readString(value.label);
-  const status = readEnforcementStatus(value.status);
-  const summary = readString(value.summary);
+  if (!isRecord(rawCapability)) return null;
+  const id = readString(rawCapability.id);
+  const label = readString(rawCapability.label);
+  const status = readEnforcementStatus(rawCapability.status);
+  const summary = readString(rawCapability.summary);
   if (!id || !label || !status || !summary) return null;
   return {
     id,
     label,
     status,
-    sources: Array.isArray(value.sources)
-      ? value.sources
+    sources: Array.isArray(rawCapability.sources)
+      ? rawCapability.sources
           .map((source) => readEnforcementSource(source))
           .filter(
             (source): source is EnforcementCapabilitySource => source !== null,
           )
       : [],
     summary,
-    evidence: readStringArray(value.evidence),
+    evidence: readStringArray(rawCapability.evidence),
   };
 }
 
 /** Read the advisory enforcement matrix for one agent. */
 function readAgentEnforcementCapability(
-  value: unknown,
+  rawEnforcement: unknown,
 ): AgentEnforcementCapability | null {
-  if (!isRecord(value)) return null;
-  const agent = readRunnerId(value.agent);
-  const name = readString(value.name);
-  if (!agent || !name || value.advisory !== true) return null;
-  const capabilities = Array.isArray(value.capabilities)
-    ? value.capabilities
+  if (!isRecord(rawEnforcement)) return null;
+  const agent = readRunnerId(rawEnforcement.agent);
+  const name = readString(rawEnforcement.name);
+  if (!agent || !name || rawEnforcement.advisory !== true) return null;
+  const capabilities = Array.isArray(rawEnforcement.capabilities)
+    ? rawEnforcement.capabilities
         .map((item) => readEnforcementCapability(item))
         .filter((item): item is EnforcementCapability => item !== null)
     : [];
@@ -466,29 +481,29 @@ function readAgentEnforcementCapability(
     name,
     advisory: true,
     capabilities,
-    summary: readEnforcementSummary(value.summary),
+    summary: readEnforcementSummary(rawEnforcement.summary),
   };
 }
 
 /** Read one per-agent score from raw payload data. */
-function readAgentScore(value: unknown): AgentScore | null {
-  if (!isRecord(value)) return null;
-  const id = readRunnerId(value.id);
+function readAgentScore(rawScore: unknown): AgentScore | null {
+  if (!isRecord(rawScore)) return null;
+  const id = readRunnerId(rawScore.id);
   if (!id) return null;
 
   const harness =
-    value.harness === null
+    rawScore.harness === null
       ? null
-      : value.harness === undefined
+      : rawScore.harness === undefined
         ? null
-        : readAuditScope(value.harness, "Audit response harness scope");
+        : readAuditScope(rawScore.harness, "Audit response harness scope");
 
   const concerns =
-    value.concerns === null
+    rawScore.concerns === null
       ? null
-      : isRecord(value.concerns)
+      : isRecord(rawScore.concerns)
         ? Object.fromEntries(
-            Object.entries(value.concerns)
+            Object.entries(rawScore.concerns)
               .map(
                 ([key, concern]) => [key, readAuditConcern(concern)] as const,
               )
@@ -500,55 +515,55 @@ function readAgentScore(value: unknown): AgentScore | null {
 
   return {
     id,
-    name: readString(value.name, id),
-    agent: readAuditScope(value.agent, "Audit response agent scope"),
+    name: readString(rawScore.name, id),
+    agent: readAuditScope(rawScore.agent, "Audit response agent scope"),
     harness,
     concerns,
-    enforcement: readAgentEnforcementCapability(value.enforcement),
+    enforcement: readAgentEnforcementCapability(rawScore.enforcement),
   };
 }
 
 /** Read one learning-loop action bucket from the audit payload. */
 function readLearningLoopBucketAction(
-  value: unknown,
+  rawAction: unknown,
 ): { path: string; reason: string } | null {
-  if (!isRecord(value)) return null;
-  const path = readString(value.path);
-  const reason = readString(value.reason);
+  if (!isRecord(rawAction)) return null;
+  const path = readString(rawAction.path);
+  const reason = readString(rawAction.reason);
   if (!path || !reason) return null;
   return { path, reason };
 }
 
 /** Read compact learning-loop health from the audit payload. */
 function readLearningLoopSummary(
-  value: unknown,
+  rawSummary: unknown,
 ): DashboardClientReport["learningLoop"] {
-  if (!isRecord(value)) return null;
-  const status = readString(value.status);
+  if (!isRecord(rawSummary)) return null;
+  const status = readString(rawSummary.status);
   if (
     !["fresh", "needs-review", "unavailable"].includes(status) ||
-    typeof value.recordCount !== "number" ||
-    typeof value.footgunCount !== "number" ||
-    typeof value.lessonCount !== "number" ||
-    typeof value.staleCount !== "number" ||
-    typeof value.invalidLineRefCount !== "number" ||
-    typeof value.oversizedCount !== "number"
+    typeof rawSummary.recordCount !== "number" ||
+    typeof rawSummary.footgunCount !== "number" ||
+    typeof rawSummary.lessonCount !== "number" ||
+    typeof rawSummary.staleCount !== "number" ||
+    typeof rawSummary.invalidLineRefCount !== "number" ||
+    typeof rawSummary.oversizedCount !== "number"
   ) {
     return null;
   }
   return {
-    recordCount: value.recordCount,
-    footgunCount: value.footgunCount,
-    lessonCount: value.lessonCount,
-    staleCount: value.staleCount,
-    invalidLineRefCount: value.invalidLineRefCount,
-    oversizedCount: value.oversizedCount,
+    recordCount: rawSummary.recordCount,
+    footgunCount: rawSummary.footgunCount,
+    lessonCount: rawSummary.lessonCount,
+    staleCount: rawSummary.staleCount,
+    invalidLineRefCount: rawSummary.invalidLineRefCount,
+    oversizedCount: rawSummary.oversizedCount,
     oldestLastReviewed:
-      typeof value.oldestLastReviewed === "string"
-        ? value.oldestLastReviewed
+      typeof rawSummary.oldestLastReviewed === "string"
+        ? rawSummary.oldestLastReviewed
         : null,
-    topBucketsNeedingAction: Array.isArray(value.topBucketsNeedingAction)
-      ? value.topBucketsNeedingAction
+    topBucketsNeedingAction: Array.isArray(rawSummary.topBucketsNeedingAction)
+      ? rawSummary.topBucketsNeedingAction
           .map((entry) => readLearningLoopBucketAction(entry))
           .filter(
             (entry): entry is { path: string; reason: string } =>
@@ -560,62 +575,66 @@ function readLearningLoopSummary(
 }
 
 /** Read one recent lesson row from the audit payload. */
-function readRecentLesson(value: unknown): RecentLesson | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const title = readString(value.title);
-  const path = readString(value.path);
+function readRecentLesson(rawLesson: unknown): RecentLesson | null {
+  if (!isRecord(rawLesson)) return null;
+  const id = readString(rawLesson.id);
+  const title = readString(rawLesson.title);
+  const path = readString(rawLesson.path);
   if (!id || !title || !path) return null;
   return {
     id,
     title,
     path,
-    created: readString(value.created) || null,
+    created: readString(rawLesson.created) || null,
   };
 }
 
 /** Read a finite numeric payload field with a safe fallback. */
-function readFiniteNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function readFiniteNumber(rawValue: unknown, fallback = 0): number {
+  return typeof rawValue === "number" && Number.isFinite(rawValue)
+    ? rawValue
+    : fallback;
 }
 
 /** Read one top-level task directory summary from `/api/tasks`. */
-function readTaskPlanSummary(value: unknown): TaskPlanSummary | null {
-  if (!isRecord(value)) return null;
-  const name = readString(value.name);
-  const path = readString(value.path);
+function readTaskPlanSummary(rawPlan: unknown): TaskPlanSummary | null {
+  if (!isRecord(rawPlan)) return null;
+  const name = readString(rawPlan.name);
+  const path = readString(rawPlan.path);
   if (!name || !path) return null;
   return {
     name,
     path,
-    modifiedAt: readString(value.modifiedAt),
-    milestoneCount: readFiniteNumber(value.milestoneCount),
-    active: value.active === true,
+    modifiedAt: readString(rawPlan.modifiedAt),
+    milestoneCount: readFiniteNumber(rawPlan.milestoneCount),
+    active: rawPlan.active === true,
   };
 }
 
 /** Read one milestone summary from `/api/tasks`. */
-function readTaskMilestoneSummary(value: unknown): TaskMilestoneSummary | null {
-  if (!isRecord(value)) return null;
-  const filename = readString(value.filename);
-  const path = readString(value.path);
-  const title = readString(value.title);
+function readTaskMilestoneSummary(
+  rawMilestone: unknown,
+): TaskMilestoneSummary | null {
+  if (!isRecord(rawMilestone)) return null;
+  const filename = readString(rawMilestone.filename);
+  const path = readString(rawMilestone.path);
+  const title = readString(rawMilestone.title);
   if (!filename || !path || !title) return null;
   return {
     filename,
     path,
     title,
-    status: readString(value.status, "unknown"),
-    objective: readString(value.objective),
-    totalTasks: readFiniteNumber(value.totalTasks),
-    completedTasks: readFiniteNumber(value.completedTasks),
-    modifiedAt: readString(value.modifiedAt),
+    status: readString(rawMilestone.status, "unknown"),
+    objective: readString(rawMilestone.objective),
+    totalTasks: readFiniteNumber(rawMilestone.totalTasks),
+    completedTasks: readFiniteNumber(rawMilestone.completedTasks),
+    modifiedAt: readString(rawMilestone.modifiedAt),
   };
 }
 
 /** Read the selected project's `.goat-flow/tasks/` state. */
-function readTaskState(value: unknown): TaskState {
-  const payload = readRecord(value, "Tasks response");
+function readTaskState(rawState: unknown): TaskState {
+  const payload = readRecord(rawState, "Tasks response");
   return {
     taskRoot: readString(payload.taskRoot),
     exists: payload.exists === true,
@@ -638,9 +657,9 @@ function readTaskState(value: unknown): TaskState {
   };
 }
 
-/** Read the full dashboard report from raw payload data. */
-function readDashboardReport(value: unknown): DashboardClientReport {
-  const payload = readRecord(value, "Audit response");
+/** Read the full dashboard report; throws when required audit status fields drift. */
+function readDashboardReport(rawReport: unknown): DashboardClientReport {
+  const payload = readRecord(rawReport, "Audit response");
   const status = readAuditStatus(payload.status);
   if (!status) {
     throw new Error("Audit response returned an invalid status");
@@ -683,7 +702,7 @@ function readDashboardReport(value: unknown): DashboardClientReport {
   };
 }
 
-/** Read the dashboard report injected into the page shell. */
+/** Read injected boot report; swallows stale shell payloads so the app can refetch. */
 function readInjectedReport(): DashboardClientReport | null {
   if (window.__GOAT_FLOW_REPORT__ == null) return null;
   try {
@@ -693,20 +712,25 @@ function readInjectedReport(): DashboardClientReport | null {
   }
 }
 
-/** Read one supported-agent record from dashboard shell injection. */
-function readSupportedAgent(value: unknown): SupportedAgent | null {
-  if (!isRecord(value)) return null;
-  const id = readRunnerId(value.id);
-  const name = readString(value.name);
-  const terminalBinary = readString(value.terminalBinary).trim();
-  const setupSurfaces = readStringArray(value.setupSurfaces).filter(
+/**
+ * Read one supported-agent record from dashboard shell injection.
+ *
+ * This stays explicit because the injected metadata controls prompt routing,
+ * terminal launch labels, and setup-surface hints before any API refetch occurs.
+ */
+function readSupportedAgent(rawAgent: unknown): SupportedAgent | null {
+  if (!isRecord(rawAgent)) return null;
+  const id = readRunnerId(rawAgent.id);
+  const name = readString(rawAgent.name);
+  const terminalBinary = readString(rawAgent.terminalBinary).trim();
+  const setupSurfaces = readStringArray(rawAgent.setupSurfaces).filter(
     (surface) => surface.trim().length > 0,
   );
   const promptInvocationStyle = readPromptInvocationStyle(
-    value.promptInvocationStyle,
+    rawAgent.promptInvocationStyle,
   );
-  const skillSource = readSkillSource(value.skillSource);
-  const supportsPostTurnHook = value.supportsPostTurnHook;
+  const skillSource = readSkillSource(rawAgent.skillSource);
+  const supportsPostTurnHook = rawAgent.supportsPostTurnHook;
   if (
     !id ||
     !name ||
@@ -738,20 +762,25 @@ function readInjectedSupportedAgents(): SupportedAgent[] {
     : [];
 }
 
-/** Read one preset definition from dashboard shell injection. */
-function readPreset(value: unknown): Preset | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const name = readString(value.name);
-  const desc = readString(value.desc);
-  const prompt = readString(value.prompt);
-  const cat = readString(value.cat);
+/**
+ * Read one preset definition from dashboard shell injection.
+ *
+ * This stays field-by-field because preset safety flags gate UI affordances and
+ * fallback copy independently; dropping one flag changes launch behavior.
+ */
+function readPreset(rawPreset: unknown): Preset | null {
+  if (!isRecord(rawPreset)) return null;
+  const id = readString(rawPreset.id);
+  const name = readString(rawPreset.name);
+  const desc = readString(rawPreset.desc);
+  const prompt = readString(rawPreset.prompt);
+  const cat = readString(rawPreset.cat);
   if (!id || !name || !desc || !prompt || !cat) return null;
   const costTier =
-    value.costTier === "low" ||
-    value.costTier === "medium" ||
-    value.costTier === "high"
-      ? value.costTier
+    rawPreset.costTier === "low" ||
+    rawPreset.costTier === "medium" ||
+    rawPreset.costTier === "high"
+      ? rawPreset.costTier
       : undefined;
   return {
     id,
@@ -759,54 +788,62 @@ function readPreset(value: unknown): Preset | null {
     desc,
     prompt,
     cat,
-    route: readString(value.route) || undefined,
-    source: readString(value.source) || undefined,
+    route: readString(rawPreset.route) || undefined,
+    source: readString(rawPreset.source) || undefined,
     globalSafe:
-      typeof value.globalSafe === "boolean" ? value.globalSafe : undefined,
+      typeof rawPreset.globalSafe === "boolean"
+        ? rawPreset.globalSafe
+        : undefined,
     internalOnly:
-      typeof value.internalOnly === "boolean" ? value.internalOnly : undefined,
+      typeof rawPreset.internalOnly === "boolean"
+        ? rawPreset.internalOnly
+        : undefined,
     qualityMode:
-      typeof value.qualityMode === "boolean" ? value.qualityMode : undefined,
+      typeof rawPreset.qualityMode === "boolean"
+        ? rawPreset.qualityMode
+        : undefined,
     requiresGh:
-      typeof value.requiresGh === "boolean" ? value.requiresGh : undefined,
+      typeof rawPreset.requiresGh === "boolean"
+        ? rawPreset.requiresGh
+        : undefined,
     requiresPrOrIssue:
-      typeof value.requiresPrOrIssue === "boolean"
-        ? value.requiresPrOrIssue
+      typeof rawPreset.requiresPrOrIssue === "boolean"
+        ? rawPreset.requiresPrOrIssue
         : undefined,
     requiresLocalDiff:
-      typeof value.requiresLocalDiff === "boolean"
-        ? value.requiresLocalDiff
+      typeof rawPreset.requiresLocalDiff === "boolean"
+        ? rawPreset.requiresLocalDiff
         : undefined,
     requiresUiApp:
-      typeof value.requiresUiApp === "boolean"
-        ? value.requiresUiApp
+      typeof rawPreset.requiresUiApp === "boolean"
+        ? rawPreset.requiresUiApp
         : undefined,
     requiresDependencyFiles:
-      typeof value.requiresDependencyFiles === "boolean"
-        ? value.requiresDependencyFiles
+      typeof rawPreset.requiresDependencyFiles === "boolean"
+        ? rawPreset.requiresDependencyFiles
         : undefined,
     requiresGoatFlowInstall:
-      typeof value.requiresGoatFlowInstall === "boolean"
-        ? value.requiresGoatFlowInstall
+      typeof rawPreset.requiresGoatFlowInstall === "boolean"
+        ? rawPreset.requiresGoatFlowInstall
         : undefined,
     mayCheckoutBranch:
-      typeof value.mayCheckoutBranch === "boolean"
-        ? value.mayCheckoutBranch
+      typeof rawPreset.mayCheckoutBranch === "boolean"
+        ? rawPreset.mayCheckoutBranch
         : undefined,
     requiresCleanWorktree:
-      typeof value.requiresCleanWorktree === "boolean"
-        ? value.requiresCleanWorktree
+      typeof rawPreset.requiresCleanWorktree === "boolean"
+        ? rawPreset.requiresCleanWorktree
         : undefined,
     mayWriteFiles:
-      typeof value.mayWriteFiles === "boolean"
-        ? value.mayWriteFiles
+      typeof rawPreset.mayWriteFiles === "boolean"
+        ? rawPreset.mayWriteFiles
         : undefined,
     artifactRequired:
-      typeof value.artifactRequired === "boolean"
-        ? value.artifactRequired
+      typeof rawPreset.artifactRequired === "boolean"
+        ? rawPreset.artifactRequired
         : undefined,
-    bestTargetSurfaces: readStringArray(value.bestTargetSurfaces),
-    fallbackPrompt: readString(value.fallbackPrompt) || undefined,
+    bestTargetSurfaces: readStringArray(rawPreset.bestTargetSurfaces),
+    fallbackPrompt: readString(rawPreset.fallbackPrompt) || undefined,
     costTier,
   };
 }
@@ -821,74 +858,84 @@ function readInjectedPresets(): Preset[] {
 }
 
 /** Read one installed-agent record from raw payload data. */
-function readAgentInfo(value: unknown): AgentInfo | null {
-  if (!isRecord(value)) return null;
-  const agent = readSupportedAgent(value);
-  if (!agent || typeof value.installed !== "boolean") return null;
+function readAgentInfo(rawAgent: unknown): AgentInfo | null {
+  if (!isRecord(rawAgent)) return null;
+  const agent = readSupportedAgent(rawAgent);
+  if (!agent || typeof rawAgent.installed !== "boolean") return null;
 
   return {
     ...agent,
-    installed: value.installed,
-    version: typeof value.version === "string" ? value.version : null,
+    installed: rawAgent.installed,
+    version: typeof rawAgent.version === "string" ? rawAgent.version : null,
   };
 }
 
 /** Read one directory entry from the project browser payload. */
-function readBrowseDir(value: unknown): BrowseDir | null {
-  if (!isRecord(value)) return null;
-  const name = readString(value.name);
-  const path = readString(value.path);
-  if (!name || !path || typeof value.isProject !== "boolean") return null;
+function readBrowseDir(rawEntry: unknown): BrowseDir | null {
+  if (!isRecord(rawEntry)) return null;
+  const name = readString(rawEntry.name);
+  const path = readString(rawEntry.path);
+  if (!name || !path || typeof rawEntry.isProject !== "boolean") return null;
 
-  return { name, path, isProject: value.isProject };
+  return { name, path, isProject: rawEntry.isProject };
 }
 
-/** Read one saved project entry from persisted state. */
-function readProjectEntry(value: unknown): ProjectEntry | null {
-  if (!isRecord(value)) return null;
-  const path = readString(value.path);
+/**
+ * Read one saved project entry from persisted state.
+ *
+ * This stays explicit because identity fields preserve alias grouping while
+ * keeping private remote URLs out of browser-local state.
+ */
+function readProjectEntry(rawProject: unknown): ProjectEntry | null {
+  if (!isRecord(rawProject)) return null;
+  const path = readString(rawProject.path);
   if (!path) return null;
-  const identity = readString(value.identity);
+  const identity = readString(rawProject.identity);
   const identitySource =
-    value.identitySource === "git-remote" ||
-    value.identitySource === "goat-marker" ||
-    value.identitySource === "path"
-      ? value.identitySource
+    rawProject.identitySource === "git-remote" ||
+    rawProject.identitySource === "goat-marker" ||
+    rawProject.identitySource === "path"
+      ? rawProject.identitySource
       : null;
 
   const entry: ProjectEntry = {
     path,
-    paths: readStringArray(value.paths),
-    state: readString(value.state),
-    action: readString(value.action),
-    details: readString(value.details),
+    paths: readStringArray(rawProject.paths),
+    state: readString(rawProject.state),
+    action: readString(rawProject.action),
+    details: readString(rawProject.details),
   };
   if (identity) entry.identity = identity;
   if (identitySource) entry.identitySource = identitySource;
-  const remoteUrlHash = readString(value.remoteUrlHash);
+  const remoteUrlHash = readString(rawProject.remoteUrlHash);
   if (remoteUrlHash) entry.remoteUrlHash = remoteUrlHash;
-  const markerId = readString(value.markerId);
+  const markerId = readString(rawProject.markerId);
   if (markerId) entry.markerId = markerId;
   return entry;
 }
 
-/** Read one backend terminal-session record from raw payload data. */
-function readServerSessionInfo(value: unknown): ServerSessionInfo | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const status = readSessionStatus(value.status);
-  const runner = readRunnerId(value.runner);
-  const createdAt = readString(value.createdAt);
-  const projectPath = readString(value.projectPath);
-  const cwd = readString(value.cwd);
-  const targetPath = readString(value.targetPath);
+/**
+ * Read one backend terminal-session record.
+ *
+ * This stays explicit because old session payloads may omit cwd/targetPath, and
+ * the dashboard must default them to projectPath without marking the session bad.
+ */
+function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
+  if (!isRecord(rawSession)) return null;
+  const id = readString(rawSession.id);
+  const status = readSessionStatus(rawSession.status);
+  const runner = readRunnerId(rawSession.runner);
+  const createdAt = readString(rawSession.createdAt);
+  const projectPath = readString(rawSession.projectPath);
+  const cwd = readString(rawSession.cwd);
+  const targetPath = readString(rawSession.targetPath);
   if (
     !id ||
     !status ||
     !runner ||
     !createdAt ||
     !projectPath ||
-    typeof value.lastInputAt !== "number"
+    typeof rawSession.lastInputAt !== "number"
   ) {
     return null;
   }
@@ -901,17 +948,19 @@ function readServerSessionInfo(value: unknown): ServerSessionInfo | null {
     cwd: cwd || projectPath,
     targetPath: targetPath || projectPath,
     runner,
-    lastInputAt: value.lastInputAt,
-    age: typeof value.age === "number" ? value.age : undefined,
+    lastInputAt: rawSession.lastInputAt,
+    age: typeof rawSession.age === "number" ? rawSession.age : undefined,
     idleDuration:
-      typeof value.idleDuration === "number" ? value.idleDuration : undefined,
-    projectName: readString(value.projectName) || undefined,
+      typeof rawSession.idleDuration === "number"
+        ? rawSession.idleDuration
+        : undefined,
+    projectName: readString(rawSession.projectName) || undefined,
   };
 }
 
-/** Read a quality-command response from raw payload data. */
-function readQualityResult(value: unknown): QualityResult {
-  const payload = readRecord(value, "Quality response");
+/** Read a quality-command response; throws when route identity or status fields drift. */
+function readQualityResult(rawResult: unknown): QualityResult {
+  const payload = readRecord(rawResult, "Quality response");
   const agent = readRunnerId(payload.agent);
   const auditStatus = readAuditStatus(payload.auditStatus);
   const auditCacheStatus = readString(payload.auditCacheStatus);
@@ -935,22 +984,27 @@ function readQualityResult(value: unknown): QualityResult {
   };
 }
 
-/** Read one quality-history table row from raw payload data. */
-function readQualityHistoryRow(value: unknown): QualityHistoryRow | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const date = readString(value.date);
-  const agent = readRunnerId(value.agent);
+/**
+ * Read one quality-history table row.
+ *
+ * This stays explicit because the dashboard compares setup/system totals and
+ * nullable setup deltas separately when rendering trend chips.
+ */
+function readQualityHistoryRow(rawRow: unknown): QualityHistoryRow | null {
+  if (!isRecord(rawRow)) return null;
+  const id = readString(rawRow.id);
+  const date = readString(rawRow.date);
+  const agent = readRunnerId(rawRow.agent);
   if (
     !id ||
     !date ||
     !agent ||
-    typeof value.setupTotal !== "number" ||
-    typeof value.systemTotal !== "number" ||
-    (value.setupDelta !== null && typeof value.setupDelta !== "number") ||
-    typeof value.blockerCount !== "number" ||
-    typeof value.majorCount !== "number" ||
-    typeof value.minorCount !== "number"
+    typeof rawRow.setupTotal !== "number" ||
+    typeof rawRow.systemTotal !== "number" ||
+    (rawRow.setupDelta !== null && typeof rawRow.setupDelta !== "number") ||
+    typeof rawRow.blockerCount !== "number" ||
+    typeof rawRow.majorCount !== "number" ||
+    typeof rawRow.minorCount !== "number"
   ) {
     return null;
   }
@@ -958,32 +1012,39 @@ function readQualityHistoryRow(value: unknown): QualityHistoryRow | null {
     id,
     date,
     agent,
-    setupTotal: value.setupTotal,
-    systemTotal: value.systemTotal,
-    setupDelta: value.setupDelta,
-    blockerCount: value.blockerCount,
-    majorCount: value.majorCount,
-    minorCount: value.minorCount,
+    setupTotal: rawRow.setupTotal,
+    systemTotal: rawRow.systemTotal,
+    setupDelta: rawRow.setupDelta,
+    blockerCount: rawRow.blockerCount,
+    majorCount: rawRow.majorCount,
+    minorCount: rawRow.minorCount,
   };
 }
 
-/** Read the latest quality-history summary from raw payload data. */
-function readQualityHistoryLatest(value: unknown): QualityHistoryLatest | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const date = readString(value.date);
-  const time = readString(value.time);
-  const agent = readRunnerId(value.agent);
+/**
+ * Read the latest quality-history summary.
+ *
+ * This stays explicit because the latest card omits setupDelta but still needs
+ * the same totals and severity counters as row history.
+ */
+function readQualityHistoryLatest(
+  rawLatest: unknown,
+): QualityHistoryLatest | null {
+  if (!isRecord(rawLatest)) return null;
+  const id = readString(rawLatest.id);
+  const date = readString(rawLatest.date);
+  const time = readString(rawLatest.time);
+  const agent = readRunnerId(rawLatest.agent);
   if (
     !id ||
     !date ||
     !time ||
     !agent ||
-    typeof value.setupTotal !== "number" ||
-    typeof value.systemTotal !== "number" ||
-    typeof value.blockerCount !== "number" ||
-    typeof value.majorCount !== "number" ||
-    typeof value.minorCount !== "number"
+    typeof rawLatest.setupTotal !== "number" ||
+    typeof rawLatest.systemTotal !== "number" ||
+    typeof rawLatest.blockerCount !== "number" ||
+    typeof rawLatest.majorCount !== "number" ||
+    typeof rawLatest.minorCount !== "number"
   ) {
     return null;
   }
@@ -992,15 +1053,15 @@ function readQualityHistoryLatest(value: unknown): QualityHistoryLatest | null {
     date,
     time,
     agent,
-    setupTotal: value.setupTotal,
-    systemTotal: value.systemTotal,
-    blockerCount: value.blockerCount,
-    majorCount: value.majorCount,
-    minorCount: value.minorCount,
+    setupTotal: rawLatest.setupTotal,
+    systemTotal: rawLatest.systemTotal,
+    blockerCount: rawLatest.blockerCount,
+    majorCount: rawLatest.majorCount,
+    minorCount: rawLatest.minorCount,
   };
 }
 
-/** Read a persisted string array from localStorage. */
+/** Read a persisted string array from localStorage; swallows corrupt JSON. */
 function readStoredStringArray(key: string): string[] {
   try {
     return readStringArray(JSON.parse(localStorage.getItem(key) || "[]"));
@@ -1009,7 +1070,7 @@ function readStoredStringArray(key: string): string[] {
   }
 }
 
-/** Read a string map from localStorage, returning an empty map on corrupt data. */
+/** Read a persisted string map from localStorage; swallows corrupt JSON. */
 function readStoredStringMap(key: string): Record<string, string> {
   try {
     return readStringMap(JSON.parse(localStorage.getItem(key) || "{}"));

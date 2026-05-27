@@ -28,6 +28,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   "known-gaps",
   "skill-overrides",
   "harness",
+  "hooks",
   "terminal",
   "quality",
 ]);
@@ -62,6 +63,7 @@ const CONFIG_DEFAULTS: GoatFlowConfig = {
   skillOverrides: {},
   terminal: { idleTimeoutMinutes: 480 },
   harness: { acknowledge: [] },
+  hooks: {},
 };
 
 /** Clone the default config object so callers can mutate it safely. */
@@ -95,6 +97,7 @@ function cloneDefaults(): GoatFlowConfig {
     skillOverrides: { ...CONFIG_DEFAULTS.skillOverrides },
     terminal: { ...CONFIG_DEFAULTS.terminal },
     harness: { acknowledge: [...CONFIG_DEFAULTS.harness.acknowledge] },
+    hooks: { ...CONFIG_DEFAULTS.hooks },
   };
 }
 
@@ -253,9 +256,22 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   }
 
   mergeHarness(raw.harness, merged);
+  mergeHooks(raw.hooks, merged);
   mergeQuality(raw.quality, merged);
 
   return merged;
+}
+
+/** Apply hook toggle state from the raw config. Unknown hook ids are handled by the registry. */
+function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
+  if (!isRecord(value)) return;
+  const hooks: GoatFlowConfig["hooks"] = {};
+  for (const [hookId, hookValue] of Object.entries(value)) {
+    if (!isRecord(hookValue)) continue;
+    if (typeof hookValue.enabled !== "boolean") continue;
+    hooks[hookId] = { enabled: hookValue.enabled };
+  }
+  merged.hooks = hooks;
 }
 
 /** Pass through the raw quality config block; full validation lives in quality-config.ts. */
@@ -508,6 +524,29 @@ function validateHarnessField(
   });
 }
 
+/** Validate the hook toggle block when present. */
+function validateHooksField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, "hooks", errors, (value) => {
+    for (const [hookId, hookValue] of Object.entries(value)) {
+      if (!/^[a-z0-9][a-z0-9-]*$/u.test(hookId)) {
+        pushError(errors, `hooks.${hookId}`, "hook id must be kebab-case");
+        continue;
+      }
+      if (!isRecord(hookValue)) {
+        pushError(errors, `hooks.${hookId}`, "must be an object");
+        continue;
+      }
+      if (typeof hookValue.enabled !== "boolean") {
+        pushError(errors, `hooks.${hookId}.enabled`, "must be a boolean");
+      }
+    }
+  });
+}
+
 /** Validate the telemetry field when present. */
 function validateTelemetryField(
   raw: RawConfig,
@@ -622,6 +661,7 @@ const CONFIG_VALIDATORS: ConfigValidator[] = [
   validateKnownGapsField,
   validateSkillOverridesField,
   validateHarnessField,
+  validateHooksField,
   validateTerminalField,
 ];
 

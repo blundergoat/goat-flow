@@ -1,6 +1,6 @@
 /**
  * Candidacy check: given a draft markdown or a description, recommend what
- * kind of artifact the author should create — skill, reference, instruction-
+ * kind of artifact the author should create - skill, reference, instruction-
  * file rule, learning-loop entry, CLI command, or "don't create."
  *
  * Runs BEFORE the structural quality rubric. The rubric answers "is this

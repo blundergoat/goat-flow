@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # goat-security reference: supply chain, CI/CD, and agent surfaces
 
@@ -98,13 +98,13 @@ When the gate passes, surface a banner that names the mutative-effect risk:
 ⚠  Active testing performs REAL ATTACKS with mutative effects.
 ├─ Targets: systems the user OWNs or has WRITTEN AUTHORIZATION to test
 ├─ Never: production environments, third-party services without authorization
-├─ Output: requires human review — tool output may include hallucinated findings
+├─ Output: requires human review - tool output may include hallucinated findings
 └─ Liability: the operator complies with all applicable laws
 ```
 
 Stop conditions (any of these): authorization is missing or ambiguous; the target resolves to a production hostname/IP; the tool needs credentials beyond the user's stated test account; the runtime/cost estimate breaches the user's budget; the tool requires Docker, system packages, or network egress that the user has not approved. On stop, name what was missing and offer one alternative (passive review, code-only audit, or an ask for written authorization).
 
-This gate sits above the existing review-mode work — `goat-security` defaults to passive review (`Quick Scan Path` / `Full Assessment Path`); active testing is an opt-in escalation that requires this gate to fire first.
+This gate sits above the existing review-mode work - `goat-security` defaults to passive review (`Quick Scan Path` / `Full Assessment Path`); active testing is an opt-in escalation that requires this gate to fire first.
 
 ## Review shorthand
 

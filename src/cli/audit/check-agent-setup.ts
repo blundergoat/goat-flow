@@ -1,9 +1,9 @@
 /**
  * Agent Setup checks for `goat-flow audit --agent <id>`.
- * 4 checks that validate per-agent installation: instruction, skills, settings, deny hook.
+ * 4 checks that validate per-agent installation: instruction, skills, settings, guardrail hooks.
  * All checks require --agent and skip in aggregate mode (except orphaned-artifacts detection).
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
@@ -45,15 +45,18 @@ function uniquePaths(paths: string[]): string[] {
 
 /** Returns true if goat-flow-specific artifacts exist for an agent.
  *  A bare agent directory (e.g. `.claude/` from Claude Code) with only a
- *  settings file does NOT count — we require goat-flow skill directories
- *  or the deny hook script to distinguish goat-flow installs from the
+ *  settings file does NOT count - we require goat-flow skill directories
+ *  or the guardrail hook scripts to distinguish goat-flow installs from the
  *  agent's own config. */
 function agentArtifactsExist(
   fs: ReadonlyFS,
   profile: { hooks_dir?: string; settings?: string; skills_dir: string },
 ): boolean {
   const hooksDir = profile.hooks_dir?.replace(/\/$/, "");
-  if (hooksDir !== undefined && fs.exists(`${hooksDir}/deny-dangerous.sh`)) {
+  if (
+    hooksDir !== undefined &&
+    fs.exists(`${hooksDir}/guard-repository-writes.sh`)
+  ) {
     return true;
   }
   const skillsDir = profile.skills_dir.replace(/\/$/, "");
@@ -266,6 +269,51 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
   };
 }
 
+function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
+  const references = ctx.structure.skills.references ?? {};
+  const referenceFiles = Array.isArray(references[skill])
+    ? references[skill].filter(
+        (file): file is string =>
+          typeof file === "string" && file.startsWith("references/"),
+      )
+    : [];
+  return new Set(referenceFiles);
+}
+
+function checkUnexpectedSkillReferences(
+  ctx: AuditContext,
+): AuditFailure | null {
+  const unexpected: string[] = [];
+
+  for (const af of ctx.agents) {
+    for (const skill of ctx.structure.skills.canonical) {
+      const skillRoot = `${af.agent.skillsDir}/${skill}`;
+      const referencesDir = `${skillRoot}/references`;
+      if (!ctx.fs.exists(referencesDir)) continue;
+
+      const expected = expectedReferenceFiles(ctx, skill);
+      for (const path of ctx.fs.glob(`${referencesDir}/**/*.md`)) {
+        const prefix = `${skillRoot}/`;
+        const relativeFile = path.startsWith(prefix)
+          ? path.slice(prefix.length)
+          : path;
+        if (!expected.has(relativeFile)) {
+          unexpected.push(`${af.agent.id}:${skill}:${relativeFile}`);
+        }
+      }
+    }
+  }
+
+  if (unexpected.length === 0) return null;
+  return {
+    check: "Agent skills",
+    message: `Unexpected stale skill reference files found: ${unexpected.join(", ")}`,
+    evidence: unexpected[0],
+    howToFix:
+      "Run `goat-flow install . --agent <id>` for the affected agent. The installer prunes manifest-unlisted skill reference files during upgrades.",
+  };
+}
+
 /** Check whether installed skills declare the current GOAT Flow version. */
 function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
   const noVersion: string[] = [];
@@ -343,6 +391,7 @@ const agentSkills: BuildCheck = {
     if (blocked) return blocked;
     return (
       checkCanonicalSkills(ctx) ??
+      checkUnexpectedSkillReferences(ctx) ??
       checkSkillVersions(ctx) ??
       checkDeprecatedSkills(ctx)
     );
@@ -408,6 +457,155 @@ function isCodexExactWorkspaceRootPath(pattern: string): boolean {
   return pattern !== "." && !pattern.includes("*") && !pattern.endsWith("/**");
 }
 
+function isCodexInvalidNoneGlob(pattern: string): boolean {
+  if (!pattern.includes("*")) return false;
+  return !pattern.endsWith("/**");
+}
+
+function collectInvalidCodexInlineGlobs(
+  rawValue: string,
+  invalidGlobs: string[],
+): void {
+  for (const [pattern, mode] of parseTomlInlineStringTableForKey(rawValue)) {
+    if (mode === "none" && isCodexInvalidNoneGlob(pattern)) {
+      invalidGlobs.push(pattern);
+    }
+  }
+}
+
+function codexFilesystemPatternFromKey(
+  key: string,
+  expandedRootPrefix: string,
+  legacyExpandedRootPrefix: string,
+): string | null {
+  if (key.startsWith(expandedRootPrefix)) {
+    return key.slice(expandedRootPrefix.length);
+  }
+  if (key.startsWith(legacyExpandedRootPrefix)) {
+    return key.slice(legacyExpandedRootPrefix.length);
+  }
+  return null;
+}
+
+function collectCodexFilesystemEntryFindings(
+  key: string,
+  value: unknown,
+  filesystemPrefix: string,
+  legacyAnchor: string,
+  invalidGlobs: string[],
+  legacyAnchors: string[],
+): void {
+  if (!key.startsWith(filesystemPrefix)) return;
+  if (key === legacyAnchor || key.startsWith(`${legacyAnchor}.`)) {
+    legacyAnchors.push(":project_roots");
+  }
+  if (typeof value !== "string") return;
+
+  const isInlineRoot =
+    key === `${filesystemPrefix}:workspace_roots` || key === legacyAnchor;
+  if (isInlineRoot) {
+    collectInvalidCodexInlineGlobs(value, invalidGlobs);
+    return;
+  }
+
+  const pattern = codexFilesystemPatternFromKey(
+    key,
+    `${filesystemPrefix}:workspace_roots.`,
+    `${legacyAnchor}.`,
+  );
+  if (pattern === null || value !== "none") return;
+  if (isCodexInvalidNoneGlob(pattern)) {
+    invalidGlobs.push(pattern);
+  }
+}
+
+function collectCodexFilesystemFindings(
+  parsed: unknown,
+  profileName: string,
+): { invalidGlobs: string[]; legacyAnchors: string[] } {
+  const invalidGlobs: string[] = [];
+  const legacyAnchors: string[] = [];
+  if (!parsed || typeof parsed !== "object") {
+    return { invalidGlobs, legacyAnchors };
+  }
+  const filesystemPrefix = `permissions.${profileName}.filesystem.`;
+  const legacyAnchor = `${filesystemPrefix}:project_roots`;
+  for (const [key, value] of Object.entries(
+    parsed as Record<string, unknown>,
+  )) {
+    collectCodexFilesystemEntryFindings(
+      key,
+      value,
+      filesystemPrefix,
+      legacyAnchor,
+      invalidGlobs,
+      legacyAnchors,
+    );
+  }
+  return { invalidGlobs, legacyAnchors };
+}
+
+function parseTomlInlineStringTableForKey(
+  rawValue: string,
+): Array<[string, string]> {
+  const value = rawValue.trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return [];
+  const entries: Array<[string, string]> = [];
+  const entryPattern = /"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/gu;
+  for (const match of value.matchAll(entryPattern)) {
+    const [, key, mode] = match;
+    if (key && mode) entries.push([key, mode]);
+  }
+  return entries;
+}
+
+function formatCodexWorkspaceRootInvalidGlobMessage(
+  invalidGlobs: string[],
+  legacyAnchors: string[],
+): string {
+  const messageParts: string[] = [];
+  if (invalidGlobs.length > 0) {
+    messageParts.push(
+      `Codex permission profile uses filename-glob patterns with "none" access that Codex 0.131+ rejects: ${uniquePaths(invalidGlobs).join(", ")}`,
+    );
+  }
+  if (legacyAnchors.length > 0) {
+    messageParts.push(
+      `Codex permission profile uses the legacy ":project_roots" anchor (Codex 0.131+ uses ":workspace_roots")`,
+    );
+  }
+  return `${messageParts.join("; ")}. Codex requires exact paths or trailing "/**" subtree patterns for "none" access.`;
+}
+
+function checkCodexWorkspaceRootInvalidGlobs(
+  ctx: AuditContext,
+): AuditFailure | null {
+  for (const af of ctx.agents) {
+    if (af.agent.id !== "codex") continue;
+    const settings = settingsObject(af.settings.parsed);
+    const defaultPermissions = settings?.default_permissions;
+    if (typeof defaultPermissions !== "string" || defaultPermissions === "") {
+      continue;
+    }
+    const { invalidGlobs, legacyAnchors } = collectCodexFilesystemFindings(
+      af.settings.parsed,
+      defaultPermissions,
+    );
+    if (invalidGlobs.length === 0 && legacyAnchors.length === 0) continue;
+    return {
+      check: "Agent settings",
+      message: formatCodexWorkspaceRootInvalidGlobMessage(
+        invalidGlobs,
+        legacyAnchors,
+      ),
+      evidence: af.agent.settingsFile ?? ".codex/config.toml",
+      howToFix:
+        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .codex/hooks/guard-secret-paths.sh.",
+    };
+  }
+  return null;
+}
+
 function checkCodexWorkspaceRootExactPaths(
   ctx: AuditContext,
 ): AuditFailure | null {
@@ -466,6 +664,7 @@ const agentSettings: BuildCheck = {
     return (
       checkCodexDeprecatedHooksFlag(ctx) ??
       checkCodexHooksEnabled(ctx) ??
+      checkCodexWorkspaceRootInvalidGlobs(ctx) ??
       checkCodexWorkspaceRootExactPaths(ctx)
     );
   },
@@ -475,6 +674,11 @@ const agentSettings: BuildCheck = {
 
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
+    // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented
+    // deny mechanism upstream. The manifest records this as
+    // `denyMechanism: null`; skip the check rather than producing a permanent
+    // audit failure that downstream projects cannot fix.
+    if (af.agent.denyMechanism === null) continue;
     if (!af.hooks.denyExists && !af.hooks.denyIsConfigBased) {
       return {
         check: "Agent deny mechanism",
@@ -525,6 +729,8 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
 /** Check whether each agent has deny patterns registered somewhere. */
 function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
+    // Skip agents with no documented project-local deny mechanism.
+    if (af.agent.denyMechanism === null) continue;
     if (!af.settings.hasDenyPatterns && !af.hooks.denyExists) {
       return {
         check: "Agent deny mechanism",
@@ -547,10 +753,16 @@ function evidencePath(relPath: string): string {
 
 /** Compare installed deny hook content against the canonical template. */
 function checkHookVersion(ctx: AuditContext): AuditFailure | null {
-  const templateFiles = ["deny-dangerous.sh", "deny-dangerous.self-test.sh"];
+  const templateFiles = [
+    "guard-common.sh",
+    "guard-destructive-shell.sh",
+    "guard-secret-paths.sh",
+    "guard-repository-writes.sh",
+    "guardrails-self-test.sh",
+  ];
   for (const af of ctx.agents) {
     if (!af.agent.hooksDir) continue;
-    const denyRelPath = join(af.agent.hooksDir, "deny-dangerous.sh");
+    const denyRelPath = join(af.agent.hooksDir, "guard-repository-writes.sh");
     if (ctx.fs.readFile(denyRelPath) === null) continue;
 
     for (const templateFile of templateFiles) {
@@ -589,7 +801,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
 function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   for (const af of ctx.agents) {
     if (!af.agent.hooksDir) continue;
-    const denyRelPath = join(af.agent.hooksDir, "deny-dangerous.sh");
+    const denyRelPath = join(af.agent.hooksDir, "guardrails-self-test.sh");
     const content = ctx.fs.readFile(denyRelPath);
     // Config-based deny rules satisfy the deny-mechanism requirement, but only an
     // on-disk shell hook can run the registered self-test.
@@ -603,18 +815,277 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     } catch {
       return {
         check: "Agent deny mechanism",
-        message: `deny-dangerous.sh --self-test=smoke failed for ${af.agent.id}`,
+        message: `guardrails-self-test.sh --self-test=smoke failed for ${af.agent.id}`,
         evidence: evidencePath(denyRelPath),
         howToFix:
-          "Run `bash <hooks-dir>/deny-dangerous.sh --self-test=smoke` to see which cases fail.",
+          "Run `bash <hooks-dir>/guardrails-self-test.sh --self-test=smoke` to see which cases fail.",
       };
     }
   }
   return null;
 }
 
+function runtimeSmokePayload(agentId: string): {
+  input: string;
+  expectedStatus: number;
+  expectedStream: "stdout" | "stderr";
+  expectedPattern: RegExp;
+} {
+  if (agentId === "copilot") {
+    return {
+      input:
+        '{"toolName":"bash","toolArgs":{"command":"git push origin main"}}',
+      expectedStatus: 0,
+      expectedStream: "stdout",
+      expectedPattern: /"permissionDecision"\s*:\s*"deny"/,
+    };
+  }
+  if (agentId === "antigravity") {
+    return {
+      input:
+        '{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"git push origin main"}}}',
+      expectedStatus: 0,
+      expectedStream: "stdout",
+      expectedPattern: /"decision"\s*:\s*"deny"/,
+    };
+  }
+  return {
+    input:
+      '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}',
+    expectedStatus: 2,
+    expectedStream: "stderr",
+    expectedPattern: /BLOCKED:/,
+  };
+}
+
+function runtimeSmokePayloadForScript(
+  agentId: string,
+  scriptFile: string,
+): ReturnType<typeof runtimeSmokePayload> {
+  const command =
+    scriptFile === "guard-destructive-shell.sh"
+      ? "rm -rf /"
+      : scriptFile === "guard-secret-paths.sh"
+        ? "cat .env"
+        : "git push origin main";
+  const base = runtimeSmokePayload(agentId);
+  if (agentId === "copilot") {
+    return {
+      ...base,
+      input: JSON.stringify({
+        toolName: "bash",
+        toolArgs: { command },
+      }),
+    };
+  }
+  if (agentId === "antigravity") {
+    return {
+      ...base,
+      input: JSON.stringify({
+        hookEventName: "PreToolUse",
+        toolCall: { name: "run_command", args: { CommandLine: command } },
+      }),
+    };
+  }
+  return {
+    ...base,
+    input: JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command },
+    }),
+  };
+}
+
+function registeredDenyRelPath(
+  af: AuditContext["agents"][number],
+): string | null {
+  if (af.hooks.denyRegisteredPath) return af.hooks.denyRegisteredPath;
+  if (!af.agent.hooksDir) return null;
+  return join(af.agent.hooksDir, "guard-repository-writes.sh");
+}
+
+const CONFIGURED_SMOKE_SCRIPTS = [
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+] as const;
+
+interface ConfiguredHookCommand {
+  command: string;
+  scriptFile: string;
+  configPath: string;
+}
+
+function pushConfiguredCommand(
+  commands: ConfiguredHookCommand[],
+  command: unknown,
+  configPath: string,
+): void {
+  if (typeof command !== "string" || command.length === 0) return;
+  const scriptFile = CONFIGURED_SMOKE_SCRIPTS.find((script) =>
+    command.includes(script),
+  );
+  if (!scriptFile) return;
+  commands.push({ command, scriptFile, configPath });
+}
+
+function collectNestedCommandValues(
+  value: unknown,
+  configPath: string,
+  commands: ConfiguredHookCommand[],
+): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectNestedCommandValues(entry, configPath, commands);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const obj = value as Record<string, unknown>;
+  pushConfiguredCommand(commands, obj.command, configPath);
+  pushConfiguredCommand(commands, obj.bash, configPath);
+  for (const child of Object.values(obj)) {
+    if (typeof child === "object") {
+      collectNestedCommandValues(child, configPath, commands);
+    }
+  }
+}
+
+function configuredGuardCommands(
+  ctx: AuditContext,
+  af: AuditContext["agents"][number],
+): ConfiguredHookCommand[] {
+  const configPath = af.agent.hookConfigFile ?? af.agent.settingsFile;
+  if (!configPath) return [];
+  const rawConfig = ctx.fs.readFile(configPath);
+  if (rawConfig === null) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawConfig);
+  } catch {
+    return [];
+  }
+  const commands: ConfiguredHookCommand[] = [];
+  collectNestedCommandValues(parsed, configPath, commands);
+  const seen = new Set<string>();
+  return commands.filter((command) => {
+    const key = `${command.configPath}\0${command.command}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function runConfiguredCommand(
+  ctx: AuditContext,
+  command: string,
+  input: string,
+): ReturnType<typeof spawnSync> {
+  if (!/\s/u.test(command) && !command.includes("$(")) {
+    return spawnSync(command, [], {
+      cwd: ctx.projectPath,
+      encoding: "utf8",
+      input,
+      timeout: 5000,
+    });
+  }
+  return spawnSync("bash", ["-lc", command], {
+    cwd: ctx.projectPath,
+    encoding: "utf8",
+    input,
+    timeout: 5000,
+  });
+}
+
+function runConfiguredHookCommandSmoke(
+  ctx: AuditContext,
+  af: AuditContext["agents"][number],
+  configured: ConfiguredHookCommand,
+): { ok: boolean; message: string; evidence: string } {
+  const smoke = runtimeSmokePayloadForScript(
+    af.agent.id,
+    configured.scriptFile,
+  );
+  const result = runConfiguredCommand(ctx, configured.command, smoke.input);
+  const status = result.status ?? (result.error ? -1 : 0);
+  if (status === 126 || status === 127) {
+    return {
+      ok: false,
+      message: `${af.agent.id} configured hook command exited ${status}: ${configured.command}`,
+      evidence: configured.configPath,
+    };
+  }
+  const stream = String(
+    smoke.expectedStream === "stdout" ? result.stdout : result.stderr,
+  );
+  if (status !== smoke.expectedStatus || !smoke.expectedPattern.test(stream)) {
+    return {
+      ok: false,
+      message: `${af.agent.id} configured hook command did not deny ${configured.scriptFile}: ${configured.command}`,
+      evidence: configured.configPath,
+    };
+  }
+  return { ok: true, message: "", evidence: configured.configPath };
+}
+
+function runDirectHookRuntimeSmoke(
+  ctx: AuditContext,
+  af: AuditContext["agents"][number],
+  denyRelPath: string,
+): boolean {
+  const smoke = runtimeSmokePayload(af.agent.id);
+  const result = spawnSync("bash", [join(ctx.projectPath, denyRelPath)], {
+    cwd: ctx.projectPath,
+    encoding: "utf8",
+    input: smoke.input,
+    timeout: 5000,
+  });
+
+  const status = result.status ?? (result.error ? -1 : 0);
+  const stream =
+    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
+  return status === smoke.expectedStatus && smoke.expectedPattern.test(stream);
+}
+
+/** Run a runtime-shaped blocked payload through the installed deny hook. */
+function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
+  for (const af of ctx.agents) {
+    const configuredCommands = configuredGuardCommands(ctx, af);
+    if (configuredCommands.length > 0) {
+      for (const configured of configuredCommands) {
+        const result = runConfiguredHookCommandSmoke(ctx, af, configured);
+        if (result.ok) continue;
+        return {
+          check: "Agent deny mechanism",
+          message: result.message,
+          evidence: evidencePath(result.evidence),
+          howToFix:
+            "Run the exact hook command string from the agent config with a runtime-shaped payload and confirm it reaches the guard script without exit 126/127.",
+        };
+      }
+      continue;
+    }
+
+    const denyRelPath = registeredDenyRelPath(af);
+    if (denyRelPath === null) continue;
+    const content = ctx.fs.readFile(denyRelPath);
+    if (content === null) continue;
+
+    if (runDirectHookRuntimeSmoke(ctx, af, denyRelPath)) continue;
+
+    return {
+      check: "Agent deny mechanism",
+      message: `registered deny hook runtime smoke failed for ${af.agent.id}`,
+      evidence: evidencePath(denyRelPath),
+      howToFix:
+        "Run the registered deny hook with a runtime-shaped Bash payload and confirm it denies `git push origin main`.",
+    };
+  }
+  return null;
+}
+
 const agentDenyMechanism: BuildCheck = {
-  id: "agent-deny-dangerous",
+  id: "agent-guardrails",
   name: "Agent deny mechanism",
   scope: "agent",
   provenance: incidentProvenance([
@@ -644,7 +1115,9 @@ const agentDenyMechanism: BuildCheck = {
       return staticFailure;
     }
 
-    return staticFailure ?? checkHookSelfTest(ctx);
+    return (
+      staticFailure ?? checkHookSelfTest(ctx) ?? checkHookRuntimeSmoke(ctx)
+    );
   },
 };
 

@@ -16,7 +16,12 @@
  *   - Standalone playbooks (template → installed in .goat-flow/skill-playbooks/):
  *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
  *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
+ *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-playbooks/code-comments.md
+ *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-playbooks/gruff-code-quality.md
+ *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-playbooks/observability.md
+ *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-playbooks/changelog.md
  *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
+ *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-playbooks/release-notes.md
  *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-playbooks/skill-quality-testing.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
  *     name is not in SKILL_NAMES. Names that appear in manifest.stale_names
@@ -40,27 +45,43 @@ import {
   getSkillFiles,
   loadManifest,
 } from "../manifest/manifest.js";
+import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
+import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding, DriftReport } from "./types.js";
 
+const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
+
 /** Remove nullish values from nested data before comparing manifests. */
-function stripNullish(value: unknown): unknown {
-  if (value === null || value === undefined) return undefined;
-  if (Array.isArray(value)) {
-    return value.map(stripNullish).filter((v) => v !== undefined);
+function stripNullish(frontmatterValue: unknown): unknown {
+  if (frontmatterValue === null || frontmatterValue === undefined) {
+    return undefined;
   }
-  if (typeof value === "object") {
+  if (Array.isArray(frontmatterValue)) {
+    return frontmatterValue.map(stripNullish).filter((v) => v !== undefined);
+  }
+  if (typeof frontmatterValue === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(
+      frontmatterValue as Record<string, unknown>,
+    )) {
       const cleaned = stripNullish(v);
       if (cleaned !== undefined) out[k] = cleaned;
     }
     return out;
   }
-  return value;
+  return frontmatterValue;
 }
 
-/** Parse YAML frontmatter and body text from a markdown file. */
+/**
+ * Parse YAML frontmatter and body text from a markdown file.
+ *
+ * The parser swallows malformed YAML into a sentinel object and never throws so
+ * drift checks can report content mismatch without aborting the whole audit.
+ *
+ * @param raw - Full markdown file contents, including optional YAML frontmatter.
+ * @returns Parsed frontmatter plus body text after the closing marker.
+ */
 export function parseMarkdownFrontmatter(raw: string): {
   frontmatter: unknown;
   body: string;
@@ -84,17 +105,44 @@ function normalizeBody(body: string): string {
   return body.replace(/^\n+/, "").trimEnd() + "\n";
 }
 
-/** True if two skill-markdown strings are semantically equivalent. */
+/**
+ * Compare skill markdown using goat-flow's drift semantics.
+ *
+ * Installed skill copies can reorder YAML keys or trim trailing whitespace
+ * during setup; those edits are not functional drift, but body or frontmatter
+ * value changes still are.
+ *
+ * @param expected - Template markdown content from `workflow/skills`.
+ * @param existing - Installed markdown content from an agent or skill-reference tree.
+ * @returns True when normalized frontmatter and body content match.
+ */
 export function skillContentsEquivalent(
   expected: string,
   existing: string,
 ): boolean {
-  const a = parseMarkdownFrontmatter(expected);
-  const b = parseMarkdownFrontmatter(existing);
-  if (!isDeepStrictEqual(a.frontmatter, b.frontmatter)) return false;
-  return normalizeBody(a.body) === normalizeBody(b.body);
+  const expectedMarkdown = parseMarkdownFrontmatter(expected);
+  const existingMarkdown = parseMarkdownFrontmatter(existing);
+  if (
+    !isDeepStrictEqual(
+      expectedMarkdown.frontmatter,
+      existingMarkdown.frontmatter,
+    )
+  ) {
+    return false;
+  }
+  return (
+    normalizeBody(expectedMarkdown.body) ===
+    normalizeBody(existingMarkdown.body)
+  );
 }
 
+/**
+ * Runtime dependencies for `checkDrift`.
+ *
+ * The filesystem is rooted at the audited project, while `templateRoot` points
+ * at goat-flow's package layout; separating them keeps consumer-project audits
+ * from accidentally reading templates from the target project.
+ */
 interface CheckDriftOptions {
   /** ReadonlyFS rooted at the project being audited (for installed-copy reads). */
   fs: ReadonlyFS;
@@ -108,6 +156,12 @@ interface CheckDriftOptions {
   templateRoot?: string;
 }
 
+/**
+ * Pair one canonical workflow file with its installed project copy.
+ *
+ * Shared references and playbooks are not per-skill directories, so the drift
+ * audit keeps this explicit map in lockstep with the setup manifest.
+ */
 interface SharedFileSpec {
   /** Relative to templateRoot. */
   template: string;
@@ -139,8 +193,28 @@ const SHARED_FILES: SharedFileSpec[] = [
     installed: ".goat-flow/skill-playbooks/browser-use.md",
   },
   {
+    template: "workflow/skills/playbooks/code-comments.md",
+    installed: ".goat-flow/skill-playbooks/code-comments.md",
+  },
+  {
+    template: "workflow/skills/playbooks/gruff-code-quality.md",
+    installed: ".goat-flow/skill-playbooks/gruff-code-quality.md",
+  },
+  {
+    template: "workflow/skills/playbooks/observability.md",
+    installed: ".goat-flow/skill-playbooks/observability.md",
+  },
+  {
+    template: "workflow/skills/playbooks/changelog.md",
+    installed: ".goat-flow/skill-playbooks/changelog.md",
+  },
+  {
     template: "workflow/skills/playbooks/page-capture.md",
     installed: ".goat-flow/skill-playbooks/page-capture.md",
+  },
+  {
+    template: "workflow/skills/playbooks/release-notes.md",
+    installed: ".goat-flow/skill-playbooks/release-notes.md",
   },
   {
     template: "workflow/skills/playbooks/skill-quality-testing.md",
@@ -164,7 +238,13 @@ const SHARED_FILES: SharedFileSpec[] = [
   },
 ];
 
-/** Read a workflow template file relative to the package root. */
+/**
+ * Read a workflow template file relative to the package root.
+ *
+ * Missing or unreadable templates return null; this swallows file-read failures
+ * so callers can report the exact drift finding path instead of turning one
+ * filesystem failure into an exception that hides the rest of the audit.
+ */
 function readTemplate(templateRoot: string, relative: string): string | null {
   const abs = resolvePath(templateRoot, relative);
   if (!existsSync(abs)) return null;
@@ -173,6 +253,18 @@ function readTemplate(templateRoot: string, relative: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray(value) === false
+  );
+}
+
+function isAgentId(value: string): value is AgentId {
+  return KNOWN_AGENT_IDS.has(value);
 }
 
 /** Read the configured list of deprecated skill names from the validated manifest. */
@@ -272,7 +364,14 @@ function compareSharedFiles(
   return checked;
 }
 
-/** Find installed skill directories that are no longer canonical. */
+/**
+ * Find installed skill directories that are no longer canonical.
+ *
+ * This branch-heavy scan exists because agent skill roots can contain editor
+ * files, docs, or partially-created directories. The SKILL.md guard avoids
+ * false positives. The function reports deprecated manifest names separately
+ * from unexpected orphans so cleanup messaging stays actionable.
+ */
 function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
   const canonical = new Set<string>(SKILL_NAMES);
   const stale = getStaleSkillNames();
@@ -320,6 +419,163 @@ function hookTemplateRel(
 }
 
 /** Compare installed hook scripts against their workflow templates. */
+function hookEventKey(agentId: AgentId, spec: HookSpec): string {
+  if (agentId === "copilot") {
+    return spec.event === "PreToolUse" ? "preToolUse" : "postToolUse";
+  }
+  return spec.event;
+}
+
+function hookCommandPath(agent: AgentProfile, script: string): string {
+  if (!agent.hooks_dir) return script;
+  return pathPosix.join(agent.hooks_dir, script);
+}
+
+function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
+  const path = hookCommandPath(agent, spec.primaryScript);
+  return {
+    type: "command",
+    bash: path,
+    powershell: `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`,
+    timeoutSec: 30,
+  };
+}
+
+function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  if (!isRecord(entry)) return false;
+  const commands = [
+    typeof entry.command === "string" ? entry.command : "",
+    typeof entry.bash === "string" ? entry.bash : "",
+    typeof entry.powershell === "string" ? entry.powershell : "",
+  ].join("\n");
+  if (spec.scriptFiles.some((script) => commands.includes(script))) {
+    return true;
+  }
+  if (Array.isArray(entry.hooks)) {
+    return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
+  }
+  return false;
+}
+
+function ensureHooksObject(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const hooks = config.hooks;
+  if (isRecord(hooks)) return hooks;
+  const next: Record<string, unknown> = {};
+  config.hooks = next;
+  return next;
+}
+
+function ensureHookEntries(
+  config: Record<string, unknown>,
+  event: string,
+): unknown[] {
+  const hooks = ensureHooksObject(config);
+  const entries = hooks[event];
+  if (Array.isArray(entries)) return entries;
+  const next: unknown[] = [];
+  hooks[event] = next;
+  return next;
+}
+
+function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
+  const config = fs.readFile(".goat-flow/config.yaml");
+  if (config === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = load(config) ?? {};
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.hooks)) return null;
+  return parsed.hooks;
+}
+
+function enabledFromHookConfig(value: unknown): boolean | null {
+  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
+  return value.enabled;
+}
+
+function explicitHookEnabled(fs: ReadonlyFS, hookId: string): boolean | null {
+  const hooks = readExplicitHooks(fs);
+  if (hooks === null) return null;
+  const explicit = enabledFromHookConfig(hooks[hookId]);
+  if (explicit !== null) return explicit;
+  if (hookId !== "gruff-code-quality") return null;
+  return enabledFromHookConfig(hooks["gruff-on-change"]);
+}
+
+function hooksObject(config: Record<string, unknown>): Record<string, unknown> {
+  return ensureHooksObject(config);
+}
+
+function deleteHookEventIfEmpty(
+  config: Record<string, unknown>,
+  event: string,
+): void {
+  const hooks = hooksObject(config);
+  if (Array.isArray(hooks[event]) && hooks[event].length === 0) {
+    Reflect.deleteProperty(hooks, event);
+  }
+}
+
+function removeHookEntries(
+  config: Record<string, unknown>,
+  event: string,
+  spec: HookSpec,
+): void {
+  const entries = ensureHookEntries(config, event);
+  const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
+  const hooks = hooksObject(config);
+  if (next.length === 0) {
+    Reflect.deleteProperty(hooks, event);
+    return;
+  }
+  hooks[event] = next;
+}
+
+/**
+ * Copilot keeps hook registrations in `.github/hooks/hooks.json`, which is
+ * also the manifest-declared installed hook artifact. The static template only
+ * represents default guardrails; dashboard/CLI toggles can add optional hooks.
+ * Drift therefore compares against template plus desired toggle state.
+ */
+function expectedHookConfig(
+  fs: ReadonlyFS,
+  agentId: string,
+  agent: AgentProfile,
+  template: string,
+): string {
+  if (agentId !== "copilot" || !isAgentId(agentId)) return template;
+
+  let config: unknown;
+  try {
+    config = JSON.parse(template);
+  } catch {
+    return template;
+  }
+  if (!isRecord(config)) return template;
+
+  let changed = false;
+  for (const spec of listHookSpecs()) {
+    const enabled = explicitHookEnabled(fs, spec.id);
+    if (enabled === null) continue;
+    changed = true;
+    const event = hookEventKey(agentId, spec);
+    removeHookEntries(config, event, spec);
+    if (!enabled) {
+      deleteHookEventIfEmpty(config, event);
+      continue;
+    }
+    ensureHookEntries(config, event).push(copilotHookEntry(agent, spec));
+  }
+
+  if (!changed) return template;
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+/** Compare installed hook scripts against their workflow templates. */
 function compareHooks(
   fs: ReadonlyFS,
   templateRoot: string,
@@ -343,6 +599,7 @@ function compareHooks(
         });
         continue;
       }
+      const expected = expectedHookConfig(fs, agentId, agent, template);
       if (!fs.exists(installedRel)) {
         findings.push({
           kind: "missing",
@@ -353,7 +610,7 @@ function compareHooks(
       }
       const installed = fs.readFile(installedRel);
       if (installed === null) continue;
-      if (installed.trimEnd() !== template.trimEnd()) {
+      if (installed.trimEnd() !== expected.trimEnd()) {
         findings.push({
           kind: "content",
           path: installedRel,
@@ -365,7 +622,12 @@ function compareHooks(
   return checked;
 }
 
-/** Run all drift comparisons and return a consolidated report. */
+/**
+ * Run all drift comparisons and return a consolidated report.
+ *
+ * @param options - Project filesystem plus optional goat-flow template root.
+ * @returns Drift status, findings, and count of compared template/install pairs.
+ */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
   const { fs } = options;
   const templateRoot = options.templateRoot ?? getTemplatePath("");

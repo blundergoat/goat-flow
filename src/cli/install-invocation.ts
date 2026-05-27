@@ -55,6 +55,9 @@ export interface InstallerInvocationParams {
  * Native Windows (`platform === "win32"`): forward-slash-normalises the script
  * and project paths so Git Bash / MSYS2 receive a valid path, and picks a
  * non-WSL `bash.exe` from the supplied candidates.
+ *
+ * @param params Installer script, target project, agent, flags, and platform-specific Bash candidates.
+ * @returns Spawn-ready Bash command and argv, or a CLI-ready error when Windows has no usable Bash.
  */
 export function buildInstallerInvocation(
   params: InstallerInvocationParams,
@@ -106,9 +109,12 @@ export function buildInstallerInvocation(
  *
  * POSIX paths contain no backslashes so the operation is a no-op for them,
  * which matters because tests assert that POSIX inputs are byte-identical.
+ *
+ * @param shellPath Path argument that will be passed to Bash.
+ * @returns The same path with Windows backslashes converted to forward slashes.
  */
-export function toBashPath(value: string): string {
-  return value.replace(/\\/g, "/");
+export function toBashPath(shellPath: string): string {
+  return shellPath.replace(/\\/g, "/");
 }
 
 /**
@@ -120,6 +126,9 @@ export function toBashPath(value: string): string {
  *
  *  - `C:\Windows\System32\bash.exe` (Windows Subsystem for Linux launcher)
  *  - `%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` (Store-managed WSL proxy)
+ *
+ * @param candidates Raw `where bash` output lines or test-injected candidate paths.
+ * @returns First non-WSL Bash path, or null when every candidate is unusable.
  */
 export function pickWindowsBashPath(
   candidates: readonly string[],
@@ -136,7 +145,12 @@ export function pickWindowsBashPath(
   return accepted[0] ?? null;
 }
 
-/** True if the candidate path matches a known WSL launcher location. */
+/**
+ * True if the candidate path matches a known WSL launcher location.
+ *
+ * @param candidate Bash executable path from discovery.
+ * @returns Whether the candidate is a WSL launcher that rejects Windows-shaped installer paths.
+ */
 export function isWslBashPath(candidate: string): boolean {
   const normalised = candidate.replace(/\//g, "\\").toLowerCase();
   return (
@@ -145,7 +159,7 @@ export function isWslBashPath(candidate: string): boolean {
   );
 }
 
-/** Probe `where bash` for candidate paths. Returns `[]` if the command fails. */
+/** Probe `where bash` for candidate paths; reads PATH and swallows command failures as no candidates. */
 function discoverWindowsBashCandidates(): string[] {
   try {
     const output = execFileSync("where", ["bash"], {
@@ -161,7 +175,12 @@ function discoverWindowsBashCandidates(): string[] {
   }
 }
 
-/** Render the actionable error when no usable Bash is found on Windows. */
+/**
+ * Render the actionable error when no usable Bash is found on Windows.
+ *
+ * @param candidates Rejected Bash paths from discovery, if any.
+ * @returns Multi-line CLI error that explains the Git Bash and WSL fallback options.
+ */
 export function buildWindowsBashMissingMessage(
   candidates: readonly string[],
 ): string {

@@ -58,28 +58,45 @@ export interface CheckEvidence {
 type EvidencePathExists = (path: string) => boolean;
 
 /** Check that unknown-source evidence includes a reason. */
-function checkUnknownReason(e: CheckEvidence): string | null {
-  if (e.source_type === "unknown" && (!e.reason || e.reason.trim() === "")) {
+function checkUnknownReason(evidence: CheckEvidence): string | null {
+  if (
+    evidence.source_type === "unknown" &&
+    (!evidence.reason || evidence.reason.trim() === "")
+  ) {
     return "source_type 'unknown' requires a non-empty `reason` explaining why provenance could not be reconstructed";
   }
   return null;
 }
 
 /** Check that `verified_on` uses YYYY-MM-DD. */
-function checkVerifiedOn(e: CheckEvidence): string | null {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(e.verified_on)) return null;
-  return `verified_on must be ISO date YYYY-MM-DD, got ${JSON.stringify(e.verified_on)}`;
+function checkVerifiedOn(evidence: CheckEvidence): string | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(evidence.verified_on)) return null;
+  return `verified_on must be ISO date YYYY-MM-DD, got ${JSON.stringify(evidence.verified_on)}`;
 }
 
-/** Check that required source metadata is present. */
-function checkSourceRequired(e: CheckEvidence): string | null {
-  if (e.source_type === "unknown") return null;
-  if (e.source_urls.length > 0) return null;
-  if (e.evidence_paths && e.evidence_paths.length > 0) return null;
-  if (e.framework_evidence_paths && e.framework_evidence_paths.length > 0) {
+/**
+ * Check that non-unknown provenance has at least one citation channel.
+ *
+ * The separate branches are intentional because legacy checks may cite vendor
+ * URLs, framework files, target-project files, or pre-split evidence_paths; the
+ * validator must preserve all four channels while still blocking uncited norms.
+ */
+function checkSourceRequired(evidence: CheckEvidence): string | null {
+  if (evidence.source_type === "unknown") return null;
+  if (evidence.source_urls.length > 0) return null;
+  if (evidence.evidence_paths && evidence.evidence_paths.length > 0) {
     return null;
   }
-  if (e.target_evidence_paths && e.target_evidence_paths.length > 0) {
+  if (
+    evidence.framework_evidence_paths &&
+    evidence.framework_evidence_paths.length > 0
+  ) {
+    return null;
+  }
+  if (
+    evidence.target_evidence_paths &&
+    evidence.target_evidence_paths.length > 0
+  ) {
     return null;
   }
   return "non-unknown source_type requires a non-empty source_url, evidence_path, framework_evidence_path, or target_evidence_path";
@@ -87,31 +104,37 @@ function checkSourceRequired(e: CheckEvidence): string | null {
 
 /** Check that every evidence path exists. */
 function checkEvidencePathsExist(
-  e: CheckEvidence,
+  evidence: CheckEvidence,
   pathExists: EvidencePathExists,
 ): string[] {
   const paths = [
-    ...(e.evidence_paths ?? []),
-    ...(e.framework_evidence_paths ?? []),
-    ...(e.target_evidence_paths ?? []),
+    ...(evidence.evidence_paths ?? []),
+    ...(evidence.framework_evidence_paths ?? []),
+    ...(evidence.target_evidence_paths ?? []),
   ];
   return paths
-    .filter((p) => !pathExists(p))
-    .map((p) => `evidence_path does not exist: ${p}`);
+    .filter((evidencePath) => !pathExists(evidencePath))
+    .map((evidencePath) => `evidence_path does not exist: ${evidencePath}`);
 }
 
-/** Runtime check that a CheckEvidence satisfies the unknown-reason contract. */
+/**
+ * Runtime check that a CheckEvidence record satisfies the audit schema.
+ *
+ * @param evidence - Provenance record attached to an audit check or runtime event.
+ * @param pathExists - Optional resolver used by development/preflight checks to reject stale local evidence paths.
+ * @returns Validation errors; an empty array means the record is usable.
+ */
 export function validateProvenance(
-  e: CheckEvidence,
+  evidence: CheckEvidence,
   pathExists?: EvidencePathExists,
 ): string[] {
   const errors: string[] = [];
-  const unknownErr = checkUnknownReason(e);
+  const unknownErr = checkUnknownReason(evidence);
   if (unknownErr) errors.push(unknownErr);
-  const dateErr = checkVerifiedOn(e);
+  const dateErr = checkVerifiedOn(evidence);
   if (dateErr) errors.push(dateErr);
-  const sourceErr = checkSourceRequired(e);
+  const sourceErr = checkSourceRequired(evidence);
   if (sourceErr) errors.push(sourceErr);
-  if (pathExists) errors.push(...checkEvidencePathsExist(e, pathExists));
+  if (pathExists) errors.push(...checkEvidencePathsExist(evidence, pathExists));
   return errors;
 }

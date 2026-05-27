@@ -24,8 +24,6 @@
 #   - Refuses to overwrite an existing browser-use wrapper that wasn't written
 #     by this script (e.g. from `uv tool install browser-use` or `pipx install
 #     browser-use`) unless --force is passed.
-#   - Removes the legacy install root ~/.local/share/halaxy-browser-tools
-#     before reinstalling under ~/.local/share/goatflow-browser-tools.
 #   - The script does not write to repo .env files or install Python packages
 #     into the project's app environment.
 # =============================================================================
@@ -40,7 +38,6 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 INSTALL_ROOT="${BROWSER_TOOLS_HOME:-$HOME/.local/share/goatflow-browser-tools}"
-LEGACY_INSTALL_ROOT="$HOME/.local/share/halaxy-browser-tools"
 VENV_DIR="${BROWSER_TOOLS_VENV:-$INSTALL_ROOT/venv}"
 DEFAULT_BIN_DIR="$HOME/.local/bin"
 BIN_DIR="${BROWSER_TOOLS_BIN_DIR:-}"
@@ -200,7 +197,7 @@ find_python() {
 
 # Refuse to overwrite a wrapper that wasn't written by this script unless
 # --force is explicit. Existing wrappers from this script are detected by the
-# marker, the current install root, or the legacy halaxy install root.
+# marker or the current install root.
 guard_existing_wrapper() {
     local path="$1"
     local content
@@ -218,7 +215,7 @@ guard_existing_wrapper() {
     fi
 
     content="$(cat "$path" 2>/dev/null || true)"
-    if [[ "$content" == *"$INSTALL_ROOT/"* ]] || [[ "$content" == *"$LEGACY_INSTALL_ROOT/"* ]]; then
+    if [[ "$content" == *"$INSTALL_ROOT/"* ]]; then
         echo -e "${YELLOW}Upgrading wrapper from previous install: $path${NC}"
         return 0
     fi
@@ -255,12 +252,6 @@ echo -e "${GREEN}Wrapper dir: ${BIN_DIR} (${BIN_DIR_REASON})${NC}"
 # Fail fast if a foreign wrapper is in the way, before doing the expensive install.
 guard_existing_wrapper "$WRAPPER_PY"
 guard_existing_wrapper "$WRAPPER_BU"
-
-# Remove legacy install root if present and the new root has not been created.
-if [[ -d "$LEGACY_INSTALL_ROOT" && "$INSTALL_ROOT" != "$LEGACY_INSTALL_ROOT" && ! -e "$INSTALL_ROOT" ]]; then
-    echo -e "${YELLOW}Removing legacy install at ${LEGACY_INSTALL_ROOT} (will reinstall under ${INSTALL_ROOT})${NC}"
-    rm -rf "$LEGACY_INSTALL_ROOT"
-fi
 
 if [[ "$FORCE" == true && -d "$VENV_DIR" ]]; then
     echo -e "${YELLOW}Removing existing venv: ${VENV_DIR}${NC}"

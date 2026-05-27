@@ -16,7 +16,7 @@
 
 **Ask First:** Before touching boundaries outside Claude ownership, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
-**Never:** Freeze writes if interrupted or told no changes. Do not edit `AGENTS.md`, `GEMINI.md`, `.agents/`, `.gemini/`, or `.codex/` during Claude setup unless the user explicitly widens scope. Do not overwrite existing instruction content; preserve or route domain knowledge to `.goat-flow/`.
+**Never:** Freeze writes if interrupted or told no changes. Do not edit `AGENTS.md`, `.agents/`, or `.codex/` during Claude setup unless the user explicitly widens scope. Do not overwrite existing instruction content; preserve or route domain knowledge to `.goat-flow/`.
 
 ## Hard Rules
 
@@ -30,7 +30,7 @@
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md` — read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
@@ -117,4 +117,4 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Claude skills/config | `.claude/skills/`, `.claude/settings.json`, `.claude/hooks/` when installed |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md` when present |
+| Peer instructions | `AGENTS.md`, `.github/copilot-instructions.md` when present |

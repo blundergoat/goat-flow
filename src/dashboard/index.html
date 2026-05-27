@@ -403,16 +403,16 @@
           <section class="gf-side-nav-group" aria-label="Managers">
             <div class="gf-side-group-label">Managers</div>
             <button
-              @click="activeView = 'skills'"
+              @click="activeView = 'hooks'"
               class="gf-side-link"
-              :class="activeView === 'skills' && 'gf-side-link-active'"
-              data-short="S"
-              aria-label="Skill Evaluator"
+              :class="activeView === 'hooks' && 'gf-side-link-active'"
+              data-short="Hk"
+              aria-label="Hooks"
             >
               <svg class="gf-side-icon" aria-hidden="true">
-                <use href="#gf-side-icon-skills"></use>
+                <use href="#gf-side-icon-hooks"></use>
               </svg>
-              <span class="gf-side-link-label">Skill Evaluator</span>
+              <span class="gf-side-link-label">Hooks</span>
             </button>
             <button
               @click="activeView = 'plans'"
@@ -425,6 +425,18 @@
                 <use href="#gf-side-icon-plans"></use>
               </svg>
               <span class="gf-side-link-label">Plans</span>
+            </button>
+            <button
+              @click="activeView = 'skills'"
+              class="gf-side-link"
+              :class="activeView === 'skills' && 'gf-side-link-active'"
+              data-short="S"
+              aria-label="Skill Evaluator"
+            >
+              <svg class="gf-side-icon" aria-hidden="true">
+                <use href="#gf-side-icon-skills"></use>
+              </svg>
+              <span class="gf-side-link-label">Skill Evaluator</span>
             </button>
           </section>
 
@@ -685,6 +697,7 @@
           <!-- include: views/quality.html -->
           <!-- include: views/skills.html -->
           <!-- include: views/setup.html -->
+          <!-- include: views/hooks.html -->
           <!-- include: views/home.html -->
           <!-- include: views/projects.html -->
           <!-- include: views/settings.html -->

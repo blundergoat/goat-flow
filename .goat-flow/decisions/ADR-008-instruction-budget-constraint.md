@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-06
 **Updated:** 2026-05-18 - retired `docs/system-spec.md` citation retargeted to the current instruction-section successor.
+**Updated:** 2026-05-27 - scanner AP1 enforcement is historical; current instruction budget enforcement lives in the audit harness and setup/preflight checks.
 
 ## Context
 
@@ -34,7 +35,7 @@ Every rule MUST apply to every session. Situation-specific guidance belongs in s
 
 ## Consequences
 
-- Hard 150-line limit enforced by scanner (AP1: -3 deduction if exceeded)
+- Hard 150-line limit is enforced by current audit/setup checks; the earlier scanner AP1 deduction is historical.
 - Setup templates generate instruction files targeting 125 lines
 - Domain knowledge that doesn't fit moves to .goat-flow/ cold path
 - Skills load on demand (not every turn), preserving budget for core behavior rules

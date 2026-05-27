@@ -58,7 +58,7 @@ describe("dashboard side navigation", () => {
     );
     assert.match(
       sideMenu,
-      />\s*Managers\s*<[\s\S]*>\s*Skill Evaluator\s*<[\s\S]*>\s*Plans\s*</,
+      />\s*Managers\s*<[\s\S]*>\s*Hooks\s*<[\s\S]*>\s*Plans\s*<[\s\S]*>\s*Skill Evaluator\s*</,
     );
     assert.match(
       sideMenu,
@@ -73,6 +73,7 @@ describe("dashboard side navigation", () => {
       "Projects",
       "Quality",
       "Setup",
+      "Hooks",
     ]) {
       assert.match(sideMenu, new RegExp(`>\\s*${label}\\s*<`));
     }
@@ -84,7 +85,6 @@ describe("dashboard side navigation", () => {
       "Feedback Loop",
       "Harness Overview",
       "Harness",
-      "Hooks",
       "Memory",
       "Playbooks",
       "Telemetry",
@@ -147,13 +147,7 @@ describe("dashboard side navigation", () => {
   it("keeps deferred dashboard pages out of coming-soon metadata", () => {
     const appSource = read(DASHBOARD_APP_PATH);
 
-    for (const view of [
-      "harness",
-      "playbooks",
-      "hooks",
-      "memory",
-      "telemetry",
-    ]) {
+    for (const view of ["harness", "playbooks", "memory", "telemetry"]) {
       assert.doesNotMatch(
         appSource,
         new RegExp(`["']?${view}["']?\\s*:\\s*\\{\\s*title:\\s*["']`, "u"),
@@ -171,7 +165,6 @@ describe("dashboard side navigation", () => {
       "constraints",
       "verification",
       "recovery",
-      "hooks",
       "memory",
       "playbooks",
     ]) {

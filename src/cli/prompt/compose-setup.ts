@@ -55,14 +55,14 @@ const CHECK_TO_STEP: Record<string, string> = {
   "agent-instruction": "Step 02 (instruction file for agent)",
   "agent-skills": "Step 03 (install skills)",
   "agent-settings": "Step 05 (customise - settings file)",
-  "agent-deny-dangerous": "Step 05 (customise - deny mechanism)",
+  "agent-guardrails": "Step 05 (customise - deny mechanism)",
 };
 
 /** Lookup from agent ID to its agent-specific setup guide. */
 const SETUP_FILES: Record<AgentId, string> = {
   claude: "workflow/setup/agents/claude.md",
   codex: "workflow/setup/agents/codex.md",
-  gemini: "workflow/setup/agents/gemini.md",
+  antigravity: "workflow/setup/agents/antigravity.md",
   copilot: "workflow/setup/agents/copilot.md",
 };
 
@@ -89,7 +89,7 @@ function auditPassInstallLine(
     return "- Audit: all build checks passing";
   }
   const label = evidenceLevel === "present-only" ? "presence-only" : "static";
-  return `- Audit: ${label} setup checks passing; runtime deny-hook self-test not run`;
+  return `- Audit: ${label} setup checks passing; runtime deny-hook probes not run`;
 }
 
 // ----------------------------------------------------------------

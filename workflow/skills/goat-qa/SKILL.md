@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.7.0"
+goat-flow-skill-version: "1.8.0"
 ---
 # /goat-qa
 
@@ -12,11 +12,7 @@ On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
 
 ## When to Use
 
-goat-qa is a **testing gap analyser**: it maps changed code to testing coverage and prioritises what to test.
-
-It does not write test code or run full test commands.
-
-Output: prioritized "must test / safe to skip / should test" guidance.
+goat-qa is a **testing gap analyser**: it maps changed code or a codebase area to coverage and outputs prioritized must/should/skip guidance. It does not write tests or run full test commands.
 
 **Invoke when:**
 - Feature branch is ready for testing and you want to know what to focus on
@@ -25,7 +21,7 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 - You want to find manual testing gaps before a release
 - You need a QA handoff artifact (flow diagram, risk matrix, manual test plan)
 
-**NOT this skill:** Running tests, "test this", "test X" → just run them (action request, not gap analysis). Debugging test failures → /goat-debug. Code quality → /goat-review. Planning milestones → /goat-plan. Feature briefs → dispatcher Route Map. Verifying a bug fix → /goat-debug. Verifying a diff/PR before merge → /goat-review. Certifying that work is complete → the Proof Gate in `skill-preamble.md`, applied by whoever makes the claim.
+**NOT this skill:** Run-test requests → run them directly. Test failures or fix verification → /goat-debug. Code quality → /goat-review. Milestones → /goat-plan. Feature briefs → dispatcher. Merge certification → /goat-review plus Proof Gate.
 
 | Excuse | Reality |
 |--------|---------|
@@ -36,14 +32,14 @@ Output: prioritized "must test / safe to skip / should test" guidance.
 
 ## Coverage Depth
 
-Canonical vocabulary for classifying test coverage. Used by Standard mode (Phase 2), Audit mode (A3), and cross-skill references.
+Canonical coverage vocabulary used in Standard, Audit, and cross-skill output.
 
-| Level | Meaning | Example |
-|-------|---------|---------|
-| NONE | No matching test file or manual plan | New module with zero tests |
-| STRUCTURAL | Tests exist but only import/construct/snapshot - no behaviour assertion | `expect(component).toBeDefined()` |
-| PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested | Login success tested, invalid-credentials path missing |
-| BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage | Asserts return value, DB side-effect, and thrown error |
+| Level | Meaning |
+|-------|---------|
+| NONE | No matching test file or manual plan |
+| STRUCTURAL | Imports, constructs, or snapshots only - no behaviour assertion |
+| PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested |
+| BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage |
 
 ## Step 0 - Intake
 
@@ -53,7 +49,7 @@ Canonical vocabulary for classifying test coverage. Used by Standard mode (Phase
 - "audit"/"coverage"/"gaps" → Audit mode (full depth)
 - "verify coverage"/"what's risky"/"what should I test" or scoped files → Standard mode (quick depth)
 
-**Depth mapping:** Standard mode = quick (analyse changed files). Audit mode = full (analyse a codebase area). If arriving from the dispatcher with depth pre-selected: quick → Standard, full → Audit.
+**Depth mapping:** Standard = quick changed-file analysis. Audit = full codebase-area analysis. Dispatcher depth maps quick → Standard, full → Audit.
 
 If mode and scope are clear, state "Running [mode] on [scope]." and proceed. Ask only on ambiguity.
 
@@ -61,11 +57,11 @@ If mode and scope are clear, state "Running [mode] on [scope]." and proceed. Ask
 
 **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, and `.goat-flow/decisions/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load any bucket.
 
-**PR / issue link (strongly encouraged):** ask for the PR URL or issue number before Phase 1 - stated acceptance criteria are the benchmark gap analysis maps against. If `gh` is available, resolve with `gh pr view` + `gh pr diff`. If unavailable or declined, note `no-intent-spec` in Verification Integrity; `safe to skip` confidence degrades when no intent spec exists.
+**PR / issue link (strongly encouraged):** ask for PR/issue before Phase 1. Acceptance criteria are the benchmark. If `gh` is available, use `gh pr view` + `gh pr diff`; otherwise note `no-intent-spec`, which degrades `safe to skip` confidence.
 
 If arriving from the dispatcher with context already gathered, confirm and proceed.
 
-**No existing tests detected:** If the project has no test files, the risk analysis still applies. Flag coverage as "NONE" for all files. Note: "This project has no automated tests. All verification falls to human and AI reviewers."
+**No existing tests:** risk analysis still applies. Mark coverage `NONE` and state: "This project has no automated tests. Verification falls to human and AI reviewers."
 
 **CHECKPOINT:** "Analysing [N] changed files against [existing test plan / no test plan]. Audience: [dev/tester/both]." Proceed unless scope, audience, or test plan is ambiguous.
 
@@ -73,7 +69,7 @@ If arriving from the dispatcher with context already gathered, confirm and proce
 
 Read every changed file. For each, understand WHAT changed and WHY it's risky.
 
-**Diff analysis - not just file names.** Read the actual diff, not just `--stat`. A one-line change to an auth check is CRITICAL. A 200-line change to a CSS file is LOW.
+**Diff analysis - not just file names.** Read the actual diff, not just `--stat`; one auth line can outrank 200 CSS lines.
 
 Classify each change:
 
@@ -114,9 +110,9 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**Cross-agent verification:** Suggest the user run verification with a different agent or model. Cross-agent verification catches blind spots that same-agent testing misses.
+**Cross-agent verification:** suggest a different agent/model for blind-spot checks.
 
-**BLOCKING GATE:** Present the gap analysis plus Verification Integrity and stop for a human decision. "Here are the testing gaps. Continue to Phase 3 (targeted testing plan), or adjust the analysis first?" Reserve QA flow diagrams for the Phase 3 checkpoint. After the testing plan, suggest `/goat-plan` to add testing tasks to the current milestone.
+**BLOCKING GATE:** Present gap analysis plus Verification Integrity and stop. Ask: "Continue to Phase 3, or adjust the analysis first?" Reserve diagrams for Phase 3. After the plan, suggest `/goat-plan` for milestone tasks.
 
 ## Phase 3 - Targeted Testing Plan
 
@@ -137,7 +133,7 @@ For flow diagrams, use Mermaid flowcharts with 8-15 nodes per diagram, happy pat
 
 ## Audit Mode
 
-For a codebase area with no recent change. Audit mode analyses *what already exists* - which files carry load-bearing behaviour, which have test coverage, where that coverage is structural (import/construct only) versus behavioural (exercises real code paths). It does NOT read a diff; skip Phase 1 and its diff-specific constraints.
+For a codebase area with no recent change. Audit mode analyses existing load-bearing files, coverage depth, and structural-vs-behavioural gaps. It does NOT read a diff; skip Phase 1.
 
 ### A1 - Scope
 
@@ -150,7 +146,7 @@ If unsure, ask the user before A1.5.
 
 ### A1.5 - Scope-Size Gate
 
-Inventory the approximate file count in the declared boundary before deep analysis. If the area contains more files than can be read at full depth within budget, present a ranked slice prioritising load-bearing and interface-boundary files, and ask the user which slice to analyse. Proceed to A2 only after scope is confirmed manageable.
+Inventory approximate file count before deep analysis. If too large, present a ranked slice prioritising load-bearing and interface-boundary files. Proceed to A2 only after manageable scope is confirmed.
 
 ### A2 - Inventory and Risk Ranking
 
@@ -187,7 +183,7 @@ Rank gaps by `Risk × (1 - CoverageLevel)` descending. Output:
 
 ## Regression Guard Mode
 
-Post-verification regression guard planning. Assumes the fix is already verified (by /goat-debug, human sign-off, or PR check). Cite the prior verification source. Define 1-2 invariants, assess coverage of each, then hand off recommended guard tests to the coding agent. This mode does NOT verify the fix itself - that is /goat-debug's domain.
+Post-verification guard planning. Cite the prior fix verification source, define 1-2 invariants, assess coverage, then hand off guard tests. This mode does NOT verify the fix itself.
 
 ## Constraints
 
@@ -197,6 +193,7 @@ Post-verification regression guard planning. Assumes the fix is already verified
 - MUST produce "must test / should test / safe to skip" tiers with rationale for skips
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
+- MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
 - MUST NOT generate test code - hand off to the coding agent
 - Universal constraints from skill-preamble.md apply.
 - Standard mode: MUST read the actual diff, not just file names - a one-line auth change outranks a 200-line CSS change
@@ -218,14 +215,14 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 ## TL;DR  <!-- what changed, what's at risk, biggest testing gaps -->
 
 ## Change Risk Map
-| File | Lines Changed | What Changed | Risk | Blast Radius | User-Visible Impact |
+| File | Lines Changed | What Changed | Risk | Blast Radius | User-Visible Impact | Proof Class |
 
 ## Gap Analysis
 ### Undertested Risks  <!-- CRITICAL/HIGH changes with no or partial test coverage -->
-| Code Change | Risk | Coverage Depth | Covered By | Gap |
+| Code Change | Risk | Coverage Depth | Covered By | Gap | Proof Class |
 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->
-| Test Case | Maps to Change | Assessment |
+| Test Case | Maps to Change | Assessment | Proof Class |
 
 ## Verification Integrity
 - Intent spec: [PR/issue/test plan URL or `no-intent-spec`]
@@ -235,6 +232,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Commands run: `none` (goat-qa does not execute tests)
 - Runtime execution by others: [who ran what, or `none observed`]
 - Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
 - Analysis confidence: [HIGH | MEDIUM | LOW] - [rationale]
 - Evidence limit: [diff/files read and any unavailable runtime/tool context]
 - Assessed by: [agent]
@@ -244,9 +242,9 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 
 ```markdown
 ## Targeted Testing Plan
-### Must test before shipping  <!-- CRITICAL gaps with manual steps, failure symptoms, time -->
-### Should test if time allows  <!-- HIGH/MEDIUM gaps -->
-### Safe to skip  <!-- with rationale -->
+### Must test before shipping  <!-- CRITICAL gaps with manual steps, failure symptoms, time, proof class -->
+### Should test if time allows  <!-- HIGH/MEDIUM gaps, proof class -->
+### Safe to skip  <!-- with rationale and proof class -->
 
 ## Verification Integrity
 
@@ -255,7 +253,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Doer-verifier separation: [FULL / PARTIAL / NONE]
 
 ## Regression Guards  <!-- post-verification only; cite prior fix-verification source -->
-| Invariant | Current Coverage | Recommended Guard | Owner |
+| Invariant | Current Coverage | Recommended Guard | Owner | Proof Class |
 ## Flow Diagram  <!-- only on request -->
 ```
 
@@ -268,17 +266,17 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 <!-- Declared boundary from A1: directory, module, or risk class. -->
 
 ## Inventory and Risk Ranking
-| File | Role | Risk |
+| File | Role | Risk | Proof Class |
 <!-- Roles: load-bearing / interface boundary / integration glue / UI / support -->
 
 ## Coverage Analysis
-| File | Test file | Coverage | Notes |
+| File | Test file | Coverage | Notes | Proof Class |
 <!-- Coverage: NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL -->
 
 ## Gap Report
-### Blocking gaps  <!-- CRITICAL-risk + NONE/STRUCTURAL coverage -->
-### High-value additions  <!-- HIGH-risk + PARTIAL coverage -->
-### Defer  <!-- LOW-risk or well-covered -->
+### Blocking gaps  <!-- CRITICAL-risk + NONE/STRUCTURAL coverage; each item includes proof class -->
+### High-value additions  <!-- HIGH-risk + PARTIAL coverage; each item includes proof class -->
+### Defer  <!-- LOW-risk or well-covered; each item includes proof class -->
 
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]
@@ -287,6 +285,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Commands discovered: [test/lint commands found]
 - Commands run: `none` (goat-qa does not execute tests)
 - Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
 - Analysis confidence: [HIGH | MEDIUM | LOW] - [rationale]
 - Assessed by: [agent]
 - Would-be testers: [who executes once gaps are filled]

@@ -84,7 +84,7 @@ function buildIncompleteDetails(
   }
   if (!hasInstructionFile) {
     missing.push(
-      "missing instruction file (CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md)",
+      "missing instruction file (CLAUDE.md / AGENTS.md / .github/copilot-instructions.md)",
     );
   }
   if (!hasPreamble) {

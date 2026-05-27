@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # Skill Reference (Meta References)
 
-This directory holds **shared meta-references composed into goat-flow skills**. They describe the universal contract that every `/goat-*` skill inherits — they are not standalone playbooks.
+This directory holds **shared meta-references composed into goat-flow skills**. They describe the universal contract that every `/goat-*` skill inherits - they are not standalone playbooks.
 
 For tool/capability playbooks (browser-use, page-capture, skill-quality-testing methodology), see the sibling `skill-playbooks/` directory.
 
@@ -14,7 +14,7 @@ For tool/capability playbooks (browser-use, page-capture, skill-quality-testing 
 | [`skill-preamble.md`](./skill-preamble.md) | Universal goat-flow contract: Proof Gate, OBSERVED/INFERRED tagging, evidence discipline, retry budget. | Composed into every `/goat-*` skill at scoring time and at runtime; agents inherit its gate vocabulary. |
 | [`skill-conventions.md`](./skill-conventions.md) | Authoring conventions: footgun/lesson entry shapes, frontmatter contracts, status / created / evidence blocks. | Composed into a skill when its body references `skill-conventions`. |
 
-These are meta because they describe the *shape* of skills, not how to use a specific tool. Adding a new shared meta reference here means committing every existing skill to inherit it — do that intentionally, not by accident.
+These are meta because they describe the *shape* of skills, not how to use a specific tool. Adding a new shared meta reference here means committing every existing skill to inherit it - do that intentionally, not by accident.
 
 ## Why a separate directory (and not duplicated into each skill)
 
@@ -25,6 +25,6 @@ Putting these inside every `.claude/skills/<name>/references/` would mean 7-fold
 `src/cli/quality/skill-quality.ts` `composeContent`:
 1. Always pulls in `skill-preamble.md` if `quality.composition.skillPreamblePath` resolves.
 2. Pulls in `skill-conventions.md` only when the skill body mentions `skill-conventions`.
-3. Concatenates with the SKILL.md to form the *composed surface* that scorers see — so gate vocabulary inherited from the preamble counts.
+3. Concatenates with the SKILL.md to form the *composed surface* that scorers see - so gate vocabulary inherited from the preamble counts.
 
 Override these paths in `.goat-flow/config.yaml` `quality.composition` if a consumer project ships its own preamble.

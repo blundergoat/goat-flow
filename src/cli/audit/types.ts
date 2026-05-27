@@ -17,6 +17,7 @@ import type { CheckEvidence } from "./provenance-types.js";
 
 // === JSON contract types (stable public API) ===
 
+/** User-facing failure detail carried by failed checks and renderer outputs. */
 export interface AuditFailure {
   check: string;
   message: string;
@@ -24,6 +25,7 @@ export interface AuditFailure {
   howToFix?: string;
 }
 
+/** Stable per-check JSON shape consumed by CLI renderers, dashboard readers, and SARIF. */
 export interface CheckResult {
   id: string;
   name: string;
@@ -48,6 +50,7 @@ export interface CheckResult {
   details?: HarnessCheckDetails;
 }
 
+/** Scope aggregate plus the original checks used to build it. */
 export interface AuditScope {
   status: "pass" | "fail";
   checks: CheckResult[];
@@ -55,6 +58,7 @@ export interface AuditScope {
   summary: Record<string, string>;
 }
 
+/** Harness concern rollup for one of the five goat-flow design concerns. */
 export interface AuditConcern {
   status: "pass" | "fail";
   /** Percentage of passing checks for this concern (0-100). */
@@ -78,6 +82,7 @@ export interface AuditConcern {
   metrics: number;
 }
 
+/** Canonical five-concern keys used by harness audit rollups. */
 export type AuditConcernKey =
   | "context"
   | "constraints"
@@ -85,6 +90,7 @@ export type AuditConcernKey =
   | "recovery"
   | "feedback_loop";
 
+/** Top-level audit JSON schema returned by CLI and dashboard audit routes. */
 export interface AuditReport {
   command: "audit";
   harness: boolean;
@@ -107,24 +113,30 @@ export interface AuditReport {
   };
 }
 
+/** Renderer-facing status; warnings and info do not always change audit status. */
 export type CheckDisplayStatus = "pass" | "fail" | "warn" | "info" | "skipped";
 
+/** Status impact category that separates hard failures from score-only signals. */
 export type CheckImpact = "none" | "scope-fail" | "score-only";
 
+/** Evidence precision label for checks that prove structure versus semantics. */
 export type CheckEvidenceKind = "semantic" | "structural";
 
+/** Assurance label for passes that are correct but limited by platform evidence. */
 export type CheckAssurance = "full" | "limited";
 
 // === Drift check (M04) ===
 
 type DriftFindingKind = "content" | "missing" | "orphan" | "deprecated";
 
+/** One installed-vs-template skill drift finding. */
 export interface DriftFinding {
   kind: DriftFindingKind;
   path: string;
   message: string;
 }
 
+/** Optional drift section populated only when `--check-drift` runs. */
 export interface DriftReport {
   status: "pass" | "fail";
   findings: DriftFinding[];
@@ -136,6 +148,7 @@ export interface DriftReport {
 /** WARNING findings fail the content scope; INFO findings are advisory. */
 export type ContentSeverity = "info" | "warning";
 
+/** One cold-path content lint finding; invariant: rule/path/line identify the source issue. */
 export interface ContentFinding {
   severity: ContentSeverity;
   /** Stable rule id (e.g. "vague-term", "skill-count-drift"). */
@@ -149,6 +162,7 @@ export interface ContentFinding {
   suggestion?: string;
 }
 
+/** Optional content-lint section populated only when `--check-content` runs. */
 export interface ContentReport {
   status: "pass" | "fail";
   findings: ContentFinding[];
@@ -160,6 +174,7 @@ export interface ContentReport {
 
 // === Internal types (check definitions and context) ===
 
+/** Fact extraction depth used to trade check fidelity for dashboard speed. */
 export type AuditFactProfile = "full" | "dashboard-summary";
 
 /** Parsed subset of manifest.json used by audit checks */
@@ -198,6 +213,7 @@ export interface AuditContext {
   denyMechanismEvidenceLevel?: "full" | "static" | "present-only";
 }
 
+/** Build-check scopes that exist before optional harness checks are requested. */
 export type AuditScopeName = "setup" | "agent";
 
 /** A single build check that returns null on pass or a failure on fail */
@@ -245,6 +261,7 @@ export interface HarnessCheck {
   run: (ctx: AuditContext) => HarnessCheckResult;
 }
 
+/** Output from one harness check before it is adapted into a public CheckResult. */
 export interface HarnessCheckResult {
   status: "pass" | "fail";
   findings: string[];
@@ -263,7 +280,7 @@ export interface HarnessCheckResult {
 /** M30: Structured per-check detail union. Keyed by `HarnessCheck.id`.
  *  Pages that consume the dashboard `/api/audit` response read the keys for
  *  their concern; unknown keys are ignored. Keep this synced with the per-check
- *  shapes declared in `.goat-flow/tasks/1.7.0/M30-audit-payload-structured-detail.md`. */
+ *  shapes declared in `.goat-flow/tasks/_archived/1.7.0/M30-audit-payload-structured-detail.md`. */
 export interface HarnessCheckDetails {
   /** instruction-line-count */
   lineCounts?: {

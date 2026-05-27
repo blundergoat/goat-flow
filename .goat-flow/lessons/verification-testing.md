@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-28
 ---
 
 ## Lesson: Cache-behaviour tests need observable contracts
@@ -11,7 +11,7 @@ last_reviewed: 2026-05-20
 
 **Root cause:** I swapped a timing smell for an implementation-observation smell. Imported Node builtins and transitive helpers are not a reliable public signal for cache behavior.
 
-**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. Avoid timing ratios and late monkeypatches of already-imported helpers. Evidence anchors: `src/cli/server/dashboard-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-setup.ts` (search: `import { execFileSync }`).
+**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. Avoid timing ratios and late monkeypatches of already-imported helpers. Evidence anchors: `src/cli/server/dashboard-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-setup.ts` (search: `checkHookSelfTest`).
 
 ---
 
@@ -19,13 +19,11 @@ last_reviewed: 2026-05-20
 
 **Status:** active | **Created:** 2026-05-19
 
-**What happened:** While replacing vague `correctly` success criteria in the skill-quality TDD table, my first wording pushed `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` to 3022 words, then a partial trim still failed at 3008 words. The ADR-023 contract caught both failures before the change could ship.
+**What happened:** Wording/schema edits repeatedly breached ADR-023 word caps: `skill-quality-testing/tdd-iteration.md` hit 3022/3008 words, `skill-preamble.md` exceeded 1500, and on 2026-05-22 proof-class fields pushed `goat-qa/SKILL.md` to 2578+.
 
-**Root cause:** I treated a content-lint cleanup as a tiny prose edit and did not account for the progressive reference-pack word cap before verification.
+**Root cause:** Treated prose edits as tiny while changing files governed by hard word-budget contracts.
 
-**Prevention:** For topical files under `skill-quality-testing/`, make table criteria terse first and run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after wording edits. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Expected outcome in new scenario`).
-
-**Recurrence 2026-05-20:** Shared-reference wording hit the same trap when `skill-preamble.md` exceeded the 1500-word cap before focused contract verification caught it. Check enforced caps immediately after shared prose edits. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+**Prevention:** For any skill/reference/playbook wording change, measure the affected file before broad validation and budget wording cuts in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/goat-qa/SKILL.md` (search: `Proof classes:`).
 
 ---
 
@@ -37,9 +35,11 @@ last_reviewed: 2026-05-20
 
 **Root cause:** The unit tests modeled ideal timer order, not the real terminal output order from Claude Code inside xterm/WebSocket. I treated "timer sent Enter in a fake clock" as equivalent to "Claude accepted the prompt" before running the original browser reproduction.
 
-**Fix:** Keep a browser-use reproduction in the proof loop for terminal launch changes: click the real dashboard button, verify the prompt advances past `[Pasted text...]`, and then clean up the terminal session. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `dashboardHandlePasteSubmitOutput`), `test/unit/dashboard-terminal-launch.test.ts` (search: `submits Claude pasted-text markers even if pending state was cleared`).
+**Fix:** Keep a browser-use reproduction in the proof loop for terminal launch changes: click the real dashboard button, verify the prompt advances past `[Pasted text...]`, and then clean up the terminal session. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `dashboardHandlePasteSubmitOutput`), `test/unit/dashboard-terminal-launch.test.ts` (search: `ignores a late Claude paste echo after the no-marker fallback submitted`).
 
 **Prevention:** For terminal automation, unit tests must cover lost/late paste state, but the Definition of Done still requires live browser evidence against the runner that originally failed. Do not close on fake timers alone when xterm, WebSocket, or agent composer behavior is involved.
+
+**Recurrence 2026-05-28:** A fake-timer fix added `TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS = 1500` and the built bundle contained it, but live WebSocket probing still showed bracketed paste followed by xterm DA response `\x1b[?1;2c` and then no Enter. The missing test variable was xterm's own protocol replies through `term.onData`: they were forwarded like keystrokes and cleared the pending fallback timer. Future terminal-submit tests must model the actual browser input stream, not just helper timers. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `dashboardTerminalDataLooksProtocolResponse`), `test/unit/dashboard-terminal-launch.test.ts` (search: `keeps Claude no-marker fallback armed across xterm protocol replies`).
 
 ---
 
@@ -58,6 +58,8 @@ last_reviewed: 2026-05-20
 **Recurrence 2026-05-12:** While self-hosting xterm assets, `test/integration/dashboard-server.test.ts` fetched `/assets/xterm.js` successfully but failed because the assertion looked for `XTerm`, a string not present in the minified upstream bundle. The route was correct; the test anchor was wrong. For vendored/minified assets, assert route status/content type and stable feature strings observed in the actual bundle, such as `bracketedPasteMode`, not package names or branding text.
 
 **Recurrence 2026-05-16:** While moving setup instruction surfaces into manifest-backed agent capabilities, full `npm test` failed because `test/unit/preset-prompts.test.ts` still asserted literal `CLAUDE.md, .claude/settings.json` strings in `dashboard-setup-quality.ts`. The product change was correct; the test had become a stale parallel authority. For manifest-backed refactors, update source-grep tests to assert the data boundary (`workflow/manifest.json` plus injected fields) instead of the old duplicated literals.
+
+**Recurrence 2026-05-27:** While hardening dashboard paste-submit timing in `src/dashboard/dashboard-terminal.ts`, the focused terminal suite passed but `npx prettier --check src/dashboard/dashboard-terminal.ts test/unit/dashboard-terminal-launch.test.ts` flagged `test/unit/dashboard-terminal-launch.test.ts` after long fake-timer assertions were added. Running Prettier on the touched TypeScript files fixed it before the final focused rerun. Prevention unchanged: run Prettier on changed dashboard classic-script tests before claiming verification is complete.
 
 ---
 
@@ -112,36 +114,6 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
 2. The skip message must name the platform constraint so a reader knows why coverage dropped, not just that it dropped.
 3. Don't try to detect "is Windows" via `process.platform` - the privilege depends on Developer Mode / admin context, not the OS. Always try-and-catch.
-
----
-
-## Lesson: Workflow parser refactors need both fixture coverage and typecheck
-
-**Status:** active | **Created:** 2026-04-03
-
-**What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
-**Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
-**Fix:** For parser refactors, verify in this order: (1) print/exercise the extracted intermediate values, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, then (4) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
-
----
-
-## Lesson: Rubric honesty changes need both in-memory and disk-backed fixture sync
-
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric/scanner system removed per ADR-013; specific check IDs no longer exist
-
-**What happened:** Tightened `2.2.2` so a registered stop hook only passes when it also runs real validation commands. The new focused regression passed immediately, but the disk-backed `failing-known` fixture still expected the old failure set and broke on the next verification step.
-**Root cause:** Updated the rubric logic and the in-memory regression corpus first, but forgot that `test/fixtures/projects/failing-known/fixture.json` and `test/fixtures/project-fixtures.test.ts` also encode expected failing check IDs. Scanner honesty work touches more than one fixture layer.
-**Fix:** Whenever a rubric check changes semantics, verify in this order: (1) focused in-memory regression, (2) disk-backed fixture corpus, (3) full suite. Search for the check ID in `test/fixtures/` before treating the change as complete.
-
----
-
-## Lesson: New blocking checks can break passing fixtures even when the scanner is correct
-
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Scanner/rubric system removed per ADR-013
-
-**What happened:** Added a new deny-hook check for pipe-to-shell blocking. The focused scanner regression passed, but the next full-suite run dropped both disk-backed `passing-minimal` and `passing-full` from `100` to `99`.
-**Root cause:** The new rubric requirement was correct, but the "passing" fixture baseline still used settings-based deny rules that blocked `rm -rf`, force push, and `chmod 777` without also blocking `curl | bash` / `wget | sh`. Positive fixtures are just as sensitive to new honesty checks as failing fixtures.
-**Fix:** When adding a new required check, audit both failure fixtures and passing baselines. For rubric changes, verify in this order: (1) focused regression, (2) disk-backed passing fixtures, (3) disk-backed failing fixtures, (4) full suite. If a positive fixture drops, update the fixture input first, not the expected score.
 
 ---
 
@@ -205,22 +177,6 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 ---
 
-## Lesson: Snapshot fixtures can carry metadata beyond the typed numeric contract
-
-**Status:** active | **Created:** 2026-04-24
-
-**What happened:** A backfill for missing v1.2.0–v1.2.4 manifest snapshots added a repo-integration test that `deepEqual`ed `loadSnapshotFacts()` output against numeric expectations. The first verification run failed because the historical `v1.1.0` snapshot already includes an extra `_note` key inside `snapshot_facts`, so the runtime payload was broader than the narrowed TypeScript interface used by the checker.
-
-**Root cause:** I treated the snapshot loader as if it returned only the typed numeric fields, but the JSON contract in the repository also carries human-facing metadata that survives parsing.
-
-**Fix:** Assert the numeric fields individually and allow extra metadata keys in historical snapshot fixtures.
-
-**Prevention:**
-1. When adding repo-integration tests for parsed JSON fixtures, inspect the real file shape before using `deepEqual` on a narrowed TypeScript view.
-2. For historical compatibility tests, verify the required semantic fields and tolerate additive metadata unless the test is explicitly enforcing exact wire format.
-
----
-
 ## Lesson: Test suite must exercise the published invocation path
 
 **Status:** active | **Created:** 2026-04-24
@@ -249,11 +205,11 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 ---
 
-## Lesson: deny-dangerous self-test needs no-space redirect and false-positive probes
+## Lesson: guardrail self-test needs no-space redirect and false-positive probes
 
 **Status:** active | **Created:** 2026-04-24
 
-**What happened:** `bash .claude/hooks/deny-dangerous.sh --self-test` passed, but live repros still showed a bypass for `echo foo>.env`, `echo foo>>.env`, `echo foo>|.env`, and `echo foo>.env.example` because the hook only treated `>` as a redirect when followed by whitespace. The same pass also left unescaped `.env` / `.env.example` regexes in place, so benign names like `aenv`, `xenv.local`, and `aenv.example` were misclassified as secret or sample-env paths.
+**What happened:** `bash .claude/hooks/guardrails-self-test.sh --self-test=full` passed, but live repros still showed a bypass for `echo foo>.env`, `echo foo>>.env`, `echo foo>|.env`, and `echo foo>.env.example` because the hook only treated `>` as a redirect when followed by whitespace. The same pass also left unescaped `.env` / `.env.example` regexes in place, so benign names like `aenv`, `xenv.local`, and `aenv.example` were misclassified as secret or sample-env paths.
 
 **Root cause:** I trusted the existing self-test matrix too early. It covered spaced redirects (`> .env`, `>| .env.example`) and canonical `.env` names, but not the no-space shell forms or near-miss filenames that reveal wildcard-dot false positives.
 
@@ -360,23 +316,11 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Status:** active | **Created:** 2026-04-27
 
-**What happened:** While hardening `deny-dangerous.sh` against quoted and wrapper-prefixed `git push` bypasses, the first focused `bash scripts/deny-dangerous.sh --self-test` failed every safe case because a Bash `[[ =~ ]]` expression with an inline `)` regex caused a parse error before the command checks could run. Later manual probes caught more wrapper-option misses after the self-test was green: `command -p git push`, `env -- git push`, and `/usr/bin/time -f %E git push` still returned exit 0 until option-bearing wrapper forms were added. The same verification pass caught a repeated VM-test mistake: `assert.deepEqual` compared a VM-created array with a host-realm array and failed despite matching printed structure.
+**What happened:** While hardening the git-mutation guardrail against quoted and wrapper-prefixed `git push` bypasses, the first focused self-test failed every safe case because a Bash `[[ =~ ]]` expression with an inline `)` regex caused a parse error before the command checks could run. Later manual probes caught more wrapper-option misses after the self-test was green: `command -p git push`, `env -- git push`, and `/usr/bin/time -f %E git push` still returned exit 0 until option-bearing wrapper forms were added. The same verification pass caught a repeated VM-test mistake: `assert.deepEqual` compared a VM-created array with a host-realm array and failed despite matching printed structure.
 
 **Root cause:** I edited a shell regex directly inside `[[ ... =~ ... ]]` instead of moving the pattern to a variable, which is safer for regex metacharacters that the Bash parser can see. I also forgot the existing VM cross-realm lesson when adding a new classic-script helper test.
 
-**Prevention:** After changing Bash hook regexes, run `bash -n <hook>` before interpreting self-test failures; if the regex contains `(`, `)`, `{`, or `}`, prefer a named regex variable. For command wrapper deny rules, probe both bare wrappers and option-bearing wrappers before mirror fanout (`command -p`, `env --`, `env -C`, `time -f`, quoted time formats). For VM-loaded dashboard helper tests, compare scalar fields/lengths or normalize arrays into the host realm. Evidence anchors: `scripts/deny-dangerous.sh` (search: `normalize_time_prefix`), `scripts/deny-dangerous.self-test.sh` (search: `env chdir git push`), `test/unit/dashboard-setup-quality.test.ts` (search: `qualityHistoryRows.length`).
-
----
-
-## Lesson: Stats fixtures need real files for line-reference assertions
-
-**Status:** active | **Created:** 2026-04-27
-
-**What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
-
-**Root cause:** I reused a familiar root file path without checking the isolated fixture filesystem. The stats extractor validates refs against the temp repo, not the real goat-flow checkout.
-
-**Prevention:** In temp-repo stats fixtures, cite a file the fixture creates when asserting line-reference behavior. For this path, `.goat-flow/footguns/hooks.md` is created by the fixture and can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Prevention:** After changing Bash hook regexes, run `bash -n <hook>` before interpreting self-test failures; if the regex contains `(`, `)`, `{`, or `}`, prefer a named regex variable. For command wrapper deny rules, probe both bare wrappers and option-bearing wrappers before mirror fanout (`command -p`, `env --`, `env -C`, `time -f`, quoted time formats). For VM-loaded dashboard helper tests, compare scalar fields/lengths or normalize arrays into the host realm. Evidence anchors: `workflow/hooks/guard-repository-writes.sh` (search: `is_git_push`), `workflow/hooks/guardrails-self-test.sh` (search: `sudo git push`), `test/unit/dashboard-setup-quality.test.ts` (search: `qualityHistoryRows.length`).
 
 ---
 
@@ -391,25 +335,3 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 **Prevention:** For shared npm scripts that create, remove, or copy files, prefer `node:fs` or an explicit cross-platform helper instead of raw `rm -rf`, `mkdir -p`, `cp`, or `chmod` in `package.json`. Evidence anchors: `package.json` (search: `require('node:fs').rmSync`), reproduction command `cmd /d /c "mkdir -p dist/dashboard"` -> `The syntax of the command is incorrect.`
 
 ---
-
-## Lesson: Snapshot-table updates must verify the snapshot files, not infer from live state
-
-**Status:** active | **Created:** 2026-05-02
-
-**What happened:** While updating the preset catalog contract after intentionally removing built-in prompts, I added v1.3.1, v1.3.2, and v1.4.0 to the snapshot-claim test expectations. I inferred the v1.3.2 harness count from current live state and set it to 17, but the frozen `workflow/manifest-snapshots/v1.3.2.json` file records 16 harness checks. The focused snapshot test failed until I reread the snapshot file and corrected the expectation and README table.
-
-**Root cause:** I mixed live manifest facts with frozen release-snapshot facts. Snapshot tests are supposed to preserve historical release state, so current repo counts are the wrong source unless the current release snapshot itself is being updated.
-
-**Prevention:** Before editing `EXPECTED_RELEASE_SNAPSHOTS` or `workflow/manifest-snapshots/README.md`, read the matching versioned snapshot JSON files and copy their `snapshot_facts` values. Only update the current release snapshot after confirming the catalog/check change is intentionally part of that release. Evidence anchors: `test/unit/check-snapshot-claims.test.ts` (search: `EXPECTED_RELEASE_SNAPSHOTS`), `workflow/manifest-snapshots/v1.3.2.json` (search: `"checks_harness": 16`), `workflow/manifest-snapshots/v1.4.0.json` (search: `"presets_count": 26`).
-
----
-
-## Lesson: Audit check tests should assert the public failure field
-
-**Status:** active | **Created:** 2026-05-06
-
-**What happened:** While tightening the execution-loop smoke check, the first focused `test/unit/audit-command.test.ts` run failed because the new regression asserted that `CheckResult.failure.message` would contain the raw finding text `inside the section`. The implementation was already failing the check correctly; `failure.message` exposed the public recommendation text (`Add READ, SCOPE, ACT, VERIFY steps under the "Execution Loop" heading...`) instead.
-
-**Root cause:** I wrote the test against an internal diagnostic phrase rather than the audit result field users and dashboard consumers actually receive.
-
-**Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/audit.ts` (search: `Convert a harness check`), `test/unit/audit-command.test.ts` (search: `execution loop smoke check only accepts step words inside the section`).

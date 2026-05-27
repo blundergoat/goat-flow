@@ -137,19 +137,23 @@ const CUSTOM_PROMPT_FLAG_GROUPS: CustomPromptFlagGroup[] = [
   },
 ];
 
+/** Prompt metadata subset used to apply the same global-safety gate to drafts and stored prompts. */
 interface PromptGlobalSafetyInput {
   requiresGoatFlowInstall?: boolean;
   globalSafe?: boolean;
 }
 
+/** Goat-flow-installed prompts are target-local because external targets may not carry the harness. */
 function dashboardGlobalSafeAllowed(prompt: PromptGlobalSafetyInput): boolean {
   return prompt.requiresGoatFlowInstall !== true;
 }
 
+/** Persisted `globalSafe` is advisory; this enforces the harness-install override every time it is read. */
 function dashboardResolvedGlobalSafe(prompt: PromptGlobalSafetyInput): boolean {
   return prompt.globalSafe === true && dashboardGlobalSafeAllowed(prompt);
 }
 
+/** Stable Alpine state schema mutated by custom-prompt helpers and mirrored by VM-based unit tests. */
 interface DashboardCustomPromptsContext {
   customPrompts: CustomPrompt[];
   customPromptDraft: CustomPromptDraft;
@@ -159,9 +163,11 @@ interface DashboardCustomPromptsContext {
   showCustomPromptEditor: boolean;
   selectedPreset: Preset | null;
   allPresets?: Preset[];
+  /** Report validation and persistence outcomes through the dashboard toast channel. */
   showToast(msg: string, isError?: boolean): void;
 }
 
+/** Create a new form draft with external-target-safe defaults and no inferred route state. */
 function dashboardDefaultCustomPromptDraft(): CustomPromptDraft {
   return {
     name: "",
@@ -185,11 +191,13 @@ function dashboardDefaultCustomPromptDraft(): CustomPromptDraft {
   };
 }
 
+/** Infer a goat route from legacy slash/dollar prompt text before the editor route pill takes over. */
 function dashboardInferPromptRoute(prompt: string): string {
   const match = prompt.trim().match(/^(?:\/|\$)(goat(?:-[a-z]+)?)\b/);
   return match?.[1] ?? "direct";
 }
 
+/** Build a storage id suffix from a user label while avoiding empty `custom:` ids. */
 function dashboardSlugifyCustomPromptName(name: string): string {
   const slug = name
     .trim()
@@ -200,10 +208,12 @@ function dashboardSlugifyCustomPromptName(name: string): string {
   return slug || "prompt";
 }
 
+/** Expose the shared route option list so the form and tests cannot drift apart. */
 function dashboardCustomPromptRouteOptions(): CustomPromptRouteOption[] {
   return CUSTOM_PROMPT_ROUTE_OPTIONS;
 }
 
+/** Expose the grouped flag metadata used by the custom-prompt form controls. */
 function dashboardCustomPromptFlagGroups(): CustomPromptFlagGroup[] {
   return CUSTOM_PROMPT_FLAG_GROUPS;
 }
@@ -217,10 +227,12 @@ function dashboardSelectedCustomPromptRoute(
   );
 }
 
+/** Canonicalize target-surface labels so user-entered chips and stored presets compare reliably. */
 function dashboardNormalizeSurfaceTag(surface: string): string {
   return surface.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
+/** Parse comma-separated target surfaces while preserving first-seen display order. */
 function dashboardParseTargetSurfaces(text: string): string[] {
   const seen = new Set<string>();
   const surfaces: string[] = [];
@@ -233,14 +245,17 @@ function dashboardParseTargetSurfaces(text: string): string[] {
   return surfaces;
 }
 
+/** Serialize canonical surface tags back into the editable comma-separated field. */
 function dashboardJoinTargetSurfaces(surfaces: string[]): string {
   return surfaces.map(dashboardNormalizeSurfaceTag).filter(Boolean).join(", ");
 }
 
-function dashboardReadBoolean(value: unknown): boolean {
-  return typeof value === "boolean" ? value : false;
+/** Read legacy localStorage booleans defensively; non-booleans become false. */
+function dashboardReadBoolean(storedValue: unknown): boolean {
+  return typeof storedValue === "boolean" ? storedValue : false;
 }
 
+/** Read manifest-provided runner ids from the page so custom prompts do not hard-code agents. */
 function dashboardKnownRunnerIds(): string[] {
   return Array.isArray(window.__GOAT_FLOW_RUNNER_IDS__)
     ? window.__GOAT_FLOW_RUNNER_IDS__.filter(
@@ -249,66 +264,77 @@ function dashboardKnownRunnerIds(): string[] {
     : [];
 }
 
-function dashboardIsKnownRunnerId(value: string): value is RunnerId {
-  return dashboardKnownRunnerIds().includes(value);
+/** Narrow a saved runner hint to the runtime runner ids advertised by the dashboard page. */
+function dashboardIsKnownRunnerId(runnerId: string): runnerId is RunnerId {
+  return dashboardKnownRunnerIds().includes(runnerId);
 }
 
-function dashboardReadCustomPrompt(value: unknown): CustomPrompt | null {
-  if (!isRecord(value)) return null;
-  const id = readString(value.id);
-  const name = readString(value.name).trim();
-  const prompt = readString(value.prompt).trim();
+/**
+ * Normalize one persisted prompt into the current schema because localStorage may be stale or edited.
+ */
+function dashboardReadCustomPrompt(storedPrompt: unknown): CustomPrompt | null {
+  if (!isRecord(storedPrompt)) return null;
+  const id = readString(storedPrompt.id);
+  const name = readString(storedPrompt.name).trim();
+  const prompt = readString(storedPrompt.prompt).trim();
   if (!id.startsWith("custom:") || !name || !prompt) return null;
-  const route = readString(value.route) || dashboardInferPromptRoute(prompt);
+  const route =
+    readString(storedPrompt.route) || dashboardInferPromptRoute(prompt);
   if (!CUSTOM_PROMPT_ROUTES.has(route)) return null;
-  const runnerHintValue = readString(value.runnerHint);
+  const runnerHintValue = readString(storedPrompt.runnerHint);
   const runnerHint =
     runnerHintValue === "any" || dashboardIsKnownRunnerId(runnerHintValue)
       ? runnerHintValue
       : "any";
   const requiresGoatFlowInstall = dashboardReadBoolean(
-    value.requiresGoatFlowInstall,
+    storedPrompt.requiresGoatFlowInstall,
   );
   const now = new Date().toISOString();
   return {
     id,
     name,
-    desc: readString(value.desc),
+    desc: readString(storedPrompt.desc),
     prompt,
     route,
     runnerHint,
-    requiresGh: dashboardReadBoolean(value.requiresGh),
-    requiresPrOrIssue: dashboardReadBoolean(value.requiresPrOrIssue),
-    requiresLocalDiff: dashboardReadBoolean(value.requiresLocalDiff),
-    requiresUiApp: dashboardReadBoolean(value.requiresUiApp),
+    requiresGh: dashboardReadBoolean(storedPrompt.requiresGh),
+    requiresPrOrIssue: dashboardReadBoolean(storedPrompt.requiresPrOrIssue),
+    requiresLocalDiff: dashboardReadBoolean(storedPrompt.requiresLocalDiff),
+    requiresUiApp: dashboardReadBoolean(storedPrompt.requiresUiApp),
     requiresDependencyFiles: dashboardReadBoolean(
-      value.requiresDependencyFiles,
+      storedPrompt.requiresDependencyFiles,
     ),
     requiresGoatFlowInstall,
-    mayCheckoutBranch: dashboardReadBoolean(value.mayCheckoutBranch),
-    requiresCleanWorktree: dashboardReadBoolean(value.requiresCleanWorktree),
-    mayWriteFiles: dashboardReadBoolean(value.mayWriteFiles),
-    artifactRequired: dashboardReadBoolean(value.artifactRequired),
+    mayCheckoutBranch: dashboardReadBoolean(storedPrompt.mayCheckoutBranch),
+    requiresCleanWorktree: dashboardReadBoolean(
+      storedPrompt.requiresCleanWorktree,
+    ),
+    mayWriteFiles: dashboardReadBoolean(storedPrompt.mayWriteFiles),
+    artifactRequired: dashboardReadBoolean(storedPrompt.artifactRequired),
     globalSafe: dashboardResolvedGlobalSafe({
       requiresGoatFlowInstall,
       globalSafe:
-        typeof value.globalSafe === "boolean" ? value.globalSafe : true,
+        typeof storedPrompt.globalSafe === "boolean"
+          ? storedPrompt.globalSafe
+          : true,
     }),
-    bestTargetSurfaces: readStringArray(value.bestTargetSurfaces),
-    notes: readString(value.notes),
-    createdAt: readString(value.createdAt) || now,
-    updatedAt: readString(value.updatedAt) || now,
+    bestTargetSurfaces: readStringArray(storedPrompt.bestTargetSurfaces),
+    notes: readString(storedPrompt.notes),
+    createdAt: readString(storedPrompt.createdAt) || now,
+    updatedAt: readString(storedPrompt.updatedAt) || now,
   };
 }
 
-function dashboardReadCustomPrompts(value: unknown): CustomPrompt[] {
-  return Array.isArray(value)
-    ? value
+/** Normalize the stored prompt list, dropping entries that no longer satisfy the schema. */
+function dashboardReadCustomPrompts(storedPrompts: unknown): CustomPrompt[] {
+  return Array.isArray(storedPrompts)
+    ? storedPrompts
         .map((entry) => dashboardReadCustomPrompt(entry))
         .filter((entry): entry is CustomPrompt => entry !== null)
     : [];
 }
 
+/** Load custom prompts from browser storage and recover to an empty list when JSON is malformed. */
 function dashboardLoadCustomPrompts(ctx: DashboardCustomPromptsContext): void {
   try {
     ctx.customPrompts = dashboardReadCustomPrompts(
@@ -328,6 +354,7 @@ function dashboardPersistCustomPrompts(
   );
 }
 
+/** Convert a user-authored custom prompt into the preset shape consumed by existing launch UI. */
 function dashboardCustomPromptToPreset(custom: CustomPrompt): Preset {
   return {
     id: custom.id,
@@ -448,7 +475,7 @@ function dashboardValidateCustomPromptDraftDetails(
       anchor: "custom-prompt-body",
     });
   }
-  const route = draft.route || "direct";
+  const route = draft.route.length > 0 ? draft.route : "direct";
   if (!CUSTOM_PROMPT_ROUTES.has(route)) {
     errors.push({
       field: "route",
@@ -511,7 +538,7 @@ function dashboardCustomPromptPromptWarning(
   ctx: DashboardCustomPromptsContext,
 ): string {
   const prompt = ctx.customPromptDraft.prompt.trim();
-  if (prompt && prompt.length < 20) {
+  if (prompt.length > 0 && prompt.length < 20) {
     return "Prompt is short; make sure it is not a placeholder.";
   }
   return "";

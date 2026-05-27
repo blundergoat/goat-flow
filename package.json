@@ -1,7 +1,7 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.7.0",
-  "description": "Harness engineering framework for AI coding agents - deterministic audit, structured skills, deny-hook safety, feedback loops, and a local dashboard. Works with Claude Code, Codex, Gemini CLI, and GitHub Copilot.",
+  "version": "1.8.0",
+  "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
   "homepage": "https://github.com/blundergoat/goat-flow#readme",
@@ -77,17 +77,25 @@
     "goat-flow",
     "harness-engineering",
     "ai-harness",
+    "ai-agent-harness",
     "ai-agents",
+    "coding-agent",
+    "coding-agents",
     "ai-coding",
     "agentic-coding",
     "ai-workflow",
+    "agent-workflows",
     "ai-safety",
     "ai-guardrails",
+    "agent-guardrails",
+    "agent-dashboard",
     "prompt-engineering",
     "claude-code",
     "codex",
-    "gemini-cli",
+    "openai-codex",
+    "antigravity",
     "copilot",
+    "github-copilot",
     "llm",
     "llm-tools",
     "developer-tools",
@@ -105,6 +113,7 @@
     "node-pty": "1.1.0"
   },
   "devDependencies": {
+    "@blundergoat/gruff-ts": "^0.2.0",
     "@stryker-mutator/core": "^9.6.1",
     "@types/js-yaml": "^4.0.9",
     "@types/markdown-it": "^14.1.2",
@@ -119,5 +128,10 @@
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.57.1"
   },
-  "main": "dist/cli/index.js"
+  "main": "dist/cli/index.js",
+  "overrides": {
+    "typed-rest-client": {
+      "qs": "6.15.2"
+    }
+  }
 }

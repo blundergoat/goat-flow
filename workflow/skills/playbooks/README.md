@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # Skill Playbooks
 
-This directory holds **standalone playbooks for tools and capabilities available to coding agents** in this project. Each playbook is self-contained — no skill composes them in. They are loaded on-demand by skills (or by you) when a tool is named.
+This directory holds **standalone playbooks for tools and capabilities available to coding agents** in this project. Each playbook is self-contained - no skill composes them in. They are loaded on-demand by skills (or by you) when a tool is named.
 
 For shared meta-references composed into every skill (preamble, conventions), see the sibling `skill-reference/` directory.
 
@@ -22,6 +22,11 @@ For shared meta-references composed into every skill (preamble, conventions), se
 | [`browser-use.md`](./browser-use.md) | One-off browser observation: load a URL, screenshot, click, inspect DOM, capture state mid-investigation | `browser-use` CLI, typically at `~/.local/bin/browser-use` |
 | [`page-capture.md`](./page-capture.md) | Batch capture: visit N known pages, screenshot each, emit one MD record per page, for documentation, before/after evidence, or audit snapshots | Playwright (MCP / Node / Python tier), or `browser-use` CLI as a downgrade |
 | [`skill-quality-testing.md`](./skill-quality-testing.md) | Authoring or hardening a goat-flow skill (TDD-on-skills methodology). Load first when creating/editing a skill; routes into `skill-quality-testing/` topical files for the relevant phase | n/a (skill-authoring methodology) |
+| [`observability.md`](./observability.md) | Instrumenting code with logs, metrics, span events, or trace context: severity, structured fields, naming, cardinality budget, sensitive-data rules, and the log-vs-metric decision | n/a (instrumentation discipline) |
+| [`code-comments.md`](./code-comments.md) | Writing or editing source code, before deciding whether to add an inline comment, docstring, or annotation; rules for TODO/FIXME/HACK markers; deciding whether existing comments should be kept, rewritten, or deleted | n/a (commenting discipline) |
+| [`gruff-code-quality.md`](./gruff-code-quality.md) | Running `gruff-go`, `gruff-rs`, `gruff-ts`, `gruff-php`, or `gruff-py`; triaging findings and verifying analyzer-driven cleanup without low-value comments or suppressions | gruff CLI family |
+| [`changelog.md`](./changelog.md) | Writing or editing `CHANGELOG.md`: Keep a Changelog categories, SemVer alignment, breaking-change markers and migration paths, write-at-commit vs write-at-release cadence, version-surface sync | n/a (changelog discipline) |
+| [`release-notes.md`](./release-notes.md) | Writing a per-release narrative for end users (GitHub release body, blog post, email, in-app banner, social): theme identification, user-impact lens, inverted-pyramid structure, multi-surface consistency. Derives from `changelog.md` | n/a (release-notes discipline) |
 
 ## Adding a new playbook
 
@@ -34,6 +39,6 @@ When you add a new tool to the project that future agents need to discover:
 
 ## Why this index exists (provenance)
 
-A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-reference/browser-use.md` (now `.goat-flow/skill-playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` — the tool was always installed.
+A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-reference/browser-use.md` (now `.goat-flow/skill-playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` - the tool was always installed.
 
 This index plus a Router Table pointer in every supported instruction file is the structural fix: agents must read project-local capability playbooks before treating harness-tool absence as capability absence.

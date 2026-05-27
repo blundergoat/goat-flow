@@ -6,8 +6,60 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/deny-dangerous.sh\"",
-            "statusMessage": "Checking command safety"
+            "command": ".codex/hooks/guard-destructive-shell.sh",
+            "statusMessage": "Guard destructive shell"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/guard-secret-paths.sh",
+            "statusMessage": "Guard secret paths"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/guard-repository-writes.sh",
+            "statusMessage": "Guard repository writes"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/gruff-code-quality.sh",
+            "statusMessage": "gruff code quality"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/gruff-code-quality.sh",
+            "statusMessage": "gruff code quality"
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/gruff-code-quality.sh",
+            "statusMessage": "gruff code quality"
           }
         ]
       }

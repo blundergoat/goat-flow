@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # Skill Preamble
 
@@ -77,7 +77,7 @@ If you catch yourself thinking the Excuse, run the proof or mark the claim `UNVE
 | "Just this once" | No exemption. |
 | "Partial check is enough" | A subset of tests is not the test suite. |
 | "Looks correct to me" | Structural inspection ≠ verification. |
-| "Different words, rule doesn't apply" | Spirit over letter — paraphrases count. |
+| "Different words, rule doesn't apply" | Spirit over letter - paraphrases count. |
 
 Concrete claim/proof examples live in `.goat-flow/skill-playbooks/skill-quality-testing.md`.
 
@@ -100,7 +100,7 @@ Adapt ceremony to complexity. This is **pre-invocation routing guidance** for ch
 
 ## Routing Boundary
 
-Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request — a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/tasks/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
+Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request - a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/tasks/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
 
 ## No-Skill Fast Path
 
@@ -115,7 +115,7 @@ If Step 0 exceeds 5 reads without producing output or asking a question, checkpo
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
 - Search with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions` (or `grep -rniE` if `rg` is missing).
 - Open only matching entries; follow related refs at most 2 hops when relevant.
-- On zero hits, reword once and re-search. If still empty, record a retrieval miss — do not broad-load a bucket.
+- On zero hits, reword once and re-search. If still empty, record a retrieval miss - do not broad-load a bucket.
 
 ## Availability Check
 
@@ -127,7 +127,7 @@ If unavailable, take the documented fallback: ask before installing, fall back t
 
 For GitHub issues, PRs, alerts, or CI runs, prefer `gh` (if authenticated) over asking the user to paste content: `gh issue view`, `gh pr view/diff/checks`, `gh run list`, `gh run view --log-failed`, and `gh api /repos/{owner}/{repo}/dependabot/alerts` for goat-security.
 
-Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste rather than guessing — never fabricate issue/PR bodies.
+Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste rather than guessing - never fabricate issue/PR bodies.
 
 ## Footgun Fast-Path
 
@@ -144,7 +144,7 @@ Update durable learning only when VERIFY caught a failure, you corrected course,
 
 Routine success needs no durable write; gitignored logs/scratchpad/critiques/quality reports/tasks stay local.
 
-**Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory — not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
+**Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory - not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
 
 **Bucket file frontmatter.** Every footgun / lesson bucket file starts with `category: <bucket-name>` and `last_reviewed: YYYY-MM-DD`. Bump `last_reviewed` on material body edits (skip cosmetic ones). `goat-flow stats --check` fails when `last_reviewed` is missing, malformed, older than the newest `**Created:**` / `**Updated:**` / `**Resolved:**` entry date, or when the bucket has stale file refs.
 

@@ -11,7 +11,7 @@ export const RATIONALISATIONS_PREAMBLE = [
 export const INSTRUCTION_FILES = {
   claude: "CLAUDE.md",
   codex: "AGENTS.md",
-  gemini: "GEMINI.md",
+  antigravity: "AGENTS.md",
   copilot: ".github/copilot-instructions.md",
 } as const;
 

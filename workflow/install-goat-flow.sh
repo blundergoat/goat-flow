@@ -168,9 +168,18 @@ while IFS=$'\t' read -r key value; do
   esac
 done <<< "$PROFILE_DATA"
 
-if [[ -z "${SKILLS_DIR:-}" || -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
+if [[ -z "${SKILLS_DIR:-}" ]]; then
   echo "ERROR: manifest profile for '$AGENT' is incomplete"
   exit 1
+fi
+
+HOOKS_ENABLED=false
+if [[ -n "${HOOKS_DIR:-}" || -n "${DENY_HOOK_DST:-}" || -n "${HOOK_CONFIG_DST:-}" || -n "${HOOK_CONFIG_SRC:-}" ]]; then
+  if [[ -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
+    echo "ERROR: manifest hook profile for '$AGENT' is incomplete"
+    exit 1
+  fi
+  HOOKS_ENABLED=true
 fi
 
 if [[ -n "${SETTINGS_DST:-}" && -z "${SETTINGS_SRC:-}" ]]; then
@@ -193,6 +202,7 @@ fi
 
 COPIED=0
 SKIPPED=0
+REMOVED=0
 
 copy_file() {
   local src="$1" dst="$2"
@@ -215,6 +225,74 @@ copy_if_missing() {
     return
   fi
   copy_file "$src" "$dst"
+}
+
+prune_unlisted_skill_references() {
+  local skill="$1" skill_dst="$2"
+  local references_dir="$skill_dst/references"
+  [[ -d "$references_dir" ]] || return 0
+
+  readarray -t stale_references < <(
+    node - "$skill_dst" "$references_dir" "${@:3}" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const skillDir = process.argv[2];
+const referencesDir = process.argv[3];
+const expected = new Set(
+  process.argv
+    .slice(4)
+    .filter((file) => file.startsWith("references/"))
+    .map((file) => file.replace(/\\/g, "/")),
+);
+
+function walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walk(fullPath);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+
+    const relativePath = path
+      .relative(skillDir, fullPath)
+      .replace(/\\/g, "/");
+    if (!expected.has(relativePath)) {
+      console.log(relativePath);
+    }
+  }
+}
+
+walk(referencesDir);
+NODE
+  )
+
+  for stale_reference in "${stale_references[@]}"; do
+    [[ -n "$stale_reference" ]] || continue
+    case "$stale_reference" in
+      *..*|*"//"*)
+        echo "ERROR: refusing to prune path with traversal: $stale_reference" >&2
+        exit 1
+        ;;
+      references/*)
+        case "$stale_reference" in
+          *.md) ;;
+          *)
+            echo "ERROR: refusing to prune non-markdown reference: $stale_reference" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      *)
+        echo "ERROR: refusing to prune unexpected path shape: $stale_reference" >&2
+        exit 1
+        ;;
+    esac
+    rm -f "$skill_dst/$stale_reference"
+    REMOVED=$((REMOVED + 1))
+    echo "  ✗ $skill_dst/$stale_reference (removed stale reference)"
+  done
 }
 
 touch_anchor() {
@@ -320,6 +398,39 @@ console.log("changed");
 NODE
 }
 
+ensure_config_hooks_entry() {
+  local path="$1"
+  node - "$path" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const content = fs.readFileSync(path, "utf8");
+if (/^hooks\s*:/m.test(content)) {
+  console.log("unchanged");
+  process.exit(0);
+}
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+let next = content;
+if (next.length > 0 && !/\r?\n$/u.test(next)) next += eol;
+next += [
+  "",
+  "# Hook toggles for goat-flow-shipped hooks.",
+  "hooks:",
+  "  guard-destructive-shell:",
+  "    enabled: true",
+  "  guard-secret-paths:",
+  "    enabled: true",
+  "  guard-repository-writes:",
+  "    enabled: true",
+  "  gruff-code-quality:",
+  "    enabled: false",
+  "",
+].join(eol);
+fs.writeFileSync(path, next);
+console.log("changed");
+NODE
+}
+
 migrate_codex_hooks_feature_flag() {
   local path="$1"
   node - "$path" <<'NODE'
@@ -392,6 +503,257 @@ console.log("migrated");
 NODE
 }
 
+migrate_codex_filesystem_permissions() {
+  local path="$1"
+  node - "$path" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const content = fs.readFileSync(path, "utf8");
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+const lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines.pop();
+
+const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
+const noneEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
+const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
+const legacyProjectRootsPattern = /":project_roots"/u;
+
+function parseTomlBasicString(value) {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch {
+    return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
+  }
+}
+
+function readActivePermissionProfile(configLines) {
+  for (const line of configLines) {
+    const basicMatch = line.match(
+      /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
+    );
+    if (basicMatch) {
+      const profile = parseTomlBasicString(basicMatch[1]).trim();
+      if (profile) return profile;
+    }
+    const literalMatch = line.match(
+      /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
+    );
+    if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
+  }
+  return "goat-flow";
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+const activeProfile = readActivePermissionProfile(lines);
+const filesystemSectionPattern = new RegExp(
+  `^\\s*\\[\\s*permissions\\.${escapeRegExp(activeProfile)}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+  "u",
+);
+
+// Single source of truth: a "none" key is only invalid if it contains a glob
+// metacharacter AND is not a trailing-/** subtree. Codex accepts exact paths
+// and trailing /** subtrees but rejects other glob shapes. Must match the
+// validator's isInvalidNoneKey in validate_codex_settings_after_install.
+function isInvalidNoneKey(key) {
+  if (!key.includes("*")) return false;
+  return !key.endsWith("/**");
+}
+
+const regions = [];
+let i = 0;
+while (i < lines.length) {
+  if (filesystemSectionPattern.test(lines[i])) {
+    const start = i;
+    i += 1;
+    while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
+    regions.push({ start, end: i });
+  } else {
+    i += 1;
+  }
+}
+
+if (regions.length === 0) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+let hasInvalidEntry = false;
+let usesLegacyAnchor = false;
+for (const region of regions) {
+  for (let j = region.start; j < region.end; j += 1) {
+    const line = lines[j];
+    if (legacyProjectRootsPattern.test(line)) usesLegacyAnchor = true;
+    const noneMatch = line.match(noneEntryPattern);
+    if (noneMatch && isInvalidNoneKey(noneMatch[1])) {
+      hasInvalidEntry = true;
+    }
+    const inlineMatch = line.match(inlineTablePattern);
+    if (inlineMatch) {
+      for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        if (isInvalidNoneKey(entry[1])) hasInvalidEntry = true;
+      }
+    }
+  }
+}
+
+if (!hasInvalidEntry && !usesLegacyAnchor) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const canonicalBlock = [
+  `[permissions.${activeProfile}.filesystem]`,
+  "glob_scan_max_depth = 3",
+  '# Codex 0.131 accepts exact paths and trailing "/**" subtrees here.',
+  "# Exact entries must point at files that exist in the target checkout; absent",
+  "# exact paths can make Codex fail before shell startup. Filename globs such as",
+  '# "*.key" are covered by .codex/hooks/guard-secret-paths.sh.',
+  '":workspace_roots" = { "." = "write", "secrets/**" = "none", ".ssh/**" = "none", ".aws/**" = "none", ".docker/**" = "none", ".gnupg/**" = "none", ".kube/**" = "none" }',
+];
+
+const inRegion = new Array(lines.length).fill(false);
+for (const region of regions) {
+  for (let j = region.start; j < region.end; j += 1) inRegion[j] = true;
+}
+
+const firstRegionStart = regions[0].start;
+const before = lines.slice(0, firstRegionStart);
+const after = [];
+for (let j = firstRegionStart; j < lines.length; j += 1) {
+  if (!inRegion[j]) after.push(lines[j]);
+}
+
+while (before.length && before[before.length - 1].trim() === "") before.pop();
+let trailingStart = 0;
+while (trailingStart < after.length && after[trailingStart].trim() === "")
+  trailingStart += 1;
+
+const rebuilt = [...before];
+if (rebuilt.length > 0) rebuilt.push("");
+rebuilt.push(...canonicalBlock);
+if (trailingStart < after.length) {
+  rebuilt.push("");
+  rebuilt.push(...after.slice(trailingStart));
+}
+
+fs.writeFileSync(path, rebuilt.join(eol) + (hadFinalNewline ? eol : ""));
+console.log("migrated");
+NODE
+}
+
+validate_codex_settings_after_install() {
+  local path="$1"
+  node - "$path" <<'NODE'
+const fs = require("node:fs");
+const path = process.argv[2];
+if (!fs.existsSync(path)) {
+  console.log("ok");
+  process.exit(0);
+}
+const content = fs.readFileSync(path, "utf8");
+const problems = new Set();
+
+// Single source of truth: must match isInvalidNoneKey in
+// migrate_codex_filesystem_permissions. A key is invalid only if it contains a
+// glob metacharacter AND is not a trailing-/** subtree.
+function isInvalidNoneKey(key) {
+  if (!key.includes("*")) return false;
+  return !key.endsWith("/**");
+}
+
+const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
+const sectionEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
+const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
+const legacyProjectRootsPattern = /":project_roots"/u;
+
+function parseTomlBasicString(value) {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch {
+    return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
+  }
+}
+
+function readActivePermissionProfile(configLines) {
+  for (const line of configLines) {
+    const basicMatch = line.match(
+      /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
+    );
+    if (basicMatch) {
+      const profile = parseTomlBasicString(basicMatch[1]).trim();
+      if (profile) return profile;
+    }
+    const literalMatch = line.match(
+      /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
+    );
+    if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
+  }
+  return "goat-flow";
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+const lines = content.split(/\r?\n/u);
+const activeProfile = readActivePermissionProfile(lines);
+const filesystemSectionPattern = new RegExp(
+  `^\\s*\\[\\s*permissions\\.${escapeRegExp(activeProfile)}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+  "u",
+);
+
+// Build filesystem section regions so we only flag entries that actually live
+// under the active [permissions.<default_permissions>.filesystem*] profile. A
+// bare "*.pem" = "none" in an unrelated table is not a Codex filesystem error.
+const regions = [];
+let i = 0;
+while (i < lines.length) {
+  if (filesystemSectionPattern.test(lines[i])) {
+    const start = i;
+    i += 1;
+    while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
+    regions.push({ start, end: i });
+  } else {
+    i += 1;
+  }
+}
+
+for (const region of regions) {
+  for (let j = region.start; j < region.end; j += 1) {
+    const line = lines[j];
+    const match = line.match(sectionEntryPattern);
+    if (match && isInvalidNoneKey(match[1])) {
+      problems.add(`section entry "${match[1]}" with access="none"`);
+    }
+    if (legacyProjectRootsPattern.test(line)) {
+      problems.add("legacy :project_roots anchor still present");
+    }
+    const inlineMatch = line.match(inlineTablePattern);
+    if (inlineMatch) {
+      for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        if (isInvalidNoneKey(entry[1])) {
+          problems.add(`inline entry "${entry[1]}" with access="none"`);
+        }
+      }
+    }
+  }
+}
+
+if (problems.size > 0) {
+  console.log("invalid:" + [...problems].join("; "));
+  process.exit(0);
+}
+console.log("ok");
+NODE
+}
+
 echo "goat-flow install: $(basename "$PROJECT") (agent: $AGENT)"
 echo ""
 
@@ -448,7 +810,7 @@ echo ""
 # 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
 #    The `skill-reference/` dir was split into:
 #      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
-#      - skill-playbooks/   (browser-use.md, page-capture.md, skill-quality-testing.md + topical dir)
+#      - skill-playbooks/   (browser-use.md, changelog.md, code-comments.md, gruff-code-quality.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical dir)
 #    On upgrade, sweep the legacy locations so the installed layout matches.
 # ==========================================================================
 legacy_reference_files=(
@@ -485,7 +847,12 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goa
 echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-playbooks/code-comments.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-playbooks/gruff-code-quality.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-playbooks/observability.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-playbooks/changelog.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-playbooks/release-notes.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-playbooks/skill-quality-testing.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md"
@@ -503,10 +870,12 @@ for skill in "${SKILL_NAMES[@]}"; do
     echo "  ✗ $skill (template dir not found: $skill_dir)"
     continue
   fi
+  readarray -t skill_files < <(manifest_eval skill-files "$skill")
+  prune_unlisted_skill_references "$skill" "$SKILLS_DIR/$skill" "${skill_files[@]}"
   while IFS= read -r relative_file; do
     [[ -n "$relative_file" ]] || continue
     copy_file "$skill_dir/$relative_file" "$SKILLS_DIR/$skill/$relative_file"
-  done < <(manifest_eval skill-files "$skill")
+  done < <(printf '%s\n' "${skill_files[@]}")
 done
 echo ""
 
@@ -516,18 +885,19 @@ echo ""
 if $CLEAN_DEPRECATED || $FORCE; then
   readarray -t STALE_NAMES < <(manifest_eval stale-skills)
   if [[ ${#STALE_NAMES[@]} -gt 0 ]]; then
-    REMOVED=0
+    DEPRECATED_REMOVED=0
     echo "Deprecated skill cleanup:"
     for stale in "${STALE_NAMES[@]}"; do
       [[ -n "$stale" ]] || continue
       stale_path="$SKILLS_DIR/$stale"
       if [[ -d "$stale_path" ]]; then
         rm -rf "$stale_path"
+        DEPRECATED_REMOVED=$((DEPRECATED_REMOVED + 1))
         REMOVED=$((REMOVED + 1))
         echo "  ✗ $stale_path (removed)"
       fi
     done
-    if [[ $REMOVED -eq 0 ]]; then
+    if [[ $DEPRECATED_REMOVED -eq 0 ]]; then
       echo "  · no deprecated skills found"
     fi
     echo ""
@@ -537,14 +907,25 @@ fi
 # ==========================================================================
 # 6. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
-echo "Hooks → $HOOKS_DIR/:"
-copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$DENY_HOOK_DST"
-DENY_SELF_TEST_DST="$(dirname "$DENY_HOOK_DST")/deny-dangerous.self-test.sh"
-copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.self-test.sh" "$DENY_SELF_TEST_DST"
-chmod +x "$DENY_HOOK_DST" "$DENY_SELF_TEST_DST"
-if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
-  echo "Hooks config:"
-  copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+if $HOOKS_ENABLED; then
+  echo "Hooks → $HOOKS_DIR/:"
+  for hook_script in \
+    guard-common.sh \
+    guard-destructive-shell.sh \
+    guard-secret-paths.sh \
+    guard-repository-writes.sh \
+    guardrails-self-test.sh
+  do
+    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/$hook_script" "$HOOKS_DIR/$hook_script"
+    chmod +x "$HOOKS_DIR/$hook_script"
+  done
+  if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
+    echo "Hooks config:"
+    copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+  fi
+else
+  echo "Hooks:"
+  echo "  · no hook files for $AGENT"
 fi
 echo ""
 
@@ -555,9 +936,19 @@ echo "Settings:"
 SETTINGS_SKIPPED=false
 if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
   if [[ -f "$SETTINGS_DST" ]] && ! $FORCE; then
-    if [[ "$AGENT" == "codex" ]] && [[ "$(migrate_codex_hooks_feature_flag "$SETTINGS_DST")" == "migrated" ]]; then
+    SETTINGS_MIGRATIONS=()
+    if [[ "$AGENT" == "codex" ]]; then
+      if [[ "$(migrate_codex_hooks_feature_flag "$SETTINGS_DST")" == "migrated" ]]; then
+        SETTINGS_MIGRATIONS+=("deprecated hooks flag")
+      fi
+      if [[ "$(migrate_codex_filesystem_permissions "$SETTINGS_DST")" == "migrated" ]]; then
+        SETTINGS_MIGRATIONS+=("invalid filesystem permissions")
+      fi
+    fi
+    if [[ ${#SETTINGS_MIGRATIONS[@]} -gt 0 ]]; then
       COPIED=$((COPIED + 1))
-      echo "  ✓ $SETTINGS_DST (migrated deprecated hooks flag)"
+      SETTINGS_NOTE="$(IFS=', '; echo "${SETTINGS_MIGRATIONS[*]}")"
+      echo "  ✓ $SETTINGS_DST (migrated: $SETTINGS_NOTE)"
     else
       SETTINGS_SKIPPED=true
       SKIPPED=$((SKIPPED + 1))
@@ -568,6 +959,19 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
   fi
 else
   echo "  · no settings file for $AGENT"
+fi
+if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; then
+  CODEX_VALIDATION="$(validate_codex_settings_after_install "$SETTINGS_DST")"
+  if [[ "$CODEX_VALIDATION" != "ok" ]]; then
+    echo ""
+    echo "ERROR: $SETTINGS_DST still has invalid Codex permission entries:" >&2
+    echo "  ${CODEX_VALIDATION#invalid:}" >&2
+    echo "Codex will reject this config at startup. Re-run with --force to" >&2
+    echo "refresh from the canonical template, or edit the file manually so" >&2
+    echo "every \"none\" entry under :workspace_roots is either an exact path" >&2
+    echo "or a trailing \"/**\" subtree." >&2
+    exit 1
+  fi
 fi
 echo ""
 
@@ -594,6 +998,10 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("legacy agents allowlist removed")
   fi
+  if [[ "$(ensure_config_hooks_entry "$CONFIG_PATH")" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("hook toggles added")
+  fi
   if $CONFIG_CHANGED; then
     COPIED=$((COPIED + 1))
     note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
@@ -603,7 +1011,7 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     echo "  · $CONFIG_PATH (exists, no config changes)"
   fi
 else
-  printf 'version: "%s"\n\nskills:\n  install: all\n' "$VERSION" > "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  guard-destructive-shell:\n    enabled: true\n  guard-secret-paths:\n    enabled: true\n  guard-repository-writes:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$CONFIG_PATH"
   COPIED=$((COPIED + 1))
   echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi
@@ -643,20 +1051,20 @@ echo ""
 # Summary
 # ==========================================================================
 echo "─────────────────────────────────────────"
-echo "DONE: $COPIED files installed, $SKIPPED skipped"
+echo "DONE: $COPIED files installed, $SKIPPED skipped, $REMOVED stale removed"
 echo ""
 
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)
-if $SETTINGS_SKIPPED && [[ -f "$DENY_HOOK_DST" ]]; then
+if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/guard-repository-writes.sh" ]]; then
   echo "⚠ Settings file was preserved (not overwritten)."
-  echo "  The deny hook at $DENY_HOOK_DST was installed but may not be"
+  echo "  The guardrail hooks in $HOOKS_DIR were installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"
-  echo "  a PreToolUse hook entry pointing at the deny script."
+  echo "  PreToolUse hook entries pointing at the guardrail scripts."
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
     # shellcheck disable=SC2016
-    echo '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash \"$(git rev-parse --show-toplevel)/.claude/hooks/deny-dangerous.sh\""}]}'
+    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; }; bash \"$root/.claude/hooks/guard-repository-writes.sh\""}]}'
   fi
   echo ""
 fi

@@ -105,9 +105,9 @@ describe("backwards compatibility", () => {
   });
 
   it("quality command parses correctly", () => {
-    const parsed = parseCLIArgs(["quality", ".", "--agent", "gemini"]);
+    const parsed = parseCLIArgs(["quality", ".", "--agent", "antigravity"]);
     assert.equal(parsed.command, "quality");
-    assert.equal(parsed.agent, "gemini");
+    assert.equal(parsed.agent, "antigravity");
   });
 
   it("setup command still works", () => {

@@ -60,9 +60,9 @@ function renderEnforcementMatrix(matrix: AgentEnforcementCapability[]): string {
   lines.push("");
   for (const agent of matrix) {
     lines.push(`  ${CYAN}${agent.name}${RESET}`);
-    for (const item of agent.capabilities) {
+    for (const capability of agent.capabilities) {
       lines.push(
-        `    ${enforcementStatus(item.status)} ${item.label}: ${item.summary}`,
+        `    ${enforcementStatus(capability.status)} ${capability.label}: ${capability.summary}`,
       );
     }
     lines.push("");
@@ -82,10 +82,10 @@ function renderTextScope(name: string, scope: AuditScope): string {
       `  ${label}:${" ".repeat(Math.max(1, 22 - label.length))}${value}`,
     );
   }
-  for (const f of scope.failures) {
-    lines.push(`  ${RED}x ${f.check}: ${f.message}${RESET}`);
-    if (f.howToFix) {
-      lines.push(`    ${CYAN}-> ${f.howToFix}${RESET}`);
+  for (const failure of scope.failures) {
+    lines.push(`  ${RED}x ${failure.check}: ${failure.message}${RESET}`);
+    if (failure.howToFix) {
+      lines.push(`    ${CYAN}-> ${failure.howToFix}${RESET}`);
     }
   }
   return lines.join("\n");
@@ -99,6 +99,13 @@ const CONCERN_LABELS: Record<AuditConcernKey, string> = {
   feedback_loop: "Feedback Loop",
 };
 
+/**
+ * Append the stable harness concern summary used by terminal output.
+ *
+ * This branch structure is intentional because the no-harness tip, concern
+ * order, and recommendation/fix pairing are part of the public output contract;
+ * structured `details` stay out of prose to preserve JSON/SARIF-only semantics.
+ */
 function renderHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {
     lines.push(
@@ -134,13 +141,17 @@ function renderHarnessConcerns(report: AuditReport, lines: string[]): void {
   }
 }
 
-/** Render the full audit report in the terminal text format. */
+/**
+ * Render the full audit report in the terminal text format.
+ *
+ * @param report - Audit report produced by `runAudit` or `runAuditBatch`.
+ * @returns Human-readable terminal output with ANSI status labels.
+ */
 export function renderAuditText(report: AuditReport): string {
   const lines: string[] = [];
   lines.push(`${BOLD}GOAT Flow Audit: ${report.target}${RESET}`);
   lines.push("");
 
-  // Build scopes
   lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
   lines.push(renderTextScope("Agent Setup", report.scopes.agent));
@@ -188,15 +199,18 @@ function renderTextContentFindings(
     lines.push(`  ${DIM}No content issues detected.${RESET}`);
     return;
   }
-  for (const f of content.findings) {
-    const color = f.severity === "warning" ? RED : YELLOW;
-    const loc = f.line !== undefined ? `${f.path}:${f.line}` : f.path;
+  for (const finding of content.findings) {
+    const color = finding.severity === "warning" ? RED : YELLOW;
+    const loc =
+      finding.line !== undefined
+        ? `${finding.path}:${finding.line}`
+        : finding.path;
     lines.push(
-      `  ${color}${f.severity.toUpperCase()} [${f.rule}] ${loc}${RESET}`,
+      `  ${color}${finding.severity.toUpperCase()} [${finding.rule}] ${loc}${RESET}`,
     );
-    lines.push(`    ${DIM}${f.message}${RESET}`);
-    if (f.suggestion) {
-      lines.push(`    ${CYAN}-> ${f.suggestion}${RESET}`);
+    lines.push(`    ${DIM}${finding.message}${RESET}`);
+    if (finding.suggestion) {
+      lines.push(`    ${CYAN}-> ${finding.suggestion}${RESET}`);
     }
   }
 }
@@ -204,35 +218,42 @@ function renderTextContentFindings(
 /** Map a skill-dir path prefix to a goat-flow install --agent target.
  *  Returns null when the path doesn't match a known satellite-agent dir. */
 function pathToAgentLabel(path: string): string | null {
+  // `.agents/skills/` is shared by codex and antigravity; codex is the
+  // default install target for repair suggestions.
   if (path.startsWith(".agents/skills/")) return "codex";
-  if (path.startsWith(".gemini/skills/")) return "gemini";
   if (path.startsWith(".claude/skills/")) return "claude";
   if (path.startsWith(".github/skills/")) return "copilot";
   return null;
 }
 
-/** Render drift findings in the terminal text format. */
+/**
+ * Render drift findings in the terminal text format.
+ *
+ * The tag vocabulary is a stable user-facing contract, and the second pass is
+ * intentional because deprecated skills need one combined repair hint per
+ * agent rather than one repeated hint per finding.
+ */
 function renderTextDriftFindings(drift: DriftReport, lines: string[]): void {
   if (drift.findings.length === 0) {
     lines.push(`  ${DIM}No drift detected.${RESET}`);
     return;
   }
-  for (const f of drift.findings) {
+  for (const finding of drift.findings) {
     const tag =
-      f.kind === "content"
+      finding.kind === "content"
         ? "drift"
-        : f.kind === "missing"
+        : finding.kind === "missing"
           ? "missing"
-          : f.kind === "deprecated"
+          : finding.kind === "deprecated"
             ? "deprecated"
             : "orphan";
-    lines.push(`  ${RED}x [${tag}] ${f.path}${RESET}`);
-    lines.push(`    ${DIM}${f.message}${RESET}`);
+    lines.push(`  ${RED}x [${tag}] ${finding.path}${RESET}`);
+    lines.push(`    ${DIM}${finding.message}${RESET}`);
   }
   const staleAgents = new Set<string>();
-  for (const f of drift.findings) {
-    if (f.kind !== "deprecated") continue;
-    const agent = pathToAgentLabel(f.path);
+  for (const finding of drift.findings) {
+    if (finding.kind !== "deprecated") continue;
+    const agent = pathToAgentLabel(finding.path);
     if (agent !== null) staleAgents.add(agent);
   }
   if (staleAgents.size > 0) {
@@ -262,16 +283,22 @@ function renderMdScope(name: string, scope: AuditScope): string {
   for (const [key, value] of Object.entries(scope.summary)) {
     lines.push(`- **${key}**: ${value}`);
   }
-  for (const f of scope.failures) {
-    lines.push(`- :x: **${f.check}**: ${f.message}`);
-    if (f.howToFix) {
-      lines.push(`  - *Fix:* ${f.howToFix}`);
+  for (const failure of scope.failures) {
+    lines.push(`- :x: **${failure.check}**: ${failure.message}`);
+    if (failure.howToFix) {
+      lines.push(`  - *Fix:* ${failure.howToFix}`);
     }
   }
   return lines.join("\n");
 }
 
-/** Render harness concerns in markdown. */
+/**
+ * Render harness concerns in markdown.
+ *
+ * Markdown preserves the same stable concern order and summary contract as the
+ * terminal renderer because PR comments and terminal output need comparable
+ * failure/recommendation ordering.
+ */
 function renderMdHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {
     lines.push(
@@ -304,7 +331,12 @@ function renderMdHarnessConcerns(report: AuditReport, lines: string[]): void {
   }
 }
 
-/** Render drift findings in markdown. */
+/**
+ * Render drift findings in markdown using stable finding-kind labels.
+ *
+ * The `[kind] path - message` shape is the public markdown contract for drift
+ * reports, matching the data model without exposing terminal-only repair hints.
+ */
 function renderMdDrift(drift: DriftReport, lines: string[]): void {
   lines.push("");
   lines.push(
@@ -314,14 +346,21 @@ function renderMdDrift(drift: DriftReport, lines: string[]): void {
     lines.push("");
     lines.push("No drift detected.");
   } else {
-    for (const f of drift.findings) {
-      lines.push(`- :x: **[${f.kind}]** \`${f.path}\` - ${f.message}`);
+    for (const finding of drift.findings) {
+      lines.push(
+        `- :x: **[${finding.kind}]** \`${finding.path}\` - ${finding.message}`,
+      );
     }
   }
   lines.push("");
 }
 
-/** Render content-check findings in markdown. */
+/**
+ * Render content-check findings in markdown using stable severity/rule labels.
+ *
+ * The location and suggestion shape is a public contract with content-quality
+ * consumers, so markdown keeps the same diagnostic fields as terminal output.
+ */
 function renderMdContent(content: ContentReport, lines: string[]): void {
   lines.push("");
   lines.push(
@@ -331,18 +370,26 @@ function renderMdContent(content: ContentReport, lines: string[]): void {
     lines.push("");
     lines.push("No content issues detected.");
   } else {
-    for (const f of content.findings) {
-      const loc = f.line !== undefined ? `${f.path}:${f.line}` : f.path;
+    for (const finding of content.findings) {
+      const loc =
+        finding.line !== undefined
+          ? `${finding.path}:${finding.line}`
+          : finding.path;
       lines.push(
-        `- :x: **${f.severity.toUpperCase()} [${f.rule}]** \`${loc}\` - ${f.message}`,
+        `- :x: **${finding.severity.toUpperCase()} [${finding.rule}]** \`${loc}\` - ${finding.message}`,
       );
-      if (f.suggestion) lines.push(`  - *Fix:* ${f.suggestion}`);
+      if (finding.suggestion) lines.push(`  - *Fix:* ${finding.suggestion}`);
     }
   }
   lines.push("");
 }
 
-/** Render the full audit report in markdown. */
+/**
+ * Render the full audit report in markdown.
+ *
+ * @param report - Audit report produced by `runAudit` or `runAuditBatch`.
+ * @returns Markdown suitable for PR comments and copied audit summaries.
+ */
 export function renderAuditMarkdown(report: AuditReport): string {
   const lines: string[] = [];
   lines.push(`# GOAT Flow Audit: ${report.target}`);

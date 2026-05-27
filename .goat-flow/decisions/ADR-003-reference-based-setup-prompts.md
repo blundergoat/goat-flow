@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-28
 **Status:** Accepted
+**Updated:** 2026-05-27 - `src/cli/prompt/fragments/` is gone except for content promoted into current setup/prompt modules after ADR-013 removed the scanner-era fragment system.
 
 ## Context
 
@@ -22,13 +23,13 @@ Replace inline skeleton generation with reference-based prompts that point agent
 - `goat-flow setup` now generates ~90-line prompts containing a template path table (skill name → `workflow/skills/goat-{name}.md` path) plus adaptation guidance
 - The agent reads each template from disk at setup time, getting the canonical current version - no inline copy to drift
 - Language-to-coding-standards mapper auto-selects the right backend/frontend/security templates based on detected stack
-- Per-agent `--agent claude|codex|gemini` flag replaces `--agent all` (which tried to generate one prompt for all agents and produced confused output)
+- Per-agent `--agent claude|codex|antigravity` flag replaces `--agent all` (which tried to generate one prompt for all agents and produced confused output)
 - ~~`GOAT_FLOW_INLINE_SETUP=1` env var preserves the old fragment-based renderer as a rollback mechanism~~ Removed in v0.10.0 -- the inline fragment renderer was deleted and this env var is no longer checked
 
 ## Consequences
 
 - Templates in `workflow/` and `workflow/setup/` are now the single source of truth - updating a template immediately affects the next setup run
-- Agents must have filesystem access to read templates (true for Claude Code, Codex, Gemini CLI; may not work for cloud-only agents)
+- Agents must have filesystem access to read templates (true for Claude Code, Codex, and Antigravity; may not work for cloud-only agents)
 - Setup output is dramatically shorter (~90 vs ~860 lines), freeing context budget for project-specific adaptation
 - The `workflow/setup/` and `workflow/` directories are included in the npm tarball (`"files"` in package.json) so templates ship with the CLI
 - Skill-quality recommendation keys (add-skill-step0, add-skill-human-gates, etc.) must render as instruction text, not template paths - otherwise they all resolve to "Adapt from goat-debug.md" (bug found and fixed during this release)

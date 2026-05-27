@@ -23,6 +23,7 @@ import {
 
 type EvidenceActor = "dashboard" | "cli" | "server";
 
+/** Stable event names emitted by local runtime producers into the evidence log. */
 export type EvidenceEventKind =
   | "terminal.create"
   | "terminal.delete"
@@ -47,8 +48,10 @@ type EvidencePayloadValue =
   | EvidencePayloadValue[]
   | { [key: string]: EvidencePayloadValue };
 
+/** JSON-compatible payload object; sensitive values must use redaction markers. */
 export type EvidencePayload = Record<string, EvidencePayloadValue>;
 
+/** Runtime event record that reuses CheckEvidence provenance fields. */
 export interface EvidenceEnvelope extends CheckEvidence {
   producer: string;
   event_kind: EvidenceEventKind;
@@ -58,6 +61,7 @@ export interface EvidenceEnvelope extends CheckEvidence {
   payload?: EvidencePayload;
 }
 
+/** Caller-friendly input shape before camelCase fields are adapted to envelope keys. */
 export interface CreateEvidenceEnvelopeInput {
   producer?: string;
   eventKind: EvidenceEventKind;
@@ -77,12 +81,14 @@ export interface CreateEvidenceEnvelopeInput {
   >;
 }
 
+/** Non-throwing append result returned to dashboard and CLI producers. */
 export interface AppendEvidenceEnvelopeResult {
   ok: boolean;
   path: string | null;
   error?: string;
 }
 
+/** Optional warning sink used by tests and dashboard routes instead of direct stderr writes. */
 export interface EvidenceEnvelopeWriteOptions {
   onWarning?: (message: string) => void;
 }
@@ -91,28 +97,41 @@ type EvidencePathExists = (path: string) => boolean;
 
 const EVENTS_LOG_RELATIVE_DIR = ".goat-flow/logs/events";
 const ENVELOPE_FRAMEWORK_EVIDENCE = "src/cli/evidence/envelope.ts";
+// Cap tails at 500 entries so dashboard reads stay bounded even when daily JSONL logs grow.
 const MAX_TAIL_LIMIT = 500;
 const SENSITIVE_PAYLOAD_KEY =
   /^(?:prompt|output|terminal_output|terminal_scrollback|scrollback|upload_content|upload_data|screenshot|raw_json|raw_html|raw_tool_output|tool_output|bucket_body)$/iu;
 const VALID_ACTORS = new Set<EvidenceActor>(["dashboard", "cli", "server"]);
 
+/** Resolve the gitignored event-log directory under the selected project root. */
 function eventsLogDir(projectPath: string): string {
   return join(projectPath, EVENTS_LOG_RELATIVE_DIR);
 }
 
+/** Normalize optional caller timestamps while defaulting local events to current time. */
 function timestampString(timestamp: string | Date | undefined): string {
   if (timestamp instanceof Date) return timestamp.toISOString();
   return timestamp ?? new Date().toISOString();
 }
 
-function isIsoTimestamp(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}T/u.test(value) && !Number.isNaN(Date.parse(value));
+/** Check the timestamp format expected by envelope filenames and provenance dates. */
+function isIsoTimestamp(timestamp: string): boolean {
+  return (
+    /^\d{4}-\d{2}-\d{2}T/u.test(timestamp) &&
+    !Number.isNaN(Date.parse(timestamp))
+  );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Narrow parsed JSON and payload values to object records before key inspection. */
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
+/** Recursively require redaction markers for sensitive payload keys. */
 function validatePayloadValue(
   key: string,
   value: EvidencePayloadValue,
@@ -140,6 +159,7 @@ function validatePayloadValue(
   );
 }
 
+/** Validate the optional payload without rejecting the envelope when no payload exists. */
 function validatePayload(payload: EvidencePayload | undefined): string[] {
   if (payload === undefined) return [];
   if (!isRecord(payload)) return ["payload must be an object"];
@@ -166,7 +186,12 @@ function applyEnvelopeOptionalFields(
   }
 }
 
-/** Build a validated envelope shape from one local runtime event. */
+/**
+ * Build a validated envelope shape from one local runtime event.
+ *
+ * @param input - Runtime event details and optional provenance override.
+ * @returns Evidence envelope ready for validation or append.
+ */
 export function createEvidenceEnvelope(
   input: CreateEvidenceEnvelopeInput,
 ): EvidenceEnvelope {
@@ -189,7 +214,13 @@ export function createEvidenceEnvelope(
   return envelope;
 }
 
-/** Validate runtime envelope fields while delegating provenance rules. */
+/**
+ * Validate runtime envelope fields while delegating provenance rules.
+ *
+ * @param envelope - Envelope to validate.
+ * @param pathExists - Optional path-existence predicate for provenance checks.
+ * @returns Human-readable validation errors; an empty array means valid.
+ */
 export function validateEvidenceEnvelope(
   envelope: EvidenceEnvelope,
   pathExists?: EvidencePathExists,
@@ -226,7 +257,14 @@ function warn(
   console.warn(message);
 }
 
-/** Append one envelope to the local gitignored JSONL event log. Never throws. */
+/**
+ * Append one envelope to the local gitignored JSONL event log. Never throws.
+ *
+ * @param projectPath - Project root that owns `.goat-flow/logs/events`.
+ * @param envelope - Validated or caller-created envelope to append.
+ * @param options - Optional warning callback for non-fatal validation or filesystem failures.
+ * @returns Append outcome with a path on success and an error string on failure.
+ */
 export function appendEvidenceEnvelope(
   projectPath: string,
   envelope: EvidenceEnvelope,
@@ -251,7 +289,13 @@ export function appendEvidenceEnvelope(
   }
 }
 
-/** Convenience producer helper for common dashboard/server event emission. */
+/**
+ * Convenience producer helper for common dashboard/server event emission.
+ *
+ * @param input - Runtime event details to envelope and append.
+ * @param options - Optional warning callback for append failures.
+ * @returns Append outcome from the underlying non-throwing writer.
+ */
 export function recordEvidenceEvent(
   input: CreateEvidenceEnvelopeInput,
   options?: EvidenceEnvelopeWriteOptions,
@@ -263,6 +307,7 @@ export function recordEvidenceEvent(
   );
 }
 
+/** Return sorted daily JSONL event logs; invariant: filenames must preserve chronology. */
 function eventLogFiles(projectPath: string): string[] {
   const dir = eventsLogDir(projectPath);
   if (!existsSync(dir)) return [];
@@ -272,19 +317,26 @@ function eventLogFiles(projectPath: string): string[] {
     .map((name) => join(dir, name));
 }
 
+/** Parse one JSONL entry; swallows malformed JSON or invalid envelopes as unreadable history. */
 function parseEnvelopeLine(line: string): EvidenceEnvelope | null {
   if (!line.trim()) return null;
   try {
     const parsed: unknown = JSON.parse(line);
     if (!isRecord(parsed)) return null;
-    const candidate = parsed as unknown as EvidenceEnvelope;
+    const candidate = parsed as EvidenceEnvelope & Record<string, unknown>;
     return validateEvidenceEnvelope(candidate).length === 0 ? candidate : null;
   } catch {
     return null;
   }
 }
 
-/** Read the newest local event envelopes, preserving chronological order. */
+/**
+ * Read the newest local event envelopes, preserving chronological order.
+ *
+ * @param projectPath - Project root whose gitignored event logs should be tailed.
+ * @param limit - Requested maximum number of newest envelopes; capped for bounded reads.
+ * @returns Valid envelopes from the newest tail window.
+ */
 export function tailEvidenceEvents(
   projectPath: string,
   limit = 20,

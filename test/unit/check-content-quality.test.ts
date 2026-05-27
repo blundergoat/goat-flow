@@ -217,7 +217,7 @@ describe("scanContentQuality: legacy execution loop (M19-9a)", () => {
 
   it("flags 'VERIFY → LOG' alone as WARNING even without CLASSIFY context", () => {
     const findings = scanContentQuality(
-      "GEMINI.md",
+      "AGENTS.md",
       "Close the loop at VERIFY → LOG.",
     );
     const legacy = findings.find(

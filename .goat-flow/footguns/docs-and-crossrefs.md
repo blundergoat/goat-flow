@@ -1,6 +1,94 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-05-18
+last_reviewed: 2026-05-28
+---
+
+## Footgun: Agent capability metadata goes stale when upstream docs add hooks
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Dashboard and docs can report an agent as "not supported" for hooks while the runtime has a project-local hook config or a viable fallback path. The 2026-05-26 Antigravity correction found stale "not wired" claims in `workflow/setup/agents/antigravity.md` (search: `.agents/hooks.json`), `workflow/hooks/README.md` (search: `secret-bearing file tools`), and `workflow/manifest.json` (search: `"antigravity"`) after official Antigravity docs documented `.agents/hooks.json` and PreToolUse hooks. The 2026-05-28 gruff correction then removed a stale `gruff-code-quality` exclusion after the hook gained Antigravity file-tool matchers and a git-changed-file fallback.
+
+**Why it happens:** Agent capability tables freeze a past product observation. Manifest fields, setup docs, dashboard state, audit logic, and changelog prose then reinforce each other, so structural checks can pass while the primary upstream docs have moved on.
+
+**Evidence:**
+- `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) now records the corrected Antigravity hook config.
+- `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) maps `gruff-code-quality` to Antigravity file-edit tool names.
+- `workflow/hooks/gruff-code-quality.sh` (search: `file_paths_for_payload`) falls back to git-changed supported files when a PostToolUse payload omits the edited path.
+- `workflow/hooks/agent-config/antigravity-hooks.json` (search: `run_command|view_file`) is the new Antigravity config template.
+- `.agents/hooks.json` (search: `guard-secret-paths`) is the installed mirror that proves this controlling workspace no longer treats Antigravity as hookless.
+
+**Prevention:** Before marking an agent capability "unsupported" or "capability-limited", check current primary product docs and the local binary version, then test whether an agent-specific matcher or repository-state fallback can preserve the contract. Use hook-specific unsupported reasons only after the fallback path is disproven. After correcting capability metadata, grep docs, changelog, footguns, manifest, audit, dashboard, templates, and installed mirrors for the old unsupported wording.
+
+## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
+
+**Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A hook script can exist and pass its own smoke test while the dashboard registry, installer, manifest, preflight parity, audit facts, agent config templates, installed mirrors, and docs disagree about whether it is installed or togglable.
+
+**Evidence:** The 2026-05-25 guardrails split and `gruff-code-quality` addition touched `src/cli/server/hooks-registry.ts` (search: `guard-destructive-shell`), `workflow/hooks/` (search: `guardrails-self-test.sh`), `workflow/manifest.json` (search: `guard-repository-writes.sh`), `workflow/install-goat-flow.sh` (search: `guardrails-self-test.sh`), `scripts/preflight-checks.sh` (search: `guardrail_hooks`), per-agent config templates under `workflow/hooks/agent-config/`, installed mirrors under `.claude/hooks/`, `.codex/hooks/`, `.github/hooks/`, audit fact extraction in `src/cli/facts/agent/hooks.ts` (search: `GUARDRAIL_HOOK_FILES`), and dashboard/CLI surfaces in `src/dashboard/views/hooks.html` plus `src/cli/cli.ts` (search: `handleHooksCommand`).
+
+**Recurrence 2026-05-26:** The `gruff-code-quality` hook rename focused drift run failed because `test/integration/audit-drift.test.ts` (search: `writeHookFixtures`) copied only `guard-repository-writes.sh` and `guardrails-self-test.sh` into its temporary hook fixture. The live manifest now declares all split guardrails, so the fixture had to copy `guard-destructive-shell.sh`, `guard-secret-paths.sh`, and `guard-repository-writes.sh` in lock-step.
+
+**Prevention:** When adding, renaming, or deleting a goat-flow hook, update this lock-step list: canonical script(s), central self-test, registry entry, config default, installer copy list, manifest `hooks[]`, per-agent config templates, installed repo mirrors, audit fact extraction, preflight self-test/parity/runtime smoke, dashboard view/API if response shape changes, CLI help if command surface changes, docs/code-map/architecture/changelog, and tests. Then run a source grep for the old hook id and a runtime-shaped smoke through an installed hook.
+
+## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
+
+**Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes a code shape that no longer exists. Search anchors in the Symptoms paragraph resolve to nothing — `grep` on the live tree returns zero hits for the identifier the footgun says to look at. Future agents following the anchor either chase a ghost incident (looking for a regex that's been refactored away) or distrust the entire footgun bucket because one entry is verifiably wrong.
+
+**Why it happens:** Footguns get created when an incident hits. When the bug is fixed, the fixer often updates code + tests + changelog but does not update the footgun text. The Status tag stays `active` because the *principle* (e.g., "two paths checking the same shape must call one predicate") is still valid — but the *evidence* (the specific identifier the Symptoms paragraph names) is now stale. The Prevention rules and the Symptoms paragraph live at different lifecycles, and no single check enforces that they stay in sync.
+
+**Evidence:** Caught by the Codex quality report `.goat-flow/logs/quality/2026-05-25-2006-codex-jqclh.json` flagging `.goat-flow/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`). The original active entry's Symptoms paragraph named a search anchor for an obsolete matcher, but `rg` returned zero hits in `workflow/install-goat-flow.sh` - the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The setup footgun is now resolved with current anchors, preserving the prevention rule without sending agents after a removed symbol.
+
+**Prevention:**
+1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
+2. When reviewing a footgun bucket, treat zero-hit search anchors as a SEV signal: either the anchor was always wrong (find the right one) or the underlying bug was fixed (rewrite or resolve). A footgun that fails `rg <anchor>` is documentation rot, not a guard.
+3. `stats --check` validates `last_reviewed` dates and bucket size but does not verify that semantic anchors in footgun bodies resolve to real symbols. The check that catches this today is human review — usually a quality report or a downstream agent following the anchor. Until automated, treat persisted footgun findings in quality reports as higher-priority than newly-flagged ones because they survived a prior review pass.
+4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
+
+---
+
+## Footgun: Adding a skill-playbook requires lock-step updates across 13+ surfaces
+
+**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A new playbook is dropped into `workflow/skills/playbooks/` and `.goat-flow/skill-playbooks/`, listed in the manifest, and seemingly working - but later silently drifts from its template because one of several parity checks was never enrolled. Or a future contributor adding a similar playbook misses one of the surfaces, leaving the playbook discoverable but undocumented in audit / drift / prompt output.
+
+**Why it happens:** `workflow/manifest.json` is the nominal source of truth for "which playbooks exist", but many other surfaces independently enumerate the same list and each must be updated by hand:
+
+1. `workflow/skills/playbooks/<name>.md` - template
+2. `.goat-flow/skill-playbooks/<name>.md` - installed copy (must byte-match template)
+3. `workflow/manifest.json` - two entries: `required_files` list AND the `directories.".goat-flow/skill-playbooks/"` description string
+4. `workflow/install-goat-flow.sh` (search: `copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/`) - installer copy line
+5. `workflow/skills/playbooks/README.md` AND `.goat-flow/skill-playbooks/README.md` - index tables (must byte-match each other)
+6. `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/`) - byte-exact parity block per playbook
+7. `test/integration/preamble-sync.test.ts` (search: `template and installed`) - per-playbook sync assertion + path constants block
+8. `test/integration/audit-build.test.ts` (search: `requiredSkillReferenceFiles`) - required-files list
+9. `src/cli/audit/check-goat-flow.ts` (search: `REQUIRED_SKILL_REFERENCE_FILES`) - two lists: the `Set` used for the manifest-catch-all gate AND the `REQUIRED_SKILL_REFERENCE_FILES` const used for agent-skill audits
+10. `src/cli/audit/check-drift.ts` (search: `template: "workflow/skills/playbooks/`) - drift comparison entries plus a parallel comment header at the top of the file
+11. `src/cli/prompt/compose-quality.ts` (search: `Standalone playbooks`) - prompt-context description string
+12. `.goat-flow/architecture.md` (search: `the standalone playbooks indexed by`) - inline playbook list in the Committed knowledge row
+13. `.goat-flow/code-map.md` - two entries: inline list comment on the `playbooks/` template line AND the per-file description block under `skill-playbooks/`
+14. `knip.json` (search: `ignoreDependencies`) - only when the playbook relies on a CLI-only devDependency that is invoked from docs/scripts instead of imported by TypeScript.
+
+Two playbooks (`code-comments.md`, `observability.md`) shipped earlier in this PR with #6, #7, and #10 partially or fully missing - the playbooks were installed, copied on update, and visible in the README, but byte-exact parity between template and installed was not enforced. The gap was caught while adding `release-notes.md` and `changelog.md`; all four playbooks are now enrolled everywhere.
+
+**Evidence:**
+- `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/code-comments.md`) added during the same change set that added `changelog.md` and `release-notes.md` parity, retroactively closing the gap for the two prior playbooks.
+- `src/cli/audit/check-drift.ts` (search: `template: "workflow/skills/playbooks/code-comments.md"`) similarly added retroactively.
+- `test/integration/preamble-sync.test.ts` (search: `template and installed code-comments.md match`) similarly added.
+- 2026-05-25 gruff-code-quality addition/rename: `bash scripts/preflight-checks.sh --verbose --no-color` in the installer round-trip fixture enrolled `gruff-code-quality.md`, then failed Knip because `@blundergoat/gruff-ts` is a CLI-only devDependency. `knip.json` (search: `@blundergoat/gruff-ts`) now records that non-imported tool dependency explicitly.
+
+**Prevention:**
+1. When adding a new skill-playbook, walk the checklist above before declaring done. Every surface is independent; missing one leaves silent drift.
+2. Run `bash scripts/preflight-checks.sh` after enrolling the new playbook. If preflight does not name the new playbook in its parity output (look for `template and installed copy match`), surface #6 is unenrolled.
+3. Run `npm test` after enrolling. If `preamble-sync.test.ts` does not list the new playbook in test names, surface #7 is unenrolled.
+4. Treat the manifest as the source of truth structurally, but treat the other surfaces as load-bearing duplicates that must be updated in lock-step. A future refactor that derives the parity blocks from `manifest.json` would eliminate this footgun, but until that lands, the enumeration is the contract.
+5. When reviewing a playbook-addition PR, grep for the new filename in every surface listed above. Missing surfaces = blocking comment.
+6. If the playbook introduces or documents a package that is used only as a CLI, run `npx knip --no-progress`; add a scoped `ignoreDependencies` entry instead of pretending doc or shell mentions are import edges.
+
 ---
 
 ## Footgun: Cross-reference fragility across docs
@@ -9,7 +97,7 @@ last_reviewed: 2026-05-18
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
-**Why it happens:** Documentation files reference each other by relative path. The project has 120+ markdown files with dense cross-referencing. Renaming one file can break references in 5-10 others.
+**Why it happens:** Documentation files reference each other by relative path. The project has hundreds of committed markdown files with dense cross-referencing; use `git ls-files '*.md' | wc -l` for the current count instead of trusting an embedded number. Renaming one file can break references in 5-10 others.
 
 **Evidence:**
 - `.goat-flow/glossary.md` → the Canonical File column is a dense pointer map into workflow/setup, skill-reference, and skill files. A single rename can invalidate multiple glossary entries at once.
@@ -33,10 +121,7 @@ last_reviewed: 2026-05-18
 
 **Why it happens:** The ADR number is used as both identity and order. On 2026-04-18, historical ADR stubs were deleted and the surviving ADRs were compact-renumbered; old prose references kept the numeric labels but no longer named the deleted slug.
 
-**Evidence:**
-- `.goat-flow/decisions/ADR-001-remove-confusion-log.md` (search: `ADR-010-confusion-log-disposition.md`) - current ADR-010 is setup file ownership, not confusion-log disposition.
-- `.goat-flow/decisions/ADR-007-extract-skill-conventions.md` (search: `ADR-023-expand-inline-conventions.md`) - current ADR-023 is reference-pack budget tiers, not inline convention expansion.
-- `.goat-flow/decisions/ADR-009-skill-consolidation.md` (search: `ADR-016-dispatcher-is-canonical-skill.md`) - current ADR-016 is cold-path truth maintenance, not dispatcher canonical-skill counting.
+**Evidence:** A 2026-05-18 ADR cleanup found three numeric references whose numbers still resolved but whose topics no longer matched the historical slug. The concrete stale references have since been rewritten; the active trap is the cross-reference class, not those fixed links. Historical examples are retained below at `.goat-flow/footguns/docs-and-crossrefs.md` (search: `ADR renumbering concrete examples`).
 
 **Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not just the number. Then run a topic check: each remaining `ADR-NNN` reference must either match the current target title or explicitly say `now-removed ADR-NNN-slug`.
 
@@ -133,11 +218,11 @@ last_reviewed: 2026-05-18
 
 **Symptoms:** One agent receives weaker release or routing guidance than the others even though all four instruction files are supposed to express the same core contract.
 
-**Why it happens:** Claude, Codex, Gemini, and Copilot use separate hot-path files with different compression levels. Cross-agent consistency checks cover a few structural sections, but not every command line or router-table detail.
+**Why it happens:** Claude, Codex, Antigravity, and Copilot use separate hot-path files with different compression levels (Codex and Antigravity share `AGENTS.md`). Cross-agent consistency checks cover a few structural sections, but not every command line or router-table detail.
 
-**Evidence:** A 2026-04-27 quality-review pass found `.github/copilot-instructions.md` needed the same release command now present at `.github/copilot-instructions.md` (search: `test:full`) because it still told Copilot to run only the slow suite while `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md` used the full release gate. The same pass found `AGENTS.md` and `GEMINI.md` Shared skill reference rows omitted topical files; those rows are now split into meta and playbook entries at `AGENTS.md` (search: `Skill reference (meta)`) and `GEMINI.md` (search: `Skill playbooks (tools)`).
+**Evidence:** A 2026-04-27 quality-review pass found `.github/copilot-instructions.md` needed the same release command now present at `.github/copilot-instructions.md` (search: `test:full`) because it still told Copilot to run only the slow suite while `CLAUDE.md` and `AGENTS.md` used the full release gate. The same pass found `AGENTS.md` Shared skill reference rows omitted topical files; those rows are now split into meta and playbook entries at `AGENTS.md` (search: `Skill reference (meta)`). (Pre-v1.8.0 evidence also cited `GEMINI.md`; that file was removed when Antigravity replaced Gemini.)
 
-**Prevention:** When changing Essential Commands or Router Table rows in one agent instruction file, grep all four hot-path files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`) for the same concept and update them together. Add preflight coverage when the row affects release validation or canonical reference discovery.
+**Prevention:** When changing Essential Commands or Router Table rows in one agent instruction file, grep all hot-path files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) for the same concept and update them together. Add preflight coverage when the row affects release validation or canonical reference discovery.
 
 ---
 
@@ -165,14 +250,15 @@ last_reviewed: 2026-05-18
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A doc lists an agent-specific path (`.gemini/skills/`, `.codex/skills/`, etc.) that does not match the manifest. The harness `doc-paths-resolve` check may or may not catch it depending on whether the wrong path happens to exist on disk. When the harness catches it, every agent card in the dashboard drops to 75% Context with the same finding; when it does not, the doc is silently wrong.
+**Symptoms:** A doc lists an agent-specific path (`.agents/skills/`, `.codex/skills/`, etc.) that does not match the manifest. The harness `doc-paths-resolve` check may or may not catch it depending on whether the wrong path happens to exist on disk. When the harness catches it, every agent card in the dashboard drops to 75% Context with the same finding; when it does not, the doc is silently wrong.
 
-**Why it happens:** `workflow/manifest.json` is the canonical source for each agent's `skills_dir`, `hooks_dir`, `settings`, and `instruction_file`. Prose in docs hand-writes these paths as examples - often guessed from the agent name (`gemini` → `.gemini/skills/`) rather than looked up. Multiple agents sometimes share a directory (gemini and codex both use `.agents/skills/`), so name-based inference is wrong by default for those agents. The detection gap: `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) only verifies that backtick-quoted paths resolve on disk. A plausible-but-wrong path that happens to exist (e.g. writing `.claude/skills/` in a gemini example) passes the audit while still misleading readers.
+**Why it happens:** `workflow/manifest.json` is the canonical source for each agent's `skills_dir`, `hooks_dir`, `settings`, and `instruction_file`. Prose in docs hand-writes these paths as examples - often guessed from the agent name (`antigravity` → `.antigravity/skills/`) rather than looked up. Multiple agents sometimes share a directory (Antigravity and Codex both use `.agents/skills/`), so name-based inference is wrong by default for those agents. The detection gap: `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) only verifies that backtick-quoted paths resolve on disk. A plausible-but-wrong path that happens to exist (e.g. writing `.claude/skills/` in an Antigravity example) passes the audit while still misleading readers. ADR-030 records the Gemini to Antigravity runtime swap that made the old example stale.
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"skills_dir"`) - four entries, but only three distinct paths: `.claude/skills/`, `.agents/skills/` (shared by codex and gemini), `.github/skills/`. Name-based inference gives the wrong answer for gemini.
+- `workflow/manifest.json` (search: `"skills_dir"`) - four entries, but only three distinct paths: `.claude/skills/`, `.agents/skills/` (shared by Codex and Antigravity), `.github/skills/`. Name-based inference gives the wrong answer for Antigravity.
 - `docs/audit-and-quality.md` (search: `satellite agents' skill dirs`) - previously named `.gemini/skills/` as an example of a satellite-agent skill dir. The path does not exist (and never did per the manifest); the harness caught it only because `.gemini/skills/` happens not to exist on disk.
-- `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) - existence-only check; an agent-wrong path that exists (e.g. `.claude/skills/` in a gemini example) would pass.
+- `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) - existence-only check; an agent-wrong path that exists (e.g. `.claude/skills/` in an Antigravity example) would pass.
+- `.goat-flow/decisions/ADR-030-replace-gemini-with-antigravity.md` (search: `Canonical agents`) - current four-agent identity is Claude, Codex, Antigravity, and Copilot.
 
 **Prevention:**
 1. Before hand-writing an agent-specific path in prose, grep `workflow/manifest.json` for that agent's `skills_dir` / `hooks_dir` / `settings` / `instruction_file` entry and copy the exact value.
@@ -197,3 +283,4 @@ last_reviewed: 2026-05-18
 - **Stale references from old project structure** (resolved 2026-04-15) - `ai-workflow-framework` no longer appears anywhere in the repo (verified by `rg "ai-workflow-framework"`).
 - **Preflight validates doc totals but not sub-breakdowns** (resolved 2026-04-17) - `scripts/preflight-checks.sh` (search: `B.8a2: Sub-breakdown validation`) now extracts `setup_count` and `agent_count` from the audit modules and validates the `(N setup + M agent)` breakdown claim in `.goat-flow/architecture.md`, not just the total. Verified by grep of preflight source.
 - **Dashboard session-limit constants drift across server, UI, docs, and tests** (resolved 2026-04-19) - `src/cli/server/terminal.ts` (search: `MAX_SESSIONS`) exports the constant, `src/cli/server/dashboard-terminal.ts` (search: `MAX_SESSIONS`) imports it, `test/integration/dashboard-server.test.ts` (search: `data.maxSessions`) asserts the value, and `docs/dashboard.md` says "Maximum 10 concurrent sessions" - all four surfaces agree on 10. Pattern-class hygiene ("single exported constant reused in API payload, UI guards, and static copy") remains good practice for any future repo-wide cap; grep `maxSessions`, `serverSessions.length >=`, `Maximum of` before closing a similar change.
+- **ADR renumbering concrete examples** (resolved 2026-05-27) - Historical stale references to `ADR-010-confusion-log-disposition.md`, `ADR-023-expand-inline-conventions.md`, and `ADR-016-dispatcher-is-canonical-skill.md` were already fixed before M11; the active entry now keeps only the failure pattern.

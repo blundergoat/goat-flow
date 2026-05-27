@@ -320,7 +320,7 @@ See `.goat-flow/skill-reference/skill-preamble.md` (installed) or `workflow/skil
 |-------|------|
 | Claude Code | `.claude/skills/goat-{name}/SKILL.md` |
 | Codex | `.agents/skills/goat-{name}/SKILL.md` |
-| Gemini CLI | `.agents/skills/goat-{name}/SKILL.md` |
+| Antigravity | `.agents/skills/goat-{name}/SKILL.md` (shared with Codex) |
 | Copilot CLI | `.github/skills/goat-{name}/SKILL.md` |
 
 Skills are created during step 03 of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them. A skill may also ship a nested `references/` directory; install and parity checks treat those files as part of the skill surface.

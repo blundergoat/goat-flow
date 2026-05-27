@@ -108,13 +108,64 @@ describe("setup --apply installer", () => {
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
+      existsSync(join(root, ".codex", "hooks", "guard-common.sh")),
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "deny-dangerous.self-test.sh")),
+      existsSync(join(root, ".codex", "hooks", "guard-repository-writes.sh")),
       true,
     );
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "guardrails-self-test.sh")),
+      true,
+    );
+  });
+
+  it("prunes stale per-skill reference files during upgrades", () => {
+    const root = makeTempProject();
+    const firstInstall = runInstaller(root, "--agent", "claude");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+
+    const staleReference = join(
+      root,
+      ".claude",
+      "skills",
+      "goat-security",
+      "references",
+      "auth-authz.md",
+    );
+    writeFileSync(
+      staleReference,
+      '---\ngoat-flow-reference-version: "1.6.0"\n---\n# Old auth reference\n',
+    );
+
+    const secondInstall = runInstaller(root, "--agent", "claude");
+    assert.equal(
+      secondInstall.status,
+      0,
+      secondInstall.stderr || secondInstall.stdout,
+    );
+
+    assert.equal(existsSync(staleReference), false);
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".claude",
+          "skills",
+          "goat-security",
+          "references",
+          "identity-and-data.md",
+        ),
+      ),
+      true,
+    );
+    assert.match(secondInstall.stdout, /removed stale reference/);
+    assert.match(secondInstall.stdout, /1 stale removed/);
   });
 
   it("removes an existing agents allowlist from config.yaml", () => {
@@ -275,7 +326,7 @@ describe("--update-config-version flag", () => {
 // ── Bug 2: Settings skip warning ────────────────────────────────────────
 
 describe("settings skip warning", () => {
-  it("warns when deny hook is installed but settings.json was skipped", () => {
+  it("warns when guardrail hooks are installed but settings.json was skipped", () => {
     const root = makeTempProject();
     const claudeDir = join(root, ".claude");
     mkdirSync(claudeDir, { recursive: true });
@@ -291,8 +342,8 @@ describe("settings skip warning", () => {
     );
     assert.match(
       result.stdout,
-      /deny hook.*was installed but may not be/i,
-      "should mention the deny hook may not be registered",
+      /guardrail hooks.*were installed but may not be/i,
+      "should mention the guardrail hooks may not be registered",
     );
   });
 });
@@ -315,7 +366,216 @@ describe("codex config migration", () => {
     assert.match(config, /approval_policy = "on-request"/);
     assert.match(config, /\[features\]\nhooks = true\n/);
     assert.doesNotMatch(config, /^\s*codex_hooks\s=/m);
-    assert.match(result.stdout, /migrated deprecated hooks flag/);
+    assert.match(result.stdout, /migrated:.*deprecated hooks flag/);
+  });
+
+  it("migrates invalid filesystem permission globs in place", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'model = "gpt-5"',
+        'default_permissions = "goat-flow"',
+        "",
+        "[features]",
+        "hooks = true",
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        "",
+        '[permissions.goat-flow.filesystem.":workspace_roots"]',
+        '"." = "write"',
+        '"**/*.key" = "none"',
+        '"*.pem" = "none"',
+        '"secrets/**" = "none"',
+        "",
+        "[other]",
+        'preserved = "yes"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.doesNotMatch(config, /"\*\*\/\*\.key"/);
+    assert.doesNotMatch(config, /"\*\.pem"/);
+    assert.match(config, /":workspace_roots"\s*=\s*\{[^}]*"secrets\/\*\*"/);
+    assert.match(config, /model = "gpt-5"/);
+    assert.match(config, /\[other\]\s*\npreserved = "yes"/);
+    assert.match(result.stdout, /migrated:.*invalid filesystem permissions/);
+  });
+
+  it("migrates the legacy :project_roots anchor to :workspace_roots", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[features]",
+        "hooks = true",
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        "",
+        '[permissions.goat-flow.filesystem.":project_roots"]',
+        '"." = "write"',
+        '"secrets/**" = "none"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.doesNotMatch(config, /:project_roots/);
+    assert.match(config, /":workspace_roots"\s*=\s*\{/);
+  });
+
+  it("migrates the active custom Codex permission profile", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "custom"',
+        "",
+        "[permissions.custom.filesystem]",
+        "glob_scan_max_depth = 3",
+        "",
+        '[permissions.custom.filesystem.":project_roots"]',
+        '"." = "write"',
+        '"*.pem" = "none"',
+        '"secrets/**" = "none"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /default_permissions = "custom"/);
+    assert.match(config, /\[permissions\.custom\.filesystem\]/);
+    assert.doesNotMatch(config, /\[permissions\.goat-flow\.filesystem\]/);
+    assert.doesNotMatch(config, /:project_roots/);
+    assert.doesNotMatch(config, /"\*\.pem"/);
+    assert.match(result.stdout, /migrated:.*invalid filesystem permissions/);
+  });
+
+  it("preserves a custom valid /** deny entry when no invalid entries are present", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none", "private/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /"private\/\*\*"\s*=\s*"none"/);
+    assert.doesNotMatch(
+      result.stdout,
+      /migrated:.*invalid filesystem permissions/,
+    );
+  });
+
+  it("migrates invalid globs inside an inline :workspace_roots table", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "*.pem" = "none", "secrets/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.doesNotMatch(config, /"\*\.pem"/);
+    assert.match(config, /":workspace_roots"\s*=\s*\{[^}]*"secrets\/\*\*"/);
+    assert.match(result.stdout, /migrated:.*invalid filesystem permissions/);
+  });
+
+  it("does not treat comment-only :project_roots references as legacy anchors", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        "# legacy :project_roots anchor was replaced with :workspace_roots",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none" }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
+    assert.match(config, /# legacy :project_roots anchor was replaced/);
+    assert.doesNotMatch(
+      result.stdout,
+      /migrated:.*invalid filesystem permissions/,
+    );
+  });
+
+  it("post-install validator does not flag a glob 'none' entry in an unrelated table", () => {
+    const root = makeTempProject();
+    const codexDir = join(root, ".codex");
+    mkdirSync(codexDir, { recursive: true });
+    writeFileSync(
+      join(codexDir, "config.toml"),
+      [
+        'default_permissions = "goat-flow"',
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "glob_scan_max_depth = 3",
+        '":workspace_roots" = { "." = "write", "secrets/**" = "none" }',
+        "",
+        "[my_custom_section]",
+        '"*.pem" = "none"',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(
+      result.stderr,
+      /still has invalid Codex permission entries/,
+    );
   });
 
   it("removes deprecated codex_hooks when hooks is already present", () => {

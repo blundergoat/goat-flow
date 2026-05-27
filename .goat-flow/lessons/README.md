@@ -5,8 +5,6 @@
 If the trap is in the code itself → `.goat-flow/footguns/` instead.
 If a proven approach should be reused → `.goat-flow/patterns/` instead.
 
-**"Add a lesson" = create/update an entry here.** Not runtime code, not code comments, not test assertions. A lesson is a documentation artifact. If the user also wants a code change, they will ask for it separately.
-
 ## Automatic Capture Policy
 
 Manual edits are normal: an explicit request to add or update a durable learning-loop entry means edit the Markdown in the correct directory. Programmatic automatic capture from terminal sessions, quality reports, PR reviews, or agent output is disabled unless `.goat-flow/config.yaml` explicitly sets `learning-loop.auto-capture.enabled: true` and a CLI-owned writer for that target exists. Prompts may suggest an entry, but automatic durable writes belong to CLI-owned code after opt-in.
@@ -17,15 +15,13 @@ Auto-capture candidates must follow Extract / Consolidate / Skip:
 - Consolidate into an existing entry when the same root cause already exists.
 - Skip raw tool output, successful smoke runs, UI/deploy churn, chain-of-thought, screenshots, raw JSON/HTML, duplicate dumps, and "I read the docs" summaries.
 
-Prefer category bucket files such as `verification.md`, `workflow.md`, or `coordination.md` with file-level frontmatter:
+Prefer category bucket files such as `verification.md`, `workflow.md`, or `coordination.md`. Every bucket file MUST start with a YAML frontmatter block that includes BOTH a `category` and a `last_reviewed` date (ISO `YYYY-MM-DD`). `goat-flow stats --check` fails when `last_reviewed` is missing.
 
 ```yaml
 ---
 category: verification
-last_reviewed: 2026-04-18
+last_reviewed: 2026-04-20
 ---
 ```
 
-Both `category` and `last_reviewed` are required. `last_reviewed` must be a strict `YYYY-MM-DD` date (no timestamps). Bump it when you add an entry or materially edit the body; cosmetic edits (typos, whitespace) do not require a bump. `goat-flow stats --check` fails when the field is missing or malformed.
-
-Inside a bucket, add entries as `## Lesson:` or `## Pattern:` blocks. Legacy one-entry files still work during migration, but category buckets are the preferred format.
+Inside a bucket, add entries as `## Lesson:` or `## Pattern:` blocks. Each entry SHOULD include a `**Created:**` line in `YYYY-MM-DD` form so tooling can detect stale content. Legacy one-entry files still work during migration, but category buckets with the frontmatter contract are the preferred and audited format.

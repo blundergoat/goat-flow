@@ -55,6 +55,12 @@ const DASHBOARD_SCOPED_CHECKS: CountClaimCheck[] = [
   },
 ];
 
+/**
+ * Numeric prose claim scanner.
+ *
+ * `pattern` must expose the claimed number as capture group 1; the live
+ * `actual` callback supplies the authoritative count at scan time.
+ */
 interface CountClaimCheck {
   rule: string;
   /** Regex with ONE capturing group for the claimed number. */
@@ -229,6 +235,7 @@ function isFenceLine(line: string): boolean {
   return /^\s*```/.test(line);
 }
 
+/** Removed command pattern that should be reported anywhere it appears in docs. */
 interface RemovedCommand {
   rule: string;
   pattern: RegExp;
@@ -249,9 +256,17 @@ const REMOVED_COMMANDS: RemovedCommand[] = [
   },
 ];
 
-/** Scan one doc file for references to removed CLI commands. Runs across every
- *  line including fenced code blocks - fenced command examples are the primary
- *  leak path this check exists to catch. */
+/**
+ * Scan one doc file for references to removed CLI commands.
+ *
+ * Runs across every line including fenced code blocks because fenced command
+ * examples are the primary leak path this check exists to catch.
+ *
+ * @param path Repo-relative source path used in findings.
+ * @param text Markdown content to scan.
+ * @param removed Removed command patterns to flag.
+ * @returns Content findings for removed command references.
+ */
 export function scanRemovedCommands(
   path: string,
   text: string,
@@ -277,10 +292,18 @@ export function scanRemovedCommands(
   return findings;
 }
 
-/** Scan one doc file for numeric-count drift using the provided check set.
- *  By default, fenced code blocks are skipped (prose code samples should not
- *  be drift-matched). Individual checks can opt in via `scanFenced: true` to
- *  catch structural drift in sample-output blocks. */
+/**
+ * Scan one doc file for numeric-count drift using the provided check set.
+ *
+ * By default, fenced code blocks are skipped because prose code samples should
+ * not be drift-matched. Individual checks can opt in via `scanFenced: true` to
+ * catch structural drift in sample-output blocks.
+ *
+ * @param path Repo-relative source path used in findings.
+ * @param text Markdown content to scan.
+ * @param checks Numeric claim checks to apply.
+ * @returns Content findings for count claims that disagree with live code.
+ */
 export function scanCountClaims(
   path: string,
   text: string,
@@ -353,10 +376,18 @@ function matchConcernCheckOnLine(
   return findings;
 }
 
-/** Scan one doc file for per-concern count drift. Each check's pattern must
- *  have two capture groups: (1) concern label, (2) claimed number. The
- *  authoritative count is looked up via `actualFor`. Fenced code blocks are
- *  skipped unless the check sets `scanFenced: true`. */
+/**
+ * Scan one doc file for per-concern count drift.
+ *
+ * Each check's pattern must have two capture groups: (1) concern label,
+ * (2) claimed number. The authoritative count is looked up via `actualFor`.
+ * Fenced code blocks are skipped unless the check sets `scanFenced: true`.
+ *
+ * @param path Repo-relative source path used in findings.
+ * @param text Markdown content to scan.
+ * @param checks Concern-count checks to apply.
+ * @returns Content findings for concern counts that disagree with live code.
+ */
 export function scanConcernCountClaims(
   path: string,
   text: string,
@@ -379,7 +410,14 @@ export function scanConcernCountClaims(
   return findings;
 }
 
-/** Extract backtick-wrapped repo-relative paths and flag ones that don't exist. */
+/**
+ * Extract backtick-wrapped repo-relative paths and flag ones that do not exist.
+ *
+ * @param path Repo-relative source path used in findings.
+ * @param text Markdown content to scan.
+ * @param ctx Audit context used for target filesystem existence checks.
+ * @returns Informational findings for unresolved repo-local path references.
+ */
 export function scanPathReferences(
   path: string,
   text: string,
@@ -419,6 +457,64 @@ export function scanPathReferences(
 
 const INTENTIONAL_LOCAL_STATE_PATHS = new Set([".goat-flow/project-id"]);
 
+/** Lifetime/retention/limit phrases that should name the enforcing constant.
+ *  When a doc claims "retained for 90 days" without anchoring the value to a
+ *  code path, future edits to the constant drift past the doc silently
+ *  (awslabs/cli-agent-orchestrator PR #245 P1-B: docs/memory.md claimed
+ *  scope-keyed retention while cleanup_service.py keyed on memory_type). */
+const LIFETIME_PHRASE_RE =
+  /\b(?:retained for|expires after|expires in|TTL(?:\s+of)?|ceiling of|max(?:imum)? of|limit of)\s+(\d+)\s+(days?|hours?|minutes?|seconds?|chars?|characters?|entries|items|sessions?|lines?)/gi;
+
+/** Evidence anchors that satisfy the lifetime-claim check: a backtick repo
+ *  path, a (search: ...) anchor, or a (file: ...) anchor on the same line. */
+const EVIDENCE_ANCHOR_RE =
+  /`(?:src|workflow|scripts|\.goat-flow|\.github|test|docs|\.claude|\.codex|\.agents)\/[^`]+`|\(search:\s*["'][^"']+["']\)|\(file:\s*[^)]+\)/u;
+
+/**
+ * Scan one doc file for lifetime/retention claims lacking an enforcing-code anchor.
+ *
+ * Any line that claims a lifetime, expiry, TTL, ceiling, or limit MUST also
+ * reference the code path that enforces the value. Without an anchor, future
+ * edits to the constant drift past the doc and the divergence ships silently.
+ * Fenced code blocks are excluded because sample output legitimately discusses
+ * values without anchoring them.
+ *
+ * @param path Repo-relative source path used in findings.
+ * @param text Markdown content to scan.
+ * @returns Informational findings for lifetime claims without evidence anchors.
+ */
+export function scanLifetimeClaimEvidence(
+  path: string,
+  text: string,
+): ContentFinding[] {
+  const findings: ContentFinding[] = [];
+  const lines = text.split(/\r?\n/);
+  let inCodeBlock = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (isFenceLine(line)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+    const rx = new RegExp(LIFETIME_PHRASE_RE.source, LIFETIME_PHRASE_RE.flags);
+    let match: RegExpExecArray | null;
+    while ((match = rx.exec(line)) !== null) {
+      if (EVIDENCE_ANCHOR_RE.test(line)) continue;
+      findings.push({
+        severity: "info",
+        rule: "lifetime-claim-evidence-missing",
+        path,
+        line: i + 1,
+        message: `Lifetime claim "${match[0]}" has no enforcing-code anchor on this line.`,
+        suggestion:
+          'Add a backtick repo path (e.g. `src/cli/server/terminal.ts`) or `(search: "CONSTANT_NAME")` on the same line so future edits cannot silently drift.',
+      });
+    }
+  }
+  return findings;
+}
+
 const REPO_PATH_PREFIXES = [
   "src/",
   "workflow/",
@@ -428,7 +524,6 @@ const REPO_PATH_PREFIXES = [
   "test/",
   ".claude/",
   ".codex/",
-  ".gemini/",
   ".agents/",
   ".github/",
 ];
@@ -489,7 +584,7 @@ function docAgentNames(): string[] {
   const docLabels: Record<string, string> = {
     claude: "Claude",
     codex: "Codex",
-    gemini: "Gemini",
+    antigravity: "Antigravity",
     copilot: "Copilot",
   };
   return Object.entries(loadManifest().agents).map(
@@ -517,6 +612,90 @@ function driftCodeMapClassifyState(
       message: `Code map lists classify-state values as ${docStates.join("/")} but source exports ${states.join("/")}.`,
       suggestion:
         "Update the classify-state.ts summary in .goat-flow/code-map.md to match the live ProjectStateName union.",
+    },
+  ];
+}
+
+/** Extract comma-separated dashboard view names from the code-map views line. */
+function readCodeMapDashboardViews(codeMap: string): string[] | null {
+  const line = codeMap
+    .split(/\r?\n/)
+    .find((entry) => entry.includes("views/") && entry.includes("HTML view"));
+  const raw = line?.match(/\(([^)]+)\)/)?.[1];
+  if (raw === undefined) return null;
+  return raw
+    .split(",")
+    .map((name) => name.trim().replace(/\.html$/u, ""))
+    .filter(Boolean)
+    .sort();
+}
+
+/** Read live dashboard view files, falling back to manifest facts in stubs. */
+function readDashboardViewFiles(ctx: AuditContext): string[] {
+  const files = ctx.fs.glob("src/dashboard/views/*.html");
+  if (files.length === 0)
+    return [...loadManifest().facts.dashboard_views.names];
+  return files
+    .map(
+      (file) =>
+        file
+          .split("/")
+          .at(-1)
+          ?.replace(/\.html$/u, "") ?? "",
+    )
+    .filter(Boolean)
+    .sort();
+}
+
+/** Drift: code-map.md dashboard view enumeration doesn't match live view files. */
+function driftCodeMapDashboardViews(
+  codeMap: string,
+  ctx: AuditContext,
+): ContentFinding[] {
+  const claimed = readCodeMapDashboardViews(codeMap);
+  const actual = readDashboardViewFiles(ctx);
+  if (claimed !== null && claimed.join("|") === actual.join("|")) return [];
+
+  return [
+    {
+      severity: "warning",
+      rule: "code-map-dashboard-view-drift",
+      path: ".goat-flow/code-map.md",
+      message: `Code map lists dashboard views as ${claimed?.join(", ") ?? "none"}, but src/dashboard/views has ${actual.join(", ")}.`,
+      suggestion:
+        "Update the src/dashboard/views/ summary in .goat-flow/code-map.md to match the live .html view files.",
+    },
+  ];
+}
+
+/** Top-level committed playbooks, excluding README.md because it is the index. */
+function readTopLevelSkillPlaybooks(ctx: AuditContext): string[] {
+  return ctx.fs
+    .listDir(".goat-flow/skill-playbooks")
+    .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
+    .sort();
+}
+
+/** Drift: committed skill-playbook inventories omit live top-level playbooks. */
+function driftSkillPlaybookInventory(
+  path: ".goat-flow/architecture.md" | ".goat-flow/code-map.md",
+  text: string,
+  ctx: AuditContext,
+): ContentFinding[] {
+  const actual = readTopLevelSkillPlaybooks(ctx);
+  if (actual.length === 0) return [];
+
+  const missing = actual.filter((name) => !text.includes(name));
+  if (missing.length === 0) return [];
+
+  return [
+    {
+      severity: "warning",
+      rule: "skill-playbook-inventory-drift",
+      path,
+      message: `${path} omits top-level skill playbook(s): ${missing.join(", ")}. Live playbooks are ${actual.join(", ")}.`,
+      suggestion:
+        "Update the committed skill-playbooks inventory to include every top-level .goat-flow/skill-playbooks/*.md playbook except README.md.",
     },
   ];
 }
@@ -704,7 +883,14 @@ function driftSkillsDoc(skillsDoc: string): ContentFinding[] {
   }));
 }
 
-/** Drift: glossary.md contains agent-specific or stale canonical pointers. */
+/**
+ * Drift: glossary.md contains agent-specific or stale canonical pointers.
+ *
+ * Returns an empty finding list when no stale phrase is present; stale prose
+ * reports as content findings rather than treated as a parser error.
+ * The caller supplies already-read text, so this helper performs no IO and has
+ * no recover path beyond returning every matched stale phrase as a finding.
+ */
 function driftGlossary(glossary: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
   if (glossary.includes("Claude Search Optimization")) {
@@ -731,7 +917,14 @@ function driftGlossary(glossary: string): ContentFinding[] {
   return findings;
 }
 
-/** Drift: setup/01-system-overview.md oversells session-logs as durable memory. */
+/**
+ * Drift: setup/01-system-overview.md oversells session logs as durable memory.
+ *
+ * Returns an empty finding list when neither retired phrase is present; matches
+ * report warnings because setup prose is the source of future install behavior.
+ * The caller supplies already-read text, so this helper performs no IO and has
+ * no recover path beyond returning every matched stale phrase as a finding.
+ */
 function driftSetupOverview(setupOverview: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
   if (setupOverview.includes("persistent memory across sessions")) {
@@ -774,7 +967,7 @@ function driftAdr020(adr020: string): ContentFinding[] {
         rule: "adr020-copilot-drift",
         path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
         message:
-          "ADR-020 still says Copilot support is accepted while the manifest-backed runtime supports only claude/codex/gemini.",
+          "ADR-020 still says Copilot support is accepted while the manifest-backed runtime supports only claude/codex/antigravity.",
         suggestion:
           "Either defer/revert ADR-020 or implement manifest/type/runtime Copilot parity in the same change.",
       },
@@ -820,7 +1013,12 @@ function driftAdr013(adr013: string): ContentFinding[] {
   ];
 }
 
-/** Targeted semantic drift checks for high-trust cold-path docs. */
+/**
+ * Targeted semantic drift checks for high-trust cold-path docs.
+ *
+ * Missing optional docs recover by being skipped, while readable docs are added
+ * to the scanned count so audit output reflects the actual coverage.
+ */
 function scanSemanticDrift(ctx: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;
@@ -836,8 +1034,24 @@ function scanSemanticDrift(ctx: AuditContext): {
   };
 
   const codeMap = readAndTrack(".goat-flow/code-map.md");
-  if (codeMap !== null)
+  if (codeMap !== null) {
     findings.push(...driftCodeMapClassifyState(codeMap, ctx));
+    findings.push(...driftCodeMapDashboardViews(codeMap, ctx));
+    findings.push(
+      ...driftSkillPlaybookInventory(".goat-flow/code-map.md", codeMap, ctx),
+    );
+  }
+
+  const architecture = readAndTrack(".goat-flow/architecture.md");
+  if (architecture !== null) {
+    findings.push(
+      ...driftSkillPlaybookInventory(
+        ".goat-flow/architecture.md",
+        architecture,
+        ctx,
+      ),
+    );
+  }
 
   const dashboard = readAndTrack("docs/dashboard.md");
   if (dashboard !== null) {
@@ -874,7 +1088,15 @@ function scanSemanticDrift(ctx: AuditContext): {
   return { findings, filesScanned: scanned.size };
 }
 
-/** Run factual-claim checks across the configured documentation targets. */
+/**
+ * Run factual-claim checks across the configured documentation targets.
+ *
+ * Missing or unreadable target docs recover by skipping that file; unresolved
+ * claims are emitted as content findings so audit can report all drift at once.
+ *
+ * @param ctx Audit context with target filesystem access.
+ * @returns Factual-claim findings and number of scanned files.
+ */
 export function runFactualClaimChecks(ctx: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;
@@ -889,6 +1111,7 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     findings.push(...scanConcernCountClaims(rel, text));
     findings.push(...scanPathReferences(rel, text, ctx));
     findings.push(...scanRemovedCommands(rel, text));
+    findings.push(...scanLifetimeClaimEvidence(rel, text));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).
   for (const rel of DASHBOARD_SCOPED_TARGETS) {

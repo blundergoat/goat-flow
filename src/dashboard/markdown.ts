@@ -8,7 +8,7 @@
  * without each call site re-inventing sanitization.
  *
  * Rendering contract:
- *   - `html: false`        — raw HTML in source is escaped (defence-in-depth).
+ *   - `html: false`        - raw HTML in source is escaped (defence-in-depth).
  *   - GFM tables, fenced code blocks, autolinks, line breaks all enabled.
  *   - Frontmatter (`---\n…\n---`) is stripped by default and surfaced as a
  *     parsed object on the result. Set `frontmatter: "passthrough"` to keep

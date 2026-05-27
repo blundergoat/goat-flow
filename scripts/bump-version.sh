@@ -11,7 +11,7 @@
 #
 # Updated files:
 #   - package.json + package-lock.json (via npm version --no-git-tag-version)
-#   - Instruction file headers (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md)
+#   - Instruction file headers (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md)
 #   - .goat-flow/config.yaml version field
 #   - workflow/manifest.json
 #   - workflow/skills/*/SKILL.md frontmatter (7 templates)
@@ -76,7 +76,7 @@ update_file() {
 # ── Source files (version string replacement) ──────────────────────────
 
 # Instruction file headers
-for ifile in CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md; do
+for ifile in CLAUDE.md AGENTS.md .github/copilot-instructions.md; do
   update_file "$ifile"
 done
 
@@ -108,12 +108,10 @@ if [[ -d test/fixtures ]]; then
   done < <(find test/fixtures -path '*/references/*.md' -print0)
 fi
 
-# Hook templates and local distributable copy
+# Hook templates
 for hook_sh in workflow/hooks/*.sh; do
   update_file "$hook_sh"
 done
-update_file "scripts/deny-dangerous.sh"
-update_file "scripts/deny-dangerous.self-test.sh"
 
 # Docs
 update_file "docs/audit-and-quality.md"
@@ -178,6 +176,22 @@ for (const h of hooks) console.log(h);
 NODE
 }
 
+manifest_hook_script_paths() {
+  node - "$MANIFEST_PATH" <<'NODE'
+const fs = require("node:fs");
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const paths = [];
+for (const agent of Object.values(manifest.agents || {})) {
+  if (typeof agent.hooks_dir !== "string" || !Array.isArray(agent.hooks)) continue;
+  const hooksDir = agent.hooks_dir.replace(/\/$/, "");
+  for (const hook of agent.hooks) {
+    if (typeof hook === "string" && hook.endsWith(".sh")) paths.push(`${hooksDir}/${hook}`);
+  }
+}
+for (const path of [...new Set(paths)]) console.log(path);
+NODE
+}
+
 # Sync skill SKILL.md files and manifest-backed references to each installed mirror
 while IFS= read -r skill_root; do
   if [[ ! -d "$skill_root" ]]; then continue; fi
@@ -194,18 +208,14 @@ while IFS= read -r skill_root; do
   echo "  ✓ ${skill_root}/*/{SKILL.md,references/}"
 done < <(manifest_skill_roots)
 
-# Sync deny hook template to each installed hook mirror
+# Sync hook templates to each installed hook mirror
 while IFS= read -r hook_dst; do
-  if [[ -f "$hook_dst" ]]; then
-    cp workflow/hooks/deny-dangerous.sh "$hook_dst"
+  hook_src="workflow/hooks/$(basename "$hook_dst")"
+  if [[ -f "$hook_src" && -d "$(dirname "$hook_dst")" ]]; then
+    cp "$hook_src" "$hook_dst"
     echo "  ✓ ${hook_dst}"
   fi
-  hook_self_test_dst="$(dirname "$hook_dst")/deny-dangerous.self-test.sh"
-  if [[ -f "$hook_self_test_dst" ]]; then
-    cp workflow/hooks/deny-dangerous.self-test.sh "$hook_self_test_dst"
-    echo "  ✓ ${hook_self_test_dst}"
-  fi
-done < <(manifest_deny_hooks)
+done < <(manifest_hook_script_paths)
 
 # Sync shared reference docs
 if [[ -d ".goat-flow/skill-reference" ]]; then

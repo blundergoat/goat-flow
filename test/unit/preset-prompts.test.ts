@@ -474,7 +474,7 @@ describe("preset prompt catalog", () => {
       "/tmp/example-library",
       "/tmp/no-goat-flow-target",
     ];
-    const runners = ["claude", "codex", "gemini", "copilot"] as const;
+    const runners = ["claude", "codex", "antigravity", "copilot"] as const;
     for (const preset of readPresets()) {
       for (const runner of runners) {
         for (const targetPath of targets) {
@@ -616,7 +616,7 @@ describe("preset prompt catalog", () => {
     assert.doesNotMatch(helper, /SETUP_INSTRUCTION_SURFACES/);
     assert.ok(surfaces.includes("CLAUDE.md"));
     assert.ok(surfaces.includes(".codex/hooks.json"));
-    assert.ok(surfaces.includes("GEMINI.md"));
+    assert.ok(surfaces.includes("AGENTS.md"));
     assert.ok(surfaces.includes(".github/copilot-instructions.md"));
   });
 

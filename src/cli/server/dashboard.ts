@@ -108,6 +108,12 @@ export const DASHBOARD_ROUTE_INVENTORY = [
   { method: "GET", path: "/api/agents/installed", class: "privileged-read" },
   { method: "GET", path: "/api/tasks", class: "privileged-read" },
   { method: "POST", path: "/api/tasks", class: "side-effectful" },
+  { method: "GET", path: "/api/hooks", class: "privileged-read" },
+  {
+    method: "POST",
+    path: "/api/hooks/:hookId/toggle",
+    class: "side-effectful",
+  },
   { method: "GET", path: "/api/projects/list", class: "privileged-read" },
   { method: "POST", path: "/api/projects/list", class: "side-effectful" },
   { method: "GET", path: "/api/projects/status", class: "privileged-read" },
@@ -149,6 +155,7 @@ export const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
   "POST /api/quality/analyse",
   "POST /api/terminal/create",
 ]);
+const HOOK_TOGGLE_API_ROUTE = /^\/api\/hooks\/[^/]+\/toggle$/u;
 const TERMINAL_UPLOAD_IMAGE_API_ROUTE =
   /^\/api\/terminal\/[^/]+\/upload-image$/u;
 
@@ -204,6 +211,7 @@ export function serveDashboard(
       handleQualityEvaluateRequest,
       handleBrowseRequest,
       handleTasksRequest,
+      handleHooksRequest,
       handleAgentDetectRequest,
       handleProjectsListRequest,
       handleProjectsStatusRequest,
@@ -278,6 +286,9 @@ export function serveDashboard(
       const method = req.method ?? "GET";
       const routeKey = `${method} ${url.pathname}`;
       if (SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)) return true;
+      if (method === "POST" && HOOK_TOGGLE_API_ROUTE.test(url.pathname)) {
+        return true;
+      }
       if (
         method === "POST" &&
         TERMINAL_UPLOAD_IMAGE_API_ROUTE.test(url.pathname)
@@ -366,6 +377,7 @@ export function serveDashboard(
 
         () => Promise.resolve(handleBrowseRequest(url, res)),
         () => handleTasksRequest(req, url, res),
+        () => handleHooksRequest(req, url, res),
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
         () => handleProjectsListRequest(req, url, res),
         () => Promise.resolve(handleProjectsStatusRequest(url, res)),

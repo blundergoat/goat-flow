@@ -8,12 +8,7 @@ import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
-import {
-  makeCtx,
-  stubAgentFacts,
-  stubConfig,
-  stubFS,
-} from "../fixtures/projects/index.js";
+import { makeCtx, stubAgentFacts, stubFS } from "../fixtures/projects/index.js";
 
 const skillReferenceCheck = SETUP_CHECKS.find(
   (check) => check.id === "instruction-file-skill-reference-pointer",
@@ -27,7 +22,12 @@ const requiredSkillReferenceFiles = [
   // Standalone playbooks
   ".goat-flow/skill-playbooks/README.md",
   ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/changelog.md",
+  ".goat-flow/skill-playbooks/code-comments.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-playbooks/observability.md",
   ".goat-flow/skill-playbooks/page-capture.md",
+  ".goat-flow/skill-playbooks/release-notes.md",
   ".goat-flow/skill-playbooks/skill-quality-testing.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
@@ -97,9 +97,9 @@ function makeSkillReferenceCtx(options: {
           instruction_file: "AGENTS.md",
           skills_dir: ".agents/skills",
         },
-        gemini: {
-          instruction_file: "GEMINI.md",
-          skills_dir: ".gemini/skills",
+        antigravity: {
+          instruction_file: "AGENTS.md",
+          skills_dir: ".agents/skills",
         },
         copilot: {
           instruction_file: ".github/copilot-instructions.md",
@@ -142,8 +142,8 @@ describe("audit build: all scopes pass on healthy project", () => {
 // Harness scope: missing deny patterns
 // ---------------------------------------------------------------------------
 describe("audit build: harness scope fails on missing deny", () => {
-  it("agent-deny-dangerous check fails when no deny configured", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "agent-deny-dangerous")!;
+  it("agent-guardrails check fails when no deny configured", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-guardrails")!;
     const ctx = makeCtx({
       agentFilter: "claude",
       agents: [
@@ -167,8 +167,8 @@ describe("audit build: harness scope fails on missing deny", () => {
     assert.ok(result!.howToFix, "Should include howToFix");
   });
 
-  it("agent-deny-dangerous summary mode stops at presence without shelling out", () => {
-    const check = BUILD_CHECKS.find((c) => c.id === "agent-deny-dangerous")!;
+  it("agent-guardrails summary mode stops at presence without shelling out", () => {
+    const check = BUILD_CHECKS.find((c) => c.id === "agent-guardrails")!;
     let execCalls = 0;
     childProcess.execFileSync = (() => {
       execCalls += 1;

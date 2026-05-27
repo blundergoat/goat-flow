@@ -3,6 +3,7 @@
 **Status:** Implemented
 **Date:** 2026-04-18
 **Updated:** 2026-05-18 - evidence citations converted from file-line form to semantic anchors.
+**Updated:** 2026-05-27 - Runtime slot updated per ADR-030; four-agent references now read Claude, Codex, Antigravity, and Copilot.
 
 ## Context
 

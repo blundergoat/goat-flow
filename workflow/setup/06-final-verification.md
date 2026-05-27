@@ -32,6 +32,7 @@ Check these surfaces:
 
 - The instruction file
 - All installed skill files
+- All installed skill `references/*.md` files
 - Agent settings / hook config files
 - `.goat-flow/skill-reference/README.md`
 - `.goat-flow/skill-reference/skill-preamble.md`
@@ -46,6 +47,7 @@ For each backtick-wrapped path or hook path:
 - For registered hook scripts, verify the file exists and has execute permissions
 - Verify the instruction file version header matches the goat-flow release version
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
+- Verify every installed goat skill reference Markdown file is listed in `workflow/manifest.json` `skills.references`; remove stale files left by reference merges or renames
 - For auto-seeded footgun entries, spot-check that each cited semantic anchor actually resolves to the described trap. If the anchor doesn't match (wrong function, outdated string), fix the reference
 
 ## Evidence verification

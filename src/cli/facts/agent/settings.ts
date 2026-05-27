@@ -10,6 +10,9 @@ export function checkDenyPatterns(
 ): { gitCommitBlocked: boolean; gitPushBlocked: boolean } {
   /** Deny mechanism configuration for this agent */
   const deny = agent.denyMechanism;
+  if (deny === null) {
+    return { gitCommitBlocked: false, gitPushBlocked: false };
+  }
 
   if (deny.type === "settings-deny") {
     /** Parsed JSON from the settings deny file */

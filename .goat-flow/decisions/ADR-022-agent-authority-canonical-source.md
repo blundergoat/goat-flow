@@ -3,11 +3,12 @@
 **Date:** 2026-04-19
 **Status:** Accepted
 **Updated:** 2026-05-18 - stale file-line citations converted to semantic anchors; runtime tuple wording aligned with the shipped `KNOWN_AGENT_IDS` location.
+**Updated:** 2026-05-27 - Runtime slot updated per ADR-030; the canonical tuple now reads `"claude" | "codex" | "antigravity" | "copilot"`.
 **Milestone:** M17-12 (quality-report follow-ups)
 
 ## Context
 
-The `AgentId` union (`"claude" | "codex" | "gemini" | "copilot"`) is duplicated across several surfaces:
+The `AgentId` union (`"claude" | "codex" | "antigravity" | "copilot"`) is duplicated across several surfaces:
 
 - `src/cli/types.ts` (search: `export const KNOWN_AGENT_IDS`) - the compile-time tuple and derived union.
 - `src/cli/agents/registry.ts` (search: `export function getKnownAgentIds`) - `getKnownAgentIds()` returns manifest-backed agent ids.
@@ -30,7 +31,7 @@ Adding a fifth agent means touching all six sites. The critique in M17-12 asked 
 
 4. **Manifest validates against the union** at load time. If `workflow/manifest.json` gains an agent key that isn't in `AgentId`, `getKnownAgentIds()`'s `isAgentId` filter drops it and `loadManifest()` surfaces the mismatch via the existing `ManifestValidationError` path.
 
-5. **All hardcoded `["claude", "codex", "gemini", "copilot"]` literals** in non-type-position code migrate to `KNOWN_AGENT_IDS` or `getKnownAgentIds()`. Type-position uses (`Record<AgentId, X>`) stay as-is - they're already authority-driven via the union.
+5. **All hardcoded `["claude", "codex", "antigravity", "copilot"]` literals** in non-type-position code migrate to `KNOWN_AGENT_IDS` or `getKnownAgentIds()`. Type-position uses (`Record<AgentId, X>`) stay as-is - they're already authority-driven via the union.
 
 ## Alternatives considered
 

@@ -12,11 +12,11 @@
 
 ## Autonomy Tiers
 
-**Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, and shared `.goat-flow/`. `.agents/skills/` is shared with Gemini; either setup can create/update skills there.
+**Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
 
 **Ask First:** Before touching non-Codex surfaces, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
-**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `GEMINI.md`, `.claude/`, or `.gemini/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
+**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md` or `.claude/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
 
 ## Hard Rules
 
@@ -32,7 +32,7 @@
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md` — read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
@@ -119,4 +119,4 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Codex skills/config | `.agents/skills/`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/` when installed |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md` when present |
+| Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` when present |

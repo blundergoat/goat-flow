@@ -43,6 +43,11 @@ import {
 } from "../quality/skill-quality.js";
 import { MAX_EVALUATE_CONTENT_BYTES } from "./decoders.js";
 import {
+  applyHookState,
+  HookRegistrarError,
+  readAllHookStates,
+} from "./hook-registrar.js";
+import {
   loadQualityConfig,
   type ArtifactSource,
 } from "../quality/quality-config.js";
@@ -90,6 +95,10 @@ const QUALITY_EVALUATE_MAX_BODY_BYTES = MAX_EVALUATE_CONTENT_BYTES + 64 * 1024;
 
 type QualityAuditCacheStatus = "hit" | "miss" | "bypass";
 
+/**
+ * Preset JSON shape served to the dashboard; keep fields aligned with the
+ * bundled `preset-prompts.json` asset rather than deriving labels at runtime.
+ */
 interface DashboardPresetData {
   id: string;
   name: string;
@@ -100,6 +109,9 @@ interface DashboardPresetData {
 
 type ProjectIdentitySource = "git-remote" | "goat-marker" | "path";
 
+/**
+ * Stable project identity used to recognise the same checkout after it moves.
+ */
 interface DashboardProjectIdentity {
   identity: string;
   identitySource: ProjectIdentitySource;
@@ -108,11 +120,17 @@ interface DashboardProjectIdentity {
   markerId?: string;
 }
 
+/**
+ * Persistent dashboard project entry, including every known local path for the identity.
+ */
 interface DashboardProjectRecord extends DashboardProjectIdentity {
   paths: string[];
   title?: string;
 }
 
+/**
+ * On-disk dashboard state schema, including legacy path lists and identity records.
+ */
 interface DashboardStateData {
   paths: string[];
   favorites: string[];
@@ -120,6 +138,9 @@ interface DashboardStateData {
   projects: Record<string, DashboardProjectRecord>;
 }
 
+/**
+ * Milestone row parsed from an `M*.md` task file without sending full Markdown to the UI.
+ */
 interface DashboardTaskMilestoneSummary {
   filename: string;
   path: string;
@@ -131,6 +152,9 @@ interface DashboardTaskMilestoneSummary {
   modifiedAt: string;
 }
 
+/**
+ * Task-plan row for the dashboard plan picker; `modifiedAt` comes from the newest milestone.
+ */
 interface DashboardTaskPlanSummary {
   name: string;
   path: string;
@@ -139,6 +163,9 @@ interface DashboardTaskPlanSummary {
   active: boolean;
 }
 
+/**
+ * Task browser response where `.active` is advisory and may name a missing plan.
+ */
 interface DashboardTaskState {
   taskRoot: string;
   exists: boolean;
@@ -149,6 +176,9 @@ interface DashboardTaskState {
   milestones: DashboardTaskMilestoneSummary[];
 }
 
+/**
+ * Home-card projection of the latest quality report, stripped to display totals.
+ */
 interface LatestQualitySummary {
   id: string;
   date: string;
@@ -163,6 +193,9 @@ interface LatestQualitySummary {
   scope: string | null;
 }
 
+/**
+ * Normalised `/api/quality` query parameters after mode and agent validation.
+ */
 interface QualityRequestParams {
   agent: AgentId;
   qualityMode: QualityMode;
@@ -170,6 +203,9 @@ interface QualityRequestParams {
   fast: boolean;
 }
 
+/**
+ * Compact learning-loop entry shown on the dashboard without loading full files.
+ */
 interface RecentLessonSummary {
   title: string;
   created: string | null;
@@ -183,6 +219,9 @@ type JsonResponder = (
   body: unknown,
 ) => void;
 
+/**
+ * Request-body read limits for upload and mutation routes.
+ */
 interface BodyReadOptions {
   maxBytes?: number;
   tooLargeMessage?: string;
@@ -193,17 +232,26 @@ type BodyReader = (
   options?: BodyReadOptions,
 ) => Promise<string>;
 
+/**
+ * Per-step server timing exposed only for explicit audit profiling requests.
+ */
 interface DashboardAuditProfileSpan {
   name: string;
   durationMs: number;
 }
 
+/**
+ * Per-request profiler so dashboard audit timings cannot leak between responses.
+ */
 interface DashboardAuditProfiler {
   enabled: boolean;
   spans: DashboardAuditProfileSpan[];
   span<T>(name: string, fn: () => T): T;
 }
 
+/**
+ * Enable expensive profiling only when the request opts in and the server is trusted.
+ */
 function shouldProfileAuditRequest(url: URL, devMode: boolean): boolean {
   return (
     url.searchParams.get("profile") === "true" &&
@@ -254,12 +302,21 @@ function appendAuditProfile<T extends object>(
   };
 }
 
+/**
+ * Normalise agent `--version` output to the first printable line.
+ *
+ * @param raw - Raw stdout captured from the agent binary.
+ * @returns A trimmed version line, or `null` when the command produced no text.
+ */
 export function normalizeAgentVersionOutput(raw: string): string | null {
   const firstLine = raw.trim().split(/\r?\n/)[0]?.trim() ?? "";
   if (!firstLine) return null;
   return firstLine.replace(/(\d)[.,;:]+$/u, "$1");
 }
 
+/**
+ * Dependency bag for non-terminal dashboard routes across dev and packaged modes.
+ */
 interface DashboardRouteDependencies {
   absDefault: string;
   devMode: boolean;
@@ -286,6 +343,9 @@ function parseQualityModeParam(param: string | null): QualityMode | null {
   return VALID_QUALITY_MODES.has(param) ? (param as QualityMode) : null;
 }
 
+/**
+ * Return filesystem stats; swallows missing-path and permission errors as `null`.
+ */
 function statOrNull(path: string) {
   try {
     return statSync(path);
@@ -294,6 +354,9 @@ function statOrNull(path: string) {
   }
 }
 
+/**
+ * Read optional dashboard state files, swallowing local churn as a `null` fallback.
+ */
 function readOptionalTextFile(path: string): string | null {
   try {
     return readFileSync(path, "utf-8");
@@ -302,6 +365,9 @@ function readOptionalTextFile(path: string): string | null {
   }
 }
 
+/**
+ * List a stable numeric sort of `M*.md` milestones; swallows absent plan directories.
+ */
 function listTaskMilestoneFilenames(planPath: string): string[] {
   try {
     return readdirSync(planPath, { withFileTypes: true })
@@ -321,6 +387,9 @@ function readMarkdownField(
   return content.match(pattern)?.[1]?.trim() || fallback;
 }
 
+/**
+ * Count Markdown task checkboxes using the same shape goat-plan writes into milestones.
+ */
 function readTaskProgress(content: string): {
   totalTasks: number;
   completedTasks: number;
@@ -380,6 +449,9 @@ function buildTaskPlanSummary(
   };
 }
 
+/**
+ * List top-level task plan directories while ignoring local dotfile markers.
+ */
 function listTaskPlanNames(taskRoot: string): string[] {
   return readdirSync(taskRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
@@ -460,6 +532,11 @@ function buildDashboardTaskState(
   };
 }
 
+/**
+ * Parse mutation request JSON before route handlers inspect path-like fields.
+ *
+ * Throws when the body is malformed JSON or is not a top-level object.
+ */
 function parseJsonObjectBody(body: string): Record<string, unknown> {
   let parsed: unknown;
   try {
@@ -473,6 +550,11 @@ function parseJsonObjectBody(body: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+/**
+ * Reject plan names that could escape the `.goat-flow/tasks` top level.
+ *
+ * Throws when the plan name is hidden, relative, or path-like.
+ */
 function assertTopLevelPlanName(planName: string): void {
   if (
     planName === "." ||
@@ -485,6 +567,11 @@ function assertTopLevelPlanName(planName: string): void {
   }
 }
 
+/**
+ * Extract and validate the active task-plan name from the dashboard request body.
+ *
+ * Throws when `body.plan` is missing, blank, or not a safe top-level plan name.
+ */
 function readActiveTaskPlanBody(body: string): string {
   const parsed = parseJsonObjectBody(body);
   const plan = parsed["plan"];
@@ -496,6 +583,11 @@ function readActiveTaskPlanBody(body: string): string {
   return normalized;
 }
 
+/**
+ * Writes `.active` only for an existing task plan so the dashboard never creates task structure.
+ *
+ * Throws when tasks are absent or the requested plan does not exist.
+ */
 function writeActiveTaskPlan(projectPath: string, planName: string): void {
   const taskRoot = resolveLocalStatePath(projectPath, "tasks");
   const taskRootStats = statOrNull(taskRoot);
@@ -647,7 +739,7 @@ function buildDashboardLearningLoopSummary(
   }
 }
 
-/** List markdown lesson buckets that can contribute Home lesson rows. */
+/** List stable markdown lesson buckets; swallows absent lessons directories. */
 function listLessonBuckets(lessonsDir: string): string[] {
   try {
     return readdirSync(lessonsDir)
@@ -740,7 +832,7 @@ function readRecentLessons(
 
 const ENRICHMENT_TTL_MS = 60_000;
 const QUALITY_AUDIT_TTL_MS = 10_000;
-const DIRECTORY_SIGNATURE_FILE_LIMIT = 500;
+const DIRECTORY_SIGNATURE_FILE_LIMIT = 500; // File cap keeps cache signatures cheap; truncated entries still change the signature.
 const DIRECTORY_SIGNATURE_IGNORES = new Set([".git", "node_modules", "dist"]);
 const enrichmentCache = new Map<
   string,
@@ -752,6 +844,7 @@ const enrichmentCache = new Map<
   }
 >();
 
+/** Hash cache and identity inputs without storing raw remote URLs in keys. */
 function hashString(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -759,12 +852,14 @@ function hashString(value: string): string {
 const PROJECT_ID_COMMENT =
   "# Local goat-flow dashboard project identity. Gitignored by default.";
 
+/** Accept only persisted identity-source values understood by this dashboard build. */
 function identitySourceFrom(value: unknown): ProjectIdentitySource | null {
   return value === "git-remote" || value === "goat-marker" || value === "path"
     ? value
     : null;
 }
 
+/** Preserve first-seen path order while removing duplicate project paths. */
 function dedupeStrings(values: string[]): string[] {
   const result: string[] = [];
   for (const value of values) {
@@ -773,6 +868,7 @@ function dedupeStrings(values: string[]): string[] {
   return result;
 }
 
+/** Resolve a project path to its realpath, with fallback when realpath lookup fails. */
 function normalizeProjectPath(projectPath: string): string {
   const resolved = resolve(projectPath);
   try {
@@ -782,6 +878,7 @@ function normalizeProjectPath(projectPath: string): string {
   }
 }
 
+/** Probe optional project directories; swallows permission and removal races. */
 function directoryExists(path: string): boolean {
   try {
     return statSync(path).isDirectory();
@@ -790,6 +887,7 @@ function directoryExists(path: string): boolean {
   }
 }
 
+/** Canonicalise a git remote host/path pair into the identity hash input. */
 function cleanRemotePath(host: string | undefined, path: string | undefined) {
   const remotePath = path?.replace(/^\/+/u, "");
   if (!host || !remotePath) return null;
@@ -798,12 +896,14 @@ function cleanRemotePath(host: string | undefined, path: string | undefined) {
     .replace(/\/+$/u, "");
 }
 
+/** Normalise `git@host:owner/repo` remotes before URL parsing gets a chance. */
 function normalizeScpLikeRemote(trimmed: string): string | null {
   const scpLike = trimmed.match(/^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/u);
   if (!scpLike || trimmed.includes("://")) return null;
   return cleanRemotePath(scpLike[1], scpLike[2]);
 }
 
+/** Normalise URL-style git remotes; swallows invalid URL inputs as `null`. */
 function normalizeUrlRemote(trimmed: string): string | null {
   try {
     const parsed = new URL(trimmed);
@@ -813,6 +913,7 @@ function normalizeUrlRemote(trimmed: string): string | null {
   }
 }
 
+/** Build the stable remote identity string used before hashing project records. */
 function normalizeGitRemoteUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -823,6 +924,7 @@ function normalizeGitRemoteUrl(raw: string): string | null {
   );
 }
 
+/** Spawns `git config` with a short timeout; swallows failures into marker/path fallback. */
 function readGitRemote(projectPath: string): string | null {
   try {
     const output = execFileSync(
@@ -840,6 +942,7 @@ function readGitRemote(projectPath: string): string | null {
   }
 }
 
+/** Read the first non-comment project marker line; swallows missing marker files. */
 function readProjectMarkerId(markerPath: string): string | null {
   try {
     const raw = readFileSync(markerPath, "utf-8");
@@ -854,6 +957,7 @@ function readProjectMarkerId(markerPath: string): string | null {
   return null;
 }
 
+/** Writes a gitignored project marker; swallows read-only projects as `null`. */
 function writeProjectMarkerId(markerPath: string): string | null {
   try {
     const markerId = `gf_${randomUUID()}`;
@@ -923,6 +1027,7 @@ function resolveProjectIdentity(
   );
 }
 
+/** Hash one cache input file; swallows disappearing files as a stable `missing` sentinel. */
 function hashExistingFile(projectPath: string, relativePath: string): string {
   try {
     return hashString(readFileSync(join(projectPath, relativePath), "utf-8"));
@@ -992,12 +1097,14 @@ function readDirectorySignatureEntries(
   }
 }
 
+/** Hash a bounded, deterministic directory snapshot for cache invalidation. */
 function directorySignature(projectPath: string, relativeDir: string): string {
   const entries: string[] = [];
   readDirectorySignatureEntries(projectPath, relativeDir, entries);
   return hashString(entries.join("\n"));
 }
 
+/** Build the Home enrichment cache key from learning-loop content directories. */
 function buildLearningLoopCacheSignature(projectPath: string): string {
   return hashString(
     [
@@ -1018,22 +1125,32 @@ function buildAuditCacheSignature(
     ".goat-flow/glossary.md",
     "CLAUDE.md",
     "AGENTS.md",
-    "GEMINI.md",
     ".github/copilot-instructions.md",
     ".claude/settings.json",
     ".codex/config.toml",
     ".codex/hooks.json",
-    ".gemini/settings.json",
+    ".agents/hooks.json",
     ".github/hooks/hooks.json",
-    ".claude/hooks/deny-dangerous.sh",
-    ".codex/hooks/deny-dangerous.sh",
-    ".gemini/hooks/deny-dangerous.sh",
-    ".github/hooks/deny-dangerous.sh",
+    ".claude/hooks/guard-common.sh",
+    ".claude/hooks/guard-destructive-shell.sh",
+    ".claude/hooks/guard-secret-paths.sh",
+    ".claude/hooks/guard-repository-writes.sh",
+    ".codex/hooks/guard-common.sh",
+    ".codex/hooks/guard-destructive-shell.sh",
+    ".codex/hooks/guard-secret-paths.sh",
+    ".codex/hooks/guard-repository-writes.sh",
+    ".agents/hooks/guard-common.sh",
+    ".agents/hooks/guard-destructive-shell.sh",
+    ".agents/hooks/guard-secret-paths.sh",
+    ".agents/hooks/guard-repository-writes.sh",
+    ".github/hooks/guard-common.sh",
+    ".github/hooks/guard-destructive-shell.sh",
+    ".github/hooks/guard-secret-paths.sh",
+    ".github/hooks/guard-repository-writes.sh",
   ];
   const directoryInputs = [
     ".claude/skills",
     ".agents/skills",
-    ".gemini/skills",
     ".github/skills",
     ".goat-flow/decisions",
     ".goat-flow/footguns",
@@ -1128,6 +1245,9 @@ function buildDashboardReport(
 
 const AUDIT_CACHE_FILE = "audit-cache.json";
 
+/**
+ * Persisted audit cache schema keyed by package version, config version, and content signature.
+ */
 interface AuditCacheEnvelope {
   packageVersion: string;
   configVersion: string;
@@ -1136,6 +1256,7 @@ interface AuditCacheEnvelope {
   report: DashboardReport;
 }
 
+/** Read the local config version; swallows absent configs as cache-miss input. */
 function readConfigVersion(projectPath: string): string | null {
   try {
     const raw = readFileSync(
@@ -1149,6 +1270,7 @@ function readConfigVersion(projectPath: string): string | null {
   }
 }
 
+/** Validate persisted cache JSON before trusting it as a dashboard report. */
 function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
   if (typeof value !== "object" || value === null) return false;
   const envelope = value as Record<string, unknown>;
@@ -1162,6 +1284,7 @@ function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
   );
 }
 
+/** Parse cached audit JSON; swallows malformed envelopes as a cache miss. */
 function parseAuditCacheEnvelope(raw: string): AuditCacheEnvelope | null {
   try {
     const parsed = JSON.parse(raw);
@@ -1242,7 +1365,11 @@ function buildQualityAuditCacheKey(
   return `${projectPath}\n${agent}`;
 }
 
-/** Build the non-terminal dashboard route handlers for one server instance. */
+/**
+ * Build the non-terminal dashboard route handlers for one server instance.
+ *
+ * @param deps - Server-owned dependencies and IO hooks shared by the route handlers.
+ */
 export function createDashboardRouteHandlers(
   deps: DashboardRouteDependencies,
 ): {
@@ -1277,6 +1404,11 @@ export function createDashboardRouteHandlers(
     res: ServerResponse,
   ) => Promise<boolean>;
   handleAgentDetectRequest: (url: URL, res: ServerResponse) => boolean;
+  handleHooksRequest: (
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ) => Promise<boolean>;
   handleProjectsListRequest: (
     req: IncomingMessage,
     url: URL,
@@ -1393,13 +1525,13 @@ export function createDashboardRouteHandlers(
     return result;
   }
 
+  /** Normalise legacy project-record paths before merging them into identity records. */
   function normalizeProjectRecordPaths(record: Record<string, unknown>) {
-    const paths = Array.isArray(record.paths)
+    return Array.isArray(record.paths)
       ? record.paths
           .filter((entry): entry is string => typeof entry === "string")
           .map((entry) => normalizeProjectPath(entry))
       : [];
-    return paths;
   }
 
   function readRecordString(
@@ -1556,7 +1688,11 @@ export function createDashboardRouteHandlers(
     );
   }
 
-  /** Read dashboard state from the new file first, then the legacy projects-only file. */
+  /**
+   * Read dashboard state from the new file first, then the legacy projects-only file.
+   *
+   * Swallows malformed or missing state files so the dashboard can recover to empty state.
+   */
   async function loadDashboardState(): Promise<DashboardStateData> {
     const { readFile } = await import("node:fs/promises");
     for (const filePath of [dashboardStateFile, legacyProjectsListFile]) {
@@ -1572,11 +1708,12 @@ export function createDashboardRouteHandlers(
     return { paths: [], favorites: [], projectTitles: {}, projects: {} };
   }
 
+  /** Convert local path validation failures into client errors instead of route crashes. */
   function responseStatusForError(err: unknown, fallback: number): number {
     return err instanceof LocalPathValidationError ? 400 : fallback;
   }
 
-  /** Serve the dashboard shell and inject the default workspace path. */
+  /** Writes the dashboard shell response after injecting the default workspace path. */
   function handleHtmlRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/") return false;
 
@@ -1689,6 +1826,7 @@ export function createDashboardRouteHandlers(
     );
   }
 
+  /** Parse optional agent filters without rejecting dashboard-wide requests. */
   function parseAgentFilter(param: string | null): AgentId | null {
     return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
   }
@@ -1735,12 +1873,14 @@ export function createDashboardRouteHandlers(
     return param as AgentId;
   }
 
+  /** Map mirrored skill directories to the source label shown in quality reports. */
   function skillSourceForDir(dir: string): ArtifactSource {
     if (dir === ".agents/skills") return "agent-mirror";
     if (dir === ".github/skills") return "github-mirror";
     return "installed";
   }
 
+  /** Narrow skill-quality discovery to the selected runner's installed skill tree. */
   function runnerSkillQualityConfig(projectPath: string, agent: AgentId) {
     const base = loadQualityConfig(projectPath);
     const skillsDir = AGENT_PROFILE_MAP[agent].skillsDir;
@@ -1759,6 +1899,8 @@ export function createDashboardRouteHandlers(
    * dashboard-summary facts: stack-derived setup details come from
    * `/api/setup/detect`, while this route must preserve report/scopes/agentScores
    * without paying setup-time stack detection on every fresh Home load.
+   *
+   * Reports validation, audit, and cache failures as JSON instead of throwing.
    */
   function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
@@ -1859,7 +2001,7 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** Detect project stack, commands, agents, and existing config for the setup view. */
+  /** Detect setup inputs for the setup view and reports validation failures as JSON. */
   function handleSetupDetectRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/setup/detect") return false;
 
@@ -1965,7 +2107,7 @@ export function createDashboardRouteHandlers(
     }
   }
 
-  /** Generate a quality-assessment prompt for a selected agent and return it to the dashboard. */
+  /** Generate a quality prompt and reports path/audit failures as JSON. */
   function handleQualityRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/quality") return false;
 
@@ -2120,7 +2262,12 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** Score a single skill/reference artifact with deterministic metrics. */
+  /**
+   * Score one skill/reference artifact because the dashboard needs artifact-level
+   * feedback without running the full project inventory again.
+   *
+   * Reports missing artifacts and validation failures as JSON.
+   */
   function handleSkillQualityRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/skill-quality") return false;
 
@@ -2163,14 +2310,13 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** Stamp the deprecation contract on responses served via the `/analyse`
-   *  alias. Called before `jsonResponse` on every status path of the alias. */
+  /** Writes deprecation headers on every response served via the `/analyse` alias. */
   function markEvaluateAliasDeprecation(res: ServerResponse): void {
     res.setHeader("Deprecation", "true");
     res.setHeader("Link", '</api/quality/evaluate>; rel="successor-version"');
   }
 
-  /** POST /api/quality/evaluate — score uploaded markdown and return tips.
+  /** POST /api/quality/evaluate - score uploaded markdown and return tips.
    * Also handles `POST /api/quality/analyse` as a deprecated alias (responds
    * with `Deprecation: true` and `Link: <…/evaluate>; rel="successor-version"`
    * headers; the response body is identical).
@@ -2179,11 +2325,11 @@ export function createDashboardRouteHandlers(
    * Returns the full SkillQualityReport plus an `tips` array with actionable
    * improvement suggestions derived from failing/warning metrics.
    *
-   * Read-only — does not write any file. The "side-effectful" classification
+   * Read-only - does not write any file. The "side-effectful" classification
    * is conservative: even though no IO happens, the endpoint is POST so the
    * Origin check applies, and the body cap keeps the engine from being abused
    * as a CPU sink. */
-  // eslint-disable-next-line complexity -- one handler covers /evaluate + the deprecated /analyse alias across method/decoder/exec/error branches; each branch represents one HTTP outcome and the deprecation header must stamp every alias path
+  // eslint-disable-next-line complexity -- intentional because one handler covers /evaluate + the deprecated /analyse alias across method/decoder/exec/error branches; each branch represents one HTTP outcome and the deprecation header must stamp every alias path
   async function handleQualityEvaluateRequest(
     req: IncomingMessage,
     url: URL,
@@ -2243,7 +2389,11 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** List child directories so the dashboard path picker can browse nearby repos. */
+  /**
+   * List child directories for the path picker with a stable `{ current, parent, dirs }` shape.
+   *
+   * Reports validation and filesystem read failures as JSON.
+   */
   function handleBrowseRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/browse") return false;
 
@@ -2322,7 +2472,75 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** Detect which coding agent CLIs are installed on the machine. */
+  function hookIdFromTogglePath(pathname: string): string | null {
+    const match = pathname.match(/^\/api\/hooks\/([^/]+)\/toggle$/u);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  }
+
+  function hookErrorStatus(err: unknown): number {
+    if (err instanceof HookRegistrarError) return err.statusCode;
+    return responseStatusForError(err, 500);
+  }
+
+  /** Return hook state or mutate one hook toggle for the selected project. */
+  async function handleHooksRequest(
+    req: IncomingMessage,
+    url: URL,
+    res: ServerResponse,
+  ): Promise<boolean> {
+    if (url.pathname === "/api/hooks") {
+      if (req.method !== "GET") {
+        jsonResponse(res, 405, { error: "Method not allowed" });
+        return true;
+      }
+      try {
+        const projectPath = validatedPath(
+          url.searchParams.get("path"),
+          "project-read",
+        );
+        jsonResponse(res, 200, { hooks: readAllHookStates(projectPath) });
+      } catch (err) {
+        jsonResponse(res, hookErrorStatus(err), {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return true;
+    }
+
+    const hookId = hookIdFromTogglePath(url.pathname);
+    if (hookId === null) return false;
+    if (req.method !== "POST") {
+      jsonResponse(res, 405, { error: "Method not allowed" });
+      return true;
+    }
+
+    try {
+      const projectPath = validatedPath(
+        url.searchParams.get("path"),
+        "write-local-state",
+      );
+      const { decodeHookToggleBody } = await import("./decoders.js");
+      const decoded = decodeHookToggleBody(await readBody(req));
+      if (!decoded.ok) {
+        jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
+        return true;
+      }
+      const hook = applyHookState(hookId, decoded.value.enabled, projectPath);
+      jsonResponse(res, 200, { hook });
+    } catch (err) {
+      jsonResponse(res, hookErrorStatus(err), {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return true;
+  }
+
+  /**
+   * Spawns lightweight agent probes because the dashboard needs availability
+   * without failing page load when a runner is missing.
+   *
+   * Swallows missing binaries and optional version failures.
+   */
   function detectInstalledAgents(includeVersions: boolean): {
     id: string;
     name: string;
@@ -2359,6 +2577,7 @@ export function createDashboardRouteHandlers(
   let cachedAgentDetection: ReturnType<typeof detectInstalledAgents> | null =
     null;
 
+  /** Return cached agent availability unless the dashboard explicitly requests a fresh probe. */
   function handleAgentDetectRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/agents/installed") return false;
 
@@ -2444,7 +2663,12 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
-  /** Classify project adoption state for one or more paths. */
+  /**
+   * Classify project adoption for one or more paths because the dashboard sends
+   * both the current project and stored recent projects through the same route.
+   *
+   * Reports malformed path lists and validation failures as JSON.
+   */
   function handleProjectsStatusRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/projects/status") return false;
 
@@ -2516,6 +2740,7 @@ export function createDashboardRouteHandlers(
     handleBrowseRequest,
     handleTasksRequest,
     handleAgentDetectRequest,
+    handleHooksRequest,
     handleProjectsListRequest,
     handleProjectsStatusRequest,
   };

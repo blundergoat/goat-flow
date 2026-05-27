@@ -26,18 +26,34 @@ export interface StatsReport {
   decisions?: DecisionsSection;
 }
 
+/**
+ * ADR file snapshot used by stats checks.
+ *
+ * `content` is nullable because unreadable files still need filename/routing validation.
+ */
 interface DecisionFileSummary {
   path: string;
   filename: string;
   content: string | null;
 }
 
+/**
+ * Advisory stats issue that should be shown but must not fail `stats --check`.
+ *
+ * Warnings are intentionally separate from findings so noisy metadata nudges do not block CI.
+ */
 interface StatsWarning {
   file: string;
   rule: "decision-metadata" | "empty-learning-loop";
   message: string;
 }
 
+/**
+ * Decision-record stats section.
+ *
+ * ADR warnings live here rather than in `StatsCheckReport` so renderers can display the same
+ * decision metadata in normal stats output and in `--check` output.
+ */
 export interface DecisionsSection {
   path: string;
   exists: boolean;
@@ -87,7 +103,12 @@ function buildSection(
   };
 }
 
-/** Build the full stats report from the learning-loop slice of shared facts. */
+/**
+ * Build the full stats report from the learning-loop slice of shared facts.
+ *
+ * @param shared Footgun, lesson, and optional decision facts from the shared extraction pipeline.
+ * @returns Report shape consumed by all text, JSON, Markdown, and check renderers.
+ */
 export function buildStatsReport(shared: {
   footguns: SharedFacts["footguns"];
   lessons: SharedFacts["lessons"];
@@ -184,7 +205,12 @@ function collectBucketFindings(
   return findings;
 }
 
-/** Collect findings. */
+/**
+ * Collect blocking findings for one learning-loop directory.
+ *
+ * Why this re-parses `formatDiagnostic`: shared fact extraction emits one combined diagnostic
+ * string, so this function must recover stable rule ids for CI while leaving empty buckets to warnings.
+ */
 function collectFindings(section: BucketSection): StatsFinding[] {
   const findings: StatsFinding[] = [];
   if (!section.exists) {
@@ -221,6 +247,7 @@ function collectFindings(section: BucketSection): StatsFinding[] {
   return findings;
 }
 
+/** Return true for empty-directory diagnostics that should remain advisory warnings. */
 function isEmptyLearningLoopDiagnostic(message: string): boolean {
   return (
     message === "Footgun directory exists but contains 0 entries" ||
@@ -228,6 +255,7 @@ function isEmptyLearningLoopDiagnostic(message: string): boolean {
   );
 }
 
+/** Collect advisory learning-loop warnings without converting them into failing findings. */
 function collectWarnings(section: BucketSection): StatsWarning[] {
   if (section.formatDiagnostic === null) return [];
   return section.formatDiagnostic
@@ -244,10 +272,12 @@ const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
 const ROUTING_HINT =
   "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/tasks/; recurring hazards with evidence belong in .goat-flow/footguns/; reusable takeaways belong in .goat-flow/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
 
+/** Match a second-level ADR heading exactly enough to avoid prose false positives. */
 function hasHeading(content: string, heading: string): boolean {
   return new RegExp(`^##\\s+${heading}\\b`, "m").test(content);
 }
 
+/** Build the routing finding for files that do not follow the ADR filename invariant. */
 function decisionFilenameFinding(file: DecisionFileSummary): StatsFinding {
   return {
     file: file.path,
@@ -256,6 +286,7 @@ function decisionFilenameFinding(file: DecisionFileSummary): StatsFinding {
   };
 }
 
+/** Accept one tradeoff section variant so older ADR shapes do not need churn-only rewrites. */
 function hasDecisionTradeoffSection(content: string): boolean {
   return (
     hasHeading(content, "Consequences") ||
@@ -264,6 +295,7 @@ function hasDecisionTradeoffSection(content: string): boolean {
   );
 }
 
+/** Return the required ADR structure pieces missing from one decision record. */
 function missingDecisionStructure(content: string): string[] {
   const missing: string[] = [];
   if (!/^\*\*Status:\*\*/m.test(content)) missing.push("**Status:**");
@@ -299,6 +331,7 @@ function collectDecisionFileFinding(
   return missing.length > 0 ? decisionStructureFinding(file, missing) : null;
 }
 
+/** Collect structural ADR findings while ignoring the directory README. */
 function collectDecisionFindings(section: DecisionsSection): StatsFinding[] {
   if (!section.exists) return [];
   return section.files.flatMap(
@@ -306,7 +339,12 @@ function collectDecisionFindings(section: DecisionsSection): StatsFinding[] {
   );
 }
 
-/** Run the `--check` verdict against an already-built stats report. */
+/**
+ * Run the `--check` verdict against an already-built stats report.
+ *
+ * @param report Stats report built from the same facts used by normal rendering.
+ * @returns Pass/fail verdict with blocking findings separated from advisory warnings.
+ */
 export function checkStats(report: StatsReport): StatsCheckReport {
   const findings = [
     ...collectFindings(report.footguns),

@@ -6,12 +6,12 @@
 
 ## Context
 
-Two independent Codex critiques (the-summit-chatroom, ambient-scribe) identified that "fix this bug" and "build this feature" have no routing destination. /goat-debug stops at diagnosis, /goat-plan stops at the plan. Six independent reviewers (3 sub-agents, Codex, Claude, Gemini) evaluated four options.
+Two independent Codex critiques (the-summit-chatroom, ambient-scribe) identified that "fix this bug" and "build this feature" have no routing destination. /goat-debug stops at diagnosis, /goat-plan stops at the plan. Six independent reviewers evaluated four options.
 
 ## Options evaluated
 
 - **Option A: goat-doer + goat-verifier** - Two new skills. Rejected 6/6. Doer-verifier in single-agent context is theater; the verifier has full context of the doer's reasoning.
-- **Option B: goat-implement** - One new skill. Rejected 5/6. Gemini favored it but for DoD enforcement (hooks), not code editing. Implementation is "the thing the agent does when it's not running a skill."
+- **Option B: goat-implement** - One new skill. Rejected 5/6. One reviewer favored it but for DoD enforcement (hooks), not code editing. Implementation is "the thing the agent does when it's not running a skill."
 - **Option C: Extend existing skills** - No new skills. Favored 5/6. Reviewers proposed adding a goat-plan execution phase, but the shipped resolution kept implementation in the ordinary execution loop instead. The gap is carry-through, not capability.
 - **Option D: Mode, not skill** - Codex's variant of C. The system spec already defines Implement as a core execution mode. The bug is no user-facing path into it. Fix the dispatcher routing, not the skill set.
 

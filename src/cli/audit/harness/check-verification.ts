@@ -79,16 +79,22 @@ const hooksRegistered: HarnessCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const fixes: string[] = [];
-    let anyFail = false;
-    const details = verificationDetails(ctx, (af) => {
-      if (af.hooks.postTurnRegistered && !af.hooks.postTurnExists) {
+    let hasHookRegistrationMismatch = false;
+    const details = verificationDetails(ctx, (agentFacts) => {
+      if (
+        agentFacts.hooks.postTurnRegistered &&
+        !agentFacts.hooks.postTurnExists
+      ) {
         return {
           reason: "post-turn hook registered but file missing",
           expected: "registered hook file exists",
           actual: "registered without file",
         };
       }
-      if (af.hooks.postTurnExists && !af.hooks.postTurnRegistered) {
+      if (
+        agentFacts.hooks.postTurnExists &&
+        !agentFacts.hooks.postTurnRegistered
+      ) {
         return {
           reason: "post-turn hook file exists but is not registered",
           expected: "existing hook is registered",
@@ -101,27 +107,36 @@ const hooksRegistered: HarnessCheck = {
         actual: "in sync",
       };
     });
-    for (const af of ctx.agents) {
-      if (af.hooks.postTurnRegistered && !af.hooks.postTurnExists) {
+    for (const agentFacts of ctx.agents) {
+      if (
+        agentFacts.hooks.postTurnRegistered &&
+        !agentFacts.hooks.postTurnExists
+      ) {
         findings.push(
-          `${af.agent.id}: post-turn hook registered but file missing`,
+          `${agentFacts.agent.id}: post-turn hook registered but file missing`,
         );
         recs.push("Create the registered post-turn hook file");
         fixes.push(
-          `Create the post-turn hook file at the path specified in ${af.agent.settingsFile}.`,
+          `Create the post-turn hook file at the path specified in ${agentFacts.agent.settingsFile}.`,
         );
-        anyFail = true;
+        hasHookRegistrationMismatch = true;
       }
-      if (af.hooks.postTurnExists && !af.hooks.postTurnRegistered) {
+      if (
+        agentFacts.hooks.postTurnExists &&
+        !agentFacts.hooks.postTurnRegistered
+      ) {
         findings.push(
-          `${af.agent.id}: post-turn hook file exists but not registered`,
+          `${agentFacts.agent.id}: post-turn hook file exists but not registered`,
         );
         recs.push("Register the post-turn hook in agent settings");
-        fixes.push(`Register the post-turn hook in ${af.agent.settingsFile}.`);
-        anyFail = true;
+        fixes.push(
+          `Register the post-turn hook in ${agentFacts.agent.settingsFile}.`,
+        );
+        hasHookRegistrationMismatch = true;
       }
     }
-    if (anyFail) return fail(findings, recs, fixes, details);
+    if (hasHookRegistrationMismatch)
+      return fail(findings, recs, fixes, details);
     return pass(["Hook registrations and files are in sync"], details);
   },
 };
@@ -267,8 +282,8 @@ const evidenceBeforeClaims: HarnessCheck = {
     [
       "CLAUDE.md",
       RATIONALISATIONS_PATH,
-      ".goat-flow/lessons/verification-review.md",
-      ".goat-flow/lessons/agent-behavior-trust.md",
+      ".goat-flow/lessons/review-feedback.md",
+      ".goat-flow/lessons/agent-behavior.md",
     ],
     "incident",
     EVIDENCE_BEFORE_CLAIMS_VERIFIED_ON,
@@ -354,23 +369,23 @@ const postTurnHookIntegrity: HarnessCheck = {
   /** Run the Post-turn hook integrity check. */
   run: (ctx) => {
     const findings: string[] = [];
-    let anyHook = false;
-    const details = verificationDetails(ctx, (af) => {
-      if (!af.hooks.postTurnExists) {
+    let hasPostTurnHook = false;
+    const details = verificationDetails(ctx, (agentFacts) => {
+      if (!agentFacts.hooks.postTurnExists) {
         return {
           reason: "post-turn hook missing",
           expected: "hook absent or meaningful validation",
           actual: "missing",
         };
       }
-      if (!af.hooks.postTurnHasValidation) {
+      if (!agentFacts.hooks.postTurnHasValidation) {
         return {
           reason: "post-turn hook has no validation logic",
           expected: "meaningful validation",
           actual: "no validation logic",
         };
       }
-      if (af.hooks.postTurnSwallowsFailures) {
+      if (agentFacts.hooks.postTurnSwallowsFailures) {
         return {
           reason: "post-turn hook always exits 0",
           expected: "validation failures are reported",
@@ -384,28 +399,30 @@ const postTurnHookIntegrity: HarnessCheck = {
       };
     });
 
-    for (const af of ctx.agents) {
-      if (!af.hooks.postTurnExists) continue;
-      anyHook = true;
+    for (const agentFacts of ctx.agents) {
+      if (!agentFacts.hooks.postTurnExists) continue;
+      hasPostTurnHook = true;
 
-      if (af.hooks.postTurnHasValidation) {
-        findings.push(`${af.agent.id}: post-turn hook runs validation`);
+      if (agentFacts.hooks.postTurnHasValidation) {
+        findings.push(`${agentFacts.agent.id}: post-turn hook runs validation`);
       } else {
-        findings.push(`${af.agent.id}: post-turn hook has no validation logic`);
+        findings.push(
+          `${agentFacts.agent.id}: post-turn hook has no validation logic`,
+        );
       }
 
-      if (af.hooks.postTurnSwallowsFailures) {
+      if (agentFacts.hooks.postTurnSwallowsFailures) {
         findings.push(
-          `${af.agent.id}: post-turn hook always exits 0 (advisory mode)`,
+          `${agentFacts.agent.id}: post-turn hook always exits 0 (advisory mode)`,
         );
-      } else if (af.hooks.postTurnHasValidation) {
+      } else if (agentFacts.hooks.postTurnHasValidation) {
         findings.push(
-          `${af.agent.id}: post-turn hook reports failures honestly`,
+          `${agentFacts.agent.id}: post-turn hook reports failures honestly`,
         );
       }
     }
 
-    if (!anyHook) {
+    if (!hasPostTurnHook) {
       return fail(
         ["No post-turn hooks installed; no hook-based validation evidence"],
         [

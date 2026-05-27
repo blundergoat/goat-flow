@@ -22,6 +22,12 @@ import type { ContentFinding, ContentSeverity } from "./types.js";
 import { SKILL_NAMES } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
 
+/**
+ * Regex detector descriptor for one prose-quality rule.
+ *
+ * The matcher only sees one non-code-block line at a time, so each rule owns
+ * both the stable audit id and the remediation text needed for that local hit.
+ */
 interface PatternRule {
   rule: string;
   /** Compiled regex (case-insensitive, word-boundary handled inside the pattern). */
@@ -47,7 +53,6 @@ const STATIC_QUALITY_TARGETS = [
   // Hot-path instruction files
   "CLAUDE.md",
   "AGENTS.md",
-  "GEMINI.md",
   ".github/copilot-instructions.md",
   // Canonical docs
   ".goat-flow/architecture.md",
@@ -60,6 +65,7 @@ const STATIC_QUALITY_TARGETS = [
   // Standalone playbooks (loaded on-demand by skills/agents)
   ".goat-flow/skill-playbooks/README.md",
   ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-playbooks/gruff-code-quality.md",
   ".goat-flow/skill-playbooks/page-capture.md",
   ".goat-flow/skill-playbooks/skill-quality-testing.md",
   ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
@@ -81,7 +87,7 @@ const STATIC_QUALITY_TARGETS = [
   "workflow/setup/06-final-verification.md",
   "workflow/setup/agents/claude.md",
   "workflow/setup/agents/codex.md",
-  "workflow/setup/agents/gemini.md",
+  "workflow/setup/agents/antigravity.md",
   "workflow/setup/agents/copilot.md",
   "workflow/setup/reference/ADR-000-template.md",
   "workflow/setup/reference/execution-loop.md",
@@ -208,9 +214,9 @@ const NON_ACTIONABLE: PatternRule[] = [
  * Legacy v1.0 six-step Execution Loop drift (M19-9a). Matches only the
  * arrow-sequence declaration, not incidental historical prose mentioning
  * CLASSIFY or LOG. All four reviewed v1.2 consumer projects (ambient-scribe,
- * sus-form-detector, blundergoat-platform, rampart) shipped AGENTS.md /
- * GEMINI.md with the legacy six-step loop while CLAUDE.md + skill-preamble.md
- * used the v1.2 four-step. See `.goat-flow/tasks/1.2.0/M19-setup-signal-hardening.md`
+ * sus-form-detector, blundergoat-platform, rampart) shipped AGENTS.md with
+ * the legacy six-step loop while CLAUDE.md + skill-preamble.md used the v1.2
+ * four-step. See `.goat-flow/tasks/1.2.0/M19-setup-signal-hardening.md`
  * slice M19-9a.
  */
 const LEGACY_EXECUTION_LOOP: PatternRule[] = [
@@ -298,9 +304,17 @@ function scanLine(
   }
 }
 
-/** Scan one file. Returns zero or more findings, skipping fenced code blocks.
- *  Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
- *  on incident-description prose. */
+/**
+ * Scan one file, skipping fenced code blocks before applying prose detectors.
+ *
+ * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
+ * on incident-description prose while still rejecting generic instructions.
+ *
+ * @param path - Repo-relative path used in emitted findings and mode-specific rules.
+ * @param text - Markdown or instruction-file content to scan.
+ * @param mode - Detector set to apply for the target surface.
+ * @returns Content-quality findings found outside fenced code blocks.
+ */
 export function scanContentQuality(
   path: string,
   text: string,
@@ -321,7 +335,13 @@ export function scanContentQuality(
   return findings;
 }
 
-/** List current ADR files. */
+/**
+ * List current ADR files in a deterministic order.
+ *
+ * ADR content is a stable truth surface, and discovering `ADR-NNN-*.md` files
+ * at runtime keeps new decisions inside content-quality coverage without
+ * requiring a second hard-coded target list.
+ */
 function listDecisionMarkdown(ctx: AuditContext): string[] {
   if (!ctx.fs.exists(DECISIONS_DIR)) return [];
   return ctx.fs
@@ -331,7 +351,13 @@ function listDecisionMarkdown(ctx: AuditContext): string[] {
     .map((name) => `${DECISIONS_DIR}${name}`);
 }
 
-/** Full list of target paths, including every installed skill SKILL.md. */
+/**
+ * Resolve the full scan target list.
+ *
+ * The target set is assembled here because static truth surfaces, current ADRs,
+ * and every installed skill file are maintained by different setup paths; a
+ * single de-duped resolver avoids coverage drift between those sources.
+ */
 function resolveTargets(ctx: AuditContext): string[] {
   const targets = new Set<string>([
     ...STATIC_QUALITY_TARGETS,
@@ -357,7 +383,16 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
     .map((name) => `${dir}${name}`);
 }
 
-/** Run content-quality checks across the configured documentation targets. */
+/**
+ * Run content-quality checks across the configured documentation targets.
+ *
+ * Missing files and unreadable targets are skipped; the function reports prose
+ * findings for available surfaces instead of failing the whole audit on
+ * optional buckets.
+ *
+ * @param ctx - Audit context containing the read-only project filesystem.
+ * @returns Findings plus the count of files that were actually scanned.
+ */
 export function runContentQualityChecks(ctx: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;

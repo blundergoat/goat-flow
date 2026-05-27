@@ -11,9 +11,8 @@
  *    version extracted from the `# GOAT Flow vX.Y.Z Release Notes` H1;
  *    validated against that version's snapshot.
  *
- * This is the M06b replacement for the rejected `scripts/lint-manifest-claims.sh`
- * - pure Node, no new runtime dep, wired into `goat-flow audit --check-content`
- * and `goat-flow manifest --check`.
+ * This stays in TypeScript so snapshot-claim checks share the audit fact model
+ * and avoid a separate shell parser for release-note text.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -101,7 +100,13 @@ const SNAPSHOT_CLAIMS: SnapshotClaim[] = [
   },
 ];
 
-/** Parse CHANGELOG.md into sections keyed by `## vX.Y.Z` headers. */
+/**
+ * Parse CHANGELOG.md into sections keyed by `## vX.Y.Z` headers.
+ * Mutates only an in-memory accumulator because preserving section order keeps finding lines stable.
+ *
+ * @param text Full CHANGELOG markdown content.
+ * @returns Versioned sections with body text and header line numbers.
+ */
 export function parseChangelogSections(text: string): ChangelogSection[] {
   const lines = text.split(/\r?\n/);
   const headerRe = /^##\s+v(\d+\.\d+\.\d+)(?:\b|\s|$)/;
@@ -110,8 +115,8 @@ export function parseChangelogSections(text: string): ChangelogSection[] {
     null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    const m = headerRe.exec(line);
-    const captured = m?.[1];
+    const headerMatch = headerRe.exec(line);
+    const captured = headerMatch?.[1];
     if (captured) {
       if (current) {
         sections.push({
@@ -135,7 +140,13 @@ export function parseChangelogSections(text: string): ChangelogSection[] {
   return sections;
 }
 
-/** Load the snapshot file for a version. Returns null if none exists. */
+/**
+ * Load the snapshot facts for one release version.
+ * Swallows missing or malformed snapshot files and reports them as null so old release sections can be skipped.
+ *
+ * @param version Semver version without the leading `v`.
+ * @returns Snapshot facts for that version, or null when the file cannot be used.
+ */
 export function loadSnapshotFacts(version: string): SnapshotFacts | null {
   const path = getTemplatePath(
     join("workflow", "manifest-snapshots", `v${version}.json`),
@@ -156,7 +167,14 @@ function isFenceLine(line: string): boolean {
   return /^\s*```/.test(line);
 }
 
-/** Scan one CHANGELOG section body against its matching snapshot. */
+/**
+ * Scan one CHANGELOG section body against its matching snapshot.
+ *
+ * @param section Parsed CHANGELOG section or whole-file release notes wrapper.
+ * @param snapshot Frozen facts for the section version.
+ * @param path Display path used in content findings.
+ * @returns Content findings for numeric claims that disagree with the snapshot.
+ */
 export function scanSectionAgainstSnapshot(
   section: ChangelogSection,
   snapshot: SnapshotFacts,
@@ -201,10 +219,18 @@ export function scanSectionAgainstSnapshot(
   return findings;
 }
 
-/** Extract the version from a `# GOAT Flow vX.Y.Z Release Notes` H1. */
+/**
+ * Extract the version from a `# GOAT Flow vX.Y.Z Release Notes` H1.
+ * Reads only markdown text and returns null when no release-note header is present.
+ *
+ * @param text Release notes markdown.
+ * @returns Semver version without the leading `v`, or null when absent.
+ */
 export function extractReleaseVersion(text: string): string | null {
-  const m = /^#\s+(?:GOAT\s+Flow\s+)?v(\d+\.\d+\.\d+)\b/im.exec(text);
-  return m ? (m[1] ?? null) : null;
+  const versionMatch = /^#\s+(?:GOAT\s+Flow\s+)?v(\d+\.\d+\.\d+)\b/im.exec(
+    text,
+  );
+  return versionMatch ? (versionMatch[1] ?? null) : null;
 }
 
 /** Scan a whole-document release notes file against its snapshot. */
@@ -222,7 +248,14 @@ function scanWholeFileAgainstSnapshot(
   );
 }
 
-/** Entry point: scan CHANGELOG.md sections + scratchpad/release.md against available snapshots. */
+/**
+ * Scan release-note surfaces against available manifest snapshots.
+ * Reports mismatched numeric claims as content findings and skips missing inputs because historical
+ * release text can exist before a matching snapshot catalog entry.
+ *
+ * @param ctx Audit context whose filesystem is rooted at the target project.
+ * @returns Findings plus the number of release-note files that were actually scanned.
+ */
 export function runSnapshotClaimChecks(ctx: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;

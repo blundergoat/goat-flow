@@ -46,24 +46,27 @@ function classifySecretDeny(ctx: Pick<AuditContext, "agents">) {
   const scriptOnly: string[] = [];
   const uncoveredSettings: string[] = [];
   const uncoveredScript: string[] = [];
-  for (const af of ctx.agents) {
-    const bashOk = af.hooks.bashDenyCoversSecrets;
-    const readOk = af.hooks.readDenyCoversSecrets;
-    const isScriptOnly = af.agent.denyMechanism.type === "deny-script";
+  for (const agentFacts of ctx.agents) {
+    // Capability-limited agents (no deny mechanism documented upstream) are
+    // skipped from secret-deny classification entirely.
+    if (agentFacts.agent.denyMechanism === null) continue;
+    const bashOk = agentFacts.hooks.bashDenyCoversSecrets;
+    const readOk = agentFacts.hooks.readDenyCoversSecrets;
+    const isScriptOnly = agentFacts.agent.denyMechanism.type === "deny-script";
 
     if (isScriptOnly) {
       // Script-only agents (e.g. Copilot) rely entirely on the Bash hook.
       if (bashOk) {
-        scriptOnly.push(af.agent.id);
+        scriptOnly.push(agentFacts.agent.id);
       } else {
-        uncoveredScript.push(af.agent.id);
+        uncoveredScript.push(agentFacts.agent.id);
       }
     } else {
       // Settings-based agents need BOTH file-read deny AND Bash hook coverage.
       if (readOk && bashOk) {
-        covered.push(af.agent.id);
+        covered.push(agentFacts.agent.id);
       } else {
-        uncoveredSettings.push(af.agent.id);
+        uncoveredSettings.push(agentFacts.agent.id);
       }
     }
   }
@@ -74,20 +77,25 @@ function secretDenyDetails(
   agents: AuditContext["agents"],
 ): HarnessCheckDetails {
   return {
-    denyMatrix: agents.map((af) => {
+    denyMatrix: agents.map((agentFacts) => {
       const missingPatterns: string[] = [];
-      const isScriptOnly = af.agent.denyMechanism.type === "deny-script";
-      if (!isScriptOnly && !af.hooks.readDenyCoversSecrets) {
+      const isScriptOnly =
+        agentFacts.agent.denyMechanism?.type === "deny-script";
+      if (
+        agentFacts.agent.denyMechanism !== null &&
+        !isScriptOnly &&
+        !agentFacts.hooks.readDenyCoversSecrets
+      ) {
         missingPatterns.push("file-read-secret-paths");
       }
-      if (!af.hooks.bashDenyCoversSecrets) {
+      if (!agentFacts.hooks.bashDenyCoversSecrets) {
         missingPatterns.push("bash-secret-paths");
       }
       return {
-        agent: af.agent.id,
+        agent: agentFacts.agent.id,
         missingPatterns,
         extraPatterns: [],
-        hookRegistered: af.hooks.denyIsRegistered,
+        hookRegistered: agentFacts.hooks.denyIsRegistered,
       };
     }),
   };
@@ -97,11 +105,13 @@ function pipeToShellDetails(
   agents: AuditContext["agents"],
 ): HarnessCheckDetails {
   return {
-    denyMatrix: agents.map((af) => ({
-      agent: af.agent.id,
-      missingPatterns: af.hooks.denyBlocksPipeToShell ? [] : ["pipe-to-shell"],
+    denyMatrix: agents.map((agentFacts) => ({
+      agent: agentFacts.agent.id,
+      missingPatterns: agentFacts.hooks.denyBlocksPipeToShell
+        ? []
+        : ["pipe-to-shell"],
       extraPatterns: [],
-      hookRegistered: af.hooks.denyIsRegistered,
+      hookRegistered: agentFacts.hooks.denyIsRegistered,
     })),
   };
 }
@@ -113,20 +123,21 @@ function denyRegistrationDetails(
   pathMismatch: string[],
 ): HarnessCheckDetails {
   return {
-    denyMatrix: agents.map((af) => {
+    denyMatrix: agents.map((agentFacts) => {
       const missingPatterns: string[] = [];
-      if (unregistered.includes(af.agent.id)) {
+      if (unregistered.includes(agentFacts.agent.id)) {
         missingPatterns.push("deny-hook-registration");
       }
-      if (noDeny.includes(af.agent.id)) missingPatterns.push("deny-hook");
-      if (pathMismatch.includes(af.agent.id)) {
+      if (noDeny.includes(agentFacts.agent.id))
+        missingPatterns.push("deny-hook");
+      if (pathMismatch.includes(agentFacts.agent.id)) {
         missingPatterns.push("deny-hook-path");
       }
       return {
-        agent: af.agent.id,
+        agent: agentFacts.agent.id,
         missingPatterns,
         extraPatterns: [],
-        hookRegistered: af.hooks.denyIsRegistered,
+        hookRegistered: agentFacts.hooks.denyIsRegistered,
       };
     }),
   };
@@ -234,37 +245,38 @@ const denyBlocksDangerous: HarnessCheck = {
     const recs: string[] = [];
     const fixes: string[] = [];
     const denyMatrix: NonNullable<HarnessCheckDetails["denyMatrix"]> = [];
-    let anyFail = false;
-    for (const af of ctx.agents) {
-      const { denyBlocksRmRf, denyBlocksGitPush, denyBlocksChmod } = af.hooks;
+    let hasDangerousDenyGap = false;
+    for (const agentFacts of ctx.agents) {
+      const { denyBlocksRmRf, denyBlocksGitPush, denyBlocksChmod } =
+        agentFacts.hooks;
       const missingPatterns: string[] = [];
       if (!denyBlocksRmRf) missingPatterns.push("broad rm -r");
       if (!denyBlocksGitPush) missingPatterns.push("git-push");
       if (!denyBlocksChmod) missingPatterns.push("chmod");
       denyMatrix.push({
-        agent: af.agent.id,
+        agent: agentFacts.agent.id,
         missingPatterns,
         extraPatterns: [],
-        hookRegistered: af.hooks.denyIsRegistered,
+        hookRegistered: agentFacts.hooks.denyIsRegistered,
       });
       if (missingPatterns.length === 0) {
         findings.push(
-          `${af.agent.id}: deny blocks broad rm -r, git-push, chmod`,
+          `${agentFacts.agent.id}: deny blocks broad rm -r, git-push, chmod`,
         );
       } else {
-        anyFail = true;
+        hasDangerousDenyGap = true;
         findings.push(
-          `${af.agent.id}: deny missing coverage for ${missingPatterns.join(", ")}`,
+          `${agentFacts.agent.id}: deny missing coverage for ${missingPatterns.join(", ")}`,
         );
         recs.push(
-          `Add deny patterns for ${missingPatterns.join(", ")} to ${af.agent.id}`,
+          `Add deny patterns for ${missingPatterns.join(", ")} to ${agentFacts.agent.id}`,
         );
         fixes.push(
-          `Add deny patterns for ${missingPatterns.join(", ")} in ${af.agent.id} agent configuration.`,
+          `Add deny patterns for ${missingPatterns.join(", ")} in ${agentFacts.agent.id} agent configuration.`,
         );
       }
     }
-    if (anyFail) return fail(findings, recs, fixes, { denyMatrix });
+    if (hasDangerousDenyGap) return fail(findings, recs, fixes, { denyMatrix });
     return pass(findings, { denyMatrix });
   },
 };
@@ -288,11 +300,11 @@ const denyBlocksPipeToShell: HarnessCheck = {
     const covered: string[] = [];
     const uncovered: string[] = [];
     const details = pipeToShellDetails(ctx.agents);
-    for (const af of ctx.agents) {
-      if (af.hooks.denyBlocksPipeToShell) {
-        covered.push(af.agent.id);
+    for (const agentFacts of ctx.agents) {
+      if (agentFacts.hooks.denyBlocksPipeToShell) {
+        covered.push(agentFacts.agent.id);
       } else {
-        uncovered.push(af.agent.id);
+        uncovered.push(agentFacts.agent.id);
       }
     }
     if (uncovered.length === 0) {
@@ -326,9 +338,16 @@ function findAgent(
   agents: AuditContext["agents"],
   id: string,
 ): AuditContext["agents"][number] | undefined {
-  return agents.find((a) => a.agent.id === id);
+  return agents.find((agentFacts) => agentFacts.agent.id === id);
 }
 
+/**
+ * Group deny-hook registration states for remediation.
+ *
+ * A missing hook, an unregistered hook, and a registered-but-wrong path all need
+ * different fix text; keeping these buckets separate avoids telling users to
+ * register a hook that does not exist or to recreate one that is only miswired.
+ */
 function classifyDenyRegistration(agents: AuditContext["agents"]): {
   registered: string[];
   unregistered: string[];
@@ -339,20 +358,20 @@ function classifyDenyRegistration(agents: AuditContext["agents"]): {
   const unregistered: string[] = [];
   const noDeny: string[] = [];
   const pathMismatch: string[] = [];
-  for (const af of agents) {
-    if (!af.hooks.denyExists && !af.hooks.denyIsConfigBased) {
-      noDeny.push(af.agent.id);
+  for (const agentFacts of agents) {
+    if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
+      noDeny.push(agentFacts.agent.id);
       continue;
     }
-    if (af.hooks.denyIsRegistered) {
-      registered.push(af.agent.id);
-      const expected = af.agent.denyHookFile;
-      const actual = af.hooks.denyRegisteredPath;
+    if (agentFacts.hooks.denyIsRegistered) {
+      registered.push(agentFacts.agent.id);
+      const expected = agentFacts.agent.denyHookFile;
+      const actual = agentFacts.hooks.denyRegisteredPath;
       if (expected && actual && !actual.endsWith(expected)) {
-        pathMismatch.push(af.agent.id);
+        pathMismatch.push(agentFacts.agent.id);
       }
     } else {
-      unregistered.push(af.agent.id);
+      unregistered.push(agentFacts.agent.id);
     }
   }
   return { registered, unregistered, noDeny, pathMismatch };
@@ -370,15 +389,15 @@ function buildDenyRegistrationFailure(
       .filter((id) => !pathMismatch.includes(id))
       .map(
         (id) =>
-          `${id}: deny hook registered as ${findAgent(agents, id)?.agent.hookEvents.preTool ?? "pre-tool"} hook`,
+          `${id}: deny hook registered as ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
       ),
     ...pathMismatch.map((id) => {
-      const af = findAgent(agents, id);
-      return `${id}: registered hook path "${af?.hooks.denyRegisteredPath}" does not match expected deny hook "${af?.agent.denyHookFile}"`;
+      const agentFacts = findAgent(agents, id);
+      return `${id}: registered hook path "${agentFacts?.hooks.denyRegisteredPath}" does not match expected deny hook "${agentFacts?.agent.denyHookFile}"`;
     }),
     ...unregistered.map(
       (id) =>
-        `${id}: deny hook exists but is NOT registered as a ${findAgent(agents, id)?.agent.hookEvents.preTool ?? "pre-tool"} hook`,
+        `${id}: deny hook exists but is NOT registered as a ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
     ),
   ];
   const actions = [
@@ -396,11 +415,11 @@ function buildDenyRegistrationFailure(
     [
       ...unregistered.map(
         (id) =>
-          `Add a ${findAgent(agents, id)?.agent.hookEvents.preTool ?? "PreToolUse"} hook entry in ${id} agent settings that runs deny-dangerous.sh.`,
+          `Add a ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook entry in ${id} agent settings that runs guard-repository-writes.sh.`,
       ),
       ...pathMismatch.map(
         (id) =>
-          `Update the ${findAgent(agents, id)?.agent.hookEvents.preTool ?? "PreToolUse"} hook in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile}.`,
+          `Update the ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile}.`,
       ),
     ],
     denyRegistrationDetails(agents, unregistered, noDeny, pathMismatch),
@@ -433,7 +452,7 @@ const denyHookRegistered: HarnessCheck = {
     const findings = [
       ...registered.map(
         (id) =>
-          `${id}: deny hook registered as ${findAgent(ctx.agents, id)?.agent.hookEvents.preTool ?? "pre-tool"} hook`,
+          `${id}: deny hook registered as ${findAgent(ctx.agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
       ),
       ...noDeny.map(
         (id) => `${id}: no deny mechanism (registration check skipped)`,

@@ -1,15 +1,9 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.7.0"
+version: "1.8.0"
 
 # ── Project Setup ───────────────────────────────
-agents:
-  - claude
-  - codex
-  - gemini
-  - copilot
-
 skills:
   install:
     - goat
@@ -34,9 +28,20 @@ learning-loop:
     enabled: false
     targets: []
 
-# ── Line Limits ──────────────────────────────────
-# Instruction-file line limits used by audit quality checks.
-# Target is the preferred maximum; limit is the hard failure threshold.
+# ── Hook Toggles ───────────────────────────────
+# Project-wide toggles for goat-flow-shipped hooks.
+# Edit here, use dashboard /hooks, or run `goat-flow hooks enable <id>`.
+# Togglable goat-flow hook state. Missing entries use registry defaults.
+# Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.
+hooks:
+  gruff-code-quality:
+    enabled: true
+  guard-destructive-shell:
+    enabled: true
+  guard-repository-writes:
+    enabled: true
+  guard-secret-paths:
+    enabled: true
 line-limits:
   target: 125
   limit: 150

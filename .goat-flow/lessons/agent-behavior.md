@@ -1,26 +1,48 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-28
+---
+
+## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
+
+**Created:** 2026-05-25
+
+**What happened:** User ran `npx gruff-ts summary` in `/home/devgoat/projects/goat-flow` and asked the agent to "deeply analyse these findings and tell me what you agree that should be fixed." The summary reported 1643 findings (0 error, 276 warning, 1367 advisory) and a Score of 12.9 (F). The agent's analysis produced three tiers - Tier 1 "Fix these", Tier 2 "Investigate", and Tier 3 "Tune the config, don't fix" - and recommended `enabled: false` in `.gruff-ts.yaml` for nine high-volume advisory rules (`docs.missing-function-doc`, `naming.boolean-prefix`, `naming.short-variable`, `test-quality.setup-bloat`, `naming.identifier-quality`, `test-quality.loop-in-test`, `test-quality.magic-number-assertion`, `docs.missing-interface-doc`, and the test-file majority of `modernisation.non-null-assertion`). The agent framed this as resolving a conflict between gruff-ts rules and CLAUDE.md's "default to no comments" stance. The user replied in capitals: *"DONT SET ANYTHING TO ENABLED FALSE!!"*
+
+**Root cause:** The agent treated high-volume advisory findings as configuration noise to mute rather than signal to act on or threshold-tune. The framing "the rule fights your stated philosophy" used a real project norm (CLAUDE.md "default to no comments") to justify silencing a tool, but a tool-vs-norm conflict is never resolved by disabling the tool - it is resolved by satisfying the rule selectively, tuning via threshold/allowlist/path-filter, or accepting the noise while triaging. The agent also misread the score: F (12.9) on a scale where 0 errors trip is not a quality emergency, and dropping advisory volume by disabling rules would produce a higher score without changing the codebase - exactly the gaming behaviour the analyser is designed to prevent.
+
+**Why it matters:** Disabling a rule erases its signal permanently. A future agent running `gruff-ts summary` will see fewer findings and conclude the codebase is clean in that dimension when in reality the rule was silenced. Worse, the user has explicitly committed to the gruff-ts rule set as the project's quality vocabulary - proposing disablement is proposing to weaken the contract the user picked. The cost of being wrong is one-directional: a wrongly-disabled rule stays disabled until someone notices, while a wrongly-noisy rule prompts a real conversation about thresholds.
+
+**Prevention:**
+
+1. **Never propose `enabled: false` for any gruff-ts rule in `.gruff-ts.yaml`**, regardless of finding volume, severity, or apparent conflict with project norms. This is a hard rule for this project.
+2. **Group findings as Fix / Investigate / Tune - never as Disable.** "Tune" means rule options the rule itself exposes: `threshold`, allowlists (`acceptedAbbreviations`, `booleanPrefixes`, `placeholderNames`, etc.), or `paths.ignore` for genuinely off-target subtrees. The rule stays on.
+3. **When a rule conflicts with a project norm, satisfy the rule anyway.** If `docs.missing-function-doc` flags 268 functions and CLAUDE.md says "default to no comments", the correct response is to add the missing docs (or raise the norm, or argue the norm change in an ADR) - not to silence the rule.
+4. **Treat the rule set as fixed; the codebase is what changes.** The analyser's controlled vocabulary is the contract. The agent's job is to help the codebase satisfy the contract, not to renegotiate the contract by attrition.
+5. **Read score in the right order: errors > warnings > advisory.** A 0-error report with thousands of advisories is not a quality emergency - it is a triage queue. F-on-a-letter-grade is misleading when severity-0 is empty.
+
+Related memory: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
+
 ---
 
 ## Lesson: Agent parsed "use X to find Y" as "audit X for Y" when X was a CLI tool
 
 **Created:** 2026-05-20
 
-**What happened:** User in cwd `/home/devgoat/projects/goat-flow` asked: *"can u use /home/devgoat/projects/gruff-workspace/gruff-ts to try and find low quality tests"*. The agent interpreted this as "audit gruff-ts's own test file" and spent a multi-turn session reading `gruff-workspace/gruff-ts/src/cli.test.ts` (4270 lines), producing a 9-finding low-quality-test report, then drafting a milestone (`M35-gruff-ts-test-quality-fixes.md`) full of fixes to gruff-ts's test file. The user actually meant: *use gruff-ts (which is a "TypeScript project quality analyzer" CLI with `bin/gruff-ts`) to scan this repo's tests*. When the user asked for the milestone in `goat-flow/.goat-flow/tasks/1.7.0/`, the agent had a second chance to re-read the original request and didn't — instead it asked only about file location, not about which project was the tool and which was the target, then doubled down on the wrong interpretation through three more rounds (self-critique pass, full rewrite) until the user lost trust and stopped the work.
+**What happened:** User in cwd `/home/devgoat/projects/goat-flow` asked: *"can u use /home/devgoat/projects/gruff-workspace/gruff-ts to try and find low quality tests"*. The agent interpreted this as "audit gruff-ts's own test file" and spent a multi-turn session reading `gruff-workspace/gruff-ts/src/cli.test.ts` (4270 lines), producing a 9-finding low-quality-test report, then drafting a milestone (`M35-gruff-ts-test-quality-fixes.md`) full of fixes to gruff-ts's test file. The user actually meant: *use gruff-ts (which is a "TypeScript project quality analyzer" CLI with `bin/gruff-ts`) to scan this repo's tests*. When the user asked for the milestone in `goat-flow/.goat-flow/tasks/1.7.0/`, the agent had a second chance to re-read the original request and didn't - instead it asked only about file location, not about which project was the tool and which was the target, then doubled down on the wrong interpretation through three more rounds (self-critique pass, full rewrite) until the user lost trust and stopped the work.
 
 **Root cause:** The agent parsed "use X to find Y" as "audit X for Y" without checking whether X was a tool or a target. Three signals were present and missed:
 
 1. **gruff-ts's package.json declares `"bin": { "gruff-ts": "./bin/gruff-ts" }`** and the README describes it as a "TypeScript project quality analyzer." This is a CLI tool, not a codebase to audit. "Use a CLI tool" almost always means "invoke it", not "audit its source."
 2. **The cwd was a different project** (`goat-flow`) than the path mentioned (`gruff-workspace/gruff-ts`). When a user working in project A references project B, the default reading should be "B is a tool/reference I'm pointing you to," not "switch your target to B." Switching project context mid-session is unusual; introducing a tool to apply to the current context is normal.
-3. **The disambiguation question the agent asked was the wrong question.** When the user said "milestone here", the agent asked *"which workspace?"* (a file-location question) instead of *"is gruff-ts the tool to run or the project to fix?"* (the semantic question). The user's answer ("goat-flow workspace") was consistent with both interpretations — but the agent took it as ratification of the original interpretation rather than a signal to re-read the request.
+3. **The disambiguation question the agent asked was the wrong question.** When the user said "milestone here", the agent asked *"which workspace?"* (a file-location question) instead of *"is gruff-ts the tool to run or the project to fix?"* (the semantic question). The user's answer ("goat-flow workspace") was consistent with both interpretations - but the agent took it as ratification of the original interpretation rather than a signal to re-read the request.
 
-**Why it matters:** Hours of work produced a milestone targeting the wrong repository. Worse, the agent's self-critique pass (which caught real formatting flaws in the milestone) created false confidence — "the doc is well-structured" masked "the doc is for the wrong project." The user explicitly stated they had lost trust in the agent's reading. A tool-vs-target misread is among the highest-cost interpretation errors because everything downstream — research, scoping, planning, writing — compounds on the wrong premise. The milestone format checks (anchors, sequencing, conventions) all came back green while the work was fundamentally misaimed.
+**Why it matters:** Hours of work produced a milestone targeting the wrong repository. Worse, the agent's self-critique pass (which caught real formatting flaws in the milestone) created false confidence - "the doc is well-structured" masked "the doc is for the wrong project." The user explicitly stated they had lost trust in the agent's reading. A tool-vs-target misread is among the highest-cost interpretation errors because everything downstream - research, scoping, planning, writing - compounds on the wrong premise. The milestone format checks (anchors, sequencing, conventions) all came back green while the work was fundamentally misaimed.
 
 **Prevention:**
 
 1. **When a request names a path or project, classify it as TOOL or TARGET before doing any work.** Signals it is a TOOL: has `bin/` with executable; `package.json` declares `bin`; README/description uses words like "CLI", "analyzer", "linter", "tool", "checker"; lives outside the cwd. Signals it is a TARGET: is the cwd itself or a subpath of it; the request is about modifying, refactoring, or understanding it as code; no executable surface. **If both classifications are plausible, ASK before reading more than the README and `package.json`.**
-2. **Parse "use X to find/check/analyze/scan Y" as "invoke X against Y" by default when X is a CLI tool.** The verb "use" combined with a tool-shaped object means invocation, not audit. "Audit X" or "review X" or "find issues in X" mean the opposite — they target X.
+2. **Parse "use X to find/check/analyze/scan Y" as "invoke X against Y" by default when X is a CLI tool.** The verb "use" combined with a tool-shaped object means invocation, not audit. "Audit X" or "review X" or "find issues in X" mean the opposite - they target X.
 3. **Working directory is load-bearing context.** When cwd is project A and a request mentions project B, the default null hypothesis is "B is being introduced as a tool or reference for work in A." Switching the target to B requires explicit signal ("look at the tests in B and tell me what's wrong").
 4. **Disambiguation questions must target the semantic uncertainty, not the surface uncertainty.** "Which workspace for the milestone?" is a surface question (file path). "Is X the tool or the target?" is the semantic question. Ask the semantic question first; surface questions can be answered after the interpretation is locked in.
 5. **When a user provides clarification mid-task, re-read the original request before continuing.** Clarifications are evidence to re-evaluate the whole interpretation, not just to ratify the current direction. If the clarification is consistent with two readings, the agent has not actually disambiguated.
@@ -75,7 +97,7 @@ The Round 4 entries in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Rou
 
 **Created:** 2026-04-29
 
-**What happened:** Audit of the last 10 commit messages on `dev` (HEAD `0366419`..`82db04b`, 2026-04-25..2026-04-29) showed 7 of 10 subjects led with *enhance, improve, streamline,* or *clarify* and carried no body. Examples: `feat(deny-dangerous): enhance command checks for combined shell flags and git push scenarios`, `refactor(docs): streamline artifact routing instructions and enhance clarity`, `refactor(docs): enhance clarity in artifact routing and learning loop instructions` (back-to-back, near-identical wording on different content). Reading the message in isolation - without the diff - told a future bisector or release-notes drafter nothing about what actually changed.
+**What happened:** Audit of the last 10 commit messages on `dev` (HEAD `0366419`..`82db04b`, 2026-04-25..2026-04-29) showed 7 of 10 subjects led with *enhance, improve, streamline,* or *clarify* and carried no body. Examples included vague guardrail and docs refactor subjects such as "enhance command checks" and back-to-back "enhance clarity" messages on different content. Reading the message in isolation - without the diff - told a future bisector or release-notes drafter nothing about what actually changed.
 
 **Root cause:** The agent was generating commit subjects by paraphrasing the diff in abstract verbs ("the change makes X better") instead of naming the concrete edit ("replace shell-specific build steps with Node fs calls"). The prior `.github/git-commit-instructions.md` listed format rules and a "what not to commit" list but did not name the failure mode or show a bad-vs-good rewrite, so the rules were easy to satisfy on paper while still emitting low-information subjects. One outlier commit (`4e0ec5d fix(dashboard): speed up home audit load on Windows`) carried a concrete subject + bulleted body and stood out as the gold standard.
 
@@ -94,6 +116,30 @@ The Round 4 entries in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Rou
 **Why this matters:** Search-first retrieval only works if the first query is grounded enough to overlap with the recorded evidence. Weak cues do not just miss a convenience result; they create false confidence that "nothing relevant exists" unless the protocol forces a reword or an explicit miss.
 
 **Prevention:** Build the first retrieval query from target area + symptom + named file/tool, not from milestone names or architecture abstractions. If the first pass is abstract, reword toward the concrete failure class before concluding miss.
+
+**Updated 2026-05-27:** The same failure class applies to learning-loop retrieval generally: roadmap phrases such as "support matrix" and "registry canonicality" miss entries because buckets store concrete incident language. Use the concrete symptom, platform, or file/tool name first, reword once, then record a retrieval miss instead of broad-loading the bucket.
+
+## Lesson: Recurring terminal bugs must start with learning-loop retrieval
+
+**Status:** active | **Created:** 2026-05-28
+
+**What happened:** While fixing the dashboard Workspace terminal bug where Claude Code received a large Quality prompt as `[Pasted text #N +... lines]` but did not auto-submit, multiple coding agents worked the browser terminal timing path before treating the learning loop as the first evidence source. The relevant dashboard footgun already documented earlier Claude pasted-text failures, marker timing, manual-Enter recovery, and the requirement for live runner proof. The user had to explicitly call out that agents were re-solving a known problem without first checking the existing learning-loop entries.
+
+**Root cause:** The agents treated the visible symptom as a fresh implementation problem instead of a recurrence in a known-risk area. That bypassed the repo's required grep-first memory check, so prior evidence in `.goat-flow/footguns/dashboard.md` and `.goat-flow/lessons/verification-testing.md` was not used to shape the first hypothesis set.
+
+**Why it matters:** Terminal automation failures are expensive because fake timers, xterm output, WebSocket frames, and runner composer behavior can all appear plausible. Skipping the learning loop repeats old failed fix shapes, wastes live reproduction time, and erodes user trust because the repo already had the exact family of incidents recorded.
+
+**Prevention:** For any dashboard terminal, runner prompt, pasted-text, WebSocket, xterm, or auto-submit bug, run learning-loop retrieval before proposing or editing code. Use concrete terms from the symptom first: `Pasted text`, `paste again to expand`, `manual Enter`, `dashboardHandlePasteSubmitOutput`, `Workspace terminal`, `Claude Code`, and the affected runner. If a matching footgun exists, map every hypothesis to that entry before changing `src/dashboard/dashboard-terminal.ts`; if no entry is found after one reword, state the retrieval miss explicitly. Evidence anchors: `.goat-flow/footguns/dashboard.md` (search: `Dashboard terminal prompts can be dropped before browser attachment`), `.goat-flow/lessons/verification-testing.md` (search: `Browser terminal fixes need live runner proof`), `src/dashboard/dashboard-terminal.ts` (search: `dashboardHandlePasteSubmitOutput`), and `test/unit/dashboard-terminal-launch.test.ts` (search: `falls back quickly for Claude pasted terminal text when no paste echo arrives`).
+
+## Lesson: Quality assessors can reopen ADR-settled skill modes
+
+**Status:** active | **Created:** 2026-05-27
+
+**What happened:** Quality assessment agents recommended "quick critique mode" or "allow lightweight critique for smaller artifacts" as a Top 5 improvement. Implementing that would have reintroduced the exact failure ADR-021 records: single-context self-talk disguised as multi-perspective critique.
+
+**Root cause:** The assessors saw that `goat-critique` spawns three sub-agents for every invocation and pattern-matched the cost as over-engineering without reading the decision history.
+
+**Prevention:** Before accepting a quality recommendation that changes a skill mode, read the relevant ADR and prompt constraints first. If the recommendation contradicts an accepted ADR, fix the assessor prompt or cite the ADR; do not re-litigate the mode inside the skill file. Evidence anchors: `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) and `src/cli/prompt/compose-quality.ts` (search: `Do NOT recommend adding quick/lite/reduced modes`).
 
 ---
 
@@ -116,13 +162,13 @@ The Round 4 entries in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Rou
 **Created:** 2026-03-28
 **Updated:** 2026-05-17
 
-**What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/` directories. Used `rm -rf` which was blocked by deny-dangerous.sh. Instead of using `rm file && rmdir dir` (which is not blocked), the agent asked the user to delete manually - wasting a round trip on something trivially solvable.
+**What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/` directories. Used `rm -rf` which is blocked by the destructive-shell guard. Instead of using `rm file && rmdir dir` (which is not blocked), the agent asked the user to delete manually - wasting a round trip on something trivially solvable.
 
 **Repeat incident:** During CLI menu/install verification, the installer smoke command used `rm -rf "$tmp"` for temp cleanup and the deny hook blocked it. The corrected smoke used a fixed `/tmp/goat-flow-install-smoke-*` path, preserved the command status, and cleaned up with `rm -r "$tmp"` after verification.
 
 **Repeat incident 2026-05-17:** During release-blocker cleanup, an inline Node heredoc for mechanically splitting lesson buckets was blocked with `BLOCKED: Command has more than 50 chained segments`. The corrected path was to put the helper in `.goat-flow/scratchpad/split-lessons-release.mjs`, run it as a plain `node` file, and delete the temporary helper after the move.
 
-**Root cause:** Agent defaulted to `rm -rf` out of habit and treated the deny hook block as a dead end instead of thinking about alternatives for 2 seconds.
+**Root cause:** Agent defaulted to `rm -rf` out of habit and treated the guardrail block as a dead end instead of thinking about alternatives for 2 seconds.
 **Fix:** When a command is blocked, think about the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file operations.
 
 ---
@@ -188,7 +234,7 @@ The Round 4 entries in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Rou
 
 **Created:** 2026-04-24
 
-**What happened:** Three independent Gemini quality reports in one session flagged stale `file:line` references across footgun entries. `hooks.md` cited `deny-dangerous.sh` lines for the read-only whitelist that had moved, and `skills.md` cited `skill-preamble.md` lines for the Step 0 budget that had also moved. Nine active line references across 3 footgun files had drifted. The framework's README and CLAUDE.md already said "line numbers are advisory" but evaluation templates said "RECOMMENDED," so agents kept using them.
+**What happened:** Three independent Gemini quality reports in one session flagged stale `file:line` references across footgun entries. `hooks.md` cited old guardrail lines for the read-only whitelist that had moved, and `skills.md` cited `skill-preamble.md` lines for the Step 0 budget that had also moved. Nine active line references across 3 footgun files had drifted. The framework's README and CLAUDE.md already said "line numbers are advisory" but evaluation templates said "RECOMMENDED," so agents kept using them.
 
 **Root cause:** Line numbers shift on every edit to the target file. Unlike stale file paths (which `stats --check` catches), stale line numbers point at valid-but-wrong code and pass all mechanical checks. The guidance was contradictory: README discouraged them while the evaluation template encouraged them.
 
@@ -205,5 +251,53 @@ The Round 4 entries in `.goat-flow/footguns/docs-and-crossrefs.md` (search: `Rou
 **Root cause:** The agent preserved a backward-compatibility shape from the starting point without proving that any installed project still needed the per-skill file. That weakened the shared-reference migration: one canonical reference existed, but stale compatibility files could keep attracting edits or references.
 
 **Prevention:** When moving guidance into `.goat-flow/skill-reference/`, grep every old path, remove redundant local copies unless there is an explicit compatibility requirement, and update manifest/install references in the same pass. Compatibility copies are a conscious exception, not the default cleanup state.
+
+---
+
+## Lesson: Verify agent capabilities against official docs, not assumptions
+
+**Status:** active | **Created:** 2026-04-15 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Codex was assumed to have no PreToolUse hook support, so its profile left the hook field empty and a parallel Starlark execpolicy workaround was built. Later doc/runtime checks showed Codex did support hooks, making copied guardrail scripts dead code until registration was fixed.
+
+**Root cause:** A stale platform assumption propagated through templates, install scripts, fact extraction, and setup guides without being re-checked against primary docs or the local binary.
+
+**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, current evidence anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.codex/hooks/guard-secret-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
+
+---
+
+## Lesson: Sub-agent delegation is universal across goat-flow's four supported agents
+
+**Status:** active | **Created:** 2026-04-20 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Quality reports proposed a pre-check before routing to `/goat-critique`, assuming delegation might be unavailable. The user corrected the premise: Claude Code, Codex, Antigravity, and Copilot all ship sub-agent / delegated-agent capability, so the pre-check would be dead ceremony.
+
+**Root cause:** Reviewers reasoned abstractly about platform variance instead of grounding the finding against goat-flow's actual supported-agent list.
+
+**Prevention:** Before accepting a finding that adds a capability pre-check, verify the capability against the four supported agents. If all four ship it, retract the finding. Applies to delegation, hook support, MCP, slash commands, and other historically partial capabilities.
+
+---
+
+## Lesson: End-of-task rules must be treated as deliverables
+
+**Status:** active | **Created:** 2026-04-08 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Multiple incidents shared the same shape: the agent skipped an AI testing gate after completing milestone tasks, treated an AI gate's "14/14 checks passed" as proof that real-world setup worked, skipped session/learning-loop closure steps, or offered to commit after completing work.
+
+**Root cause:** Closing rules fire after the primary work feels done, so the agent's attention shifts to reporting instead of executing the remaining gate.
+
+**Prevention:** Make closing gates part of the deliverable, not an optional afterword. After completing milestone tasks, run the named testing gate before summary. Report what was done and stop; do not offer commits, pushes, PRs, or follow-on git writes unless the user asked.
+
+---
+
+## Lesson: Fresh-eyes critique reruns need section-only evidence after a leak-scan discard
+
+**Status:** active | **Created:** 2026-04-24 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** During a full `goat-critique` run, a fresh-eyes sub-agent stayed within the artifact but returned evidence links that echoed the artifact's `.goat-flow/...` path. Phase 2's leak scan treats that path text as context leak, so the output had to be discarded and rerun.
+
+**Root cause:** The isolation rule is enforced over output text, not just over what the sub-agent actually read. A clean analysis can still fail if its citation format contains repository-local paths.
+
+**Prevention:** When rerunning a fresh-eyes critique after leak-scan discard, instruct the sub-agent to cite section titles or neutral labels only. Do not include repository-local paths in the output unless the phase explicitly permits them.
 
 ---

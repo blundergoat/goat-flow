@@ -107,7 +107,7 @@ function writeSkill(projectRoot: string, name: string, content: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Cached repo artifact discovery + scoring — both walk the entire repo tree
+// Cached repo artifact discovery + scoring - both walk the entire repo tree
 // and `scoreAllArtifacts` additionally scores every installed skill/reference.
 // Lazy-caching avoids repeating the same expensive walk in 10+ tests. Tests
 // must treat the returned data as read-only.
@@ -1003,7 +1003,7 @@ describe("uploaded skill evaluation skips host preamble composition", () => {
   // Uploads in the dashboard "Evaluate skill" modal are scored as standalone
   // artifacts: only the user's files contribute to the composed surface.
   // skill-preamble.md / skill-conventions.md from the host project are
-  // intentionally excluded — gluing them on inflates gate/evidence/tool-deps
+  // intentionally excluded - gluing them on inflates gate/evidence/tool-deps
   // scores for content the uploaded skill doesn't actually own.
   const UPLOADED_SKILL = [
     "---",
@@ -1295,14 +1295,14 @@ describe("classification", () => {
       report.tips.map((tip) => tip.message).join("\n"),
     );
     const serialized = JSON.stringify(report);
-    assert.doesNotMatch(serialized, /halaxy|deploy\.halaxy|bbbbbb99/i);
+    assert.doesNotMatch(serialized, /example-tenant|deploy\.example|cafebabe/i);
     assert.doesNotMatch(serialized, /\.goat-flow\/tasks\//);
   });
 
   it("ignores rubric-keyword substrings that appear inside example prose", () => {
     // Adversarial case from a humanizer-style content skill: the body quotes
     // English prose containing "readers ... context", "plans", "Model",
-    // "router" — all substrings of rubric signal words (`\bread\b ... context`,
+    // "router" - all substrings of rubric signal words (`\bread\b ... context`,
     // `\bPlan\b`, `\bmode\b`, `\broute\b`). Without `\b` boundaries these
     // false-positive into cold-start, write-risk, and dispatcher shape. The
     // regression check: zero false positives on adversarial prose.

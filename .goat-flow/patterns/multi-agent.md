@@ -1,6 +1,6 @@
 ---
 category: multi-agent
-last_reviewed: 2026-05-02
+last_reviewed: 2026-05-27
 ---
 
 ## Pattern: Multi-agent critique - how to run it effectively
@@ -26,3 +26,15 @@ last_reviewed: 2026-05-02
 - Don't rank findings by how many reviewers found them. The most important findings are often found by exactly one reviewer.
 - Don't use score to select which reviewer to trust. Score tracks coverage, not quality.
 - Don't skip synthesis. Raw multi-agent output is noisier than single-agent output. The synthesis step is where reliability comes from.
+
+---
+
+## Pattern: Convert self-declared critique gates into executable checks
+
+**Context:** A multi-agent critique skill asks sub-agents to declare dimensions, isolation, lens coverage, or severity calibration, then the orchestrator uses those declarations to make decisions.
+
+**Approach:** Treat every self-declaration that changes routing, severity, or acceptance as a candidate for orchestrator-side verification. Start with the highest-blast-radius claims: re-read a sample finding to verify dimension tags, grep fresh-eyes output for forbidden namespace references, and only then trust coverage math. Lower-blast-radius declarations such as quota and lens completeness can remain prose until they repeatedly fail.
+
+**Evidence:** `workflow/skills/goat-critique/SKILL.md` (search: `leak scan`) and `workflow/skills/goat-critique/SKILL.md` (search: `coverage gate`) are the current executable-check anchors that replaced earlier self-report-only gates.
+
+**Anti-pattern:** Do not let a prompt rule feed automatic HIGH severity or phase progression unless another context verifies the input. Prompt-based orchestration can request discipline; it cannot prove the discipline happened by reading the sub-agent's own assertion.

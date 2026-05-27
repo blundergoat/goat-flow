@@ -399,7 +399,7 @@
                     class="gf-text-muted"
                     style="font-size: 12px; padding: 12px 0"
                   >
-                    No improvement tips — all metrics passing.
+                    No improvement tips - all metrics passing.
                   </div>
                 </template>
 
@@ -463,7 +463,7 @@
       </div>
     </div>
 
-    <!-- Scope strip — counts of audited skills + warnings + scope tag + avg
+    <!-- Scope strip - counts of audited skills + warnings + scope tag + avg
          grade. Mirrors the Setup page's "14 of 14 installed · audited just now"
          pattern so the headline finding is visible without drilling in. -->
     <template x-if="skillQualityArtifacts.length > 0">
@@ -517,7 +517,7 @@
         overflow: hidden;
       "
     >
-      <!-- Sidebar — one row per discovered skill, with letter grade and
+      <!-- Sidebar - one row per discovered skill, with letter grade and
            percentage on the right (populated from the prefetch cache). -->
       <div
         class="gf-installed-skills-sidebar"
@@ -586,7 +586,7 @@
                 </span>
               </template>
               <template x-if="!skillQualityReports[art.id]">
-                <span class="gf-skill-sidebar-score is-pending">—</span>
+                <span class="gf-skill-sidebar-score is-pending">-</span>
               </template>
             </button>
           </template>
@@ -755,7 +755,7 @@
               </div>
             </div>
 
-            <!-- Summary banner — promotes the headline conclusion (e.g.
+            <!-- Summary banner - promotes the headline conclusion (e.g.
                  "Strong skill identity with adequate structural quality")
                  instead of leaving it buried in fit notes. -->
             <div
@@ -879,7 +879,7 @@
               </template>
             </div>
 
-            <!-- Findings — only renders for warn/fail metrics. Each finding
+            <!-- Findings - only renders for warn/fail metrics. Each finding
                  is its own bordered banner with severity colour, score meta,
                  and the metric's detail string. -->
             <template
@@ -920,7 +920,7 @@
               </div>
             </template>
 
-            <!-- Composed-from list — every file the engine pulled into the
+            <!-- Composed-from list - every file the engine pulled into the
                  scored surface. Lives at the bottom so the score and metric
                  breakdown stay above the fold. The engine's fit-notes prose
                  was duplicating the summary banner above, so it's been

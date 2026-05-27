@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-22
 **Status:** Accepted
+**Updated:** 2026-05-27 - preflight script existence checking now lives in audit (`src/cli/audit/check-factual-claims.ts`), not in the removed scanner system; the skill swap decision still stands.
 
 ## Context
 
@@ -11,7 +12,7 @@ Meanwhile, security review was identified as the #1 missing capability. 5 of 6 p
 
 Multi-agent review consensus:
 - "A glorified shell script" (Codex)
-- "A shell script could replace it entirely" (Gemini)
+- "A shell script could replace it entirely" (independent reviewer)
 - "Least skill-like of the set - more of a checklist" (Claude Code)
 - "Its value is as a convenience alias, not as a reasoning framework" (Claude Code)
 

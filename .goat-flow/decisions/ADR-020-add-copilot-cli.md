@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
+**Updated:** 2026-05-27 - Runtime slot updated per ADR-030; the four-agent parity matrix now reads Claude, Codex, Antigravity, and Copilot.
 
 ## Context
 
@@ -11,10 +12,10 @@ Copilot CLI now exposes the same broad categories of surface the other supported
 
 - **Instructions.** `.github/copilot-instructions.md` for repo-wide Copilot guidance, plus optional `.github/instructions/**/*.instructions.md` for path-specific rules.
 - **Skills.** `.github/skills/<name>/SKILL.md` using the same goat skill shape as the existing installed copies.
-- **Hooks.** `.github/hooks/hooks.json` plus on-disk scripts such as `.github/hooks/deny-dangerous.sh`.
+- **Hooks.** `.github/hooks/hooks.json` plus on-disk scripts such as `.github/hooks/guard-repository-writes.sh`.
 - **Copilot commands.** Current Copilot CLI command help exposes `/agent`, `/review`, `/research`, and `/tasks`, plus `/fleet` for parallelizable work.
 
-The live repo already carries peer hot-path instruction files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), a shared deny script template (`workflow/hooks/deny-dangerous.sh`), and canonical skill templates under `workflow/skills/`. Shipping Copilot support therefore means wiring Copilot into the same standalone per-agent model rather than inventing a special-case bridge.
+The live repo already carries peer hot-path instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`), shared guardrail script templates under `workflow/hooks/`, and canonical skill templates under `workflow/skills/`. Shipping Copilot support therefore means wiring Copilot into the same standalone per-agent model rather than inventing a special-case bridge.
 
 ## Decision
 
@@ -29,7 +30,7 @@ Treat `copilot` as a first-class `AgentId` and ship full runtime parity in the s
 3. Setup ships a real Copilot guide at `workflow/setup/agents/copilot.md`.
 4. Repo live surfaces include `.github/copilot-instructions.md`, `.github/hooks/`, and `.github/skills/`.
 5. Copilot uses a standalone hot-path instruction file. `.github/copilot-instructions.md` carries its own Truth Order, Execution Loop, Definition of Done, Router Table, and Autonomy Tiers, while optional `.github/instructions/**/*.instructions.md` remains path-scoped only.
-6. Hooks use one canonical Copilot config file: `.github/hooks/hooks.json` carrying the deny-dangerous guardrail.
+6. Hooks use one canonical Copilot config file: `.github/hooks/hooks.json` carrying the split guardrail hooks.
 7. Wave 6 relies on the current Copilot CLI command surface plus `/fleet`. Repository custom agents in `.github/agents/` stay out of scope unless a concrete specialization gap is proven later.
 
 ## Out of scope for this ADR
@@ -40,7 +41,7 @@ Treat `copilot` as a first-class `AgentId` and ship full runtime parity in the s
 
 ## Consequences
 
-- **Positive:** Copilot now participates in the same audit/setup/dashboard matrix as Claude, Codex, and Gemini.
+- **Positive:** Copilot now participates in the same audit/setup/dashboard matrix as Claude, Codex, and Antigravity.
 - **Positive:** `.github/skills/` and `.github/hooks/` become maintained install targets rather than undocumented side surfaces.
 - **Positive:** The registry stays honest: support claims match the runtime, not just the docs.
 - **Negative:** The repo now has another installed skill root and hook surface to keep in parity, so preflight and drift checks must enforce it.

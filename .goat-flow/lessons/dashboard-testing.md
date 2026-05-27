@@ -1,6 +1,18 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-28
+---
+
+## Lesson: Prove hook capability before marking an agent unsupported
+
+**Status:** active | **Created:** 2026-05-26
+
+**What happened:** The Hooks dashboard first used `not supported`, then `unavailable`, for Antigravity on `gruff-code-quality` after Antigravity already had project-local hook wiring. The registry then excluded Antigravity for that hook because I treated missing edited-path payload evidence as a hard blocker. That was too narrow: the hook can still register for Antigravity file-write tool names and fall back to git-changed supported files while preserving changed-line filtering.
+
+**Root cause:** I collapsed "payload path may be absent" into "the hook cannot work for this agent" before testing the writer mapping and available fallback data. The UI label made that mistaken runtime exclusion look like an agent-level capability failure.
+
+**Prevention:** Before adding `unsupportedAgents` or similar capability gates, verify the agent-specific matcher names and whether the hook can infer the needed data from repository state without widening enforcement beyond changed lines. For gruff, Antigravity uses `write_to_file`, `replace_file_content`, and `multi_replace_file_content`; the hook should prefer payload paths and use git-changed supported files only as a fallback. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`), `workflow/hooks/gruff-code-quality.sh` (search: `file_paths_for_payload`), `test/unit/hook-registrar.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`).
+
 ---
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
@@ -41,7 +53,7 @@ last_reviewed: 2026-05-21
 
 **Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. Later, the opposite bug appeared in the view layer: filtering metrics out of dashboard percentages hid score-only verification gaps and restored misleading 100% headlines.
 
-**Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `value.type === "metric"`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
+**Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type === "metric"`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
 
 ---
 
@@ -56,6 +68,18 @@ last_reviewed: 2026-05-21
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 
 **Prevention:** When testing browser classic-script helpers through `node:vm`, normalize VM-produced arrays/objects with host constructors before strict structural assertions, or compare scalar fields. Evidence anchor: `test/unit/dashboard-custom-prompts.test.ts` (search: `Array.from(helpers.dashboardValidateCustomPromptDraft(ctx))`).
+
+---
+
+## Lesson: VM helper timer harnesses must fake every timer primitive they exercise
+
+**Status:** active | **Created:** 2026-05-24
+
+**What happened:** PR #44's CI `Test` step stayed in progress far past the usual runtime even after the dashboard terminal unit suite had printed its passing suite summary locally. The local minimised repro was `timeout 35s node --import tsx --test --test-reporter=spec test/unit/dashboard-terminal-launch.test.ts`: the suite body completed, then Node stayed alive until the external timeout killed it.
+
+**Root cause:** The VM-loaded dashboard helper tests injected fake `setTimeout` / `clearTimeout`, but still passed real `setInterval` / `clearInterval` into the VM. Tests that called `dashboardConnectTerminal()` exercised the production age-update interval and left a live event-loop handle behind. Node's test runner waits for live handles, so this converted "test assertions finished" into an unbounded CI wait.
+
+**Prevention:** When a VM-loaded browser helper test exercises lifecycle code, fake or explicitly clean up every timer primitive the helper can use (`setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`). For terminal helper tests specifically, prefer the shared fake timer harness and assert the focused file exits under a short outer `timeout`, not just that the suite prints passing assertions. Evidence anchors: `test/unit/dashboard-terminal-launch.test.ts` (search: `type TimerControls`), `test/unit/dashboard-terminal-launch.test.ts` (search: `createFakeTimers`), `src/dashboard/dashboard-terminal.ts` (search: `ageInterval = setInterval`).
 
 ---
 

@@ -1,8 +1,10 @@
 # GOAT Flow
 
-**A dashboard for auditing, configuring, and running your AI coding agents.**
+**An AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot.**
 
-One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, Codex, Gemini CLI, and Copilot CLI.
+GOAT Flow helps teams find and fix weak AI-agent setup: it audits agent instructions, installs guardrails and deny hooks, provides structured `/goat-*` workflows, preserves a learning loop, and runs supported coding agents from one local dashboard.
+
+One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI.
 
 [![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
 
@@ -63,7 +65,7 @@ Prompts include structured workflows like pre-walk-through notes with targeted t
 
 ### Workspace
 
-Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators, plus collapsed-rail tooltips and an active-session status pip. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY - run Claude, Codex, Gemini, or Copilot directly in the browser. Drag and drop images onto the terminal pane to attach them to the next prompt.
+Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators, plus collapsed-rail tooltips and an active-session status pip. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY - run Claude, Codex, Antigravity, or Copilot directly in the browser. Drag and drop images onto the terminal pane to attach them to the next prompt.
 
 ### Projects
 
@@ -84,7 +86,7 @@ The dashboard is the interface. Underneath, GOAT Flow installs a harness that ma
 |---|---|
 | **Execution Loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code, shipping without checks |
 | **Skills** (six `/goat-*` commands + dispatcher) | Free-form prompting that drifts mid-task |
-| **Enforcement Hooks** (`deny-dangerous.sh`) | `rm -rf`, all git push, secret file access |
+| **Enforcement Hooks** (guardrails) | `rm -rf`, all git push, secret file access |
 | **Learning Loop** (footguns, lessons, decisions) | Same mistake recurring next session |
 | **Autonomy Tiers** (Always / Ask First / Never) | Agent overreach, missed approvals |
 
@@ -154,7 +156,7 @@ Open the **Prompts** view, pick a workflow (code review, bug diagnosis, UI debug
 
 ## Multi-agent support
 
-GOAT Flow's current manifest-backed registry supports **Claude Code, Codex, Gemini CLI, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
+GOAT Flow's current manifest-backed registry supports **Claude Code, Codex, Google Antigravity, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
 
 Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matrix from `workflow/manifest.json`.
 

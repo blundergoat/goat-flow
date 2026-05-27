@@ -43,6 +43,13 @@ const SHARED_STUB = "# shared\nbody\n";
 const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";
 const COPILOT_HOOK_CONFIG_STUB =
   '{\n  "version": 1,\n  "hooks": { "preToolUse": [] }\n}\n';
+const COPILOT_GRUFF_HOOK_ENTRY = {
+  type: "command",
+  bash: ".github/hooks/gruff-code-quality.sh",
+  powershell:
+    'if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/gruff-code-quality.sh } else { Write-Output \'{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run .github/hooks/gruff-code-quality.sh on Windows."}\' }',
+  timeoutSec: 30,
+};
 
 interface CommandResult {
   status: number | null;
@@ -89,7 +96,27 @@ function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "code-comments.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "gruff-code-quality.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "observability.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "changelog.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, "workflow", "skills", "playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "release-notes.md"),
     SHARED_STUB,
   );
   writeFileSync(
@@ -151,7 +178,27 @@ function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "code-comments.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "gruff-code-quality.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "observability.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "changelog.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, ".goat-flow", "skill-playbooks", "page-capture.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "skill-playbooks", "release-notes.md"),
     SHARED_STUB,
   );
   writeFileSync(
@@ -185,30 +232,33 @@ function writeHookFixtures(root: string): void {
   mkdirSync(join(root, "workflow", "hooks", "agent-config"), {
     recursive: true,
   });
+  for (const guardrailHook of [
+    "guard-common.sh",
+    "guard-destructive-shell.sh",
+    "guard-secret-paths.sh",
+    "guard-repository-writes.sh",
+  ]) {
+    writeFileSync(join(root, "workflow", "hooks", guardrailHook), HOOK_STUB);
+  }
   writeFileSync(
-    join(root, "workflow", "hooks", "deny-dangerous.sh"),
-    HOOK_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "hooks", "deny-dangerous.self-test.sh"),
+    join(root, "workflow", "hooks", "guardrails-self-test.sh"),
     HOOK_STUB,
   );
   writeFileSync(
     join(root, "workflow", "hooks", "agent-config", "copilot-hooks.json"),
     COPILOT_HOOK_CONFIG_STUB,
   );
-  for (const hooksDir of [
-    ".claude/hooks",
-    ".codex/hooks",
-    ".gemini/hooks",
-    ".github/hooks",
-  ]) {
+  for (const hooksDir of [".claude/hooks", ".codex/hooks", ".github/hooks"]) {
     mkdirSync(join(root, hooksDir), { recursive: true });
-    writeFileSync(join(root, hooksDir, "deny-dangerous.sh"), HOOK_STUB);
-    writeFileSync(
-      join(root, hooksDir, "deny-dangerous.self-test.sh"),
-      HOOK_STUB,
-    );
+    for (const guardrailHook of [
+      "guard-common.sh",
+      "guard-destructive-shell.sh",
+      "guard-secret-paths.sh",
+      "guard-repository-writes.sh",
+    ]) {
+      writeFileSync(join(root, hooksDir, guardrailHook), HOOK_STUB);
+    }
+    writeFileSync(join(root, hooksDir, "guardrails-self-test.sh"), HOOK_STUB);
   }
   writeFileSync(
     join(root, ".github", "hooks", "hooks.json"),
@@ -340,7 +390,11 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    assert.equal(report.checked, expectedSkillComparisons + 10);
+    const expectedSharedComparisons = 15;
+    assert.equal(
+      report.checked,
+      expectedSkillComparisons + expectedSharedComparisons,
+    );
   });
 });
 
@@ -452,7 +506,7 @@ describe("checkDrift: hook templates", () => {
     try {
       writeHookFixtures(root);
       writeFileSync(
-        join(root, ".codex", "hooks", "deny-dangerous.sh"),
+        join(root, ".codex", "hooks", "guard-repository-writes.sh"),
         `${HOOK_STUB}\n# local drift\n`,
       );
       const report = checkDrift({
@@ -465,7 +519,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "content" &&
-            finding.path === ".codex/hooks/deny-dangerous.sh",
+            finding.path === ".codex/hooks/guard-repository-writes.sh",
         ),
         `expected .codex hook drift, findings=${JSON.stringify(report.findings)}`,
       );
@@ -478,7 +532,7 @@ describe("checkDrift: hook templates", () => {
     const root = setupFixture();
     try {
       writeHookFixtures(root);
-      rmSync(join(root, ".gemini", "hooks", "deny-dangerous.sh"), {
+      rmSync(join(root, ".codex", "hooks", "guard-repository-writes.sh"), {
         force: true,
       });
       const report = checkDrift({
@@ -491,9 +545,9 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "missing" &&
-            finding.path === ".gemini/hooks/deny-dangerous.sh",
+            finding.path === ".codex/hooks/guard-repository-writes.sh",
         ),
-        `expected missing .gemini hook finding, findings=${JSON.stringify(report.findings)}`,
+        `expected missing .codex hook finding, findings=${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -524,6 +578,43 @@ describe("checkDrift: hook templates", () => {
             ),
         ),
         `expected Copilot hook-config drift, findings=${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("allows Copilot hook config entries for enabled optional hooks", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      writeFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "hooks:\n  gruff-code-quality:\n    enabled: true\n",
+      );
+      writeFileSync(
+        join(root, ".github", "hooks", "hooks.json"),
+        `${JSON.stringify(
+          {
+            version: 1,
+            hooks: {
+              preToolUse: [],
+              postToolUse: [COPILOT_GRUFF_HOOK_ENTRY],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(
+        report.status,
+        "pass",
+        `expected enabled optional Copilot hook to be drift-clean, findings=${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

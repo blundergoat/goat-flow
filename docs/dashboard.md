@@ -128,12 +128,12 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 
 The dashboard is a local operations console for AI coding workflows, not a landing page or marketing surface. When adding or changing UI, run through this anti-convergence checklist before declaring done. Apply only the parts that fit a utilitarian operations tool.
 
-- **Purpose** — what operational decision does this view support? If it has no decision, it is documentation; consider whether it belongs in `docs/` instead.
-- **Density** — every panel earns its space. Default to a denser layout than a typical SaaS landing page; whitespace is for separating noisy regions, not framing single elements.
-- **Scannability** — operators arrive mid-task. Place the highest-signal data top-left, and use letter grades, badges, or counts before paragraphs.
-- **Differentiation** — the dashboard's job is to surface goat-flow's audit/harness/quality state. Generic AI-assistant UI patterns (chat bubbles, animated typing, illustrative empty states) usually pull the eye away from that data.
-- **Tone** — neutral, technical, lower-case status words ("audited just now", "12 skills audited"). Avoid celebratory copy ("Awesome!", "All set!") and apology copy ("Oops!").
-- **Constraints** — `.gf-*` CSS classes, theme variables (`--surface-base`, `--surface-elevated`, `--text-primary`), and Alpine for interactivity. No new heavy dependencies, no decorative motion, no framework swap "while we're in here".
-- **Typography / colour / motion fit** — typography is monospace-leaning for evidence, sans-serif for status; colour is reserved for severity (`is-a`/`is-b`/.../`is-f`, `is-low`); motion is restricted to load spinners and disabled-button feedback. Anything else needs a justification tied to an operator decision.
+- **Purpose** - what operational decision does this view support? If it has no decision, it is documentation; consider whether it belongs in `docs/` instead.
+- **Density** - every panel earns its space. Default to a denser layout than a typical SaaS landing page; whitespace is for separating noisy regions, not framing single elements.
+- **Scannability** - operators arrive mid-task. Place the highest-signal data top-left, and use letter grades, badges, or counts before paragraphs.
+- **Differentiation** - the dashboard's job is to surface goat-flow's audit/harness/quality state. Generic AI-assistant UI patterns (chat bubbles, animated typing, illustrative empty states) usually pull the eye away from that data.
+- **Tone** - neutral, technical, lower-case status words ("audited just now", "12 skills audited"). Avoid celebratory copy ("Awesome!", "All set!") and apology copy ("Oops!").
+- **Constraints** - `.gf-*` CSS classes, theme variables (`--surface-base`, `--surface-elevated`, `--text-primary`), and Alpine for interactivity. No new heavy dependencies, no decorative motion, no framework swap "while we're in here".
+- **Typography / colour / motion fit** - typography is monospace-leaning for evidence, sans-serif for status; colour is reserved for severity (`is-a`/`is-b`/.../`is-f`, `is-low`); motion is restricted to load spinners and disabled-button feedback. Anything else needs a justification tied to an operator decision.
 
-When in doubt, look at the Skills page or the Home view as the reference shape — both are operations-first. Imitate them; do not import a marketing-site shape.
+When in doubt, look at the Skills page or the Home view as the reference shape - both are operations-first. Imitate them; do not import a marketing-site shape.

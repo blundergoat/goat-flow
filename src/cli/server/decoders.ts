@@ -1,12 +1,10 @@
 /**
  * Runtime decoders for server-boundary payloads.
  *
- * Every ingress boundary (HTTP body, WebSocket message) must validate the
- * payload shape before dispatching. The previous code hand-rolled casts
- * like `JSON.parse(body) as { prompt?: string }`, which silently allows
- * arbitrary shapes through to downstream logic. M17-9 centralises the
- * per-boundary decoders here so failures return a typed `{ ok: false, error, path }`
- * instead of a stack trace at a later inner layer.
+ * Every ingress boundary (HTTP body, WebSocket message) validates payload shape
+ * before dispatching. These decoders return typed `{ ok: false, error, path }`
+ * failures so routes can report the exact rejected field instead of letting
+ * arbitrary shapes fail later in terminal or quality logic.
  *
  * Deliberately pure TS with no new runtime deps (zod, valibot, etc.) per
  * goat-flow's zero-new-dep policy. Narrow shapes are easy enough to validate
@@ -19,6 +17,7 @@ type DecodeResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; path: string };
 
+/** Terminal-create payload after optional text fields and runner selection are normalised. */
 interface TerminalCreateBody {
   prompt: string;
   projectPath: string;
@@ -26,21 +25,25 @@ interface TerminalCreateBody {
   runner: Runner;
 }
 
+/** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
 interface ProjectsListBody {
   paths: string[];
   favorites: string[];
   projectTitles: Record<string, string>;
 }
 
+/** Base64 upload item after structural validation; file safety checks run in the upload handler. */
 interface TerminalUploadFile {
   name: string;
   data: string;
 }
 
+/** Terminal upload payload grouped by request so count limits can be enforced before decoding files. */
 interface TerminalUploadBody {
   files: TerminalUploadFile[];
 }
 
+/** Quality-evaluate payload, accepting one pasted document or one bounded file bundle. */
 interface EvaluateBody {
   /** Either a single content string (paste / textarea) OR an array of named
    *  files (multi-file drop). Exactly one must be set. */
@@ -52,7 +55,12 @@ interface EvaluateBody {
   kind?: "skill" | "shared-reference";
 }
 
-const MAX_PROJECT_TITLE_LENGTH = 120;
+/** Hook-toggle payload accepted by POST /api/hooks/:hookId/toggle. */
+interface HookToggleBody {
+  enabled: boolean;
+}
+
+const MAX_PROJECT_TITLE_LENGTH = 120; // Storage limit: dense dashboard rows cannot absorb long custom aliases.
 
 /** Build a decoder error result. */
 function err(
@@ -62,7 +70,7 @@ function err(
   return { ok: false, error: message, path };
 }
 
-/** Parse the JSON. */
+/** Parse JSON; reports malformed bodies as typed path errors instead of throwing. */
 function parseJson(body: string, path: string): DecodeResult<unknown> {
   try {
     return { ok: true, value: JSON.parse(body) };
@@ -72,12 +80,16 @@ function parseJson(body: string, path: string): DecodeResult<unknown> {
   }
 }
 
-/** Check whether a value is a record. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Treat arrays as invalid objects because every decoded payload expects named fields. */
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
-/** Decode one string-array field from a JSON object. */
+/** Decode dashboard string lists; omitted optional lists become empty for older state files. */
 function decodeStringArrayField(
   raw: Record<string, unknown>,
   key: "paths" | "favorites",
@@ -104,7 +116,7 @@ function decodeStringArrayField(
   return { ok: true, value: values };
 }
 
-/** Decode one optional string field from a JSON object. */
+/** Decode terminal-create strings; missing values become empty to launch against defaults. */
 function decodeOptionalStringField(
   raw: Record<string, unknown>,
   key: "prompt" | "projectPath" | "targetPath",
@@ -117,7 +129,13 @@ function decodeOptionalStringField(
     : err(`body.${key}`, "must be a string");
 }
 
-/** Decode POST /api/terminal/create body. */
+/**
+ * Decode POST /api/terminal/create without defaulting invalid runner names.
+ *
+ * @param body Raw request body.
+ * @param options Runner allow-list plus the fallback used only when `runner` is absent.
+ * @returns Typed terminal-create payload or a path-specific decoder error.
+ */
 export function decodeTerminalCreateBody(
   body: string,
   options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
@@ -127,11 +145,10 @@ export function decodeTerminalCreateBody(
   const raw = parsed.value;
   if (!isRecord(raw)) return err("body", "must be a JSON object");
 
-  // prompt: optional string; empty string allowed (opens an idle shell).
+  // Empty prompt is valid: the terminal route opens an idle shell in that case.
   const prompt = decodeOptionalStringField(raw, "prompt");
   if (!prompt.ok) return prompt;
 
-  // projectPath: optional string.
   const projectPath = decodeOptionalStringField(raw, "projectPath");
   if (!projectPath.ok) return projectPath;
 
@@ -140,7 +157,7 @@ export function decodeTerminalCreateBody(
   const targetPath = decodeOptionalStringField(raw, "targetPath");
   if (!targetPath.ok) return targetPath;
 
-  // runner: optional string; fall back only when absent.
+  // Invalid runner names stay errors; the default only applies when the field is absent.
   let runner: AgentId = options.defaultRunner;
   if (Object.hasOwn(raw, "runner")) {
     if (typeof raw.runner !== "string") {
@@ -166,7 +183,12 @@ export function decodeTerminalCreateBody(
   };
 }
 
-/** Decode POST /api/projects/list body. */
+/**
+ * Decode POST /api/projects/list while preserving dashboard state-file fallbacks.
+ *
+ * @param body Raw request body.
+ * @returns Typed project-list payload or a path-specific decoder error.
+ */
 export function decodeProjectsListBody(
   body: string,
 ): DecodeResult<ProjectsListBody> {
@@ -192,10 +214,31 @@ export function decodeProjectsListBody(
   };
 }
 
-/** Decode POST /api/terminal/:id/upload-image body.
- *  Shape: `{ files: [{ name: string, data: <base64 string> }] }`. The handler
- *  enforces size, MIME, and count limits after structural validation. */
-// eslint-disable-next-line complexity -- explicit ingress validation: each branch maps to one rejection class for the upload payload
+/** Decode POST /api/hooks/:hookId/toggle. */
+export function decodeHookToggleBody(
+  body: string,
+): DecodeResult<HookToggleBody> {
+  const parsed = parseJson(body, "body");
+  if (!parsed.ok) return parsed;
+  const raw = parsed.value;
+  if (!isRecord(raw)) return err("body", "must be a JSON object");
+  if (typeof raw.enabled !== "boolean") {
+    return err("body.enabled", "must be a boolean");
+  }
+  return { ok: true, value: { enabled: raw.enabled } };
+}
+
+/**
+ * Decode POST /api/terminal/:id/upload-image before content safety checks.
+ *
+ * The handler enforces MIME and byte limits after this structural pass; this
+ * decoder only proves the request has named base64 entries and a valid count.
+ *
+ * @param body Raw request body.
+ * @param options Request-level upload limits from the route.
+ * @returns Typed upload payload or a path-specific decoder error.
+ */
+// eslint-disable-next-line complexity -- intentional: flat boundary checks preserve one precise error path per rejected upload field.
 export function decodeTerminalUploadBody(
   body: string,
   options: { maxFiles: number },
@@ -246,12 +289,12 @@ function decodeProjectTitles(
   if (!Object.hasOwn(raw, "projectTitles")) {
     return { ok: true, value: {} };
   }
-  const value = raw.projectTitles;
-  if (!isRecord(value)) {
+  const projectTitles = raw.projectTitles;
+  if (!isRecord(projectTitles)) {
     return err("body.projectTitles", "must be an object");
   }
   const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of Object.entries(projectTitles)) {
     if (typeof entry !== "string") {
       return err(
         `body.projectTitles[${JSON.stringify(key)}]`,
@@ -265,7 +308,15 @@ function decodeProjectTitles(
   return { ok: true, value: result };
 }
 
-/** Decode a WebSocket frame into a typed ClientMessage or a typed error. */
+/**
+ * Decode a terminal WebSocket frame with one branch per supported message type.
+ *
+ * The socket handler sends these errors back to the client, so the explicit
+ * input and resize branches intentionally preserve the exact rejected field.
+ *
+ * @param raw Raw WebSocket frame text.
+ * @returns Typed client message or a path-specific decoder error.
+ */
 export function decodeClientMessage(raw: string): DecodeResult<ClientMessage> {
   const parsed = parseJson(raw, "message");
   if (!parsed.ok) return parsed;
@@ -301,12 +352,17 @@ const MAX_EVALUATE_NAME_BYTES = 200;
 const MAX_EVALUATE_FILES = 32;
 const MAX_EVALUATE_FILENAME_BYTES = 256;
 
-function utf8ByteLength(value: string): number {
-  return Buffer.byteLength(value, "utf8");
+/** Measure limits in bytes because HTTP caps count UTF-8 bytes, not JS characters. */
+function utf8ByteLength(text: string): number {
+  return Buffer.byteLength(text, "utf8");
 }
 
-/** Decode the optional `suggestedName` and `kind` fields shared between the
- *  single-content and multi-file evaluate payloads. */
+/**
+ * Decode the optional evaluate fields shared by both accepted payload shapes.
+ *
+ * This stays separate because single-content and multi-file requests must
+ * report identical path errors for `suggestedName` and `kind`.
+ */
 function decodeEvaluateOptionals(obj: Record<string, unknown>): DecodeResult<{
   suggestedName?: string;
   kind?: "skill" | "shared-reference";
@@ -334,10 +390,13 @@ function decodeEvaluateOptionals(obj: Record<string, unknown>): DecodeResult<{
   return { ok: true, value: { suggestedName, kind } };
 }
 
-/** Decode the `files` array on a multi-file evaluate body. Validates count,
- *  per-file name + content shape, and enforces the same total-byte cap as the
- *  single-content path so the server can't be used as a CPU sink. */
-// eslint-disable-next-line complexity -- per-file boundary validation; each branch maps to one rejection class for the bundle payload
+/**
+ * Decode the `files` array on a multi-file evaluate body.
+ *
+ * The bundle path uses the same aggregate byte cap as pasted content, preventing
+ * many small files from bypassing the route-level request budget.
+ */
+// eslint-disable-next-line complexity -- intentional: per-file boundary checks preserve exact error paths for rejected bundle entries.
 function decodeEvaluateFiles(
   raw: unknown,
 ): DecodeResult<{ name: string; content: string }[]> {
@@ -398,10 +457,16 @@ function decodeEvaluateFiles(
   return { ok: true, value: files };
 }
 
-/** Decode and validate a `POST /api/quality/evaluate` request body (also
- *  accepted via the deprecated `/api/quality/analyse` alias). Accepts either a
- *  single `content` string (paste / textarea) or a `files` array (multi-file
- *  drag-drop) — exactly one must be set. */
+/**
+ * Decode and validate a `POST /api/quality/evaluate` request body.
+ *
+ * This stays explicit because the route accepts the current multi-file uploader
+ * and the older single-text form; ambiguous bodies are rejected before quality
+ * scoring. The deprecated `/api/quality/analyse` alias reuses the same shape.
+ *
+ * @param body Raw request body.
+ * @returns Typed evaluate payload or a path-specific decoder error.
+ */
 export function decodeEvaluateBody(body: string): DecodeResult<EvaluateBody> {
   const parsed = parseJson(body, "body");
   if (!parsed.ok) return parsed;

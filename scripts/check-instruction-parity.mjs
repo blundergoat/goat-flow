@@ -15,13 +15,12 @@ const SETUP_FILES = [
   "workflow/setup/agents/claude.md",
   "workflow/setup/agents/codex.md",
   "workflow/setup/agents/copilot.md",
-  "workflow/setup/agents/gemini.md",
+  "workflow/setup/agents/antigravity.md",
 ];
 
 const LIVE_FILES = [
   "CLAUDE.md",
   "AGENTS.md",
-  "GEMINI.md",
   ".github/copilot-instructions.md",
 ];
 

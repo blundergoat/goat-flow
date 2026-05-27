@@ -124,7 +124,6 @@ export function extractSharedFacts(
     ignoreFiles: {
       copilotignore: fs.exists(".copilotignore"),
       cursorignore: fs.exists(".cursorignore"),
-      geminiignore: fs.exists(".geminiignore"),
     },
     gitignore: extractGitignoreFacts(fs),
     preflightScript: { exists: fs.exists("scripts/preflight-checks.sh") },

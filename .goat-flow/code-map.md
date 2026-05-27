@@ -90,7 +90,7 @@ globals.d.ts               # Global type declarations for the frontend bundle
 index.html                 # Dashboard HTML entry point
 preset-prompts.json        # Built-in prompt templates for quality and setup modes
 styles.css                 # Dashboard stylesheet
-views/                     # HTML view templates (about, coming-soon, home, projects, prompts, quality, settings, setup, skills, tasks, workspace)
+views/                     # HTML view templates (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
 
 ## workflow/ -- Setup templates, skills, and reference docs
@@ -103,7 +103,7 @@ setup/
   04-architecture-code-map.md  # Architecture doc and code map creation
   05-customise-to-project.md   # Learning loop, hooks, config
   06-final-verification.md # Post-setup verification and audit gate
-  agents/                  # Agent-specific config (claude.md, codex.md, gemini.md, copilot.md)
+  agents/                  # Agent-specific config (claude.md, codex.md, antigravity.md, copilot.md)
   reference/               # execution-loop.md, coding guidelines, security refs
 
 skills/
@@ -115,9 +115,9 @@ skills/
   goat-security/SKILL.md   # Security assessment skill template
   goat-qa/SKILL.md         # Testing gap analysis skill template
   reference/               # Meta-reference templates: skill-preamble.md, skill-conventions.md
-  playbooks/               # Standalone playbook templates: browser-use.md, page-capture.md, skill-quality-testing.md + topical skill-quality-testing/*
+  playbooks/               # Standalone playbook templates: browser-use.md, changelog.md, code-comments.md, gruff-code-quality.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical skill-quality-testing/*
 
-hooks/                     # Hook templates (deny-dangerous.sh + self-test sibling, etc.)
+hooks/                     # Hook templates (three guardrails, central self-test, gruff-code-quality, agent configs)
 evaluation/                # Quality-assessment prompt templates
 ```
 
@@ -133,8 +133,6 @@ check-path-integrity.sh    # Cross-reference path-integrity checks between docs 
 check-versions.mjs         # Verify workflow/skills templates match package.json version
 dependency-install.sh      # Wrapper: npm install with guards
 dependency-update.sh       # Wrapper: upgrade dependencies
-deny-dangerous.sh          # Hook: blocks destructive commands (copied to agent hook dirs)
-deny-dangerous.self-test.sh # Self-test corpus sourced by deny-dangerous.sh --self-test
 deploy-landing.sh          # Deploy landing page to hosting
 install-browser-tools.sh   # Install browser-use and Playwright for page capture
 npm-publish.sh             # Wrapper: npm publish sanity checks
@@ -157,7 +155,7 @@ audit-and-quality.md       # User-facing audit vs quality command model and repo
 audit-checks.md            # Deterministic audit check inventory and scope breakdown
 cli.md                     # CLI command reference, flags, and examples
 dashboard.md               # Dashboard views, terminal behavior, and HTTP API reference
-deny-dangerous.md          # Deny hook behavior, installation notes, and troubleshooting
+guardrails.md              # Guardrail hook behavior, installation notes, and troubleshooting
 skill-authoring.md         # `goat-flow skill new` / `quality candidacy` / dashboard Evaluate workflow
 skill-quality-config.md    # Project overrides for the skill-quality rubric in `.goat-flow/config.yaml`
 skills.md                  # User-facing goat-* skill overview and routing guide
@@ -192,7 +190,12 @@ skill-reference/           # Shared skill doctrine (committed, install-copied fr
 
 skill-playbooks/           # Standalone tool/capability playbooks (committed, copied from workflow/skills/playbooks/)
   browser-use.md           # Browser evidence capture and availability checks
+  code-comments.md         # Commenting discipline for inline comments, docstrings, TODO/FIXME/HACK markers
+  gruff-code-quality.md           # Gruff analyzer triage, fix loop, and verification discipline across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py
+  observability.md         # Instrumentation discipline for logs, metrics, spans, and sensitive-data rules
+  changelog.md             # Discipline for writing CHANGELOG.md entries (Keep a Changelog, SemVer, BREAKING markers)
   page-capture.md          # Playwright page-capture usage tiers and installation checks
+  release-notes.md         # Discipline for per-release narrative surfaces (GitHub release, blog, email); derives from changelog.md
   skill-quality-testing.md # Index for the authoring methodology (points at topical files below)
   skill-quality-testing/   # Topical authoring files loaded on demand per ADR-023
     tdd-iteration.md       # TDD loop, pressure types, scenarios, bulletproofing, persuasion

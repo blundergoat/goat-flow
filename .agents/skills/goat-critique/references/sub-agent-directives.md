@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.7.0"
+goat-flow-reference-version: "1.8.0"
 ---
 # Critique Sub-Agent Directives (Reference Pack)
 
@@ -7,9 +7,9 @@ goat-flow-reference-version: "1.7.0"
 
 ## Sub-agent A (Risk Focus - backward-looking context)
 
-**Directive:** "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name - speculation without a named target gets retracted in Phase 3. Your context includes past mistakes (footguns, lessons) - use them."
+**Directive:** "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name - speculation without a named target gets retracted in Phase 3. Your context includes targeted grep-first past-mistake hits - use them."
 
-**Context reads:** artifact + architecture.md + footguns + lessons + rubric
+**Context reads:** artifact + architecture.md + targeted grep-first footgun/lesson hits + rubric
 **Does NOT read:** git history, config.yaml
 
 ## Sub-agent B (Alternatives Focus - current-state context)
@@ -31,6 +31,7 @@ goat-flow-reference-version: "1.7.0"
 Every finding MUST include:
 
 - **Proof attempt:** exact command/read executed in sub-agent's tool budget, or "N/A - purely structural"
+- **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
 - **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED
 - Title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file + semantic anchor or artifact section reference), confidence (HIGH/MEDIUM/LOW)
 - **SKEPTIC:** one line - what could go wrong, worst case (or "N/A - [reason]" if genuinely inapplicable)

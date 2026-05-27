@@ -12,6 +12,7 @@ import {
   scanConcernCountClaims,
   scanPathReferences,
   scanRemovedCommands,
+  scanLifetimeClaimEvidence,
   runFactualClaimChecks,
 } from "../../src/cli/audit/check-factual-claims.js";
 import { SKILL_NAMES } from "../../src/cli/constants.js";
@@ -36,17 +37,32 @@ function stubFS(existsSet: Set<string>): ReadonlyFS {
 }
 
 function stubFSFromFiles(files: Record<string, string>): ReadonlyFS {
+  const listDir = (dir: string): string[] => {
+    const prefix = dir.replace(/\/$/u, "") + "/";
+    return [
+      ...new Set(
+        Object.keys(files)
+          .filter((path) => path.startsWith(prefix))
+          .map((path) => path.slice(prefix.length).split("/")[0])
+          .filter((entry): entry is string => entry !== undefined),
+      ),
+    ];
+  };
   const fs = {
     exists: (p: string) => Object.prototype.hasOwnProperty.call(files, p),
     readFile: (p: string) => files[p] ?? null,
     lineCount: (p: string) => (files[p] ?? "").split(/\r?\n/).length,
     readJson: () => null,
-    listDir: () => [],
+    listDir,
     isExecutable: () => false,
     glob: (pattern: string) =>
       pattern === "docs/*.md"
         ? Object.keys(files).filter((path) => /^docs\/[^/]+\.md$/u.test(path))
-        : [],
+        : pattern === "src/dashboard/views/*.html"
+          ? Object.keys(files).filter((path) =>
+              /^src\/dashboard\/views\/[^/]+\.html$/u.test(path),
+            )
+          : [],
   };
   return {
     ...fs,
@@ -325,6 +341,68 @@ describe("scanPathReferences", () => {
   });
 });
 
+describe("scanLifetimeClaimEvidence", () => {
+  it("flags a lifetime claim with no enforcing-code anchor as INFO", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      "Session memories are retained for 14 days.",
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.rule, "lifetime-claim-evidence-missing");
+    assert.equal(findings[0]?.severity, "info");
+    assert.match(findings[0]?.message ?? "", /retained for 14 days/);
+  });
+
+  it("passes when a backtick repo path anchor sits on the same line", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      "Sessions are retained for 14 days, enforced by `src/services/cleanup.ts`.",
+    );
+    assert.equal(findings.length, 0);
+  });
+
+  it("passes when a (search:) anchor sits on the same line", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/memory.md",
+      'Project memories expire after 90 days (search: "SCOPE_RETENTION_DAYS").',
+    );
+    assert.equal(findings.length, 0);
+  });
+
+  it("skips lifetime phrases inside fenced code blocks", () => {
+    const text = [
+      "```",
+      "expires after 90 days",
+      "```",
+      "Normal prose with no lifetime phrase.",
+    ].join("\n");
+    const findings = scanLifetimeClaimEvidence("docs/memory.md", text);
+    assert.equal(findings.length, 0);
+  });
+
+  it("flags TTL, ceiling, max-of, and limit-of variants", () => {
+    const text = [
+      "TTL 7 days for ephemera.",
+      "Ceiling of 60 chars for slugs.",
+      "Maximum of 10 sessions per host.",
+      "Limit of 100 lines per file.",
+    ].join("\n");
+    const findings = scanLifetimeClaimEvidence("docs/example.md", text);
+    assert.equal(findings.length, 4);
+    for (const finding of findings) {
+      assert.equal(finding.rule, "lifetime-claim-evidence-missing");
+    }
+  });
+
+  it("does not flag generic phrases without lifetime prefixes", () => {
+    const findings = scanLifetimeClaimEvidence(
+      "docs/dashboard.md",
+      "Up to 10 concurrent sessions. 480-minute idle timeout (8 hours).",
+    );
+    assert.equal(findings.length, 0);
+  });
+});
+
 describe("runFactualClaimChecks", () => {
   it("scans docs/*.md path references, not just architecture/code-map", () => {
     const fs: ReadonlyFS = {
@@ -354,10 +432,58 @@ describe("runFactualClaimChecks", () => {
     assert.ok(findings.some((f) => f.rule === "code-map-state-drift"));
   });
 
+  it("flags stale dashboard view summaries in code-map", () => {
+    const fs = stubFSFromFiles({
+      ".goat-flow/code-map.md":
+        "views/ # HTML view templates (about, home, tasks)\n",
+      "src/dashboard/views/about.html": "",
+      "src/dashboard/views/home.html": "",
+      "src/dashboard/views/plans.html": "",
+    });
+    const { findings } = runFactualClaimChecks(stubCtx(fs));
+    assert.ok(findings.some((f) => f.rule === "code-map-dashboard-view-drift"));
+  });
+
+  it("flags top-level skill playbooks omitted from architecture and code-map inventories", () => {
+    const fs = stubFSFromFiles({
+      ".goat-flow/architecture.md":
+        "Standalone playbooks: browser-use.md, page-capture.md, skill-quality-testing.md\n",
+      ".goat-flow/code-map.md": [
+        "views/ # HTML view templates (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)",
+        "skill-playbooks/",
+        "  browser-use.md",
+        "  page-capture.md",
+        "  skill-quality-testing.md",
+      ].join("\n"),
+      ".goat-flow/skill-playbooks/README.md": "# Index\n",
+      ".goat-flow/skill-playbooks/browser-use.md": "# Browser\n",
+      ".goat-flow/skill-playbooks/observability.md": "# Observability\n",
+      ".goat-flow/skill-playbooks/page-capture.md": "# Capture\n",
+      ".goat-flow/skill-playbooks/skill-quality-testing.md": "# Quality\n",
+    });
+    const { findings } = runFactualClaimChecks(stubCtx(fs));
+    assert.ok(
+      findings.some(
+        (f) =>
+          f.rule === "skill-playbook-inventory-drift" &&
+          f.path === ".goat-flow/architecture.md" &&
+          f.message.includes("observability.md"),
+      ),
+    );
+    assert.ok(
+      findings.some(
+        (f) =>
+          f.rule === "skill-playbook-inventory-drift" &&
+          f.path === ".goat-flow/code-map.md" &&
+          f.message.includes("observability.md"),
+      ),
+    );
+  });
+
   it("flags stale dashboard session-cap claims", () => {
     const fs = stubFSFromFiles({
       "docs/dashboard.md":
-        "- Supports Claude, Codex, and Gemini runners\n- Sessions rail: up to 3\n",
+        "- Supports Claude, Codex, and Antigravity runners\n- Sessions rail: up to 3\n",
       "src/cli/server/terminal.ts": "const MAX_SESSIONS = 7;\n",
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));
@@ -390,7 +516,7 @@ describe("runFactualClaimChecks", () => {
   it("flags stale dashboard version references", () => {
     const fs = stubFSFromFiles({
       "docs/dashboard.md":
-        "- Supports Claude, Codex, Gemini, and Copilot runners in v1.2.0\n",
+        "- Supports Claude, Codex, Antigravity, and Copilot runners in v1.2.0\n",
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));
     assert.ok(
@@ -401,7 +527,7 @@ describe("runFactualClaimChecks", () => {
   it("does not flag the current dashboard runner list with natural-language commas", () => {
     const fs = stubFSFromFiles({
       "docs/dashboard.md":
-        "- Supports Claude, Codex, Gemini, and Copilot runners\n- Sessions rail: up to 7\n",
+        "- Supports Claude, Codex, Antigravity, and Copilot runners\n- Sessions rail: up to 7\n",
       "src/cli/server/terminal.ts": "const MAX_SESSIONS = 7;\n",
     });
     const { findings } = runFactualClaimChecks(stubCtx(fs));

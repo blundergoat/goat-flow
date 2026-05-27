@@ -39,7 +39,12 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Return the markdown section body under a heading label. */
+/**
+ * Return the markdown section body under a heading label.
+ *
+ * The helper reads only the provided string; RegExp cursors are local so section
+ * detection cannot mutate audit context or project files.
+ */
 function markdownSectionByLabel(content: string, label: string): string | null {
   const headingPattern = new RegExp(
     `^(?<marks>#{1,6})\\s+${escapeRegex(label)}\\b.*$`,
@@ -95,7 +100,6 @@ const instructionLineCount: HarnessCheck = {
     "docs/harness-audit.md",
     "CLAUDE.md",
     "AGENTS.md",
-    "GEMINI.md",
     ".github/copilot-instructions.md",
   ]),
   /** Run the Instruction file size check. */
@@ -104,46 +108,50 @@ const instructionLineCount: HarnessCheck = {
     const recs: string[] = [];
     const fixes: string[] = [];
     const lineCounts: NonNullable<HarnessCheckDetails["lineCounts"]> = [];
-    let anyFail = false;
+    let hasLineCountFailure = false;
     const limit = ctx.config.config.lineLimits.limit;
     const target = ctx.config.config.lineLimits.target;
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists) {
-        findings.push(`${af.agent.id}: no instruction file`);
-        recs.push(`Create ${af.agent.instructionFile}`);
+    for (const agentFacts of ctx.agents) {
+      if (!agentFacts.instruction.exists) {
+        findings.push(`${agentFacts.agent.id}: no instruction file`);
+        recs.push(`Create ${agentFacts.agent.instructionFile}`);
         fixes.push(
-          `Create ${af.agent.instructionFile} by running \`goat-flow setup\`.`,
+          `Create ${agentFacts.agent.instructionFile} by running \`goat-flow setup\`.`,
         );
         lineCounts.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           actual: 0,
           target,
           hardLimit: limit,
         });
-        anyFail = true;
+        hasLineCountFailure = true;
         continue;
       }
-      const lines = af.instruction.lineCount;
+      const lines = agentFacts.instruction.lineCount;
       lineCounts.push({
-        agent: af.agent.id,
+        agent: agentFacts.agent.id,
         actual: lines,
         target,
         hardLimit: limit,
       });
       if (lines > limit) {
         findings.push(
-          `${af.agent.id}: ${lines} lines (exceeds hard limit ${limit})`,
+          `${agentFacts.agent.id}: ${lines} lines (exceeds hard limit ${limit})`,
         );
-        recs.push(`Reduce ${af.agent.instructionFile} below ${limit} lines`);
+        recs.push(
+          `Reduce ${agentFacts.agent.instructionFile} below ${limit} lines`,
+        );
         fixes.push(
-          `Reduce ${af.agent.instructionFile} to under ${limit} lines by moving verbose sections to .goat-flow/ docs.`,
+          `Reduce ${agentFacts.agent.instructionFile} to under ${limit} lines by moving verbose sections to .goat-flow/ docs.`,
         );
-        anyFail = true;
+        hasLineCountFailure = true;
       } else {
-        findings.push(`${af.agent.id}: ${lines} lines (within limit ${limit})`);
+        findings.push(
+          `${agentFacts.agent.id}: ${lines} lines (within limit ${limit})`,
+        );
       }
     }
-    if (anyFail) return fail(findings, recs, fixes, { lineCounts });
+    if (hasLineCountFailure) return fail(findings, recs, fixes, { lineCounts });
     return pass(findings, { lineCounts });
   },
 };
@@ -158,7 +166,6 @@ const executionLoopPresent: HarnessCheck = {
     "docs/harness-audit.md",
     "CLAUDE.md",
     "AGENTS.md",
-    "GEMINI.md",
     ".github/copilot-instructions.md",
   ]),
   /** Run the Execution loop present check. */
@@ -176,21 +183,21 @@ const executionLoopPresent: HarnessCheck = {
     const findings: string[] = [];
     const recs: string[] = [];
     const executionLoop: NonNullable<HarnessCheckDetails["executionLoop"]> = [];
-    let anyFail = false;
+    let hasExecutionLoopFailure = false;
 
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists || !af.instruction.content) {
-        findings.push(`${af.agent.id}: no instruction file to check`);
+    for (const agentFacts of ctx.agents) {
+      if (!agentFacts.instruction.exists || !agentFacts.instruction.content) {
+        findings.push(`${agentFacts.agent.id}: no instruction file to check`);
         executionLoop.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           found: false,
           sectionLabel: EXECUTION_LOOP_LABEL,
           missingSteps: stepWords,
         });
-        anyFail = true;
+        hasExecutionLoopFailure = true;
         continue;
       }
-      const content = af.instruction.content;
+      const content = agentFacts.instruction.content;
       const executionLoopSection = markdownSectionByLabel(
         content,
         EXECUTION_LOOP_LABEL,
@@ -200,48 +207,48 @@ const executionLoopPresent: HarnessCheck = {
         executionLoopSection === null
       ) {
         findings.push(
-          `${af.agent.id}: no "${EXECUTION_LOOP_LABEL}" heading detected`,
+          `${agentFacts.agent.id}: no "${EXECUTION_LOOP_LABEL}" heading detected`,
         );
         recs.push(
-          `Add a "${EXECUTION_LOOP_LABEL}" heading with READ → SCOPE → ACT → VERIFY steps to ${af.agent.instructionFile}`,
+          `Add a "${EXECUTION_LOOP_LABEL}" heading with READ → SCOPE → ACT → VERIFY steps to ${agentFacts.agent.instructionFile}`,
         );
         executionLoop.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           found: false,
           sectionLabel: EXECUTION_LOOP_LABEL,
           missingSteps: stepWords,
         });
-        anyFail = true;
+        hasExecutionLoopFailure = true;
         continue;
       }
       // Heading present - verify the four step words actually appear under it.
       const lower = executionLoopSection.toLowerCase();
       const missingSteps = stepWords.filter((s) => !lower.includes(s));
       if (missingSteps.length === 0) {
-        findings.push(`${af.agent.id}: execution loop has all 4 steps`);
+        findings.push(`${agentFacts.agent.id}: execution loop has all 4 steps`);
         executionLoop.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           found: true,
           sectionLabel: EXECUTION_LOOP_LABEL,
           missingSteps: [],
         });
       } else {
         findings.push(
-          `${af.agent.id}: execution loop heading present but missing step words inside the section (${missingSteps.join(", ")})`,
+          `${agentFacts.agent.id}: execution loop heading present but missing step words inside the section (${missingSteps.join(", ")})`,
         );
         recs.push(
-          `Add READ, SCOPE, ACT, VERIFY steps under the "${EXECUTION_LOOP_LABEL}" heading in ${af.agent.instructionFile}`,
+          `Add READ, SCOPE, ACT, VERIFY steps under the "${EXECUTION_LOOP_LABEL}" heading in ${agentFacts.agent.instructionFile}`,
         );
         executionLoop.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           found: true,
           sectionLabel: EXECUTION_LOOP_LABEL,
           missingSteps,
         });
-        anyFail = true;
+        hasExecutionLoopFailure = true;
       }
     }
-    if (anyFail)
+    if (hasExecutionLoopFailure)
       return fail(
         findings,
         recs,
@@ -254,13 +261,29 @@ const executionLoopPresent: HarnessCheck = {
   },
 };
 
-/** Consolidated: router-table-resolves + architecture-refs-resolve + doc-paths-resolve + architecture-exists */
+/**
+ * Consolidate router, architecture, and core-doc path validation.
+ *
+ * This reads only the audited project's filesystem and reports diagnostics
+ * instead of throwing because context integrity should return every stale path
+ * in one pass. The shape is branch-heavy to preserve the old check boundaries:
+ * router-table paths, architecture presence, architecture refs, and curated
+ * docs all feed one dashboard detail payload.
+ */
 function checkAllDocPaths(ctx: AuditContext) {
   let totalPaths = 0;
   let resolvedCount = 0;
   const findings: string[] = [];
   const unresolved: { ref: string; source: string }[] = [];
 
+  /**
+   * Count paths that resolve while keeping brittle line-number refs visible.
+   *
+   * A `file:line` token reports as unresolved even when the base file exists
+   * because semantic anchors are the durable contract for learning-loop docs.
+   * The helper mutates only the enclosing unresolved-path accumulator so the
+   * dashboard can show every stale reference source in one payload.
+   */
   const countResolvedPaths = (file: string, paths: string[]) => {
     let resolved = 0;
     const localFindings: string[] = [];
@@ -284,15 +307,15 @@ function checkAllDocPaths(ctx: AuditContext) {
 
   // Router tables enumerate the docs and directories the agent is expected to consult,
   // so dead entries here are a high-signal context failure.
-  for (const af of ctx.agents) {
-    totalPaths += af.router.paths.length;
-    resolvedCount += af.router.resolved;
-    if (af.router.unresolved.length > 0) {
+  for (const agentFacts of ctx.agents) {
+    totalPaths += agentFacts.router.paths.length;
+    resolvedCount += agentFacts.router.resolved;
+    if (agentFacts.router.unresolved.length > 0) {
       findings.push(
-        `${af.agent.id}: ${af.router.unresolved.length} dead router paths`,
+        `${agentFacts.agent.id}: ${agentFacts.router.unresolved.length} dead router paths`,
       );
-      for (const ref of af.router.unresolved) {
-        unresolved.push({ ref, source: af.agent.instructionFile });
+      for (const ref of agentFacts.router.unresolved) {
+        unresolved.push({ ref, source: agentFacts.agent.instructionFile });
       }
     }
   }
@@ -404,7 +427,6 @@ const instructionSectionsPresent: HarnessCheck = {
     "src/cli/prompt/compose-quality.ts",
     "CLAUDE.md",
     "AGENTS.md",
-    "GEMINI.md",
     ".github/copilot-instructions.md",
   ]),
   /** Run the Instruction file required sections check. */
@@ -413,46 +435,46 @@ const instructionSectionsPresent: HarnessCheck = {
     const recs: string[] = [];
     const fixes: string[] = [];
     const sections: NonNullable<HarnessCheckDetails["sections"]> = [];
-    let anyFail = false;
-
+    let hasInstructionSectionFailure = false;
     const requiredSections = getRequiredInstructionSections();
     const required = requiredSections.map((s) => s.label);
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists || !af.instruction.content) {
-        findings.push(`${af.agent.id}: no instruction file to check`);
+    for (const agentFacts of ctx.agents) {
+      if (!agentFacts.instruction.exists || !agentFacts.instruction.content) {
+        findings.push(`${agentFacts.agent.id}: no instruction file to check`);
         sections.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           required,
           present: [],
           missing: required,
         });
-        anyFail = true;
+        hasInstructionSectionFailure = true;
         continue;
       }
-      const content = af.instruction.content;
+      const content = agentFacts.instruction.content;
       const missing = requiredSections
         .filter(({ pattern }) => !pattern.test(content))
         .map(({ label }) => label);
       const present = required.filter((label) => !missing.includes(label));
-      sections.push({ agent: af.agent.id, required, present, missing });
+      sections.push({ agent: agentFacts.agent.id, required, present, missing });
       if (missing.length === 0) {
         findings.push(
-          `${af.agent.id}: all ${requiredSections.length} required sections present`,
+          `${agentFacts.agent.id}: all ${requiredSections.length} required sections present`,
         );
       } else {
         findings.push(
-          `${af.agent.id}: missing sections - ${missing.join(", ")}`,
+          `${agentFacts.agent.id}: missing sections - ${missing.join(", ")}`,
         );
         recs.push(
-          `Add the missing hot-path sections to ${af.agent.instructionFile}: ${missing.join(", ")}`,
+          `Add the missing hot-path sections to ${agentFacts.agent.instructionFile}: ${missing.join(", ")}`,
         );
         fixes.push(
-          `Add level-2 (or deeper) headings for ${missing.join(", ")} to ${af.agent.instructionFile}. Skeleton overlays are not sufficient for hot-path contract.`,
+          `Add level-2 (or deeper) headings for ${missing.join(", ")} to ${agentFacts.agent.instructionFile}. Skeleton overlays are not sufficient for hot-path contract.`,
         );
-        anyFail = true;
+        hasInstructionSectionFailure = true;
       }
     }
-    if (anyFail) return fail(findings, recs, fixes, { sections });
+    if (hasInstructionSectionFailure)
+      return fail(findings, recs, fixes, { sections });
     return pass(findings, { sections });
   },
 };
@@ -474,10 +496,9 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
   evidenceKind: "structural",
   provenance: contextProvenance("advisory", [
     "docs/harness-audit.md",
-    ".goat-flow/lessons/auditor-and-rubric.md",
+    ".goat-flow/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md",
     "CLAUDE.md",
     "AGENTS.md",
-    "GEMINI.md",
     ".github/copilot-instructions.md",
   ]),
   /** Run the Workspace boundary guidance present check. */
@@ -486,19 +507,21 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
     const missing: string[] = [];
     const boundary: NonNullable<HarnessCheckDetails["boundary"]> = [];
 
-    for (const af of ctx.agents) {
-      if (!af.instruction.exists || !af.instruction.content) {
-        findings.push(`${af.agent.id}: no instruction file to check`);
-        missing.push(`${af.agent.id} (${af.agent.instructionFile})`);
+    for (const agentFacts of ctx.agents) {
+      if (!agentFacts.instruction.exists || !agentFacts.instruction.content) {
+        findings.push(`${agentFacts.agent.id}: no instruction file to check`);
+        missing.push(
+          `${agentFacts.agent.id} (${agentFacts.agent.instructionFile})`,
+        );
         boundary.push({
-          agent: af.agent.id,
+          agent: agentFacts.agent.id,
           controllingWorkspace: false,
           targetWorkspace: false,
           boundaryHeading: false,
         });
         continue;
       }
-      const content = af.instruction.content;
+      const content = agentFacts.instruction.content;
       const controllingWorkspace = CONTROLLING_WORKSPACE_PATTERNS.some((p) =>
         p.test(content),
       );
@@ -507,20 +530,22 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
       );
       const boundaryHeading = BOUNDARY_HEADING_PATTERN.test(content);
       boundary.push({
-        agent: af.agent.id,
+        agent: agentFacts.agent.id,
         controllingWorkspace,
         targetWorkspace,
         boundaryHeading,
       });
       if (boundaryGuidancePresent(content)) {
         findings.push(
-          `${af.agent.id}: instruction file distinguishes controlling workspace from selected target`,
+          `${agentFacts.agent.id}: instruction file distinguishes controlling workspace from selected target`,
         );
       } else {
         findings.push(
-          `${af.agent.id}: instruction file has no workspace boundary guidance`,
+          `${agentFacts.agent.id}: instruction file has no workspace boundary guidance`,
         );
-        missing.push(`${af.agent.id} (${af.agent.instructionFile})`);
+        missing.push(
+          `${agentFacts.agent.id} (${agentFacts.agent.instructionFile})`,
+        );
       }
     }
 

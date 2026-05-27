@@ -1,0 +1,290 @@
+<!-- ═══ Hooks View ═══ -->
+<div x-show="activeView === 'hooks'" x-cloak class="gf-hooks-view">
+  <main class="gf-hooks-page">
+    <header class="gf-page-head gf-hooks-head">
+      <div>
+        <h1>Hooks</h1>
+        <p>Manage project hook state for the selected workspace.</p>
+      </div>
+      <button
+        @click="loadHooks()"
+        :disabled="hooksLoading"
+        class="gf-btn gf-btn-md gf-btn-secondary"
+        title="Refresh hook state"
+      >
+        <span x-text="hooksLoading ? 'Refreshing...' : 'Refresh'"></span>
+      </button>
+    </header>
+
+    <div
+      x-show="hooksLoading && hooksState.length === 0"
+      class="gf-hooks-panel"
+      role="status"
+    >
+      Loading hooks...
+    </div>
+
+    <div x-show="hooksError" x-cloak class="gf-hooks-alert" role="alert">
+      <div class="gf-text-primary">Hooks could not be loaded</div>
+      <p x-text="hooksError"></p>
+    </div>
+
+    <section
+      x-show="hooksState.length > 0"
+      class="gf-hooks-summary"
+      aria-label="Hook state summary"
+    >
+      <div class="gf-hooks-stat">
+        <span class="gf-hooks-stat-label">Total hooks</span>
+        <strong x-text="hooksState.length"></strong>
+      </div>
+      <div class="gf-hooks-stat">
+        <span class="gf-hooks-stat-label">Enabled</span>
+        <strong class="is-success" x-text="hooksEnabledCount()"></strong>
+      </div>
+      <div class="gf-hooks-stat">
+        <span class="gf-hooks-stat-label">Drift</span>
+        <strong
+          :class="hooksDriftCount() > 0 ? 'is-warning' : ''"
+          x-text="hooksDriftCount()"
+        ></strong>
+      </div>
+      <div class="gf-hooks-stat">
+        <span class="gf-hooks-stat-label">Installed surfaces</span>
+        <strong x-text="hooksInstalledSurfaceCount()"></strong>
+      </div>
+    </section>
+
+    <section
+      x-show="hooksState.length > 0"
+      class="gf-hooks-toolbar"
+      aria-label="Hook filters"
+    >
+      <div class="gf-hooks-filter-group" role="group" aria-label="Hook state">
+        <button
+          type="button"
+          class="gf-hooks-chip"
+          :class="hooksFilter === 'all' && 'is-active'"
+          :aria-pressed="String(hooksFilter === 'all')"
+          @click="hooksFilter = 'all'"
+        >
+          All
+          <span
+            class="gf-hooks-chip-count"
+            x-text="hookFilterCount('all')"
+          ></span>
+        </button>
+        <button
+          type="button"
+          class="gf-hooks-chip"
+          :class="hooksFilter === 'enabled' && 'is-active'"
+          :aria-pressed="String(hooksFilter === 'enabled')"
+          @click="hooksFilter = 'enabled'"
+        >
+          Enabled
+          <span
+            class="gf-hooks-chip-count"
+            x-text="hookFilterCount('enabled')"
+          ></span>
+        </button>
+        <button
+          type="button"
+          class="gf-hooks-chip"
+          :class="hooksFilter === 'disabled' && 'is-active'"
+          :aria-pressed="String(hooksFilter === 'disabled')"
+          @click="hooksFilter = 'disabled'"
+        >
+          Disabled
+          <span
+            class="gf-hooks-chip-count"
+            x-text="hookFilterCount('disabled')"
+          ></span>
+        </button>
+        <button
+          type="button"
+          class="gf-hooks-chip"
+          :class="hooksFilter === 'drift' && 'is-active'"
+          :aria-pressed="String(hooksFilter === 'drift')"
+          @click="hooksFilter = 'drift'"
+        >
+          Drift
+          <span
+            class="gf-hooks-chip-count"
+            x-text="hookFilterCount('drift')"
+          ></span>
+        </button>
+      </div>
+
+      <label class="gf-hooks-search">
+        <span class="sr-only">Search hooks</span>
+        <input
+          type="search"
+          x-model="hooksSearch"
+          placeholder="Search hooks"
+          aria-label="Search hooks"
+        />
+      </label>
+    </section>
+
+    <div
+      x-show="!hooksLoading && !hooksError && hooksState.length === 0"
+      class="gf-hooks-empty"
+    >
+      <div class="gf-empty-mark">HK</div>
+      <p>No hook state is available for this project.</p>
+    </div>
+
+    <div
+      x-show="hooksState.length > 0 && filteredHooks().length === 0"
+      class="gf-hooks-empty"
+    >
+      <div class="gf-empty-mark">0</div>
+      <p>No hooks match the current filter.</p>
+    </div>
+
+    <template
+      x-for="section in [
+        { id: 'safety', label: 'Safety', tone: 'danger' },
+        { id: 'git', label: 'Git & deploy', tone: 'warning' },
+        { id: 'quality', label: 'Quality', tone: 'neutral' }
+      ]"
+      :key="section.id"
+    >
+      <section
+        x-show="hookSectionCount(section.id) > 0"
+        class="gf-hooks-section"
+      >
+        <div class="gf-hooks-section-head">
+          <span
+            class="gf-hooks-pip"
+            :class="'gf-hooks-pip-' + section.tone"
+            aria-hidden="true"
+          ></span>
+          <div class="gf-hooks-section-title">
+            <span x-text="section.label"></span>
+            <span
+              class="gf-section-count"
+              x-text="hookSectionCount(section.id) + (hookSectionCount(section.id) === 1 ? ' hook' : ' hooks')"
+            ></span>
+          </div>
+          <span class="gf-hooks-section-rule" aria-hidden="true"></span>
+        </div>
+
+        <div class="gf-hooks-list">
+          <template x-for="hook in hooksForSection(section.id)" :key="hook.id">
+            <article
+              class="gf-hook-row"
+              :class="{ 'is-disabled': !hook.enabled, 'is-saving': hookSavingId === hook.id }"
+            >
+              <div
+                class="gf-hook-rail"
+                :class="'gf-hook-rail-' + hookTone(hook)"
+                aria-hidden="true"
+              ></div>
+
+              <div class="gf-hook-main">
+                <div class="gf-hook-title-row">
+                  <h2 x-text="hook.name"></h2>
+                  <code x-text="hook.id"></code>
+                </div>
+                <p class="gf-hook-description" x-text="hook.description"></p>
+
+                <div class="gf-hook-pills" aria-label="Hook properties">
+                  <span
+                    class="gf-hook-pill"
+                    :class="hook.enabled ? 'is-on' : 'is-muted'"
+                    x-text="hook.enabled ? 'enabled' : 'disabled'"
+                  ></span>
+                  <span
+                    class="gf-hook-pill"
+                    :class="hook.defaultEnabled ? 'is-on' : 'is-muted'"
+                    x-text="hook.defaultEnabled ? 'default on' : 'default off'"
+                  ></span>
+                  <span
+                    x-show="hook.requiresConfirmDialog"
+                    class="gf-hook-pill is-danger"
+                    >confirm required</span
+                  >
+                  <span
+                    x-show="hookHasDrift(hook)"
+                    class="gf-hook-pill is-warning"
+                    >drift</span
+                  >
+                </div>
+
+                <div class="gf-hook-agent-row">
+                  <span class="gf-hook-agent-label">Agents</span>
+                  <template
+                    x-for="[agentId, state] in hookAgents(hook)"
+                    :key="hook.id + '-' + agentId"
+                  >
+                    <span
+                      class="gf-hook-agent"
+                      :class="hookAgentStatusClass(state)"
+                      :title="state.reason || state.scriptPath || hookAgentStatusLabel(state)"
+                      :aria-label="agentId + ': ' + hookAgentStatusLabel(state) + (state.reason ? '. ' + state.reason : '')"
+                    >
+                      <span x-text="agentId"></span>
+                      <strong x-text="hookAgentStatusLabel(state)"></strong>
+                    </span>
+                  </template>
+                </div>
+              </div>
+
+              <div class="gf-hook-controls">
+                <span
+                  x-show="hook.togglable"
+                  class="gf-hook-control-label"
+                  :class="hook.enabled ? 'is-on' : 'is-off'"
+                  x-text="hookSavingId === hook.id ? 'Saving...' : (hook.enabled ? 'Enabled' : 'Disabled')"
+                ></span>
+                <button
+                  x-show="hook.togglable"
+                  type="button"
+                  role="switch"
+                  class="gf-hook-switch"
+                  :class="hook.enabled && 'is-on'"
+                  :aria-checked="String(hook.enabled)"
+                  :disabled="hookSavingId === hook.id"
+                  @click="toggleHook(hook, !hook.enabled)"
+                >
+                  <span
+                    class="sr-only"
+                    x-text="(hook.enabled ? 'Disable ' : 'Enable ') + hook.name"
+                  ></span>
+                  <span class="gf-hook-switch-knob" aria-hidden="true"></span>
+                </button>
+                <span x-show="!hook.togglable" class="gf-hook-pill is-on"
+                  >always on</span
+                >
+                <button
+                  x-show="hook.togglable && hookHasDrift(hook)"
+                  @click="resyncHook(hook)"
+                  :disabled="hookSavingId === hook.id"
+                  class="gf-btn gf-btn-sm gf-btn-secondary"
+                >
+                  Re-sync
+                </button>
+              </div>
+            </article>
+          </template>
+        </div>
+      </section>
+    </template>
+
+    <div x-show="hooksState.length > 0" class="gf-hooks-legend">
+      <span>
+        <span class="gf-hooks-swatch is-installed" aria-hidden="true"></span>
+        installed and enforced
+      </span>
+      <span>
+        <span class="gf-hooks-swatch is-available" aria-hidden="true"></span>
+        available, not installed
+      </span>
+      <span>
+        <span class="gf-hooks-swatch is-drift" aria-hidden="true"></span>
+        desired state drift
+      </span>
+    </div>
+  </main>
+</div>

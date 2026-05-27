@@ -11,18 +11,18 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Copyable hook scripts (`deny-dangerous.sh` + self-test sibling) + per-agent config templates |
+| Hook scripts | `workflow/hooks/` | Copyable guardrail hooks (`guard-destructive-shell.sh`, `guard-secret-paths.sh`, `guard-repository-writes.sh`), central `guardrails-self-test.sh`, opt-in `gruff-code-quality.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 19 build checks (15 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, coming-soon, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` owns non-terminal HTTP handlers, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
 
 ```
 User runs `npx goat-flow setup .` or reads workflow/setup/
-  -> Chooses agent (workflow/setup/agents/claude.md, workflow/setup/agents/codex.md, workflow/setup/agents/gemini.md, workflow/setup/agents/copilot.md)
+  -> Chooses agent (workflow/setup/agents/claude.md, workflow/setup/agents/codex.md, workflow/setup/agents/antigravity.md, workflow/setup/agents/copilot.md)
   -> Follows numbered setup steps (01-06) via their agent config
   -> Agent reads workflow/setup/ (01-system-overview.md, 02-instruction-file.md, reference/execution-loop.md)
   -> Agent generates project-specific files (CLAUDE.md, hooks, skills, etc.)
@@ -57,7 +57,7 @@ src/cli/
 src/dashboard/
   index.html          # Dashboard entry point
   preset-prompts.json  # Preset configurations
-  views/              # Page views (about, coming-soon, home, plans, projects, prompts, quality, settings, setup, skills, workspace)
+  views/              # Page views (about, coming-soon, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
 
 ## Key Constraints
@@ -68,7 +68,7 @@ src/dashboard/
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Codex and Antigravity share `AGENTS.md` per the community standard. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
 
 ## Persistence Tiers
 
@@ -76,7 +76,7 @@ Agent instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instru
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, the meta references at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, and the standalone playbooks at `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`, `.goat-flow/skill-playbooks/skill-quality-testing.md` (index) plus the topical files `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md`, `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md`, and `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` (per ADR-023) | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, the meta references at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, and the standalone playbooks indexed by `.goat-flow/skill-playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `observability.md`, `page-capture.md`, `release-notes.md`, and `skill-quality-testing.md` plus the topical files under `.goat-flow/skill-playbooks/skill-quality-testing/` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `tasks/**`, `scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json`, `.goat-flow/project-id` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state. Coordinates a single work session - not project history. |
 | **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, and security assessment history from goat-security runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
 

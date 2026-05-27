@@ -267,11 +267,15 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
     writeFileSync(join(root, "CLAUDE.md"), "# CLAUDE.md\n\nSynthetic.\n");
     writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
     writeFileSync(
-      join(root, ".claude", "hooks", "deny-dangerous.sh"),
+      join(root, ".claude", "hooks", "guard-common.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
-      join(root, ".claude", "hooks", "deny-dangerous.self-test.sh"),
+      join(root, ".claude", "hooks", "guard-repository-writes.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    writeFileSync(
+      join(root, ".claude", "hooks", "guardrails-self-test.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
@@ -287,14 +291,18 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
     writeFileSync(join(root, ".codex", "config.toml"), CODEX_CONFIG);
     writeFileSync(
       join(root, ".codex", "hooks.json"),
-      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/deny-dangerous.sh"}]}]}}\n',
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/guard-repository-writes.sh"}]}]}}\n',
     );
     writeFileSync(
-      join(root, ".codex", "hooks", "deny-dangerous.sh"),
+      join(root, ".codex", "hooks", "guard-common.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
-      join(root, ".codex", "hooks", "deny-dangerous.self-test.sh"),
+      join(root, ".codex", "hooks", "guard-repository-writes.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    writeFileSync(
+      join(root, ".codex", "hooks", "guardrails-self-test.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
@@ -316,14 +324,18 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
     );
     writeFileSync(
       join(root, ".github", "hooks", "hooks.json"),
-      '{"hooks":{"preToolUse":[{"command":".github/hooks/deny-dangerous.sh"}]}}\n',
+      '{"hooks":{"preToolUse":[{"command":".github/hooks/guard-repository-writes.sh"}]}}\n',
     );
     writeFileSync(
-      join(root, ".github", "hooks", "deny-dangerous.sh"),
+      join(root, ".github", "hooks", "guard-common.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
-      join(root, ".github", "hooks", "deny-dangerous.self-test.sh"),
+      join(root, ".github", "hooks", "guard-repository-writes.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    writeFileSync(
+      join(root, ".github", "hooks", "guardrails-self-test.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(

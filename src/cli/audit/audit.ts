@@ -552,7 +552,7 @@ function enforcementLimitSummary(
   const totalLimitedEvidence = unknown + limited;
   const capabilityLabel =
     totalLimitedEvidence === 1 ? "capability" : "capabilities";
-  return `Constraint score covers verified deny patterns only; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
+  return `Constraint score covers verified deny patterns only, not broad filesystem enforcement; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
 }
 
 function addNonGatingEvidenceLimits(
@@ -679,15 +679,14 @@ function overallStatus(
  * Decide whether drift should auto-run without --check-drift (M19-4).
  *
  * Multi-agent projects leave satellite skill dirs (`.agents/skills/`,
- * `.gemini/skills/`, etc.) stale after a single-agent migration completes.
+ * `.claude/skills/`, etc.) stale after a single-agent migration completes.
  * The existing drift machinery detects `manifest.stale_names` orphans but
  * is off by default, so `audit --agent claude` on a project that also ships
- * AGENTS.md / GEMINI.md exits "pass" while the Codex / Gemini skill dirs
- * still hold pre-v1.2 names. When more than one agent instruction file is
- * present on disk we run drift automatically. Evidence: n=4 migrations
- * reviewed 2026-04-20 all had stale satellite dirs surviving a "pass"
- * audit - see `.goat-flow/tasks/1.2.0/M19-setup-signal-hardening.md`
- * slice M19-4.
+ * AGENTS.md exits "pass" while the Codex / Antigravity skill dirs still hold
+ * pre-v1.2 names. When more than one agent instruction file is present on
+ * disk we run drift automatically. Evidence: n=4 migrations reviewed
+ * 2026-04-20 all had stale satellite dirs surviving a "pass" audit - see
+ * `.goat-flow/tasks/1.2.0/M19-setup-signal-hardening.md` slice M19-4.
  *
  * The signal is computed from the manifest-backed instruction paths rather
  * than `ctx.agents`, which has already been narrowed by `--agent` upstream.

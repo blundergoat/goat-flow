@@ -326,11 +326,16 @@ async function makeDashboardCacheProject(): Promise<{
   await writeProjectFile(
     root,
     ".codex/hooks.json",
-    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/deny-dangerous.sh"}]}]}}\n',
+    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/guard-repository-writes.sh"}]}]}}\n',
   );
   await writeProjectFile(
     root,
-    ".codex/hooks/deny-dangerous.sh",
+    ".codex/hooks/guard-common.sh",
+    "#!/usr/bin/env bash\nexit 0\n",
+  );
+  await writeProjectFile(
+    root,
+    ".codex/hooks/guard-repository-writes.sh",
     "#!/usr/bin/env bash\nexit 0\n",
   );
   return {
@@ -381,11 +386,15 @@ async function makeDashboardSetupPromptProject(options: {
 }): Promise<{ root: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "goat-flow-setup-prompt-tests-"));
   const denyHook = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.sh"),
+    join(PROJECT_PATH, "workflow", "hooks", "guard-repository-writes.sh"),
+    "utf-8",
+  );
+  const guardCommon = await readFile(
+    join(PROJECT_PATH, "workflow", "hooks", "guard-common.sh"),
     "utf-8",
   );
   const denyHookSelfTest = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.self-test.sh"),
+    join(PROJECT_PATH, "workflow", "hooks", "guardrails-self-test.sh"),
     "utf-8",
   );
   const commonDirs = [
@@ -452,8 +461,7 @@ skills:
               hooks: [
                 {
                   type: "command",
-                  command:
-                    'bash "$(git rev-parse --show-toplevel)/.codex/hooks/deny-dangerous.sh"',
+                  command: ".codex/hooks/guard-repository-writes.sh",
                 },
               ],
             },
@@ -464,10 +472,15 @@ skills:
       2,
     ),
   );
-  await writeProjectFile(root, ".codex/hooks/deny-dangerous.sh", denyHook);
+  await writeProjectFile(root, ".codex/hooks/guard-common.sh", guardCommon);
   await writeProjectFile(
     root,
-    ".codex/hooks/deny-dangerous.self-test.sh",
+    ".codex/hooks/guard-repository-writes.sh",
+    denyHook,
+  );
+  await writeProjectFile(
+    root,
+    ".codex/hooks/guardrails-self-test.sh",
     denyHookSelfTest,
   );
   if (options.installSkills) {
@@ -776,6 +789,7 @@ describe("dashboard API authorization", () => {
 
   it("rejects terminal WebSocket upgrades with a missing token", async () => {
     const { WebSocket } = await import("ws");
+    let rejectedUpgrade = false;
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(
         `${baseUrl.replace(/^http/u, "ws")}/ws/terminal/test`,
@@ -792,13 +806,16 @@ describe("dashboard API authorization", () => {
       });
       ws.once("error", () => {
         clearTimeout(timer);
+        rejectedUpgrade = true;
         resolve();
       });
       ws.once("close", () => {
         clearTimeout(timer);
+        rejectedUpgrade = true;
         resolve();
       });
     });
+    assert.equal(rejectedUpgrade, true);
   });
 });
 
@@ -953,14 +970,14 @@ describe("dashboard /api/audit", () => {
       );
       assert.match(
         JSON.stringify(aggregateAgent),
-        /Supported agent instruction files missing: codex \(AGENTS\.md\), gemini \(GEMINI\.md\), copilot \(\.github\/copilot-instructions\.md\)/,
+        /Supported agent instruction files missing: codex \(AGENTS\.md\), antigravity \(AGENTS\.md\), copilot \(\.github\/copilot-instructions\.md\)/,
       );
 
       const agentScores = report.agentScores as unknown[];
       const scoreIds = agentScores.map((score, index) =>
         String(expectRecord(score, `Supported-agent score[${index}]`).id),
       );
-      assert.deepEqual(scoreIds, ["claude", "codex", "gemini", "copilot"]);
+      assert.deepEqual(scoreIds, ["claude", "codex", "antigravity", "copilot"]);
 
       const scoresById = new Map<string, Record<string, unknown>>();
       for (const score of agentScores) {
@@ -968,7 +985,7 @@ describe("dashboard /api/audit", () => {
         scoresById.set(String(entry.id), entry);
       }
 
-      for (const id of ["claude", "codex", "gemini", "copilot"] as const) {
+      for (const id of ["claude", "codex", "antigravity", "copilot"] as const) {
         assert.ok(scoresById.has(id), `Dashboard report should include ${id}`);
       }
       const codex = expectRecord(scoresById.get("codex"), "Codex score");
@@ -1109,7 +1126,7 @@ describe("dashboard /api/audit", () => {
 
       await writeProjectFile(
         project.root,
-        ".codex/hooks/deny-dangerous.sh",
+        ".codex/hooks/guard-repository-writes.sh",
         "#!/usr/bin/env bash\nexit 1\n",
       );
       const afterHook = await fetchProfiledAudit(project.root);

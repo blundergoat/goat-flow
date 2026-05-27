@@ -22,6 +22,7 @@ const QUALITY_HISTORY_FILENAME = new RegExp(
   `^(\\d{4}-\\d{2}-\\d{2})-(\\d{4})-(${KNOWN_AGENT_IDS.join("|")})-([a-z0-9]{5})\\.json$`,
 );
 
+/** Parsed quality report; invariant: filename-derived ids are the cross-run diff keys. */
 export interface QualityHistoryEntry {
   id: string;
   path: string;
@@ -32,6 +33,7 @@ export interface QualityHistoryEntry {
   report: SavedQualityReport;
 }
 
+/** Display row for history tables after same-agent deltas have been calculated. */
 interface QualityHistoryRow {
   id: string;
   date: string;
@@ -48,6 +50,7 @@ interface QualityHistoryRow {
   evidenceMethods: SavedQualityFinding["evidence_method"][];
 }
 
+/** Finding summary row shared by resolved, new, persisted, and stuck diff sections. */
 interface QualityDiffFindingRow {
   id: string;
   severity: SavedQualityFinding["severity"];
@@ -55,6 +58,7 @@ interface QualityDiffFindingRow {
   summary: string;
 }
 
+/** Diff result for two same-agent, same-mode quality-history entries. */
 interface QualityDiffResult {
   from: QualityHistoryEntry;
   to: QualityHistoryEntry;
@@ -127,7 +131,7 @@ function entryQualityMode(entry: QualityHistoryEntry): QualityMode {
   return entry.report.quality_mode ?? "agent-setup";
 }
 
-/** Format the delta. */
+/** Format a score delta for the compact history table, keeping first-run cells blank. */
 function formatDelta(delta: number | null): string {
   if (delta === null) return "";
   if (delta > 0) return ` (+${delta})`;
@@ -158,7 +162,7 @@ function getQualityLogsDir(projectPath: string): string {
   return join(projectPath, ".goat-flow", "logs", "quality");
 }
 
-/** Return quality JSON filenames in descending recency order. */
+/** Return quality JSON filenames newest-first; invariant: filename timestamps define recency. */
 function listHistoryFilenamesDesc(dir: string): string[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
@@ -203,7 +207,16 @@ function appendMatchingHistoryEntry(
   return true;
 }
 
-/** Load the quality history. */
+/**
+ * Load every saved quality-history report from disk.
+ *
+ * Reports malformed files as warnings and skips them because agent-written
+ * history must be non-blocking. Invariant: returned entries stay newest-first
+ * and use filename-derived ids for stable diff selection.
+ *
+ * @param projectPath - Project root containing `.goat-flow/logs/quality`.
+ * @returns Parsed entries sorted newest-first plus non-fatal parse warnings.
+ */
 export function loadQualityHistory(projectPath: string): {
   entries: QualityHistoryEntry[];
   warnings: string[];
@@ -266,6 +279,10 @@ export function loadQualityHistory(projectPath: string): {
  * Load only the newest dashboard-sized quality-history window. For selected
  * agent tables, one extra matching entry is parsed so the oldest displayed row
  * can still calculate its delta without parsing the whole history directory.
+ *
+ * @param projectPath - Project root containing `.goat-flow/logs/quality`.
+ * @param options - Agent/mode filters and optional dashboard row limit.
+ * @returns Bounded entries sorted newest-first plus non-fatal parse warnings.
  */
 export function loadQualityHistoryWindow(
   projectPath: string,
@@ -304,7 +321,14 @@ export function loadQualityHistoryWindow(
   return { entries, warnings };
 }
 
-/** Return the latest history entry for one agent. */
+/**
+ * Return the latest history entry for one agent and optional quality mode.
+ *
+ * @param entries - Pre-sorted quality-history entries.
+ * @param agent - Agent whose latest report should be selected.
+ * @param qualityMode - Optional mode filter; `null` accepts any mode.
+ * @returns The newest matching entry, or `null` when no report matches.
+ */
 export function getLatestQualityHistoryEntry(
   entries: QualityHistoryEntry[],
   agent: AgentId,
@@ -368,6 +392,11 @@ function tryParseHistoryFile(
  * Find the latest quality report for one agent/mode without parsing all files.
  * Scans filenames newest-first, filters by agent from the filename, and parses
  * only matching JSON until a valid entry is found.
+ *
+ * @param projectPath - Project root containing `.goat-flow/logs/quality`.
+ * @param agent - Agent whose newest report should be found.
+ * @param qualityMode - Optional mode filter; `null` accepts any mode.
+ * @returns Latest valid entry plus warnings for malformed matching files.
  */
 export function findLatestQualityReport(
   projectPath: string,
@@ -394,7 +423,13 @@ export function findLatestQualityReport(
   return { entry: null, warnings };
 }
 
-/** Select quality history entries. */
+/**
+ * Select visible quality-history entries after agent, mode, and limit filters.
+ *
+ * @param entries - Pre-sorted quality-history entries.
+ * @param options - Filter and limit options from CLI or dashboard callers.
+ * @returns Filtered entries, preserving input order.
+ */
 export function selectQualityHistoryEntries(
   entries: QualityHistoryEntry[],
   options: {
@@ -412,7 +447,13 @@ export function selectQualityHistoryEntries(
   return filtered.slice(0, options.limit);
 }
 
-/** Build the quality history rows. */
+/**
+ * Build display rows with same-agent, same-mode setup deltas.
+ *
+ * @param entries - Pre-sorted quality-history entries.
+ * @param options - Filter and limit options from CLI or dashboard callers.
+ * @returns History table rows, preserving newest-first order.
+ */
 export function buildQualityHistoryRows(
   entries: QualityHistoryEntry[],
   options: {
@@ -508,7 +549,7 @@ function countConsecutivePresence(
 }
 
 /** Build the diff between two quality-history runs. */
-// eslint-disable-next-line complexity -- diff selection branches on implicit latest-vs-explicit pair resolution and validation
+// eslint-disable-next-line complexity -- intentional because diff selection branches on implicit latest-vs-explicit pair resolution and validation before the shared comparison path.
 export function buildQualityDiff(
   entries: QualityHistoryEntry[],
   options: {
@@ -518,8 +559,8 @@ export function buildQualityDiff(
   },
 ): { ok: true; diff: QualityDiffResult } | { ok: false; error: string } {
   const qualityMode = options.qualityMode ?? null;
-  let from: QualityHistoryEntry | undefined;
-  let to: QualityHistoryEntry | undefined;
+  let sourceEntry: QualityHistoryEntry | undefined;
+  let targetEntry: QualityHistoryEntry | undefined;
 
   if (options.pair) {
     const [fromId, toId, ...rest] = options.pair.split(":");
@@ -529,27 +570,27 @@ export function buildQualityDiff(
         error: "quality diff pair must be in the form <from-id>:<to-id>",
       };
     }
-    from = entries.find((entry) => entry.id === fromId);
-    to = entries.find((entry) => entry.id === toId);
-    if (!from || !to) {
+    sourceEntry = entries.find((entry) => entry.id === fromId);
+    targetEntry = entries.find((entry) => entry.id === toId);
+    if (!sourceEntry || !targetEntry) {
       return {
         ok: false,
         error: "quality diff pair must reference existing saved report ids",
       };
     }
-    if (from.agent !== to.agent) {
+    if (sourceEntry.agent !== targetEntry.agent) {
       return {
         ok: false,
         error: "quality diff rejects cross-agent comparisons",
       };
     }
-    if (options.agent && from.agent !== options.agent) {
+    if (options.agent && sourceEntry.agent !== options.agent) {
       return {
         ok: false,
         error: `quality diff pair does not match --agent ${options.agent}`,
       };
     }
-    if (entryQualityMode(from) !== entryQualityMode(to)) {
+    if (entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)) {
       return {
         ok: false,
         error: "quality diff rejects cross-mode comparisons",
@@ -557,8 +598,8 @@ export function buildQualityDiff(
     }
     if (
       qualityMode !== null &&
-      (entryQualityMode(from) !== qualityMode ||
-        entryQualityMode(to) !== qualityMode)
+      (entryQualityMode(sourceEntry) !== qualityMode ||
+        entryQualityMode(targetEntry) !== qualityMode)
     ) {
       return {
         ok: false,
@@ -591,21 +632,21 @@ export function buildQualityDiff(
         error: "quality diff could not resolve the requested report pair",
       };
     }
-    to = latest;
-    from = previous;
+    targetEntry = latest;
+    sourceEntry = previous;
     if (
       qualityMode === null &&
-      entryQualityMode(from) !== entryQualityMode(to)
+      entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)
     ) {
       return {
         ok: false,
-        error: `quality diff would compare ${entryQualityMode(from)} to ${entryQualityMode(to)}. Pass --mode to diff one quality mode, or pass explicit same-mode report ids.`,
+        error: `quality diff would compare ${entryQualityMode(sourceEntry)} to ${entryQualityMode(targetEntry)}. Pass --mode to diff one quality mode, or pass explicit same-mode report ids.`,
       };
     }
   }
 
-  const fromMap = getFindingMap(from.report);
-  const toMap = getFindingMap(to.report);
+  const fromMap = getFindingMap(sourceEntry.report);
+  const toMap = getFindingMap(targetEntry.report);
 
   const resolved = [...fromMap.values()]
     .filter((finding) => !toMap.has(finding.id))
@@ -640,18 +681,21 @@ export function buildQualityDiff(
   const stuck = persisted
     .filter((finding) => {
       if (!["BLOCKER", "MAJOR"].includes(finding.severity)) return false;
-      return countConsecutivePresence(entries, to, finding.id) >= 3;
+      return countConsecutivePresence(entries, targetEntry, finding.id) >= 3;
     })
     .sort(diffRowSort);
 
   return {
     ok: true,
     diff: {
-      from,
-      to,
-      setupDelta: to.report.scores.setup.total - from.report.scores.setup.total,
+      from: sourceEntry,
+      to: targetEntry,
+      setupDelta:
+        targetEntry.report.scores.setup.total -
+        sourceEntry.report.scores.setup.total,
       systemDelta:
-        to.report.scores.system.total - from.report.scores.system.total,
+        targetEntry.report.scores.system.total -
+        sourceEntry.report.scores.system.total,
       resolved,
       newFindings,
       persisted,
@@ -660,7 +704,13 @@ export function buildQualityDiff(
   };
 }
 
-/** Render the quality history text. */
+/**
+ * Render quality-history rows for CLI text output.
+ *
+ * @param rows - Rows returned by `buildQualityHistoryRows`.
+ * @param options - Active filters used to render empty-state and limit hints.
+ * @returns Markdown-like text table for terminal output.
+ */
 export function renderQualityHistoryText(
   rows: QualityHistoryRow[],
   options: {
@@ -706,7 +756,15 @@ export function renderQualityHistoryText(
   return lines.join("\n");
 }
 
-/** Render the quality diff text. */
+/**
+ * Render a quality diff for CLI text output.
+ *
+ * The four fixed sections mirror the lifecycle buckets because saved-report
+ * diffs are scanned by humans and shell output, not just JSON clients.
+ *
+ * @param diff - Diff returned by `buildQualityDiff`.
+ * @returns Human-readable diff grouped by finding lifecycle.
+ */
 export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;
   const lines = [header, ""];

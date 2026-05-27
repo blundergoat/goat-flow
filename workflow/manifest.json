@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.7.0",
+  "version": "1.8.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -22,7 +22,12 @@
     ".goat-flow/skill-reference/skill-conventions.md",
     ".goat-flow/skill-playbooks/README.md",
     ".goat-flow/skill-playbooks/browser-use.md",
+    ".goat-flow/skill-playbooks/changelog.md",
+    ".goat-flow/skill-playbooks/code-comments.md",
+    ".goat-flow/skill-playbooks/gruff-code-quality.md",
+    ".goat-flow/skill-playbooks/observability.md",
     ".goat-flow/skill-playbooks/page-capture.md",
+    ".goat-flow/skill-playbooks/release-notes.md",
     ".goat-flow/skill-playbooks/skill-quality-testing.md",
     ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
@@ -59,15 +64,14 @@
     ".goat-flow/logs/critiques/": "Workspace-local, gitignored-by-design critique run history. Phase 3 snapshots from `/goat-critique` runs persisted before the Phase 4 blocking gate so work survives session interruptions. Only README.md is committed.",
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits — adding a new file here commits every skill to inherit it.",
-    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, page-capture.md for Playwright page-capture usage tiers, and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents — never composed into a skill at scoring time.",
+    ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
+    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
   "optional_files": {
     "_note": "Optional files created when the project needs them, not during base setup.",
-    ".cursorignore": "Excludes secret/sensitive paths from Cursor context.",
-    ".geminiignore": "Excludes secret/sensitive paths from Gemini context."
+    ".cursorignore": "Excludes secret/sensitive paths from Cursor context."
   },
 
   "never_create": [],
@@ -91,7 +95,11 @@
         "references/rubric-examples.md",
         "references/sub-agent-directives.md"
       ],
-      "goat-review": ["references/examples.md", "references/refuter-spec.md"],
+      "goat-review": [
+        "references/examples.md",
+        "references/refuter-spec.md",
+        "references/automated-review.md"
+      ],
       "goat-security": [
         "references/common-threats.md",
         "references/identity-and-data.md",
@@ -130,18 +138,24 @@
       "hooks_dir": ".claude/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
-      "deny_hook": ".claude/hooks/deny-dangerous.sh",
+      "deny_hook": ".claude/hooks/guard-repository-writes.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".claude/settings.json",
-        "script_path": ".claude/hooks/deny-dangerous.sh"
+        "script_path": ".claude/hooks/guard-repository-writes.sh"
       },
       "local_pattern": "*/CLAUDE.md",
       "hook_events": {
         "pre_tool": "PreToolUse",
         "post_turn": "Stop"
       },
-      "hooks": ["deny-dangerous.sh", "deny-dangerous.self-test.sh"]
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
     },
     "codex": {
       "name": "Codex",
@@ -160,44 +174,59 @@
       "hooks_dir": ".codex/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
-      "deny_hook": ".codex/hooks/deny-dangerous.sh",
+      "deny_hook": ".codex/hooks/guard-repository-writes.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".codex/config.toml",
-        "script_path": ".codex/hooks/deny-dangerous.sh"
+        "script_path": ".codex/hooks/guard-repository-writes.sh"
       },
       "local_pattern": ".github/instructions/*.md",
       "hook_events": {
         "pre_tool": "PreToolUse",
         "post_turn": "Stop"
       },
-      "hooks": ["deny-dangerous.sh", "deny-dangerous.self-test.sh"]
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
     },
-    "gemini": {
-      "name": "Gemini CLI",
-      "instruction_file": "GEMINI.md",
+    "antigravity": {
+      "name": "Antigravity",
+      "instruction_file": "AGENTS.md",
       "skills_dir": ".agents/skills/",
       "capabilities": {
-        "terminal_binary": "gemini",
-        "setup_surfaces": ["GEMINI.md", ".gemini/settings.json"],
+        "terminal_binary": "agy",
+        "setup_surfaces": [
+          "AGENTS.md",
+          ".agents/skills/",
+          ".agents/hooks.json",
+          ".agents/hooks/"
+        ],
         "prompt_invocation_style": "slash",
         "skill_source": "agent-mirror"
       },
-      "hooks_dir": ".gemini/hooks/",
-      "settings": ".gemini/settings.json",
-      "hook_config_file": ".gemini/settings.json",
-      "deny_hook": ".gemini/hooks/deny-dangerous.sh",
+      "hooks_dir": ".agents/hooks/",
+      "hook_config_file": ".agents/hooks.json",
+      "deny_hook": ".agents/hooks/guard-repository-writes.sh",
       "deny_mechanism": {
-        "type": "both",
-        "settings_path": ".gemini/settings.json",
-        "script_path": ".gemini/hooks/deny-dangerous.sh"
+        "type": "deny-script",
+        "path": ".agents/hooks/guard-repository-writes.sh"
       },
-      "local_pattern": "*/GEMINI.md",
+      "local_pattern": "*/AGENTS.md",
       "hook_events": {
-        "pre_tool": "BeforeTool",
-        "post_turn": "AfterAgent"
+        "pre_tool": "PreToolUse",
+        "post_turn": "Stop"
       },
-      "hooks": ["deny-dangerous.sh", "deny-dangerous.self-test.sh"]
+      "hooks": [
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
+      ]
     },
     "copilot": {
       "name": "Copilot CLI",
@@ -215,10 +244,10 @@
       },
       "hooks_dir": ".github/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
-      "deny_hook": ".github/hooks/deny-dangerous.sh",
+      "deny_hook": ".github/hooks/guard-repository-writes.sh",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".github/hooks/deny-dangerous.sh"
+        "path": ".github/hooks/guard-repository-writes.sh"
       },
       "local_pattern": ".github/instructions/**/*.instructions.md",
       "hook_events": {
@@ -227,8 +256,11 @@
       },
       "hooks": [
         "hooks.json",
-        "deny-dangerous.sh",
-        "deny-dangerous.self-test.sh"
+        "guard-common.sh",
+        "guard-destructive-shell.sh",
+        "guard-secret-paths.sh",
+        "guard-repository-writes.sh",
+        "guardrails-self-test.sh"
       ]
     }
   },
@@ -256,6 +288,7 @@
       "about",
       "coming-soon",
       "home",
+      "hooks",
       "projects",
       "prompts",
       "quality",

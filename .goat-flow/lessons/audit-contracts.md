@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-27
 ---
 
 ## Lesson: Audit check skip semantics need both unit and integration fixture updates
@@ -24,3 +24,39 @@ last_reviewed: 2026-05-20
 **Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and only the obvious unit helper was updated before the full suite.
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
+
+---
+
+## Lesson: Audit fixture expectations must follow detector semantics
+
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed, tightened, or moves responsibility to a different detector.
+
+**Root cause:** Expected check ids were treated as stable facts instead of outputs of the current detector contract.
+
+**Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. Do not trust older expected ids after check-contract work.
+
+---
+
+## Lesson: Generic skill quality rules must be portable outside goat-flow
+
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** The skill-quality evaluator treated `.goat-flow/skill-reference/skill-preamble.md` and the goat-flow Proof Gate as universal requirements, then told uploaded standalone skills to inherit them. The user objected: external skills may never run inside goat-flow.
+
+**Root cause:** The quality rules mixed installed goat-flow skills with generic uploaded/non-goat-flow skills.
+
+**Prevention:** Every generic skill-quality rule must be satisfiable by a standalone skill with no goat-flow files present. Framework inheritance can be credited only for installed artifact paths that actually compose the shared references. Evidence anchors: `src/cli/quality/skill-quality.ts` (search: `no prerequisites or operating context`) and `test/unit/skill-quality.test.ts` (search: `does not require goat-flow preamble inheritance for portable uploaded skills`).
+
+---
+
+## Lesson: Quality-report recommendations need ADR reconciliation before gate changes
+
+**Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** Four same-agent harness quality reports correctly observed that several concern signals were partly structural, then suggested making missing post-turn hooks, task-state semantics, or learning-loop capture hard failures. Current ADRs and lessons showed some of those weak signals were deliberate product contracts.
+
+**Root cause:** Quality reports detect weak presentation, but they do not automatically know which non-gating limits are intentional.
+
+**Prevention:** Before implementing recommendations that change audit status, scoring, or setup gates, reconcile the suggestion against current ADRs and lessons. If the report is right about presentation but wrong about gating, preserve the pass/fail contract and add an explicit limit, warning, or prompt note instead. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`) and `src/cli/prompt/compose-quality.ts` (search: `metrics=${concern.metrics}`).

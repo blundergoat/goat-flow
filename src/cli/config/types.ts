@@ -37,6 +37,11 @@ interface LearningLoopConfig {
   };
 }
 
+/** One togglable goat-flow hook entry from `.goat-flow/config.yaml`. */
+interface GoatFlowHookConfig {
+  enabled: boolean;
+}
+
 /** Normalized config shape after parsing and validating .goat-flow/config.yaml. */
 export interface GoatFlowConfig {
   version: string;
@@ -70,6 +75,8 @@ export interface GoatFlowConfig {
     /** Advisory check ids the project has opted out of. Silenced checks render as `acknowledged` and do not affect concern status. */
     acknowledge: string[];
   };
+  /** Project-wide toggles for goat-flow-shipped hook scripts. */
+  hooks: Record<string, GoatFlowHookConfig>;
   /**
    * Raw skill-quality configuration block (parsed but not normalized here).
    * Consumed by `loadQualityConfig` in `src/cli/quality/quality-config.ts`,

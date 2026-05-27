@@ -32,7 +32,7 @@ Separate the subject from the body with a blank line.
 | `security` | Security hardening, deny-policy, or sandbox change |
 
 Pick the scope from the area that actually changed (`dashboard`, `audit-command`,
-`deny-dangerous`, `learning-loop`, `quality`, `ci`, `version`, …). One scope per
+`guardrails`, `learning-loop`, `quality`, `ci`, `version`, …). One scope per
 commit - if scopes diverge, split the commit.
 
 ## Subject-Line Rules (the part agents get wrong)
@@ -50,8 +50,8 @@ or move the second axis into a bulleted body.
 ### Bad → Good rewrites
 
 ```
-BAD:  feat(deny-dangerous): enhance command checks for combined shell flags and git push scenarios
-GOOD: feat(deny-dangerous): deny `bash -lc` chains and protected-branch git push
+BAD:  feat(guardrails): enhance command checks for combined shell flags and git push scenarios
+GOOD: feat(guardrails): deny `bash -lc` chains and protected-branch git push
 
 BAD:  refactor(docs): streamline artifact routing instructions and enhance clarity
 GOOD: refactor(docs): move artifact routing rules from CLAUDE.md to artifact-routing.md

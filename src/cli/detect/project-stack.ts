@@ -30,35 +30,42 @@ interface SetupStackSummary {
   commands: SetupCommandSlots;
 }
 
+/** Package-dependency row that turns Node manifests into canonical framework ids. */
 interface NodeFrameworkSignal {
   language: string;
   packages: string[];
 }
 
+/** Shared shipped-data shape for detector rows that match paths, globs, or both. */
 interface NamedPathGlobSignal {
   paths: string[];
   globs: string[];
 }
 
+/** Extra language detector row loaded from the project-stack data table. */
 interface LanguagePathGlobSignal extends NamedPathGlobSignal {
   language: string;
 }
 
+/** Tool detector row for code generation and deployment signals. */
 interface ToolPathGlobSignal extends NamedPathGlobSignal {
   tool: string;
 }
 
+/** Setup dashboard framework marker that scans selected files for package/config tokens. */
 interface SetupFrameworkMarkerSignal {
   name: string;
   files: string[];
   markers: string[];
 }
 
+/** Node test-framework row used to choose the most specific npm test command. */
 interface NodeTestFrameworkSignal {
   name: string;
   packages: string[];
 }
 
+/** Parsed schema for workflow/project-stack-data.json after startup validation. */
 interface ProjectStackData {
   nodeFrameworks: NodeFrameworkSignal[];
   nodeTestFrameworks: NodeTestFrameworkSignal[];
@@ -78,23 +85,27 @@ interface ProjectStackData {
 /** Relative path to the shipped project-stack data tables. */
 const PROJECT_STACK_DATA_PATH = "workflow/project-stack-data.json";
 
-/** Check whether a parsed JSON value is a plain object. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Treat arrays as invalid records because every shipped data row uses named fields. */
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
-/** Read a string array from the project-stack data JSON. */
-function readStringArray(value: unknown, label: string): string[] {
+/** Read a string array from shipped data; throws with the table label on schema drift. */
+function readStringArray(rawValue: unknown, label: string): string[] {
   if (
-    !Array.isArray(value) ||
-    value.some((entry) => typeof entry !== "string")
+    !Array.isArray(rawValue) ||
+    rawValue.some((entry) => typeof entry !== "string")
   ) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} array`);
   }
-  return [...value];
+  return [...rawValue];
 }
 
-/** Read language/path/glob signal rows from the project-stack data JSON. */
+/** Read language/path/glob rows; throws with row indexes so bad shipped data is fixable. */
 function readLanguageSignals(
   value: unknown,
   label: string,
@@ -116,12 +127,15 @@ function readLanguageSignals(
   });
 }
 
-/** Read tool/path/glob signal rows from the project-stack data JSON. */
-function readToolSignals(value: unknown, label: string): ToolPathGlobSignal[] {
-  if (!Array.isArray(value)) {
+/** Read tool/path/glob rows; throws before detector startup can use malformed data. */
+function readToolSignals(
+  rawValue: unknown,
+  label: string,
+): ToolPathGlobSignal[] {
+  if (!Array.isArray(rawValue)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
   }
-  return value.map((entry, index) => {
+  return rawValue.map((entry, index) => {
     if (!isRecord(entry) || typeof entry.tool !== "string") {
       throw new Error(
         `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,
@@ -199,20 +213,20 @@ function readNodeTestFrameworkSignals(
   });
 }
 
-/** Read the formatter map from the project-stack data JSON. */
-function readFormatterMap(value: unknown): Record<string, string[]> {
-  if (!isRecord(value)) {
+/** Read formatter mappings; throws if a language maps to anything other than strings. */
+function readFormatterMap(rawValue: unknown): Record<string, string[]> {
+  if (!isRecord(rawValue)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid formatterMap`);
   }
   return Object.fromEntries(
-    Object.entries(value).map(([language, formatters]) => [
+    Object.entries(rawValue).map(([language, formatters]) => [
       language,
       readStringArray(formatters, `formatterMap.${language}`),
     ]),
   );
 }
 
-/** Load the shipped project-stack detection tables. */
+/** Load shipped detector tables once; throws during startup when the JSON schema drifts. */
 function loadProjectStackData(): ProjectStackData {
   const path = getTemplatePath(PROJECT_STACK_DATA_PATH);
   const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown;
@@ -535,7 +549,7 @@ function readFirstExistingFile(
   return null;
 }
 
-/** Detect python languages. */
+/** Root Python manifests can name framework dependencies that plain file globs cannot. */
 function detectPythonLanguages(fs: ReadonlyFS): string[] {
   const languages: string[] = ["python"];
   const pyContent =
@@ -652,7 +666,7 @@ function detectRubyStack(fs: ReadonlyFS): DetectorResult {
   return {};
 }
 
-/** Detect java languages. */
+/** Java framework identity comes from manifest content because file names only reveal the build tool. */
 function detectJavaLanguages(manifest: string): string[] {
   const languages: string[] = ["java"];
   if (/spring-boot/i.test(manifest)) {
@@ -698,7 +712,7 @@ function detectDotnetStack(fs: ReadonlyFS): DetectorResult {
   return {};
 }
 
-/** Detect shell scripts */
+/** Treat shell as a language when scripts exist anywhere, even without a package manifest. */
 function detectShellScripts(fs: ReadonlyFS): DetectorResult {
   if (fs.existsGlob("**/*.sh")) {
     return { languages: ["bash"] };
@@ -790,7 +804,7 @@ function hasJinjaSignal(fs: ReadonlyFS): boolean {
     });
 }
 
-/** Detect extra languages. */
+/** Apply data-table language signals after primary manifest detectors have run. */
 function detectExtraLanguages(fs: ReadonlyFS): string[] {
   const languages: string[] = [];
 
@@ -816,7 +830,16 @@ function applyMarkdownFallback(fs: ReadonlyFS, languages: string[]): void {
   }
 }
 
-/** Detect languages and workflow commands from project manifests and source files. */
+/**
+ * Detect languages and workflow commands from manifests and source files.
+ *
+ * Detector order intentionally preserves command priority: the first detector
+ * that supplies a build/test/lint/format command wins, while language labels are
+ * merged across all detectors.
+ *
+ * @param fs Read-only project filesystem abstraction.
+ * @returns Canonical stack info, source count, and richer project signals.
+ */
 export function detectStack(fs: ReadonlyFS): StackInfo {
   // Order matters: first detector to provide a command wins (matches original priority)
   const detectorResults: DetectorResult[] = [
@@ -910,7 +933,12 @@ function buildSetupFrameworks(
   return frameworks;
 }
 
-/** Build the setup-view stack summary from the canonical detector output. */
+/**
+ * Build the setup-view stack summary from the canonical detector output.
+ *
+ * @param fs Read-only project filesystem abstraction.
+ * @returns Dashboard-friendly labels and command slots derived from `detectStack`.
+ */
 export function detectSetupStack(fs: ReadonlyFS): SetupStackSummary {
   const stack = detectStack(fs);
   return {
@@ -983,7 +1011,7 @@ function detectLLMIntegration(fs: ReadonlyFS): boolean {
 }
 
 /** Detect static-analysis tooling from project files. */
-// eslint-disable-next-line complexity -- detection covers many tool/config combos; extracting would fragment the detector
+// eslint-disable-next-line complexity -- intentional: detection covers many tool/config combos; extracting would fragment the detector.
 function detectStaticAnalysis(
   fs: ReadonlyFS,
 ): Array<{ tool: string; level: string | null }> {
@@ -1068,7 +1096,7 @@ function detectStaticAnalysis(
   return staticAnalysis;
 }
 
-/** Detect compliance signals. */
+/** Compliance-sensitive docs are signal-only; audit policy decides whether they matter. */
 function detectComplianceSignals(fs: ReadonlyFS): boolean {
   return fileContainsPattern(
     fs,

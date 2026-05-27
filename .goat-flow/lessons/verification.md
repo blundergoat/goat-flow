@@ -1,6 +1,74 @@
 ---
 category: verification
-last_reviewed: 2026-05-17
+last_reviewed: 2026-05-28
+---
+
+## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
+
+**Status:** active | **Created:** 2026-05-15 | **Merged during:** M11 learning-loop consolidation
+
+**What happened:** The first `scripts/mutation-test.sh` audit-engine run failed before mutation testing because Stryker copied gitignored `.goat-flow/scratchpad` content into its sandbox. After local-state ignores were added, the dry run still failed because instrumented source broke learning-loop semantic-anchor checks and the sandbox lacked `dist/cli/cli.js` for the main-module guard.
+
+**Root cause:** Mutation sandboxes are not the same as the live checkout. They copy and instrument files, so repo self-inspection tests and local working artifacts can break before a mutation campaign begins.
+
+**Prevention:** For mutation-test helpers, run `bash scripts/mutation-test.sh '<target>' -- --dryRunOnly` before a full campaign. Keep Stryker sandbox inputs focused on committed anchors, ignore `.goat-flow/logs/`, `.goat-flow/scratchpad/`, and `.goat-flow/tasks/` local contents, and use mutation-safe test selection for source-text and built-dist guards. Evidence anchors: `scripts/mutation-test.sh` (search: `ignorePatterns`) and `scripts/mutation-test.sh` (search: `--test-skip-pattern`).
+
+---
+
+## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** During the gruff docs cleanup, the first pass on `src/cli/server/decoders.ts` added comments that explained the intent to a maintainer, but `npx gruff-ts analyse src/cli/server/decoders.ts` still reported `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, and `docs.missing-why-for-complex-code`. The comments did not use analyzer-recognised language for limits, reporting behavior, or why complex control flow exists. A second pass, after checking the gruff rule vocabulary, cleared the docs findings.
+
+**Recurrence 2026-05-25:** During the same cleanup, a naming improvement in `src/dashboard/dashboard-terminal.ts` changed queued paste metadata from `delayed` to `shouldDelaySubmit`. Focused gruff and runtime tests passed, but `npm run typecheck` caught stale ambient and VM-test helper shapes in `src/dashboard/globals.d.ts` and `test/unit/dashboard-terminal-launch.test.ts`. Comment cleanup can still touch type surfaces when a rename is the better comment.
+
+**Root cause:** I treated "this comment makes sense to me" as enough before checking whether the actual analyzer accepted it, and later treated a local rename as complete before checking parallel ambient declarations. The `code-comments.md` playbook gives the quality bar, but gruff's docs rules also have concrete vocabulary expectations that must be verified with the targeted command.
+
+**Prevention:** For gruff-driven comment work, read `.goat-flow/skill-playbooks/code-comments.md`, patch one file or cohesive cluster, then immediately rerun `npx gruff-ts analyse <path>`. If docs findings remain, tighten the comment around the exact rule remediation instead of moving on. When a rename is part of making a comment unnecessary, grep the old identifier and run `npm run typecheck` before declaring the pass done. Evidence anchors: `src/cli/server/decoders.ts` (search: `Parse JSON; reports malformed bodies`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
+
+## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
+
+**Status:** active | **Created:** 2026-05-28
+
+**What happened:** While verifying `workflow/hooks/gruff-code-quality.sh` against `/home/devgoat/projects/gruff-workspace/gruff-go`, `gruff-php`, `gruff-py`, and `gruff-rs`, the first hook-shaped probes failed or produced no output for reasons unrelated to JSON compatibility. Placeholder `.gruff-*.yaml` files such as `rules: {}` were invalid or too incomplete for several analyzers, and the Rust probe replaced `PATH` with only gruff binary directories plus `/usr/bin:/bin`, hiding `cargo` from `gruff-rs/bin/gruff-rs`.
+
+**Root cause:** I treated sibling gruff CLIs as interchangeable binaries but skipped two runtime surfaces that are part of the hook contract: schema-bearing project config files and wrapper-script dependencies inherited from the caller's normal `PATH`.
+
+**Prevention:** When testing `gruff-code-quality.sh` against sibling gruff implementations, copy or reference each project's real `.gruff-*.yaml`, preserve the normal `PATH` while prefixing local gruff binaries, and run both checks: direct `analyse --format json` schema probes and hook-shaped probes with changed ranges. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `discover_binary`), `.goat-flow/tasks/1.8.0/M14-gruff-changed-line-hook-filter.md` (search: `gruff family hook probes`).
+
+## Lesson: RegExp constructor assertions need a real escape helper
+
+**Status:** active | **Created:** 2026-05-28
+
+**What happened:** While adding a hook smoke test for extension-based gruff binary selection, the first assertion escaped path separators for a `RegExp` constructor with `replaceAll("/", "\\\\/")`. The hook output used the expected slash-separated PHP fixture path, but the generated regex expected an extra backslash and the focused test failed.
+
+**Root cause:** I treated slash escaping for regex literals and `RegExp` constructor strings as the same problem. In constructor strings, `/` is not a delimiter and does not need escaping; only regex metacharacters do.
+
+**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. Evidence anchors: `test/integration/gruff-code-quality-smoke.test.ts` (search: `function escapeRegex`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`).
+
+## Lesson: Harness fixture counts must match the reported unit
+
+**Status:** active | **Created:** 2026-05-25
+
+**What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
+
+**Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
+
+**Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
+
+## Lesson: Validators can require explicit inventories and phrases despite README pointers
+
+**Status:** active | **Created:** 2026-05-24
+
+**What happened:** While implementing M07, I changed `.goat-flow/architecture.md` to point at `.goat-flow/skill-playbooks/README.md` instead of explicitly listing every top-level playbook. The targeted audit then failed with `skill-playbook-inventory-drift`, because `src/cli/audit/check-factual-claims.ts` (search: `driftSkillPlaybookInventory`) checks whether `.goat-flow/architecture.md` and `.goat-flow/code-map.md` include each live top-level `.goat-flow/skill-playbooks/*.md` filename.
+
+**Same-session recurrence:** I then changed the instruction-file Key Resources line to point only at the README index. `bash scripts/preflight-checks.sh` failed the `Instruction parity` gate because `scripts/check-instruction-parity.mjs` (search: `tool-playbook Key Resources`) requires the exact browser-use/page-capture example paths and the phrase `read BEFORE declaring a tool unavailable`.
+
+**Root cause:** I optimized for low-drift prose without reading the live validators that own those text contracts. The README pointer was human-useful but did not satisfy the machine-readable cross-doc checks.
+
+**Prevention:** Before replacing an explicit inventory or required phrase with an index pointer, grep the content-quality, factual-claims, parity, and preflight checks for that surface. If a validator checks direct filename or phrase inclusion, keep the explicit words and add the README pointer around them instead of relying on an indirect reference alone.
+
 ---
 
 ## Lesson: Header-only edits leave bodies contradicting the new scope
@@ -9,18 +77,18 @@ last_reviewed: 2026-05-17
 
 **What happened:** Updated six milestone files across `.goat-flow/tasks/1.7.0/` and `.goat-flow/tasks/1.8.0/`: bumped five milestones (M02, M06, M15, M16, M17) and reframed M11 from "observer event trail" to "evidence envelope + dashboard session trace". For each touched milestone I edited the Status/Depends-on header and (for M11) the Objective + Tasks, but left the rest of the body untouched. A subsequent Codex review caught five contradictions I should have caught before claiming done:
 
-- **M09** got a new `**Status:** planned, conditional (doc-only)` header, but the Tasks list still required `assertAutoCaptureAllowed` helper, the Exit Criteria still demanded helper-bound enforcement, and the Manual Testing Gate still asked for helper-rejection scenarios — sending implementers in the opposite direction from the header.
-- **M14** still said `Depends on: none` even though it writes/removes files in agent skill mirror directories — clearly M13 (path validation) and M05 (manifest-backed capabilities) territory.
-- **M17** Depends-on said "M17 wraps M14" but Scope kept "out of scope: CLI skill-management commands from M14" and Deferred kept "CLI `goat-flow skill list/add/remove` commands from M14" — treating M14 as parallel/future work in the same file that named M14 as a prerequisite.
+- **M09** got a new `**Status:** planned, conditional (doc-only)` header, but the Tasks list still required `assertAutoCaptureAllowed` helper, the Exit Criteria still demanded helper-bound enforcement, and the Manual Testing Gate still asked for helper-rejection scenarios - sending implementers in the opposite direction from the header.
+- **M14** still said `Depends on: none` even though it writes/removes files in agent skill mirror directories - clearly M13 (path validation) and M05 (manifest-backed capabilities) territory.
+- **M17** Depends-on said "M17 wraps M14" but Scope kept "out of scope: CLI skill-management commands from M14" and Deferred kept "CLI `goat-flow skill list/add/remove` commands from M14" - treating M14 as parallel/future work in the same file that named M14 as a prerequisite.
 - **M16** retained a `confidence` field in the insight schema, directly violating ADR-018 / AGENTS.md red-flag #4 (numeric confidence is itself a hedge). Values weren't numeric (`derived|inferred|observed`) but the field name invites the violation. Renamed to `evidenceBasis` with `direct|derived|heuristic`.
-- **M11** content was rewritten in full but the filename `M11-local-observer-event-trail.md` retained the abandoned framing — a slow-burn revival hazard for the next reader (the file is now `M11-evidence-envelope-dashboard-session-trace.md`).
+- **M11** content was rewritten in full but the filename `M11-local-observer-event-trail.md` retained the abandoned framing - a slow-burn revival hazard for the next reader (the file is now `M11-evidence-envelope-dashboard-session-trace.md`).
 
-**Root cause:** Treated the Status/Depends-on header as if it *were* the scope change. When a milestone's scope shifts — status, dependency, framing, doctrine alignment — the change ripples through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, sometimes the filename, and any field names that survived from the original spec. A header-only edit leaves the body pointing implementers in the opposite direction from the new header. This is the planning-doc surface variant of "Behavior-scope changes need assertion updates before the first focused run" (below): same pattern, different artifact.
+**Root cause:** Treated the Status/Depends-on header as if it *were* the scope change. When a milestone's scope shifts - status, dependency, framing, doctrine alignment - the change ripples through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, sometimes the filename, and any field names that survived from the original spec. A header-only edit leaves the body pointing implementers in the opposite direction from the new header. This is the planning-doc surface variant of "Behavior-scope changes need assertion updates before the first focused run" (below): same pattern, different artifact.
 
 **Prevention:** When applying a scope change to a milestone or planning doc:
 1. Re-read the entire file end-to-end *after* the header edit, not just the area you changed.
 2. Grep within the file for the old scope's keywords (helper, deferred-as-future, dependency-name) and confirm each hit still makes sense after the change.
-3. Check the file's name — does it match the new scope, or is it a slow-burn revival hazard?
+3. Check the file's name - does it match the new scope, or is it a slow-burn revival hazard?
 4. Check for doctrine violations (`confidence` numeric-hedge field names, `file:line` evidence, etc.) that may have been in the original spec and survived the bump untouched.
 5. In the completion summary, list each touched milestone with *what was changed where* (header / scope / tasks / exit criteria), so a reviewer can do their own sweep without re-reading every file from scratch.
 
@@ -32,9 +100,9 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 
 **Status:** active | **Created:** 2026-05-09
 
-**What happened:** Verifying the new dashboard skill-quality workbench in a browser, ran `npx goat-flow dashboard .` to launch the dashboard. The Quality view loaded but the Skill Quality artifact list was empty — `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
+**What happened:** Verifying the new dashboard skill-quality workbench in a browser, ran `npx goat-flow dashboard .` to launch the dashboard. The Quality view loaded but the Skill Quality artifact list was empty - `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
 
-**Root cause:** `npx goat-flow ...` resolves the published `@blundergoat/goat-flow` from `~/.npm/_npx/...`, not the local source tree. The dashboard CLI from the published package bundles the package's own compiled assets — local source edits to `src/dashboard/app.ts` are invisible to it.
+**Root cause:** `npx goat-flow ...` resolves the published `@blundergoat/goat-flow` from `~/.npm/_npx/...`, not the local source tree. The dashboard CLI from the published package bundles the package's own compiled assets - local source edits to `src/dashboard/app.ts` are invisible to it.
 
 **Fix:** Use `npm run dev` (which runs `tsc && npm run build:dashboard && node dist/cli/cli.js dashboard . --dev`) to build and serve the local source. After that, `curl ... /assets/app.js | grep -c loadSkillQualityInventory` returned `2` and the workbench rendered correctly.
 
@@ -51,6 +119,8 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 **Recurrence 2026-05-07:** Changed dashboard `/goat-plan` launch context from inline-only to Step 0/File-Write mode semantics. Focused skill and dashboard terminal tests passed, but the first full `npm test` failed because `test/unit/preset-prompts.test.ts` still asserted the old `treat bare task paths as read-only context` phrase. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `goat-plan global mode`), `test/unit/preset-prompts.test.ts` (search: `File-Write modes may create target`).
 
 **Recurrence 2026-05-09:** Changed dashboard terminal launch prompts from runner argv/env delivery to PTY paste delivery. Focused terminal-spawn and dashboard-terminal tests passed, but the first full `npm test` failed because `test/smoke/dashboard-endpoints.test.ts` still expected `GOAT_PROMPT`, `GOAT_PROMPT_FLAG`, and `-i "$GOAT_PROMPT"` in `buildTerminalSpawnSpec` output. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/smoke/dashboard-endpoints.test.ts` (search: `injects POSIX launch prompts through PTY input`).
+
+**Recurrence 2026-05-24:** Changed the instruction-file tool-playbook router row from a partial filename list to a README-index description. The first focused `node --import tsx --test test/unit/audit-command.test.ts` run failed because `test/unit/audit-command.test.ts` still asserted the old router-label regex `Tool playbooks (CLI/MCP availability checks: browser-use, page-capture, skill-quality-testing)`. Evidence anchors: `workflow/setup/02-instruction-file.md` (search: `README index for CLI/MCP availability checks`), `test/unit/audit-command.test.ts` (search: `keeps setup snippets aligned with the audit remediation contract`).
 
 **Root cause:** Updated the route contract and one setup-prompt test, but missed the adjacent assertion that encoded the previous harness-only remediation behavior.
 
@@ -155,26 +225,6 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 
 ---
 
-## Lesson: Missing RULES.md went undetected because failing tests were dismissed as pre-existing
-
-**Status:** historical | **Created:** 2026-04-16 | **Reason:** RULES.md deleted; "never dismiss test failures as pre-existing" rule survives as an active principle elsewhere in this file
-
-**What happened:** `RULES.md` existed in `.agents/skills/goat/` (codex/gemini) but was missing from `.claude/skills/goat/`. The audit code in `check-agent-setup.ts` explicitly checked for it. The goat dispatcher's `SKILL.md` told the agent to "Read RULES.md in this directory immediately." But:
-1. The install script (`install-goat-flow.sh`) only copied `SKILL.md` per skill - never copied `RULES.md`.
-2. No template for `RULES.md` existed in `workflow/skills/`.
-3. The 2 test failures (`audit on well-configured project`, `audit --harness`) were caused by this + the skill count bug, but were treated as "pre-existing failures" across an entire session of work.
-
-**Root cause:** Two compounding failures. First, the install script was never updated to copy RULES.md when the audit check was added - the check and the installer were authored independently. Second, the resulting test failures were dismissed as background noise instead of investigated. Every test run showed "62 pass / 2 fail" and the response was "same 2 pre-existing failures, not from my change" - a correct but useless observation that prevented anyone from reading the actual failure messages.
-
-**Fix:** Created a rules template for the goat skill. Updated install script to copy it. (RULES.md was later deleted entirely; its 2 unique lines were moved to `skill-preamble.md`.)
-
-**Prevention:**
-1. Never dismiss test failures as "pre-existing" without reading what they actually assert. If 2 tests fail, read the 2 failure messages.
-2. When adding an audit check that requires a file, also update the install script that creates that file. Audit checks and install scripts must be updated together.
-3. A contract test should verify that every file the audit checks for is also produced by the install script - otherwise the audit gates on something the installer never creates.
-
----
-
 ## Lesson: Redundant context files survive architecture changes because nobody measures token cost
 
 **Status:** active | **Created:** 2026-04-16
@@ -276,5 +326,3 @@ Applies whenever the change is: a status flip (`planned → conditional`, `plann
 **Root cause:** Treated the installed Copilot hook config as the only file needing the UX copy change. The workflow template is the parity source for installed agent configs, so any installed hook-message change needs the template change in the same patch.
 
 **Prevention:** When changing `.github/hooks/hooks.json`, grep `workflow/hooks/agent-config/` for the same hook payload and update the matching template before the first preflight run. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
-
----

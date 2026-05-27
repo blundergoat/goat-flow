@@ -25,7 +25,7 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 
 A framework that gives AI coding agents structured planning (with multi-perspective critique via `/goat-critique`), durable project knowledge, local continuity notes, and mechanical safety guardrails. Three layers:
 
-1. **Instruction file** (CLAUDE.md / AGENTS.md / GEMINI.md / `.github/copilot-instructions.md`) - The execution loop, autonomy tiers, definition of done, and router table. Loaded every turn.
+1. **Instruction file** (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`) - The execution loop, autonomy tiers, definition of done, and router table. Loaded every turn.
 2. **Skills** (6 functional + 1 dispatcher) - Plan (milestone task files), critique (`/goat-critique` multi-perspective analysis), QA, review, secure, debug. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
 3. **.goat-flow/ learning loop** - Footguns (architectural traps with file evidence), lessons (behavioural mistakes), decisions (ADRs), patterns (successful approaches), and optional local instruction files. Durable project knowledge lives in committed files; session logs and task files stay local to the checkout.
 
@@ -41,6 +41,6 @@ Create `.goat-flow/logs/sessions/` if it doesn't exist, then use one shared loca
 
 ## File ownership
 
-Setup creates/edits files in `.goat-flow/`, the agent's instruction file (CLAUDE.md / AGENTS.md / GEMINI.md / `.github/copilot-instructions.md`), and the agent's own directories (see agent config file for "Owns" list - skills, hooks, settings). Everything else in the project is hands-off - do not modify source code, tests, CI, or other agents' files.
+Setup creates/edits files in `.goat-flow/`, the agent's instruction file (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`), and the agent's own directories (see agent config file for "Owns" list - skills, hooks, settings). Everything else in the project is hands-off - do not modify source code, tests, CI, or other agents' files.
 
 NEXT: proceed to `02-instruction-file.md`

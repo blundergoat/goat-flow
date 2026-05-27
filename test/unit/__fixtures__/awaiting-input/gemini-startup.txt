@@ -1,0 +1,72 @@
+[8m[?u]11;?\[>q[>4;?m[c[2K[0m]0;◇  Ready (goat-flow-capture-gemini-C2x3o2)                                      [?25l
+[38;5;244m╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[39m
+[38;5;244m│[39m                                                                                                                      [38;5;244m│[39m
+[38;5;244m│[39m ⠋ Waiting for authentication... (Press Esc or Ctrl+C to cancel)                                                      [38;5;244m│[39m
+[38;5;244m│[39m                                                                                                                      [38;5;244m│[39m
+[38;5;244m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+[?25l[?1006l[?1002l[?1004h]0;◇  Ready (goat-flow-capture-gemini-C2x3o2)                                      [?2004h[2J[3J[H[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+ [38;5;229m╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [1m[38;5;231mDo you trust the files in this folder?[22m[39m                                                                             [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mTrusting a folder allows Gemini CLI to load its local configurations, including custom commands, hooks, MCP[39m        [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mservers, agent skills, and settings. These configurations could execute code on your behalf or change the behavior[39m [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mof the CLI.[39m                                                                                                        [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;194m[48;5;28m●[39m [38;5;194m1.[39m [38;5;194mTrust folder (goat-flow-capture-gemini-C2x3o2)[39m[49m                                                                [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m2.[39m [38;5;231mTrust parent folder (tmp)[39m                                                                                     [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m3.[39m [38;5;231mDon't trust[39m                                                                                                   [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+ [38;5;74m▝[38;5;110m▜[38;5;140m▄[38;5;139m [38;5;174m [39m   [1m[38;5;231mGemini CLI[22m[38;5;248m v0.42.0[39m
+ [38;5;74m [38;5;110m [38;5;140m▝[38;5;139m▜[38;5;174m▄[39m
+ [38;5;74m [38;5;110m▗[38;5;140m▟[38;5;139m▀[38;5;174m [39m   [1m[38;5;231mSigned in with Google[22m[38;5;248m /auth[39m
+ [38;5;74m▝[38;5;110m▀[38;5;140m  [38;5;139m [38;5;174m [39m  [1m[38;5;231mPlan:[22m Gemini Code Assist in Google One AI Pro[38;5;248m /upgrade[39m
+
+[38;5;229m╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[39m
+[38;5;229m│[39m [1m[38;5;229mGemini CLI is transitioning to the new Antigravity CLI for Google One and unpaid tier (Gemini Code Assist for[22m[39m        [38;5;229m│[39m
+[38;5;229m│[39m [1m[38;5;229mindividuals) users.[22m[39m                                                                                                  [38;5;229m│[39m
+[38;5;229m│[39m [38;5;231mWhat's Changing: We are unifying our tools into a single, multi-agent platform called Antigravity, with Antigravity[39m  [38;5;229m│[39m
+[38;5;229m│[39m [38;5;231mCLI now available. Gemini CLI will stop serving requests for Google One and unpaid tiers starting June 18th. Please[39m  [38;5;229m│[39m
+[38;5;229m│[39m [38;5;231mmigrate to Antigravity CLI before this date to avoid disruption to your workflow.[39m                                    [38;5;229m│[39m
+[38;5;229m│[39m [38;5;231mTo learn more visit: https://goo.gle/gemini-cli-migration[39m                                                            [38;5;229m│[39m
+[38;5;229m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+
+[38;5;229mℹ Skipping project agents due to untrusted folder. To enable, ensure that the project root is trusted.[39m
+[?25l
+ [38;5;229m╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [1m[38;5;231mDo you trust the files in this folder?[22m[39m                                                                             [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mTrusting a folder allows Gemini CLI to load its local configurations, including custom commands, hooks, MCP[39m        [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mservers, agent skills, and settings. These configurations could execute code on your behalf or change the behavior[39m [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mof the CLI.[39m                                                                                                        [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;194m[48;5;28m●[39m [38;5;194m1.[39m [38;5;194mTrust folder (goat-flow-capture-gemini-C2x3o2)[39m[49m                                                                [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m2.[39m [38;5;231mTrust parent folder (tmp)[39m                                                                                     [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m3.[39m [38;5;231mDon't trust[39m                                                                                                   [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+ [38;5;229m╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [1m[38;5;231mDo you trust the files in this folder?[22m[39m                                                                             [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mTrusting a folder allows Gemini CLI to load its local configurations, including custom commands, hooks, MCP[39m        [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mservers, agent skills, and settings. These configurations could execute code on your behalf or change the behavior[39m [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231mof the CLI.[39m                                                                                                        [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;194m[48;5;28m●[39m [38;5;194m1.[39m [38;5;194mTrust folder (goat-flow-capture-gemini-C2x3o2)[39m[49m                                                                [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m2.[39m [38;5;231mTrust parent folder (tmp)[39m                                                                                     [38;5;229m│[39m
+ [38;5;229m│[39m [38;5;231m [39m [38;5;231m3.[39m [38;5;231mDon't trust[39m                                                                                                   [38;5;229m│[39m
+ [38;5;229m│[39m                                                                                                                    [38;5;229m│[39m
+ [38;5;229m╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[39m
+
+
+[38;5;229mPress Ctrl+C again to exit.[39m

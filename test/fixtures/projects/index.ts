@@ -97,7 +97,7 @@ export const STUB_AGENT_PROFILE: AgentProfile = {
   skillsDir: ".claude/skills",
   hooksDir: ".claude/hooks",
   denyMechanism: { type: "settings-deny", path: ".claude/settings.json" },
-  denyHookFile: ".claude/hooks/deny-dangerous.sh",
+  denyHookFile: ".claude/hooks/guard-repository-writes.sh",
   localPattern: "*/CLAUDE.md",
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
@@ -149,7 +149,7 @@ export function stubAgentFacts(
       denyBlocksPipeToShell: false,
       denyBlocksCloudDestructive: false,
       denyIsRegistered: true,
-      denyRegisteredPath: ".claude/hooks/deny-dangerous.sh",
+      denyRegisteredPath: ".claude/hooks/guard-repository-writes.sh",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,
@@ -246,7 +246,6 @@ export function makeSharedFacts(): ProjectFacts["shared"] {
     ignoreFiles: {
       copilotignore: false,
       cursorignore: false,
-      geminiignore: false,
     },
     gitignore: { exists: true, hasRequiredEntries: true },
     preflightScript: { exists: false },

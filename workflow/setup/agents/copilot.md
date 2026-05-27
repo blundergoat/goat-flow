@@ -16,7 +16,7 @@
 
 **Ask First:** Before touching non-Copilot surfaces, state boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
-**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.claude/`, `.codex/`, `.gemini/`, or `.agents/` during Copilot setup unless the user explicitly widens scope.
+**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.codex/`, or `.agents/` during Copilot setup unless the user explicitly widens scope.
 
 ## Hard Rules
 
@@ -31,7 +31,7 @@
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md` — read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
@@ -118,4 +118,4 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Copilot skills/config | `.github/skills/`, `.github/git-commit-instructions.md`, `.github/hooks/`, `.copilotignore` when installed |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` when present |
+| Peer instructions | `CLAUDE.md`, `AGENTS.md` when present |

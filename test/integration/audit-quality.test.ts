@@ -20,7 +20,7 @@ import {
 } from "../fixtures/projects/index.js";
 
 // ---------------------------------------------------------------------------
-// Cached repo audits — this file runs 4 audits against the goat-flow repo
+// Cached repo audits - this file runs 4 audits against the goat-flow repo
 // itself (1× build-only, 3× harness). Each audit is ~6–12s; lazy-caching by
 // (agent, harness) key prevents repeats. Tests must treat reports as read-only.
 // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ describe("deny-hook-registered harness check", () => {
             ...stubAgentFacts().hooks,
             denyExists: true,
             denyIsRegistered: true,
-            denyRegisteredPath: ".claude/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".claude/hooks/guard-repository-writes.sh",
           },
         }),
       ],
@@ -228,7 +228,7 @@ describe("deny-hook-registered harness check", () => {
             ...stubAgentFacts().hooks,
             denyExists: true,
             denyIsRegistered: true,
-            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+            denyRegisteredPath: ".codex/hooks/guard-repository-writes.sh",
           },
         }),
       ],
@@ -237,8 +237,8 @@ describe("deny-hook-registered harness check", () => {
     assert.equal(result.status, "fail");
     const finding = result.findings.find((f) => f.includes("does not match"));
     assert.ok(finding, "should report path mismatch");
-    assert.ok(finding.includes(".codex/hooks/deny-dangerous.sh"));
-    assert.ok(finding.includes(".claude/hooks/deny-dangerous.sh"));
+    assert.ok(finding.includes(".codex/hooks/guard-repository-writes.sh"));
+    assert.ok(finding.includes(".claude/hooks/guard-repository-writes.sh"));
   });
 });
 

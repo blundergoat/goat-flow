@@ -56,19 +56,28 @@ type Recommendation =
   | "needs-human-review";
 type MetricSeverity = "ok" | "warn" | "fail" | "n/a";
 
+/**
+ * Lower-ranked subtype match shown to reviewers when classification is ambiguous.
+ */
 interface ClassificationAlternative {
   subtype: ArtifactSubtype;
   score: number;
 }
 
+/**
+ * Applied scoring profile plus the evidence explaining why that subtype won.
+ */
 interface ClassificationResult {
   detectedSubtype: ArtifactSubtype;
-  /** 0-1 — how strongly the top subtype dominates alternatives. */
+  /** 0-1 - how strongly the top subtype dominates alternatives. */
   confidence: number;
   alternatives: ClassificationAlternative[];
   reasoning: string[];
 }
 
+/**
+ * Semantic shape detected independently from the scoring profile to catch misfiled artifacts.
+ */
 interface ShapeDetectionResult {
   detectedShape: ArtifactSubtype;
   confidence: number;
@@ -76,6 +85,9 @@ interface ShapeDetectionResult {
   reasoning: string[];
 }
 
+/**
+ * Inventory record surfaced by the CLI and dashboard; paths stay project-relative.
+ */
 interface ArtifactEntry {
   id: string;
   name: string;
@@ -86,12 +98,18 @@ interface ArtifactEntry {
   missingMirrors?: string[];
 }
 
+/**
+ * Recommendation hints emitted by fit metrics without altering the numeric score.
+ */
 interface MetricSignals {
   promote?: boolean;
   demote?: boolean;
   meta?: boolean;
 }
 
+/**
+ * One rubric row after subtype-specific max-score capping has been applied.
+ */
 interface MetricResult {
   metric: MetricName;
   label: string;
@@ -102,6 +120,9 @@ interface MetricResult {
   signals?: MetricSignals;
 }
 
+/**
+ * Stable public report schema consumed by CLI JSON, dashboard routes, and prompts.
+ */
 export interface SkillQualityReport {
   artifact: ArtifactEntry;
   totalScore: number;
@@ -120,6 +141,9 @@ export interface SkillQualityReport {
   fitNotes: string[];
 }
 
+/**
+ * Shared scorer input that carries both raw artifact text and composed context.
+ */
 interface MetricInput {
   rawContent: string;
   composedContent: string;
@@ -130,11 +154,17 @@ interface MetricInput {
   config: QualityConfig;
 }
 
+/**
+ * Read result with truncation notes kept separate from content so scoring remains deterministic.
+ */
 interface ReadContentResult {
   content: string;
   notes: string[];
 }
 
+/**
+ * Composed scoring surface plus provenance shown in `composedFrom`.
+ */
 interface ComposeResult {
   raw: string;
   composed: string;
@@ -164,7 +194,7 @@ const METRIC_LABELS: Record<MetricName, string> = {
 // Artifact Inventory
 // ---------------------------------------------------------------------------
 
-/** Return true when a directory entry is safe to inspect as a normal file tree. */
+/** Return true for normal entries; swallows symlink and disappearing-path errors as unsafe. */
 function isSafeEntry(path: string): boolean {
   try {
     return !lstatSync(path).isSymbolicLink();
@@ -173,11 +203,17 @@ function isSafeEntry(path: string): boolean {
   }
 }
 
+/**
+ * Candidate shared-reference file before duplicate names are expanded into stable ids.
+ */
 interface ReferenceCandidate {
   name: string;
   path: string;
 }
 
+/**
+ * Sanitize a path segment for reference ids without leaking separators into artifact ids.
+ */
 function referenceIdSegment(value: string): string {
   return (
     value
@@ -207,6 +243,9 @@ function referenceArtifactId(
   return id;
 }
 
+/**
+ * Build the synthetic path used when uploaded markdown is evaluated as a reference.
+ */
 function uploadedSharedReferencePath(name: string): string {
   return `.goat-flow/skill-playbooks/${name}.md`;
 }
@@ -260,7 +299,7 @@ function addMissingMirrorMetadata(
   };
 }
 
-// eslint-disable-next-line complexity -- inventory walks multiple artifact roots and dedupes mirrored skills into one canonical artifact
+// eslint-disable-next-line complexity -- intentional because inventory walks multiple artifact roots and dedupes mirrored skills into one canonical artifact
 export function discoverArtifacts(
   projectRoot: string,
   config: QualityConfig = loadQualityConfig(projectRoot),
@@ -341,6 +380,9 @@ export function findArtifact(
 // Content helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Guard resolved paths before any reference include can escape its allowed root.
+ */
 function isPathWithin(parent: string, child: string): boolean {
   const rel = relative(parent, child);
   if (rel === "") return true;
@@ -407,14 +449,23 @@ function readArtifactContent(
   };
 }
 
+/**
+ * Read an optional composed-context file, returning `null` when caps or safety checks reject it.
+ */
 function readOptionalText(path: string, config: QualityConfig): string | null {
   return readTextCapped(path, config)?.content ?? null;
 }
 
+/**
+ * Measure byte caps in UTF-8 so dashboard upload limits match HTTP body limits.
+ */
 function utf8ByteLength(content: string): number {
   return Buffer.byteLength(content, "utf-8");
 }
 
+/**
+ * Truncate without splitting multibyte characters in composed scoring surfaces.
+ */
 function truncateUtf8Bytes(content: string, maxBytes: number): string {
   const cap = Math.max(0, Math.floor(maxBytes));
   let used = 0;
@@ -435,7 +486,7 @@ interface ComposeOptions {
   scanDisk?: boolean;
 }
 
-// eslint-disable-next-line complexity -- composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case
+// eslint-disable-next-line complexity -- intentional because composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case
 function composeArtifactContent(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -520,7 +571,7 @@ function composeArtifactContent(
         sources.push(entry.name);
       }
     } catch {
-      // Directory unreadable: ignore — composition continues with what we have.
+      // Directory unreadable: ignore - composition continues with what we have.
     }
   }
 
@@ -539,19 +590,31 @@ function composeArtifactContent(
   };
 }
 
+/**
+ * Count exact Markdown heading levels so rubric section counts are deterministic.
+ */
 function countHeadings(content: string, level: number): number {
   const prefix = "#".repeat(level) + " ";
   return content.split("\n").filter((l) => l.startsWith(prefix)).length;
 }
 
+/**
+ * Centralise section checks so rubric regexes stay scoped to Markdown content.
+ */
 function hasSection(content: string, pattern: RegExp): boolean {
   return pattern.test(content);
 }
 
+/**
+ * Remove frontmatter before tool-keyword scoring so version metadata cannot earn credit.
+ */
 function stripYamlFrontmatter(content: string): string {
   return content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/u, "");
 }
 
+/**
+ * Estimate token load conservatively for budget scoring without invoking a tokenizer.
+ */
 function estimateTokens(content: string): number {
   return Math.ceil(content.length / 4);
 }
@@ -570,6 +633,9 @@ function countSubReferences(
     .filter((file) => isSafeEntry(join(referencesDir, file))).length;
 }
 
+/**
+ * Convert subtype-capped scores into the severity bands shown in the dashboard.
+ */
 function metricSeverity(score: number, maxScore: number): MetricSeverity {
   if (maxScore === 0) return "n/a";
   const pct = score / maxScore;
@@ -613,17 +679,23 @@ function finalizeMetric(
 // Subtype detection & classification
 // ---------------------------------------------------------------------------
 
-const SUBTYPE_NAME_MATCH_SCORE = 5;
+const SUBTYPE_NAME_MATCH_SCORE = 5; // Threshold: name match outweighs two heading hits so canonical skills keep their calibrated subtype.
 const SUBTYPE_HEADING_MATCH_SCORE = 2;
 const SUBTYPE_FALLBACK_SCORE = 1;
 const FALLBACK_ONLY_CONFIDENCE = 0.3;
 
+/**
+ * Raw subtype score with the reasoning used to explain the winning profile.
+ */
 interface SubtypeMatchScore {
   subtype: ArtifactSubtype;
   score: number;
   reasoning: string[];
 }
 
+/**
+ * Detect fallback-only matches so confidence stays visibly low.
+ */
 function isFallbackOnlyMatch(match: SubtypeMatchScore): boolean {
   return (
     match.score === SUBTYPE_FALLBACK_SCORE &&
@@ -644,14 +716,14 @@ function subtypeConfidence(
  * subtype is incompatible (wrong kind or vetoed by a `mustNotHave` heading).
  *
  * Scoring rules:
- *  - Name match: +SUBTYPE_NAME_MATCH_SCORE (unconditional — preserves the M07
+ *  - Name match: +SUBTYPE_NAME_MATCH_SCORE (unconditional - preserves the M07
  *    OR semantics where `goat-security` is a report regardless of Step 0).
  *  - Heading match: +SUBTYPE_HEADING_MATCH_SCORE per match, vetoed by
  *    `mustNotHave`. Heading-only matches that trigger `mustNotHave` return 0.
  *  - Empty rules (fallback subtype): SUBTYPE_FALLBACK_SCORE so the fallback
  *    always matches with low confidence.
  */
-// eslint-disable-next-line complexity -- subtype match scoring exhausts kind compatibility, fallback rules, name-vs-heading scoring, and mustNotHave veto in one place to keep priority semantics local
+// eslint-disable-next-line complexity -- intentional because subtype match scoring exhausts kind compatibility, fallback rules, name-vs-heading scoring, and mustNotHave veto in one place to keep priority semantics local
 function scoreSubtypeMatch(
   artifact: ArtifactEntry,
   content: string,
@@ -802,8 +874,11 @@ const SHAPE_DETECTION_ORDER: ArtifactSubtype[] = [
 // qualifies, but a single +1 frontmatter-name signal or single +2 substring
 // hit does not. Below the floor, the fallback shape is reported with 0
 // confidence and no mismatch is raised.
-const MIN_SHAPE_SCORE = 3;
+const MIN_SHAPE_SCORE = 3; // Threshold: one strong signal or two heading signals required before shape mismatch can fire.
 
+/**
+ * Count pattern hits when repeated tool or step references are meaningful signals.
+ */
 function countRegexMatches(content: string, pattern: RegExp): number {
   return Array.from(content.matchAll(pattern)).length;
 }
@@ -822,7 +897,7 @@ function scoreFromSignals(
   return { subtype, score, reasoning };
 }
 
-// eslint-disable-next-line complexity -- semantic shape has separate signal sets per supported subtype; splitting would obscure the scoring table.
+// eslint-disable-next-line complexity -- intentional because semantic shape has separate signal sets per supported subtype; splitting would obscure the scoring table
 function scoreShapeMatch(
   artifact: ArtifactEntry,
   content: string,
@@ -1002,13 +1077,16 @@ function detectArtifactShape(
  *  summarizes`): when a description names *what the skill does internally*
  *  (procedural verbs, "X then Y" connectives) rather than *when to trigger*,
  *  agents tend to follow the description and skip the skill body. Detected as
- *  a yellow signal only — emits a tip via the trigger-clarity detail string;
+ *  a yellow signal only - emits a tip via the trigger-clarity detail string;
  *  never deducts score. Verb list narrowed to keep <10% false-positive rate
  *  on the in-tree `.claude/skills` corpus. */
 const WORKFLOW_VERB_RE =
   /\b(dispatches?|implements?(?:ing|ed)?|executes?(?:ing|ed)?|generates?|runs?|produces?|creates?|builds?|refactors?|writes?)\b/i;
 const WORKFLOW_CONNECTIVE_RE = /\b(then|between)\b/i;
 
+/**
+ * Reads frontmatter descriptions to detect workflow summaries that make agents skip the skill body.
+ */
 function descriptionSummarizesWorkflow(content: string): boolean {
   const match = /^---[\s\S]*?description:\s*"([^"]+)"[\s\S]*?---/m.exec(
     content,
@@ -1016,7 +1094,7 @@ function descriptionSummarizesWorkflow(content: string): boolean {
   if (!match) return false;
   const description = match[1];
   if (!description) return false;
-  // Skip the trigger preamble — `Use when X, Y` — and inspect the rest of the
+  // Skip the trigger preamble - `Use when X, Y` - and inspect the rest of the
   // description. If the trailing portion contains procedural verbs or process
   // connectives, the description is summarising workflow rather than naming
   // triggering conditions.
@@ -1026,7 +1104,7 @@ function descriptionSummarizesWorkflow(content: string): boolean {
   );
 }
 
-// eslint-disable-next-line complexity -- exhaustive structural signal scoring; each branch maps to one trigger-clarity rule
+// eslint-disable-next-line complexity -- intentional because exhaustive structural signal scoring keeps each trigger-clarity rule beside its note text
 const triggerClarity: MetricScorer = (input) => {
   const { artifact, rawContent: content, subtype } = input;
   let score = 0;
@@ -1046,7 +1124,7 @@ const triggerClarity: MetricScorer = (input) => {
     if (hasWhenToUse) score += 5;
     else notes.push('missing "When to Use" signal');
     if (subtype === "dispatcher") {
-      // Dispatchers disambiguate by routing, not by an exclusion list — award
+      // Dispatchers disambiguate by routing, not by an exclusion list - award
       // the third 5-point bucket when they expose a Route Map (their structural
       // equivalent of "NOT this skill"). Mirrors the dispatcher branch of
       // skillReferenceFit (search: `subtype === "dispatcher" && signals.hasRouteMap`).
@@ -1087,7 +1165,7 @@ const triggerClarity: MetricScorer = (input) => {
   );
 };
 
-// eslint-disable-next-line complexity -- exhaustive structural signal scoring; each branch maps to one workflow-completeness rule
+// eslint-disable-next-line complexity -- intentional because exhaustive structural signal scoring keeps each workflow-completeness rule beside its note text
 const workflowCompleteness: MetricScorer = (input) => {
   const { artifact, rawContent: content, subtype, config } = input;
   let score = 0;
@@ -1196,7 +1274,7 @@ const evidenceTestability: MetricScorer = (input) => {
   );
 };
 
-// eslint-disable-next-line complexity -- exhaustive structural signal scoring; each branch maps to one cold-start rule
+// eslint-disable-next-line complexity -- intentional because exhaustive structural signal scoring keeps each cold-start rule beside its note text
 const coldStartExecutability: MetricScorer = (input) => {
   const { artifact, rawContent: content } = input;
   let score = 0;
@@ -1355,7 +1433,7 @@ const writeRisk: MetricScorer = (input) => {
   );
 };
 
-// eslint-disable-next-line complexity -- exhaustive structural signal scoring; each branch maps to one skill-vs-reference fit rule
+// eslint-disable-next-line complexity -- intentional because exhaustive structural signal scoring keeps each skill-vs-reference fit rule beside its note text
 const skillReferenceFit: MetricScorer = (input) => {
   const { artifact, rawContent: content, subtype } = input;
   const signals = {
@@ -1468,8 +1546,11 @@ const ALL_METRICS: MetricScorer[] = [
 // Recommendation engine
 // ---------------------------------------------------------------------------
 
-const CONFIDENCE_THRESHOLD = 0.7;
+const CONFIDENCE_THRESHOLD = 0.7; // Threshold: below 70%, strong scores still need human subtype review.
 
+/**
+ * Explain when a high-scoring artifact still needs subtype review.
+ */
 function reclassifyNote(classification: ClassificationResult): string {
   const top = classification.alternatives[0];
   const altText = top
@@ -1492,7 +1573,7 @@ function shapeMismatchNote(
   )}% confidence).`;
 }
 
-// eslint-disable-next-line complexity -- recommendation tree dispatches over kind × score-band × confidence × structured fit signals
+// eslint-disable-next-line complexity -- intentional because the recommendation tree dispatches over kind × score-band × confidence × structured fit signals
 function deriveRecommendation(
   artifact: ArtifactEntry,
   metrics: MetricResult[],
@@ -1677,6 +1758,9 @@ export function scoreAllArtifacts(
 // Uploaded-content evaluation (draft scoring; user-supplied markdown)
 // ---------------------------------------------------------------------------
 
+/**
+ * Uploaded single-file artifact payload; scoring must not read sibling files from disk.
+ */
 interface EvaluateInput {
   /** Raw markdown content (uploaded file or pasted text). */
   content: string;
@@ -1686,16 +1770,25 @@ interface EvaluateInput {
   kind?: ArtifactKind;
 }
 
+/**
+ * Dashboard-facing remediation generated from one metric detail string.
+ */
 interface ImprovementTip {
   metric: MetricName;
   severity: MetricSeverity;
   message: string;
 }
 
+/**
+ * Skill-quality report plus actionable dashboard tips for uploaded content.
+ */
 interface EvaluateResult extends SkillQualityReport {
   tips: ImprovementTip[];
 }
 
+/**
+ * Infer whether uploaded markdown is a skill or reference from explicit headers first.
+ */
 function inferArtifactKind(content: string): ArtifactKind {
   if (/goat-flow-skill-version:/i.test(content)) return "skill";
   if (/goat-flow-reference-version:/i.test(content)) return "shared-reference";
@@ -1705,6 +1798,9 @@ function inferArtifactKind(content: string): ArtifactKind {
   return "shared-reference";
 }
 
+/**
+ * Convert an uploaded filename into the synthetic artifact id segment.
+ */
 function sanitiseUploadName(raw: string | undefined): string {
   if (!raw) return "uploaded-skill";
   const slug = raw
@@ -1747,7 +1843,7 @@ const TIP_RULES: Array<{
     metric: "trigger-clarity",
     match: /description summarizes workflow rather than triggering conditions/,
     message:
-      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body — see `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
+      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body - see `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
     alwaysFire: true,
   },
   {
@@ -1778,7 +1874,7 @@ const TIP_RULES: Array<{
     metric: "workflow-completeness",
     match: /no checkpoint or blocking gate stops/,
     message:
-      "Add a phase-stop marker between phases — `CHECKPOINT:` or `BLOCKING GATE:` — to gate human review before continuing.",
+      "Add a phase-stop marker between phases - `CHECKPOINT:` or `BLOCKING GATE:` - to gate human review before continuing.",
   },
   {
     metric: "workflow-completeness",
@@ -1868,7 +1964,7 @@ const TIP_RULES: Array<{
     metric: "token-cost",
     match: /sub-references loaded/,
     message:
-      "Sub-reference count is high — review whether some can be merged or moved into a shared playbook.",
+      "Sub-reference count is high - review whether some can be merged or moved into a shared playbook.",
   },
   {
     metric: "tool-deps",
@@ -1904,7 +2000,7 @@ const TIP_RULES: Array<{
     metric: "skill-reference-fit",
     match: /weak skill identity/,
     message:
-      "Strengthen the skill identity — add the frontmatter `name`, `## Step 0`, and `CHECKPOINT` markers so it reads as a skill rather than a doc.",
+      "Strengthen the skill identity - add the frontmatter `name`, `## Step 0`, and `CHECKPOINT` markers so it reads as a skill rather than a doc.",
   },
   {
     metric: "skill-reference-fit",
@@ -1916,7 +2012,7 @@ const TIP_RULES: Array<{
     metric: "skill-reference-fit",
     match: /strong reference signals - consider demoting/,
     message:
-      "Strong reference-shape signals — if this is supposed to be a skill, drop the playbook framing and add Step 0 / phases / gates.",
+      "Strong reference-shape signals - if this is supposed to be a skill, drop the playbook framing and add Step 0 / phases / gates.",
   },
   {
     metric: "skill-reference-fit",
@@ -1926,6 +2022,10 @@ const TIP_RULES: Array<{
   },
 ];
 
+/**
+ * Translate metric details into stable remediation tips because dashboard advice
+ * must stay tied to the exact scoring detail that triggered it.
+ */
 function tipsForMetric(metric: MetricResult): ImprovementTip[] {
   if (metric.severity === "n/a") return [];
   const matched: ImprovementTip[] = [];
@@ -1991,6 +2091,10 @@ function configForUpload(config: QualityConfig): QualityConfig {
  * Score uploaded markdown content (no file IO) and synthesise actionable
  * improvement tips from the metric breakdown. Used by the dashboard
  * "Evaluate skill" modal.
+ *
+ * @param projectRoot - Project whose quality config supplies rubric settings.
+ * @param input - Uploaded markdown and optional naming/classification hints.
+ * @param config - Optional scoring config; host composition is stripped before scoring.
  */
 export function evaluateContent(
   projectRoot: string,
@@ -2022,11 +2126,17 @@ export function evaluateContent(
   return { ...report, tips: synthesiseImprovementTips(report) };
 }
 
+/**
+ * One uploaded bundle file after dashboard request decoding has validated size and name.
+ */
 interface EvaluateBundleFile {
   name: string;
   content: string;
 }
 
+/**
+ * Multi-file upload payload where only user-provided files contribute to composition.
+ */
 interface EvaluateBundleInput {
   files: EvaluateBundleFile[];
   suggestedName?: string;
@@ -2035,14 +2145,14 @@ interface EvaluateBundleInput {
 
 /**
  * Score a multi-file uploaded skill bundle (no file IO). Picks a primary file
- * — `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
- * — and treats the remaining files as sibling `.md` files appended to the
+ * - `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
+ * - and treats the remaining files as sibling `.md` files appended to the
  * composed surface. The same composition recipe applies as for on-disk skills:
  * preamble + conventions are still pulled in if available, and the bundle
  * surface contributes to gate/evidence/tool-deps scoring. `composedFrom` lists
  * every input file in drop order, plus preamble/conventions when composed in.
  */
-// eslint-disable-next-line complexity -- multi-file scoring fans out across primary-file selection, single-file fast path, and the manual compose+score pipeline; each branch represents one distinct case
+// eslint-disable-next-line complexity -- intentional because multi-file scoring fans out across primary-file selection, single-file fast path, and the manual compose+score pipeline; each branch represents one distinct case
 export function evaluateUploadedBundle(
   projectRoot: string,
   input: EvaluateBundleInput,

@@ -5,7 +5,7 @@
 Documentation framework for AI coding agent workflows. Two parts:
 - **TypeScript CLI** (`src/cli/`): auditor, setup prompt generator, dashboard server
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
-- **Shell scripts** (`scripts/`): maintenance, preflight checks, deny policy
+- **Shell scripts** (`scripts/`, `workflow/hooks/`): maintenance, preflight checks, guardrail hooks
 
 Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`.
 
@@ -34,9 +34,9 @@ src/dashboard/        # Dashboard UI (views/, static assets)
 workflow/
   install-goat-flow.sh        # Install workflow assets into a target project
   setup/                      # Agent setup docs and shared setup references
+  hooks/                      # Runtime guardrails and hook config templates
 scripts/
   preflight-checks.sh  # Full preflight gate (shellcheck, tsc, tests, version, ADR)
-  deny-dangerous.sh    # Codex deny policy with --self-test
   maintenance/         # Utility scripts (git-cleanup, scan-secrets, etc.)
 test/
   unit/                # Unit tests

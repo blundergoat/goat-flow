@@ -5,8 +5,8 @@
 # - Filesystem allow/deny policy uses Codex permission profiles, not Claude's
 #   settings.json permissions.allow/permissions.deny syntax
 # - Hook registrations live in .codex/hooks.json for goat-flow installs
-# - The shipped codex-hooks.json template registers the PreToolUse deny hook
-# - Command deny policy still lives in the Bash-matched PreToolUse hook because
+# - The shipped codex-hooks.json template registers Bash-matched guardrail hooks
+# - Command deny policy still lives in those PreToolUse hooks because
 #   Codex permission profiles describe filesystem/network access, not shell
 #   command pattern denies like git push or sudo
 default_permissions = "goat-flow"
@@ -19,5 +19,5 @@ glob_scan_max_depth = 3
 # Codex 0.131 accepts exact paths and trailing "/**" subtrees here.
 # Exact entries must point at files that exist in the target checkout; absent
 # exact paths can make Codex fail before shell startup. Filename globs such as
-# "*.key" are covered by .codex/hooks/deny-dangerous.sh.
+# "*.key" are covered by .codex/hooks/guard-secret-paths.sh.
 ":workspace_roots" = { "." = "write", "secrets/**" = "none", ".ssh/**" = "none", ".aws/**" = "none", ".docker/**" = "none", ".gnupg/**" = "none", ".kube/**" = "none" }

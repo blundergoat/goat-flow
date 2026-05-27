@@ -7,6 +7,12 @@ import { pushUniquePath } from "./routing.js";
 /** Regex matching common lint, typecheck, and format-check tool invocations. */
 const POST_TURN_VALIDATION_COMMAND_PATTERN =
   /\b(shellcheck|eslint|tsc|phpstan|ruff|mypy|flake8|rubocop|stylelint|ktlint|swiftlint)\b|biome\s+check|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:lint|typecheck|format(?::check)?)\b|cargo\s+check|go\s+vet|prettier\s+--check|bash\s+-n\b|(?:^|\s)(?:bash\s+)?(?:\.\/)?scripts\/preflight-checks\.sh\b/i;
+const GUARDRAIL_HOOK_FILES = [
+  "guard-common.sh",
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+];
 
 /** Detect shell lines that intentionally mask validation failures with `|| true`. */
 function lineSwallowsValidationFailure(line: string): boolean {
@@ -201,7 +207,7 @@ function normalizeHookPath(candidate: string): string | null {
   let path = candidate.trim();
   if (!path) return null;
   path = path.replace(/^['"`]|['"`]$/g, "");
-  // Common Claude/Gemini pattern: bash "$(git rev-parse --show-toplevel)/.../script.sh"
+  // Common pattern across hook-supporting agents: bash "$(git rev-parse --show-toplevel)/.../script.sh"
   const substitutionMatch = path.match(/\$\([^)]*\)\/(.*\.sh)$/);
   if (substitutionMatch && substitutionMatch[1]) {
     path = substitutionMatch[1];
@@ -232,15 +238,18 @@ function extractHookPathsFromCommand(command: string): string[] {
   return pathCandidates;
 }
 
-/** Return the first shell-script path referenced by a list of hook commands. */
-function firstHookPathFromCommands(commands: string[]): string | null {
+/** Return the preferred shell-script path referenced by a list of hook commands. */
+function preferredHookPathFromCommands(commands: string[]): string | null {
+  const paths: string[] = [];
   for (const command of commands) {
     const candidates = extractHookPathsFromCommand(command);
-    const [first] = candidates;
-    if (first === undefined) continue;
-    return first;
+    for (const candidate of candidates) pushUniquePath(paths, candidate);
   }
-  return null;
+  return (
+    paths.find((path) => path.endsWith("/guard-repository-writes.sh")) ??
+    paths[0] ??
+    null
+  );
 }
 
 /** Return the parsed `hooks` object from settings when it exists. */
@@ -251,6 +260,17 @@ function readHooksObject(
   const hooks = (settingsParsed as Record<string, unknown>).hooks;
   if (!hooks || typeof hooks !== "object") return null;
   return hooks as Record<string, unknown>;
+}
+
+/** Return one Antigravity top-level hook definition by goat-flow hook id. */
+function readAntigravityHookDefinition(
+  hookConfigParsed: unknown,
+  hookId: string,
+): Record<string, unknown> | null {
+  if (!hookConfigParsed || typeof hookConfigParsed !== "object") return null;
+  const definition = (hookConfigParsed as Record<string, unknown>)[hookId];
+  if (!definition || typeof definition !== "object") return null;
+  return definition as Record<string, unknown>;
 }
 
 /** Extract the shell command from one hook entry when it uses command mode. */
@@ -312,7 +332,7 @@ function normalizeEventConfig(
     commands.push(...extractCommandsFromEventEntry(entry));
   }
 
-  const path = firstHookPathFromCommands(commands);
+  const path = preferredHookPathFromCommands(commands);
   return { registered: path !== null, path };
 }
 
@@ -349,6 +369,9 @@ function buildHookRegistration(
     };
   }
 
+  if (!agent.hookEvents) {
+    return { postTurnRegistered: false, postTurnRegisteredPath: null };
+  }
   const postTurn = normalizeEventConfig(hooks, agent.hookEvents.postTurn);
   return {
     postTurnRegistered: postTurn.registered,
@@ -361,11 +384,35 @@ function buildDenyRegistration(
   agent: AgentProfile,
   hookConfigParsed: unknown,
 ): { denyIsRegistered: boolean; denyRegisteredPath: string | null } {
+  if (agent.id === "antigravity") {
+    if (!agent.hookEvents) {
+      return { denyIsRegistered: false, denyRegisteredPath: null };
+    }
+    const denyDefinition = readAntigravityHookDefinition(
+      hookConfigParsed,
+      "guard-repository-writes",
+    );
+    if (!denyDefinition || denyDefinition.enabled === false) {
+      return { denyIsRegistered: false, denyRegisteredPath: null };
+    }
+    const preTool = normalizeEventConfig(
+      denyDefinition,
+      agent.hookEvents.preTool,
+    );
+    return {
+      denyIsRegistered: preTool.registered,
+      denyRegisteredPath: preTool.path,
+    };
+  }
+
   const hooks = readHooksObject(hookConfigParsed);
   if (!hooks) {
     return { denyIsRegistered: false, denyRegisteredPath: null };
   }
 
+  if (!agent.hookEvents) {
+    return { denyIsRegistered: false, denyRegisteredPath: null };
+  }
   const preTool = normalizeEventConfig(hooks, agent.hookEvents.preTool);
   return {
     denyIsRegistered: preTool.registered,
@@ -378,19 +425,40 @@ function resolveDenyHookPath(
   fs: ReadonlyFS,
   agent: AgentProfile,
 ): string | null {
-  if (agent.denyHookFile && fs.exists(agent.denyHookFile)) {
-    return agent.denyHookFile;
-  }
-  if (agent.hooksDir && fs.exists(`${agent.hooksDir}/deny-dangerous.sh`)) {
-    return `${agent.hooksDir}/deny-dangerous.sh`;
-  }
-  if (agent.denyMechanism.type === "deny-script") {
+  const explicitHook =
+    agent.denyHookFile && fs.exists(agent.denyHookFile)
+      ? agent.denyHookFile
+      : null;
+  if (explicitHook) return explicitHook;
+
+  const splitGuardrail = agent.hooksDir
+    ? `${agent.hooksDir}/guard-repository-writes.sh`
+    : null;
+  if (splitGuardrail && fs.exists(splitGuardrail)) return splitGuardrail;
+
+  return resolveDenyMechanismPath(agent);
+}
+
+function resolveDenyMechanismPath(agent: AgentProfile): string | null {
+  if (agent.denyMechanism?.type === "deny-script") {
     return agent.denyMechanism.path;
   }
-  if (agent.denyMechanism.type === "both") {
+  if (agent.denyMechanism?.type === "both") {
     return agent.denyMechanism.scriptPath;
   }
   return null;
+}
+
+function siblingGuardrailPaths(
+  fs: ReadonlyFS,
+  denyHookPath: string | null,
+): string[] {
+  if (!denyHookPath) return [];
+  const slash = denyHookPath.lastIndexOf("/");
+  if (slash === -1) return [];
+  const dir = denyHookPath.slice(0, slash);
+  const paths = GUARDRAIL_HOOK_FILES.map((file) => `${dir}/${file}`);
+  return paths.every((path) => fs.exists(path)) ? paths : [];
 }
 
 /** Build the empty deny-hook fact object used when no deny hook is available. */
@@ -425,7 +493,12 @@ function analyzeDenyHookPath(
     return hook;
   }
 
-  const analysis = analyzeDenyScript(denyContent);
+  const guardrailContents = siblingGuardrailPaths(fs, denyHookPath)
+    .map((path) => fs.readFile(path))
+    .filter((content): content is string => typeof content === "string");
+  const analysis = analyzeDenyScript(
+    guardrailContents.length > 0 ? guardrailContents.join("\n") : denyContent,
+  );
   return {
     ...hook,
     denyHasBlocks: analysis.hasBlocks,
@@ -462,10 +535,11 @@ function denyHookHasNormalizedSecretRoots(content: string): boolean {
 function denyHookHasSecretFamilyMarkers(content: string): boolean {
   const hasKeys =
     content.includes("\\.(pem|key|pfx)") ||
+    content.includes("\\.(pem|key|pfx|p12)") ||
     content.includes("\\.\\(pem\\|key\\|pfx\\)");
   return [
     /\\\.env/.test(content),
-    /\.env\.example/.test(content),
+    /\\\.env\\\.example/.test(content) || /\.env\.example/.test(content),
     /\\\.ssh\//.test(content) || /\/\\\.ssh\//.test(content),
     /\\\.aws\//.test(content) || /\/\\\.aws\//.test(content),
     /secrets\//.test(content),
@@ -482,7 +556,10 @@ function detectBashDenyCoversSecrets(
   denyHookPath: string | null,
 ): boolean {
   if (!denyHookPath || !fs.exists(denyHookPath)) return false;
-  const content = fs.readFile(denyHookPath);
+  const secretSibling = siblingGuardrailPaths(fs, denyHookPath).find((path) =>
+    path.endsWith("/guard-secret-paths.sh"),
+  );
+  const content = fs.readFile(secretSibling ?? denyHookPath);
   if (!content) return false;
   return (
     denyHookHasActiveSecretRule(content) &&

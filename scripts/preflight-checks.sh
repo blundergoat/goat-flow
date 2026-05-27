@@ -313,7 +313,7 @@ details_pipe() {
 # ── Phase mapping (centralised) ──────────────────────────────────────
 # In live rendering, the phase heading prints whenever the phase
 # changes between two consecutive sections. There's no precomputed
-# phase order — sections appear in execution order, and a phase's
+# phase order - sections appear in execution order, and a phase's
 # heading may repeat if its sections aren't contiguous.
 phase_for() {
     case "$1" in
@@ -361,7 +361,7 @@ collapsed_desc_for() {
         "TypeScript") printf 'build · lint · knip · prettier' ;;
         "Deny Policy") printf 'self-test + runtime smokes' ;;
         "ADR Enforcement") printf 'no removed patterns' ;;
-        "Agent Config Parity") printf 'claude · codex · gemini · copilot' ;;
+        "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
         "Skill Behavioral Contracts") printf 'goat-critique invocation' ;;
@@ -384,7 +384,7 @@ collapsed_desc_for() {
 
 # ── Live renderer ────────────────────────────────────────────────────
 # Each section's collapsed row (and any auto-expansion on FAIL/WARN)
-# is printed when the section completes — i.e. when the next section()
+# is printed when the section completes - i.e. when the next section()
 # call fires, or when _on_exit runs for the last section. The header
 # prints once, lazily, on the first section() call. Phase headings
 # print whenever the phase changes between two consecutive sections.
@@ -684,56 +684,228 @@ fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────
 section "Deny Policy"
-if deny_self_test_output=$(bash scripts/deny-dangerous.sh --self-test=full 2>&1); then
-    pass "scripts/deny-dangerous.sh ${deny_self_test_output}"
+if deny_self_test_output=$(bash workflow/hooks/guardrails-self-test.sh --self-test=full 2>&1); then
+    pass "workflow/hooks/guardrails-self-test.sh ${deny_self_test_output}"
 else
-    fail "scripts/deny-dangerous.sh full self-test"
+    fail "workflow/hooks/guardrails-self-test.sh full self-test"
 fi
 
 # Also smoke-test installed hooks. Routine audit/preflight only needs the
 # install-safe representative set; the local scripts/ copy runs the full corpus
 # above.
+guardrail_hooks=(
+    guard-destructive-shell.sh
+    guard-secret-paths.sh
+    guard-repository-writes.sh
+)
 while IFS= read -r hookdir; do
-    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
-        if bash "$hookdir/deny-dangerous.sh" --self-test=smoke >/dev/null 2>&1; then
-            pass "$hookdir/deny-dangerous.sh smoke self-test"
+    for guardrail_hook in "${guardrail_hooks[@]}"; do
+        if [[ -f "$hookdir/$guardrail_hook" ]]; then
+            if bash "$hookdir/$guardrail_hook" --self-test=smoke >/dev/null 2>&1; then
+                pass "$hookdir/$guardrail_hook smoke self-test"
+            else
+                fail "$hookdir/$guardrail_hook smoke self-test"
+            fi
+        fi
+    done
+    if [[ -f "$hookdir/guardrails-self-test.sh" ]]; then
+        if bash "$hookdir/guardrails-self-test.sh" --self-test=smoke >/dev/null 2>&1; then
+            pass "$hookdir/guardrails-self-test.sh smoke self-test"
         else
-            fail "$hookdir/deny-dangerous.sh smoke self-test"
+            fail "$hookdir/guardrails-self-test.sh smoke self-test"
         fi
     fi
 done < <(manifest_eval hook-dirs)
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
 while IFS= read -r hookdir; do
-    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
+    if [[ -f "$hookdir/guard-destructive-shell.sh" ]]; then
         if [[ "$hookdir" == ".github/hooks" ]]; then
             test_payload='{"toolName":"bash","toolArgs":"{\"command\":\"rm -rf /\"}"}'
-            if output=$(printf '%s' "$test_payload" | bash "$hookdir/deny-dangerous.sh" 2>&1); then
+            if output=$(bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" 2>&1); then
                 if echo "$output" | grep -q '"permissionDecision":"deny"'; then
-                    pass "$hookdir/deny-dangerous.sh runtime smoke test (copilot payload denied rm -rf)"
+                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (copilot payload denied rm -rf)"
                 else
-                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Copilot payload"
+                    fail "$hookdir/guard-destructive-shell.sh did not return a deny decision for Copilot payload"
                 fi
             else
                 exit_code=$?
-                warn "$hookdir/deny-dangerous.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
+                warn "$hookdir/guard-destructive-shell.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
+            fi
+        elif [[ "$hookdir" == ".agents/hooks" ]]; then
+            test_payload='{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}}}'
+            if output=$(bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" 2>&1); then
+                if echo "$output" | grep -q '"decision":"deny"'; then
+                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (antigravity payload denied rm -rf)"
+                else
+                    fail "$hookdir/guard-destructive-shell.sh did not return a deny decision for Antigravity payload"
+                fi
+            else
+                exit_code=$?
+                warn "$hookdir/guard-destructive-shell.sh exited $exit_code on Antigravity deny payload (expected 0 + deny JSON)"
             fi
         else
             # Simulate a VS Code-style Bash tool call with a dangerous command
             test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
-            if printf '%s' "$test_payload" | bash "$hookdir/deny-dangerous.sh" >/dev/null 2>&1; then
-                fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
+            if bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" >/dev/null 2>&1; then
+                fail "$hookdir/guard-destructive-shell.sh did not block 'rm -rf /' (exit 0)"
             else
                 exit_code=$?
                 if [[ $exit_code -eq 2 ]]; then
-                    pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
+                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (blocked rm -rf)"
                 else
-                    warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
+                    warn "$hookdir/guard-destructive-shell.sh exited $exit_code on blocked command (expected 2)"
                 fi
             fi
         fi
     fi
 done < <(manifest_eval hook-dirs)
+
+# Runtime smoke test the exact command strings in installed agent configs. This
+# catches failures before the guard script starts, including stale paths and
+# exit-127 command-shape regressions.
+configured_hook_smoke_output=$(
+    node <<'NODE'
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+
+const guardScripts = [
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+];
+const configs = [
+  { agent: "claude", path: ".claude/settings.json", mode: "stderr" },
+  { agent: "codex", path: ".codex/hooks.json", mode: "stderr" },
+  { agent: "antigravity", path: ".agents/hooks.json", mode: "antigravity-json" },
+  { agent: "copilot", path: ".github/hooks/hooks.json", mode: "copilot-json" },
+];
+
+function emit(status, message) {
+  console.log(`${status}\t${message}`);
+}
+
+function payloadFor(mode, script) {
+  const command =
+    script === "guard-destructive-shell.sh"
+      ? "rm -rf /"
+      : script === "guard-secret-paths.sh"
+        ? "cat .env"
+        : "git push origin main";
+  if (mode === "copilot-json") {
+    return {
+      input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),
+      status: 0,
+      stream: "stdout",
+      pattern: /"permissionDecision"\s*:\s*"deny"/,
+    };
+  }
+  if (mode === "antigravity-json") {
+    return {
+      input: JSON.stringify({
+        hookEventName: "PreToolUse",
+        toolCall: { name: "run_command", args: { CommandLine: command } },
+      }),
+      status: 0,
+      stream: "stdout",
+      pattern: /"decision"\s*:\s*"deny"/,
+    };
+  }
+  return {
+    input: JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+    status: 2,
+    stream: "stderr",
+    pattern: /BLOCKED:/,
+  };
+}
+
+function collect(value, out = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) collect(item, out);
+    return out;
+  }
+  if (!value || typeof value !== "object") return out;
+  for (const key of ["command", "bash"]) {
+    if (typeof value[key] !== "string") continue;
+    const script = guardScripts.find((name) => value[key].includes(name));
+    if (script) out.push({ command: value[key], script });
+  }
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") collect(child, out);
+  }
+  return out;
+}
+
+function runCommand(command, input) {
+  if (!/\s/u.test(command) && !command.includes("$(")) {
+    return spawnSync(command, [], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      input,
+      timeout: 5000,
+    });
+  }
+  return spawnSync("bash", ["-lc", command], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    input,
+    timeout: 5000,
+  });
+}
+
+let checked = 0;
+for (const config of configs) {
+  if (!fs.existsSync(config.path)) {
+    emit("SKIP", `${config.agent}: hook config missing (${config.path})`);
+    continue;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(config.path, "utf8"));
+  } catch (error) {
+    emit("FAIL", `${config.agent}: hook config JSON parse failed (${error.message})`);
+    continue;
+  }
+  const seen = new Set();
+  const commands = collect(parsed).filter((entry) => {
+    const key = `${entry.command}\0${entry.script}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (commands.length === 0) {
+    emit("FAIL", `${config.agent}: no configured guard hook commands found in ${config.path}`);
+    continue;
+  }
+  for (const entry of commands) {
+    checked += 1;
+    const smoke = payloadFor(config.mode, entry.script);
+    const result = runCommand(entry.command, smoke.input);
+    const status = result.status ?? (result.error ? -1 : 0);
+    if (status === 126 || status === 127) {
+      emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status}: ${entry.command}`);
+      continue;
+    }
+    const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
+    if (status === smoke.status && smoke.pattern.test(stream)) {
+      emit("PASS", `${config.agent}: ${entry.script} configured command smoke denied payload`);
+    } else {
+      emit("FAIL", `${config.agent}: ${entry.script} configured command smoke failed (exit ${status})`);
+    }
+  }
+}
+if (checked === 0) emit("SKIP", "No configured guard hook commands checked");
+NODE
+)
+while IFS=$'\t' read -r status message; do
+    [[ -z "${status:-}" ]] && continue
+    case "$status" in
+        PASS) pass "$message" ;;
+        FAIL) fail "$message" ;;
+        SKIP) skip "$message" ;;
+        *) fail "Configured hook smoke emitted unexpected result: $status $message" ;;
+    esac
+done <<< "$configured_hook_smoke_output"
 
 # ── Agent Config Parity ──────────────────────────────────────────────
 section "Agent Config Parity"
@@ -1106,7 +1278,7 @@ if manifest_agent_lines=$(node -e "const m=require('./workflow/manifest.json');f
         [[ -f "$af" ]] && agent_files+=("$af")
     done <<< "$manifest_agent_lines"
 else
-    warn "Could not read agent profiles from workflow/manifest.json — instruction-file checks will be skipped"
+    warn "Could not read agent profiles from workflow/manifest.json - instruction-file checks will be skipped"
 fi
 
 # ── Version Consistency ──────────────────────────────────────────────
@@ -1201,7 +1373,7 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
         pass "Execution loops consistent across ${#agent_files[@]} agent files"
     fi
 
-    # Router Table path parity (path-based, not label-based — labels drift
+    # Router Table path parity (path-based, not label-based - labels drift
     # across agents but .goat-flow/ paths are consistent)
     router_parity_output=$(
         node - "${agent_files[@]}" <<'NODE'
@@ -1220,7 +1392,7 @@ function extractRouterPaths(filepath) {
             const raw = m[1];
             const wasDir = raw.endsWith("/");
             const p = raw.replace(/\/+$/, "");
-            if (/^\.(claude|github|agents|codex|gemini)\//.test(p)) continue;
+            if (/^\.(claude|github|agents|codex)\//.test(p)) continue;
             if (p.includes("/") || p.endsWith(".md") || p.endsWith(".yaml") || wasDir) paths.add(p);
         }
     }
@@ -1311,7 +1483,7 @@ for ifile in "${agent_files[@]}"; do
     fi
 done
 
-# Encyclopedia guard (advisory — downstream projects may have edge cases)
+# Encyclopedia guard (advisory - downstream projects may have edge cases)
 encyclopedia_patterns="database schema|api reference|endpoint list|table definition|historical background|architecture history|full project overview"
 enc_ok=true
 for ifile in "${agent_files[@]}"; do
@@ -1327,31 +1499,6 @@ for ifile in "${agent_files[@]}"; do
 done
 if $enc_ok; then
     pass "No encyclopedia content in instruction files"
-fi
-
-# Downstream-content guard (fail — upstream surfaces must not contain project-specific names)
-downstream_patterns="healthkit|Halaxy|PracGroup|LinkPaG|/home/hxdev/|/home/devgoat/projects/healthkit"
-downstream_surfaces=(
-    "${agent_files[@]}"
-    workflow/setup/agents/claude.md workflow/setup/agents/codex.md
-    workflow/setup/agents/copilot.md workflow/setup/agents/gemini.md
-    workflow/setup/reference/execution-loop.md
-    workflow/setup/02-instruction-file.md
-)
-ds_ok=true
-for f in "${downstream_surfaces[@]}"; do
-    if [[ -f "$f" ]]; then
-        ds_hits=$(grep -inE "$downstream_patterns" "$f" || true)
-        if [[ -n "$ds_hits" ]]; then
-            while IFS= read -r hit; do
-                fail "Downstream project content in $f: $(echo "$hit" | head -c 120)"
-                ds_ok=false
-            done <<< "$ds_hits"
-        fi
-    fi
-done
-if $ds_ok; then
-    pass "No downstream project content in upstream surfaces"
 fi
 
 # ── TypeScript ───────────────────────────────────────────────────────
@@ -1612,7 +1759,7 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     # .goat-flow/lessons/ (narrative may include historical numbers).
     if [[ -n "$setup_count" ]]; then
         b8a3_ok=true
-        for doc in CLAUDE.md AGENTS.md GEMINI.md .goat-flow/code-map.md CONTRIBUTING.md; do
+        for doc in CLAUDE.md AGENTS.md .goat-flow/code-map.md CONTRIBUTING.md; do
             [[ -f "$doc" ]] || continue
             stale=$(grep -oE '[0-9]+ setup' "$doc" 2>/dev/null | grep -Fv "${setup_count} setup" | head -1 || true)
             if [[ -n "$stale" ]]; then
@@ -1771,6 +1918,42 @@ if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-p
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill-playbooks/code-comments.md ]]; then
+    if diff -q workflow/skills/playbooks/code-comments.md .goat-flow/skill-playbooks/code-comments.md >/dev/null 2>&1; then
+        pass "code-comments.md: template and installed copy match"
+    else
+        fail "code-comments.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "code-comments.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/skill-playbooks/gruff-code-quality.md ]]; then
+    if diff -q workflow/skills/playbooks/gruff-code-quality.md .goat-flow/skill-playbooks/gruff-code-quality.md >/dev/null 2>&1; then
+        pass "gruff-code-quality.md: template and installed copy match"
+    else
+        fail "gruff-code-quality.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "gruff-code-quality.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-playbooks/observability.md ]]; then
+    if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-playbooks/observability.md >/dev/null 2>&1; then
+        pass "observability.md: template and installed copy match"
+    else
+        fail "observability.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "observability.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-playbooks/changelog.md ]]; then
+    if diff -q workflow/skills/playbooks/changelog.md .goat-flow/skill-playbooks/changelog.md >/dev/null 2>&1; then
+        pass "changelog.md: template and installed copy match"
+    else
+        fail "changelog.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "changelog.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-playbooks/page-capture.md ]]; then
     if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-playbooks/page-capture.md >/dev/null 2>&1; then
         pass "page-capture.md: template and installed copy match"
@@ -1779,6 +1962,15 @@ if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-
     fi
 else
     skip "page-capture.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill-playbooks/release-notes.md ]]; then
+    if diff -q workflow/skills/playbooks/release-notes.md .goat-flow/skill-playbooks/release-notes.md >/dev/null 2>&1; then
+        pass "release-notes.md: template and installed copy match"
+    else
+        fail "release-notes.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+    fi
+else
+    skip "release-notes.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-playbooks/skill-quality-testing.md ]]; then
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-playbooks/skill-quality-testing.md >/dev/null 2>&1; then

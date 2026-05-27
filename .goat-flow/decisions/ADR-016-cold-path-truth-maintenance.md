@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-15
 **Updated:** 2026-05-18 - dead audit-doc reference and line-number citations converted to historical notes or semantic anchors.
+**Updated:** 2026-05-27 - Tier 2 content-truth checks now live mainly in `src/cli/audit/check-factual-claims.ts` and `src/cli/audit/check-content-quality.ts`, not in preflight-only scanner-era machinery.
 
 ## Context
 

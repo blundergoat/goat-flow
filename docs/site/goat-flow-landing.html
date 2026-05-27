@@ -4,12 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>
-      goat-flow - AI coding agent harness for Claude Code, Codex, Gemini CLI &
-      Copilot CLI
+      goat-flow - AI coding agent harness and dashboard
     </title>
     <meta
       name="description"
-      content="The opinionated harness for Claude Code, Codex, Gemini CLI, and Copilot CLI. Guardrails, structured skills, and persistent memory so the same mistake doesn't happen twice."
+      content="AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. Guardrails, setup audits, structured skills, and persistent memory."
     />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://goat-flow.com" />
@@ -19,11 +18,11 @@
     <meta property="og:url" content="https://goat-flow.com" />
     <meta
       property="og:title"
-      content="goat-flow - Guardrails and memory for AI coding agents"
+      content="goat-flow - AI coding agent harness and dashboard"
     />
     <meta
       property="og:description"
-      content="The opinionated harness for Claude Code, Codex, Gemini CLI, and Copilot CLI. Guardrails, structured skills, and persistent memory so the same mistake doesn't happen twice."
+      content="AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. Guardrails, setup audits, structured skills, and persistent memory."
     />
     <meta
       property="og:image"
@@ -35,11 +34,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="goat-flow - Guardrails and memory for AI coding agents"
+      content="goat-flow - AI coding agent harness and dashboard"
     />
     <meta
       name="twitter:description"
-      content="The opinionated harness for Claude Code, Codex, Gemini CLI, and Copilot CLI. Guardrails, structured skills, and persistent memory so the same mistake doesn't happen twice."
+      content="AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. Guardrails, setup audits, structured skills, and persistent memory."
     />
     <meta
       name="twitter:image"
@@ -52,7 +51,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "goat-flow",
-        "description": "The opinionated harness for Claude Code, Codex, Gemini CLI, and Copilot CLI. Guardrails, structured skills, and persistent memory so the same mistake doesn't happen twice.",
+        "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. Guardrails, setup audits, structured skills, and persistent memory.",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Linux, Windows",
         "offers": {
@@ -69,8 +68,8 @@
           "url": "https://www.blundergoat.com"
         },
         "softwareRequirements": "Node.js",
-        "keywords": "AI coding agent, harness engineering, Claude Code, Codex, Gemini CLI, Copilot CLI, AI guardrails, agent safety, agent memory",
-        "featureList": "CLI audit system, structured slash-command skills, pre/post-action hooks, persistent learning loop, multi-agent harness scoring, deny-dangerous safety hook",
+        "keywords": "AI coding agent harness, AI agent dashboard, agent guardrails, agent workflows, harness engineering, Claude Code, OpenAI Codex, Google Antigravity, GitHub Copilot, Copilot CLI, AI safety, agent memory",
+        "featureList": "CLI audit system, structured slash-command skills, pre/post-action hooks, persistent learning loop, multi-agent harness scoring, guardrails safety hook",
         "isAccessibleForFree": true,
         "license": "https://github.com/blundergoat/goat-flow/blob/main/LICENSE"
       }
@@ -93,7 +92,7 @@
             "name": "What AI coding agents does goat-flow support?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "goat-flow supports Claude Code, Codex, Gemini CLI, and Copilot CLI. It provides agent-specific instruction files and scores each agent's harness completeness across five concerns: context, constraints, verification, recovery, and feedback loop."
+              "text": "goat-flow supports Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. It provides agent-specific instruction files and scores each agent's harness completeness across five concerns: context, constraints, verification, recovery, and feedback loop."
             }
           },
           {
@@ -109,7 +108,7 @@
             "name": "How does goat-flow prevent AI agents from making dangerous changes?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default deny-dangerous hook catches unsafe recursive deletion, all git push, direct literal secret-path reads, subshell escapes, and database truncation. These are tool-layer boundaries rather than prompt-only guidance."
+              "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default guardrails hook catches unsafe recursive deletion, all git push, direct literal secret-path reads, subshell escapes, and database truncation. These are tool-layer boundaries rather than prompt-only guidance."
             }
           },
           {
@@ -1165,8 +1164,8 @@
                   problem.</strong
                 >
                 goat-flow is the opinionated harness for teams shipping with
-                Claude Code, Codex, Gemini CLI, and Copilot CLI - not just
-                demoing them.
+                Claude Code, OpenAI Codex, Google Antigravity, and GitHub
+                Copilot/Copilot CLI - not just demoing them.
               </p>
               <div class="hero-install">
                 <span class="dollar">$</span>
@@ -1222,7 +1221,7 @@
             <p class="sr-only">
               Terminal output showing goat-flow audit results: 18 of 18 build
               checks passing, harness scores for Claude Code (94%), Codex (91%),
-              Gemini CLI (87%), and Copilot CLI (85%), plus five-concern
+              Antigravity (87%), and Copilot CLI (85%), plus five-concern
               coverage for context, constraints, verification, recovery, and
               feedback loop.
             </p>
@@ -1265,7 +1264,7 @@
                 </div>
                 <div class="t-row">
                   <span class="t-check">✓</span>
-                  <span class="name">Gemini CLI</span>
+                  <span class="name">Antigravity</span>
                   <span class="t-grade">B</span>
                   <span class="val">87%</span>
                 </div>
@@ -1336,7 +1335,7 @@
               <span class="lbl">Supports</span>
               <span class="agent">Claude Code</span>
               <span class="agent">Codex</span>
-              <span class="agent">Gemini CLI</span>
+              <span class="agent">Antigravity</span>
               <span class="agent">Copilot CLI</span>
             </div>
           </div>
@@ -1432,7 +1431,7 @@
                 Pre-action guards block dangerous commands before they run.
                 Post-action guards catch silent breakage after.
                 <code style="font-size: 12.5px; color: var(--accent)"
-                  >deny-dangerous</code
+                  >guardrails</code
                 >
                 ships by default, blocking destructive filesystem commands, all
                 git push, direct literal secret-path access, and risky
@@ -1665,7 +1664,7 @@
               <h3>Ships with sensible defaults</h3>
               <p>
                 <code style="color: var(--accent); font-size: 13.5px"
-                  >deny-dangerous</code
+                  >guardrails</code
                 >
                 catches the patterns agents hit most often when they go
                 off-script: destructive filesystem commands, all git push,
@@ -1682,7 +1681,7 @@
 
             <div class="hook-block">
               <div class="hook-block-hdr">
-                <span class="name">deny-dangerous</span>
+                <span class="name">guardrails</span>
                 <span class="tag">Pre-action</span>
               </div>
               <div class="hook-block-body">
@@ -1875,7 +1874,7 @@
             </div>
 
             <p class="install-note">
-              Supports Claude Code, Codex, Gemini CLI, and Copilot CLI.
+              Supports Claude Code, Codex, Antigravity, and Copilot CLI.
               <a
                 href="https://github.com/blundergoat/goat-flow#readme"
                 target="_blank"

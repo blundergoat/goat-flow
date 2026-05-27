@@ -72,7 +72,9 @@ type TestContext = {
   showToast(msg: string, isError?: boolean): void;
 };
 
-function loadHelpers(runnerIds = ["claude", "codex", "gemini", "copilot"]): {
+function loadHelpers(
+  runnerIds = ["claude", "codex", "antigravity", "copilot"],
+): {
   helpers: HelperContext;
   storage: Map<string, string>;
 } {

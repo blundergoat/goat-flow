@@ -12,7 +12,7 @@ import {
   decodeClientMessage,
 } from "../../src/cli/server/decoders.js";
 
-const RUNNERS = new Set(["claude", "codex", "gemini", "copilot"]);
+const RUNNERS = new Set(["claude", "codex", "antigravity", "copilot"]);
 
 describe("decodeTerminalCreateBody", () => {
   it("returns typed body on a valid payload", () => {

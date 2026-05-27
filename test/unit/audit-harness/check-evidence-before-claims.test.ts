@@ -1,3 +1,10 @@
+/**
+ * Regression tests for the evidence-before-claims verification metric.
+ *
+ * The fixture deliberately maps Codex and Antigravity to the same AGENTS.md
+ * path so the metric stays pinned to unique present instruction files, not the
+ * number of agent profiles in the manifest.
+ */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
@@ -35,8 +42,8 @@ const STRUCTURE = {
       instruction_file: INSTRUCTION_FILES.codex,
       skills_dir: ".agents/skills/",
     },
-    gemini: {
-      instruction_file: INSTRUCTION_FILES.gemini,
+    antigravity: {
+      instruction_file: INSTRUCTION_FILES.antigravity,
       skills_dir: ".agents/skills/",
     },
     copilot: {
@@ -46,16 +53,28 @@ const STRUCTURE = {
   },
 };
 
+/**
+ * Build a fully covered project fixture.
+ *
+ * Duplicate instruction-file paths collapse to one object key, matching the
+ * harness behavior that scans each present instruction file once.
+ */
 function completeFiles(): Record<string, string> {
   return {
     [RATIONALISATIONS_PATH]: RATIONALISATIONS_PREAMBLE,
     [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
     [INSTRUCTION_FILES.codex]: completeInstruction("AGENTS.md"),
-    [INSTRUCTION_FILES.gemini]: completeInstruction("GEMINI.md"),
+    [INSTRUCTION_FILES.antigravity]: completeInstruction("AGENTS.md"),
     [INSTRUCTION_FILES.copilot]: completeInstruction("copilot-instructions.md"),
   };
 }
 
+/**
+ * Build a harness context whose filesystem exposes exactly the provided files.
+ *
+ * Missing instruction files must read as absent so metric tests can distinguish
+ * "agent profile exists" from "instruction file exists in this target".
+ */
 function ctxFromFiles(files: Record<string, string>, overrides = {}) {
   return makeCtx({
     structure: STRUCTURE,
@@ -75,7 +94,7 @@ describe("evidence-before-claims harness metric", () => {
     const result = evidenceBeforeClaims.run(ctxFromFiles(completeFiles()));
 
     assert.equal(result.status, "pass");
-    assert.match(result.findings.join("\n"), /4 present instruction file/);
+    assert.match(result.findings.join("\n"), /3 present instruction file/);
   });
 
   it("fails as a metric when a present instruction file lacks the red-flags section", () => {

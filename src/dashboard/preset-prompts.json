@@ -478,7 +478,7 @@
     "id": "review-instructions",
     "name": "Review Instructions",
     "desc": "Audit agent instruction files for drift and contradictions",
-    "prompt": "/goat-review audit my agent instruction files (AGENTS.md, CLAUDE.md, GEMINI.md, .github/copilot-instructions.md) for drift. Check for: stale references, contradictions between files, missing verification gates, broken cross-references. Verify every claim by reading the actual file or running the command - do not assume it's correct because it's written down.",
+    "prompt": "/goat-review audit my agent instruction files (AGENTS.md, CLAUDE.md, .github/copilot-instructions.md) for drift. Check for: stale references, contradictions between files, missing verification gates, broken cross-references. Verify every claim by reading the actual file or running the command - do not assume it's correct because it's written down.",
     "cat": "review",
     "route": "goat-review",
     "source": "goat-flow-catalog",

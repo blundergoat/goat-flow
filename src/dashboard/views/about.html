@@ -54,10 +54,10 @@
         <strong class="gf-text-primary" style="font-weight: 500"
           >That's a harness problem.</strong
         >
-        goat-flow is an opinionated harness for Claude Code, Codex, Gemini CLI,
-        and Copilot CLI: an audit that validates the setup, hooks that block
-        dangerous commands, skills that replace free-form prompting, and a
-        learning loop that captures lessons so mistakes don't recur.
+        goat-flow is an opinionated harness for Claude Code, Codex, Google
+        Antigravity, and Copilot CLI: an audit that validates the setup, hooks
+        that block dangerous commands, skills that replace free-form prompting,
+        and a learning loop that captures lessons so mistakes don't recur.
       </p>
 
       <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap">
@@ -595,9 +595,9 @@
             style="font-size: 15px; max-width: 640px; margin: 0 0 18px"
           >
             Hooks fire before or after agent actions. One ships by default:
-            <span class="mono gf-text-primary">deny-dangerous</span>. Projects
-            can add their own where their runner supports it; the audit checks
-            that hook files and registrations stay in sync.
+            <span class="mono gf-text-primary">guardrails</span>. Projects can
+            add their own where their runner supports it; the audit checks that
+            hook files and registrations stay in sync.
           </p>
 
           <div class="gf-card" style="padding: 16px 18px">
@@ -610,7 +610,7 @@
                   font-size: 13px;
                   min-width: 140px;
                 "
-                >deny-dangerous</span
+                >guardrails</span
               >
               <span class="gf-text-muted" style="font-size: 13px; flex: 1">
                 Blocks destructive filesystem commands, all git push,
@@ -636,8 +636,8 @@
               <span class="gf-text-primary">Add your own.</span> Linters, custom
               validators, format-on-save, project-specific rules. Register them
               in the agent's hook config alongside
-              <span class="mono gf-text-primary">deny-dangerous</span> so the
-              audit can verify the wiring.
+              <span class="mono gf-text-primary">guardrails</span> so the audit
+              can verify the wiring.
             </p>
           </div>
         </section>

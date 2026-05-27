@@ -95,18 +95,22 @@ function toRuntimeProfile(
     setupSurfaces: [...capabilities.setup_surfaces],
     promptInvocationStyle: capabilities.prompt_invocation_style,
     skillSource: capabilities.skill_source,
-    supportsPostTurnHook: agent.hook_events.post_turn !== null,
+    supportsPostTurnHook: agent.hook_events?.post_turn != null,
     settingsFile: agent.settings ?? null,
     hookConfigFile: agent.hook_config_file ?? agent.settings ?? null,
     skillsDir: requireDir(id, "skills_dir", agent.skills_dir),
     hooksDir: trimDir(agent.hooks_dir),
-    denyMechanism: toDenyMechanism(agent.deny_mechanism),
+    denyMechanism: agent.deny_mechanism
+      ? toDenyMechanism(agent.deny_mechanism)
+      : null,
     denyHookFile: agent.deny_hook ?? null,
     localPattern: agent.local_pattern,
-    hookEvents: {
-      preTool: agent.hook_events.pre_tool,
-      postTurn: agent.hook_events.post_turn ?? null,
-    },
+    hookEvents: agent.hook_events
+      ? {
+          preTool: agent.hook_events.pre_tool,
+          postTurn: agent.hook_events.post_turn ?? null,
+        }
+      : null,
   };
 }
 

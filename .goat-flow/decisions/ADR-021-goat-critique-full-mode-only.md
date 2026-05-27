@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-04-19
 **Updated:** 2026-05-18 - stale file-line citations replaced with current anchors or historical notes where Quick-mode text was removed.
+**Updated:** 2026-05-27 - Runtime slot updated per ADR-030; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
 
 ## Context
 
@@ -16,7 +17,7 @@
 ## Decision
 
 1. **goat-critique runs in one mode: full delegated.** 5 phases, 2-3 sub-agents by default; optionally 4 when cross-model spawning is available (see critique improvement plan M1/M5). Spawned via the Agent tool. Phase 1 MUST use isolated Agent-tool calls; no inline role-play substitute is permitted.
-2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23):** All four supported agents (Claude Code, Codex, Gemini, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/lessons/agent-behavior-trust.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
+2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/lessons/agent-behavior.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
 3. **Skill-chained entry still runs the full 5-phase flow.** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
 4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
 5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-claims.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
@@ -58,7 +59,7 @@
 Open a new ADR only if one of these occurs after the change ships:
 
 1. Demand for inline multi-lens critique (not covered by `/goat-review`) becomes a repeated pain point across users.
-2. Delegation becomes unavailable by default in a supported agent runtime (Claude, Codex, Gemini, Copilot), forcing the skill to add a fallback to stay useful.
+2. Delegation becomes unavailable by default in a supported agent runtime (Claude, Codex, Antigravity, Copilot), forcing the skill to add a fallback to stay useful.
 3. A lighter-weight brain-dump critique workflow emerges separately and makes goat-critique feel ceremonial for standard work, suggesting the ceremony ceiling was mis-set.
 
 ## References

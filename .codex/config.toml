@@ -1,7 +1,7 @@
 # Codex CLI configuration for goat-flow
 # Hooks: configured in .codex/hooks.json (not here)
 # Filesystem deny: Codex permission profile below
-# Command deny: deny-dangerous.sh via PreToolUse in .codex/hooks.json
+# Command deny: guardrail hooks via PreToolUse in .codex/hooks.json
 
 default_permissions = "goat-flow"
 
@@ -13,5 +13,5 @@ glob_scan_max_depth = 3
 # Codex 0.131 accepts exact paths and trailing "/**" subtrees here.
 # Exact entries must point at files that exist in this checkout; absent exact
 # paths can make Codex fail before shell startup. Filename globs such as
-# "*.key" are covered by .codex/hooks/deny-dangerous.sh.
+# "*.key" are covered by .codex/hooks/guard-secret-paths.sh.
 ":workspace_roots" = { "." = "write", "secrets/**" = "none", ".ssh/**" = "none", ".aws/**" = "none", ".docker/**" = "none", ".gnupg/**" = "none", ".kube/**" = "none" }

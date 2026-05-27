@@ -19,8 +19,8 @@ set -uo pipefail
 root="${1:-.}"
 errors=0
 skill_dirs=".claude/skills .agents/skills .github/skills"
-instruction_files="CLAUDE.md AGENTS.md GEMINI.md .github/copilot-instructions.md"
-hook_configs=".claude/settings.json .gemini/settings.json .codex/hooks.json .github/hooks/hooks.json"
+instruction_files="CLAUDE.md AGENTS.md .github/copilot-instructions.md"
+hook_configs=".claude/settings.json .codex/hooks.json .github/hooks/hooks.json"
 
 err() { echo "FAIL: $1" >&2; errors=$((errors + 1)); }
 

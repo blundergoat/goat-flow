@@ -24,7 +24,7 @@ Meanwhile, the scanner penalized every project 1 point for the missing file (che
 Remove `confusion-log.md` from the workflow entirely and do not resurrect it as a first-class learning-loop surface.
 
 - Remove rubric check 2.3.5
-- Remove from all router tables (CLAUDE.md, AGENTS.md, GEMINI.md)
+- Remove from all router tables (CLAUDE.md, AGENTS.md, `.github/copilot-instructions.md`)
 - Remove from spec docs, setup prompts, fragment registry, shared facts
 - Remove `workflow/evaluation/confusion-log.md` template
 - Remove from CI allowed-missing paths

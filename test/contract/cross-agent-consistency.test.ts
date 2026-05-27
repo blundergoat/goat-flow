@@ -137,7 +137,8 @@ describe("manifest-backed agent capability alignment", () => {
       );
       assert.equal(
         profile.supportsPostTurnHook,
-        manifestAgent.hook_events.post_turn !== null,
+        manifestAgent.hook_events != null &&
+          manifestAgent.hook_events.post_turn !== null,
       );
       assert.ok(
         profile.terminalBinary.trim(),

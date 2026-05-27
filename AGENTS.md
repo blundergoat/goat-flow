@@ -1,7 +1,7 @@
-# AGENTS.md - v1.7.0 (2026-05-20)
+# AGENTS.md - v1.8.0 (2026-05-20)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 
-goat-flow is a harness — guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
+goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
 
 This repo is the goat-flow controlling workspace. When the dashboard or CLI operates on a selected target project, commands like `audit` and `quality` run against that target - not this repo. Keep the two contexts separate: framework code lives here, project-specific harness content lives in the target.
 
@@ -20,7 +20,7 @@ This repo is the goat-flow controlling workspace. When the dashboard or CLI oper
 
 **Ask First** - before proceeding, state: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked (`.github/instructions/` / `AGENTS.md` / none), rollback command.
 
-Boundaries: instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`); workflow/manifest (`workflow/setup/`, `workflow/skills/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill reference (`.goat-flow/skill-reference/`); skill playbooks (`.goat-flow/skill-playbooks/`); server runtime (`src/cli/server/terminal.ts`, `src/cli/server/dashboard.ts`); agent configs (`.claude/**`, `.codex/**`, `.gemini/**`, `.agents/**`); CI/hooks (`.github/workflows/**`, `.github/actions/**`, `.github/hooks/**`, `.github/skills/**`); any add/remove/rename; changes spanning 3+ docs.
+Boundaries: instruction files (`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`); workflow/manifest (`workflow/setup/`, `workflow/skills/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill reference (`.goat-flow/skill-reference/`); skill playbooks (`.goat-flow/skill-playbooks/`); server runtime (`src/cli/server/terminal.ts`, `src/cli/server/dashboard.ts`); agent configs (`.claude/**`, `.codex/**`, `.agents/**`); CI/hooks (`.github/workflows/**`, `.github/actions/**`, `.github/hooks/**`, `.github/skills/**`); any add/remove/rename; changes spanning 3+ docs.
 
 **Never:** If interrupted or told no changes, freeze writes; run only read-only status/diff checks until the user explicitly asks for cleanup, revert, or apply. Delete docs without replacement. Modify .env/secrets. Push. Commit unless asked. Invent hypothetical examples. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`). Delete/move/overwrite 5+ files in one operation without listing targets and getting confirmation.
 
@@ -37,7 +37,7 @@ Boundaries: instruction files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/c
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md` — read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 ```bash
@@ -48,7 +48,7 @@ npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.codex/hooks/deny-dangerous.sh --self-test` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.codex/hooks/guardrails-self-test.sh --self-test` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
@@ -93,7 +93,7 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 
 The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-flow/skill-reference/skill-preamble.md` (search: `Rationalisations to reject`) names the specific rationalisations that defeat the red-flags ("I'm confident", "Just this once", "Linter passed", etc.). Apply both before any completion or fix claim.
 
-- **Stop-the-line:** When tests break, builds fail, or behaviour regresses — stop expanding scope. Preserve evidence, return to diagnosis, re-plan before continuing.
+- **Stop-the-line:** When tests break, builds fail, or behaviour regresses - stop expanding scope. Preserve evidence, return to diagnosis, re-plan before continuing.
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human. Two corrections on same approach = MUST rewind.
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
@@ -121,4 +121,4 @@ When asked to add, create, or update a goat-flow artifact, route it to the artif
 | Config | `.goat-flow/config.yaml` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
-| Peer instructions | `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md` |
+| Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` |

@@ -42,7 +42,7 @@
   "url": "https://goat-flow.com/what-is-harness-engineering",
   "datePublished": "2026-04-26",
   "mainEntityOfPage": "https://goat-flow.com/what-is-harness-engineering",
-  "keywords": "harness engineering, AI coding agent, guardrails, agent memory, Claude Code, Codex, Gemini CLI, Copilot CLI, AI safety, agent reliability"
+  "keywords": "harness engineering, AI coding agent, guardrails, agent memory, Claude Code, Codex, Google Antigravity, Copilot CLI, AI safety, agent reliability"
 }
 </script>
 
@@ -103,7 +103,7 @@
       "name": "Do I need harness engineering if I only use one AI coding agent?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Harness engineering applies regardless of which agent you use. Claude Code, Codex, Gemini CLI, and Copilot CLI all share the same failure modes: they fabricate APIs, forget yesterday's context, and confidently act on bad premises without verification. A harness addresses these structurally."
+        "text": "Yes. Harness engineering applies regardless of which agent you use. Claude Code, Codex, Google Antigravity, and Copilot CLI all share the same failure modes: they fabricate APIs, forget yesterday's context, and confidently act on bad premises without verification. A harness addresses these structurally."
       }
     }
   ]
@@ -574,7 +574,7 @@
   </p>
 
   <p>
-    The practitioners actually shipping production agents have converged on the same observation. The LLM is a commodity. Everyone has Claude Code. Everyone has Codex. Gemini CLI. Copilot CLI. If the model is the differentiator, there is no differentiator. What makes one team ship fast and safe with AI while the team next door ships fast and broken? The scaffolding.
+    The practitioners actually shipping production agents have converged on the same observation. The LLM is a commodity. Everyone has Claude Code. Everyone has Codex. Antigravity. Copilot CLI. If the model is the differentiator, there is no differentiator. What makes one team ship fast and safe with AI while the team next door ships fast and broken? The scaffolding.
   </p>
 
   <p>
@@ -842,12 +842,12 @@
   <h2>How goat-flow implements the five concerns</h2>
 
   <p>
-    <a href="/">goat-flow</a> is the opinionated harness for teams shipping with Claude Code, Codex, Gemini CLI, and Copilot CLI. It implements the five concerns as a single CLI that audits, scores, and installs everything an agent needs to operate reliably.
+    <a href="/">goat-flow</a> is the opinionated harness for teams shipping with Claude Code, Codex, Google Antigravity, and Copilot CLI. It implements the five concerns as a single CLI that audits, scores, and installs everything an agent needs to operate reliably.
   </p>
 
   <ul>
     <li><strong>Context</strong> - hot-path router with cold-path domain docs. READ → SCOPE → ACT → VERIFY execution loop enforced in every instruction file.</li>
-    <li><strong>Constraints</strong> - <code>deny-dangerous</code> hook blocks destructive commands at the tool-call layer. Covers <code>rm -rf</code>, all git push, direct literal secret-path reads, subshell escapes, and database truncation.</li>
+    <li><strong>Constraints</strong> - <code>guardrails</code> hook blocks destructive commands at the tool-call layer. Covers <code>rm -rf</code>, all git push, direct literal secret-path reads, subshell escapes, and database truncation.</li>
     <li><strong>Verification</strong> - post-action hooks, typecheck/lint gates, and structured skills with built-in stopping points before the agent moves on.</li>
     <li><strong>Recovery</strong> - milestone files with trackable checkboxes, session logs, and compaction-safe artefacts the agent reads on resume.</li>
     <li><strong>Feedback loop</strong> - <code>footguns/</code>, <code>lessons/</code>, and <code>decisions/</code> directories with semantic-anchor evidence. Every mistake becomes next session's context.</li>
@@ -882,7 +882,7 @@
     </div>
 
     <p class="install-note">
-      Supports Claude Code, Codex, Gemini CLI, and Copilot CLI. <a href="https://github.com/blundergoat/goat-flow#readme" target="_blank" rel="noopener">Read the docs →</a>
+      Supports Claude Code, Codex, Google Antigravity, and Copilot CLI. <a href="https://github.com/blundergoat/goat-flow#readme" target="_blank" rel="noopener">Read the docs →</a>
     </p>
   </div>
 </section>

@@ -24,36 +24,44 @@ const ACKNOWLEDGED_SUPPRESSION =
 type SarifScope = "setup" | "agent" | "harness" | "drift" | "content";
 type SarifLevel = "error" | "warning" | "note" | "none";
 
+/** Minimal SARIF message shape used by this renderer; audit text is already plain text. */
 interface SarifMessage {
   text: string;
 }
 
+/** Repo-relative artifact reference accepted by SARIF uploaders. */
 interface SarifArtifactLocation {
   uri: string;
 }
 
+/** Location detail is intentionally line-only because audit evidence does not track columns. */
 interface SarifRegion {
   startLine?: number;
 }
 
+/** SARIF nests file and region under physicalLocation even when only a file URI exists. */
 interface SarifPhysicalLocation {
   artifactLocation: SarifArtifactLocation;
   region?: SarifRegion;
 }
 
+/** Result locations are omitted entirely when goat-flow evidence is not file-addressable. */
 interface SarifLocation {
   physicalLocation: SarifPhysicalLocation;
 }
 
+/** External suppressions preserve acknowledged audit findings without marking them as fixed. */
 interface SarifSuppression {
   kind: "external";
   justification: string;
 }
 
+/** Extension bag for goat-flow fields that have no first-class SARIF slot. */
 interface SarifPropertyBag {
   [key: string]: unknown;
 }
 
+/** Registered rule metadata shared by all SARIF results using the same audit check id. */
 interface SarifReportingDescriptor {
   id: string;
   name: string;
@@ -63,6 +71,7 @@ interface SarifReportingDescriptor {
   properties?: SarifPropertyBag;
 }
 
+/** Audit finding projected into SARIF with a stable fingerprint for downstream dedupe. */
 interface SarifResult {
   ruleId: string;
   level: SarifLevel;
@@ -73,6 +82,7 @@ interface SarifResult {
   properties?: SarifPropertyBag;
 }
 
+/** Tool driver block shown by SARIF consumers, pinned to the audit renderer version. */
 interface SarifToolComponent {
   name: string;
   informationUri: string;
@@ -80,6 +90,7 @@ interface SarifToolComponent {
   rules: SarifReportingDescriptor[];
 }
 
+/** A single goat-flow audit invocation produces exactly one SARIF run. */
 interface SarifRun {
   tool: {
     driver: SarifToolComponent;
@@ -87,12 +98,14 @@ interface SarifRun {
   results: SarifResult[];
 }
 
+/** Top-level SARIF document shape emitted by `audit --format sarif`. */
 interface SarifLog {
   $schema: string;
   version: "2.1.0";
   runs: SarifRun[];
 }
 
+/** Couples rule descriptors to goat-flow scopes so sorting stays deterministic. */
 interface RuleRegistration {
   scope: SarifScope;
   descriptor: SarifReportingDescriptor;
@@ -118,12 +131,22 @@ const DRIFT_RULE_DESCRIPTIONS: Record<DriftKind, string> = {
     "A deprecated goat-flow skill mirror exists in the target project.",
 };
 
-/** Render an AuditReport as a SARIF 2.1.0 JSON string. */
+/**
+ * Render an AuditReport as a SARIF 2.1.0 JSON string.
+ *
+ * @param report - Completed goat-flow audit report to project into SARIF.
+ * @returns Pretty-printed SARIF JSON ready for stdout or `--output`.
+ */
 export function renderAuditSarif(report: AuditReport): string {
   return JSON.stringify(buildAuditSarifLog(report), null, 2);
 }
 
-/** Build the SARIF log object before JSON serialization. */
+/**
+ * Build the SARIF log object before JSON serialization.
+ *
+ * Invariant: rule and result order must stay deterministic because CI uploads
+ * and code-scanning baselines diff SARIF across runs.
+ */
 function buildAuditSarifLog(report: AuditReport): SarifLog {
   const rules = new Map<string, RuleRegistration>();
   const results: SarifResult[] = [];
@@ -339,12 +362,14 @@ function resultFromCheck(
   };
 }
 
+/** Map goat-flow audit impact to the closest SARIF level without changing audit semantics. */
 function levelFromImpact(impact: CheckImpact): SarifLevel {
   if (impact === "scope-fail") return "error";
   if (impact === "score-only") return "warning";
   return "note";
 }
 
+/** Prefer target evidence so SARIF annotations point at the files users can change first. */
 function locationsFromCheck(check: CheckResult): SarifLocation[] {
   const paths = [
     ...(check.provenance.target_evidence_paths ?? []),
@@ -353,6 +378,12 @@ function locationsFromCheck(check: CheckResult): SarifLocation[] {
   return locationsFromPaths(paths);
 }
 
+/**
+ * Convert a single safe repo path into a SARIF location.
+ *
+ * Unsafe paths return no locations because SARIF uploads should omit
+ * annotations rather than leak host paths or invent placeholder files.
+ */
 function locationsFromPath(path: string, line?: number): SarifLocation[] {
   const uri = normalizeRepoUri(path);
   if (!uri) return [];
@@ -366,6 +397,7 @@ function locationsFromPath(path: string, line?: number): SarifLocation[] {
   ];
 }
 
+/** Use only the first addressable evidence path because one result should create one annotation. */
 function locationsFromPaths(paths: string[]): SarifLocation[] {
   for (const path of paths) {
     const locations = locationsFromPath(path);
@@ -374,6 +406,7 @@ function locationsFromPaths(paths: string[]): SarifLocation[] {
   return [];
 }
 
+/** Keep SARIF URIs repo-relative and prevent local paths or URI schemes from leaking. */
 function normalizeRepoUri(path: string): string | null {
   const trimmed = path.trim().replace(/\\/g, "/");
   if (trimmed === "") return null;
@@ -383,10 +416,12 @@ function normalizeRepoUri(path: string): string | null {
   return trimmed.replace(/^\.\//u, "");
 }
 
+/** Namespace drift rules away from setup check ids so SARIF rule identities cannot collide. */
 function driftRuleId(kind: DriftKind): string {
   return `drift:${kind}`;
 }
 
+/** Namespace content lint rules away from setup check ids so downstream alerts stay distinct. */
 function contentRuleId(rule: string): string {
   return `content:${rule}`;
 }
@@ -401,6 +436,7 @@ function compareRuleRegistrations(
   );
 }
 
+/** Deterministic result ordering keeps SARIF diffs focused on finding changes. */
 function compareResults(left: SarifResult, right: SarifResult): number {
   return (
     compareScope(resultScope(left), resultScope(right)) ||
@@ -413,6 +449,7 @@ function compareResults(left: SarifResult, right: SarifResult): number {
   );
 }
 
+/** Treat malformed extension properties as setup scope so sorting never throws. */
 function resultScope(result: SarifResult): SarifScope {
   const scope = result.properties?.scope;
   if (
@@ -427,14 +464,17 @@ function resultScope(result: SarifResult): SarifScope {
   return "setup";
 }
 
+/** Compare scopes in the same order the audit summary presents them. */
 function compareScope(left: SarifScope, right: SarifScope): number {
   return SCOPE_ORDER[left] - SCOPE_ORDER[right];
 }
 
+/** Locale-pinned string comparison avoids host-locale drift in generated SARIF. */
 function compareString(left: string, right: string): number {
   return left.localeCompare(right, "en");
 }
 
+/** Empty URI keeps unlocated results sortable and fingerprintable without fake paths. */
 function locationUri(locations: SarifLocation[]): string {
   return locations[0]?.physicalLocation.artifactLocation.uri ?? "";
 }
