@@ -318,7 +318,7 @@ details_pipe() {
 phase_for() {
     case "$1" in
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
-        "Deny Policy"|"ADR Enforcement") printf 'POLICY' ;;
+        "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
         "Skill Behavioral Contracts"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
@@ -334,6 +334,7 @@ display_for() {
         "TypeScript") printf 'TypeScript' ;;
         "Deny Policy") printf 'Deny policy' ;;
         "ADR Enforcement") printf 'ADR enforcement' ;;
+        "Gruff Policy") printf 'Gruff policy' ;;
         "Agent Config Parity") printf 'Agent config parity' ;;
         "Skill and Reference Versions") printf 'Skill versions' ;;
         "Version Consistency") printf 'Version consistency' ;;
@@ -362,6 +363,7 @@ collapsed_desc_for() {
         "TypeScript") printf 'build · lint · knip · prettier' ;;
         "Deny Policy") printf 'self-test + runtime smokes' ;;
         "ADR Enforcement") printf 'no removed patterns' ;;
+        "Gruff Policy") printf 'no enabled:false in .gruff-ts.yaml' ;;
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
@@ -465,7 +467,7 @@ _compute_widths() {
     local sec disp d
     local known=(
         "Shell Scripts" "TypeScript"
-        "Deny Policy" "ADR Enforcement"
+        "Deny Policy" "ADR Enforcement" "Gruff Policy"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
         "Skill Behavioral Contracts" "Cross-Agent Consistency"
         "Instruction Parity Contract" "Instruction File Quality"
@@ -1692,6 +1694,26 @@ for pattern in "${removed_patterns[@]}"; do
     fi
 done
 $adr_clean && pass "No removed patterns found"
+
+# ── Gruff Policy ─────────────────────────────────────────────────────
+# Enforces the project rule "never disable gruff-ts rules" structurally
+# instead of relying on agent memory (see feedback_gruff_never_disable.md
+# and the M00 gruff-cleanup milestone). Findings get fixed, tuned via
+# thresholds/allowlists, or baselined with rationale - never silenced via
+# `enabled: false`. A single line in .gruff-ts.yaml setting `enabled: false`
+# on any rule fails this check.
+if [[ -f .gruff-ts.yaml ]]; then
+    section "Gruff Policy"
+    disabled_lines=$(grep -nE '^[[:space:]]*enabled:[[:space:]]*false' .gruff-ts.yaml || true)
+    if [[ -z "$disabled_lines" ]]; then
+        pass "No gruff-ts rules disabled (satisfy or tune)"
+    else
+        fail "gruff-ts rule(s) disabled in .gruff-ts.yaml - satisfy or tune, never silence"
+        printf '%s\n' "$disabled_lines" | head -5 | details_pipe
+    fi
+else
+    skip "Gruff Policy (.gruff-ts.yaml not found)"
+fi
 
 # ── GOAT Flow Audit ────────────────────────────────────────────────────
 if [[ -f dist/cli/cli.js ]]; then

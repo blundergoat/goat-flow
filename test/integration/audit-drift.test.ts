@@ -12,6 +12,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { assertExists } from "../helpers/assert-exists.ts";
 import {
   cpSync,
   existsSync,
@@ -420,8 +421,8 @@ describe("checkDrift: body edit in one skill", () => {
     });
     assert.equal(report.status, "fail");
     const drift = report.findings.find((f) => f.kind === "content");
-    assert.ok(drift, "expected a content drift finding");
-    assert.match(drift!.path, /\.claude\/skills\/goat\/SKILL\.md/);
+    assertExists(drift, "expected a content drift finding");
+    assert.match(drift.path, /\.claude\/skills\/goat\/SKILL\.md/);
   });
 });
 
@@ -472,8 +473,8 @@ describe("checkDrift: missing installed copy", () => {
     });
     assert.equal(report.status, "fail");
     const missing = report.findings.find((f) => f.kind === "missing");
-    assert.ok(missing, "expected a missing finding");
-    assert.match(missing!.path, /\.claude\/skills\/goat\/SKILL\.md/);
+    assertExists(missing, "expected a missing finding");
+    assert.match(missing.path, /\.claude\/skills\/goat\/SKILL\.md/);
   });
 });
 

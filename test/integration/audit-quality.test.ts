@@ -4,6 +4,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
+import { assertExists } from "../helpers/assert-exists.ts";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
@@ -46,9 +47,9 @@ describe("harness concern statuses", () => {
   it("all concern statuses are pass or fail", () => {
     const report = getRepoAudit({ agentFilter: "claude", harness: true });
 
-    assert.notEqual(report.concerns, null);
-    for (const key of Object.keys(report.concerns!) as AuditConcernKey[]) {
-      const status = report.concerns![key].status;
+    assertExists(report.concerns);
+    for (const key of Object.keys(report.concerns) as AuditConcernKey[]) {
+      const status = report.concerns[key].status;
       assert.ok(
         status === "pass" || status === "fail",
         `${key} status ${status} should be pass or fail`,
@@ -249,10 +250,10 @@ describe("zero-entry fresh install", () => {
   it("a project with zero footguns and lessons passes harness", () => {
     const report = getRepoAudit({ agentFilter: "claude", harness: true });
 
-    assert.notEqual(report.concerns, null);
+    assertExists(report.concerns);
     // feedback_loop concern should pass even with zero entries
     // (the real project has entries, but the check only requires directories to exist)
-    const feedbackLoop = report.concerns!.feedback_loop;
+    const feedbackLoop = report.concerns.feedback_loop;
     assert.equal(
       feedbackLoop.status,
       "pass",

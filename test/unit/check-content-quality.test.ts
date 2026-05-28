@@ -16,15 +16,16 @@ import {
   scanContentQuality,
 } from "../../src/cli/audit/check-content-quality.js";
 import { makeCtx, stubFS } from "../fixtures/projects/index.js";
+import { assertExists } from "../helpers/assert-exists.ts";
 
 describe("scanContentQuality: vague terms", () => {
   it("flags 'properly' as INFO", () => {
     const findings = scanContentQuality("x.md", "Handle errors properly.");
     const vague = findings.find((f) => f.rule === "vague-term");
-    assert.ok(vague, "expected vague-term finding");
-    assert.equal(vague!.severity, "info");
-    assert.match(vague!.message, /properly/);
-    assert.ok(vague!.suggestion, "should include suggestion");
+    assertExists(vague, "expected vague-term finding");
+    assert.equal(vague.severity, "info");
+    assert.match(vague.message, /properly/);
+    assert.ok(vague.suggestion, "should include suggestion");
   });
 
   it("does not flag 'properly' inside a fenced code block", () => {
@@ -46,7 +47,9 @@ describe("scanContentQuality: vague terms", () => {
   it("context-aware suggestion for format/style", () => {
     const findings = scanContentQuality("x.md", "Format the file properly.");
     const vague = findings.find((f) => f.rule === "vague-term");
-    assert.match(vague!.suggestion!, /Prettier|style guide|indentation/i);
+    assertExists(vague, "expected vague-term finding");
+    assertExists(vague.suggestion, "vague-term finding should carry a suggestion");
+    assert.match(vague.suggestion, /Prettier|style guide|indentation/i);
   });
 });
 
@@ -54,15 +57,15 @@ describe("scanContentQuality: generic instructions", () => {
   it("flags 'follow best practices' as WARNING", () => {
     const findings = scanContentQuality("x.md", "Follow best practices.");
     const generic = findings.find((f) => f.rule === "generic-best-practices");
-    assert.ok(generic, "expected generic-best-practices finding");
-    assert.equal(generic!.severity, "warning");
+    assertExists(generic, "expected generic-best-practices finding");
+    assert.equal(generic.severity, "warning");
   });
 
   it("flags 'be careful' as WARNING", () => {
     const findings = scanContentQuality("x.md", "Be careful with paths.");
     const generic = findings.find((f) => f.rule === "generic-be-careful");
-    assert.ok(generic);
-    assert.equal(generic!.severity, "warning");
+    assertExists(generic, "expected generic-be-careful finding");
+    assert.equal(generic.severity, "warning");
   });
 
   it("does not flag generic patterns inside a code block", () => {
@@ -86,8 +89,8 @@ describe("scanContentQuality: non-actionable patterns", () => {
       "Remember: paths are absolute.",
     );
     const na = findings.find((f) => f.rule === "non-actionable-remember");
-    assert.ok(na, "expected non-actionable-remember finding");
-    assert.equal(na!.severity, "info");
+    assertExists(na, "expected non-actionable-remember finding");
+    assert.equal(na.severity, "info");
   });
 
   it("does not flag 'remember to run tests' (has 'to <verb>')", () => {
@@ -238,9 +241,9 @@ describe("scanContentQuality: legacy execution loop (M19-9a)", () => {
     const legacy = findings.find(
       (f) => f.rule === "legacy-execution-loop-classify",
     );
-    assert.ok(legacy, "expected legacy-execution-loop-classify finding");
-    assert.equal(legacy!.severity, "warning");
-    assert.match(legacy!.message, /v1\.2 loop is four steps/);
+    assertExists(legacy, "expected legacy-execution-loop-classify finding");
+    assert.equal(legacy.severity, "warning");
+    assert.match(legacy.message, /v1\.2 loop is four steps/);
   });
 
   it("flags 'VERIFY → LOG' alone as WARNING even without CLASSIFY context", () => {
@@ -251,8 +254,8 @@ describe("scanContentQuality: legacy execution loop (M19-9a)", () => {
     const legacy = findings.find(
       (f) => f.rule === "legacy-execution-loop-trailing-log",
     );
-    assert.ok(legacy, "expected legacy-execution-loop-trailing-log finding");
-    assert.equal(legacy!.severity, "warning");
+    assertExists(legacy, "expected legacy-execution-loop-trailing-log finding");
+    assert.equal(legacy.severity, "warning");
   });
 
   it("flags ASCII arrows 'READ -> CLASSIFY -> SCOPE'", () => {

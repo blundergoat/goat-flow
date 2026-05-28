@@ -100,9 +100,9 @@ function makeScope(checks: CheckResult[]): AuditScope {
   return {
     status: checks.some((check) => check.status === "fail") ? "fail" : "pass",
     checks,
-    failures: checks
-      .filter((check) => check.status === "fail" && check.failure)
-      .map((check) => check.failure!),
+    failures: checks.flatMap((check) =>
+      check.status === "fail" && check.failure ? [check.failure] : [],
+    ),
     summary: {},
   };
 }

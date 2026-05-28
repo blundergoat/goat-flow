@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createContext, runInContext } from "node:vm";
 import { ScriptTarget, transpileModule } from "typescript";
+import { assertExists } from "../helpers/assert-exists.ts";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const DASHBOARD_TERMINAL_PATH = resolve(
@@ -3978,9 +3979,9 @@ describe("dashboard terminal launch flow", () => {
     );
     const longDetail = "Error loading configuration: " + "x".repeat(500);
     const detail = helpers.dashboardExtractRunnerStartupError(longDetail);
-    assert.ok(detail !== null);
-    assert.ok(detail!.length <= 303);
-    assert.ok(detail!.endsWith("..."));
+    assertExists(detail);
+    assert.ok(detail.length <= 303);
+    assert.ok(detail.endsWith("..."));
   });
 
   it("detects the compact Claude composer footer as runner readiness", () => {
