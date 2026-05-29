@@ -225,10 +225,12 @@ function rerunAuditCommand(
   return `${getCliCommand()} audit ${targetArg(facts.root)}${scopeFlag} --agent ${agentId}`;
 }
 
+/** Build the audit command shown in generated setup prompts for the selected agent. */
 function auditCommand(facts: ProjectFacts, agentId: AgentId): string {
   return `${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId}`;
 }
 
+/** Build the harness audit command variant used by setup follow-up instructions. */
 function harnessAuditCommand(facts: ProjectFacts, agentId: AgentId): string {
   return `${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId} --harness`;
 }

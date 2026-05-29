@@ -93,15 +93,18 @@ const SANITISED_PLAYWRIGHT_SHAPED_SKILL = [
   "- Prefer visible text waits over fixed sleeps.",
 ].join("\n");
 
+/** Keep skill-quality fixture projects isolated from the real repo tree. */
 function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-quality-"));
 }
 
+/** Write fixture files while preserving nested artifact directory shapes. */
 function writeText(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);
 }
 
+/** Place a test skill at the installed Claude skill path the scanner expects. */
 function writeSkill(projectRoot: string, name: string, content: string): void {
   writeText(join(projectRoot, ".claude/skills", name, "SKILL.md"), content);
 }
@@ -114,6 +117,7 @@ function writeSkill(projectRoot: string, name: string, content: string): void {
 // ---------------------------------------------------------------------------
 
 let cachedRepoArtifacts: ReturnType<typeof discoverArtifacts> | null = null;
+/** Reuse whole-repo discovery because artifact walks dominate this suite. */
 function getRepoArtifacts(): ReturnType<typeof discoverArtifacts> {
   if (cachedRepoArtifacts === null) {
     cachedRepoArtifacts = discoverArtifacts(PROJECT_ROOT);
@@ -123,6 +127,7 @@ function getRepoArtifacts(): ReturnType<typeof discoverArtifacts> {
 
 let cachedRepoScoredArtifacts: ReturnType<typeof scoreAllArtifacts> | null =
   null;
+/** Reuse whole-repo scoring because each run evaluates every installed skill. */
 function getRepoScoredArtifacts(): ReturnType<typeof scoreAllArtifacts> {
   if (cachedRepoScoredArtifacts === null) {
     cachedRepoScoredArtifacts = scoreAllArtifacts(PROJECT_ROOT);
@@ -559,6 +564,7 @@ describe("reference scoring", () => {
 });
 
 describe("gate vocabulary", () => {
+  /** Score only the gate-quality metric for a one-off skill body. */
   function gateScoreFor(content: string): number {
     const projectRoot = makeTempProject();
     writeSkill(projectRoot, "gate-vocab", content);
@@ -567,6 +573,7 @@ describe("gate vocabulary", () => {
     return report.metrics.find((m) => m.metric === "gate-quality")!.score;
   }
 
+  /** Wrap gate-vocabulary snippets in the minimum valid skill scaffold. */
   function frontmatterSkill(body: string): string {
     return [
       "---",
@@ -1496,6 +1503,7 @@ describe("metric completeness", () => {
 });
 
 describe("workflow-summary description detection (M10 §4)", () => {
+  /** Build a minimal skill around the description under scorer test. */
   function buildSkillMd(description: string): string {
     return [
       "---",

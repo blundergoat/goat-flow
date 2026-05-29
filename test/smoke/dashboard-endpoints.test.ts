@@ -26,12 +26,17 @@ const childProcess =
 
 type TerminalWebSocket = Parameters<TerminalManager["attachWebSocket"]>[1];
 
+/** Minimal PTY surface TerminalManager needs for endpoint smoke tests. */
 interface TestPty {
+  /** Record terminal input sent through the fake PTY. */
   write(data: string): void;
+  /** Record terminal resize requests without opening a real PTY. */
   resize(cols: number, rows: number): void;
+  /** Terminate the fake PTY lifecycle used by shutdown assertions. */
   kill(): void;
 }
 
+/** Mutable terminal session shape used to seed TerminalManager internals. */
 interface TestTerminalSession {
   id: string;
   status: "active" | "terminated";
@@ -48,6 +53,7 @@ interface TestTerminalSession {
   detachBufferSize: number;
 }
 
+/** Private TerminalManager fields initialized directly for focused tests. */
 interface TestTerminalManagerInternals {
   sessions: Map<string, TestTerminalSession>;
   runnerPaths: Map<string, string>;
@@ -64,27 +70,32 @@ class FakeWebSocket {
   closed = false;
   private handlers = new Map<string, Array<(raw: Buffer | string) => void>>();
 
+  /** Capture serialized server messages for WebSocket boundary assertions. */
   send(payload: string): void {
     this.sent.push(JSON.parse(payload) as ServerMessage);
   }
 
+  /** Move the fake socket to closed state and notify close listeners. */
   close(): void {
     this.closed = true;
     this.emit("close", "");
   }
 
+  /** Register a fake socket listener using the server-facing callback shape. */
   on(event: string, handler: (raw: Buffer | string) => void): void {
     const existing = this.handlers.get(event) ?? [];
     existing.push(handler);
     this.handlers.set(event, existing);
   }
 
+  /** Dispatch a fake socket event to registered terminal handlers. */
   emit(event: string, raw: Buffer | string): void {
     for (const handler of this.handlers.get(event) ?? []) {
       handler(raw);
     }
   }
 
+  /** Cast this focused fake to the WebSocket subset TerminalManager consumes. */
   asTerminalSocket(): TerminalWebSocket {
     return this as unknown as TerminalWebSocket;
   }
@@ -96,6 +107,7 @@ function managerInternals(
   return manager as unknown as TestTerminalManagerInternals;
 }
 
+/** Build a TerminalManager instance with explicit test-owned internals. */
 function makeManager(): TerminalManager {
   const manager = Object.create(TerminalManager.prototype) as TerminalManager;
   const internals = managerInternals(manager);
@@ -108,6 +120,7 @@ function makeManager(): TerminalManager {
   return manager;
 }
 
+/** Create an active session fixture plus arrays that record PTY calls. */
 function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   session: TestTerminalSession;
   writes: string[];
@@ -116,8 +129,11 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   const writes: string[] = [];
   const resizes: Array<{ cols: number; rows: number }> = [];
   const pty: TestPty = {
+    /** Capture input routed from decoded WebSocket messages. */
     write: (data) => writes.push(data),
+    /** Capture clamped resize dimensions routed from WebSocket messages. */
     resize: (cols, rows) => resizes.push({ cols, rows }),
+    /** Keep shutdown paths synchronous for session-list tests. */
     kill: () => undefined,
   };
   const session: TestTerminalSession = {
@@ -139,6 +155,7 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
   return { session, writes, resizes };
 }
 
+/** Create the fake spawned PTY used by prompt-delivery timing tests. */
 function makeSpawnedPty(): {
   pty: TestPty & {
     onData(handler: (data: string) => void): void;
@@ -147,6 +164,7 @@ function makeSpawnedPty(): {
     ): void;
   };
   writes: string[];
+  /** Emit fake runner output into TerminalManager's PTY data handler. */
   emitData(data: string): void;
 } {
   const writes: string[] = [];
@@ -158,16 +176,22 @@ function makeSpawnedPty(): {
   return {
     writes,
     pty: {
+      /** Capture delayed prompt input written into the spawned PTY. */
       write: (data) => writes.push(data),
+      /** Ignore resize calls because prompt timing tests do not inspect them. */
       resize: () => undefined,
+      /** Route termination through the registered exit handler. */
       kill: () => exitHandler({ exitCode: 0 }),
+      /** Store the data handler so tests can emit runner output deterministically. */
       onData: (handler) => {
         dataHandler = handler;
       },
+      /** Store the exit handler so fake kill mirrors node-pty shutdown. */
       onExit: (handler) => {
         exitHandler = handler;
       },
     },
+    /** Emit fake runner output into TerminalManager's PTY data handler. */
     emitData(data: string): void {
       dataHandler(data);
     },

@@ -31,8 +31,11 @@ interface DashboardPromptsContext {
   flatPresetOrder: string[];
   presetsByCategory: Array<{ id: string; label: string; items: Preset[] }>;
   filteredPresets: Preset[];
+  /** Adapt slash-command syntax for the selected runner before preview or copy. */
   adaptPrompt(prompt: string, runner?: RunnerId): string;
+  /** Copy prompt text through the shared dashboard clipboard helper. */
   copyText(text: string): void;
+  /** Persist dashboard favorites after prompt interactions mutate them. */
   _saveDashboardState(): void;
 }
 

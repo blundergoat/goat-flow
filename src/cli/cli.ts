@@ -586,6 +586,7 @@ interface SkillPositionals {
   projectPath: string;
 }
 
+/** Detect positional skill project paths so descriptions do not accidentally consume them. */
 function isPathShapedSkillProject(value: string): boolean {
   const normalized = value.replace(/\\/gu, "/");
   return (
@@ -599,6 +600,7 @@ function isPathShapedSkillProject(value: string): boolean {
   );
 }
 
+/** Join free-form skill description parts after dropping absent argv values. */
 function parseSkillDescription(parts: string[]): string | null {
   const description = parts
     .filter(
@@ -656,6 +658,7 @@ function rejectFlagOutsideCommand(
   );
 }
 
+/** Reject shared flags when they are attached to commands that do not support them. */
 function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   rejectFlagOutsideCommand(
     command,
@@ -924,12 +927,14 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   };
 }
 
+/** Remove heavy per-check detail payloads from compact JSON audit output. */
 function stripCheckDetails(check: CheckResult): CheckResult {
   const stripped: CheckResult = { ...check };
   delete stripped.details;
   return stripped;
 }
 
+/** Remove detail payloads from every check inside one audit scope. */
 function stripScopeDetails(scope: AuditScope): AuditScope {
   return {
     ...scope,
@@ -937,6 +942,7 @@ function stripScopeDetails(scope: AuditScope): AuditScope {
   };
 }
 
+/** Return the compact audit report shape used by non-verbose JSON output. */
 function stripAuditDetails(report: AuditReport): AuditReport {
   return {
     ...report,
@@ -1244,6 +1250,7 @@ function commitGuidanceInstallSummary(
   return `${detection.status} guidance generated from ${detection.total} commits`;
 }
 
+/** Print commit-guide generation status only when install wrote new guidance. */
 function emitCommitGuidanceInstallResult(projectPath: string): void {
   const result = ensureGitCommitInstructions(projectPath);
   if (result.status !== "written" || result.detection === null) return;

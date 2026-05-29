@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -36,6 +36,18 @@ last_reviewed: 2026-05-29
 **Root cause:** I treated sibling gruff CLIs as interchangeable binaries but skipped two runtime surfaces that are part of the hook contract: schema-bearing project config files and wrapper-script dependencies inherited from the caller's normal `PATH`.
 
 **Prevention:** When testing `gruff-code-quality.sh` against sibling gruff implementations, copy or reference each project's real `.gruff-*.yaml`, preserve the normal `PATH` while prefixing local gruff binaries, and run both checks: direct `analyse --format json` schema probes and hook-shaped probes with changed ranges. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `discover_binary`), `.goat-flow/tasks/1.8.0/M14-gruff-changed-line-hook-filter.md` (search: `gruff family hook probes`).
+
+## Lesson: Gruff doc comments can expose hidden complexity warnings
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During the M00 `docs.missing-internal-function-doc` cleanup, adding a maintainer comment to `src/dashboard/app.ts` `_uploadTerminalImages` cleared the docs finding but made the helper visible to the warning rules. The full gruff snapshot regressed from warning 122 to `summary error=0 warning=123 advisory=935 total=1058`, with new `complexity.npath` and `design.god-function` findings on `_uploadTerminalImages`.
+
+**Same-session recurrence:** After extracting upload-result helpers, `bash scripts/preflight-checks.sh` failed ESLint with `@typescript-eslint/no-unnecessary-type-assertion` on `showTerminalUploadResult(this as DashboardTerminalContext, ...)`. TypeScript accepted the cast, but ESLint correctly showed the receiver already satisfied the helper contract.
+
+**Root cause:** I checked the targeted docs rule and assumed a comment-only patch could not affect warning counts. In gruff-ts, a documented helper can also enter other block-level rule paths; treating the docs check as sufficient would have shipped a warning regression.
+
+**Prevention:** After any large gruff docs batch, run a full `npx gruff-ts analyse --format json --fail-on none` snapshot and compare warning count, not only the targeted docs rule. When extracting helpers to resolve the surfaced warning, run the lint/preflight gate too; TS can accept redundant assertions that ESLint rejects. If documentation surfaces a real warning, do not remove the comment to hide it; fix the surfaced shape or record the warning as accepted debt. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`), `.goat-flow/tasks/1.9.0/M00-gruff-ts-cleanup.md` (search: `_uploadTerminalImages`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 

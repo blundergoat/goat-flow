@@ -58,6 +58,7 @@ export class HookRegistrarError extends Error {
   }
 }
 
+/** Validate and resolve a hook id into the registry spec used by state readers and writers. */
 function resolveSpec(hookId: string): HookSpec {
   if (!isValidHookIdShape(hookId)) {
     throw new HookRegistrarError("Invalid hook id", 400);
@@ -67,6 +68,7 @@ function resolveSpec(hookId: string): HookSpec {
   return spec;
 }
 
+/** Confirm an agent profile has all manifest paths needed for hook registration. */
 function isSupportedAgent(agent: AgentProfile): boolean {
   return (
     agent.hooksDir !== null &&
@@ -82,6 +84,7 @@ function unsupportedReasonForSpec(
   return spec.unsupportedAgents?.[agent.id] ?? null;
 }
 
+/** Block hook script writes that would escape the selected project root. */
 function assertWithinProject(projectPath: string, targetPath: string): void {
   const root = resolve(projectPath);
   const target = resolve(targetPath);
@@ -171,6 +174,7 @@ function shouldReconcileAgent(
   );
 }
 
+/** Check for an existing hook config before writing disabled state for optional hooks. */
 function hookConfigExists(projectPath: string, agent: AgentProfile): boolean {
   return (
     agent.hookConfigFile !== null &&
@@ -206,6 +210,7 @@ function removeHookScripts(
   }
 }
 
+/** Build the state payload for an agent that cannot host the requested hook. */
 function unsupportedAgentHookState(reason: string): HookAgentState {
   return {
     supported: false,
@@ -265,6 +270,7 @@ function agentHookState(
   return supportedAgentHookState(projectPath, agent, spec, desired);
 }
 
+/** Read persisted desired hook state, falling back to the registry default. */
 function readDesired(projectPath: string, spec: HookSpec): boolean {
   return readHookEnabled(projectPath, spec.id, spec.defaultEnabled);
 }
@@ -287,6 +293,7 @@ function reconcileHook(
   }
 }
 
+/** Snapshot one hook across all known agents for dashboard and CLI consumers. */
 function readHookState(hookId: string, projectPath: string): HookState {
   const spec = resolveSpec(hookId);
   const enabled = readDesired(projectPath, spec);

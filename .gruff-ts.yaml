@@ -66,7 +66,97 @@ allowlists:
   # Accepted prefixes for boolean identifiers. Names without one of these
   # prefixes trigger naming.boolean-prefix.
   # Default: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
-  # booleanPrefixes: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
+  # 2026-05-30: dashboard state and CLI option DTOs intentionally use
+  # domain/flag-shaped booleans (`show*`, `loading*`, `fresh`, `verbose`,
+  # `enabled`) because those names mirror UI state, query params, or persisted
+  # JSON. Revisit if these prefixes start appearing in domain logic where an
+  # `is/has/can/should` name would read better.
+  booleanPrefixes:
+    - is
+    - has
+    - can
+    - should
+    - does
+    - did
+    - was
+    - will
+    - may
+    - in
+    - scan
+    - supports
+    - requires
+    - allow
+    - check
+    - enable
+    - exclude
+    - include
+    - omit
+    - skip
+    - with
+    - without
+    - active
+    - all
+    - apply
+    - audit
+    - available
+    - bodies
+    - clean
+    - co
+    - compliance
+    - connected
+    - config
+    - custom
+    - default
+    - dev
+    - demote
+    - deny
+    - editing
+    - enabled
+    - ended
+    - fast
+    - force
+    - fresh
+    - global
+    - harness
+    - heading
+    - help
+    - instructions
+    - interactive
+    - internal
+    - json
+    - launch
+    - launching
+    - llm
+    - loading
+    - loaded
+    - needs
+    - ok
+    - paste
+    - previous
+    - promote
+    - projects
+    - quality
+    - rejected
+    - require
+    - selected
+    - setup
+    - shape
+    - show
+    - signed
+    - skill
+    - starts
+    - supported
+    - terminal
+    - timed
+    - toast
+    - too
+    - togglable
+    - trim
+    - update
+    - valid
+    - verbose
+    - written
+    - zero
   # Hungarian type-style prefixes flagged by naming.hungarian-notation.
   # Default: [str, obj, arr, bool, int, num]
   # hungarianPrefixes: [str, obj, arr, bool, int, num]

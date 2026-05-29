@@ -131,6 +131,7 @@ export class SafeExecRejection extends Error {
 class SafeFileWriteRejection extends Error {
   readonly reason = "target-outside-project";
 
+  /** Report the rejected destination and project root without writing any file content. */
   constructor(targetPath: string, projectRoot: string) {
     super(
       `Refusing to write ${JSON.stringify(targetPath)} outside project root ${JSON.stringify(projectRoot)}`,
@@ -145,6 +146,7 @@ function basename(path: string): string {
   return slash === -1 ? path : path.slice(slash + 1);
 }
 
+/** Confirm a target path resolves to the project root or one of its descendants. */
 function isWithinProject(projectRoot: string, targetPath: string): boolean {
   const root = resolve(projectRoot);
   const target = resolve(targetPath);

@@ -9,6 +9,75 @@ type HookFilter = "all" | "enabled" | "disabled" | "drift";
 type HookSection = "safety" | "git" | "quality";
 type HookTone = "danger" | "warning" | "neutral";
 
+interface TerminalUploadResult {
+  note: string;
+  accepted: unknown[];
+  rejected: unknown[];
+}
+
+/** Encode dropped terminal image files into the JSON payload expected by the upload route. */
+async function encodeTerminalUploadFiles(files: File[]) {
+  return Promise.all(
+    files.map(async (file) => ({
+      name: file.name,
+      data: await dashboardFileToBase64(file),
+    })),
+  );
+}
+
+/** Decode the terminal upload response fields used for paste notes and toasts. */
+function readTerminalUploadResult(payload: JsonRecord): TerminalUploadResult {
+  return {
+    note: typeof payload.note === "string" ? payload.note : "",
+    accepted: Array.isArray(payload.accepted) ? payload.accepted : [],
+    rejected: Array.isArray(payload.rejected) ? payload.rejected : [],
+  };
+}
+
+/** Decode one rejected upload entry into the user-facing file name and reason. */
+function readRejectedTerminalUpload(entry: unknown): {
+  name: string;
+  reason: string;
+} {
+  const record = isRecord(entry) ? entry : {};
+  return {
+    name:
+      typeof record["originalName"] === "string"
+        ? record["originalName"]
+        : "file",
+    reason:
+      typeof record["reason"] === "string"
+        ? record["reason"]
+        : "unknown reason",
+  };
+}
+
+/** Paste terminal upload notes and surface accepted/rejected file feedback. */
+function showTerminalUploadResult(
+  ctx: DashboardTerminalContext,
+  sessionId: string,
+  result: TerminalUploadResult,
+): void {
+  if (result.note.length > 0) {
+    dashboardSendToTerminalSession(ctx, sessionId, result.note, {
+      adapt: false,
+    });
+  }
+  if (result.rejected.length > 0) {
+    for (const entry of result.rejected) {
+      const rejected = readRejectedTerminalUpload(entry);
+      ctx.showToast(`Rejected ${rejected.name}: ${rejected.reason}`, true);
+    }
+    return;
+  }
+  if (result.accepted.length > 0) {
+    ctx.showToast(
+      `Attached ${result.accepted.length} image${result.accepted.length === 1 ? "" : "s"}`,
+      false,
+    );
+  }
+}
+
 /** Alpine.js data factory for the dashboard shell. */
 function app() {
   const supportedAgents = readInjectedSupportedAgents();
@@ -348,6 +417,7 @@ function app() {
         parts.reduce((total, value) => total + value, 0) / parts.length,
       );
     },
+    /** Convert the selected setup target's readiness score into a letter grade. */
     setupTargetGrade(agentId: RunnerId): string {
       const score = this.setupTargetScore(agentId);
       if (score === null) return "-";
@@ -357,6 +427,7 @@ function app() {
       if (score >= 60) return "D";
       return "F";
     },
+    /** Format the selected setup target's readiness score for the target card. */
     setupTargetPercent(agentId: RunnerId): string {
       const score = this.setupTargetScore(agentId);
       return score === null ? "Not audited" : `${score}%`;
@@ -662,16 +733,19 @@ function app() {
       this._terminalDragDepth += 1;
       this.terminalDragActive = true;
     },
+    /** Keep image drops routed to the active terminal pane instead of the browser. */
     handleTerminalDragOver(event: DragEvent) {
       if (!this._dragHasImageFiles(event)) return;
       // Setting dropEffect on the dataTransfer is what lets browsers fire `drop`
       // on this pane instead of routing the file to the OS handler.
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     },
+    /** Clear terminal drag state when the nested drag counter returns to zero. */
     handleTerminalDragLeave(_event: DragEvent) {
       this._terminalDragDepth = Math.max(0, this._terminalDragDepth - 1);
       if (this._terminalDragDepth === 0) this.terminalDragActive = false;
     },
+    /** Upload dropped image files to the active terminal session. */
     async handleTerminalDrop(event: DragEvent) {
       this._terminalDragDepth = 0;
       this.terminalDragActive = false;
@@ -691,6 +765,7 @@ function app() {
       }
       await this._uploadTerminalImages(files);
     },
+    /** Detect image-file drags before showing the terminal drop target. */
     _dragHasImageFiles(event: DragEvent): boolean {
       const items = event.dataTransfer?.items;
       if (!items || items.length === 0) return false;
@@ -701,17 +776,13 @@ function app() {
       }
       return false;
     },
+    /** Encode and send dropped images to the backend terminal upload route. */
     async _uploadTerminalImages(files: File[]) {
       const sessionId = this.activeSessionId;
       if (!sessionId) return;
       this.terminalUploading = true;
       try {
-        const encoded = await Promise.all(
-          files.map(async (file) => ({
-            name: file.name,
-            data: await dashboardFileToBase64(file),
-          })),
-        );
+        const encoded = await encodeTerminalUploadFiles(files);
         const res = await dashboardFetch(
           `/api/terminal/${encodeURIComponent(sessionId)}/upload-image`,
           {
@@ -729,35 +800,11 @@ function app() {
           this.showToast(error, true);
           return;
         }
-        const note = typeof payload.note === "string" ? payload.note : "";
-        const accepted = Array.isArray(payload.accepted)
-          ? payload.accepted
-          : [];
-        const rejected = Array.isArray(payload.rejected)
-          ? payload.rejected
-          : [];
-        if (note.length > 0) {
-          dashboardSendToTerminalSession(this, sessionId, note, {
-            adapt: false,
-          });
-        }
-        if (rejected.length > 0) {
-          for (const entry of rejected) {
-            const r = entry as Record<string, unknown>;
-            const name =
-              typeof r["originalName"] === "string"
-                ? r["originalName"]
-                : "file";
-            const reason =
-              typeof r["reason"] === "string" ? r["reason"] : "unknown reason";
-            this.showToast(`Rejected ${name}: ${reason}`, true);
-          }
-        } else if (accepted.length > 0) {
-          this.showToast(
-            `Attached ${accepted.length} image${accepted.length === 1 ? "" : "s"}`,
-            false,
-          );
-        }
+        showTerminalUploadResult(
+          this,
+          sessionId,
+          readTerminalUploadResult(payload),
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.showToast(msg || "Terminal image upload failed", true);
@@ -1065,9 +1112,11 @@ function app() {
       const meta: Record<string, { title: string; desc: string }> = {};
       return meta[view] ?? null;
     },
+    /** Return whether a requested dashboard view is still routed to the coming-soon panel. */
     isComingSoonView(view?: string): boolean {
       return this.comingSoonMeta(view ?? this.activeView) !== null;
     },
+    /** Toggle and persist the collapsed state of the dashboard side navigation. */
     toggleSideNav() {
       this.sideNavCollapsed = !this.sideNavCollapsed;
       localStorage.setItem(
@@ -1119,6 +1168,7 @@ function app() {
         });
       }
     },
+    /** Refresh installed-agent detection for launcher defaults and dashboard badges. */
     async fetchInstalledAgents(): Promise<boolean> {
       try {
         const res = await dashboardFetch("/api/agents/installed");
@@ -1189,10 +1239,12 @@ function app() {
         if (this.projectPath === requestProjectPath) this.tasksLoading = false;
       }
     },
+    /** Select a task plan and reload milestones for that plan. */
     selectTaskPlan(planName: string) {
       this.selectedTaskPlan = planName;
       void this.loadTasks(planName);
     },
+    /** Persist the active task plan for the selected project. */
     async setActiveTaskPlan(planName: string) {
       if (!planName || this.tasksActivePlanSaving) return;
       this.tasksActivePlanSaving = planName;
@@ -1228,15 +1280,18 @@ function app() {
         }
       }
     },
+    /** Format completed and total task counts for one milestone row. */
     taskProgressLabel(milestone: TaskMilestoneSummary): string {
       return `${milestone.completedTasks}/${milestone.totalTasks}`;
     },
+    /** Convert milestone checkbox progress to a percent for progress bars. */
     taskProgressPct(milestone: TaskMilestoneSummary): number {
       if (milestone.totalTasks <= 0) return 0;
       return Math.round(
         (milestone.completedTasks / milestone.totalTasks) * 100,
       );
     },
+    /** Format milestone modified time, falling back when the timestamp is invalid. */
     taskModifiedLabel(value: string): string {
       if (!value) return "unknown";
       const date = new Date(value);
@@ -1268,6 +1323,7 @@ function app() {
         if (this.projectPath === requestProjectPath) this.hooksLoading = false;
       }
     },
+    /** Return hook state rows for every supported agent, filling absent payloads explicitly. */
     hookAgents(hook: HookState): Array<[RunnerId, HookAgentState]> {
       return this.supportedAgents.map((agent) => [
         agent.id,
@@ -1280,47 +1336,57 @@ function app() {
         },
       ]);
     },
+    /** Group a hook into the section that owns its primary risk surface. */
     hookSectionFor(hook: HookState): HookSection {
       if (hook.id === "guard-repository-writes") return "git";
       if (hook.id === "gruff-code-quality") return "quality";
       return "safety";
     },
+    /** Return the visual tone for a hook based on its dashboard section. */
     hookTone(hook: HookState): HookTone {
       const section = this.hookSectionFor(hook);
       if (section === "git") return "warning";
       if (section === "quality") return "neutral";
       return "danger";
     },
+    /** Return true when any agent's installed hook state differs from desired state. */
     hookHasDrift(hook: HookState): boolean {
       return Object.values(hook.agents).some((state) => Boolean(state.drift));
     },
+    /** Count agent surfaces where the hook is currently installed. */
     hookInstalledSurfaceCount(hook: HookState): number {
       return this.hookAgents(hook).filter(([, state]) => state.installed)
         .length;
     },
+    /** Count hooks whose desired dashboard state is enabled. */
     hooksEnabledCount(): number {
       return this.hooksState.filter((hook) => hook.enabled).length;
     },
+    /** Count hooks with at least one agent surface in drift. */
     hooksDriftCount(): number {
       return this.hooksState.filter((hook) => this.hookHasDrift(hook)).length;
     },
+    /** Count installed hook surfaces across all hook and agent combinations. */
     hooksInstalledSurfaceCount(): number {
       return this.hooksState.reduce(
         (total, hook) => total + this.hookInstalledSurfaceCount(hook),
         0,
       );
     },
+    /** Apply the current hook filter predicate to one hook. */
     hookMatchesFilter(hook: HookState, filter: HookFilter): boolean {
       if (filter === "enabled") return hook.enabled;
       if (filter === "disabled") return !hook.enabled;
       if (filter === "drift") return this.hookHasDrift(hook);
       return true;
     },
+    /** Count hooks that would appear under one filter chip. */
     hookFilterCount(filter: HookFilter): number {
       return this.hooksState.filter((hook) =>
         this.hookMatchesFilter(hook, filter),
       ).length;
     },
+    /** Return hooks matching the selected filter and search query. */
     filteredHooks(): HookState[] {
       const query = this.hooksSearch.trim().toLowerCase();
       return this.hooksState.filter((hook) => {
@@ -1331,25 +1397,30 @@ function app() {
         );
       });
     },
+    /** Return filtered hooks that belong to one dashboard section. */
     hooksForSection(section: HookSection): HookState[] {
       return this.filteredHooks().filter(
         (hook) => this.hookSectionFor(hook) === section,
       );
     },
+    /** Count filtered hooks in one dashboard section. */
     hookSectionCount(section: HookSection): number {
       return this.hooksForSection(section).length;
     },
+    /** Format one agent hook state for the hook table. */
     hookAgentStatusLabel(state: HookAgentState): string {
       if (!state.supported) return "not for this hook";
       if (state.drift === "desired-on-actual-off") return "drift: missing";
       if (state.drift === "desired-off-actual-on") return "drift: installed";
       return state.installed ? "installed" : "not installed";
     },
+    /** Return the CSS status class for one agent hook state. */
     hookAgentStatusClass(state: HookAgentState): string {
       if (!state.supported) return "gf-hook-status-muted";
       if (state.drift) return "gf-hook-status-warn";
       return state.installed ? "gf-hook-status-ok" : "gf-hook-status-muted";
     },
+    /** Persist one hook toggle and replace the returned hook snapshot. */
     async toggleHook(hook: HookState, enabled: boolean) {
       if (!hook.togglable || this.hookSavingId) return;
       if (!enabled && hook.requiresConfirmDialog) {
@@ -1387,6 +1458,7 @@ function app() {
         if (this.hookSavingId === hook.id) this.hookSavingId = null;
       }
     },
+    /** Reapply the current desired hook state to repair installed drift. */
     async resyncHook(hook: HookState) {
       await this.toggleHook(hook, hook.enabled);
     },
@@ -1564,6 +1636,7 @@ function app() {
       this.skillQualitySelectedId = null;
       await this.loadSkillQualityInventory();
     },
+    /** Load or reuse one skill-quality report for the selected artifact. */
     async loadSkillQualityReport(artifactId: string) {
       this.skillQualitySelectedId = artifactId;
       const cached = this.skillQualityReports[artifactId];
@@ -1618,6 +1691,7 @@ function app() {
       if (pct >= 0.6) return "D";
       return "F";
     },
+    /** Convert a skill-quality report score to a 0..1 ratio. */
     skillReportPct(report: SkillQualityReport | null): number {
       if (!report || !report.profileMax) return 0;
       return report.totalScore / report.profileMax;

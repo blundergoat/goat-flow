@@ -41,10 +41,12 @@ interface DashboardServerHandle {
   close: () => Promise<void>;
 }
 
+/** Scale performance budgets from one env-controlled multiplier. */
 function budget(ms: number): number {
   return ms * budgetScale;
 }
 
+/** Summarize repeated timings with the p95 value used by assertions. */
 function summarize(samples: number[]): DurationStats {
   assert.ok(samples.length > 0, "duration samples should not be empty");
   const sorted = [...samples].sort((a, b) => a - b);
@@ -61,12 +63,14 @@ function summarize(samples: number[]): DurationStats {
   };
 }
 
+/** Render timing stats in a stable format for local performance runs. */
 function formatStats(label: string, stats: DurationStats): string {
   return `${label}: mean=${stats.mean.toFixed(1)}ms p95=${stats.p95.toFixed(
     1,
   )}ms max=${stats.max.toFixed(1)}ms n=${stats.samples.length}`;
 }
 
+/** Fail with a budget-specific message instead of a generic assertion. */
 function assertUnderBudget(label: string, actualMs: number, budgetMs: number) {
   assert.ok(
     actualMs <= budgetMs,
@@ -95,6 +99,7 @@ async function measure(
   return stats;
 }
 
+/** Ensure opt-in performance tests run against built distribution files. */
 function requireBuiltArtifacts(): void {
   assert.ok(
     existsSync(CLI_PATH),
@@ -106,6 +111,7 @@ function requireBuiltArtifacts(): void {
   );
 }
 
+/** Run the built CLI so startup measurements match packaged execution. */
 function runCli(args: string[]): string {
   const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
     cwd: PROJECT_ROOT,

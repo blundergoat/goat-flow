@@ -44,10 +44,15 @@ interface DashboardSetupQualityContext {
   qualityHistoryWarnings: string[];
   _qualityHistoryTimer: ReturnType<typeof setTimeout> | null;
   presets: Preset[];
+  /** Surface a dashboard toast message, with error styling when requested. */
   showToast(msg: string, isError?: boolean): void;
+  /** Copy generated prompt text through the shared dashboard clipboard helper. */
   copyText(text: string): void;
+  /** Generate setup guidance for the selected agent and project. */
   generateSetupPrompt(force?: boolean): Promise<void>;
+  /** Generate the selected quality prompt or report request. */
   generateQuality(options?: DashboardQualityGenerateOptions): Promise<void>;
+  /** Load saved quality-history rows for the selected quality mode. */
   generateQualityHistory(): Promise<void>;
 }
 
@@ -81,12 +86,14 @@ function dashboardQualityModePreset(
   return ctx.presets.find((preset) => preset.id === presetId) ?? null;
 }
 
+/** Reset quality-history rows and warnings before loading a new mode or project. */
 function dashboardClearQualityHistory(ctx: DashboardSetupQualityContext): void {
   ctx.qualityHistoryRows = [];
   ctx.qualityHistoryLatest = null;
   ctx.qualityHistoryWarnings = [];
 }
 
+/** Build the read-only harness-engineering assessment prompt used by the Quality page. */
 function dashboardHarnessQualityPrompt(): string {
   return [
     "AI Harness Engineering Quality Assessment",
@@ -163,10 +170,12 @@ function dashboardSelectedQualityModeMeta(
   );
 }
 
+/** Return the goat-flow controlling workspace path for framework-scoped quality modes. */
 function dashboardQualityControllingWorkspace(): string {
   return window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".";
 }
 
+/** Quote a value for the shell snippets embedded in generated quality-report prompts. */
 function dashboardQualityShellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }

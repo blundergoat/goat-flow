@@ -101,6 +101,7 @@ function expectRecord(
   return value as Record<string, unknown>;
 }
 
+/** Assert that an endpoint response advertises JSON before decoding the body. */
 function assertJsonResponse(res: Response, context: string): void {
   assert.match(
     res.headers.get("content-type") ?? "",
@@ -109,12 +110,14 @@ function assertJsonResponse(res: Response, context: string): void {
   );
 }
 
+/** Extract the dashboard auth token injected into the served HTML shell. */
 function extractDashboardToken(html: string): string {
   const match = html.match(/__GOAT_FLOW_DASHBOARD_TOKEN__\s*=\s*"([^"]+)"/);
   assert.ok(match?.[1], "dashboard HTML should inject an auth token");
   return match[1];
 }
 
+/** Assert that a check provenance payload preserves the audit evidence contract. */
 function assertAuditCheckProvenance(value: unknown, context: string): void {
   const provenance = expectRecord(value, context);
   assert.match(
@@ -135,6 +138,7 @@ function assertAuditCheckProvenance(value: unknown, context: string): void {
   );
 }
 
+/** Assert one rendered audit scope has valid status, checks, failures, and summary shape. */
 function assertAuditScope(value: unknown, context: string): void {
   const scope = expectRecord(value, context);
   assert.match(
@@ -164,6 +168,7 @@ function assertAuditScope(value: unknown, context: string): void {
   }
 }
 
+/** Assert the dashboard report payload contains the fields the browser app reads. */
 function assertDashboardReport(value: unknown): Record<string, unknown> {
   const report = expectRecord(value, "Dashboard report");
   assert.match(
@@ -241,6 +246,7 @@ async function fetchJson(
   return { res, body: await res.json() };
 }
 
+/** Read all emitted evidence envelopes from a temporary project log directory. */
 async function readEventEnvelopes(root: string): Promise<EvidenceEnvelope[]> {
   const dir = join(root, ".goat-flow", "logs", "events");
   let files: string[];
@@ -261,6 +267,7 @@ async function readEventEnvelopes(root: string): Promise<EvidenceEnvelope[]> {
   return envelopes;
 }
 
+/** Validate one emitted evidence envelope against the production schema validator. */
 function assertValidEmittedEnvelope(envelope: EvidenceEnvelope): void {
   assert.deepEqual(
     validateEvidenceEnvelope(envelope, (path) =>
@@ -280,6 +287,7 @@ async function writeProjectFile(
   await writeFile(fullPath, content);
 }
 
+/** Run git inside a fixture project and return stdout for setup helpers. */
 function runGit(root: string, args: string[]): string {
   return childProcess.execFileSync("git", args, {
     cwd: root,
@@ -287,6 +295,7 @@ function runGit(root: string, args: string[]): string {
   });
 }
 
+/** Create a baseline git commit so cache identity tests can resolve repository metadata. */
 function commitDashboardCacheProject(root: string): void {
   runGit(root, ["init"]);
   runGit(root, ["add", "."]);
@@ -301,6 +310,7 @@ function commitDashboardCacheProject(root: string): void {
   ]);
 }
 
+/** Create a minimal committed goat-flow fixture project for dashboard cache tests. */
 async function makeDashboardCacheProject(): Promise<{
   root: string;
   cleanup: () => Promise<void>;
@@ -346,6 +356,7 @@ async function makeDashboardCacheProject(): Promise<{
   };
 }
 
+/** Return the compact AGENTS.md fixture text used by setup-prompt integration tests. */
 function dashboardSetupInstruction(): string {
   return `# AGENTS.md
 
@@ -822,6 +833,7 @@ describe("dashboard API authorization", () => {
 });
 
 describe("dashboard /api/audit", () => {
+  /** Read dashboard profile spans from an endpoint response body. */
   function getProfileSpans(body: unknown): Record<string, unknown>[] {
     const report = expectRecord(body, "Profiled dashboard report");
     const profile = expectRecord(report._profile, "Dashboard profile");
@@ -835,6 +847,7 @@ describe("dashboard /api/audit", () => {
     );
   }
 
+  /** Count profile spans by name so tests can assert dashboard-summary batching. */
   function spanCount(spans: Record<string, unknown>[], name: string): number {
     return spans.filter((spanEntry) => spanEntry.name === name).length;
   }

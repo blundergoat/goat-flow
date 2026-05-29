@@ -2472,11 +2472,13 @@ export function createDashboardRouteHandlers(
     return true;
   }
 
+  /** Extract a hook id from dashboard toggle route paths. */
   function hookIdFromTogglePath(pathname: string): string | null {
     const match = pathname.match(/^\/api\/hooks\/([^/]+)\/toggle$/u);
     return match?.[1] ? decodeURIComponent(match[1]) : null;
   }
 
+  /** Map hook registrar errors to HTTP status codes while preserving generic error handling. */
   function hookErrorStatus(err: unknown): number {
     if (err instanceof HookRegistrarError) return err.statusCode;
     return responseStatusForError(err, 500);

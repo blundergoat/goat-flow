@@ -74,6 +74,7 @@ interface DraftSignals {
   hasADRStructure: boolean;
 }
 
+/** Extract deterministic structure signals from a draft before artifact routing. */
 function inspectDraft(content: string, suggestedName?: string): DraftSignals {
   const lower = content.toLowerCase();
   const lines = content.split("\n");
@@ -293,10 +294,12 @@ interface DescriptionTokens {
   lower: string;
 }
 
+/** Preserve both original and lowercase description text for intent matchers. */
 function tokenize(text: string): DescriptionTokens {
   return { text, lower: text.toLowerCase() };
 }
 
+/** Detect whether description terms imply a reusable skill workflow. */
 function matchSkillIntent(tokens: DescriptionTokens): CandidacyResult | null {
   const { lower } = tokens;
   const wantsWorkflow =
@@ -467,6 +470,7 @@ function matchCliCommandIntent(
   return null;
 }
 
+/** Route a free-form artifact description to the recommended goat-flow artifact type. */
 function analyzeDescription(text: string): CandidacyResult {
   const trimmed = text.trim();
   if (trimmed.length === 0) {

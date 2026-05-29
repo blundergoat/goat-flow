@@ -17,6 +17,7 @@ const CODEX_CONFIG = [
   "",
 ].join("\n");
 
+/** Parse CLI flags into the profile options that select project, endpoint, and synthetic fixtures. */
 function parseArgs(argv) {
   const args = {
     project: process.cwd(),
@@ -63,6 +64,7 @@ function parseArgs(argv) {
   return args;
 }
 
+/** Print the operator-facing usage text for this profiling script. */
 function printHelp() {
   console.log(`Usage: node scripts/profile-dashboard-audit.mjs [options]
 
@@ -75,6 +77,7 @@ Options:
 `);
 }
 
+/** Fail before profiling when dashboard imports would resolve to missing built runtime files. */
 function ensureBuiltRuntime() {
   const required = [
     "dist/cli/server/dashboard.js",
@@ -90,14 +93,17 @@ function ensureBuiltRuntime() {
   }
 }
 
+/** Convert a built runtime path to a file URL for dynamic ESM imports. */
 function distUrl(relative) {
   return pathToFileURL(join(REPO_ROOT, relative)).href;
 }
 
+/** Build a span collector for timings that are not exposed by the dashboard endpoint profile. */
 function createProfiler() {
   const spans = [];
   return {
     spans,
+    /** Run a synchronous span and record its rounded duration even when the callback throws. */
     span(name, fn) {
       const start = performance.now();
       try {
@@ -112,6 +118,7 @@ function createProfiler() {
   };
 }
 
+/** Wrap the project filesystem so profile output can include call counts, timings, and glob patterns. */
 function createCountingFS(base) {
   const counts = {
     glob: 0,
@@ -128,6 +135,7 @@ function createCountingFS(base) {
     glob: new Map(),
     existsGlob: new Map(),
   };
+  /** Aggregate glob pattern timing by method so repeated probes show up as one row. */
   const recordPattern = (name, pattern, durationMs) => {
     const existing = patterns[name].get(pattern) ?? {
       count: 0,
@@ -139,7 +147,9 @@ function createCountingFS(base) {
     existing.maxMs = Math.max(existing.maxMs, durationMs);
     patterns[name].set(pattern, existing);
   };
+  /** Create a counted filesystem method wrapper while preserving the base method's return value. */
   const wrap = (name) =>
+    /** Count and time one filesystem method call, including glob-pattern detail when present. */
     function countedMethod(...args) {
       counts[name] += 1;
       const start = performance.now();
@@ -170,6 +180,7 @@ function createCountingFS(base) {
   };
 }
 
+/** Collapse raw span events into totals sorted by the slowest profiled work. */
 function summarizeSpans(spans) {
   const summary = new Map();
   for (const span of spans) {
@@ -193,6 +204,7 @@ function summarizeSpans(spans) {
     .sort((a, b) => b.totalMs - a.totalMs);
 }
 
+/** Measure a synchronous operation and return the label, result value, and elapsed milliseconds. */
 function timeSync(label, fn) {
   const start = performance.now();
   const value = fn();
@@ -203,6 +215,7 @@ function timeSync(label, fn) {
   };
 }
 
+/** Measure an async operation and return the label, awaited value, and elapsed milliseconds. */
 async function timeAsync(label, fn) {
   const start = performance.now();
   const value = await fn();
@@ -213,10 +226,12 @@ async function timeAsync(label, fn) {
   };
 }
 
+/** Extract the per-server dashboard token from the started server URL. */
 function dashboardToken(server) {
   return new URL(server.url).searchParams.get("token") ?? "";
 }
 
+/** Fetch one dashboard audit endpoint variant and retain the small response fields needed for timing output. */
 async function fetchAudit(baseUrl, token, projectPath, fresh) {
   const params = new URLSearchParams({
     path: projectPath,
@@ -243,6 +258,7 @@ async function fetchAudit(baseUrl, token, projectPath, fresh) {
   });
 }
 
+/** Create a temporary goat-flow project large enough to stress dashboard audit discovery paths. */
 function writeSyntheticProject(fileCount, agents = ["codex"]) {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-profile-"));
   mkdirSync(join(root, ".goat-flow", "footguns"), { recursive: true });
@@ -356,6 +372,7 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
   return root;
 }
 
+/** Compare fresh dashboard audit timing for one-agent and three-agent synthetic projects. */
 async function runAgentCountComparison(serveDashboard, fileCount) {
   const cases = [
     { label: "one-agent", agents: ["codex"] },
@@ -380,6 +397,7 @@ async function runAgentCountComparison(serveDashboard, fileCount) {
   }
 }
 
+/** Print the HTTP endpoint timing summary and the slowest endpoint profile spans. */
 function printEndpointResult(result) {
   const body = result.value;
   console.log(
@@ -394,6 +412,7 @@ function printEndpointResult(result) {
   }
 }
 
+/** Print direct audit timings, filesystem counters, and pattern costs captured outside the HTTP route. */
 function printDirectProfile(result) {
   console.log(`direct timings:`);
   for (const row of result.timings) {
@@ -427,6 +446,7 @@ function printDirectProfile(result) {
   }
 }
 
+/** Flatten counted glob-pattern maps into rows sorted by total duration. */
 function summarizePatternTimings(patterns) {
   const rows = [];
   for (const method of ["glob", "existsGlob"]) {
@@ -443,6 +463,7 @@ function summarizePatternTimings(patterns) {
   return rows.sort((a, b) => b.totalMs - a.totalMs);
 }
 
+/** Run the dashboard profile flow for the requested project or generated synthetic project. */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   ensureBuiltRuntime();

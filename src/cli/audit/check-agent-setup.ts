@@ -37,6 +37,7 @@ function incidentProvenance(paths: string[]): CheckEvidence {
   };
 }
 
+/** Deduplicate provenance paths while preserving first-seen order for stable audit output. */
 function uniquePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
 }
@@ -295,6 +296,7 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
   };
 }
 
+/** Return the manifest-declared reference files for one skill, scoped to the references/ subtree. */
 function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
   const references = ctx.structure.skills.references ?? {};
   const referenceFiles = Array.isArray(references[skill])
@@ -432,11 +434,13 @@ function settingsObject(parsed: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/** Check exact parsed settings keys because flattened TOML facts use dotted key names. */
 function hasSettingsKey(parsed: unknown, key: string): boolean {
   const settings = settingsObject(parsed);
   return settings ? Object.prototype.hasOwnProperty.call(settings, key) : false;
 }
 
+/** Read an explicit boolean setting without treating missing or mistyped values as false. */
 function booleanSetting(parsed: unknown, key: string): boolean | null {
   const settings = settingsObject(parsed);
   if (!settings) return null;
@@ -444,6 +448,7 @@ function booleanSetting(parsed: unknown, key: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
+/** Report the old Codex hooks flag so installs migrate to the current feature name. */
 function checkCodexDeprecatedHooksFlag(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     if (agentFacts.agent.id !== "codex") continue;
@@ -461,6 +466,7 @@ function checkCodexDeprecatedHooksFlag(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/** Report installed Codex hooks that cannot run because the hooks feature flag is absent. */
 function checkCodexHooksEnabled(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     if (agentFacts.agent.id !== "codex") continue;
@@ -481,10 +487,12 @@ function checkCodexHooksEnabled(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/** Detect literal Codex workspace-root denies that should be expanded to subtree globs. */
 function isCodexExactWorkspaceRootPath(pattern: string): boolean {
   return pattern !== "." && !pattern.includes("*") && !pattern.endsWith("/**");
 }
 
+/** Detect Codex none-mode globs that do not use the required subtree suffix. */
 function isCodexInvalidNoneGlob(pattern: string): boolean {
   if (!pattern.includes("*")) return false;
   return !pattern.endsWith("/**");
@@ -859,6 +867,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/** Build the per-agent hook payload and expected denial shape for runtime smoke tests. */
 function runtimeSmokePayload(agentId: string): {
   input: string;
   expectedStatus: number;

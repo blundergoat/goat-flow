@@ -178,6 +178,7 @@ function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
   return 2;
 }
 
+/** Return the operator-facing label for a quality prompt mode. */
 function qualityModeLabel(mode: QualityMode): string {
   if (mode === "process") return "Process";
   if (mode === "harness") return "Harness Engineering";
@@ -185,6 +186,7 @@ function qualityModeLabel(mode: QualityMode): string {
   return "Agent Installation";
 }
 
+/** Describe which workspace or target the selected quality mode should assess. */
 function qualityModeTargetScope(mode: QualityMode): string {
   if (mode === "process") {
     return "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation";
@@ -282,6 +284,7 @@ function isSupersededLocalArtifactWriteFinding(
   return referencesWritePolicy && referencesLocalArtifact;
 }
 
+/** Rewrite legacy prior-finding phrasing before embedding it in new quality prompts. */
 function renderPriorFindingSummary(summary: string): string {
   return summary.replace(
     /\bstrict no-write\b/gi,

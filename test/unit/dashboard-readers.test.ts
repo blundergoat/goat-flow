@@ -17,8 +17,11 @@ const READERS_PATH = resolve(
 );
 
 type HelperContext = {
+  /** Read runner ids through the VM-loaded dashboard helper. */
   readRunnerId(value: unknown): string | null;
+  /** Read injected agent metadata through the VM-loaded dashboard helper. */
   readInjectedSupportedAgents(): SupportedAgent[];
+  /** Read audit reports through the VM-loaded dashboard helper. */
   readDashboardReport(value: unknown): {
     scopes: {
       setup: {
@@ -68,6 +71,7 @@ type HelperContext = {
       } | null;
     }[];
   };
+  /** Read plan/task payloads through the VM-loaded dashboard helper. */
   readTaskState(value: unknown): {
     taskRoot: string;
     exists: boolean;
@@ -120,6 +124,7 @@ function supportedAgent(
   };
 }
 
+/** Load dashboard reader helpers into a browser-shaped VM context. */
 function loadHelpers(
   windowOverrides: Record<string, unknown> = {},
 ): HelperContext {
@@ -151,6 +156,7 @@ globalThis.__helpers = {
   return (context as typeof context & { __helpers: HelperContext }).__helpers;
 }
 
+/** Provide the minimum structured provenance object required by check readers. */
 function provenance(): Record<string, unknown> {
   return {
     source_type: "spec",

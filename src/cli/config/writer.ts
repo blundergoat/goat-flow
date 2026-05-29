@@ -17,6 +17,7 @@ const HOOK_BLOCK_COMMENT_LINES = new Set([
   "# Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.",
 ]);
 
+/** Narrow parsed YAML values before reading the hooks block. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
     value !== null &&
@@ -25,10 +26,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+/** Resolve the project-local goat-flow config path used by dashboard hook toggles. */
 function configPath(projectPath: string): string {
   return join(projectPath, ".goat-flow", "config.yaml");
 }
 
+/** Read existing config text or synthesize the minimal config needed before the first toggle write. */
 function readConfigText(projectPath: string): string {
   const path = configPath(projectPath);
   if (!existsSync(path)) {
@@ -41,10 +44,12 @@ function readConfigText(projectPath: string): string {
   return readFileSync(path, "utf-8");
 }
 
+/** Map legacy hook ids to canonical ids so old config entries keep their state. */
 function normalizeHookId(hookId: string): string {
   return HOOK_ID_ALIASES.get(hookId) ?? hookId;
 }
 
+/** Parse explicitly configured hook states while ignoring malformed or non-boolean hook entries. */
 function readRawHooks(text: string): HookConfigMap {
   let parsed: unknown;
   try {
@@ -68,6 +73,7 @@ function readRawHooks(text: string): HookConfigMap {
   return hooks;
 }
 
+/** Render the managed hooks block with stable ordering and the operator-facing ownership comment. */
 function renderHooksBlock(hooks: HookConfigMap): string {
   const ordered = Object.fromEntries(
     Object.entries(hooks).sort(([a], [b]) => a.localeCompare(b)),
@@ -80,10 +86,12 @@ function renderHooksBlock(hooks: HookConfigMap): string {
   ].join("\n");
 }
 
+/** Detect top-level YAML keys so hook-block replacement preserves following config sections. */
 function isTopLevelLine(line: string): boolean {
   return /^[A-Za-z0-9_-]+:/u.test(line);
 }
 
+/** Replace only the managed top-level hooks block, preserving all unrelated config text. */
 function replaceTopLevelHooksBlock(text: string, block: string): string {
   const lines = text.replace(/\s*$/u, "\n").split("\n");
   const start = lines.findIndex((line) => /^hooks:\s*(?:#.*)?$/u.test(line));

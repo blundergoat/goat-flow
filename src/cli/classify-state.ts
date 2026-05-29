@@ -8,7 +8,9 @@ import { getAgentProfiles } from "./agents/registry.js";
 
 /** Minimal filesystem interface needed for project state detection. */
 interface StateFS {
+  /** Return true when a project-relative marker path exists. */
   exists(path: string): boolean;
+  /** Read a project-relative text file, returning null when unavailable. */
   readFile(path: string): string | null;
 }
 

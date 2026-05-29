@@ -20,12 +20,14 @@ after(() => {
   for (const dir of disposables) rmSync(dir, { recursive: true, force: true });
 });
 
+/** Create a disposable git root for hook smoke-test isolation. */
 function makeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-gruff-hook-"));
   disposables.push(root);
   return root;
 }
 
+/** Install the default mock gruff binary used by most hook scenarios. */
 function writeMockGruff(root: string): string {
   return writeMockGruffBinary(root, "bin", "gruff-ts", "changed.rule");
 }
@@ -71,6 +73,7 @@ exit 1
   return binDir;
 }
 
+/** Run git with a deterministic PATH inside the disposable test repo. */
 function git(root: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd: root,
@@ -80,10 +83,12 @@ function git(root: string, args: string[]): void {
   assert.equal(result.status, 0, result.stderr);
 }
 
+/** Initialize the disposable repo without leaking command details into tests. */
 function initGit(root: string): void {
   git(root, ["init", "--quiet"]);
 }
 
+/** Escape file names before embedding them in assertion regular expressions. */
 function escapeRegex(value: string): string {
   return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
@@ -101,6 +106,7 @@ function runHook(
   });
 }
 
+/** Read the files passed to the mock gruff binary across hook invocations. */
 function readInvocations(root: string): string[] {
   try {
     const content = readFileSync(

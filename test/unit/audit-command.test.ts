@@ -115,10 +115,15 @@ function posixifyPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+/** Wrap a fake FS handler with host-independent path normalization. */
 function wrapPathArg<T>(fn: ((path: string) => T) | undefined, fallback: T) {
-  return (path: string): T => (fn ? fn(posixifyPath(path)) : fallback);
+  /** Invoke a fake FS override after converting Windows separators. */
+  const readNormalizedPath = (path: string): T =>
+    fn ? fn(posixifyPath(path)) : fallback;
+  return readNormalizedPath;
 }
 
+/** Build a default-passing ReadonlyFS fake with optional targeted overrides. */
 function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   const fs: ReadonlyFS = {
     exists: wrapPathArg(overrides.exists, true),
@@ -136,6 +141,7 @@ function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   return fs;
 }
 
+/** Build a valid loaded-config fixture with overrideable config fields. */
 function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   return {
     exists: true,
@@ -185,6 +191,7 @@ const STUB_AGENT_PROFILE: AgentProfile = {
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
 
+/** Extract deny-hook facts from a single in-memory hook body. */
 function extractHookFactsForDenyContent(denyContent: string) {
   const fs = stubFS({
     exists: (path) => path === STUB_AGENT_PROFILE.denyHookFile,
@@ -194,6 +201,7 @@ function extractHookFactsForDenyContent(denyContent: string) {
   return extractHookFacts(fs, STUB_AGENT_PROFILE, {}, true, true);
 }
 
+/** Build complete agent facts for checks that only override one concern. */
 function stubAgentFacts(overrides: Partial<AgentFacts> = {}): AgentFacts {
   return {
     agent: STUB_AGENT_PROFILE,
@@ -284,6 +292,7 @@ const STUB_STRUCTURE: ProjectStructure = {
   agents: {},
 };
 
+/** Build an audit context fixture with valid defaults for focused checks. */
 function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   return {
     projectPath: "/tmp/test-project",
@@ -572,6 +581,7 @@ function makeReportWithDetails(
   );
 }
 
+/** Create a profile span recorder for audit-cache instrumentation assertions. */
 function createSpanRecorder(): {
   profile: { span<T>(name: string, fn: () => T): T };
   names: string[];
@@ -588,6 +598,7 @@ function createSpanRecorder(): {
   };
 }
 
+/** Count recorded profile spans with the exact requested name. */
 function countSpan(names: string[], name: string): number {
   return names.filter((entry) => entry === name).length;
 }
@@ -1967,6 +1978,7 @@ describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
   );
+  /** Read canonical guardrail templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
       common: readFileSync(
@@ -2004,10 +2016,12 @@ describe("agent deny hook template comparison", () => {
       [`${hooksDir}/guard-repository-writes.sh`]: templates.git,
       [`${hooksDir}/guardrails-self-test.sh`]: templates.selfTest,
     };
-    return (path: string) => {
+    /** Resolve installed hook content from overrides before template defaults. */
+    const readInstalledGuardrail = (path: string) => {
       if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
       return files[path] ?? null;
     };
+    return readInstalledGuardrail;
   }
 
   it("fails when an installed deny hook differs from the canonical template", () => {
@@ -2364,6 +2378,7 @@ The controlling goat-flow workspace may differ from the selected target project.
     });
   }
 
+  /** Run the boundary guidance harness check and expose its context concern. */
   function boundaryCheck(ctx: AuditContext) {
     const { scope, concerns } = computeHarness(ctx);
     const check = scope.checks.find(

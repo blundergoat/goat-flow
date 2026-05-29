@@ -36,6 +36,7 @@ function isObject(value: unknown): value is JsonObject {
   );
 }
 
+/** Resolve the agent hook config file and fail early for profiles that do not support hook writes. */
 function configPath(projectPath: string, agent: AgentProfile): string {
   if (!agent.hookConfigFile) {
     throw new Error(`${agent.id} has no hook config file`);
@@ -43,6 +44,7 @@ function configPath(projectPath: string, agent: AgentProfile): string {
   return join(projectPath, agent.hookConfigFile);
 }
 
+/** Read an existing agent hook config while distinguishing missing files from invalid JSON. */
 function readJsonFile(path: string): {
   value: JsonObject;
   missing: boolean;
@@ -61,6 +63,7 @@ function readJsonFile(path: string): {
   }
 }
 
+/** Map goat-flow hook events to the event-key spelling required by each agent config format. */
 function hookEventKey(agent: AgentProfile, spec: HookSpec): string {
   if (agent.id === "copilot") {
     return spec.event === "PreToolUse" ? "preToolUse" : "postToolUse";
@@ -68,17 +71,20 @@ function hookEventKey(agent: AgentProfile, spec: HookSpec): string {
   return spec.event;
 }
 
+/** Ensure the shared hooks container is an object before mutating event arrays inside it. */
 function ensureHooksObject(config: JsonObject): JsonObject {
   if (!isObject(config.hooks)) config.hooks = {};
   return config.hooks as JsonObject;
 }
 
+/** Return the mutable event-entry array, creating it when an agent config lacks the event key. */
 function eventEntries(config: JsonObject, event: string): unknown[] {
   const hooks = ensureHooksObject(config);
   if (!Array.isArray(hooks[event])) hooks[event] = [];
   return hooks[event] as unknown[];
 }
 
+/** Split pipe-delimited matcher strings because Claude and Codex store one matcher per entry. */
 function matcherParts(matcher: string): string[] {
   return matcher
     .split("|")
@@ -86,11 +92,13 @@ function matcherParts(matcher: string): string[] {
     .filter(Boolean);
 }
 
+/** Build the repo-relative hook script path stored in agent config files. */
 function commandPath(agent: AgentProfile, script: string): string {
   if (!agent.hooksDir) throw new Error(`${agent.id} has no hooks dir`);
   return `${agent.hooksDir}/${script}`.replace(/\/+/gu, "/");
 }
 
+/** Build the shell command variant that matches each agent's hook response protocol. */
 function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   const path = commandPath(agent, spec.primaryScript);
   if (agent.id === "codex") return path;
@@ -103,11 +111,13 @@ function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   return `${resolveRoot} || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; ${selectRoot}; bash "$root/${path}"`;
 }
 
+/** Build Copilot's Windows hook command with a denial response when bash is unavailable. */
 function powershellCommand(agent: AgentProfile, spec: HookSpec): string {
   const path = commandPath(agent, spec.primaryScript);
   return `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`;
 }
 
+/** Detect any existing hook entry that already points at one of the spec's managed scripts. */
 function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   if (!isObject(entry)) return false;
   const commands = [
@@ -122,6 +132,7 @@ function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   return false;
 }
 
+/** Translate generic hook matchers into Antigravity's tool names while leaving other agents unchanged. */
 function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   if (agent.id !== "antigravity") return spec.matcher;
   if (spec.id === "gruff-code-quality") {
@@ -149,6 +160,7 @@ function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
   return spec.matcher;
 }
 
+/** Remove only goat-flow-managed hook entries so unrelated user hook config is preserved. */
 function removeHookEntries(config: JsonObject, event: string, spec: HookSpec) {
   const entries = eventEntries(config, event);
   const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
@@ -160,6 +172,7 @@ function removeHookEntries(config: JsonObject, event: string, spec: HookSpec) {
   hooks[event] = next;
 }
 
+/** Create the Claude/Codex hook entries for each matcher segment in the managed spec. */
 function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
   return matcherParts(spec.matcher).map((matcher) => {
     const command: JsonObject = {
@@ -174,6 +187,7 @@ function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
   });
 }
 
+/** Create Copilot's single hook entry shape with both bash and PowerShell commands. */
 function copilotEntry(agent: AgentProfile, spec: HookSpec): JsonObject {
   return {
     type: "command",

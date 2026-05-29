@@ -73,10 +73,12 @@ function span<T>(
   return profile ? profile.span(name, fn) : fn();
 }
 
+/** Resolve the fact profile once so dashboard-summary callers get consistent fact slicing. */
 function factProfile(options: AuditOptions): AuditFactProfile {
   return options.factProfile ?? "full";
 }
 
+/** Decide whether stack detection should run for the requested fact profile. */
 function factsIncludeStack(options: AuditOptions): boolean {
   return factProfile(options) !== "dashboard-summary";
 }
@@ -198,6 +200,7 @@ const FRAMEWORK_EVIDENCE_PATHS = new Set([
   ".goat-flow/glossary.md",
 ]);
 
+/** Classify evidence paths that describe goat-flow framework truth rather than target-project files. */
 function isFrameworkEvidencePath(path: string): boolean {
   return (
     FRAMEWORK_EVIDENCE_PATHS.has(path) ||
@@ -205,6 +208,7 @@ function isFrameworkEvidencePath(path: string): boolean {
   );
 }
 
+/** Deduplicate strings while preserving order for stable evidence output. */
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
@@ -383,6 +387,7 @@ function toCheckResult(
  *  stale provenance surfaces in preflight. */
 let provenanceValidated = false;
 
+/** Validate registered check provenance once per process so stale evidence paths fail fast in dev. */
 function validateRegisteredCheckProvenance(fs: ReadonlyFS): void {
   if (provenanceValidated) return;
   const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
@@ -525,6 +530,7 @@ export function computeHarness(ctx: AuditContext): {
   return { scope: buildScope(checks, {}), concerns };
 }
 
+/** Summarize agent-specific checks skipped by aggregate audit mode for non-gating evidence limits. */
 function describeAggregateAgentSkips(agentScope: AuditScope): string | null {
   const skippedAgentChecks = agentScope.checks
     .filter((check) => check.status === "skipped")
@@ -606,6 +612,7 @@ function runSingleBuildCheck(
   };
 }
 
+/** Run setup and agent build checks into their separately rendered audit scopes. */
 function runBuildChecks(ctx: AuditContext): {
   setup: AuditScope;
   agent: AuditScope;

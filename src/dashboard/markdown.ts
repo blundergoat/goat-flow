@@ -30,6 +30,7 @@ interface RenderMarkdownResult {
 }
 
 interface MarkdownItInstance {
+  /** Render markdown text to sanitized HTML according to the configured markdown-it options. */
   render(text: string): string;
 }
 
@@ -43,11 +44,13 @@ interface MarkdownItGlobal {
 }
 
 interface JsYamlGlobal {
+  /** Parse YAML frontmatter into JavaScript data for the dashboard metadata panel. */
   load(text: string): unknown;
 }
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+/** Parse frontmatter only when js-yaml is loaded and the YAML root is an object. */
 function parseFrontmatter(block: string): Record<string, unknown> | null {
   const yaml = (window as { jsyaml?: JsYamlGlobal }).jsyaml;
   if (!yaml) return null;
@@ -58,6 +61,7 @@ function parseFrontmatter(block: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
+/** Build the global markdown renderer with reusable line-break and no-line-break instances. */
 function buildRenderer(): (
   text: string,
   opts?: RenderMarkdownOptions,

@@ -36,3 +36,15 @@ last_reviewed: 2026-05-30
 **Root cause:** Word-boundary replacement is not safe for one-letter identifiers in TypeScript source because regex flags, string literals, and other syntax-adjacent one-letter tokens can also sit on word boundaries.
 
 **Prevention:** For one-letter identifiers, inspect the local AST-shaped context or use a narrower pattern such as `const m =` plus explicit call-site replacements. Always run the focused test after the rename and before expanding the rename pattern to other files. Evidence anchors: `test/unit/manifest.test.ts` (search: `renderManifestMarkdown`), `.goat-flow/tasks/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.short-variable`).
+
+---
+
+## Lesson: Boolean state prefixes differ from domain flags
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During the M00 boolean-prefix pass, gruff reported 156 advisory findings across dashboard state, CLI flags, hook JSON, setup-detect DTOs, and tests. Many were not ambiguous booleans; they mirrored persisted JSON or operator flags such as `show*`, `loading*`, `fresh`, `verbose`, `enabled`, `instructionsPathScoped`, and `customPromptSubmitAttempted`.
+
+**Root cause:** `naming.boolean-prefix` enforces an `is/has/can`-style grammar, but goat-flow has two other boolean naming grammars: UI state (`show*`, `loading*`, `selected*`, `terminal*`) and CLI/API flag names that intentionally match query params, JSON fields, or argv switches. Renaming those mechanically would make boundary code less traceable.
+
+**Prevention:** Keep `.gruff-ts.yaml` `booleanPrefixes` extended for camelCase state and protocol prefixes used across dashboard and CLI surfaces. Do not use the prefix list to hide exact lowercase flag names; those remain fix-or-baseline candidates because gruff's prefix matcher requires an uppercase boundary after the prefix. Evidence anchors: `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `.goat-flow/tasks/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.boolean-prefix`).

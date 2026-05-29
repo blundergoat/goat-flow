@@ -34,21 +34,26 @@ type TestContext = {
   presets: unknown[];
   toast: string | null;
   toastError: boolean;
+  /** Capture toast state updates made by browser-local helpers. */
   showToast(msg: string, isError?: boolean): void;
 };
 
 type HelperContext = {
+  /** Generate setup prompt output through the transpiled browser helper. */
   dashboardGenerateSetupPrompt(
     ctx: TestContext,
     options?: { force?: boolean },
   ): Promise<void>;
+  /** Generate the quality prompt through the transpiled browser helper. */
   dashboardGenerateQuality(
     ctx: TestContext,
     options?: { fast?: boolean; fresh?: boolean },
   ): Promise<void>;
+  /** Load quality history through the transpiled browser helper. */
   dashboardGenerateQualityHistory(ctx: TestContext): Promise<void>;
 };
 
+/** Load dashboard helper functions into a VM with test-owned globals. */
 function loadHelpers(fetchImpl: typeof fetch): HelperContext {
   const source = readFileSync(SETUP_QUALITY_PATH, "utf-8");
   const js = transpileModule(source, {
@@ -59,6 +64,7 @@ function loadHelpers(fetchImpl: typeof fetch): HelperContext {
     dashboardFetch: fetchImpl,
     setTimeout,
     clearTimeout,
+    /** Coerce JSON-like values into records for dashboard helper reads. */
     readRecord(value: unknown): Record<string, unknown> {
       return typeof value === "object" &&
         value !== null &&
@@ -66,23 +72,29 @@ function loadHelpers(fetchImpl: typeof fetch): HelperContext {
         ? (value as Record<string, unknown>)
         : {};
     },
+    /** Extract endpoint error text from a parsed response body. */
     readErrorMessage(value: Record<string, unknown>): string | null {
       return typeof value.error === "string" ? value.error : null;
     },
+    /** Read optional string fields using the dashboard helper fallback. */
     readString(value: unknown): string {
       return typeof value === "string" ? value : "";
     },
+    /** Filter optional array fields down to dashboard-visible strings. */
     readStringArray(value: unknown): string[] {
       return Array.isArray(value)
         ? value.filter((entry): entry is string => typeof entry === "string")
         : [];
     },
+    /** Pass through history rows so tests can inspect state assignment. */
     readQualityHistoryRow(value: unknown): unknown {
       return value;
     },
+    /** Preserve latest history payloads while normalizing absent values. */
     readQualityHistoryLatest(value: unknown): unknown {
       return value ?? null;
     },
+    /** Pass through quality payloads so tests can assert the endpoint contract. */
     readQualityResult(value: unknown): unknown {
       return value;
     },
@@ -99,6 +111,7 @@ globalThis.__helpers = {
   return (context as typeof context & { __helpers: HelperContext }).__helpers;
 }
 
+/** Create the browser-local state object consumed by setup and quality helpers. */
 function makeContext(): TestContext {
   return {
     projectPath: "/repo",
@@ -118,6 +131,7 @@ function makeContext(): TestContext {
     presets: [],
     toast: null,
     toastError: false,
+    /** Store toast calls for assertions without rendering browser UI. */
     showToast(msg: string, isError = false): void {
       this.toast = msg;
       this.toastError = isError;

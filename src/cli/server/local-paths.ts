@@ -80,6 +80,7 @@ const DESCENDANT_BLOCKED_POSIX_ROOTS = [
   "/private/etc",
 ];
 
+/** Normalize candidate paths to POSIX shape before comparing against policy roots. */
 function toPosixPath(path: string): string {
   const normalized = path.replace(/\\/gu, "/").replace(/\/+/gu, "/");
   return normalized.length > 1 ? normalized.replace(/\/$/u, "") : normalized;
@@ -96,6 +97,7 @@ export function isPathWithin(parent: string, child: string): boolean {
   return firstSegment !== "..";
 }
 
+/** Exempt browse-only requests from terminal/write local-path restrictions. */
 function isPolicyEnforcedPurpose(purpose: LocalPathPurpose): boolean {
   return purpose !== "browse";
 }
@@ -149,6 +151,7 @@ export function validateLocalPath(
   return { path: resolvedPath, realPath, purpose };
 }
 
+/** Return existing path components so symlink checks only touch filesystem entries that exist. */
 function existingPathComponents(from: string, to: string): string[] {
   const rel = relative(from, to);
   if (rel === "") return [from];

@@ -17,20 +17,33 @@ const HOME_VIEW_PATH = resolve(
 );
 
 type HomeModel = {
+  /** Return true when every harness concern for an agent is passing. */
   agentAllConcernsPassing(agent: Record<string, unknown>): boolean;
+  /** Return the score shown for one agent summary card. */
   agentScore(agent: Record<string, unknown>): number | null;
+  /** Return the compact enforcement capability badge label. */
   enforcementBadge(row: Record<string, unknown>): string;
+  /** Return the CSS class used for one enforcement badge. */
   enforcementBadgeClass(row: Record<string, unknown>): string;
+  /** Return the enforcement rows rendered in the Home detail panel. */
   enforcementRows(agent: Record<string, unknown>): Record<string, unknown>[];
+  /** Return the concern summary text rendered for one concern key. */
   formatConcernSummary(agent: Record<string, unknown>, key: string): string;
+  /** Return the average harness score across agents. */
   harnessAverage(): number | null;
+  /** Return the Home harness pill detail text. */
   harnessPillDetail(): string;
+  /** Return the Home harness pill tone. */
   harnessPillTone(): string;
+  /** Return the Home harness pill headline value. */
   harnessPillValue(): string;
+  /** Return the recommendation summary for one agent card. */
   recommendationSummary(agent: Record<string, unknown>): string;
+  /** Return the section metadata text for the Home harness summary. */
   sectionMeta(): string;
 };
 
+/** Load the inline Home x-data model into a VM context for unit assertions. */
 function loadHomeModel(report: unknown): HomeModel {
   const source = readFileSync(HOME_VIEW_PATH, "utf-8");
   const start = source.indexOf('x-data="{');

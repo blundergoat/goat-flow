@@ -1,6 +1,18 @@
 ---
 category: verification-testing
-last_reviewed: 2026-05-28
+last_reviewed: 2026-05-30
+---
+
+## Lesson: Real-timer terminal smoke tests need isolated verification
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During `docs.missing-internal-function-doc` cleanup, the combined focused command `node --import tsx --test test/smoke/dashboard-endpoints.test.ts test/unit/dashboard-setup-quality.test.ts test/unit/audit-command.test.ts` failed `uses the fallback deadline when runner output keeps updating`: `spawned.writes` was still `[]` at the 5600ms assertion. The touched code was comment-only. Rerunning `node --import tsx --test test/smoke/dashboard-endpoints.test.ts` immediately afterward passed with `# pass 15` / `# fail 0`; the two edited unit files also passed in isolated runs.
+
+**Root cause:** The terminal smoke test uses real timers to assert a fallback deadline, while `audit-command.test.ts` performs CPU-heavy repo audits in the same Node test process. Grouping them made the timer-sensitive assertion fail like a product regression even though the smoke file passed alone.
+
+**Prevention:** When `test/smoke/dashboard-endpoints.test.ts` is in focused verification, run it as its own `node --import tsx --test` command. Run heavy audit suites separately, and treat a combined-run fallback-deadline failure as an invocation-shape suspect until the isolated smoke file fails too. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/unit/audit-command.test.ts` (search: `runs full-profile batch fact extraction once`).
+
 ---
 
 ## Lesson: Cache-behaviour tests need observable contracts

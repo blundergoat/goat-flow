@@ -20,12 +20,19 @@ interface DashboardProjectsContext {
   editingProjectTitle: boolean;
   projectTitleDraft: string;
   presetFavorites: string[];
+  /** Return the visible project title for a path, honoring saved aliases. */
   displayNameFor(path: string): string;
+  /** Return the stable identity key used for saved project titles. */
   projectKeyFor(path: string): string;
+  /** Refresh the active project audit, optionally bypassing the cached result. */
   runAudit(fresh?: boolean): Promise<void>;
+  /** Surface a dashboard toast message, with error styling when requested. */
   showToast(msg: string, isError?: boolean): void;
+  /** Load browser rows for a filesystem path. */
   browseTo(path: string): Promise<void>;
+  /** Persist the project list through the legacy method name used by app.ts. */
   _saveProjectsList(): void;
+  /** Persist dashboard path, favorite, and title state. */
   _saveDashboardState(): void;
 }
 
@@ -51,6 +58,7 @@ function dashboardRememberProjectIdentities(
   }
 }
 
+/** Decode one persisted project record while dropping entries without identity or path. */
 function dashboardReadProjectRecord(value: unknown): ProjectEntry | null {
   if (!isRecord(value)) return null;
   const path = readString(value.currentPath);
@@ -78,6 +86,7 @@ function dashboardReadProjectRecord(value: unknown): ProjectEntry | null {
   return entry;
 }
 
+/** Decode the persisted project-record map into dashboard project rows. */
 function dashboardReadProjectRecords(value: unknown): ProjectEntry[] {
   if (!isRecord(value)) return [];
   return Object.values(value)
