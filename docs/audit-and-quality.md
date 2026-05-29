@@ -90,7 +90,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.8.0
+  Config:                 valid, version 1.9.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS

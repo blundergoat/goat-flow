@@ -204,7 +204,7 @@ Revisit trigger or expiry:
 For each cluster:
 
 1. Read the relevant source and nearby tests before editing.
-2. If a naming or extraction fix can remove the need for a comment, do that first.
+2. If a Rewrite-First fix (rename, extract, or simplify) can remove the need for a comment, do that first, per [`code-comments.md`](./code-comments.md).
 3. Patch the code.
 4. Run `<gruff-binary> analyse <touched paths>`.
 5. If findings remain, decide whether the remaining issue is real, out of scope, or better handled in a later cluster.
@@ -273,9 +273,9 @@ Language footnotes:
 
 ## Documentation Findings
 
-Documentation findings should produce maintainable comments, not analyzer bait. Use [`code-comments.md`](./code-comments.md) and write comments that explain the hidden contract.
+Documentation findings should produce maintainable comments, not analyzer bait. Use [`code-comments.md`](./code-comments.md) and write comments that explain the hidden contract. A `docs.missing-*` fix is not about satisfying the analyzer - the doc comment is a verification surface: it states the intent a reviewer can diff against the body, and a promise the code doesn't keep is exactly the mismatch the bar exists to catch.
 
-The no-boilerplate rule does not mean "skip `docs.missing-*` findings." It means "do not write comments that restate syntax." A useful doc comment describes caller obligation, edge values, side effects, errors, determinism, compatibility, or rationale. If a language's ecosystem consumes tags, keep accurate tags; if a tag only duplicates the type signature, prefer prose.
+`code-comments.md`'s omit-by-default stance is about *inline* comments - it never licensed skipping `docs.missing-*`. Doc comments are mandatory there, so a missing one is a real gap, and the bar is "do not restate syntax," not "write fewer comments." A useful doc comment describes caller obligation, edge values, side effects, errors, determinism, compatibility, or rationale. If a language's ecosystem consumes tags, keep accurate tags; and give every `@param`/`@returns` a real description - if a tag only restates the type signature, rewrite it with meaning (units, edge values, caller obligation) rather than dropping it, per [`code-comments.md`](./code-comments.md).
 
 Gruff documentation rules often need explicit vocabulary near the declaration:
 
@@ -297,7 +297,12 @@ Language conventions matter:
 Bad:
 
 ```ts
-/** Handles paths. */
+/**
+ * Handles paths.
+ *
+ * @param paths - a string array of paths
+ * @returns a string array
+ */
 function collect(paths: string[]): string[] {
   return paths.filter(Boolean);
 }
@@ -311,11 +316,16 @@ Good:
  *
  * Empty strings are ignored here because setup prompts may emit optional
  * fields as blank lines; callers still receive the original ordering.
+ *
+ * @param paths - raw path list from setup prompts; may contain blank entries
+ * @returns the non-empty paths - original input order preserved
  */
 function collectAuditPaths(paths: string[]): string[] {
   return paths.filter(Boolean);
 }
 ```
+
+The Bad version pairs a vague summary with type-only tags (`a string array of paths` just restates `string[]`); the Good version's tags add what the signature can't show - provenance, blank-entry handling, and preserved order. A type-only tag fails the bar as surely as a missing one.
 
 Do not add `contract:` prefixes or other marker words as a substitute for meaning. If gruff still reports the comment, improve the comment around the real boundary the rule is asking for.
 
@@ -328,6 +338,8 @@ Triage `docs.missing-internal-function-doc`:
 1. **FIX (default)** - add the doc comment `code-comments.md` requires. A trivial, name-clear helper gets a single tight contract line; a helper hiding a non-obvious WHY (tradeoff, workaround, threshold rationale, side effect, caller obligation) gets that orientation too. Both satisfy the rule.
 2. **RENAME first where it helps** - a better name (`phaseFor` over `processItem`) makes the required doc comment shorter, per the "Rewrite First" ladder. Renaming does not remove the requirement: the mandate stands regardless of name clarity.
 3. **Never baseline `docs.missing-*` as accepted noise** - under the mandate there is no name-clear-helper tail to write off; those get a one-line doc comment too. Do not set `enabled: false`, and do not baseline these away to dodge the work - satisfy them.
+
+Test functions are the one carve-out: under the mandate they still need a doc comment, but a descriptive test name plus a single line is enough (per `code-comments.md`'s "Test code" note) - don't expand test helpers into full contract blocks just to clear the finding.
 
 ## Naming Findings
 

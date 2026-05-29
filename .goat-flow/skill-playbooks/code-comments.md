@@ -324,7 +324,7 @@ The WHEN and WHY rules above are portable across languages. Core SYNTAX is not -
 
 - **TypeScript / JavaScript.** JSDoc when documenting contracts; plain `//` inline.
 - **Python.** PEP 257 for docstrings; `#` inline.
-- **Go.** godoc syntax for all identifiers, exported AND private; `//` inline. Go's culture documents only exported names - but gate item 6 mandates a doc comment on every unit, so apply this playbook's broader rule, not Go's default.
+- **Go.** godoc syntax for all identifiers, exported AND private; `//` inline. Go's culture documents only exported names - but this playbook's doc-comment mandate ("Docstring vs Inline") requires one on every unit, so apply the broader rule, not Go's default.
 - **Rust.** rustdoc (`///` and `//!` are doc comments) for all items, public AND private; `//` inline.
 - **Shell.** `#` only. No standardised docstring; put contract details in a heredoc help block at the top of the script.
 
@@ -363,7 +363,7 @@ Before claiming a code change is done, walk the new and changed comments against
 3. **[static] Each TODO / FIXME / HACK marker carries an expiry** (a `YYYY-MM-DD` date or a trigger) and an issue link when one exists. Bare markers are future bugs.
 4. **[static] No comment contains secrets, internal URLs, or production hostnames** (pattern-matchable); customer/patient identifiers may need **[judge]**. Comments ship with the code.
 5. **[judge] Existing comments edited or left untouched are still accurate.** A stale comment from before your edit is now your responsibility if you noticed it.
-6. **[static] presence + [judge] quality: Every function/method and class/file carries a doc comment** - presence, the blank separator line, and the 1-5 (function) / 3-10 (class/file) line counts are mechanical; whether the orientation (when-to-use, big-picture fit, null/edge context, footguns) and the per-parameter/return descriptions are *real* and not restated types is semantic. Required regardless of the four-reasons check in item 1, which governs inline comments only.
+6. **[static] presence + [judge] quality: Every function/method and class/file carries a doc comment** - presence, the blank separator line, and the 1-5 (function) / 3-10 (class/file) line counts are mechanical; whether the orientation (when-to-use, big-picture fit, null/edge context, footguns) and the per-parameter/return descriptions are *real* and not restated types is semantic. Required regardless of the inline four-reasons check, which governs inline comments only.
 7. **[static] Each comment line wraps at about 110 characters** - not padded short to 50-70, and not run past 120.
 
 If a comment fails any of these, fix it before merging. This gate is the spec for the two enforcement layers: the **[static]** items map to a linter, the **[judge]** items to a review-judge - keep the tags accurate so the boundary stays clear if those checks are built.
