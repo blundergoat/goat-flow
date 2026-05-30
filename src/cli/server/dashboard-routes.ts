@@ -1131,22 +1131,14 @@ function buildAuditCacheSignature(
     ".codex/hooks.json",
     ".agents/hooks.json",
     ".github/hooks/hooks.json",
-    ".claude/hooks/guard-common.sh",
-    ".claude/hooks/guard-destructive-shell.sh",
-    ".claude/hooks/guard-secret-paths.sh",
-    ".claude/hooks/guard-repository-writes.sh",
-    ".codex/hooks/guard-common.sh",
-    ".codex/hooks/guard-destructive-shell.sh",
-    ".codex/hooks/guard-secret-paths.sh",
-    ".codex/hooks/guard-repository-writes.sh",
-    ".agents/hooks/guard-common.sh",
-    ".agents/hooks/guard-destructive-shell.sh",
-    ".agents/hooks/guard-secret-paths.sh",
-    ".agents/hooks/guard-repository-writes.sh",
-    ".github/hooks/guard-common.sh",
-    ".github/hooks/guard-destructive-shell.sh",
-    ".github/hooks/guard-secret-paths.sh",
-    ".github/hooks/guard-repository-writes.sh",
+    ".claude/hooks/deny-dangerous.sh",
+    ".codex/hooks/deny-dangerous.sh",
+    ".agents/hooks/deny-dangerous.sh",
+    ".github/hooks/deny-dangerous.sh",
+    ".goat-flow/hook-lib/patterns-shell.sh",
+    ".goat-flow/hook-lib/patterns-paths.sh",
+    ".goat-flow/hook-lib/patterns-writes.sh",
+    ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
   ];
   const directoryInputs = [
     ".claude/skills",
@@ -1157,6 +1149,7 @@ function buildAuditCacheSignature(
     ".goat-flow/lessons",
     ".goat-flow/patterns",
     ".goat-flow/skill-reference",
+    ".goat-flow/hook-lib",
   ];
   return hashString(
     [

@@ -12,7 +12,7 @@ Copilot CLI now exposes the same broad categories of surface the other supported
 
 - **Instructions.** `.github/copilot-instructions.md` for repo-wide Copilot guidance, plus optional `.github/instructions/**/*.instructions.md` for path-specific rules.
 - **Skills.** `.github/skills/<name>/SKILL.md` using the same goat skill shape as the existing installed copies.
-- **Hooks.** `.github/hooks/hooks.json` plus on-disk scripts such as `.github/hooks/guard-repository-writes.sh`.
+- **Hooks.** `.github/hooks/hooks.json` plus on-disk scripts such as `.github/hooks/patterns-writes.sh`.
 - **Copilot commands.** Current Copilot CLI command help exposes `/agent`, `/review`, `/research`, and `/tasks`, plus `/fleet` for parallelizable work.
 
 The live repo already carries peer hot-path instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`), shared guardrail script templates under `workflow/hooks/`, and canonical skill templates under `workflow/skills/`. Shipping Copilot support therefore means wiring Copilot into the same standalone per-agent model rather than inventing a special-case bridge.

@@ -1,113 +1,8 @@
-#!/usr/bin/env bash
-# shellcheck disable=SC2034,SC2317,SC2319
-
-# guard-repository-writes.sh
+# patterns-writes.sh
 #
-# Purpose:
-#   PreToolUse hook that blocks shell commands which write to the local
-#   git repository or to remote GitHub state via `gh`. Sources
-#   guard-common.sh for payload parsing, command normalization, and
-#   segment splitting, then evaluates each segment against the policies
-#   below. Implements ADR-025 (git push is never agent-driven).
-#
-# Blocks:
-#   - `git commit` in any form (including via `git -C <dir>`, `git -c
-#     alias.x=...`, absolute paths, or `sudo` prefix).
-#   - `git push` and `git send-pack` regardless of how the git invocation
-#     is decorated (absolute paths, `sudo`, globals like `--git-dir`,
-#     `--work-tree`, `--namespace`, or aliases that resolve to push).
-#   - Destructive git flags: `--no-verify`, `reset --hard`,
-#     `clean -f` / `clean --force`.
-#   - GitHub writes via `gh`:
-#       * `gh issue`     create / comment / close / reopen / edit /
-#                        delete / lock / unlock / pin / unpin / transfer /
-#                        develop
-#       * `gh pr`        create / comment / review / merge / close /
-#                        reopen / edit / ready / update-branch
-#       * `gh release`   create / upload / delete / edit
-#       * `gh repo`      create / delete / edit / fork / rename /
-#                        archive / unarchive / sync / set-default
-#       * `gh label`     create / delete / edit / clone
-#       * `gh workflow`  run / disable / enable
-#       * `gh run`       rerun / cancel / delete
-#       * `gh gist`      create / edit / delete
-#       * `gh secret`    set / remove / delete
-#       * `gh variable`  set / delete
-#       * `gh ssh-key`, `gh gpg-key`   add / delete
-#       * `gh auth`      login / logout / refresh / setup-git
-#       * `gh codespace`, `gh extension`, `gh project`, `gh cache` write
-#         subcommands
-#   - `gh api` with `-X` / `--method` other than GET or HEAD, or with
-#     request-body fields (`-f`, `-F`, `--field`, `--raw-field`,
-#     `--input`).
-#   - `xargs ... gh <write>` (the `xargs` prefix is stripped before the
-#     gh call is classified).
-#
-# Allows (illustrative):
-#   - Read-only git: status, log, diff, show, ls-files, branch, remote.
-#   - Read-only gh: `gh issue view`, `gh pr view`, `gh api ... -X GET`.
-#   - Quoted-literal mentions of blocked commands inside grep/rg search
-#     arguments (the matcher unquotes string literals before policy).
-#
-# Usage:
-#   Wired in to the agent's PreToolUse hook for shell tools. Payload is
-#   read from stdin (JSON) in production; the `--check` form is used by
-#   guardrails-self-test.sh and for manual verification.
-#
-#     bash guard-repository-writes.sh --check="git push origin main"
-#     echo '<agent-payload-json>' | bash guard-repository-writes.sh
-#     bash guard-repository-writes.sh --self-test=smoke
-#
-# Exit:
-#   0 to allow, 2 to block (stderr-exit mode). In Copilot / Antigravity
-#   payload mode, exits 0 with a deny JSON document on stdout instead.
-
-set -uo pipefail
-
-if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
-  echo "guard-repository-writes.sh requires bash 4.4+ (got ${BASH_VERSION:-unknown}). On macOS install Homebrew bash and invoke /usr/local/bin/bash or /opt/homebrew/bin/bash explicitly." >&2
-  exit 2
-fi
-
-GOAT_GUARD_NAME="guard-repository-writes.sh"
-GOAT_GUARD_SCOPE="repository"
-GOAT_GUARD_SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-GOAT_GUARD_COMMON="$GOAT_GUARD_SCRIPT_DIR/guard-common.sh"
-
-guard_common_missing_json_escape() {
-  local value="$1"
-  value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
-  value="${value//$'\n'/\\n}"
-  value="${value//$'\r'/\\r}"
-  value="${value//$'\t'/\\t}"
-  printf '%s' "$value"
-}
-
-guard_common_unavailable() {
-  local detail="$1"
-  local message payload escaped
-  message="$GOAT_GUARD_NAME cannot start: $detail. Re-run goat-flow setup so guard-common.sh is installed beside this hook."
-  payload="$(cat || true)"
-  escaped="$(guard_common_missing_json_escape "$message")"
-  if [[ "$payload" == *'"toolName"'* && "$payload" != *'"tool_name"'* ]]; then
-    printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$escaped"
-    exit 0
-  fi
-  if [[ "$payload" == *'"toolCall"'* ]]; then
-    printf '{"decision":"deny","reason":"%s"}\n' "$escaped"
-    exit 0
-  fi
-  printf '%s\n' "$message" >&2
-  exit 2
-}
-
-if [[ ! -r "$GOAT_GUARD_COMMON" ]]; then
-  guard_common_unavailable "missing required shared helper $GOAT_GUARD_COMMON"
-fi
-
-# shellcheck disable=SC1090,SC1091
-source "$GOAT_GUARD_COMMON" || guard_common_unavailable "failed to load required shared helper $GOAT_GUARD_COMMON"
+# Repository and GitHub write policy extracted from writes.sh.
+# Sourced by deny-dangerous.sh; not executable on its own.
+# shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 __goat_git_rest=""
 __goat_git_aliased_push=0
@@ -346,7 +241,7 @@ is_gh_write_operation() {
   return 1
 }
 
-check_segment() {
+check_repository_segment() {
   local cmd="$1"
   local depth="${2:-0}"
   prepare_segment_context "$cmd" "$depth" || return $?
@@ -392,4 +287,3 @@ check_segment() {
   fi
 }
 
-main "$@"

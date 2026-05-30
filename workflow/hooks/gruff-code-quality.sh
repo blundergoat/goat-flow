@@ -36,8 +36,11 @@
 #   primary reported line intersects the changed ranges, then one compact
 #   suppressed-count line for same-file findings outside those ranges.
 #   The playbook footer is printed only when at least one changed-line
-#   finding is shown. Exit status stays 0 for analyzer findings and
-#   fail-soft diagnostics.
+#   finding is shown. If the analyzer reports the edited file as ignored by
+#   its `paths.ignore` config, the hook instead prints a single
+#   `skipped <path> - out of scope` line and surfaces no findings, so the
+#   agent does not try to fix a file the project deliberately excludes. Exit
+#   status stays 0 for analyzer findings and fail-soft diagnostics.
 
 set -euo pipefail
 
@@ -466,12 +469,50 @@ suppressed_count() {
   ' 2>/dev/null || printf '0'
 }
 
+# When the analyzer reports the edited file as ignored by its config
+# (`paths.ignore`), return a short human descriptor (for example
+# "ignored by gruff config (matched *.css)") so the hook can tell the agent the
+# file is out of scope instead of surfacing findings for it. The verdict is read
+# from gruff's own output (`paths.ignoredPaths`, or `paths.skipped` for
+# gruff-go); the hook never re-derives ignore rules. Handles bare-string and
+# `{path,source,pattern,reason}` entry shapes, and prints nothing when the file
+# is not ignored. No-op on gruff binaries that still bypass `paths.ignore` for
+# explicitly-passed files (the list comes back empty).
+ignored_descriptor() {
+  local output="$1"
+  local rel_path="$2"
+  local abs_path="$3"
+  printf '%s' "$output" | jq -r --arg rel "$rel_path" --arg abs "$abs_path" '
+    def normalize_path:
+      tostring | gsub("\\\\"; "/") | sub("^\\./"; "");
+    def entry_path:
+      if type == "string" then . else (.path? // .file? // "") end;
+    def entry_detail:
+      if type == "object" then (.pattern? // .source? // .reason? // "") else "" end;
+    def is_match($p):
+      ($p | normalize_path) as $n
+      | ($n == ($rel | normalize_path)
+        or $n == ($abs | normalize_path)
+        or $n == ("./" + ($rel | normalize_path))
+        or ($n | endswith("/" + ($rel | normalize_path))));
+
+    ((.paths.ignoredPaths? // .ignoredPaths? // .paths.skipped? // []))
+    | map(select(is_match(entry_path)))
+    | first
+    | if . == null then empty
+      else (entry_detail) as $d
+        | if ($d | length) > 0 then "ignored by gruff config (matched \($d))"
+          else "ignored by gruff config" end
+      end
+  ' 2>/dev/null || true
+}
+
 process_file() {
   local payload="$1"
   local root="$2"
   local file_path="$3"
   local rel_path abs_path binary binary_path config_file
-  local ranges help output status changed_output suppressed
+  local ranges help output status changed_output suppressed ignored_desc
 
   [[ -n "$file_path" ]] || return 0
   [[ "$file_path" =~ $SKIP_DIR_PATTERN ]] && return 0
@@ -521,6 +562,17 @@ process_file() {
   fi
   if ! valid_gruff_json "$output"; then
     printf 'gruff-code-quality: %s produced non-JSON output; changed-line filtering skipped\n' "$binary" >&2
+    return 0
+  fi
+
+  # If gruff reports the edited file as ignored by config (`paths.ignore`), tell
+  # the agent it is out of scope and stop - never surface findings for a file the
+  # project deliberately excludes. The verdict is gruff's own (`ignoredPaths`);
+  # the hook does not re-derive ignore rules. No-op on gruff binaries that still
+  # bypass `paths.ignore` for explicitly-passed files.
+  ignored_desc="$(ignored_descriptor "$output" "$rel_path" "$abs_path")"
+  if [[ -n "$ignored_desc" ]]; then
+    printf 'gruff-code-quality: skipped %s - %s; out of scope, do not modify to satisfy gruff.\n' "$rel_path" "$ignored_desc"
     return 0
   fi
 

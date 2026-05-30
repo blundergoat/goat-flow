@@ -7,11 +7,17 @@ import { pushUniquePath } from "./routing.js";
 /** Regex matching common lint, typecheck, and format-check tool invocations. */
 const POST_TURN_VALIDATION_COMMAND_PATTERN =
   /\b(shellcheck|eslint|tsc|phpstan|ruff|mypy|flake8|rubocop|stylelint|ktlint|swiftlint)\b|biome\s+check|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:lint|typecheck|format(?::check)?)\b|cargo\s+check|go\s+vet|prettier\s+--check|bash\s+-n\b|(?:^|\s)(?:bash\s+)?(?:\.\/)?scripts\/preflight-checks\.sh\b/i;
-const GUARDRAIL_HOOK_FILES = [
+const LEGACY_GUARDRAIL_HOOK_FILES = [
   "guard-common.sh",
   "guard-destructive-shell.sh",
   "guard-secret-paths.sh",
   "guard-repository-writes.sh",
+];
+const DENY_DANGEROUS_HOOK_LIB_FILES = [
+  ".goat-flow/hook-lib/patterns-shell.sh",
+  ".goat-flow/hook-lib/patterns-paths.sh",
+  ".goat-flow/hook-lib/patterns-writes.sh",
+  ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
 ];
 
 /** Detect shell lines that intentionally mask validation failures with `|| true`. */
@@ -249,6 +255,7 @@ function preferredHookPathFromCommands(commands: string[]): string | null {
     for (const candidate of candidates) pushUniquePath(paths, candidate);
   }
   return (
+    paths.find((path) => path.endsWith("/deny-dangerous.sh")) ??
     paths.find((path) => path.endsWith("/guard-repository-writes.sh")) ??
     paths[0] ??
     null
@@ -391,10 +398,12 @@ function buildDenyRegistration(
     if (!agent.hookEvents) {
       return { denyIsRegistered: false, denyRegisteredPath: null };
     }
-    const denyDefinition = readAntigravityHookDefinition(
-      hookConfigParsed,
-      "guard-repository-writes",
-    );
+    const denyDefinition =
+      readAntigravityHookDefinition(hookConfigParsed, "deny-dangerous") ??
+      readAntigravityHookDefinition(
+        hookConfigParsed,
+        "guard-repository-writes",
+      );
     if (!denyDefinition || denyDefinition.enabled === false) {
       return { denyIsRegistered: false, denyRegisteredPath: null };
     }
@@ -428,6 +437,11 @@ function resolveDenyHookPath(
   fs: ReadonlyFS,
   agent: AgentProfile,
 ): string | null {
+  const singleDispatcher = agent.hooksDir
+    ? `${agent.hooksDir}/deny-dangerous.sh`
+    : null;
+  if (singleDispatcher && fs.exists(singleDispatcher)) return singleDispatcher;
+
   const explicitHook =
     agent.denyHookFile && fs.exists(agent.denyHookFile)
       ? agent.denyHookFile
@@ -458,10 +472,15 @@ function siblingGuardrailPaths(
   denyHookPath: string | null,
 ): string[] {
   if (!denyHookPath) return [];
+  if (denyHookPath.endsWith("/deny-dangerous.sh")) {
+    return DENY_DANGEROUS_HOOK_LIB_FILES.every((path) => fs.exists(path))
+      ? DENY_DANGEROUS_HOOK_LIB_FILES
+      : [];
+  }
   const slash = denyHookPath.lastIndexOf("/");
   if (slash === -1) return [];
   const dir = denyHookPath.slice(0, slash);
-  const paths = GUARDRAIL_HOOK_FILES.map((file) => `${dir}/${file}`);
+  const paths = LEGACY_GUARDRAIL_HOOK_FILES.map((file) => `${dir}/${file}`);
   return paths.every((path) => fs.exists(path)) ? paths : [];
 }
 
@@ -560,8 +579,10 @@ function detectBashDenyCoversSecrets(
   denyHookPath: string | null,
 ): boolean {
   if (!denyHookPath || !fs.exists(denyHookPath)) return false;
-  const secretSibling = siblingGuardrailPaths(fs, denyHookPath).find((path) =>
-    path.endsWith("/guard-secret-paths.sh"),
+  const secretSibling = siblingGuardrailPaths(fs, denyHookPath).find(
+    (path) =>
+      path.endsWith("/patterns-paths.sh") ||
+      path.endsWith("/guard-secret-paths.sh"),
   );
   const content = fs.readFile(secretSibling ?? denyHookPath);
   if (!content) return false;

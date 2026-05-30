@@ -32,6 +32,10 @@
     ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
     ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+    ".goat-flow/hook-lib/patterns-shell.sh",
+    ".goat-flow/hook-lib/patterns-paths.sh",
+    ".goat-flow/hook-lib/patterns-writes.sh",
+    ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
@@ -51,6 +55,7 @@
     ".goat-flow/scratchpad/",
     ".goat-flow/skill-reference/",
     ".goat-flow/skill-playbooks/",
+    ".goat-flow/hook-lib/",
     ".goat-flow/tasks/"
   ],
 
@@ -66,6 +71,7 @@
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
     ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
     ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/hook-lib/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
     ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
@@ -124,6 +130,17 @@
     ]
   },
 
+  "hooks": {
+    "stale_names": [
+      "guard-common.sh",
+      "guard-destructive-shell.sh",
+      "guard-secret-paths.sh",
+      "guard-repository-writes.sh",
+      "guardrails-self-test.sh",
+      "deny-dangerous.self-test.sh"
+    ]
+  },
+
   "agents": {
     "claude": {
       "name": "Claude Code",
@@ -138,11 +155,11 @@
       "hooks_dir": ".claude/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
-      "deny_hook": ".claude/hooks/guard-repository-writes.sh",
+      "deny_hook": ".claude/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".claude/settings.json",
-        "script_path": ".claude/hooks/guard-repository-writes.sh"
+        "script_path": ".claude/hooks/deny-dangerous.sh"
       },
       "local_pattern": "*/CLAUDE.md",
       "hook_events": {
@@ -150,11 +167,7 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "guard-common.sh",
-        "guard-destructive-shell.sh",
-        "guard-secret-paths.sh",
-        "guard-repository-writes.sh",
-        "guardrails-self-test.sh"
+        "deny-dangerous.sh"
       ]
     },
     "codex": {
@@ -174,11 +187,11 @@
       "hooks_dir": ".codex/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
-      "deny_hook": ".codex/hooks/guard-repository-writes.sh",
+      "deny_hook": ".codex/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".codex/config.toml",
-        "script_path": ".codex/hooks/guard-repository-writes.sh"
+        "script_path": ".codex/hooks/deny-dangerous.sh"
       },
       "local_pattern": ".github/instructions/*.md",
       "hook_events": {
@@ -186,11 +199,7 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "guard-common.sh",
-        "guard-destructive-shell.sh",
-        "guard-secret-paths.sh",
-        "guard-repository-writes.sh",
-        "guardrails-self-test.sh"
+        "deny-dangerous.sh"
       ]
     },
     "antigravity": {
@@ -210,10 +219,10 @@
       },
       "hooks_dir": ".agents/hooks/",
       "hook_config_file": ".agents/hooks.json",
-      "deny_hook": ".agents/hooks/guard-repository-writes.sh",
+      "deny_hook": ".agents/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".agents/hooks/guard-repository-writes.sh"
+        "path": ".agents/hooks/deny-dangerous.sh"
       },
       "local_pattern": "*/AGENTS.md",
       "hook_events": {
@@ -221,11 +230,7 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "guard-common.sh",
-        "guard-destructive-shell.sh",
-        "guard-secret-paths.sh",
-        "guard-repository-writes.sh",
-        "guardrails-self-test.sh"
+        "deny-dangerous.sh"
       ]
     },
     "copilot": {
@@ -244,10 +249,10 @@
       },
       "hooks_dir": ".github/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
-      "deny_hook": ".github/hooks/guard-repository-writes.sh",
+      "deny_hook": ".github/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".github/hooks/guard-repository-writes.sh"
+        "path": ".github/hooks/deny-dangerous.sh"
       },
       "local_pattern": ".github/instructions/**/*.instructions.md",
       "hook_events": {
@@ -256,11 +261,7 @@
       },
       "hooks": [
         "hooks.json",
-        "guard-common.sh",
-        "guard-destructive-shell.sh",
-        "guard-secret-paths.sh",
-        "guard-repository-writes.sh",
-        "guardrails-self-test.sh"
+        "deny-dangerous.sh"
       ]
     }
   },

@@ -5,7 +5,7 @@
 
 ## Context
 
-Footgun and lesson entries cited code evidence using `file:line` references (e.g. `guardrails-self-test.sh:88-96`). Three independent quality reports in a single session flagged stale line numbers in footgun evidence - references that pointed at the right file but wrong code because line numbers shift on every edit. The framework's own `stats --check` validated that cited lines were in-bounds but could not detect that the content at those lines no longer matched the described evidence.
+Footgun and lesson entries cited code evidence using `file:line` references (e.g. `deny-dangerous-self-test.sh:88-96`). Three independent quality reports in a single session flagged stale line numbers in footgun evidence - references that pointed at the right file but wrong code because line numbers shift on every edit. The framework's own `stats --check` validated that cited lines were in-bounds but could not detect that the content at those lines no longer matched the described evidence.
 
 The maintenance cost was real: 9 active line-number references across 3 footgun files had drifted, and 2 were already confirmed stale by direct file reads. The README already recommended semantic anchors, but entries kept using line numbers because the evaluation templates said "Line numbers are RECOMMENDED."
 

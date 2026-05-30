@@ -36,11 +36,7 @@ learning-loop:
 hooks:
   gruff-code-quality:
     enabled: true
-  guard-destructive-shell:
-    enabled: true
-  guard-repository-writes:
-    enabled: true
-  guard-secret-paths:
+  deny-dangerous:
     enabled: true
 line-limits:
   target: 125

@@ -688,77 +688,63 @@ fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────
 section "Deny Policy"
-if deny_self_test_output=$(bash workflow/hooks/guardrails-self-test.sh --self-test=full 2>&1); then
-    pass "workflow/hooks/guardrails-self-test.sh ${deny_self_test_output}"
+if deny_self_test_output=$(bash workflow/hooks/deny-dangerous.sh --self-test=full 2>&1); then
+    pass "workflow/hooks/deny-dangerous.sh ${deny_self_test_output}"
 else
-    fail "workflow/hooks/guardrails-self-test.sh full self-test"
+    fail "workflow/hooks/deny-dangerous.sh full self-test"
 fi
 
 # Also smoke-test installed hooks. Routine audit/preflight only needs the
 # install-safe representative set; the local scripts/ copy runs the full corpus
 # above.
-guardrail_hooks=(
-    guard-destructive-shell.sh
-    guard-secret-paths.sh
-    guard-repository-writes.sh
-)
 while IFS= read -r hookdir; do
-    for guardrail_hook in "${guardrail_hooks[@]}"; do
-        if [[ -f "$hookdir/$guardrail_hook" ]]; then
-            if bash "$hookdir/$guardrail_hook" --self-test=smoke >/dev/null 2>&1; then
-                pass "$hookdir/$guardrail_hook smoke self-test"
-            else
-                fail "$hookdir/$guardrail_hook smoke self-test"
-            fi
-        fi
-    done
-    if [[ -f "$hookdir/guardrails-self-test.sh" ]]; then
-        if bash "$hookdir/guardrails-self-test.sh" --self-test=smoke >/dev/null 2>&1; then
-            pass "$hookdir/guardrails-self-test.sh smoke self-test"
+    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
+        if bash "$hookdir/deny-dangerous.sh" --self-test=smoke >/dev/null 2>&1; then
+            pass "$hookdir/deny-dangerous.sh smoke self-test"
         else
-            fail "$hookdir/guardrails-self-test.sh smoke self-test"
+            fail "$hookdir/deny-dangerous.sh smoke self-test"
         fi
     fi
 done < <(manifest_eval hook-dirs)
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
 while IFS= read -r hookdir; do
-    if [[ -f "$hookdir/guard-destructive-shell.sh" ]]; then
+    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
         if [[ "$hookdir" == ".github/hooks" ]]; then
             test_payload='{"toolName":"bash","toolArgs":"{\"command\":\"rm -rf /\"}"}'
-            if output=$(bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" 2>&1); then
+            if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
                 if echo "$output" | grep -q '"permissionDecision":"deny"'; then
-                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (copilot payload denied rm -rf)"
+                    pass "$hookdir/deny-dangerous.sh runtime smoke test (copilot payload denied rm -rf)"
                 else
-                    fail "$hookdir/guard-destructive-shell.sh did not return a deny decision for Copilot payload"
+                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Copilot payload"
                 fi
             else
                 exit_code=$?
-                warn "$hookdir/guard-destructive-shell.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
+                warn "$hookdir/deny-dangerous.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
             fi
         elif [[ "$hookdir" == ".agents/hooks" ]]; then
             test_payload='{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}}}'
-            if output=$(bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" 2>&1); then
+            if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
                 if echo "$output" | grep -q '"decision":"deny"'; then
-                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (antigravity payload denied rm -rf)"
+                    pass "$hookdir/deny-dangerous.sh runtime smoke test (antigravity payload denied rm -rf)"
                 else
-                    fail "$hookdir/guard-destructive-shell.sh did not return a deny decision for Antigravity payload"
+                    fail "$hookdir/deny-dangerous.sh did not return a deny decision for Antigravity payload"
                 fi
             else
                 exit_code=$?
-                warn "$hookdir/guard-destructive-shell.sh exited $exit_code on Antigravity deny payload (expected 0 + deny JSON)"
+                warn "$hookdir/deny-dangerous.sh exited $exit_code on Antigravity deny payload (expected 0 + deny JSON)"
             fi
         else
             # Simulate a VS Code-style Bash tool call with a dangerous command
             test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
-            if bash "$hookdir/guard-destructive-shell.sh" <<< "$test_payload" >/dev/null 2>&1; then
-                fail "$hookdir/guard-destructive-shell.sh did not block 'rm -rf /' (exit 0)"
+            if bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" >/dev/null 2>&1; then
+                fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
             else
                 exit_code=$?
                 if [[ $exit_code -eq 2 ]]; then
-                    pass "$hookdir/guard-destructive-shell.sh runtime smoke test (blocked rm -rf)"
+                    pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
                 else
-                    warn "$hookdir/guard-destructive-shell.sh exited $exit_code on blocked command (expected 2)"
+                    warn "$hookdir/deny-dangerous.sh exited $exit_code on blocked command (expected 2)"
                 fi
             fi
         fi
@@ -773,11 +759,7 @@ configured_hook_smoke_output=$(
 const fs = require("node:fs");
 const { spawnSync } = require("node:child_process");
 
-const guardScripts = [
-  "guard-destructive-shell.sh",
-  "guard-secret-paths.sh",
-  "guard-repository-writes.sh",
-];
+const guardScripts = ["deny-dangerous.sh"];
 const configs = [
   { agent: "claude", path: ".claude/settings.json", mode: "stderr" },
   { agent: "codex", path: ".codex/hooks.json", mode: "stderr" },
@@ -790,12 +772,7 @@ function emit(status, message) {
 }
 
 function payloadFor(mode, script) {
-  const command =
-    script === "guard-destructive-shell.sh"
-      ? "rm -rf /"
-      : script === "guard-secret-paths.sh"
-        ? "cat .env"
-        : "git push origin main";
+  const command = "git push origin main";
   if (mode === "copilot-json") {
     return {
       input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),

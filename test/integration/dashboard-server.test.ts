@@ -316,10 +316,29 @@ async function makeDashboardCacheProject(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const root = await mkdtemp(join(tmpdir(), "goat-flow-cache-tests-"));
+  const denyHook = await readFile(
+    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.sh"),
+    "utf-8",
+  );
+  const hookLibFiles = new Map<string, string>();
+  for (const file of [
+    "patterns-shell.sh",
+    "patterns-paths.sh",
+    "patterns-writes.sh",
+    "deny-dangerous-self-test.sh",
+  ]) {
+    hookLibFiles.set(
+      file,
+      await readFile(
+        join(PROJECT_PATH, "workflow", "hooks", "hook-lib", file),
+        "utf-8",
+      ),
+    );
+  }
   await writeProjectFile(
     root,
     ".goat-flow/.gitignore",
-    "*\n!.gitignore\n!config.yaml\n!footguns/\n!footguns/**\n!lessons/\n!lessons/**\n",
+    "*\n!.gitignore\n!config.yaml\n!hook-lib/\n!hook-lib/**\n!footguns/\n!footguns/**\n!lessons/\n!lessons/**\n",
   );
   await writeProjectFile(
     root,
@@ -338,18 +357,12 @@ async function makeDashboardCacheProject(): Promise<{
   await writeProjectFile(
     root,
     ".codex/hooks.json",
-    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/guard-repository-writes.sh"}]}]}}\n',
+    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/deny-dangerous.sh"}]}]}}\n',
   );
-  await writeProjectFile(
-    root,
-    ".codex/hooks/guard-common.sh",
-    "#!/usr/bin/env bash\nexit 0\n",
-  );
-  await writeProjectFile(
-    root,
-    ".codex/hooks/guard-repository-writes.sh",
-    "#!/usr/bin/env bash\nexit 0\n",
-  );
+  await writeProjectFile(root, ".codex/hooks/deny-dangerous.sh", denyHook);
+  for (const [file, content] of hookLibFiles) {
+    await writeProjectFile(root, `.goat-flow/hook-lib/${file}`, content);
+  }
   return {
     root,
     cleanup: () => rm(root, { recursive: true, force: true }),
@@ -399,17 +412,24 @@ async function makeDashboardSetupPromptProject(options: {
 }): Promise<{ root: string; cleanup: () => Promise<void> }> {
   const root = await mkdtemp(join(tmpdir(), "goat-flow-setup-prompt-tests-"));
   const denyHook = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "guard-repository-writes.sh"),
+    join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous.sh"),
     "utf-8",
   );
-  const guardCommon = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "guard-common.sh"),
-    "utf-8",
-  );
-  const denyHookSelfTest = await readFile(
-    join(PROJECT_PATH, "workflow", "hooks", "guardrails-self-test.sh"),
-    "utf-8",
-  );
+  const hookLibFiles = new Map<string, string>();
+  for (const file of [
+    "patterns-shell.sh",
+    "patterns-paths.sh",
+    "patterns-writes.sh",
+    "deny-dangerous-self-test.sh",
+  ]) {
+    hookLibFiles.set(
+      file,
+      await readFile(
+        join(PROJECT_PATH, "workflow", "hooks", "hook-lib", file),
+        "utf-8",
+      ),
+    );
+  }
   const commonDirs = [
     ".goat-flow/footguns",
     ".goat-flow/lessons",
@@ -418,6 +438,7 @@ async function makeDashboardSetupPromptProject(options: {
     ".goat-flow/skill-reference",
     ".goat-flow/patterns",
     ".goat-flow/scratchpad",
+    ".goat-flow/hook-lib",
     ".codex/hooks",
   ];
   if (options.decisionsDir) commonDirs.push(".goat-flow/decisions");
@@ -474,7 +495,7 @@ skills:
               hooks: [
                 {
                   type: "command",
-                  command: ".codex/hooks/guard-repository-writes.sh",
+                  command: ".codex/hooks/deny-dangerous.sh",
                 },
               ],
             },
@@ -485,17 +506,10 @@ skills:
       2,
     ),
   );
-  await writeProjectFile(root, ".codex/hooks/guard-common.sh", guardCommon);
-  await writeProjectFile(
-    root,
-    ".codex/hooks/guard-repository-writes.sh",
-    denyHook,
-  );
-  await writeProjectFile(
-    root,
-    ".codex/hooks/guardrails-self-test.sh",
-    denyHookSelfTest,
-  );
+  await writeProjectFile(root, ".codex/hooks/deny-dangerous.sh", denyHook);
+  for (const [file, content] of hookLibFiles) {
+    await writeProjectFile(root, `.goat-flow/hook-lib/${file}`, content);
+  }
   if (options.installSkills) {
     for (const skill of [
       "goat",
@@ -1127,7 +1141,7 @@ describe("dashboard /api/audit", () => {
 
       await writeProjectFile(
         project.root,
-        ".codex/hooks/guard-repository-writes.sh",
+        ".codex/hooks/deny-dangerous.sh",
         "#!/usr/bin/env bash\nexit 1\n",
       );
       const afterHook = await fetchProfiledAudit(project.root);

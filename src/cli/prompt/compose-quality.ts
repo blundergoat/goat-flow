@@ -1011,7 +1011,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
   lines.push("#    Record: which pass, which fail, which don't exist.");
   lines.push("");
   lines.push(
-    "# 2. Hook self-test (if guardrails-self-test.sh exists in your hooks directory)",
+    "# 2. Hook self-test (if deny-dangerous.sh exists in your hooks directory)",
   );
   if (denyHookFile) {
     lines.push(`bash ${denyHookFile} --self-test=smoke`);
@@ -1144,7 +1144,7 @@ export function composeQuality(input: QualityInput): QualityPayload {
     `- Were hook scripts installed and registered in \`${hookConfigFile}\`?`,
   );
   lines.push(
-    "- Did guardrails-self-test.sh pass the self-test in Step 0? If not, what failed?",
+    "- Did deny-dangerous.sh pass the self-test in Step 0? If not, what failed?",
   );
   lines.push("");
 

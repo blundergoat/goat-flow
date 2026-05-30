@@ -1,48 +1,64 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
 
-# guard-common.sh
+# deny-dangerous.sh
 #
-# Purpose:
-#   Shared helper library sourced by the three goat-flow guardrail hooks
-#   (guard-destructive-shell, guard-repository-writes, guard-secret-paths).
-#   Provides the runtime they share: cross-agent payload parsing
-#   (Claude / Codex / Antigravity / Copilot), command-line normalization
-#   (sudo, env, time, nohup, nice, variable-assignment prefixes, command
-#   and process substitution, heredoc body masking), shell-aware segment
-#   splitting on `;`, `&&`, `||`, and pipes, and the block/allow
-#   primitives that emit the correct decision shape for the detected
-#   agent.
-#
-# Usage:
-#   Not executed directly. Each thin guard:
-#     1. Sets GOAT_GUARD_NAME and GOAT_GUARD_SCOPE.
-#     2. Sources this file.
-#     3. Defines a `check_segment <cmd> <depth>` callback.
-#     4. Calls `main "$@"`.
-#
-#   `main` accepts:
-#     --check=<command>      test one command (stderr-exit mode)
-#     --check <command>      same with split args
-#     --self-test[=mode]     re-exec into guardrails-self-test.sh
-#     <command>              bare positional command for testing
-#     (no args)              read agent JSON payload from stdin
-#
-# Output modes (auto-detected from the stdin payload):
-#   copilot-json       payload has `toolName` -> permissionDecision JSON
-#                      on stdout, exit 0
-#   antigravity-json   payload has `toolCall` -> decision JSON on stdout,
-#                      exit 0
-#   stderr-exit        default for --check, bare args, and Claude/Codex
-#                      payloads -> "BLOCKED:" line on stderr, exit 2
-#
-# Exit:
-#   0 to allow (or to deliver a fail-closed JSON deny in copilot-json /
-#   antigravity-json mode), 2 to block in stderr-exit mode.
-#
-# Requirements:
-#   - bash 4.4+ (the thin guards enforce this before sourcing).
-#   - jq optional; falls back to bash regex parsing when absent.
+# Single goat-flow PreToolUse guardrail dispatcher. It contains the shared
+# payload parser/normalizer and sources policy modules from the committed
+# .goat-flow/hook-lib/ store, then runs destructive-shell, secret-path, and
+# repository-write checks in one process.
+
+set -uo pipefail
+
+if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
+  echo "deny-dangerous.sh requires bash 4.4+ (got ${BASH_VERSION:-unknown}). On macOS install Homebrew bash and invoke /usr/local/bin/bash or /opt/homebrew/bin/bash explicitly." >&2
+  exit 2
+fi
+
+GOAT_GUARD_NAME="deny-dangerous.sh"
+GOAT_GUARD_SCOPE="deny-dangerous"
+GOAT_GUARD_SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+GOAT_HOOK_LIB_DIR=""
+
+deny_dangerous_json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+deny_dangerous_unavailable() {
+  local detail="$1"
+  local message payload escaped
+  message="deny-dangerous.sh cannot start: $detail. Re-run goat-flow setup so .goat-flow/hook-lib is installed and tracked."
+  payload="$(cat || true)"
+  escaped="$(deny_dangerous_json_escape "$message")"
+  if [[ "$payload" == *'"toolName"'* && "$payload" != *'"tool_name"'* ]]; then
+    printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$escaped"
+    exit 0
+  fi
+  if [[ "$payload" == *'"toolCall"'* ]]; then
+    printf '{"decision":"deny","reason":"%s"}\n' "$escaped"
+    exit 0
+  fi
+  printf '%s\n' "$message" >&2
+  exit 2
+}
+
+resolve_goat_flow_root() {
+  local gcd
+  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
+  case "$gcd" in
+    /*) dirname "$gcd" ;;
+    *) git rev-parse --show-toplevel ;;
+  esac
+}
+
+GOAT_FLOW_ROOT="$(resolve_goat_flow_root)" || deny_dangerous_unavailable "git repository root unavailable"
+GOAT_HOOK_LIB_DIR="$GOAT_FLOW_ROOT/.goat-flow/hook-lib"
 
 read_payload() {
   if [[ -n "$CHECK_COMMAND" ]]; then
@@ -890,17 +906,17 @@ block() {
   case "$OUTPUT_MODE" in
     copilot-json)
       printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}
-' "$(json_escape "Guard $GOAT_GUARD_SCOPE: $reason")"
+' "$(json_escape "Guard ${GOAT_ACTIVE_GUARD_SCOPE:-$GOAT_GUARD_SCOPE}: $reason")"
       exit 0
       ;;
     antigravity-json)
       printf '{"decision":"deny","reason":"%s"}
-' "$(json_escape "Guard $GOAT_GUARD_SCOPE: $reason")"
+' "$(json_escape "Guard ${GOAT_ACTIVE_GUARD_SCOPE:-$GOAT_GUARD_SCOPE}: $reason")"
       exit 0
       ;;
     *)
       printf 'BLOCKED: Guard %s: %s
-' "$GOAT_GUARD_SCOPE" "$reason" >&2
+' "${GOAT_ACTIVE_GUARD_SCOPE:-$GOAT_GUARD_SCOPE}" "$reason" >&2
       exit 2
       ;;
   esac
@@ -1086,7 +1102,7 @@ main() {
   local script_dir
   script_dir="${GOAT_GUARD_SCRIPT_DIR:-$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}"
   if [[ -n "$SELF_TEST_MODE" ]]; then
-    exec bash "$script_dir/guardrails-self-test.sh" "--self-test=$SELF_TEST_MODE" --hook "$GOAT_GUARD_NAME"
+    GOAT_DENY_DANGEROUS_HOOK="${BASH_SOURCE[0]}" exec bash "$GOAT_HOOK_LIB_DIR/deny-dangerous-self-test.sh" "--self-test=$SELF_TEST_MODE"
   fi
 
   local payload structured_input payload_trimmed tool_name command command_policy
@@ -1105,7 +1121,7 @@ main() {
     command="$(extract_command_text "$payload")"
     if [[ -n "$tool_name" ]]; then
       if ! tool_is_shell_command "$tool_name"; then
-        if [[ "$GOAT_GUARD_SCOPE" == "secret" ]] && tool_is_secret_file_operation "$tool_name"; then
+        if { [[ "$GOAT_GUARD_SCOPE" == "secret" ]] || [[ "$GOAT_GUARD_NAME" == "deny-dangerous.sh" ]]; } && tool_is_secret_file_operation "$tool_name"; then
           :
         else
           allow
@@ -1139,3 +1155,43 @@ main() {
   check_command_segments "$command_policy" 0
   allow
 }
+
+required_hook_lib_files=(
+  "patterns-shell.sh"
+  "patterns-paths.sh"
+  "patterns-writes.sh"
+)
+
+for required_hook_lib_file in "${required_hook_lib_files[@]}"; do
+  if [[ ! -r "$GOAT_HOOK_LIB_DIR/$required_hook_lib_file" ]]; then
+    deny_dangerous_unavailable "missing required hook-lib file $GOAT_HOOK_LIB_DIR/$required_hook_lib_file"
+  fi
+done
+
+# shellcheck disable=SC1090,SC1091
+source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh" || deny_dangerous_unavailable "failed to load $GOAT_HOOK_LIB_DIR/patterns-shell.sh"
+# shellcheck disable=SC1090,SC1091
+source "$GOAT_HOOK_LIB_DIR/patterns-paths.sh" || deny_dangerous_unavailable "failed to load $GOAT_HOOK_LIB_DIR/patterns-paths.sh"
+# shellcheck disable=SC1090,SC1091
+source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "failed to load $GOAT_HOOK_LIB_DIR/patterns-writes.sh"
+
+check_segment() {
+  local cmd="$1"
+  local depth="${2:-0}"
+  local previous_scope="${GOAT_ACTIVE_GUARD_SCOPE-}"
+
+  GOAT_ACTIVE_GUARD_SCOPE="destructive"
+  check_destructive_segment "$cmd" "$depth" || return $?
+  GOAT_ACTIVE_GUARD_SCOPE="secret"
+  check_secret_segment "$cmd" "$depth" || return $?
+  GOAT_ACTIVE_GUARD_SCOPE="repository"
+  check_repository_segment "$cmd" "$depth" || return $?
+
+  if [[ -n "$previous_scope" ]]; then
+    GOAT_ACTIVE_GUARD_SCOPE="$previous_scope"
+  else
+    unset GOAT_ACTIVE_GUARD_SCOPE
+  fi
+}
+
+main "$@"

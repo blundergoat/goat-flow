@@ -22,7 +22,7 @@ Block **all** git push commands from agents, at both the settings layer and the 
 
 ## Consequences
 
-- `guard-repository-writes.sh` now blocks any `git push` command with a single pattern match.
+- `patterns-writes.sh` now blocks any `git push` command with a single pattern match.
 - The old `is_protected_push_token()` helper and force-push checks (old checks 4-6) are removed as redundant.
 - All settings.json deny lists must use `Bash(*git push*)`, not `Bash(*git push*--force*)`.
 - Self-test cases updated: feature-branch pushes, bare `git push`, and `git push -u` all expect exit 2.

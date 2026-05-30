@@ -4,20 +4,8 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": ".github/hooks/guard-destructive-shell.sh",
-        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/guard-destructive-shell.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .github/hooks/guard-destructive-shell.sh on Windows.\"}' }",
-        "timeoutSec": 30
-      },
-      {
-        "type": "command",
-        "bash": ".github/hooks/guard-secret-paths.sh",
-        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/guard-secret-paths.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .github/hooks/guard-secret-paths.sh on Windows.\"}' }",
-        "timeoutSec": 30
-      },
-      {
-        "type": "command",
-        "bash": ".github/hooks/guard-repository-writes.sh",
-        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/guard-repository-writes.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .github/hooks/guard-repository-writes.sh on Windows.\"}' }",
+        "bash": ".github/hooks/deny-dangerous.sh",
+        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/deny-dangerous.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .github/hooks/deny-dangerous.sh on Windows.\"}' }",
         "timeoutSec": 30
       }
     ],

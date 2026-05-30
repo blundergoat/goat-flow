@@ -22,6 +22,8 @@
 !skill-reference/**
 !skill-playbooks/
 !skill-playbooks/**
+!hook-lib/
+!hook-lib/**
 # Keep the local-workspace directories themselves committed so tools can rely on the paths.
 # Their own nested .gitignore files decide which contents stay local-only.
 !tasks/

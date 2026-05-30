@@ -19,5 +19,5 @@ glob_scan_max_depth = 3
 # Codex 0.131 accepts exact paths and trailing "/**" subtrees here.
 # Exact entries must point at files that exist in the target checkout; absent
 # exact paths can make Codex fail before shell startup. Filename globs such as
-# "*.key" are covered by .codex/hooks/guard-secret-paths.sh.
+# "*.key" are covered by .codex/hooks/deny-dangerous.sh.
 ":workspace_roots" = { "." = "write", "secrets/**" = "none", ".ssh/**" = "none", ".aws/**" = "none", ".docker/**" = "none", ".gnupg/**" = "none", ".kube/**" = "none" }

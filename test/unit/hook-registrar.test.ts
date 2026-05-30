@@ -15,21 +15,21 @@ import {
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
 
-const HOOK_ID = "guard-secret-paths";
+const HOOK_ID = "deny-dangerous";
 
 const GENERATED_AGENT_SURFACES = [
   ".claude/settings.json",
-  ".claude/hooks/guard-common.sh",
-  ".claude/hooks/guard-secret-paths.sh",
+  ".claude/hooks/deny-dangerous.sh",
   ".codex/hooks.json",
-  ".codex/hooks/guard-common.sh",
-  ".codex/hooks/guard-secret-paths.sh",
+  ".codex/hooks/deny-dangerous.sh",
   ".agents/hooks.json",
-  ".agents/hooks/guard-common.sh",
-  ".agents/hooks/guard-secret-paths.sh",
+  ".agents/hooks/deny-dangerous.sh",
   ".github/hooks/hooks.json",
-  ".github/hooks/guard-common.sh",
-  ".github/hooks/guard-secret-paths.sh",
+  ".github/hooks/deny-dangerous.sh",
+  ".goat-flow/hook-lib/patterns-shell.sh",
+  ".goat-flow/hook-lib/patterns-paths.sh",
+  ".goat-flow/hook-lib/patterns-writes.sh",
+  ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
 ];
 
 /** Writes a cleaned temporary target project for hook-registrar assertions. */
@@ -93,20 +93,23 @@ describe("hook registrar", () => {
 
       assertPresent(root, [
         ".codex/hooks.json",
-        ".codex/hooks/guard-common.sh",
-        ".codex/hooks/guard-secret-paths.sh",
+        ".codex/hooks/deny-dangerous.sh",
+        ".goat-flow/hook-lib/patterns-shell.sh",
+        ".goat-flow/hook-lib/patterns-paths.sh",
+        ".goat-flow/hook-lib/patterns-writes.sh",
+        ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
       ]);
       assertMissing(root, [
         ".claude/settings.json",
-        ".claude/hooks/guard-secret-paths.sh",
+        ".claude/hooks/deny-dangerous.sh",
         ".agents/hooks.json",
-        ".agents/hooks/guard-secret-paths.sh",
+        ".agents/hooks/deny-dangerous.sh",
         ".github/hooks/hooks.json",
-        ".github/hooks/guard-secret-paths.sh",
+        ".github/hooks/deny-dangerous.sh",
       ]);
       assert.match(
         readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
-        /guard-secret-paths\.sh/u,
+        /deny-dangerous\.sh/u,
       );
     });
   });
@@ -120,9 +123,9 @@ describe("hook registrar", () => {
 
       assertMissing(root, [
         ".codex/hooks.json",
-        ".codex/hooks/guard-secret-paths.sh",
+        ".codex/hooks/deny-dangerous.sh",
         ".agents/hooks.json",
-        ".agents/hooks/guard-secret-paths.sh",
+        ".agents/hooks/deny-dangerous.sh",
       ]);
     });
   });
@@ -169,6 +172,7 @@ describe("hook registrar", () => {
 
       assertMissing(root, [
         ".claude/settings.json",
+        ".claude/hooks/guard-common.sh",
         ".claude/hooks/guard-secret-paths.sh",
       ]);
     });

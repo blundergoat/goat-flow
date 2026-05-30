@@ -1,20 +1,5 @@
 {
-  "guard-destructive-shell": {
-    "enabled": true,
-    "PreToolUse": [
-      {
-        "matcher": "run_command",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.agents/hooks/guard-destructive-shell.sh\"",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  },
-  "guard-secret-paths": {
+  "deny-dangerous": {
     "enabled": true,
     "PreToolUse": [
       {
@@ -22,22 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.agents/hooks/guard-secret-paths.sh\"",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  },
-  "guard-repository-writes": {
-    "enabled": true,
-    "PreToolUse": [
-      {
-        "matcher": "run_command",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.agents/hooks/guard-repository-writes.sh\"",
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.agents/hooks/deny-dangerous.sh\"",
             "timeout": 30
           }
         ]

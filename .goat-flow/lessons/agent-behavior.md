@@ -262,7 +262,7 @@ The Round 4 entries in `.goat-flow/footguns/docs-drift.md` (search: `Round 4 (20
 
 **Root cause:** A stale platform assumption propagated through templates, install scripts, fact extraction, and setup guides without being re-checked against primary docs or the local binary.
 
-**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, current evidence anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.codex/hooks/guard-secret-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
+**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, current evidence anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.goat-flow/hook-lib/patterns-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
 
 ---
 

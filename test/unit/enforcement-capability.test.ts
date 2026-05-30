@@ -29,7 +29,7 @@ function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
           ? {
               failure: {
                 check: "Agent deny mechanism",
-                message: "guard-repository-writes.sh --self-test=smoke failed",
+                message: "deny-dangerous.sh --self-test=smoke failed",
               },
             }
           : {}),

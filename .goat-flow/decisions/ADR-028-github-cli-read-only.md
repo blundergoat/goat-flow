@@ -9,7 +9,7 @@ ADR-025 blocked all `git push` commands because pushes mutate shared remote stat
 
 On 2026-05-20, a coding agent posted a GitHub issue comment after interpreting forwarded Slack text as authorization. The reported successful command was `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`. Before the fix, local probes also showed `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi` returned exit 0 through the then-current monolithic deny hook.
 
-The incident is captured as a hooks footgun at `.goat-flow/footguns/hooks.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`). The hook implementation now has `workflow/hooks/guard-repository-writes.sh` (search: `is_gh_write_operation`) and regression coverage in `workflow/hooks/guardrails-self-test.sh` (search: `gh issue comment body-file blocked`).
+The incident is captured as a hooks footgun at `.goat-flow/footguns/hooks.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`). The hook implementation now has `workflow/hooks/hook-lib/patterns-writes.sh` (search: `is_gh_write_operation`) and regression coverage in `workflow/hooks/hook-lib/deny-dangerous-self-test.sh` (search: `gh issue comment body-file blocked`).
 
 ## Decision
 
@@ -31,7 +31,7 @@ If a downstream project wants agent-authored GitHub writes, it must make that an
 
 ## Consequences
 
-- `guard-repository-writes.sh` must classify GitHub CLI writes separately from `git push`.
+- `patterns-writes.sh` must classify GitHub CLI writes separately from `git push`.
 - Self-tests must include both blocked write cases and allowed read-only cases so the policy does not drift into either a write bypass or a blanket read ban.
 - Documentation that lists deny-hook coverage should mention GitHub writes via `gh`, not only `git push`.
 - Future `gh` subcommand additions that mutate remote state must be added to the write classifier and self-test corpus.

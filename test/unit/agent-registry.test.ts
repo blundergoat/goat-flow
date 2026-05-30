@@ -25,7 +25,7 @@ describe("agent registry", () => {
     const codex = getAgentProfile("codex");
     assert.equal(codex.settingsFile, ".codex/config.toml");
     assert.equal(codex.hookConfigFile, ".codex/hooks.json");
-    assert.equal(codex.denyHookFile, ".codex/hooks/guard-repository-writes.sh");
+    assert.equal(codex.denyHookFile, ".codex/hooks/deny-dangerous.sh");
     assert.equal(codex.hookEvents.postTurn, "Stop");
   });
 
@@ -33,10 +33,7 @@ describe("agent registry", () => {
     const copilot = getAgentProfile("copilot");
     assert.equal(copilot.settingsFile, null);
     assert.equal(copilot.hookConfigFile, ".github/hooks/hooks.json");
-    assert.equal(
-      copilot.denyHookFile,
-      ".github/hooks/guard-repository-writes.sh",
-    );
+    assert.equal(copilot.denyHookFile, ".github/hooks/deny-dangerous.sh");
     assert.equal(copilot.skillsDir, ".github/skills");
   });
 
@@ -45,10 +42,7 @@ describe("agent registry", () => {
     assert.equal(antigravity.settingsFile, null);
     assert.equal(antigravity.hookConfigFile, ".agents/hooks.json");
     assert.equal(antigravity.hooksDir, ".agents/hooks");
-    assert.equal(
-      antigravity.denyHookFile,
-      ".agents/hooks/guard-repository-writes.sh",
-    );
+    assert.equal(antigravity.denyHookFile, ".agents/hooks/deny-dangerous.sh");
     assert.equal(antigravity.hookEvents?.preTool, "PreToolUse");
   });
 
@@ -57,20 +51,20 @@ describe("agent registry", () => {
     assert.deepEqual(claude.denyMechanism, {
       type: "both",
       settingsPath: ".claude/settings.json",
-      scriptPath: ".claude/hooks/guard-repository-writes.sh",
+      scriptPath: ".claude/hooks/deny-dangerous.sh",
     });
 
     const codex = getAgentProfile("codex");
     assert.deepEqual(codex.denyMechanism, {
       type: "both",
       settingsPath: ".codex/config.toml",
-      scriptPath: ".codex/hooks/guard-repository-writes.sh",
+      scriptPath: ".codex/hooks/deny-dangerous.sh",
     });
 
     const antigravity = getAgentProfile("antigravity");
     assert.deepEqual(antigravity.denyMechanism, {
       type: "deny-script",
-      path: ".agents/hooks/guard-repository-writes.sh",
+      path: ".agents/hooks/deny-dangerous.sh",
     });
   });
 

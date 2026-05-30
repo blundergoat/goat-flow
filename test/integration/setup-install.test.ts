@@ -113,17 +113,110 @@ describe("setup --apply installer", () => {
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "guard-common.sh")),
+      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "guard-repository-writes.sh")),
+      existsSync(join(root, ".goat-flow", "hook-lib", "patterns-shell.sh")),
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "guardrails-self-test.sh")),
+      existsSync(
+        join(root, ".goat-flow", "hook-lib", "deny-dangerous-self-test.sh"),
+      ),
       true,
     );
+  });
+
+  it("prunes legacy deny-dangerous self-test files during upgrades", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, ".codex", "hooks", "deny-dangerous.self-test.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "deny-dangerous.self-test.sh")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(root, ".goat-flow", "hook-lib", "deny-dangerous-self-test.sh"),
+      ),
+      true,
+    );
+    assert.match(result.stdout, /removed stale hook/);
+  });
+
+  it("prunes 1.8.0 split guard hook files and registrations during upgrades", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    for (const file of [
+      "guard-common.sh",
+      "guard-destructive-shell.sh",
+      "guard-secret-paths.sh",
+      "guard-repository-writes.sh",
+      "guardrails-self-test.sh",
+    ]) {
+      writeFileSync(
+        join(root, ".codex", "hooks", file),
+        "#!/usr/bin/env bash\n",
+      );
+    }
+    writeFileSync(
+      join(root, ".codex", "hooks.json"),
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/guard-repository-writes.sh"}]}]}}\n',
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.8.0"',
+        "hooks:",
+        "  guard-destructive-shell:",
+        "    enabled: true",
+        "  guard-secret-paths:",
+        "    enabled: true",
+        "  guard-repository-writes:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    for (const file of [
+      "guard-common.sh",
+      "guard-destructive-shell.sh",
+      "guard-secret-paths.sh",
+      "guard-repository-writes.sh",
+      "guardrails-self-test.sh",
+    ]) {
+      assert.equal(existsSync(join(root, ".codex", "hooks", file)), false);
+    }
+    const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
+    assert.doesNotMatch(hooksJson, /guard-repository-writes/);
+    assert.match(hooksJson, /deny-dangerous\.sh/);
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.doesNotMatch(
+      config,
+      /guard-(destructive-shell|secret-paths|repository-writes)/,
+    );
+    assert.match(config, /deny-dangerous:\n    enabled: true/);
+    assert.match(result.stdout, /removed stale hook/);
+    assert.match(result.stdout, /migrated deny hook registration/);
   });
 
   it("prunes stale per-skill reference files during upgrades", () => {
@@ -331,9 +424,9 @@ describe("--update-config-version flag", () => {
 
 // ── Bug 2: Settings skip warning ────────────────────────────────────────
 
-describe("settings skip warning", () => {
-  /** Writes a pre-existing settings file to verify skip-warning output. */
-  it("warns when guardrail hooks are installed but settings.json was skipped", () => {
+describe("settings preservation", () => {
+  /** Writes a pre-existing settings file to verify hook registration migration. */
+  it("migrates deny hook registration when settings.json already exists", () => {
     const root = makeTempProject();
     const claudeDir = join(root, ".claude");
     mkdirSync(claudeDir, { recursive: true });
@@ -342,15 +435,13 @@ describe("settings skip warning", () => {
     const result = runInstaller(root, "--agent", "claude");
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
-    assert.match(
-      result.stdout,
-      /Settings file was preserved/,
-      "should warn about preserved settings",
-    );
-    assert.match(
-      result.stdout,
-      /guardrail hooks.*were installed but may not be/i,
-      "should mention the guardrail hooks may not be registered",
+    const settings = readFileSync(join(claudeDir, "settings.json"), "utf-8");
+    assert.match(settings, /deny-dangerous\.sh/);
+    assert.doesNotMatch(result.stdout, /may not be registered/);
+    assert.match(result.stdout, /migrated deny hook registration/);
+    assert.equal(
+      existsSync(join(root, ".claude", "hooks", "deny-dangerous.sh")),
+      true,
     );
   });
 });

@@ -186,7 +186,7 @@ const STUB_AGENT_PROFILE: AgentProfile = {
   skillsDir: ".claude/skills",
   hooksDir: ".claude/hooks",
   denyMechanism: { type: "settings-deny", path: ".claude/settings.json" },
-  denyHookFile: ".claude/hooks/guard-repository-writes.sh",
+  denyHookFile: ".claude/hooks/deny-dangerous.sh",
   localPattern: "*/CLAUDE.md",
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
@@ -255,7 +255,7 @@ function stubAgentFacts(overrides: Partial<AgentFacts> = {}): AgentFacts {
       denyBlocksPipeToShell: false,
       denyBlocksCloudDestructive: false,
       denyIsRegistered: true,
-      denyRegisteredPath: ".claude/hooks/guard-repository-writes.sh",
+      denyRegisteredPath: ".claude/hooks/deny-dangerous.sh",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,
@@ -1067,9 +1067,9 @@ describe("orphaned artifact detection refinement", () => {
       hooksDir: ".codex/hooks",
       denyMechanism: {
         type: "deny-script",
-        path: ".codex/hooks/guard-repository-writes.sh",
+        path: ".codex/hooks/deny-dangerous.sh",
       },
-      denyHookFile: ".codex/hooks/guard-repository-writes.sh",
+      denyHookFile: ".codex/hooks/deny-dangerous.sh",
       localPattern: ".github/instructions/*.md",
       hookEvents: { preTool: "", postTurn: "stop" },
     };
@@ -1101,6 +1101,7 @@ describe("orphaned artifact detection refinement", () => {
             if (path === "CLAUDE.md") return false;
             if (path === ".claude/settings.json") return true;
             if (path === ".claude/hooks") return true;
+            if (path === ".claude/hooks/deny-dangerous.sh") return false;
             if (path === ".claude/hooks/guard-repository-writes.sh")
               return false;
             return true;
@@ -1132,9 +1133,9 @@ describe("orphaned artifact detection refinement", () => {
       hooksDir: ".codex/hooks",
       denyMechanism: {
         type: "deny-script",
-        path: ".codex/hooks/guard-repository-writes.sh",
+        path: ".codex/hooks/deny-dangerous.sh",
       },
-      denyHookFile: ".codex/hooks/guard-repository-writes.sh",
+      denyHookFile: ".codex/hooks/deny-dangerous.sh",
       localPattern: ".github/instructions/*.md",
       hookEvents: { preTool: "", postTurn: "stop" },
     };
@@ -1164,8 +1165,7 @@ describe("orphaned artifact detection refinement", () => {
           exists: (path: string) => {
             if (path === "AGENTS.md") return true;
             if (path === "CLAUDE.md") return false;
-            if (path === ".claude/hooks/guard-repository-writes.sh")
-              return true;
+            if (path === ".claude/hooks/deny-dangerous.sh") return true;
             return true;
           },
           listDir: () => [],
@@ -1195,9 +1195,9 @@ describe("--agent filtering", () => {
       hooksDir: ".codex/hooks",
       denyMechanism: {
         type: "deny-script",
-        path: ".codex/hooks/guard-repository-writes.sh",
+        path: ".codex/hooks/deny-dangerous.sh",
       },
-      denyHookFile: ".codex/hooks/guard-repository-writes.sh",
+      denyHookFile: ".codex/hooks/deny-dangerous.sh",
       localPattern: ".github/instructions/*.md",
       hookEvents: { preTool: "", postTurn: "stop" },
     };
@@ -1276,7 +1276,7 @@ describe("codex settings feature flags", () => {
         ...hooks,
         denyExists: true,
         denyIsRegistered: true,
-        denyRegisteredPath: ".codex/hooks/guard-repository-writes.sh",
+        denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
       },
     });
   }
@@ -1978,27 +1978,30 @@ describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
   );
-  /** Read canonical guardrail templates used for drift comparisons. */
+  /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
-      common: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/guard-common.sh"),
+      dispatcher: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
       ),
-      destructive: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/guard-destructive-shell.sh"),
+      shell: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-shell.sh"),
         "utf-8",
       ),
-      secret: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/guard-secret-paths.sh"),
+      paths: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-paths.sh"),
         "utf-8",
       ),
-      git: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/guard-repository-writes.sh"),
+      writes: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-writes.sh"),
         "utf-8",
       ),
       selfTest: readFileSync(
-        resolve(PROJECT_ROOT, "workflow/hooks/guardrails-self-test.sh"),
+        resolve(
+          PROJECT_ROOT,
+          "workflow/hooks/hook-lib/deny-dangerous-self-test.sh",
+        ),
         "utf-8",
       ),
     };
@@ -2010,11 +2013,11 @@ describe("agent deny hook template comparison", () => {
     overrides: Record<string, string | null> = {},
   ) {
     const files: Record<string, string> = {
-      [`${hooksDir}/guard-common.sh`]: templates.common,
-      [`${hooksDir}/guard-destructive-shell.sh`]: templates.destructive,
-      [`${hooksDir}/guard-secret-paths.sh`]: templates.secret,
-      [`${hooksDir}/guard-repository-writes.sh`]: templates.git,
-      [`${hooksDir}/guardrails-self-test.sh`]: templates.selfTest,
+      [`${hooksDir}/deny-dangerous.sh`]: templates.dispatcher,
+      ".goat-flow/hook-lib/patterns-shell.sh": templates.shell,
+      ".goat-flow/hook-lib/patterns-paths.sh": templates.paths,
+      ".goat-flow/hook-lib/patterns-writes.sh": templates.writes,
+      ".goat-flow/hook-lib/deny-dangerous-self-test.sh": templates.selfTest,
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
@@ -2032,14 +2035,14 @@ describe("agent deny hook template comparison", () => {
       projectPath: PROJECT_ROOT,
       fs: stubFS({
         readFile: installedGuardrailContent(".claude/hooks", templates, {
-          ".claude/hooks/guard-repository-writes.sh": `${templates.git}\n# local drift\n`,
+          ".claude/hooks/deny-dangerous.sh": `${templates.dispatcher}\n# local drift\n`,
         }),
       }),
     });
     const result = denyCheck.run(ctx);
     assert.ok(result, "expected hook version drift failure");
     assert.match(result.message, /differs from the current goat-flow template/);
-    assert.equal(result.evidence, ".claude/hooks/guard-repository-writes.sh");
+    assert.equal(result.evidence, ".claude/hooks/deny-dangerous.sh");
   });
 
   it("passes when the installed deny hook matches the canonical template", () => {
@@ -2072,7 +2075,7 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".github/hooks/guard-repository-writes.sh",
+            denyRegisteredPath: ".github/hooks/deny-dangerous.sh",
             readDenyCoversSecrets: false,
           },
         }),
@@ -2102,7 +2105,7 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".codex/hooks/guard-repository-writes.sh",
+            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
             readDenyCoversSecrets: false,
           },
         }),
@@ -2117,7 +2120,7 @@ describe("agent deny hook template comparison", () => {
                   hooks: [
                     {
                       type: "command",
-                      command: ".codex/hooks/stale-guard-repository-writes.sh",
+                      command: ".codex/hooks/stale-deny-dangerous.sh",
                     },
                   ],
                 },
@@ -2151,7 +2154,7 @@ describe("agent deny hook template comparison", () => {
           },
           hooks: {
             ...stubAgentFacts().hooks,
-            denyRegisteredPath: ".codex/hooks/guard-repository-writes.sh",
+            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
             readDenyCoversSecrets: false,
           },
         }),
@@ -2167,7 +2170,7 @@ describe("agent deny hook template comparison", () => {
                     {
                       type: "command",
                       command:
-                        "bash -lc 'exit 127' # .codex/hooks/guard-repository-writes.sh",
+                        "bash -lc 'exit 127' # .codex/hooks/deny-dangerous.sh",
                     },
                   ],
                 },
@@ -2184,7 +2187,7 @@ describe("agent deny hook template comparison", () => {
     assert.equal(result.evidence, ".codex/hooks.json");
   });
 
-  it("fails when the split deny hook self-test sibling is missing", () => {
+  it("fails when the shared deny hook self-test is missing", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
     const ctx = makeCtx({
@@ -2192,14 +2195,17 @@ describe("agent deny hook template comparison", () => {
       projectPath: PROJECT_ROOT,
       fs: stubFS({
         readFile: installedGuardrailContent(".claude/hooks", templates, {
-          ".claude/hooks/guardrails-self-test.sh": null,
+          ".goat-flow/hook-lib/deny-dangerous-self-test.sh": null,
         }),
       }),
     });
     const result = denyCheck.run(ctx);
     assert.ok(result, "expected missing self-test sibling failure");
-    assert.match(result.message, /guardrails-self-test\.sh is missing/);
-    assert.equal(result.evidence, ".claude/hooks/guardrails-self-test.sh");
+    assert.match(result.message, /deny-dangerous-self-test\.sh is missing/);
+    assert.equal(
+      result.evidence,
+      ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+    );
   });
 });
 
@@ -2265,40 +2271,34 @@ describe("M01 harness check type tagging", () => {
 describe("hook fact extraction", () => {
   it("detects current deny hook secret coverage from generalized path matcher", () => {
     const gitTemplate = readFileSync(
-      resolve(PROJECT_ROOT, "workflow/hooks/guard-repository-writes.sh"),
+      resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
       "utf8",
     );
     const secretTemplate = readFileSync(
-      resolve(PROJECT_ROOT, "workflow/hooks/guard-secret-paths.sh"),
+      resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-paths.sh"),
       "utf8",
     );
     const destructiveTemplate = readFileSync(
-      resolve(PROJECT_ROOT, "workflow/hooks/guard-destructive-shell.sh"),
-      "utf8",
-    );
-    const commonTemplate = readFileSync(
-      resolve(PROJECT_ROOT, "workflow/hooks/guard-common.sh"),
+      resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-shell.sh"),
       "utf8",
     );
     const fs = stubFS({
       exists: (path) =>
         [
-          ".claude/hooks/guard-common.sh",
-          ".claude/hooks/guard-destructive-shell.sh",
-          ".claude/hooks/guard-secret-paths.sh",
-          ".claude/hooks/guard-repository-writes.sh",
+          ".claude/hooks/deny-dangerous.sh",
+          ".goat-flow/hook-lib/patterns-shell.sh",
+          ".goat-flow/hook-lib/patterns-paths.sh",
+          ".goat-flow/hook-lib/patterns-writes.sh",
+          ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
         ].includes(path),
       readFile: (path) => {
-        if (path === ".claude/hooks/guard-common.sh") {
-          return commonTemplate;
-        }
-        if (path === ".claude/hooks/guard-destructive-shell.sh") {
+        if (path === ".goat-flow/hook-lib/patterns-shell.sh") {
           return destructiveTemplate;
         }
-        if (path === ".claude/hooks/guard-secret-paths.sh") {
+        if (path === ".goat-flow/hook-lib/patterns-paths.sh") {
           return secretTemplate;
         }
-        if (path === ".claude/hooks/guard-repository-writes.sh") {
+        if (path === ".claude/hooks/deny-dangerous.sh") {
           return gitTemplate;
         }
         return null;

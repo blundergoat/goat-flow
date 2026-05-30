@@ -56,7 +56,8 @@ function agentArtifactsExist(
   const hooksDir = profile.hooks_dir?.replace(/\/$/, "");
   if (
     hooksDir !== undefined &&
-    fs.exists(`${hooksDir}/guard-repository-writes.sh`)
+    (fs.exists(`${hooksDir}/deny-dangerous.sh`) ||
+      fs.exists(`${hooksDir}/guard-repository-writes.sh`))
   ) {
     return true;
   }
@@ -637,7 +638,7 @@ function checkCodexWorkspaceRootInvalidGlobs(
       ),
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
       howToFix:
-        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .codex/hooks/guard-secret-paths.sh.",
+        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .codex/hooks/deny-dangerous.sh.",
     };
   }
   return null;
@@ -792,18 +793,15 @@ function evidencePath(relPath: string): string {
 /** Compare installed deny hooks against templates; recover from missing templates because installs may be partial. */
 function checkHookVersion(ctx: AuditContext): AuditFailure | null {
   const templateFiles = [
-    "guard-common.sh",
-    "guard-destructive-shell.sh",
-    "guard-secret-paths.sh",
-    "guard-repository-writes.sh",
-    "guardrails-self-test.sh",
+    "deny-dangerous.sh",
+    "hook-lib/patterns-shell.sh",
+    "hook-lib/patterns-paths.sh",
+    "hook-lib/patterns-writes.sh",
+    "hook-lib/deny-dangerous-self-test.sh",
   ];
   for (const agentFacts of ctx.agents) {
     if (!agentFacts.agent.hooksDir) continue;
-    const denyRelPath = join(
-      agentFacts.agent.hooksDir,
-      "guard-repository-writes.sh",
-    );
+    const denyRelPath = join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
     if (ctx.fs.readFile(denyRelPath) === null) continue;
 
     for (const templateFile of templateFiles) {
@@ -815,7 +813,9 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
       } catch {
         continue;
       }
-      const installedRelPath = join(agentFacts.agent.hooksDir, templateFile);
+      const installedRelPath = templateFile.startsWith("hook-lib/")
+        ? join(".goat-flow", templateFile)
+        : join(agentFacts.agent.hooksDir, templateFile);
       const installed = ctx.fs.readFile(installedRelPath);
       if (installed === null) {
         return {
@@ -843,8 +843,9 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     if (!agentFacts.agent.hooksDir) continue;
     const denyRelPath = join(
-      agentFacts.agent.hooksDir,
-      "guardrails-self-test.sh",
+      ".goat-flow",
+      "hook-lib",
+      "deny-dangerous-self-test.sh",
     );
     const content = ctx.fs.readFile(denyRelPath);
     // Config-based deny rules satisfy the deny-mechanism requirement, but only an
@@ -859,10 +860,10 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     } catch {
       return {
         check: "Agent deny mechanism",
-        message: `guardrails-self-test.sh --self-test=smoke failed for ${agentFacts.agent.id}`,
+        message: `deny-dangerous-self-test.sh --self-test=smoke failed for ${agentFacts.agent.id}`,
         evidence: evidencePath(denyRelPath),
         howToFix:
-          "Run `bash <hooks-dir>/guardrails-self-test.sh --self-test=smoke` to see which cases fail.",
+          "Run `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=smoke` to see which cases fail.",
       };
     }
   }
@@ -908,11 +909,12 @@ function runtimeSmokePayloadForScript(
   scriptFile: string,
 ): ReturnType<typeof runtimeSmokePayload> {
   const command =
-    scriptFile === "guard-destructive-shell.sh"
-      ? "rm -rf /"
+    scriptFile === "deny-dangerous.sh" ||
+    scriptFile === "guard-repository-writes.sh"
+      ? "git push origin main"
       : scriptFile === "guard-secret-paths.sh"
         ? "cat .env"
-        : "git push origin main";
+        : "rm -rf /";
   const base = runtimeSmokePayload(agentId);
   if (agentId === "copilot") {
     return {
@@ -947,14 +949,10 @@ function registeredDenyRelPath(
   if (agentFacts.hooks.denyRegisteredPath)
     return agentFacts.hooks.denyRegisteredPath;
   if (!agentFacts.agent.hooksDir) return null;
-  return join(agentFacts.agent.hooksDir, "guard-repository-writes.sh");
+  return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
 }
 
-const CONFIGURED_SMOKE_SCRIPTS = [
-  "guard-destructive-shell.sh",
-  "guard-secret-paths.sh",
-  "guard-repository-writes.sh",
-] as const;
+const CONFIGURED_SMOKE_SCRIPTS = ["deny-dangerous.sh"] as const;
 
 /** Hook command extracted from agent config for runtime-shaped smoke validation. */
 interface ConfiguredHookCommand {

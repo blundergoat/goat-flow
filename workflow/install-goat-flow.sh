@@ -54,6 +54,13 @@ if (mode === "stale-skills") {
   process.exit(0);
 }
 
+if (mode === "stale-hooks") {
+  for (const hook of manifest.hooks?.stale_names || []) {
+    console.log(hook);
+  }
+  process.exit(0);
+}
+
 if (mode === "skill-files") {
   const skillName = process.argv[4];
   const canonical = manifest.skills?.canonical;
@@ -295,6 +302,32 @@ NODE
   done
 }
 
+prune_unlisted_hook_files() {
+  local hooks_dir="$1"
+  [[ -d "$hooks_dir" ]] || return 0
+  readarray -t stale_hooks < <(manifest_eval stale-hooks)
+  for stale_hook in "${stale_hooks[@]}"; do
+    [[ -n "$stale_hook" ]] || continue
+    case "$stale_hook" in
+      *..*|*"//"*|*/*)
+        echo "ERROR: refusing to prune unexpected hook path: $stale_hook" >&2
+        exit 1
+        ;;
+      guard-common.sh|guard-destructive-shell.sh|guard-secret-paths.sh|guard-repository-writes.sh|guardrails-self-test.sh|deny-dangerous.self-test.sh)
+        ;;
+      *)
+        echo "ERROR: refusing to prune unknown stale hook: $stale_hook" >&2
+        exit 1
+        ;;
+    esac
+    if [[ -f "$hooks_dir/$stale_hook" ]]; then
+      rm -f "$hooks_dir/$stale_hook"
+      REMOVED=$((REMOVED + 1))
+      echo "  ✗ $hooks_dir/$stale_hook (removed stale hook)"
+    fi
+  done
+}
+
 touch_anchor() {
   local dst="$1"
   if [[ -f "$dst" ]]; then
@@ -405,22 +438,56 @@ const fs = require("node:fs");
 
 const path = process.argv[2];
 const content = fs.readFileSync(path, "utf8");
-if (/^hooks\s*:/m.test(content)) {
-  console.log("unchanged");
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+let lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines.pop();
+const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes):\s*$/u;
+let changed = false;
+
+let hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
+if (hooksIndex !== -1) {
+  const next = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (i > hooksIndex && staleHookRe.test(lines[i])) {
+      changed = true;
+      i += 1;
+      while (i < lines.length && /^    /.test(lines[i])) i += 1;
+      i -= 1;
+      continue;
+    }
+    next.push(lines[i]);
+  }
+  lines = next;
+  hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
+  const hasDenyDangerous = lines.some((line) =>
+    /^  deny-dangerous:\s*$/u.test(line),
+  );
+  if (!hasDenyDangerous) {
+    let insertAt = hooksIndex + 1;
+    while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
+      insertAt += 1;
+      while (insertAt < lines.length && /^    /.test(lines[insertAt])) insertAt += 1;
+    }
+    lines.splice(insertAt, 0, "  deny-dangerous:", "    enabled: true");
+    changed = true;
+  }
+  if (changed) {
+    fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+    console.log("changed");
+  } else {
+    console.log("unchanged");
+  }
   process.exit(0);
 }
-const eol = content.includes("\r\n") ? "\r\n" : "\n";
+
 let next = content;
 if (next.length > 0 && !/\r?\n$/u.test(next)) next += eol;
 next += [
   "",
   "# Hook toggles for goat-flow-shipped hooks.",
   "hooks:",
-  "  guard-destructive-shell:",
-  "    enabled: true",
-  "  guard-secret-paths:",
-  "    enabled: true",
-  "  guard-repository-writes:",
+  "  deny-dangerous:",
   "    enabled: true",
   "  gruff-code-quality:",
   "    enabled: false",
@@ -428,6 +495,110 @@ next += [
 ].join(eol);
 fs.writeFileSync(path, next);
 console.log("changed");
+NODE
+}
+
+migrate_agent_hook_config() {
+  local dst="$1"
+  local src="$2"
+  [[ -n "$dst" && -n "$src" && -f "$dst" && -f "$GOAT_FLOW_ROOT/$src" ]] || return 0
+  node - "$dst" "$GOAT_FLOW_ROOT/$src" "$AGENT" <<'NODE'
+const fs = require("node:fs");
+
+const [dst, src, agent] = process.argv.slice(2);
+const managedScripts = [
+  "deny-dangerous.sh",
+  "deny-dangerous.self-test.sh",
+  "guard-common.sh",
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+  "guardrails-self-test.sh",
+];
+const managedHookIds = [
+  "deny-dangerous",
+  "guard-destructive-shell",
+  "guard-secret-paths",
+  "guard-repository-writes",
+];
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readJson(path) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path, "utf8"));
+    return isObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function entryReferencesManagedHook(value) {
+  return managedScripts.some((script) => JSON.stringify(value).includes(script));
+}
+
+function appendTemplateEventEntries(currentHooks, templateHooks) {
+  let changed = false;
+  for (const [event, templateEntries] of Object.entries(templateHooks)) {
+    if (!Array.isArray(templateEntries)) continue;
+    const currentEntries = Array.isArray(currentHooks[event])
+      ? currentHooks[event]
+      : [];
+    const filtered = currentEntries.filter(
+      (entry) => !entryReferencesManagedHook(entry),
+    );
+    const nextEntries = [...filtered, ...templateEntries];
+    if (JSON.stringify(currentEntries) !== JSON.stringify(nextEntries)) {
+      currentHooks[event] = nextEntries;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+const current = readJson(dst);
+const template = readJson(src);
+if (!current || !template) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+let changed = false;
+if (agent === "antigravity") {
+  for (const hookId of managedHookIds) {
+    if (
+      hookId !== "deny-dangerous" &&
+      Object.prototype.hasOwnProperty.call(current, hookId)
+    ) {
+      delete current[hookId];
+      changed = true;
+    }
+  }
+  if (isObject(template["deny-dangerous"])) {
+    if (
+      JSON.stringify(current["deny-dangerous"]) !==
+      JSON.stringify(template["deny-dangerous"])
+    ) {
+      current["deny-dangerous"] = template["deny-dangerous"];
+      changed = true;
+    }
+  }
+} else if (isObject(template.hooks)) {
+  if (!isObject(current.hooks)) {
+    current.hooks = {};
+    changed = true;
+  }
+  changed = appendTemplateEventEntries(current.hooks, template.hooks) || changed;
+}
+
+if (changed) {
+  fs.writeFileSync(dst, `${JSON.stringify(current, null, 2)}\n`);
+  console.log("changed");
+} else {
+  console.log("unchanged");
+}
 NODE
 }
 
@@ -613,7 +784,7 @@ const canonicalBlock = [
   '# Codex 0.131 accepts exact paths and trailing "/**" subtrees here.',
   "# Exact entries must point at files that exist in the target checkout; absent",
   "# exact paths can make Codex fail before shell startup. Filename globs such as",
-  '# "*.key" are covered by .codex/hooks/guard-secret-paths.sh.',
+  '# "*.key" are covered by .codex/hooks/deny-dangerous.sh.',
   '":workspace_roots" = { "." = "write", "secrets/**" = "none", ".ssh/**" = "none", ".aws/**" = "none", ".docker/**" = "none", ".gnupg/**" = "none", ".kube/**" = "none" }',
 ];
 
@@ -909,19 +1080,34 @@ fi
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
-  for hook_script in \
-    guard-common.sh \
-    guard-destructive-shell.sh \
-    guard-secret-paths.sh \
-    guard-repository-writes.sh \
-    guardrails-self-test.sh
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh"
+  chmod +x "$HOOKS_DIR/deny-dangerous.sh"
+  prune_unlisted_hook_files "$HOOKS_DIR"
+  echo "Hook library → .goat-flow/hook-lib/:"
+  for hook_lib_script in \
+    patterns-shell.sh \
+    patterns-paths.sh \
+    patterns-writes.sh \
+    deny-dangerous-self-test.sh
   do
-    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/$hook_script" "$HOOKS_DIR/$hook_script"
-    chmod +x "$HOOKS_DIR/$hook_script"
+    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-lib/$hook_lib_script" ".goat-flow/hook-lib/$hook_lib_script"
+    chmod +x ".goat-flow/hook-lib/$hook_lib_script"
   done
+  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hook-lib/")" == "changed" ]]; then
+    COPIED=$((COPIED + 1))
+    echo "  ✓ .goat-flow/.gitignore (hook-lib/ un-ignored)"
+  fi
+  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hook-lib/**")" == "changed" ]]; then
+    COPIED=$((COPIED + 1))
+    echo "  ✓ .goat-flow/.gitignore (hook-lib/** un-ignored)"
+  fi
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     echo "Hooks config:"
     copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+    if [[ "$(migrate_agent_hook_config "$HOOK_CONFIG_DST" "$HOOK_CONFIG_SRC")" == "changed" ]]; then
+      COPIED=$((COPIED + 1))
+      echo "  ✓ $HOOK_CONFIG_DST (migrated deny hook registration)"
+    fi
   fi
 else
   echo "Hooks:"
@@ -973,6 +1159,13 @@ if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; th
     exit 1
   fi
 fi
+if $HOOKS_ENABLED && [[ -z "${HOOK_CONFIG_DST:-}" && -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" && -f "$SETTINGS_DST" ]]; then
+  if [[ "$(migrate_agent_hook_config "$SETTINGS_DST" "$SETTINGS_SRC")" == "changed" ]]; then
+    COPIED=$((COPIED + 1))
+    SETTINGS_SKIPPED=false
+    echo "  ✓ $SETTINGS_DST (migrated deny hook registration)"
+  fi
+fi
 echo ""
 
 # ==========================================================================
@@ -1011,7 +1204,7 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     echo "  · $CONFIG_PATH (exists, no config changes)"
   fi
 else
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  guard-destructive-shell:\n    enabled: true\n  guard-secret-paths:\n    enabled: true\n  guard-repository-writes:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$CONFIG_PATH"
   COPIED=$((COPIED + 1))
   echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi
@@ -1055,7 +1248,7 @@ echo "DONE: $COPIED files installed, $SKIPPED skipped, $REMOVED stale removed"
 echo ""
 
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)
-if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/guard-repository-writes.sh" ]]; then
+if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]]; then
   echo "⚠ Settings file was preserved (not overwritten)."
   echo "  The guardrail hooks in $HOOKS_DIR were installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"
@@ -1064,7 +1257,7 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/guard-repository-wri
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
     # shellcheck disable=SC2016
-    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/guard-repository-writes.sh\""}]}'
+    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/deny-dangerous.sh\""}]}'
   fi
   echo ""
 fi

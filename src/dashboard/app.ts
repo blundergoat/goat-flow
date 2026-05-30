@@ -1348,7 +1348,6 @@ function app() {
     },
     /** Group a hook into the section that owns its primary risk surface. */
     hookSectionFor(hook: HookState): HookSection {
-      if (hook.id === "guard-repository-writes") return "git";
       if (hook.id === "gruff-code-quality") return "quality";
       return "safety";
     },

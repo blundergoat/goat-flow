@@ -17,7 +17,7 @@ Trigger checklist: (1) GitHub returns "exceeds 20,000 lines"; (2) reviewer asks 
 
 ## Pattern: Deny-rule grammar matrix before mirror fanout
 **Context:** Adding or changing a deny hook rule for an external CLI with subcommands, inherited flags, or pipeline use.
-**Approach:** Before syncing hook mirrors, write self-tests that cover the command grammar, not only the incident command. Include: direct write form, global flags before the topic, inherited flags after the topic, short flag forms, wrapper prefixes (`env`, `command`, `sudo` when supported), pipeline consumers (`xargs`), API write-method forms, and at least one read-only allow control. Then run the canonical self-test before copying to installed hooks. (search: `expect_block guard-repository-writes`)
+**Approach:** Before syncing hook mirrors, write self-tests that cover the command grammar, not only the incident command. Include: direct write form, global flags before the topic, inherited flags after the topic, short flag forms, wrapper prefixes (`env`, `command`, `sudo` when supported), pipeline consumers (`xargs`), API write-method forms, and at least one read-only allow control. Then run the canonical self-test before copying to installed hooks. (search: `expect_block deny-dangerous`)
 
 ## Pattern: Dry-run readiness belongs beside the command
 **Context:** A command can write files, launch terminals, mutate harness config, or ask an agent to act.

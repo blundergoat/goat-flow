@@ -24,40 +24,14 @@ export interface HookSpec {
 
 const HOOKS: HookSpec[] = [
   {
-    id: "guard-destructive-shell",
-    displayName: "Guard destructive shell",
+    id: "deny-dangerous",
+    displayName: "Deny dangerous hook",
     description:
-      "Block risky shell operations such as recursive deletion, chmod 777, pipe-to-shell, file truncation, destructive database commands, and opaque shell execution.",
+      "Block risky shell operations, direct secret-path access, repository writes, and GitHub write operations through one PreToolUse dispatcher.",
     event: "PreToolUse",
     matcher: "Bash",
-    scriptFiles: ["guard-common.sh", "guard-destructive-shell.sh"],
-    primaryScript: "guard-destructive-shell.sh",
-    togglable: true,
-    defaultEnabled: true,
-    requiresConfirmDialog: true,
-  },
-  {
-    id: "guard-secret-paths",
-    displayName: "Guard secret paths",
-    description:
-      "Block Bash access to .env files, SSH/AWS/GCP credentials, key material, package credentials, and other common secret paths.",
-    event: "PreToolUse",
-    matcher: "Bash",
-    scriptFiles: ["guard-common.sh", "guard-secret-paths.sh"],
-    primaryScript: "guard-secret-paths.sh",
-    togglable: true,
-    defaultEnabled: true,
-    requiresConfirmDialog: true,
-  },
-  {
-    id: "guard-repository-writes",
-    displayName: "Guard repository writes",
-    description:
-      "Block agent-side git commits, git pushes, destructive git flags, and GitHub write operations through gh.",
-    event: "PreToolUse",
-    matcher: "Bash",
-    scriptFiles: ["guard-common.sh", "guard-repository-writes.sh"],
-    primaryScript: "guard-repository-writes.sh",
+    scriptFiles: ["deny-dangerous.sh"],
+    primaryScript: "deny-dangerous.sh",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: true,

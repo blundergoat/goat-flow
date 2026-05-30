@@ -245,7 +245,7 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Status:** active | **Created:** 2026-04-24
 
-**What happened:** `bash .claude/hooks/guardrails-self-test.sh --self-test=full` passed, but live repros still showed a bypass for `echo foo>.env`, `echo foo>>.env`, `echo foo>|.env`, and `echo foo>.env.example` because the hook only treated `>` as a redirect when followed by whitespace. The same pass also left unescaped `.env` / `.env.example` regexes in place, so benign names like `aenv`, `xenv.local`, and `aenv.example` were misclassified as secret or sample-env paths.
+**What happened:** `bash .claude/hooks/deny-dangerous-self-test.sh --self-test=full` passed, but live repros still showed a bypass for `echo foo>.env`, `echo foo>>.env`, `echo foo>|.env`, and `echo foo>.env.example` because the hook only treated `>` as a redirect when followed by whitespace. The same pass also left unescaped `.env` / `.env.example` regexes in place, so benign names like `aenv`, `xenv.local`, and `aenv.example` were misclassified as secret or sample-env paths.
 
 **Root cause:** I trusted the existing self-test matrix too early. It covered spaced redirects (`> .env`, `>| .env.example`) and canonical `.env` names, but not the no-space shell forms or near-miss filenames that reveal wildcard-dot false positives.
 
@@ -356,7 +356,7 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Root cause:** I edited a shell regex directly inside `[[ ... =~ ... ]]` instead of moving the pattern to a variable, which is safer for regex metacharacters that the Bash parser can see. I also forgot the existing VM cross-realm lesson when adding a new classic-script helper test.
 
-**Prevention:** After changing Bash hook regexes, run `bash -n <hook>` before interpreting self-test failures; if the regex contains `(`, `)`, `{`, or `}`, prefer a named regex variable. For command wrapper deny rules, probe both bare wrappers and option-bearing wrappers before mirror fanout (`command -p`, `env --`, `env -C`, `time -f`, quoted time formats). For VM-loaded dashboard helper tests, compare scalar fields/lengths or normalize arrays into the host realm. Evidence anchors: `workflow/hooks/guard-repository-writes.sh` (search: `is_git_push`), `workflow/hooks/guardrails-self-test.sh` (search: `sudo git push`), `test/unit/dashboard-setup-quality.test.ts` (search: `qualityHistoryRows.length`).
+**Prevention:** After changing Bash hook regexes, run `bash -n <hook>` before interpreting self-test failures; if the regex contains `(`, `)`, `{`, or `}`, prefer a named regex variable. For command wrapper deny rules, probe both bare wrappers and option-bearing wrappers before mirror fanout (`command -p`, `env --`, `env -C`, `time -f`, quoted time formats). For VM-loaded dashboard helper tests, compare scalar fields/lengths or normalize arrays into the host realm. Evidence anchors: `workflow/hooks/hook-lib/patterns-writes.sh` (search: `is_git_push`), `workflow/hooks/hook-lib/deny-dangerous-self-test.sh` (search: `sudo git push`), `test/unit/dashboard-setup-quality.test.ts` (search: `qualityHistoryRows.length`).
 
 ---
 

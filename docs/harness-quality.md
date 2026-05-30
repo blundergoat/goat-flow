@@ -54,7 +54,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Are Ask First boundaries specific to real risk areas in this codebase, or generic placeholders?
-- Does the repository-write guardrail pass its self-test (`guard-repository-writes.sh --self-test`)?
+- Does the deny-dangerous hook pass its self-test (`deny-dangerous.sh --self-test`)?
 - Does `.goat-flow/config.yaml` stay lean and accurate for this project? Optional project-calibration fields such as `toolchain` are valid only when they reflect real commands; their absence is not a setup gap.
 - Are there static analysis tools in the project's package manifest that aren't registered as constraints?
 

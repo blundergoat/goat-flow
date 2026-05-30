@@ -231,38 +231,45 @@ function setupFixture(): string {
   return root;
 }
 
-/** Writes guardrail hook fixtures for drift checks that compare hook manifests. */
+/** Writes deny-dangerous hook fixtures for drift checks that compare hook manifests. */
 function writeHookFixtures(root: string): void {
   mkdirSync(join(root, "workflow", "hooks", "agent-config"), {
     recursive: true,
   });
-  for (const guardrailHook of [
-    "guard-common.sh",
-    "guard-destructive-shell.sh",
-    "guard-secret-paths.sh",
-    "guard-repository-writes.sh",
-  ]) {
-    writeFileSync(join(root, "workflow", "hooks", guardrailHook), HOOK_STUB);
-  }
+  mkdirSync(join(root, "workflow", "hooks", "hook-lib"), {
+    recursive: true,
+  });
   writeFileSync(
-    join(root, "workflow", "hooks", "guardrails-self-test.sh"),
+    join(root, "workflow", "hooks", "deny-dangerous.sh"),
     HOOK_STUB,
   );
+  for (const hookLibFile of [
+    "patterns-shell.sh",
+    "patterns-paths.sh",
+    "patterns-writes.sh",
+    "deny-dangerous-self-test.sh",
+  ]) {
+    writeFileSync(
+      join(root, "workflow", "hooks", "hook-lib", hookLibFile),
+      HOOK_STUB,
+    );
+  }
+  mkdirSync(join(root, ".goat-flow", "hook-lib"), { recursive: true });
+  for (const hookLibFile of [
+    "patterns-shell.sh",
+    "patterns-paths.sh",
+    "patterns-writes.sh",
+    "deny-dangerous-self-test.sh",
+  ]) {
+    writeFileSync(join(root, ".goat-flow", "hook-lib", hookLibFile), HOOK_STUB);
+  }
   writeFileSync(
     join(root, "workflow", "hooks", "agent-config", "copilot-hooks.json"),
     COPILOT_HOOK_CONFIG_STUB,
   );
   for (const hooksDir of [".claude/hooks", ".codex/hooks", ".github/hooks"]) {
     mkdirSync(join(root, hooksDir), { recursive: true });
-    for (const guardrailHook of [
-      "guard-common.sh",
-      "guard-destructive-shell.sh",
-      "guard-secret-paths.sh",
-      "guard-repository-writes.sh",
-    ]) {
-      writeFileSync(join(root, hooksDir, guardrailHook), HOOK_STUB);
-    }
-    writeFileSync(join(root, hooksDir, "guardrails-self-test.sh"), HOOK_STUB);
+    writeFileSync(join(root, hooksDir, "deny-dangerous.sh"), HOOK_STUB);
   }
   writeFileSync(
     join(root, ".github", "hooks", "hooks.json"),
@@ -285,6 +292,15 @@ function setupInstallRoundTripFixture(): string {
     },
   });
   symlinkSync(join(PROJECT_ROOT, "node_modules"), join(root, "node_modules"));
+  const git = spawnSync("git", ["init", "-q"], {
+    cwd: root,
+    encoding: "utf-8",
+  });
+  assert.equal(
+    git.status,
+    0,
+    `temp round-trip repo should initialize git:\n${git.stderr ?? ""}`,
+  );
   return root;
 }
 
@@ -518,7 +534,7 @@ describe("checkDrift: hook templates", () => {
     try {
       writeHookFixtures(root);
       writeFileSync(
-        join(root, ".codex", "hooks", "guard-repository-writes.sh"),
+        join(root, ".codex", "hooks", "deny-dangerous.sh"),
         `${HOOK_STUB}\n# local drift\n`,
       );
       const report = checkDrift({
@@ -531,7 +547,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "content" &&
-            finding.path === ".codex/hooks/guard-repository-writes.sh",
+            finding.path === ".codex/hooks/deny-dangerous.sh",
         ),
         `expected .codex hook drift, findings=${JSON.stringify(report.findings)}`,
       );
@@ -544,7 +560,7 @@ describe("checkDrift: hook templates", () => {
     const root = setupFixture();
     try {
       writeHookFixtures(root);
-      rmSync(join(root, ".codex", "hooks", "guard-repository-writes.sh"), {
+      rmSync(join(root, ".codex", "hooks", "deny-dangerous.sh"), {
         force: true,
       });
       const report = checkDrift({
@@ -557,7 +573,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "missing" &&
-            finding.path === ".codex/hooks/guard-repository-writes.sh",
+            finding.path === ".codex/hooks/deny-dangerous.sh",
         ),
         `expected missing .codex hook finding, findings=${JSON.stringify(report.findings)}`,
       );

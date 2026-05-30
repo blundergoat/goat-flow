@@ -59,7 +59,7 @@ Per-artifact quality view for installed skills and shared references. Shows dete
 
 ### Hooks
 
-Manage shipped guardrails and quality hooks for the selected project. Lists each registered hook (`guard-destructive-shell`, `guard-secret-paths`, `guard-repository-writes`, `gruff-code-quality`) with its current enabled/disabled state and the agents it is wired into (Claude, Codex, Antigravity, Copilot). Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. Mirrors the `goat-flow hooks <list|enable|disable|sync>` CLI.
+Manage shipped guardrails and quality hooks for the selected project. Lists each registered hook (`deny-dangerous`, `gruff-code-quality`) with its current enabled/disabled state and the agents it is wired into (Claude, Codex, Antigravity, Copilot). Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. Mirrors the `goat-flow hooks <list|enable|disable|sync>` CLI.
 
 ### Projects
 

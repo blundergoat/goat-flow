@@ -11,7 +11,12 @@ import { writeFileAtomic } from "../server/safe-exec.js";
 
 type HookConfigMap = Record<string, { enabled: boolean }>;
 
-const HOOK_ID_ALIASES = new Map([["gruff-on-change", "gruff-code-quality"]]);
+const HOOK_ID_ALIASES = new Map([
+  ["gruff-on-change", "gruff-code-quality"],
+  ["guard-destructive-shell", "deny-dangerous"],
+  ["guard-secret-paths", "deny-dangerous"],
+  ["guard-repository-writes", "deny-dangerous"],
+]);
 const HOOK_BLOCK_COMMENT_LINES = new Set([
   "# Togglable goat-flow hook state. Missing entries use registry defaults.",
   "# Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.",

@@ -30,7 +30,7 @@ Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `
 - Ambiguous requirements: present interpretations, don't pick silently.
 - Commit format: see **## Commit Messages** below; full rules in `docs/coding-standards/git-commit.md`.
 - Use current Copilot CLI commands (`/agent`, `/review`, `/research`, `/tasks`) when appropriate; use `/fleet` only for explicit or genuinely independent parallel work.
-- Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.github/hooks/guard-*.sh`, `.github/hooks/guardrails-self-test.sh`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them.
+- Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.github/hooks/deny-dangerous.sh`, `.goat-flow/hook-lib/**`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them.
 - `.github/agents/` is intentionally out of scope; CI/CD, hooks, prompts, or skills work should prefer `goat-security` or `goat-review`.
 
 ## Commit Messages
@@ -52,7 +52,7 @@ npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.github/hooks/guardrails-self-test.sh --self-test=smoke` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=smoke` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
@@ -109,7 +109,7 @@ When asked to add/update a goat-flow artifact, route to docs, not runtime code: 
 | Workflow source | `workflow/` (setup, skills, hooks, evaluation, agent config templates) |
 | CLI + dashboard | `src/cli/`, `src/dashboard/` |
 | Scripts | `scripts/` |
-| Hooks | `.github/hooks/hooks.json`, `.github/hooks/guard-*.sh`, `.github/hooks/guardrails-self-test.sh` |
+| Hooks | `.github/hooks/hooks.json`, `.github/hooks/deny-dangerous.sh`, `.goat-flow/hook-lib/` |
 | Config | `.goat-flow/config.yaml` |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |

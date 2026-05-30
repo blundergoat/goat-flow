@@ -48,7 +48,7 @@ npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.claude/hooks/guardrails-self-test.sh --self-test` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 

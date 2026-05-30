@@ -11,7 +11,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Copyable guardrail hooks (`guard-destructive-shell.sh`, `guard-secret-paths.sh`, `guard-repository-writes.sh`), central `guardrails-self-test.sh`, opt-in `gruff-code-quality.sh`, and per-agent config templates |
+| Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `hook-lib/` policy templates, opt-in `gruff-code-quality.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 19 build checks (15 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |

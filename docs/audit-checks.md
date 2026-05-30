@@ -46,7 +46,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; for Copilot, `.github/copilot-instructions.md` must also reference `docs/coding-standards/git-commit.md` under a `## Commit Messages` section. Without `--agent`, this also detects orphaned agent artifacts and incomplete Copilot installs |
 | `agent-skills` | Agent skills | The selected agent has every canonical skill file, each installed skill declares the current `goat-flow-skill-version`, and no deprecated skill directories remain |
 | `agent-settings` | Agent settings | The selected agent's settings file parses as valid JSON or TOML |
-| `agent-guardrails` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, installed guardrail hook files match the workflow templates, `guardrails-self-test.sh --self-test=smoke` passes when the hook scripts exist, and a runtime-shaped blocked Bash payload is denied through the registered hook path |
+| `agent-guardrails` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, installed `deny-dangerous.sh` plus `.goat-flow/hook-lib/` match the workflow templates, `deny-dangerous-self-test.sh --self-test=smoke` passes when the hook scripts exist, and a runtime-shaped blocked Bash payload is denied through the registered hook path |
 
 Aggregate-mode nuance:
 

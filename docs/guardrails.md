@@ -1,17 +1,16 @@
 # guardrails
 
-`guardrails` are goat-flow's runtime command-safety hooks. They are split by
-risk category so each guardrail can be audited, enabled, disabled, and
-re-synced independently.
+`guardrails` are goat-flow's runtime command-safety hooks. The shipped safety
+surface is one `deny-dangerous.sh` dispatcher per agent, backed by shared policy
+modules in `.goat-flow/hook-lib/`.
 
 ## Surfaces
 
 | Surface | Path | Role |
 | --- | --- | --- |
-| Destructive commands | `workflow/hooks/guard-destructive-shell.sh` | Blocks recursive force deletion, privileged package-manager mutation, chmod 777, pipe-to-shell, file truncation, destructive database commands, and destructive cloud/infrastructure commands |
-| Secret access | `workflow/hooks/guard-secret-paths.sh` | Blocks direct literal shell access to `.env`, credentials, key material, and common secret directories while allowing read-only `.env.example` inspection |
-| Git mutations | `workflow/hooks/guard-repository-writes.sh` | Blocks `git commit`, `git push`, destructive git flags, and GitHub write operations through `gh` |
-| Self-test | `workflow/hooks/guardrails-self-test.sh` | Runs smoke/full checks across all three guardrails and is what preflight invokes |
+| Dispatcher | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, secret-path access, `git commit`, `git push`, destructive git flags, and GitHub write operations through `gh` |
+| Policy store | `.goat-flow/hook-lib/` | Shared policy modules sourced by each installed dispatcher |
+| Self-test | `.goat-flow/hook-lib/deny-dangerous-self-test.sh` | Runs smoke/full checks for the dispatcher and is what preflight invokes |
 
 ## Agent Mapping
 
@@ -20,12 +19,12 @@ re-synced independently.
 | Claude Code | `PreToolUse` shell hooks plus settings deny patterns | `.claude/hooks/*.sh`, `.claude/settings.json` |
 | Codex | `PreToolUse` shell hooks plus config TOML permission profile | `.codex/hooks/*.sh`, `.codex/hooks.json`, `.codex/config.toml` |
 | Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` | `.github/hooks/*.sh`, `.github/hooks/hooks.json` |
-| Antigravity | Capability-limited in v1.8.0; no repo-local hook path is documented upstream | none |
+| Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` | `.agents/hooks/*.sh`, `.agents/hooks.json`, `.goat-flow/hook-lib/` |
 
 ## Verification
 
-- `bash workflow/hooks/guardrails-self-test.sh --self-test=smoke`
-- `bash workflow/hooks/guardrails-self-test.sh --self-test=full`
+- `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=smoke`
+- `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=full`
 - `goat-flow hooks list --json`
 - `goat-flow hooks sync`
 

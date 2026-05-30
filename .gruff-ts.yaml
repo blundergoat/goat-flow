@@ -22,7 +22,11 @@ paths:
   #   - "out/**"
   #   - ".next/**"
   #   - "src/generated/**"
-  ignore: []
+  ignore:
+    # 2026-05-30: gruff-ts is the TypeScript analyzer; CSS files are handled
+    # outside its rule surface. Keep this as path ignore, not threshold tuning.
+    - "*.css"
+    - "**/*.css"
 
 allowlists:
   acceptedAbbreviations:

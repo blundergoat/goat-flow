@@ -19,6 +19,21 @@ export interface AgentHookReadState {
 
 type JsonObject = Record<string, unknown>;
 
+const LEGACY_DENY_DANGEROUS_SCRIPT_NAMES = [
+  "guard-common.sh",
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+  "guardrails-self-test.sh",
+  "deny-dangerous.self-test.sh",
+];
+
+const LEGACY_DENY_DANGEROUS_HOOK_IDS = [
+  "guard-destructive-shell",
+  "guard-secret-paths",
+  "guard-repository-writes",
+];
+
 /**
  * Type guard for a JSON object - the only shape we can safely read keyed properties off. Excludes the two
  * `typeof x === "object"` footguns, `null` and arrays, so callers can treat untrusted `JSON.parse` output
@@ -126,6 +141,14 @@ function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
   if (spec.scriptFiles.some((script) => commands.includes(script))) return true;
+  if (
+    spec.id === "deny-dangerous" &&
+    LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
+      commands.includes(script),
+    )
+  ) {
+    return true;
+  }
   if (Array.isArray(entry.hooks)) {
     return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
   }
@@ -142,13 +165,7 @@ function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
       "multi_replace_file_content",
     ].join("|");
   }
-  if (
-    spec.id === "guard-destructive-shell" ||
-    spec.id === "guard-repository-writes"
-  ) {
-    return "run_command";
-  }
-  if (spec.id === "guard-secret-paths") {
+  if (spec.id === "deny-dangerous") {
     return [
       "run_command",
       "view_file",
@@ -300,6 +317,11 @@ export function writeAgentHookState(
   const event = hookEventKey(agent, spec);
   if (agent.id === "antigravity") {
     Reflect.deleteProperty(config.value, spec.id);
+    if (spec.id === "deny-dangerous") {
+      for (const legacyId of LEGACY_DENY_DANGEROUS_HOOK_IDS) {
+        Reflect.deleteProperty(config.value, legacyId);
+      }
+    }
     if (enabled) appendHookEntries(config.value, agent, spec);
     writeFileAtomic(
       path,

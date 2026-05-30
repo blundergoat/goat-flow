@@ -85,7 +85,7 @@ def prompt(*args, **kwargs):
 
 ## Pattern: Split guardrails by operational decision
 **Context:** A safety hook grows multiple policy categories with different risk profiles, self-test corpora, default states, or dashboard toggle needs.
-**Approach:** Make each operational decision a separate registry entry and script instead of adding another branch to a monolithic hook. Destructive shell, secret-path access, and repository writes are distinct user decisions, so they belong in `guard-destructive-shell.sh`, `guard-secret-paths.sh`, and `guard-repository-writes.sh`. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `guard-destructive-shell`) and `workflow/hooks/guardrails-self-test.sh` (search: `guard-secret-paths`).
+**Approach:** Make each operational decision a separate registry entry and script instead of adding another branch to a monolithic hook. Destructive shell, secret-path access, and repository writes are distinct user decisions, so they belong in `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh`. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `deny-dangerous`) and `workflow/hooks/hook-lib/deny-dangerous-self-test.sh` (search: `deny-dangerous`).
 
 ## Pattern: Asymmetric trust - set state from output, clear state from input
 **Context:** Any state machine that classifies streaming PTY / WebSocket / SSE output to track "is the producer blocked on user input." The producer is a third-party TUI (coding agent, language REPL, build tool) whose chunk boundaries, redraw patterns, and decorative glyphs are not under your control. Symptom of the antipattern: badge flickers, never appears, or stays stuck because output chunks the classifier doesn't recognize keep flipping the state.

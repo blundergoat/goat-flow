@@ -69,13 +69,14 @@ describe("config writer", () => {
         ].join("\n"),
       );
 
-      setHookEnabled(root, "guard-secret-paths", false);
+      setHookEnabled(root, "deny-dangerous", false);
 
       const next = readFileSync(configPath, "utf-8");
       assert.equal(next.match(/Togglable goat-flow hook state/gu)?.length, 1);
       assert.equal(next.includes("gruff-on-change:"), false);
+      assert.equal(next.includes("guard-secret-paths:"), false);
       assert.match(next, /gruff-code-quality:\n    enabled: false/u);
-      assert.match(next, /guard-secret-paths:\n    enabled: false/u);
+      assert.match(next, /deny-dangerous:\n    enabled: false/u);
       assert.match(next, /# Project-wide toggles/u);
       assert.match(next, /line-limits:\n  target: 125/u);
     });
