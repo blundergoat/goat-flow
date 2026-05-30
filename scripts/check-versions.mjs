@@ -2,7 +2,7 @@
 /**
  * Verify workflow skill and reference templates have the same version as package.json.
  * Run: node scripts/check-versions.mjs
- * Called by: npm run check-versions (and prepublishOnly)
+ * Called by: npm run check-versions (and publish:check)
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

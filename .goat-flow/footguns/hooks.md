@@ -47,15 +47,15 @@ last_reviewed: 2026-05-28
 
 **Symptoms:** Direct hook self-tests pass, but an agent session reports a PreToolUse failure with exit 126 or 127 before any `BLOCKED:` or deny JSON response appears. The script exists and works when launched manually, so the failure looks like a runtime mystery instead of a stale or unsupported command string.
 
-**Why it happens:** Agent configs execute registered strings, not the abstract hook file. A stale path, lost executable bit, unsupported shell substitution, or cwd assumption can fail before `guard-common.sh` and the thin hook code start. Direct `bash workflow/hooks/<guard>.sh` smoke tests skip that surface entirely.
+**Why it happens:** Agent configs name launch paths, not the abstract hook file. A stale path, lost executable bit, unsupported shell substitution, or cwd assumption can fail before `guard-common.sh` and the thin hook code start. Direct `bash workflow/hooks/<guard>.sh` smoke tests skip that surface entirely.
 
 **Evidence:**
-- M12 preflight and audit now parse configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json` and run each guard with safe deny payloads. Evidence anchors: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`) and `src/cli/audit/check-agent-setup.ts` (search: `configuredGuardCommands`).
-- `test/unit/audit-command.test.ts` (search: `exact configured hook command exits 127`) locks the failure case where a configured command exits before a valid installed hook can run.
+- M12 preflight and audit parse configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, require an exact guard script path, then run that guard with safe deny payloads. Evidence anchors: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`) and `src/cli/audit/check-agent-setup.ts` (search: `configuredGuardCommands`).
+- `test/unit/audit-command.test.ts` (search: `exact configured hook command points at a stale path`) locks the stale-path case, and `test/unit/audit-command.test.ts` (search: `hides the script path in shell text`) locks the unsafe hidden-script-path case.
 - Runtime contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-writer.ts` (search: `Guard cannot start: git repository root unavailable`).
 
 **Prevention:**
-1. Treat configured-command replay as part of hook verification, not an optional integration smoke.
+1. Treat configured guard-script replay as part of hook verification, not an optional integration smoke.
 2. Fail hard on exit 126/127 even if direct script self-tests pass.
 3. Keep command-shape differences documented: Claude and Antigravity resolve the git root and fail closed when unavailable; Codex and Copilot use direct project-local paths and require project-root cwd.
 

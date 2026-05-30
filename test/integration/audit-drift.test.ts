@@ -355,15 +355,21 @@ function patchInstallRoundTripFixture(root: string): {
 
 function runCommand(
   cwd: string,
-  command: string,
+  command: "bash" | "node" | "npx",
   args: string[],
   timeout = 60000,
 ): CommandResult {
-  const result = spawnSync(command, args, {
+  const spawnOptions = {
     cwd,
     encoding: "utf-8",
     timeout,
-  });
+  } as const;
+  const result =
+    command === "bash"
+      ? spawnSync("bash", args, spawnOptions)
+      : command === "node"
+        ? spawnSync("node", args, spawnOptions)
+        : spawnSync("npx", args, spawnOptions);
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
   return {

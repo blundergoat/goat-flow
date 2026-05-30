@@ -55,15 +55,15 @@ last_reviewed: 2026-05-28
 
 **Prevention:** For Codex `.codex/hooks.json`, register direct project-local script paths such as `.codex/hooks/guard-repository-writes.sh` and verify the exact configured commands from the JSON file, not only direct `bash hook.sh` calls. Evidence anchors: `.codex/hooks.json` (search: `.codex/hooks/guard-repository-writes.sh`) and `src/cli/server/agent-hook-writer.ts` (search: `if (agent.id === "codex") return path`).
 
-## Lesson: Configured-command smoke must execute the registered string
+## Lesson: Configured hook smoke must verify the registered guard path
 
 **Status:** active | **Created:** 2026-05-27
 
-**What happened:** M12 found that audit and preflight smoke tests launched hook scripts directly, so they could pass even when an agent config contained a stale command string or a command shape that exited before the hook started. The fix parses `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, then runs each registered guard command with a runtime-shaped safe deny payload.
+**What happened:** M12 found that audit and preflight smoke tests launched hook scripts directly, so they could pass even when an agent config contained a stale command string or a command shape that exited before the hook started. The fix parses `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, requires an exact configured guard script path, then runs that script with a runtime-shaped safe deny payload.
 
-**Root cause:** The verification target was the hook file, not the runtime contract. That missed exit 126/127 failures caused by stale paths, executable-bit loss, or shell-substitution assumptions.
+**Root cause:** The verification target was the hook file, not the runtime contract. That missed stale paths, executable-bit loss, and shell-substitution assumptions before guard code could run.
 
-**Prevention:** Hook verification must include exact configured-command replay in addition to direct script self-tests. Fail hard on exit 126/127, assert the agent-specific deny stream, and coerce `spawnSync` streams with `String(...)` before regex matching because TypeScript can type them as `string | Buffer`. Evidence anchors: `src/cli/audit/check-agent-setup.ts` (search: `runConfiguredHookCommandSmoke`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command.test.ts` (search: `exact configured hook command exits 127`).
+**Prevention:** Hook verification must include configured guard-script replay in addition to direct script self-tests. Reject commands that hide the script path inside shell text, fail hard on exit 126/127 for the extracted script, and assert the agent-specific deny stream from the configured script path. Evidence anchors: `src/cli/audit/check-agent-setup.ts` (search: `runConfiguredHookCommandSmoke`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command.test.ts` (search: `hides the script path in shell text`).
 
 ## Lesson: Hook parser regressions need false-positive grammar probes
 

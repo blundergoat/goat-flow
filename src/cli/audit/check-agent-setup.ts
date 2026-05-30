@@ -5,7 +5,7 @@
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import type { ReadonlyFS } from "../types.js";
@@ -960,7 +960,35 @@ const CONFIGURED_SMOKE_SCRIPTS = [
 interface ConfiguredHookCommand {
   command: string;
   scriptFile: string;
+  scriptPath: string | null;
   configPath: string;
+}
+
+/** Extract the configured guard script path without executing shell glue from agent config. */
+function extractConfiguredScriptPath(
+  command: string,
+  scriptFile: string,
+): string | null {
+  const withoutShellComment =
+    command.replace(/\\/g, "/").split("#", 1)[0] ?? "";
+  for (const candidate of withoutShellComment.match(/[^\s"'`;|&{}]+\.sh/gu) ??
+    []) {
+    if (posix.basename(candidate) !== scriptFile) continue;
+    const withoutRoot = candidate.startsWith("$root/")
+      ? candidate.slice("$root/".length)
+      : candidate;
+    const relative = withoutRoot.replace(/^\.\//, "");
+    const normalised = posix.normalize(relative);
+    if (
+      normalised.startsWith("../") ||
+      normalised === ".." ||
+      posix.isAbsolute(normalised)
+    ) {
+      continue;
+    }
+    return normalised;
+  }
+  return null;
 }
 
 function pushConfiguredCommand(
@@ -973,7 +1001,12 @@ function pushConfiguredCommand(
     command.includes(script),
   );
   if (!scriptFile) return;
-  commands.push({ command, scriptFile, configPath });
+  commands.push({
+    command,
+    scriptFile,
+    scriptPath: extractConfiguredScriptPath(command, scriptFile),
+    configPath,
+  });
 }
 
 function collectNestedCommandValues(
@@ -1024,52 +1057,46 @@ function configuredGuardCommands(
   });
 }
 
-function runConfiguredCommand(
-  ctx: AuditContext,
-  command: string,
-  input: string,
-): ReturnType<typeof spawnSync> {
-  if (!/\s/u.test(command) && !command.includes("$(")) {
-    return spawnSync(command, [], {
-      cwd: ctx.projectPath,
-      encoding: "utf8",
-      input,
-      timeout: 5000,
-    });
-  }
-  return spawnSync("bash", ["-lc", command], {
-    cwd: ctx.projectPath,
-    encoding: "utf8",
-    input,
-    timeout: 5000,
-  });
-}
-
 function runConfiguredHookCommandSmoke(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
   configured: ConfiguredHookCommand,
 ): { ok: boolean; message: string; evidence: string } {
+  if (configured.scriptPath === null) {
+    return {
+      ok: false,
+      message: `${agentFacts.agent.id} configured hook command does not name an exact guard script path: ${configured.command}`,
+      evidence: configured.configPath,
+    };
+  }
   const smoke = runtimeSmokePayloadForScript(
     agentFacts.agent.id,
     configured.scriptFile,
   );
-  const result = runConfiguredCommand(ctx, configured.command, smoke.input);
+  const result = spawnSync(
+    "bash",
+    [join(ctx.projectPath, configured.scriptPath)],
+    {
+      cwd: ctx.projectPath,
+      encoding: "utf8",
+      input: smoke.input,
+      timeout: 5000,
+    },
+  );
   const status = result.status ?? (result.error ? -1 : 0);
   if (status === 126 || status === 127) {
     return {
       ok: false,
-      message: `${agentFacts.agent.id} configured hook command exited ${status}: ${configured.command}`,
+      message: `${agentFacts.agent.id} configured hook script exited ${status}: ${configured.scriptPath}`,
       evidence: configured.configPath,
     };
   }
-  const stream = String(
-    smoke.expectedStream === "stdout" ? result.stdout : result.stderr,
-  );
+  const stream =
+    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
   if (status !== smoke.expectedStatus || !smoke.expectedPattern.test(stream)) {
     return {
       ok: false,
-      message: `${agentFacts.agent.id} configured hook command did not deny ${configured.scriptFile}: ${configured.command}`,
+      message: `${agentFacts.agent.id} configured hook script did not deny ${configured.scriptFile}: ${configured.scriptPath}`,
       evidence: configured.configPath,
     };
   }
@@ -1112,7 +1139,7 @@ function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
           message: result.message,
           evidence: evidencePath(result.evidence),
           howToFix:
-            "Run the exact hook command string from the agent config with a runtime-shaped payload and confirm it reaches the guard script without exit 126/127.",
+            "Run the configured guard script path with a runtime-shaped payload and confirm it reaches the guard script without exit 126/127.",
         };
       }
       continue;

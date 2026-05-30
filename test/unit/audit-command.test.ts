@@ -2134,7 +2134,7 @@ describe("agent deny hook template comparison", () => {
     assert.equal(result.evidence, ".codex/hooks.json");
   });
 
-  it("fails when an exact configured hook command exits 127", () => {
+  it("fails when a configured hook command hides the script path in shell text", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
     const ctx = makeCtx({
@@ -2180,7 +2180,7 @@ describe("agent deny hook template comparison", () => {
 
     const result = denyCheck.run(ctx);
     assert.ok(result, "expected configured command runtime failure");
-    assert.match(result.message, /configured hook command exited 127/);
+    assert.match(result.message, /does not name an exact guard script path/);
     assert.equal(result.evidence, ".codex/hooks.json");
   });
 

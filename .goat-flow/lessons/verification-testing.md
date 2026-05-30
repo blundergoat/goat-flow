@@ -3,6 +3,18 @@ category: verification-testing
 last_reviewed: 2026-05-30
 ---
 
+## Lesson: Security parser fixes need focused parser proof
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During the M00 security cleanup, I replaced dynamic `bash -lc` hook smoke execution with fixed-vector guard-script execution. The first parser used a dynamic RegExp and failed focused audit tests with `Invalid regular expression`; typecheck also caught `split(...)[0]` as possibly undefined. After switching to a literal `.sh` token scan and updating the stale assertion, the focused audit/install tests reported `# pass 153` / `# fail 0`. The learning-loop stats check then caught two stale anchors that still referenced the old test name, and full preflight caught an unnecessary `String(...)` conversion copied forward from the old hook-testing lesson.
+
+**Root cause:** I treated shell-command parsing as a small cleanup after removing the risky spawn path. The safer behavior changed the test contract, and the first parser shape had its own syntax hazard.
+
+**Prevention:** For security changes that parse shell or agent-config command strings, run the focused parser/contract tests immediately, avoid dynamic regex construction when a literal token scan is enough, run `goat-flow stats --check` after renaming test anchors that learning-loop artifacts cite, and let current type/lint evidence override stale lesson text. Evidence anchors: `src/cli/audit/check-agent-setup.ts` (search: `extractConfiguredScriptPath`), `test/unit/audit-command.test.ts` (search: `hides the script path in shell text`).
+
+---
+
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30

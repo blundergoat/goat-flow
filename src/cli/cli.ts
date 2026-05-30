@@ -6,7 +6,7 @@
  */
 
 import { parseArgs } from "node:util";
-import { resolve, dirname, join, basename } from "node:path";
+import { resolve, dirname, join, basename, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -1271,6 +1271,16 @@ function emitCommitGuidanceInstallResult(projectPath: string): void {
   );
 }
 
+/** Build installer spawn env; selected Windows Bash paths get PATH precedence without a dynamic command. */
+function installerSpawnEnv(bashCommand: string): NodeJS.ProcessEnv {
+  if (bashCommand === "bash") return process.env;
+  const existingPath = process.env.PATH ?? "";
+  return {
+    ...process.env,
+    PATH: `${dirname(bashCommand)}${delimiter}${existingPath}`,
+  };
+}
+
 /** Handle deterministic install/update; spawns the bundled installer and reports CLIError failures. */
 function handleInstallCommand(options: ParsedCLI): void {
   if (!options.agent) {
@@ -1294,7 +1304,8 @@ function handleInstallCommand(options: ParsedCLI): void {
     throw new CLIError(invocation.error, 1);
   }
 
-  const result = spawnSync(invocation.bashCommand, invocation.args, {
+  const result = spawnSync("bash", invocation.args, {
+    env: installerSpawnEnv(invocation.bashCommand),
     stdio: "inherit",
   });
   if (result.error) {
