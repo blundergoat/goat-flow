@@ -40,6 +40,7 @@ after(() => {
   }
 });
 
+/** Writes an isolated project with just enough quality-log structure for CLI tests. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-cli-"));
   mkdirSync(join(root, ".goat-flow", "logs", "quality"), { recursive: true });

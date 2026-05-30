@@ -111,7 +111,7 @@ function requireBuiltArtifacts(): void {
   );
 }
 
-/** Run the built CLI so startup measurements match packaged execution. */
+/** Spawns the built CLI so startup measurements match packaged execution. */
 function runCli(args: string[]): string {
   const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
     cwd: PROJECT_ROOT,

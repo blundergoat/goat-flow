@@ -287,7 +287,7 @@ async function writeProjectFile(
   await writeFile(fullPath, content);
 }
 
-/** Run git inside a fixture project and return stdout for setup helpers. */
+/** Spawns git inside a fixture project and returns stdout for setup helpers. */
 function runGit(root: string, args: string[]): string {
   return childProcess.execFileSync("git", args, {
     cwd: root,
@@ -310,7 +310,7 @@ function commitDashboardCacheProject(root: string): void {
   ]);
 }
 
-/** Create a minimal committed goat-flow fixture project for dashboard cache tests. */
+/** Writes a minimal committed goat-flow fixture project for dashboard cache tests. */
 async function makeDashboardCacheProject(): Promise<{
   root: string;
   cleanup: () => Promise<void>;

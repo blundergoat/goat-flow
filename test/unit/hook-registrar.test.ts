@@ -32,6 +32,7 @@ const GENERATED_AGENT_SURFACES = [
   ".github/hooks/guard-secret-paths.sh",
 ];
 
+/** Writes a cleaned temporary target project for hook-registrar assertions. */
 function withTempProject(fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-hook-registrar-"));
   try {
@@ -41,16 +42,19 @@ function withTempProject(fn: (root: string) => void): void {
   }
 }
 
+/** Check fixture-relative generated hook paths. */
 function pathExists(root: string, path: string): boolean {
   return existsSync(join(root, path));
 }
 
+/** Assert generated surfaces remain absent when a hook toggle should not scaffold. */
 function assertMissing(root: string, paths: string[]): void {
   for (const path of paths) {
     assert.equal(pathExists(root, path), false, `${path} should be absent`);
   }
 }
 
+/** Assert generated surfaces are present after an explicit hook sync. */
 function assertPresent(root: string, paths: string[]): void {
   for (const path of paths) {
     assert.equal(pathExists(root, path), true, `${path} should exist`);

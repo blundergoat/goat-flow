@@ -26,6 +26,7 @@ const COMING_SOON_VIEW_PATH = resolve(
   "coming-soon.html",
 );
 
+/** Read dashboard source fixtures as text for navigation assertions. */
 function read(path: string): string {
   return readFileSync(path, "utf-8");
 }

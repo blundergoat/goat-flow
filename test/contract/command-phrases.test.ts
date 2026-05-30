@@ -13,6 +13,7 @@ import type { AuditReport } from "../../src/cli/audit/types.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+/** Build the smallest passing audit report needed by command-phrase renderers. */
 function makePassingReport(): AuditReport {
   return {
     command: "audit",

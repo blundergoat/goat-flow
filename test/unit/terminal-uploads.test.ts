@@ -58,6 +58,7 @@ const WEBP_HEADER = Buffer.concat([
   Buffer.from("WEBP"),
 ]);
 
+/** Build a minimal binary image with a chosen signature and padded body. */
 function makeFakeImage(header: Buffer, bodyBytes = 32): Buffer {
   return Buffer.concat([header, Buffer.alloc(bodyBytes, 0xff)]);
 }

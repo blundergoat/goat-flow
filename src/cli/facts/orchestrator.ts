@@ -12,6 +12,7 @@ import { detectStack } from "../detect/project-stack.js";
 import { extractSharedFacts } from "./shared/index.js";
 import { extractAgentFacts } from "./agent/index.js";
 
+/** Optional profiler seam for timing fact extraction spans without changing returned facts. */
 interface FactExtractionProfiler {
   span<T>(name: string, fn: () => T): T;
 }
@@ -37,13 +38,14 @@ function span<T>(
   return profile ? profile.span(name, fn) : fn();
 }
 
-/** Stack sentinel for profiles that intentionally do not have stack facts. */
+/** Stack sentinel for profiles without stack facts; throws because invalid checks must fail loudly. */
 function unavailableStack(): StackInfo {
   const message =
     "facts.stack is unavailable in dashboard-summary audit profile; mark the check requiresStack or run a full audit profile";
   return new Proxy(
     {},
     {
+      /** Throws for all stack property reads except JSON serialization because the profile excludes stack facts. */
       get(_target, prop) {
         if (prop === "toJSON") {
           return () => ({ unavailable: true });
@@ -54,7 +56,13 @@ function unavailableStack(): StackInfo {
   ) as StackInfo;
 }
 
-/** Gather stack, shared, and per-agent facts into the single scan input object. */
+/**
+ * Gather stack, shared, and per-agent facts into the single scan input object.
+ *
+ * @param fs - filesystem adapter for the target project
+ * @param options - extraction scope, config state, stack profile, and optional profiler
+ * @returns project facts consumed by audit, setup, and quality prompt generation
+ */
 export function extractProjectFacts(
   fs: ReadonlyFS,
   options: ExtractOptions,

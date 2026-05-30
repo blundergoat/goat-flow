@@ -131,7 +131,7 @@ function findCompetingArtifactSurfaces(
     .sort((a, b) => a.localeCompare(b));
 }
 
-/** List markdown files in a directory (or read a single flat .md file), returning path+content pairs. */
+/** List markdown files in deterministic order, preserving flat-file config as a stable single-entry contract. */
 function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
   // Flat-file mode: config points at a single .md file instead of a directory
   if (dir.endsWith(".md")) {
@@ -171,6 +171,9 @@ function parseMarkdownFrontmatter(content: string): {
  * Parse simple `key: value` pairs from a YAML frontmatter block.
  * Only handles flat scalar fields (sufficient for goat-flow's single-level frontmatter);
  * nested structures, arrays, and multi-line scalars are intentionally unsupported.
+ *
+ * @param frontmatter - YAML frontmatter body without the surrounding `---` markers
+ * @returns flat key/value fields parsed from the frontmatter block
  */
 export function parseFrontmatterFields(
   frontmatter: string,
@@ -187,6 +190,9 @@ export function parseFrontmatterFields(
 /**
  * Compute days-since-review and a coarse freshness band for a bucket file.
  * Returns `unknown` for missing or non-YYYY-MM-DD values so callers can flag them.
+ *
+ * @param lastReviewed - ISO date from bucket frontmatter, or null when absent
+ * @param now - comparison clock for deterministic tests and reports
  */
 export function computeFreshness(
   lastReviewed: string | null,
@@ -226,14 +232,14 @@ function countLessonEntries(content: string): number {
   return bucketCount > 0 ? bucketCount : 1;
 }
 
-/** Count footgun entries. */
+/** Count active footgun sections, preserving legacy single-entry files as one entry. */
 function countFootgunEntries(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
   const bucketCount = countMatches(body, /^##\s+Footgun:\s+/gm);
   return bucketCount > 0 ? bucketCount : 1;
 }
 
-/** Count footgun labels. */
+/** Count footgun evidence labels so stats can compare labels to entry count. */
 function countFootgunLabels(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
   const bucketCount = countMatches(body, /^##\s+Footgun:\s+/gm);
@@ -396,6 +402,7 @@ function scanSearchAnchors(
   }
 }
 
+/** Parsed `## Footgun:` section with status metadata for entry extraction. */
 interface FootgunSection {
   title: string;
   start: number;
@@ -856,7 +863,13 @@ function summarizeLessonEntries(
   };
 }
 
-/** Extract footgun facts: existence, evidence quality, directory mention counts, and per-bucket freshness. */
+/**
+ * Extract footgun facts: existence, evidence quality, directory mention counts, and per-bucket freshness.
+ *
+ * @param fs - filesystem adapter for the target project
+ * @param configState - loaded config that chooses the footgun artifact path
+ * @param now - comparison clock for deterministic bucket freshness
+ */
 export function extractFootgunFacts(
   fs: ReadonlyFS,
   configState: LoadedConfig,
@@ -892,7 +905,13 @@ export function extractFootgunFacts(
   };
 }
 
-/** Extract lessons facts: existence, entry presence, and per-bucket freshness. */
+/**
+ * Extract lessons facts: existence, entry presence, and per-bucket freshness.
+ *
+ * @param fs - filesystem adapter for the target project
+ * @param configState - loaded config that chooses the lessons artifact path
+ * @param now - comparison clock for deterministic bucket freshness
+ */
 export function extractLessonsFacts(
   fs: ReadonlyFS,
   configState: LoadedConfig,
@@ -922,6 +941,7 @@ export function extractLessonsFacts(
   };
 }
 
+/** Parsed lesson/pattern section with its inferred learning-loop entry kind. */
 interface LearningSection {
   title: string;
   kind: LearningLoopEntryKind;
@@ -1055,7 +1075,13 @@ function extractDecisionEntries(
     });
 }
 
-/** Extract compact learning-loop entries for bounded prompt retrieval. */
+/**
+ * Extract compact learning-loop entries for bounded prompt retrieval.
+ *
+ * @param fs - filesystem adapter for the target project
+ * @param configState - loaded config with footgun, lesson, and decision paths
+ * @returns ordered compact entries suitable for prompt context selection
+ */
 export function extractLearningLoopEntries(
   fs: ReadonlyFS,
   configState: LoadedConfig,

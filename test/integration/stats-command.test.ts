@@ -28,6 +28,7 @@ import type {
   GoatFlowConfig,
 } from "../../src/cli/config/types.js";
 
+/** Build a valid loaded config with targeted overrides for stats fixtures. */
 function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   return {
     exists: true,
@@ -95,6 +96,7 @@ after(() => {
   for (const dir of disposables) rmSync(dir, { recursive: true, force: true });
 });
 
+/** Load a stats report from a seeded learning-loop fixture repo. */
 function loadReport(spec: Parameters<typeof makeFixtureRepo>[0]) {
   const root = makeFixtureRepo(spec);
   disposables.push(root);
@@ -107,6 +109,7 @@ function loadReport(spec: Parameters<typeof makeFixtureRepo>[0]) {
   });
 }
 
+/** Load a stats report when the learning-loop directories are absent. */
 function loadReportWithoutLoopDirs() {
   const root = mkdtempSync(join(tmpdir(), "goatflow-stats-missing-"));
   disposables.push(root);

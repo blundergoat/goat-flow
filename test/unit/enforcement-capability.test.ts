@@ -8,6 +8,7 @@ import { PROFILES } from "../../src/cli/detect/agents.js";
 import type { AuditScope } from "../../src/cli/audit/types.js";
 import type { AgentFacts, AgentProfile } from "../../src/cli/types.js";
 
+/** Build a minimal agent scope that exercises enforcement capability states. */
 function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
   return {
     status: status === "fail" ? "fail" : "pass",

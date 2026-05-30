@@ -33,6 +33,7 @@ function toShellProjectPath(projectPath: string, sub: string): string {
   return isUnc && !joined.startsWith("//") ? "/" + joined : joined;
 }
 
+/** Inputs needed to compose an agent quality-review prompt for one project. */
 interface QualityInput {
   agent: AgentId;
   projectPath: string;
@@ -47,6 +48,7 @@ interface QualityInput {
 
 type AuditUnavailableReason = "audit-failed" | "fast-cache-only";
 
+/** Structured quality command payload returned to CLI and dashboard callers. */
 interface QualityPayload {
   command: "quality";
   agent: AgentId;
@@ -73,7 +75,7 @@ function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-/** Infer the report scope from the project package metadata. */
+/** Infer the report scope from package metadata; recover as consumer when metadata is unreadable. */
 function inferQualityScope(projectPath: string): "framework-self" | "consumer" {
   const packagePath = join(projectPath, "package.json");
   try {
@@ -89,7 +91,7 @@ function inferQualityScope(projectPath: string): "framework-self" | "consumer" {
   }
 }
 
-/** Render the audit summary block embedded in the quality prompt. */
+/** Render the audit summary block because reviewers need setup failures before qualitative judgment. */
 function renderAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
   const scopes: [string, string][] = [
@@ -620,7 +622,11 @@ function appendComposedFromInstruction(
  *  After M09, the prompt requires four scored semantic dimensions, an
  *  anti-bias preamble, an explicit per-file `composedFrom` reading
  *  instruction, a focus/scope probe, a final gate decision, and a fenced JSON
- *  block summarising the verdict. */
+ *  block summarising the verdict.
+ *
+ * @param report - skill-quality report to turn into a focused reviewer prompt
+ * @returns prompt text for reviewing the selected skill or reference artifact
+ */
 export function composeArtifactQualityPrompt(
   report: SkillQualityReport,
 ): string {
@@ -802,8 +808,8 @@ export function composeArtifactQualityPrompt(
   return lines.join("\n");
 }
 
-/** Compose the quality review prompt. */
-// eslint-disable-next-line complexity -- prompt assembly branches on audit availability and split hook-config surfaces
+/** Compose the quality review prompt; branching is intentional because audit availability changes prompt contract. */
+// eslint-disable-next-line complexity -- intentional because audit availability and hook surfaces change prompt sections
 export function composeQuality(input: QualityInput): QualityPayload {
   const {
     agent,

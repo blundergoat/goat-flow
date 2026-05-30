@@ -25,6 +25,7 @@ function stubFS(
   };
 }
 
+/** Provide a representative project-conventions document for extraction tests. */
 function conventionsContent(): string {
   return [
     "# Project Conventions",

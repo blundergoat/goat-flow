@@ -287,6 +287,7 @@ function existingExactPathsAreDenied(
     .every((pattern) => denied.has(pattern));
 }
 
+/** Confirm Codex denies every root env file that actually exists in the target project. */
 function hasCodexEnvDeny(denied: Set<string>, fs: ReadonlyFS): boolean {
   return existingExactPathsAreDenied(denied, fs, [
     ".env",

@@ -30,6 +30,7 @@ after(() => {
   }
 });
 
+/** Spawns git in fixture repos with deterministic author metadata. */
 function git(root: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd: root,
@@ -45,6 +46,7 @@ function git(root: string, args: string[]): void {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
+/** Create a temporary git repo configured for commit-guidance detection. */
 function makeRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-commit-guidance-"));
   disposables.push(root);
@@ -54,6 +56,7 @@ function makeRepo(): string {
   return root;
 }
 
+/** Writes and commits a fixture history entry with an optional body. */
 function commit(root: string, subject: string, body?: string): void {
   writeFileSync(join(root, "history.txt"), `${subject}\n`, { flag: "a" });
   git(root, ["add", "history.txt"]);

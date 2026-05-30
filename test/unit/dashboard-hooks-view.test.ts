@@ -19,6 +19,7 @@ const DASHBOARD_STYLES_PATH = resolve(
   "styles.css",
 );
 
+/** Read dashboard source fixtures as text for structural assertions. */
 function read(path: string): string {
   return readFileSync(path, "utf-8");
 }

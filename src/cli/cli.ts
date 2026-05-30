@@ -154,11 +154,13 @@ type QualitySubcommand =
   | "validate"
   | "candidacy";
 
+/** Parsed quality-candidacy input source and payload from CLI flags/positionals. */
 interface CandidacyInputArg {
   mode: "draft" | "description";
   value: string;
 }
 
+/** Raw parseArgs values before command-specific normalization and validation. */
 interface ParsedArgValues {
   format?: string;
   agent?: string;
@@ -220,7 +222,7 @@ let cachedValidAgents: AgentId[] | null = null;
 function validAgents(): AgentId[] {
   return (cachedValidAgents ??= getKnownAgentIds());
 }
-/** Return the valid agent IDs as help text. */
+/** Return the valid agent IDs as help text, falling back when manifest loading throws. */
 function validAgentList(): string {
   try {
     return validAgents().join(", ");
@@ -228,7 +230,7 @@ function validAgentList(): string {
     return "run `goat-flow manifest` for the current list";
   }
 }
-/** Return the valid `--agent` flag examples. */
+/** Return the valid `--agent` flag examples, falling back when manifest loading throws. */
 function validAgentFlags(): string {
   try {
     return validAgents()
@@ -286,7 +288,7 @@ type SkillCLIFields = Pick<
   | "skillSkipConfirm"
 >;
 
-/** Parse the positional subcommand from raw CLI args. Empty argv opens the menu. */
+/** Parse the positional subcommand from raw CLI args; throws CLIError for removed commands with migration help. */
 function parseCommand(argv: string[]): {
   command: Command;
   filteredArgs: string[];
@@ -309,7 +311,7 @@ function parseCommand(argv: string[]): {
   return { command: "audit", filteredArgs };
 }
 
-/** Parse the `--format` flag, defaulting to text on TTYs and JSON otherwise. */
+/** Parse the `--format` flag; throws CLIError for invalid values before command dispatch. */
 function parseFormatArg(value: string | undefined): CLIOptions["format"] {
   const defaultFormat: CLIOptions["format"] = process.stdout.isTTY
     ? "text"
@@ -324,7 +326,7 @@ function parseFormatArg(value: string | undefined): CLIOptions["format"] {
   return value as CLIOptions["format"];
 }
 
-/** Parse the `--agent` flag and reject deprecated aggregate agent modes. */
+/** Parse the `--agent` flag; throws CLIError for invalid or deprecated aggregate values. */
 function parseAgentArg(value: string | undefined): AgentId | null {
   if (!value) return null;
   if (value === "all") {
@@ -339,7 +341,7 @@ function parseAgentArg(value: string | undefined): AgentId | null {
   return value as AgentId;
 }
 
-/** Parse the quality-history/diff mode filter. */
+/** Parse the quality-history/diff mode filter; throws CLIError for invalid modes. */
 function parseQualityModeArg(value: string | undefined): QualityMode | null {
   if (!value) return null;
   if (!QUALITY_MODES.includes(value as QualityMode)) {
@@ -364,8 +366,8 @@ function resolveOutputPath(
   );
 }
 
-/** Parse quality subcommand positionals. */
-// eslint-disable-next-line complexity -- quality subcommand dispatch is intentionally explicit: each branch has its own positional validation
+/** Parse quality subcommand positionals; throws CLIError for invalid subcommand arity. */
+// eslint-disable-next-line complexity -- intentional because each quality positional error reports in CLI order
 function parseQualityPositionals(
   positionals: string[],
   draftFlag: string | null,
@@ -478,7 +480,7 @@ function parseQualityPositionals(
   };
 }
 
-/** Parse events subcommand positionals. */
+/** Parse events subcommand positionals; throws CLIError for unsupported subcommands or arity. */
 function parseEventsPositionals(positionals: string[]): {
   eventsSubcommand: EventsSubcommand;
   projectPath: string;
@@ -499,7 +501,7 @@ function parseEventsPositionals(positionals: string[]): {
   };
 }
 
-/** Parse hooks subcommand positionals. */
+/** Parse hooks subcommand positionals; throws CLIError for unsupported subcommands or arity. */
 function parseHooksPositionals(positionals: string[]): {
   hookSubcommand: HookSubcommand;
   hookId: string | null;
@@ -580,6 +582,7 @@ function parseCommandPositionals(
   };
 }
 
+/** Parsed skill command positionals before flag-derived fields are merged. */
 interface SkillPositionals {
   skillSubcommand: SkillSubcommand | null;
   skillDescription: string | null;
@@ -610,7 +613,7 @@ function parseSkillDescription(parts: string[]): string | null {
   return description.length > 0 ? description : null;
 }
 
-/** Parse `skill [project-path] new [project-path] [description...]` positionals. */
+/** Parse `skill [project-path] new [project-path] [description...]`; throws CLIError for unknown subcommands. */
 function parseSkillPositionals(positionals: string[]): SkillPositionals {
   const [first, second, ...rest] = positionals;
   if (first === undefined) {
@@ -694,7 +697,7 @@ function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   );
 }
 
-/** Validate deterministic install/setup flags. */
+/** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   if (command !== "setup" && values.apply === true) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
@@ -715,7 +718,7 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
 }
 
 /** Validate quality mode flags against the selected quality subcommand. */
-// eslint-disable-next-line complexity -- enumerates four cross-command flag/subcommand restrictions; splitting per-flag obscures the validation contract
+// eslint-disable-next-line complexity -- intentional because one validator preserves the cross-command error contract
 function validateQualityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -784,7 +787,7 @@ function validateFlagCombinations(
   validateQualityFlags(command, values, qualitySubcommand);
 }
 
-/** Parse the events tail limit, clamping only after rejecting invalid input. */
+/** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
 function parseEventsLimitArg(value: string | undefined): number {
   if (value === undefined) return 20;
   const parsed = Number.parseInt(value, 10);
@@ -814,7 +817,13 @@ function buildSkillCLIFields(
   };
 }
 
-/** Parse raw CLI argv into a structured ParsedCLI options object */
+/**
+ * Parse raw CLI argv into structured command options.
+ * Throws CLIError when a command, flag, positional, or value combination is invalid.
+ *
+ * @param argv - raw CLI arguments after the executable and script path
+ * @returns normalized options consumed by command dispatch
+ */
 export function parseCLIArgs(argv: string[]): ParsedCLI {
   const { command, filteredArgs } = parseCommand(argv);
 
@@ -956,6 +965,7 @@ function stripAuditDetails(report: AuditReport): AuditReport {
   };
 }
 
+/** One interactive menu row and the command it dispatches to. */
 interface MenuAction {
   key: string;
   label: string;
@@ -1261,7 +1271,7 @@ function emitCommitGuidanceInstallResult(projectPath: string): void {
   );
 }
 
-/** Handle deterministic install/update by delegating to the packaged installer. */
+/** Handle deterministic install/update; spawns the bundled installer and reports CLIError failures. */
 function handleInstallCommand(options: ParsedCLI): void {
   if (!options.agent) {
     throw new CLIError(
@@ -1303,7 +1313,7 @@ function handleInstallCommand(options: ParsedCLI): void {
   emitCommitGuidanceInstallResult(options.projectPath);
 }
 
-/** Write rendered output to file or stdout. */
+/** Writes rendered output to a requested file path or stdout, creating parent directories for files. */
 function writeOutput(options: ParsedCLI, rendered: string): void {
   if (options.output) {
     mkdirSync(dirname(options.output), { recursive: true });
@@ -1315,7 +1325,7 @@ function writeOutput(options: ParsedCLI, rendered: string): void {
   process.stdout.write(rendered + "\n");
 }
 
-/** Handle the info command: rubrics and anti-patterns were removed in v1.1.0. */
+/** Handle the removed info command; throws CLIError with the current audit replacement. */
 function handleInfoCommand(options: ParsedCLI): void {
   // The subcommand is the first positional arg after 'info'.
   // parseCLIArgs resolves projectPath to an absolute path, so extract the basename.
@@ -1375,8 +1385,13 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/** Dispatch the quality subcommands. */
-// eslint-disable-next-line complexity -- quality prompt, history, and diff intentionally share one command dispatcher
+/**
+ * Dispatch quality subcommands through one async path.
+ * The command is intentionally centralized because prompt/history/diff share
+ * output rendering. It recovers from audit failure for prompt generation, but
+ * throws CLIError for invalid candidacy, diff, validate, or missing-agent inputs.
+ */
+// eslint-disable-next-line complexity -- intentional because quality subcommands share output rendering and throws CLIError
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   if (options.qualitySubcommand === "history") {
     const {

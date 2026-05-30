@@ -13,6 +13,7 @@ import { AUDIT_VERSION } from "../../src/cli/constants.js";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const SCRIPT = join(PROJECT_ROOT, "scripts", "check-path-integrity.sh");
 
+/** Spawns the path-integrity script against an isolated project fixture. */
 function runScript(projectRoot: string): { ok: boolean; output: string } {
   const r = spawnSync("bash", [SCRIPT, projectRoot], {
     encoding: "utf-8",
@@ -22,6 +23,7 @@ function runScript(projectRoot: string): { ok: boolean; output: string } {
   return { ok: r.status === 0, output };
 }
 
+/** Writes the minimum goat-flow filesystem layout required by path-integrity checks. */
 function makeTempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "gf-path-test-"));
   // Minimal .goat-flow with config

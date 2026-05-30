@@ -40,6 +40,7 @@ import type {
   ProjectStructure,
 } from "./types.js";
 
+/** Runtime switches that choose audit scope, fact depth, and optional diagnostics. */
 interface AuditOptions {
   agentFilter: AgentId | null;
   harness: boolean;
@@ -94,7 +95,13 @@ function assertCheckCanRunWithoutStack(
   }
 }
 
-/** Build an isolated facts view for one audit context from a batch fact bundle. */
+/**
+ * Build an isolated facts view for one audit context from a batch fact bundle.
+ *
+ * @param facts - shared extracted facts reused across aggregate and per-agent audits
+ * @param options - optional agent/profile narrowing for the returned facts view
+ * @returns facts narrowed to the requested agent/profile without mutating the batch bundle
+ */
 export function createAuditFactsView(
   facts: ProjectFacts,
   options: { agentId?: AgentId; factProfile?: AuditFactProfile } = {},
@@ -387,7 +394,7 @@ function toCheckResult(
  *  stale provenance surfaces in preflight. */
 let provenanceValidated = false;
 
-/** Validate registered check provenance once per process so stale evidence paths fail fast in dev. */
+/** Validate registered check provenance once per process; throws when dev evidence paths are stale. */
 function validateRegisteredCheckProvenance(fs: ReadonlyFS): void {
   if (provenanceValidated) return;
   const checks = [...SETUP_CHECKS, ...AGENT_CHECKS, ...HARNESS_CHECKS];
@@ -487,7 +494,11 @@ function applyCheckToConcern(
   }
 }
 
-/** Run harness checks and return the scope results plus per-concern scores. */
+/**
+ * Run harness checks and return the scope results plus per-concern scores.
+ *
+ * @param ctx - audit context containing facts, config, checks, and target filesystem access
+ */
 export function computeHarness(ctx: AuditContext): {
   scope: AuditScope;
   concerns: Record<AuditConcernKey, AuditConcern>;
@@ -711,7 +722,14 @@ function shouldAutoRunDrift(ctx: AuditContext): boolean {
   return instructionFilesPresent > 1;
 }
 
-/** Run the audit against a project and return the full report. */
+/**
+ * Run the audit against a project and return the full report.
+ *
+ * @param fs - filesystem adapter scoped to the target project
+ * @param projectPath - absolute or relative target project root passed to fact extraction and checks
+ * @param options - audit switches controlling agent filtering, harness, drift, content, and fact profile
+ * @returns full audit report with setup, agent, optional harness, drift, and content sections
+ */
 export function runAudit(
   fs: ReadonlyFS,
   projectPath: string,
@@ -828,6 +846,11 @@ function computeContentWithProfile(
 /**
  * Run aggregate + per-agent audits sharing a single config/structure/provenance pass.
  * Eliminates the N+1 pattern where each per-agent audit re-parses config and facts.
+ *
+ * @param fs - filesystem adapter scoped to the target project
+ * @param projectPath - target project root reused by aggregate and per-agent runs
+ * @param options - aggregate audit switches reused by the per-agent runs
+ * @param agentIds - supported agent ids to audit individually after the aggregate run
  */
 export function runAuditBatch(
   fs: ReadonlyFS,

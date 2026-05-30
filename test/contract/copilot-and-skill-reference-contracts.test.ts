@@ -6,10 +6,12 @@ import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+/** Count physical lines so contract ceilings match the human-visible files. */
 function lineCount(path: string): number {
   return readFileSync(path, "utf-8").split(/\r?\n/).length;
 }
 
+/** Walk reference trees recursively because mirrored skill docs can nest packs. */
 function markdownFilesUnder(path: string): string[] {
   if (!existsSync(path)) return [];
   const stat = statSync(path);

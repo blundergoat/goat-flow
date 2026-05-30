@@ -7,6 +7,7 @@ import { loadConfig } from "../../src/cli/config/reader.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
+/** Build a config-only readonly filesystem for reader merge tests. */
 function configFS(content: string | null): ReadonlyFS {
   return {
     exists: (path: string) =>

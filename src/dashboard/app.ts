@@ -9,6 +9,7 @@ type HookFilter = "all" | "enabled" | "disabled" | "drift";
 type HookSection = "safety" | "git" | "quality";
 type HookTone = "danger" | "warning" | "neutral";
 
+/** Decoded terminal upload response used to paste notes and report rejected files. */
 interface TerminalUploadResult {
   note: string;
   accepted: unknown[];
@@ -78,7 +79,12 @@ function showTerminalUploadResult(
   }
 }
 
-/** Alpine.js data factory for the dashboard shell. */
+/**
+ * Alpine.js data factory for the dashboard shell.
+ * This large object stays centralized because Alpine binds methods by property name from
+ * server-rendered HTML, so extracting view modules would break template lookup. It reports API
+ * errors as toast state, and stale async responses must not overwrite newer project state.
+ */
 function app() {
   const supportedAgents = readInjectedSupportedAgents();
   const defaultRunner = supportedAgents[0]?.id ?? "claude";
@@ -776,7 +782,7 @@ function app() {
       }
       return false;
     },
-    /** Encode and send dropped images to the backend terminal upload route. */
+    /** Encode and send dropped images to the backend terminal upload route; reports upload errors as toasts. */
     async _uploadTerminalImages(files: File[]) {
       const sessionId = this.activeSessionId;
       if (!sessionId) return;
@@ -813,6 +819,7 @@ function app() {
       }
     },
     // --- Init ---
+    /** Register Alpine watchers and swallows lazy terminal warmup errors because init must keep mounting. */
     init() {
       const self = this as typeof this & AlpineMagics<typeof this>;
       self.$watch("darkMode", (v: boolean) => {
@@ -1126,6 +1133,7 @@ function app() {
     },
 
     // -- API Calls --
+    /** Load an audit snapshot; reports network/server errors as toasts because the dashboard must stay usable. */
     async runAudit(fresh = false) {
       this.auditing = true;
       this.toast = "";
@@ -1168,7 +1176,7 @@ function app() {
         });
       }
     },
-    /** Refresh installed-agent detection for launcher defaults and dashboard badges. */
+    /** Refresh installed-agent detection for launcher defaults; uses a recover fallback on fetch/decode failure. */
     async fetchInstalledAgents(): Promise<boolean> {
       try {
         const res = await dashboardFetch("/api/agents/installed");
@@ -1212,6 +1220,7 @@ function app() {
     },
 
     // -- Tasks --
+    /** Load task-plan state; reports endpoint errors and preserves newer project state because requests race. */
     async loadTasks(planName?: string) {
       this.tasksLoading = true;
       this.tasksError = "";
@@ -1244,7 +1253,7 @@ function app() {
       this.selectedTaskPlan = planName;
       void this.loadTasks(planName);
     },
-    /** Persist the active task plan for the selected project. */
+    /** Persist the active task plan; reports endpoint errors and preserves newer project state because saves race. */
     async setActiveTaskPlan(planName: string) {
       if (!planName || this.tasksActivePlanSaving) return;
       this.tasksActivePlanSaving = planName;
@@ -1300,6 +1309,7 @@ function app() {
     },
 
     // -- Hooks --
+    /** Load hook state for the selected project; reports errors in the Hooks banner because rows may be stale. */
     async loadHooks() {
       this.hooksLoading = true;
       this.hooksError = "";
@@ -1420,7 +1430,7 @@ function app() {
       if (state.drift) return "gf-hook-status-warn";
       return state.installed ? "gf-hook-status-ok" : "gf-hook-status-muted";
     },
-    /** Persist one hook toggle and replace the returned hook snapshot. */
+    /** Persist one hook toggle; reports failed requests while preserving rows because guardrail state is sensitive. */
     async toggleHook(hook: HookState, enabled: boolean) {
       if (!hook.togglable || this.hookSavingId) return;
       if (!enabled && hook.requiresConfirmDialog) {
@@ -1488,7 +1498,7 @@ function app() {
     scheduleQualityHistory() {
       dashboardScheduleQualityHistory(this);
     },
-    /** Load the latest quality-history summary for the Home rollup. */
+    /** Load the latest quality-history summary; reports errors as toasts and ignores stale responses. */
     async generateHomeQualitySummary() {
       this.homeQualityLoading = true;
       this.homeQualityLatest = null;
@@ -1522,6 +1532,7 @@ function app() {
     },
 
     // -- Skill quality --
+    /** Load skill-quality inventory; reports endpoint errors and resets stale caches because reports key by artifact. */
     async loadSkillQualityInventory() {
       const requestProjectPath = this.projectPath;
       const requestRunner = this.activeRunner;
@@ -1636,7 +1647,7 @@ function app() {
       this.skillQualitySelectedId = null;
       await this.loadSkillQualityInventory();
     },
-    /** Load or reuse one skill-quality report for the selected artifact. */
+    /** Load or reuse one skill-quality report; reports errors and aborts prior fetches because users can switch quickly. */
     async loadSkillQualityReport(artifactId: string) {
       this.skillQualitySelectedId = artifactId;
       const cached = this.skillQualityReports[artifactId];
@@ -1718,9 +1729,12 @@ function app() {
       for (const r of reports) sum += this.skillReportPct(r);
       return sum / reports.length;
     },
-    /** Headline summary for the skills detail panel - derives a one-sentence
-     *  conclusion from the recommendation + warn/fail counts so the buried
-     *  "two non-blocking issues" line gets promoted into a banner. */
+    /**
+     * Build the skills detail headline from recommendation and warn/fail counts.
+     * The branch order promotes blocking findings above percentage score so a high
+     * score cannot hide a small number of load-bearing structural failures because
+     * review must see the risk before the aggregate grade.
+     */
     skillSummaryBanner(report: SkillQualityReport | null): {
       title: string;
       desc: string;
@@ -2194,7 +2208,7 @@ function app() {
       el.style.opacity = "0";
       document.body.appendChild(el);
       el.select();
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional fallback for insecure contexts without Clipboard API
       const ok = document.execCommand("copy");
       document.body.removeChild(el);
       return ok;

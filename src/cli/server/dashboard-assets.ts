@@ -22,6 +22,7 @@ interface DashboardPreset extends Record<string, unknown> {
   cat: string;
 }
 
+/** Cached asset bytes plus stable HTTP metadata derived from the source file stats. */
 interface CachedDashboardAsset {
   content: Buffer;
   etag: string;
@@ -32,7 +33,14 @@ interface CachedDashboardAsset {
 
 const dashboardAssetCache = new Map<string, CachedDashboardAsset>();
 
-/** Replace `<!-- include: path -->` markers with fragment file contents (one level, no nesting). */
+/**
+ * Replace `<!-- include: path -->` markers with fragment file contents.
+ * Uses a recover fallback for missing fragments by embedding an HTML error comment so the
+ * dashboard shell still loads and the broken include is visible in source.
+ *
+ * @param shellPath - dashboard shell HTML file to assemble
+ * @returns assembled dashboard HTML with one-level includes expanded
+ */
 export function assembleDashboardHtml(shellPath: string): string {
   let html = readFileSync(shellPath, "utf-8");
   const includePattern = /<!-- include: (.+?) -->/g;
@@ -47,7 +55,12 @@ export function assembleDashboardHtml(shellPath: string): string {
   return html;
 }
 
-/** Read the dashboard preset definitions shipped with the frontend bundle. */
+/**
+ * Read the dashboard preset definitions shipped with the frontend bundle.
+ * Throws when the JSON schema is not the expected preset array.
+ *
+ * @returns validated preset prompt definitions
+ */
 export function loadDashboardPresets(): DashboardPreset[] {
   const presetPath = resolveFirstExistingPackagePath(
     DASHBOARD_PRESET_CATALOG_PATHS,
@@ -86,7 +99,12 @@ function resolveDashboardAssetPath(filename: string): string {
     : getTemplatePath(`dist/dashboard/${filename}`);
 }
 
-/** Read one bundled dashboard asset through a small mtime/size-aware memory cache. */
+/**
+ * Read one bundled dashboard asset through a small mtime/size-aware memory cache.
+ *
+ * @param filename - dashboard asset filename relative to the bundled asset root
+ * @returns asset bytes and cache metadata for HTTP responses
+ */
 export function loadDashboardAssetCached(
   filename: string,
 ): CachedDashboardAsset {

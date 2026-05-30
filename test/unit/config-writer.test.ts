@@ -14,6 +14,7 @@ import {
   setHookEnabled,
 } from "../../src/cli/config/writer.js";
 
+/** Writes a cleaned temporary project for each config-writer assertion. */
 function withTempProject(fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-config-writer-"));
   try {

@@ -24,6 +24,7 @@ import { CONTEXT_CHECKS } from "../../src/cli/audit/harness/check-context.js";
 import type { AuditContext } from "../../src/cli/audit/types.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
+/** Build a path-existence-only filesystem for claim scanners. */
 function stubFS(existsSet: Set<string>): ReadonlyFS {
   return {
     exists: (p: string) => existsSet.has(p),
@@ -37,6 +38,7 @@ function stubFS(existsSet: Set<string>): ReadonlyFS {
   };
 }
 
+/** Build a hermetic filesystem from file contents for path and glob claims. */
 function stubFSFromFiles(files: Record<string, string>): ReadonlyFS {
   const listDir = (dir: string): string[] => {
     const prefix = dir.replace(/\/$/u, "") + "/";
@@ -71,6 +73,7 @@ function stubFSFromFiles(files: Record<string, string>): ReadonlyFS {
   };
 }
 
+/** Wrap a readonly filesystem in the minimal audit context scanner APIs need. */
 function stubCtx(fs: ReadonlyFS): AuditContext {
   return { fs } as unknown as AuditContext;
 }

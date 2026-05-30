@@ -98,7 +98,7 @@ function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-quality-"));
 }
 
-/** Write fixture files while preserving nested artifact directory shapes. */
+/** Writes fixture files while preserving nested artifact directory shapes. */
 function writeText(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);

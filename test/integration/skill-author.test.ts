@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { runSkillNew, SkillNewInputError } from "../../src/cli/skill-author.js";
 import { assertExists } from "../helpers/assert-exists.ts";
 
+/** Create an isolated project root for skill-author write tests. */
 function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-author-"));
 }

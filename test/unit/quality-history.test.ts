@@ -43,6 +43,7 @@ after(() => {
   }
 });
 
+/** Writes an isolated project with a quality-log directory. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-history-"));
   mkdirSync(join(root, ".goat-flow", "logs", "quality"), { recursive: true });
@@ -50,6 +51,7 @@ function makeTempProject(): string {
   return root;
 }
 
+/** Writes a named quality-history fixture into the temp project. */
 function installFixture(root: string, id: string): void {
   const content = readFileSync(join(FIXTURE_DIR, `${id}.json`), "utf-8");
   writeFileSync(

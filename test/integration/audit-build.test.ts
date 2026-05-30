@@ -36,6 +36,7 @@ const requiredSkillReferenceFiles = [
   ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
 ];
 
+/** Produce a minimal compliant instruction file for skill-reference audit fixtures. */
 function compliantSkillReferenceInstruction(): string {
   return `# CLAUDE.md
 

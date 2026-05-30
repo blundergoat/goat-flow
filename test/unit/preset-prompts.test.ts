@@ -103,12 +103,14 @@ const KNOWN_CATEGORIES = new Set([
   "security",
 ]);
 
+/** Load the preset catalog once per assertion path from the repo fixture. */
 function readPresets(): PresetPrompt[] {
   const parsed = JSON.parse(readFileSync(PRESET_PATH, "utf-8")) as unknown;
   assert.ok(Array.isArray(parsed), "preset catalog should be an array");
   return parsed as PresetPrompt[];
 }
 
+/** Find a preset by stable id so tests can assert specific catalog entries. */
 function byId(id: string): PresetPrompt {
   const preset = readPresets().find((entry) => entry.id === id);
   assert.ok(preset, `missing preset ${id}`);

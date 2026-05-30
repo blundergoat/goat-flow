@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+/**
+ * Verifies that README-relative links resolve to files included by `npm pack`.
+ * This catches package documentation links that work in the repo but break for
+ * consumers after the package `files` whitelist is applied.
+ */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { posix } from "node:path";
@@ -31,7 +36,12 @@ function normalizeMarkdownHref(rawHref) {
   return normalized;
 }
 
-/** Extract package-local Markdown link/image targets from README content. */
+/**
+ * Extract package-local Markdown link/image targets from README content.
+ * Returned paths are unique and sorted so validation output is deterministic.
+ *
+ * @param readmeText - Markdown README content to scan
+ */
 export function extractPackageLocalReadmeLinks(readmeText) {
   const links = [];
   const inlineLinkPattern = /!?\[[^\]]*]\(([^)]+)\)/g;
@@ -46,7 +56,12 @@ export function extractPackageLocalReadmeLinks(readmeText) {
   return [...new Set(links)].sort();
 }
 
-/** Validate README package-local links against npm pack output paths. */
+/**
+ * Validate README package-local links against npm pack output paths.
+ *
+ * @param readmeText - Markdown README content to scan
+ * @param packedPaths - package-relative paths emitted by npm pack
+ */
 export function validatePackageReadmeLinks(readmeText, packedPaths) {
   const packed = new Set(packedPaths);
   const links = extractPackageLocalReadmeLinks(readmeText);
@@ -54,7 +69,13 @@ export function validatePackageReadmeLinks(readmeText, packedPaths) {
   return { links, missing };
 }
 
-/** Parse the `npm pack --dry-run --json` payload into package paths. */
+/**
+ * Parse the `npm pack --dry-run --json` payload into package paths.
+ * Throws when npm changes the JSON schema because missing `files` means the
+ * link check cannot prove package contents.
+ *
+ * @param packJson - raw stdout from `npm pack --dry-run --json`
+ */
 export function parsePackFileList(packJson) {
   const parsed = JSON.parse(packJson);
   const first = Array.isArray(parsed) ? parsed[0] : parsed;
@@ -67,7 +88,7 @@ export function parsePackFileList(packJson) {
     .sort();
 }
 
-/** Run npm pack and return the dry-run package paths. */
+/** Spawns npm pack as a process side effect and return the dry-run package paths. */
 function readPackFileList() {
   const output = execFileSync(
     "npm",
@@ -84,7 +105,7 @@ function readPackFileList() {
   return parsePackFileList(output);
 }
 
-/** CLI entry point. */
+/** CLI entry point; exits non-zero when README links target unpacked paths. */
 function main() {
   const packedPaths = readPackFileList();
   const readmeText = readFileSync("README.md", "utf-8");

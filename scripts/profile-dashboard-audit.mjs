@@ -258,7 +258,7 @@ async function fetchAudit(baseUrl, token, projectPath, fresh) {
   });
 }
 
-/** Create a temporary goat-flow project large enough to stress dashboard audit discovery paths. */
+/** Writes a temporary goat-flow project large enough to stress dashboard audit discovery paths. */
 function writeSyntheticProject(fileCount, agents = ["codex"]) {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-profile-"));
   mkdirSync(join(root, ".goat-flow", "footguns"), { recursive: true });

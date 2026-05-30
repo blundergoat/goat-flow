@@ -42,11 +42,13 @@ type RecommendedArtifact =
       reason: "one-time-task" | "already-exists" | "no-clear-intent";
     };
 
+/** Follow-up action shown to authors after the candidacy recommendation. */
 interface CandidacyNextStep {
   action: string;
   template?: string;
 }
 
+/** Deterministic recommendation plus evidence for which artifact type should be created. */
 export interface CandidacyResult {
   recommendedArtifact: RecommendedArtifact;
   /** 0-1 confidence in the recommendation. */
@@ -57,6 +59,7 @@ export interface CandidacyResult {
 
 const MIN_DRAFT_LINES_FOR_SKILL = 30;
 
+/** Boolean structure signals extracted from draft content before routing. */
 interface DraftSignals {
   hasStep0: boolean;
   hasVerification: boolean;
@@ -107,7 +110,7 @@ function inspectDraft(content: string, suggestedName?: string): DraftSignals {
   };
 }
 
-// eslint-disable-next-line complexity -- decision tree exhausts artifact-type signals (skill, reference, learning-loop, instruction-file, do-not-create) in priority order; splitting reduces readability
+// eslint-disable-next-line complexity -- intentional because artifact-type signals must stay in priority order
 function analyzeDraft(
   content: string,
   suggestedName?: string,
@@ -289,6 +292,7 @@ function analyzeDraft(
   };
 }
 
+/** Original and normalized description text used by reusable intent matchers. */
 interface DescriptionTokens {
   text: string;
   lower: string;
@@ -525,6 +529,10 @@ function analyzeDescription(text: string): CandidacyResult {
  *
  * The optional `config` parameter is reserved for future per-project
  * heuristic overrides (currently the v1 heuristics are project-independent).
+ *
+ * @param input - draft markdown or free-text description to classify
+ * @param _config - reserved quality config for future project-specific heuristics
+ * @returns candidacy recommendation, confidence, reasoning, and next steps
  */
 export function runCandidacyCheck(
   input: CandidacyInput,

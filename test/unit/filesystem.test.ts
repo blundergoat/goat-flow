@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
 
+/** Writes fixture files while creating parent directories as needed. */
 async function write(root: string, path: string, content = ""): Promise<void> {
   const fullPath = join(root, path);
   await mkdir(dirname(fullPath), { recursive: true });

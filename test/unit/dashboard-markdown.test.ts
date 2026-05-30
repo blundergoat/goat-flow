@@ -26,6 +26,7 @@ interface MarkdownTestWindow {
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 let importCounter = 0;
 
+/** Load a fresh renderer instance into a mocked browser global. */
 async function loadRenderer(): Promise<RenderMarkdown> {
   const testWindow: MarkdownTestWindow = {
     markdownit: MarkdownIt,

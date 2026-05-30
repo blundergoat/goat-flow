@@ -12,6 +12,7 @@ const SKILL_PATHS = [
   ".github/skills/goat-review/SKILL.md",
 ] as const;
 
+/** Read a goat-review mirror relative to the repo root for drift assertions. */
 function readSkill(path: string): string {
   return readFileSync(resolve(PROJECT_ROOT, path), "utf-8");
 }

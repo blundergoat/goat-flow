@@ -9,6 +9,7 @@ import {
   parseSavedQualityReport,
 } from "../../src/cli/quality/schema.js";
 
+/** Build a complete raw report object before schema mutation tests alter it. */
 function makeRawReport() {
   return {
     report_kind: QUALITY_REPORT_KIND,

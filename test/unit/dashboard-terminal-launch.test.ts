@@ -766,6 +766,7 @@ function makeBrowserTerminalGlobals(): {
     }
   };
   const TerminalCtor = class extends FakeTerminal {
+    /** Registers each constructed terminal so tests can inspect launch state. */
     constructor() {
       super();
       terminals.push(this);

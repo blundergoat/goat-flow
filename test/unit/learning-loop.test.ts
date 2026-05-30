@@ -37,6 +37,7 @@ function stubFS(
   };
 }
 
+/** Build a valid loaded config with targeted overrides for learning-loop facts. */
 function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   return {
     exists: true,

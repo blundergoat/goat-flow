@@ -31,6 +31,7 @@ const CANONICAL_SETUP_SECTIONS = [
   "Router Table",
 ];
 
+/** Extract H2 headings with stable naming for versioned execution-loop variants. */
 function h2Sections(content: string): string[] {
   return Array.from(content.matchAll(/^##\s+(.+)$/gm), (m) => {
     const heading = m[1].trim();
@@ -186,6 +187,7 @@ describe("encyclopedia guard", () => {
 });
 
 describe("Router Table path parity", () => {
+  /** Extract router-table paths while preserving directory coverage semantics. */
   function extractRouterPaths(content: string): Set<string> {
     const lines = content.split(/\r?\n/);
     let inSection = false;
@@ -214,6 +216,7 @@ describe("Router Table path parity", () => {
     return paths;
   }
 
+  /** Check whether a router path contract covers the exact target or a child path. */
   function hasCoverage(pathSet: Set<string>, target: string): boolean {
     if (pathSet.has(target)) return true;
     for (const p of pathSet) {

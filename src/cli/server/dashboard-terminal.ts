@@ -127,6 +127,7 @@ export function createDashboardTerminalHandlers(
     });
   }
 
+  /** Record terminal input trace events without forcing callers to know whether tracing is enabled. */
   function recordTerminalTraceInput(event: TerminalTraceEvent): void {
     recordTerminalEvent(event.projectPath, event.eventKind, {
       session_id: event.sessionId,

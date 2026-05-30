@@ -269,6 +269,7 @@ const agentInstruction: BuildCheck = {
 
 // === 2. Agent Skills ===
 
+/** Check canonical skills and references because every agent mirror must preserve the install contract. */
 function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
   const canonical = ctx.structure.skills.canonical;
   const missing: string[] = [];
@@ -342,7 +343,7 @@ function checkUnexpectedSkillReferences(
   };
 }
 
-/** Check whether installed skills declare the current GOAT Flow version. */
+/** Check installed skill versions because outdated mirrors can silently use old workflow rules. */
 function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
   const noVersion: string[] = [];
   const mismatch: string[] = [];
@@ -376,7 +377,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
-/** Check for stale skill directories that still use deprecated names. */
+/** Check stale skill directories because old names leave duplicate routing surfaces behind. */
 function checkDeprecatedSkills(ctx: AuditContext): AuditFailure | null {
   const staleNames = new Set(ctx.structure.skills.stale_names);
   const found: string[] = [];
@@ -708,6 +709,7 @@ const agentSettings: BuildCheck = {
 
 // === 4. Agent Deny Mechanism ===
 
+/** Check deny-hook presence because unsupported agents and config-based agents need different handling. */
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented
@@ -727,7 +729,7 @@ function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
-/** Check shell syntax for each installed agent hook script. */
+/** Check shell syntax; spawns bash and recover from unreadable hook dirs because fixtures may be partial. */
 function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   const failures: string[] = [];
   for (const agentFacts of ctx.agents) {
@@ -762,7 +764,7 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   };
 }
 
-/** Check whether each agent has deny patterns registered somewhere. */
+/** Check deny-pattern registration because config and hook based agents satisfy the contract differently. */
 function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     // Skip agents with no documented project-local deny mechanism.
@@ -787,7 +789,7 @@ function evidencePath(relPath: string): string {
   return relPath.replace(/\\/g, "/");
 }
 
-/** Compare installed deny hook content against the canonical template. */
+/** Compare installed deny hooks against templates; recover from missing templates because installs may be partial. */
 function checkHookVersion(ctx: AuditContext): AuditFailure | null {
   const templateFiles = [
     "guard-common.sh",
@@ -836,7 +838,7 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
-/** Run each deny hook self-test when the script is present. */
+/** Run each deny hook self-test; spawns bash and reports failures because static registration is insufficient. */
 function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     if (!agentFacts.agent.hooksDir) continue;
@@ -954,6 +956,7 @@ const CONFIGURED_SMOKE_SCRIPTS = [
   "guard-repository-writes.sh",
 ] as const;
 
+/** Hook command extracted from agent config for runtime-shaped smoke validation. */
 interface ConfiguredHookCommand {
   command: string;
   scriptFile: string;
@@ -1092,7 +1095,7 @@ function runDirectHookRuntimeSmoke(
   return status === smoke.expectedStatus && smoke.expectedPattern.test(stream);
 }
 
-/** Run a runtime-shaped blocked payload through the installed deny hook. */
+/** Run a runtime-shaped blocked payload because configured commands and direct hooks fail differently. */
 function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
     const configuredCommands = configuredGuardCommands(ctx, agentFacts);

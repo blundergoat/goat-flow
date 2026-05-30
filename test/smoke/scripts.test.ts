@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+/** Spawns bash to assert a shipped script parses before smoke tests rely on it. */
 function bashCheck(scriptPath: string): void {
   const full = resolve(PROJECT_ROOT, scriptPath);
   assert.ok(existsSync(full), `${scriptPath} should exist`);

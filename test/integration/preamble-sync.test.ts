@@ -121,6 +121,7 @@ const TOPICAL_PAIRS = TOPICAL_FILES.map((name) => ({
   ),
 }));
 
+/** Spawns quiet diff so sync contracts can assert parity without printing bodies. */
 function diffQuiet(a: string, b: string): number {
   const r = spawnSync("diff", ["-q", a, b], {
     encoding: "utf-8",

@@ -96,6 +96,7 @@ function makeCheck(
   };
 }
 
+/** Convert check fixtures into an audit scope with derived status and failures. */
 function makeScope(checks: CheckResult[]): AuditScope {
   return {
     status: checks.some((check) => check.status === "fail") ? "fail" : "pass",
@@ -141,10 +142,12 @@ function makeReport(options: {
   };
 }
 
+/** Render and parse SARIF so tests can assert its typed structure. */
 function parseSarif(report: AuditReport): ParsedSarifLog {
   return JSON.parse(renderAuditSarif(report)) as ParsedSarifLog;
 }
 
+/** Writes a target project path for SARIF location tests. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-audit-sarif-"));
   mkdirSync(join(root, ".goat-flow"), { recursive: true });

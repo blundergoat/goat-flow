@@ -24,6 +24,7 @@ import { redactEvidenceText } from "../../src/cli/evidence/redaction.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+/** Check framework-relative evidence paths against the live repo root. */
 function frameworkPathExists(path: string): boolean {
   return existsSync(join(PROJECT_ROOT, path));
 }

@@ -73,7 +73,7 @@ exit 1
   return binDir;
 }
 
-/** Run git with a deterministic PATH inside the disposable test repo. */
+/** Spawns git with a deterministic PATH inside the disposable test repo. */
 function git(root: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd: root,

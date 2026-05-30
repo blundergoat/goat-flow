@@ -303,6 +303,7 @@ const EXPECTED_RELEASE_SNAPSHOTS = [
   },
 ] as const;
 
+/** Load a versioned manifest snapshot for historical claim comparisons. */
 function loadSnapshotJson(version: string): Record<string, unknown> {
   return JSON.parse(
     readFileSync(

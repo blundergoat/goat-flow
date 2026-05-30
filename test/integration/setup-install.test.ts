@@ -28,12 +28,14 @@ after(() => {
   }
 });
 
+/** Create an isolated target project for installer side-effect assertions. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-setup-install-"));
   disposables.push(root);
   return root;
 }
 
+/** Spawns the shell installer exactly as users invoke setup --apply. */
 function runInstaller(root: string, ...extraArgs: string[]) {
   return spawnSync(
     "bash",
@@ -50,6 +52,7 @@ function runInstaller(root: string, ...extraArgs: string[]) {
   );
 }
 
+/** Spawns the TypeScript CLI installer path against a temp project fixture. */
 function runCliInstaller(root: string, ...extraArgs: string[]) {
   return spawnSync(
     "node",
@@ -69,6 +72,7 @@ function runCliInstaller(root: string, ...extraArgs: string[]) {
   );
 }
 
+/** Spawns git in a fixture repo with deterministic author metadata. */
 function git(root: string, args: string[]): void {
   const result = spawnSync("git", args, {
     cwd: root,
@@ -84,6 +88,7 @@ function git(root: string, args: string[]): void {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
+/** Writes a fixture history entry and commits it for upgrade-path tests. */
 function addCommit(root: string, subject: string): void {
   writeFileSync(join(root, "history.txt"), `${subject}\n`, { flag: "a" });
   git(root, ["add", "history.txt"]);
@@ -278,6 +283,7 @@ describe("setup --apply installer", () => {
 // ── Bug 1: Config version stuck on upgrade ──────────────────────────────
 
 describe("--update-config-version flag", () => {
+  /** Writes config.yaml, then verifies installer migration side effects. */
   it("updates only the version field in existing config.yaml", () => {
     const root = makeTempProject();
     const configDir = join(root, ".goat-flow");
@@ -326,6 +332,7 @@ describe("--update-config-version flag", () => {
 // ── Bug 2: Settings skip warning ────────────────────────────────────────
 
 describe("settings skip warning", () => {
+  /** Writes a pre-existing settings file to verify skip-warning output. */
   it("warns when guardrail hooks are installed but settings.json was skipped", () => {
     const root = makeTempProject();
     const claudeDir = join(root, ".claude");
@@ -599,6 +606,7 @@ describe("codex config migration", () => {
 // ── Bug 3: Deprecated skill cleanup ─────────────────────────────────────
 
 describe("--clean-deprecated flag", () => {
+  /** Writes deprecated skill directories and verifies cleanup removes them. */
   it("removes deprecated skill directories when flag is passed", () => {
     const root = makeTempProject();
     // Simulate a v0.9 project with deprecated skills

@@ -28,7 +28,7 @@ type TerminalWebSocket = Parameters<TerminalManager["attachWebSocket"]>[1];
 
 /** Minimal PTY surface TerminalManager needs for endpoint smoke tests. */
 interface TestPty {
-  /** Record terminal input sent through the fake PTY. */
+  /** Writes terminal input sent through the fake PTY. */
   write(data: string): void;
   /** Record terminal resize requests without opening a real PTY. */
   resize(cols: number, rows: number): void;

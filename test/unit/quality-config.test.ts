@@ -17,15 +17,18 @@ import {
   scoreArtifact,
 } from "../../src/cli/quality/skill-quality.js";
 
+/** Create an isolated project root for quality-config file discovery. */
 function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-quality-config-"));
 }
 
+/** Writes the project quality YAML after creating the harness directory. */
 function writeYaml(projectRoot: string, body: string): void {
   mkdirSync(join(projectRoot, ".goat-flow"), { recursive: true });
   writeFileSync(join(projectRoot, ".goat-flow/config.yaml"), body);
 }
 
+/** Writes a skill fixture under the default Claude skill root. */
 function writeSkill(projectRoot: string, name: string, content: string): void {
   mkdirSync(join(projectRoot, ".claude/skills", name), { recursive: true });
   writeFileSync(join(projectRoot, ".claude/skills", name, "SKILL.md"), content);

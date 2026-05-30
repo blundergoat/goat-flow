@@ -11,10 +11,12 @@ const MIRRORS = [
   ".github/skills",
 ] as const;
 
+/** Read mirrored skill files from the repo root for byte-level contract checks. */
 function read(path: string): string {
   return readFileSync(resolve(PROJECT_ROOT, path), "utf-8");
 }
 
+/** Build every installed mirror path for a skill so parity tests stay exhaustive. */
 function skillPaths(skill: string): string[] {
   return MIRRORS.map((root) => `${root}/${skill}/SKILL.md`);
 }

@@ -114,7 +114,13 @@ function toRuntimeProfile(
   };
 }
 
-/** Return the manifest-backed runtime profile for one agent id. */
+/**
+ * Return the manifest-backed runtime profile for one agent id.
+ * Throws when the manifest omits a supported runtime id because callers rely on a complete registry.
+ *
+ * @param id - supported agent id to resolve
+ * @returns runtime profile derived from workflow/manifest.json
+ */
 export function getAgentProfile(id: AgentId): AgentProfile {
   const agents = loadManifest().agents;
   const manifestAgent = agents[id];
@@ -134,7 +140,11 @@ function getKnownManifestAgents(
   );
 }
 
-/** Return the manifest-backed runtime profile record keyed by agent id. */
+/**
+ * Return the manifest-backed runtime profile record keyed by agent id.
+ *
+ * @returns all supported runtime profiles as an id-keyed map
+ */
 export function getAgentProfileMap(): Record<AgentId, AgentProfile> {
   const agents = loadManifest().agents;
   return Object.fromEntries(
@@ -145,7 +155,11 @@ export function getAgentProfileMap(): Record<AgentId, AgentProfile> {
   ) as Record<AgentId, AgentProfile>;
 }
 
-/** Return all known manifest-backed runtime profiles in canonical order. */
+/**
+ * Return all known manifest-backed runtime profiles in canonical order.
+ *
+ * @returns supported runtime profiles in manifest order
+ */
 export function getAgentProfiles(): AgentProfile[] {
   const agents = loadManifest().agents;
   return getKnownManifestAgents(agents).map(([id, agent]) =>
@@ -153,7 +167,11 @@ export function getAgentProfiles(): AgentProfile[] {
   );
 }
 
-/** Return the manifest-backed supported agent ids. */
+/**
+ * Return the manifest-backed supported agent ids.
+ *
+ * @returns supported agent ids in manifest order
+ */
 export function getKnownAgentIds(): AgentId[] {
   const agents = loadManifest().agents;
   return getKnownManifestAgents(agents).map(([id]) => id);

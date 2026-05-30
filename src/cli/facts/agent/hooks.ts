@@ -442,6 +442,7 @@ function resolveDenyHookPath(
   return resolveDenyMechanismPath(agent);
 }
 
+/** Resolve the primary deny mechanism path for agents that may use settings, scripts, or both. */
 function resolveDenyMechanismPath(agent: AgentProfile): string | null {
   if (agent.denyMechanism?.type === "deny-script") {
     return agent.denyMechanism.path;

@@ -15,6 +15,18 @@ last_reviewed: 2026-05-30
 
 ---
 
+## Lesson: Gruff side-effect comments must name the side effect
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but left the full snapshot at only 175 findings down because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
+
+**Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
+
+**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.test.ts` (search: `Writes canonical skill stubs`), `test/integration/setup-install.test.ts` (search: `Spawns the shell installer`), `.goat-flow/tasks/1.9.0/M00-gruff-ts-cleanup.md` (search: `docs.missing-side-effect-doc=0`).
+
+---
+
 ## Lesson: Cache-behaviour tests need observable contracts
 
 **Status:** active | **Created:** 2026-05-20

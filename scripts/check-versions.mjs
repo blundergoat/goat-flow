@@ -20,6 +20,7 @@ const templates = [
   "workflow/skills/goat-qa/SKILL.md",
 ];
 
+/** Collect markdown files recursively so version checks cover nested docs and playbooks. */
 function walkMarkdown(dir, out = []) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {

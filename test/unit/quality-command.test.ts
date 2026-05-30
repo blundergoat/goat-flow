@@ -33,6 +33,7 @@ after(() => {
   }
 });
 
+/** Writes an isolated project root with the quality command log directory. */
 function makeTempProject(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-command-"));
   mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -358,6 +359,7 @@ describe("quality prompt content", () => {
   it("defaults run_date from local calendar getters, not UTC ISO date", () => {
     const RealDate = Date;
     class FakeDate extends RealDate {
+      /** Freeze construction at a UTC boundary that differs from local date math. */
       constructor(value?: string | number | Date) {
         super(value ?? "2026-04-19T00:00:00.000Z");
       }

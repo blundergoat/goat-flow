@@ -59,6 +59,7 @@ interface CommandResult {
   output: string;
 }
 
+/** Writes canonical skill stubs into a template or installed mirror root. */
 function writeSkillFiles(root: string, baseDir: string, name: string): void {
   for (const relativeFile of getSkillFiles(name)) {
     const fullPath = join(root, baseDir, name, relativeFile);
@@ -70,6 +71,7 @@ function writeSkillFiles(root: string, baseDir: string, name: string): void {
   }
 }
 
+/** Writes a complete filesystem drift fixture with workflow templates and installed copies. */
 function setupFixture(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-drift-"));
   // Template: meta references stay under workflow/skills/reference/
@@ -229,6 +231,7 @@ function setupFixture(): string {
   return root;
 }
 
+/** Writes guardrail hook fixtures for drift checks that compare hook manifests. */
 function writeHookFixtures(root: string): void {
   mkdirSync(join(root, "workflow", "hooks", "agent-config"), {
     recursive: true,
@@ -267,6 +270,7 @@ function writeHookFixtures(root: string): void {
   );
 }
 
+/** Clone the repo into a temp fixture while reusing node_modules for speed. */
 function setupInstallRoundTripFixture(): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
@@ -284,6 +288,7 @@ function setupInstallRoundTripFixture(): string {
   return root;
 }
 
+/** Writes cloned fixture patches so install round-trip tests include a reference skill. */
 function patchInstallRoundTripFixture(root: string): {
   agentIds: string[];
   skillRoots: string[];
