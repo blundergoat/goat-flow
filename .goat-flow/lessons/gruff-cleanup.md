@@ -37,11 +37,11 @@ last_reviewed: 2026-05-31
 
 **Status:** active | **Created:** 2026-05-31
 
-**What happened:** During the gruff naming cleanup, a mechanical rewrite left unrelated test files staged as deleted. `git status --short` caught the problem before final verification; affected paths included `test/unit/audit-command/harness.test.ts` and `test/unit/dashboard-toast.test.ts`.
+**What happened:** During the gruff naming cleanup, a mechanical rewrite left unrelated test files staged as deleted. `git status --short` caught the problem before final verification; affected paths included `test/unit/audit-command/harness.test.ts` and `test/unit/dashboard-toast.test.ts` (both were later removed for real when the audit unit suites were regrouped under `test/unit/audit-harness/`, so they no longer exist in the tree).
 
 **Root cause:** I treated a broad cleanup as a sequence of source edits and did not immediately inspect staged state after the mechanical step. Because the deletions were staged, a worktree-only restore was insufficient and the unexpected `D` entries remained until I checked status again.
 
-**Prevention:** After any bulk gruff cleanup, run `git status --short` before formatting or tests. If unrelated deletes appear, restore both index and worktree state for only those paths, then re-run the targeted gruff rule to confirm no finding was reintroduced. Evidence anchors: `test/unit/audit-command/harness.test.ts`, `test/unit/dashboard-toast.test.ts`, status pattern (search: `D  test/unit/dashboard-toast.test.ts`).
+**Prevention:** After any bulk gruff cleanup, run `git status --short` before formatting or tests. If unrelated deletes appear, restore both index and worktree state for only those paths, then re-run the targeted gruff rule to confirm no finding was reintroduced. Evidence anchors: `CHANGELOG.md` (search: `gruff-ts size cleanup`) for the bulk-rewrite campaign that staged these deletions, and `.goat-flow/skill-playbooks/gruff-code-quality.md` (search: `Verification Gate`) for the post-cleanup verification discipline.
 
 ## Lesson: Run cheap style gates before expensive gruff verification
 

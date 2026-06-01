@@ -402,23 +402,36 @@ describe("gruff-code-quality hook", () => {
 
   it("does not discover binaries from the removed glob or build-output paths", () => {
     const root = makeRoot();
-    // Security (ADR-032): discovery must not auto-execute a name-matched binary
-    // from an arbitrary `*/.venv/bin` subtree or `target/debug` build output.
+    // Security (ADR-032): a name-matched binary planted only on a removed path -
+    // the `*/.venv/bin` glob or the `target/debug` build-output dir - must not be
+    // discovered or executed. This is the inverse of the extension-routing test
+    // above: same Edit + changed-range-at-line-3 scenario, but the binary lives
+    // only on a removed path, so a surfaced finding (or any invocation) would
+    // mean it was wrongly run. Silence + an empty invocation log proves the path
+    // is no longer searched. Pre-change, this binary was discovered and executed.
     writeMockGruffBinary(root, "nested/.venv/bin", "gruff-ts", "glob.rule");
-    writeMockGruffBinary(root, "target/debug", "gruff-ts", "debug.rule");
+    writeMockGruffBinary(root, "target/debug", "gruff-py", "debug.rule");
     writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
+    writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
     mkdirSync(join(root, "src"), { recursive: true });
-    writeFileSync(join(root, "src", "example.ts"), "const value = 1;\n");
+    writeFileSync(join(root, "src", "example.ts"), "a\nb\nc\n");
+    writeFileSync(join(root, "src", "example.py"), "a\nb\nc\n");
 
-    const result = runHook(
-      root,
-      { tool_name: "Write", tool_input: { file_path: "src/example.ts" } },
-      "/usr/bin:/bin",
-    );
-
-    assert.equal(result.status, 0, result.stderr);
-    // No binary on a supported path -> hook fails soft and stays silent.
-    assert.equal(result.stdout, "");
+    for (const file of ["src/example.ts", "src/example.py"]) {
+      const result = runHook(
+        root,
+        {
+          tool_name: "Edit",
+          tool_input: {
+            file_path: file,
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
+        },
+        "/usr/bin:/bin",
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, "", `expected silence for ${file}`);
+    }
     assert.deepEqual(readInvocations(root), []);
   });
 
