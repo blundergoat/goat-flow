@@ -65,9 +65,10 @@ describe("quality subcommand parsing", () => {
     assert.equal(HOOK_SUBCOMMANDS.has("sync"), true);
     assert.equal(VALID_FORMATS.includes("json"), true);
     assert.match(REMOVED_COMMANDS.check, /audit --check-drift/);
-    assert.match(REMOVED_COMMANDS.critique, /quality/);
-    assert.match(REMOVED_COMMANDS.fix, /audit|quality/);
-    assert.match(REMOVED_COMMANDS.eval, /quality evaluate/);
+    assert.match(REMOVED_COMMANDS.critique, /\bquality\b/);
+    assert.match(REMOVED_COMMANDS.fix, /\b(?:audit|quality)\b/);
+    assert.match(REMOVED_COMMANDS.eval, /\bquality candidacy\b/);
+    assert.doesNotMatch(REMOVED_COMMANDS.eval, /quality evaluate/);
     assert.equal(captureStdoutWrite("payload"), "payload\n");
     assert.equal(
       classifyProjectState({ exists: () => false, readFile: () => null }).state,
@@ -198,7 +199,7 @@ describe("skill subcommand parsing", () => {
 
 describe("quality candidacy draft naming", () => {
   it("uses the platform path basename instead of POSIX-only splitting", () => {
-    const commandSource = readFileSync(
+    const qualityCommandSource = readFileSync(
       resolve(
         import.meta.dirname,
         "..",
@@ -210,7 +211,7 @@ describe("quality candidacy draft naming", () => {
       ),
       "utf-8",
     );
-    assert.match(commandSource, /basename\(path\)\.replace/);
-    assert.doesNotMatch(commandSource, /path\.split\("\/"\)/);
+    assert.match(qualityCommandSource, /basename\(path\)\.replace/);
+    assert.doesNotMatch(qualityCommandSource, /path\.split\("\/"\)/);
   });
 });

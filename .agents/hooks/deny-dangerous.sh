@@ -158,9 +158,10 @@ json_fallback_nested_string_value() {
   if value="$(json_fallback_string_value "$payload" "$key_re")"; then
     printf '%s' "$value"
     return 0
+  else
+    status=$?
+    [[ "$status" -eq 2 ]] && return 2
   fi
-  status=$?
-  [[ "$status" -eq 2 ]] && return 2
 
   local nested_key nested=""
   for nested_key in toolArgs tool_args; do
@@ -168,9 +169,10 @@ json_fallback_nested_string_value() {
       if value="$(json_fallback_string_value "$nested" "$key_re")"; then
         printf '%s' "$value"
         return 0
+      else
+        status=$?
+        [[ "$status" -eq 2 ]] && return 2
       fi
-      status=$?
-      [[ "$status" -eq 2 ]] && return 2
     else
       status=$?
       [[ "$status" -eq 2 ]] && return 2
@@ -197,13 +199,14 @@ extract_tool_name() {
   local payload="$1"
   local tool=""
   local fallback_status=0
+  local unsafe=0
   local tool_pattern='"(toolName|tool_name|name)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   tool="$(json_value "$payload" '.toolName // .tool_name // .toolCall.name')"
   if [[ -z "$tool" ]] && ! command -v jq >/dev/null 2>&1; then
     fallback_status=0
     tool="$(json_fallback_nested_string_value "$payload" 'toolName|tool_name|name')" || fallback_status=$?
     if [[ "$fallback_status" -ne 0 ]]; then
-      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      [[ "$fallback_status" -eq 2 ]] && unsafe=1
       tool=""
     fi
   fi
@@ -211,6 +214,8 @@ extract_tool_name() {
     tool="${BASH_REMATCH[2]}"
   fi
   printf '%s' "$tool"
+  [[ "$unsafe" -eq 1 ]] && return 2
+  return 0
 }
 
 extract_command_text() {
@@ -218,6 +223,7 @@ extract_command_text() {
   local command=""
   local file_path=""
   local fallback_status=0
+  local unsafe=0
   local command_pattern='"(command|CommandLine|commandLine|input)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   local path_pattern='"(file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   if [[ -n "$CHECK_COMMAND" ]]; then
@@ -262,13 +268,13 @@ extract_command_text() {
     fallback_status=0
     command="$(json_fallback_nested_string_value "$payload" 'command|CommandLine|commandLine|input')" || fallback_status=$?
     if [[ "$fallback_status" -ne 0 ]]; then
-      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      [[ "$fallback_status" -eq 2 ]] && unsafe=1
       command=""
     fi
     fallback_status=0
     file_path="$(json_fallback_nested_string_value "$payload" 'file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath')" || fallback_status=$?
     if [[ "$fallback_status" -ne 0 ]]; then
-      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      [[ "$fallback_status" -eq 2 ]] && unsafe=1
       file_path=""
     fi
   fi
@@ -282,6 +288,8 @@ extract_command_text() {
     command="${command} ${file_path}"
   fi
   printf '%s' "${command# }"
+  [[ "$unsafe" -eq 1 ]] && return 2
+  return 0
 }
 
 json_escape() {
@@ -1250,7 +1258,7 @@ main() {
     GOAT_DENY_DANGEROUS_HOOK="${BASH_SOURCE[0]}" exec bash "$GOAT_HOOK_LIB_DIR/deny-dangerous-self-test.sh" "--self-test=$SELF_TEST_MODE"
   fi
 
-  local payload structured_input payload_trimmed tool_name command command_policy
+  local payload structured_input payload_trimmed tool_name command command_policy extraction_status
   JSON_EXTRACTION_UNSAFE=0
   payload="$(read_payload)"
   structured_input=0
@@ -1263,8 +1271,12 @@ main() {
   tool_name=""
   command=""
   if [[ "$structured_input" -eq 1 ]]; then
-    tool_name="$(extract_tool_name "$payload")"
-    command="$(extract_command_text "$payload")"
+    extraction_status=0
+    tool_name="$(extract_tool_name "$payload")" || extraction_status=$?
+    [[ "$extraction_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+    extraction_status=0
+    command="$(extract_command_text "$payload")" || extraction_status=$?
+    [[ "$extraction_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
     if [[ "$JSON_EXTRACTION_UNSAFE" -eq 1 ]]; then
       if [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name" || tool_is_secret_file_operation "$tool_name"; then
         block "Hook payload contains unsupported JSON escapes. Fail closed and rerun with jq installed or a simpler payload."

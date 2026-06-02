@@ -411,6 +411,40 @@ describe("gruff-code-quality hook", () => {
     assert.doesNotMatch(result.stdout, /old\.rule/);
   });
 
+  it("uses staged hunks for pathless fallback files", () => {
+    const root = makeRoot();
+    initGit(root);
+    writeMockGruff(root);
+    writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(
+      join(root, "src", "example.ts"),
+      "const existingDebt = true;\nconst unchanged = 1;\nconst touched = 'before';\n",
+    );
+    git(root, ["add", "src/example.ts"]);
+    writeFileSync(
+      join(root, "src", "example.ts"),
+      "const existingDebt = true;\nconst unchanged = 1;\nconst touched = 'after';\n",
+    );
+    git(root, ["add", "src/example.ts"]);
+
+    const result = runHook(
+      root,
+      {
+        hookEventName: "PostToolUse",
+        toolCall: { name: "replace_file_content", args: {} },
+      },
+      "/usr/bin:/bin",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /\[warning\] src\/example\.ts:3 changed\.rule - changed line finding/,
+    );
+    assert.doesNotMatch(result.stdout, /no changed lines detected/);
+  });
+
   it("does not print whole-file findings when no changed range is available", () => {
     const root = makeRoot();
     initGit(root);

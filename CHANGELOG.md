@@ -12,6 +12,7 @@ Guardrail hotfix for 1.9.0 hook regressions and release-safety gaps.
 - **Review artifacts moved out of scratchpad** - `/goat-review` now writes refutation ledgers and cross-model refuter JSON under `.goat-flow/logs/review/`, with setup, manifest, and gitignore support for the new local-only log bucket. `.goat-flow/scratchpad/` remains generic WIP.
 - **Quality-report follow-ups** - Shell validation now covers `scripts/installers/*.sh` in hot-path commands and preflight, learning-loop `(search: ...)` validation accepts both backtick and double-quoted needles, and stale `SBAO` / full-depth critique wording was aligned with current `goat-critique` and `goat-plan` behavior.
 - **Release command safety** - Removed `critique`, `fix`, and `eval` command aliases now return explicit migration guidance, and `npm publish` runs the existing `publish:check` gate through `prepublishOnly`.
+- **PR review follow-ups** - Deny-hook fallback JSON parsing now preserves unsafe escape status, gruff changed-range fallback includes staged hunks, ADR-028 `gh comment` body-file coverage is restored, and audit rejects configured deny launchers that point at the wrong registered script.
 
 ## v1.9.0 - 2026-05-28
 

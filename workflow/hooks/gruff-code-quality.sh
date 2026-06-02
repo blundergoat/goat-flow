@@ -28,6 +28,8 @@
 # Changed-line model:
 #   Prefer changed ranges from the PostToolUse payload when present.
 #   Otherwise parse `git diff --unified=0 -- <file>` for tracked files.
+#   Pathless fallback files also consult staged hunks when no unstaged hunk
+#   exists, because those paths can come from `git diff --cached`.
 #   New/untracked files are treated as fully changed. If no range can be
 #   derived, the hook exits quietly apart from a short stderr diagnostic.
 #   Analyzers with native changed-region support own the filtering: gruff-py is
@@ -236,14 +238,23 @@ git_changed_supported_paths() {
   done | awk '!seen[$0]++'
 }
 
-file_paths_for_payload() {
+payload_file_paths() {
   local payload="$1"
-  local root="$2"
   local paths
   paths="$(json_file_paths "$payload" || true)"
   [[ -n "$paths" ]] || paths="$(fallback_file_paths "$payload")"
   if [[ -n "$paths" ]]; then
     printf '%s\n' "$paths" | awk 'length($0) && !seen[$0]++'
+  fi
+}
+
+file_paths_for_payload() {
+  local payload="$1"
+  local root="$2"
+  local paths
+  paths="$(payload_file_paths "$payload")"
+  if [[ -n "$paths" ]]; then
+    printf '%s\n' "$paths"
     return
   fi
   git_changed_supported_paths "$root"
@@ -353,12 +364,19 @@ git_diff_ranges() {
   local root="$1"
   local rel_path="$2"
   local abs_path="$3"
-  local diff_output
+  local include_cached="${4:-0}"
+  local diff_output ranges
   if ! git -C "$root" ls-files --error-unmatch -- "$rel_path" >/dev/null 2>&1; then
     [[ -f "$abs_path" ]] && all_file_range "$abs_path"
     return
   fi
   diff_output="$(git -C "$root" diff --unified=0 -- "$rel_path" 2>/dev/null || true)"
+  ranges="$(parse_diff_ranges "$diff_output")"
+  if [[ -n "$ranges" || "$include_cached" -eq 0 ]]; then
+    printf '%s' "$ranges"
+    return
+  fi
+  diff_output="$(git -C "$root" diff --cached --unified=0 -- "$rel_path" 2>/dev/null || true)"
   parse_diff_ranges "$diff_output"
 }
 
@@ -373,7 +391,11 @@ changed_ranges() {
     printf '%s' "$ranges"
     return
   fi
-  git_diff_ranges "$root" "$rel_path" "$abs_path"
+  if [[ -n "$(payload_file_paths "$payload")" ]]; then
+    git_diff_ranges "$root" "$rel_path" "$abs_path" 0
+  else
+    git_diff_ranges "$root" "$rel_path" "$abs_path" 1
+  fi
 }
 
 self_test() {

@@ -307,6 +307,58 @@ describe("agent deny hook template comparison", () => {
     assert.match(result.message, /configured hook script exited 127/);
     assert.equal(result.evidence, ".codex/hooks.json");
   });
+
+  it("fails when a configured hook command points at another agent mirror", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: installedGuardrailContent(".codex/hooks", templates, {
+          ".codex/hooks.json": JSON.stringify({
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: ".claude/hooks/deny-dangerous.sh",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        }),
+      }),
+    });
+
+    const result = denyCheck.run(ctx);
+    assert.ok(result, "expected configured hook path mismatch failure");
+    assert.match(
+      result.message,
+      /points at \.claude\/hooks\/deny-dangerous\.sh, expected \.codex\/hooks\/deny-dangerous\.sh/,
+    );
+    assert.equal(result.evidence, ".codex/hooks.json");
+  });
 });
 
 describe("agent deny hook template comparison", () => {

@@ -99,7 +99,7 @@ export const REMOVED_COMMANDS: Record<string, string> = {
   critique:
     '"critique" was removed in v1.1.0. Use "quality" for agent-driven assessment.',
   fix: '"fix" was removed in v1.1.0. Use "audit" or "quality" to identify issues, then apply fixes directly.',
-  eval: '"eval" was removed in v1.1.0. Use "quality evaluate" for skill/artifact evaluation or "audit" for setup validation.',
+  eval: '"eval" was removed in v1.1.0. Use "quality candidacy" for skill/playbook fit checks or "audit" for setup validation.',
   scan: '"scan" was removed in v1.1.0. Use "audit" for setup validation.',
   check:
     '"check" was removed in v1.1.0. Use "audit --check-drift" for deterministic drift/content checks.',

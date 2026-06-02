@@ -342,6 +342,17 @@ function registeredDenyRelPath(
   return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
 }
 
+/** Normalize registered hook paths to the same slash style as parsed shell command paths. */
+function normalizedRegisteredDenyRelPath(
+  agentFacts: AuditContext["agents"][number],
+): string | null {
+  const registeredPath = registeredDenyRelPath(agentFacts);
+  if (registeredPath === null) return null;
+  return posix.normalize(
+    registeredPath.replace(/\\/gu, "/").replace(/^\.\//u, ""),
+  );
+}
+
 const CONFIGURED_SMOKE_SCRIPTS = ["deny-dangerous.sh"] as const;
 
 /** Hook command extracted from agent config for runtime-shaped smoke validation. */
@@ -445,15 +456,33 @@ function configuredGuardCommands(
   });
 }
 
+function configuredHookCommandPathFailure(
+  agentFacts: AuditContext["agents"][number],
+  configured: ConfiguredHookCommand,
+): string | null {
+  if (configured.scriptPath === null) {
+    return `${agentFacts.agent.id} configured hook command does not name an exact guard script path: ${configured.command}`;
+  }
+  const expectedScriptPath = normalizedRegisteredDenyRelPath(agentFacts);
+  if (
+    expectedScriptPath !== null &&
+    configured.scriptPath !== expectedScriptPath
+  ) {
+    return `${agentFacts.agent.id} configured hook command points at ${configured.scriptPath}, expected ${expectedScriptPath}: ${configured.command}`;
+  }
+  return null;
+}
+
 function runConfiguredHookCommandSmoke(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
   configured: ConfiguredHookCommand,
 ): { ok: boolean; message: string; evidence: string } {
-  if (configured.scriptPath === null) {
+  const pathFailure = configuredHookCommandPathFailure(agentFacts, configured);
+  if (pathFailure !== null) {
     return {
       ok: false,
-      message: `${agentFacts.agent.id} configured hook command does not name an exact guard script path: ${configured.command}`,
+      message: pathFailure,
       evidence: configured.configPath,
     };
   }
