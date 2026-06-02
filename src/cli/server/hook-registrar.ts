@@ -208,6 +208,46 @@ function hookConfigExists(projectPath: string, agent: AgentProfile): boolean {
   );
 }
 
+function ensureGoatFlowGitignoreEntry(
+  projectPath: string,
+  entry: string,
+): void {
+  const gitignorePath = join(projectPath, ".goat-flow", ".gitignore");
+  assertWithinProject(projectPath, gitignorePath);
+  mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+
+  const original = existsSync(gitignorePath)
+    ? readFileSync(gitignorePath, "utf-8")
+    : "";
+  const hasFinalNewline = original.length === 0 || original.endsWith("\n");
+  const lines = original.split(/\r?\n/u).filter((line, index, all) => {
+    return index < all.length - 1 || line.length > 0;
+  });
+  if (lines.includes(entry)) return;
+
+  const next = `${lines.join("\n")}${lines.length > 0 ? "\n" : ""}${entry}\n`;
+  writeFileAtomic(
+    gitignorePath,
+    hasFinalNewline ? next : next.trimEnd(),
+    projectPath,
+  );
+}
+
+/**
+ * Keep the shared `.goat-flow/hook-lib/` policy store tracked by Git.
+ *
+ * Adds both `!hook-lib/` and `!hook-lib/**` negations to `.goat-flow/.gitignore` so the
+ * deny-dangerous policy modules survive a fresh clone; without them a gitignored
+ * `.goat-flow/` drops the store and the guard fails closed on checkout. Idempotent -
+ * each entry is appended only when absent (writes `.goat-flow/.gitignore`).
+ *
+ * @param projectPath - target project root whose `.goat-flow/.gitignore` is updated
+ */
+function ensureHookLibGitignoreEntries(projectPath: string): void {
+  ensureGoatFlowGitignoreEntry(projectPath, "!hook-lib/");
+  ensureGoatFlowGitignoreEntry(projectPath, "!hook-lib/**");
+}
+
 function copyHookScripts(
   projectPath: string,
   agent: AgentProfile,
@@ -222,6 +262,7 @@ function copyHookScripts(
     chmodSync(target, 0o755);
   }
   if (spec.id === "deny-dangerous") {
+    ensureHookLibGitignoreEntries(projectPath);
     const targetDir = join(projectPath, ".goat-flow", "hook-lib");
     mkdirSync(targetDir, { recursive: true });
     for (const file of DENY_DANGEROUS_HOOK_LIB_FILES) {

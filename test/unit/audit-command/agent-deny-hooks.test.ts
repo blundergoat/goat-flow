@@ -119,6 +119,41 @@ describe("agent deny hook template comparison", () => {
     assert.match(result.message, /does not name an exact guard script path/);
     assert.equal(result.evidence, ".codex/hooks.json");
   });
+
+  it("fails when legacy split guardrail hooks are still installed", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".codex/hooks/guard-repository-writes.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: installedGuardrailContent(".codex/hooks", templates, {
+          ".codex/hooks/guard-repository-writes.sh": "# old split hook\n",
+        }),
+      }),
+    });
+
+    const result = denyCheck.run(ctx);
+    assert.ok(result, "expected legacy guardrail drift failure");
+    assert.match(result.message, /legacy guardrail hook/);
+    assert.equal(result.evidence, ".codex/hooks/guard-repository-writes.sh");
+  });
 });
 
 describe("agent deny hook template comparison", () => {
@@ -220,6 +255,56 @@ describe("agent deny hook template comparison", () => {
     const result = denyCheck.run(ctx);
     assert.ok(result, "expected configured command runtime failure");
     assert.match(result.message, /configured hook command/);
+    assert.equal(result.evidence, ".codex/hooks.json");
+  });
+
+  it("runs the configured launcher string instead of bypassing it with bash script path", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: installedGuardrailContent(".codex/hooks", templates, {
+          ".codex/hooks.json": JSON.stringify({
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command:
+                        'root="/missing-goat-flow-root"; bash "$root/.codex/hooks/deny-dangerous.sh"',
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        }),
+      }),
+    });
+
+    const result = denyCheck.run(ctx);
+    assert.ok(result, "expected configured launcher runtime failure");
+    assert.match(result.message, /configured hook script exited 127/);
     assert.equal(result.evidence, ".codex/hooks.json");
   });
 });

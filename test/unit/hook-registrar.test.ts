@@ -145,6 +145,24 @@ describe("hook registrar", () => {
     });
   });
 
+  it("unignores hook-lib when enabling deny-dangerous on a stale goat-flow gitignore", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+      writeFileSync(join(root, ".goat-flow", ".gitignore"), "*\n!.gitignore\n");
+
+      applyHookState(HOOK_ID, true, root);
+
+      const gitignore = readFileSync(
+        join(root, ".goat-flow", ".gitignore"),
+        "utf-8",
+      );
+      assert.match(gitignore, /^!hook-lib\/$/m);
+      assert.match(gitignore, /^!hook-lib\/\*\*$/m);
+    });
+  });
+
   it("does not treat shared AGENTS.md surfaces as a Codex or Antigravity opt-in", () => {
     withTempProject((root) => {
       writeFileSync(join(root, "AGENTS.md"), "# Local agent instructions\n");

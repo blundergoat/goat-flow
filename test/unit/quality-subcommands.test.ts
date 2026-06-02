@@ -22,8 +22,8 @@ import {
   HOOK_SUBCOMMANDS,
   REMOVED_COMMANDS,
   VALID_FORMATS,
-  type ParsedCLI,
 } from "../../src/cli/cli-types.js";
+import type { ParsedCLI } from "../../src/cli/cli-types.js";
 import { handleHooksCommand } from "../../src/cli/hooks-command.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
@@ -65,6 +65,9 @@ describe("quality subcommand parsing", () => {
     assert.equal(HOOK_SUBCOMMANDS.has("sync"), true);
     assert.equal(VALID_FORMATS.includes("json"), true);
     assert.match(REMOVED_COMMANDS.check, /audit --check-drift/);
+    assert.match(REMOVED_COMMANDS.critique, /quality/);
+    assert.match(REMOVED_COMMANDS.fix, /audit|quality/);
+    assert.match(REMOVED_COMMANDS.eval, /quality evaluate/);
     assert.equal(captureStdoutWrite("payload"), "payload\n");
     assert.equal(
       classifyProjectState({ exists: () => false, readFile: () => null }).state,
@@ -195,7 +198,7 @@ describe("skill subcommand parsing", () => {
 
 describe("quality candidacy draft naming", () => {
   it("uses the platform path basename instead of POSIX-only splitting", () => {
-    const cliSource = readFileSync(
+    const commandSource = readFileSync(
       resolve(
         import.meta.dirname,
         "..",
@@ -207,7 +210,7 @@ describe("quality candidacy draft naming", () => {
       ),
       "utf-8",
     );
-    assert.match(cliSource, /basename\(path\)\.replace/);
-    assert.doesNotMatch(cliSource, /path\.split\("\/"\)/);
+    assert.match(commandSource, /basename\(path\)\.replace/);
+    assert.doesNotMatch(commandSource, /path\.split\("\/"\)/);
   });
 });

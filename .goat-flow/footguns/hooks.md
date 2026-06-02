@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-06-01
+last_reviewed: 2026-06-02
 ---
 
 **Last independent review:** 2026-05-26 - Active entries re-verified against current split guardrail anchors and central self-test. Workflow, Claude, GitHub, Codex, and Antigravity guardrail self-tests return `PASS: deny-dangerous self-test`; Antigravity uses `.agents/hooks.json` plus scripts in `.agents/hooks/` for PreToolUse guardrails. The direct `cat .env` probe is blocked by `patterns-paths.sh`; coverage relies on self-test cases plus live harness blocking for that command shape.
@@ -141,7 +141,7 @@ last_reviewed: 2026-06-01
 
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
-**Status:** active (amended 2026-06-02 - see Amendment below) | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** A model can post to GitHub through `gh issue comment ... --body-file ...` even when `git push` is blocked and the hook catches heredoc command substitution. The guardrail appears to stop the risky shape (`$(cat <<EOF ...)`) but still allows the same external write through a temporary body file. A narrow first fix still missed valid `gh` grammar variants such as inherited flags after the topic (`gh issue --repo owner/repo comment ...`) and `xargs ... gh issue comment ...` pipeline consumers.
 

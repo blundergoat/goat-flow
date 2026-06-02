@@ -146,6 +146,51 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /migrated deny hook registration/);
   });
 
+  it("preserves disabled split guardrail config when migrating to deny-dangerous", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    for (const file of [
+      "guard-common.sh",
+      "guard-destructive-shell.sh",
+      "guard-secret-paths.sh",
+      "guard-repository-writes.sh",
+      "guardrails-self-test.sh",
+    ]) {
+      writeFileSync(
+        join(root, ".codex", "hooks", file),
+        "#!/usr/bin/env bash\n",
+      );
+    }
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.8.0"',
+        "hooks:",
+        "  guard-destructive-shell:",
+        "    enabled: false",
+        "  guard-secret-paths:",
+        "    enabled: true",
+        "  guard-repository-writes:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.doesNotMatch(
+      config,
+      /guard-(destructive-shell|secret-paths|repository-writes)/,
+    );
+    assert.match(config, /deny-dangerous:\n    enabled: false/);
+  });
+
   it("prunes stale per-skill reference files during upgrades", () => {
     const root = makeTempProject();
     const firstInstall = runInstaller(root, "--agent", "claude");

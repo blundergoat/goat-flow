@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.9.0"
+goat-flow-reference-version: "1.9.1"
 ---
 # Changelog
 
@@ -249,7 +249,7 @@ Each of these has cost a downstream user a real upgrade-day surprise. Don't writ
 - **Same change in two places.** A bug fix listed under **Fixed** and again under **Changed** reads as two separate releases of work. Cross-reference instead.
 - **Stripped-out reasons.** "Removed the old caching layer" without "because it leaked memory on workers >2GB" tells the user nothing about whether they will be affected.
 - **Tombstone entries.** "Cleanup: removed deprecated code." The reader cannot tell whether anything they use was deprecated. Name what was removed.
-- **Version-mismatched surfaces.** `package.json` says 1.7.1, `CHANGELOG.md` tops out at 1.6.4, README says 1.9.0. Every release should bump every version surface; preflight should enforce.
+- **Version-mismatched surfaces.** `package.json` says 1.7.1, `CHANGELOG.md` tops out at 1.6.4, README says 1.9.1. Every release should bump every version surface; preflight should enforce.
 - **Entries for the wrong audience.** Internal-only refactor entries in a user-facing release surface. Either omit, or move to an internal "engineering notes" file with a different audience contract.
 - **Deprecation without a removal version.** "Will be removed in a future release" is a future surprise. Name the target version.
 

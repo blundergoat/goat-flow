@@ -37,7 +37,7 @@ async function loadRenderer(): Promise<RenderMarkdown> {
     markdownit: MarkdownIt,
     jsyaml: { load },
   };
-  (globalThis as unknown as { window: MarkdownTestWindow }).window = testWindow;
+  Reflect.set(globalThis, "window", testWindow);
   await import(`../../src/dashboard/markdown.ts?case=${importCounter++}`);
   assert.equal(typeof testWindow.renderMarkdown, "function");
   return testWindow.renderMarkdown;

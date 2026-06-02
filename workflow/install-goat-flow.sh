@@ -444,6 +444,7 @@ let lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
 const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes):\s*$/u;
 let changed = false;
+let legacyEnabled = "true";
 
 let hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
 if (hooksIndex !== -1) {
@@ -452,7 +453,11 @@ if (hooksIndex !== -1) {
     if (i > hooksIndex && staleHookRe.test(lines[i])) {
       changed = true;
       i += 1;
-      while (i < lines.length && /^    /.test(lines[i])) i += 1;
+      while (i < lines.length && /^    /.test(lines[i])) {
+        const match = lines[i].match(/^    enabled:\s*(true|false)\s*$/u);
+        if (match && match[1] === "false") legacyEnabled = "false";
+        i += 1;
+      }
       i -= 1;
       continue;
     }
@@ -469,7 +474,7 @@ if (hooksIndex !== -1) {
       insertAt += 1;
       while (insertAt < lines.length && /^    /.test(lines[insertAt])) insertAt += 1;
     }
-    lines.splice(insertAt, 0, "  deny-dangerous:", "    enabled: true");
+    lines.splice(insertAt, 0, "  deny-dangerous:", `    enabled: ${legacyEnabled}`);
     changed = true;
   }
   if (changed) {
@@ -1257,7 +1262,7 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
     # shellcheck disable=SC2016
-    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/deny-dangerous.sh\""}]}'
+    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf '\''BLOCKED: Guard cannot start: git repository root unavailable.\\n'\'' >&2; exit 2; } ;; esac; bash \"$root/.claude/hooks/deny-dangerous.sh\""}]}'
   fi
   echo ""
 fi

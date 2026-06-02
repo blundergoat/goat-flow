@@ -8,9 +8,11 @@ import {
   describe,
   getRepoAudit,
   it,
+  makeCtx,
   makeTempProject,
   PROJECT_ROOT,
   runAudit,
+  stubFS,
 } from "./helpers.js";
 import { computeContent } from "../../../src/cli/audit/audit-content.js";
 import { shouldAutoRunDrift } from "../../../src/cli/audit/audit-drift-policy.js";
@@ -46,31 +48,17 @@ import type { AuditContext } from "../../../src/cli/audit/types.js";
 function helperContractContext(
   instructionFiles: ReadonlyArray<string>,
 ): AuditContext {
-  return {
-    fs: {
-      exists: (path: string) => instructionFiles.includes(path),
-      readFile: () => null,
-      lineCount: () => 0,
-      readJson: () => null,
-      listDir: () => [],
-      isExecutable: () => false,
-      glob: () => [],
-      existsGlob: () => false,
-    },
+  return makeCtx({
+    fs: stubFS({ exists: (path: string) => instructionFiles.includes(path) }),
     structure: {
+      required_files: [],
+      required_dirs: [],
       skills: { canonical: ["goat"], stale_names: [], references: {} },
+      agents: {},
     },
     agents: [],
     agentFilter: "codex",
-    config: {
-      exists: true,
-      valid: true,
-      config: {
-        version: "1.0.0",
-        toolchain: { test: [], lint: [], build: [], package: [], format: [] },
-      },
-    },
-  } as unknown as AuditContext;
+  });
 }
 
 /** Assert harness check arrays stay populated for every audit concern. */

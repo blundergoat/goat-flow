@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -71,6 +71,7 @@
     "check-package-links": "node scripts/check-package-readme-links.mjs",
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
+    "prepublishOnly": "npm run publish:check",
     "publish:check": "npm run build && npm run check-versions && npm run check-package-links"
   },
   "keywords": [

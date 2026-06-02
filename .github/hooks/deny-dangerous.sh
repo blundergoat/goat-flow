@@ -49,11 +49,20 @@ deny_dangerous_unavailable() {
 }
 
 resolve_goat_flow_root() {
-  local gcd
+  local gcd root
   gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
   case "$gcd" in
-    /*) dirname "$gcd" ;;
-    *) git rev-parse --show-toplevel ;;
+    */.git/modules/*|.git/modules/*)
+      root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+      printf '%s\n' "$root"
+      ;;
+    /*)
+      dirname "$gcd"
+      ;;
+    *)
+      root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+      printf '%s\n' "$root"
+      ;;
   esac
 }
 
@@ -76,6 +85,101 @@ json_value() {
   fi
 }
 
+json_fallback_string_value() {
+  local payload="$1"
+  local key_re="$2"
+  awk -v key_re="^(${key_re})$" '
+    function parse_string(pos,    out, c, esc) {
+      out = ""
+      esc = 0
+      for (; pos <= n; pos += 1) {
+        c = substr(s, pos, 1)
+        if (esc == 1) {
+          if (c == "\"" || c == "\\" || c == "/") out = out c
+          else if (c == "b") out = out "\b"
+          else if (c == "f") out = out "\f"
+          else if (c == "n") out = out "\n"
+          else if (c == "r") out = out "\r"
+          else if (c == "t") out = out "\t"
+          else {
+            parse_error = 1
+            return 0
+          }
+          esc = 0
+          continue
+        }
+        if (c == "\\") {
+          esc = 1
+          continue
+        }
+        if (c == "\"") {
+          parsed = out
+          return pos + 1
+        }
+        out = out c
+      }
+      parse_error = 1
+      return 0
+    }
+
+    { s = s $0 "\n" }
+    END {
+      if (length(s) > 0) s = substr(s, 1, length(s) - 1)
+      n = length(s)
+      for (i = 1; i <= n; i += 1) {
+        if (substr(s, i, 1) != "\"") continue
+        next_pos = parse_string(i + 1)
+        if (parse_error == 1) exit 2
+        key = parsed
+        i = next_pos
+        while (i <= n && substr(s, i, 1) ~ /[[:space:]]/) i += 1
+        if (substr(s, i, 1) != ":") continue
+        i += 1
+        while (i <= n && substr(s, i, 1) ~ /[[:space:]]/) i += 1
+        if (substr(s, i, 1) != "\"") continue
+        value_pos = parse_string(i + 1)
+        if (parse_error == 1) exit 2
+        if (key ~ key_re) {
+          print parsed
+          exit 0
+        }
+        i = value_pos
+      }
+      exit 3
+    }
+  ' <<<"$payload"
+}
+
+json_fallback_nested_string_value() {
+  local payload="$1"
+  local key_re="$2"
+  local value=""
+  local status=0
+  if value="$(json_fallback_string_value "$payload" "$key_re")"; then
+    printf '%s' "$value"
+    return 0
+  fi
+  status=$?
+  [[ "$status" -eq 2 ]] && return 2
+
+  local nested_key nested=""
+  for nested_key in toolArgs tool_args; do
+    if nested="$(json_fallback_string_value "$payload" "$nested_key")"; then
+      if value="$(json_fallback_string_value "$nested" "$key_re")"; then
+        printf '%s' "$value"
+        return 0
+      fi
+      status=$?
+      [[ "$status" -eq 2 ]] && return 2
+    else
+      status=$?
+      [[ "$status" -eq 2 ]] && return 2
+    fi
+  done
+
+  return 3
+}
+
 detect_output_mode() {
   local payload="$1"
   if [[ "$payload" == *'"toolName"'* && "$payload" != *'"tool_name"'* ]]; then
@@ -92,8 +196,17 @@ detect_output_mode() {
 extract_tool_name() {
   local payload="$1"
   local tool=""
+  local fallback_status=0
   local tool_pattern='"(toolName|tool_name|name)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   tool="$(json_value "$payload" '.toolName // .tool_name // .toolCall.name')"
+  if [[ -z "$tool" ]] && ! command -v jq >/dev/null 2>&1; then
+    fallback_status=0
+    tool="$(json_fallback_nested_string_value "$payload" 'toolName|tool_name|name')" || fallback_status=$?
+    if [[ "$fallback_status" -ne 0 ]]; then
+      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      tool=""
+    fi
+  fi
   if [[ -z "$tool" && "$payload" =~ $tool_pattern ]]; then
     tool="${BASH_REMATCH[2]}"
   fi
@@ -104,45 +217,61 @@ extract_command_text() {
   local payload="$1"
   local command=""
   local file_path=""
+  local fallback_status=0
   local command_pattern='"(command|CommandLine|commandLine|input)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   local path_pattern='"(file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   if [[ -n "$CHECK_COMMAND" ]]; then
     printf '%s' "$CHECK_COMMAND"
     return
   fi
-  command="$(json_value "$payload" '
-    def extract_command(value):
-      if value == null then empty
-      elif (value | type) == "object" then (value.command // value.CommandLine // value.commandLine // value.input // empty)
-      elif (value | type) == "string" then
-        ((value | fromjson? // {}) | if type == "object" then (.command // .CommandLine // .commandLine // .input // empty) else empty end)
-      else empty end;
-    [
-      .tool_input.command,
-      .toolCall.args.CommandLine,
-      .toolCall.args.command,
-      .toolCall.args.commandLine,
-      .toolCall.args.input,
-      .command,
-      .input,
-      extract_command(.toolArgs),
-      extract_command(.tool_args)
-    ] | map(select(type == "string" and length > 0)) | first
-  ')"
-  file_path="$(json_value "$payload" '
-    [
-      .tool_input.file_path,
-      .tool_input.path,
-      .toolCall.args.AbsolutePath,
-      .toolCall.args.TargetFile,
-      .toolCall.args.FilePath,
-      .toolCall.args.SearchPath,
-      .toolCall.args.path,
-      .toolCall.args.file_path,
-      .path,
-      .file_path
-    ] | map(select(type == "string" and length > 0)) | first
-  ')"
+  if command -v jq >/dev/null 2>&1; then
+    command="$(json_value "$payload" '
+      def extract_command(value):
+        if value == null then empty
+        elif (value | type) == "object" then (value.command // value.CommandLine // value.commandLine // value.input // empty)
+        elif (value | type) == "string" then
+          ((value | fromjson? // {}) | if type == "object" then (.command // .CommandLine // .commandLine // .input // empty) else empty end)
+        else empty end;
+      [
+        .tool_input.command,
+        .toolCall.args.CommandLine,
+        .toolCall.args.command,
+        .toolCall.args.commandLine,
+        .toolCall.args.input,
+        .command,
+        .input,
+        extract_command(.toolArgs),
+        extract_command(.tool_args)
+      ] | map(select(type == "string" and length > 0)) | first
+    ')"
+    file_path="$(json_value "$payload" '
+      [
+        .tool_input.file_path,
+        .tool_input.path,
+        .toolCall.args.AbsolutePath,
+        .toolCall.args.TargetFile,
+        .toolCall.args.FilePath,
+        .toolCall.args.SearchPath,
+        .toolCall.args.path,
+        .toolCall.args.file_path,
+        .path,
+        .file_path
+      ] | map(select(type == "string" and length > 0)) | first
+    ')"
+  else
+    fallback_status=0
+    command="$(json_fallback_nested_string_value "$payload" 'command|CommandLine|commandLine|input')" || fallback_status=$?
+    if [[ "$fallback_status" -ne 0 ]]; then
+      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      command=""
+    fi
+    fallback_status=0
+    file_path="$(json_fallback_nested_string_value "$payload" 'file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath')" || fallback_status=$?
+    if [[ "$fallback_status" -ne 0 ]]; then
+      [[ "$fallback_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+      file_path=""
+    fi
+  fi
   if [[ -z "$command" && "$payload" =~ $command_pattern ]]; then
     command="${BASH_REMATCH[2]}"
   fi
@@ -997,6 +1126,8 @@ prepare_segment_context() {
   local cmd="$1"
   local depth="${2:-0}"
   local policy_cmd
+  local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
+  local saved_has_redirect saved_has_pipe
 
   if [ "$depth" -gt 3 ]; then
     block "Deeply nested command substitution. Simplify the command." || return $?
@@ -1031,7 +1162,21 @@ prepare_segment_context() {
   if [[ "$policy_cmd" =~ $shell_c_re ]]; then
     local inner_c="${BASH_REMATCH[5]}"
     if [[ -n "$inner_c" ]]; then
+      saved_cmd_trimmed="$CMD_TRIMMED"
+      saved_cmd_normalized="$CMD_NORMALIZED"
+      saved_cmd_verb="$CMD_VERB"
+      saved_cmd_unquoted="$CMD_UNQUOTED"
+      saved_cmd_lower="$CMD_LOWER"
+      saved_has_redirect="$HAS_REDIRECT"
+      saved_has_pipe="$HAS_PIPE"
       check_command_segments "$inner_c" $((depth + 1)) || return $?
+      CMD_TRIMMED="$saved_cmd_trimmed"
+      CMD_NORMALIZED="$saved_cmd_normalized"
+      CMD_VERB="$saved_cmd_verb"
+      CMD_UNQUOTED="$saved_cmd_unquoted"
+      CMD_LOWER="$saved_cmd_lower"
+      HAS_REDIRECT="$saved_has_redirect"
+      HAS_PIPE="$saved_has_pipe"
     fi
   fi
 }
@@ -1078,7 +1223,7 @@ main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --self-test)
-        SELF_TEST_MODE="smoke"
+        SELF_TEST_MODE="full"
         ;;
       --self-test=*)
         SELF_TEST_MODE="${1#--self-test=}"
@@ -1106,6 +1251,7 @@ main() {
   fi
 
   local payload structured_input payload_trimmed tool_name command command_policy
+  JSON_EXTRACTION_UNSAFE=0
   payload="$(read_payload)"
   structured_input=0
   payload_trimmed="${payload#"${payload%%[![:space:]]*}"}"
@@ -1119,6 +1265,11 @@ main() {
   if [[ "$structured_input" -eq 1 ]]; then
     tool_name="$(extract_tool_name "$payload")"
     command="$(extract_command_text "$payload")"
+    if [[ "$JSON_EXTRACTION_UNSAFE" -eq 1 ]]; then
+      if [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name" || tool_is_secret_file_operation "$tool_name"; then
+        block "Hook payload contains unsupported JSON escapes. Fail closed and rerun with jq installed or a simpler payload."
+      fi
+    fi
     if [[ -n "$tool_name" ]]; then
       if ! tool_is_shell_command "$tool_name"; then
         if { [[ "$GOAT_GUARD_SCOPE" == "secret" ]] || [[ "$GOAT_GUARD_NAME" == "deny-dangerous.sh" ]]; } && tool_is_secret_file_operation "$tool_name"; then
@@ -1133,7 +1284,7 @@ main() {
   fi
 
   if [[ -z "$command" ]]; then
-    if [[ "$structured_input" -eq 1 ]] && { [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name"; }; then
+    if [[ "$structured_input" -eq 1 ]] && { [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name" || tool_is_secret_file_operation "$tool_name"; }; then
       block "Hook payload did not expose a bash command to evaluate"
     fi
     allow

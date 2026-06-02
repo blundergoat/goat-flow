@@ -63,7 +63,7 @@ function makeDriftedInputs(): {
     skills: {
       canonical: [...SKILL_NAMES],
       stale_names: [],
-    } as unknown as ManifestJson["skills"],
+    },
     agents: {} as ManifestJson["agents"],
     facts: {
       dashboard_views: ["ship", "setup", "terminal"],
@@ -145,7 +145,7 @@ describe("validateManifest: packaged vs dev mode", () => {
       skills: {
         canonical: ["this-skill-does-not-exist"],
         stale_names: [],
-      } as unknown as ManifestJson["skills"],
+      },
       agents: {} as ManifestJson["agents"],
       facts: {
         dashboard_views: [],

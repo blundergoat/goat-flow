@@ -118,13 +118,14 @@ function commandPath(agent: AgentProfile, script: string): string {
 function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   const path = commandPath(agent, spec.primaryScript);
   if (agent.id === "codex") return path;
-  // dirname(--git-common-dir) is the main repo root in both main and worktree checkouts; --show-toplevel returns the worktree's working dir and would break worktree hooks.
+  const failClosed =
+    agent.id === "antigravity"
+      ? `{ printf '{"decision":"deny","reason":"Guard cannot start: git repository root unavailable."}\\n'; exit 0; }`
+      : `{ printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }`;
+  // dirname(--git-common-dir) is the main repo root in linked worktrees; absorbed submodule gitdirs live under .git/modules and must use their own worktree root.
   const resolveRoot = `gcd="$(git rev-parse --git-common-dir 2>/dev/null)"`;
-  const selectRoot = `case "$gcd" in /*) root="$(dirname "$gcd")" ;; *) root="$(git rev-parse --show-toplevel)" ;; esac`;
-  if (agent.id === "antigravity") {
-    return `${resolveRoot} || { printf '{"decision":"deny","reason":"Guard cannot start: git repository root unavailable."}\\n'; exit 0; }; ${selectRoot}; bash "$root/${path}"`;
-  }
-  return `${resolveRoot} || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; ${selectRoot}; bash "$root/${path}"`;
+  const selectRoot = `case "$gcd" in */.git/modules/*|.git/modules/*) root="$(git rev-parse --show-toplevel 2>/dev/null)" || ${failClosed} ;; /*) root="$(dirname "$gcd")" ;; *) root="$(git rev-parse --show-toplevel 2>/dev/null)" || ${failClosed} ;; esac`;
+  return `${resolveRoot} || ${failClosed}; ${selectRoot}; bash "$root/${path}"`;
 }
 
 /** Build Copilot's Windows hook command with a denial response when bash is unavailable. */

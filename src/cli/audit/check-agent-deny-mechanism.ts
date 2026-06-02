@@ -18,6 +18,23 @@ import {
 
 // === 4. Agent Deny Mechanism ===
 
+const LEGACY_DENY_HOOK_FILES = [
+  "guard-common.sh",
+  "guard-destructive-shell.sh",
+  "guard-secret-paths.sh",
+  "guard-repository-writes.sh",
+  "guardrails-self-test.sh",
+  "deny-dangerous.self-test.sh",
+];
+
+const DENY_HOOK_TEMPLATE_FILES = [
+  "deny-dangerous.sh",
+  "hook-lib/patterns-shell.sh",
+  "hook-lib/patterns-paths.sh",
+  "hook-lib/patterns-writes.sh",
+  "hook-lib/deny-dangerous-self-test.sh",
+];
+
 /** Check deny-hook presence because unsupported agents and config-based agents need different handling. */
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
@@ -98,50 +115,105 @@ function evidencePath(relPath: string): string {
   return relPath.replace(/\\/g, "/");
 }
 
+function checkLegacyHookDrift(
+  ctx: AuditContext,
+  agentId: string,
+  hooksDir: string,
+): AuditFailure | null {
+  for (const legacyFile of LEGACY_DENY_HOOK_FILES) {
+    const legacyRelPath = join(hooksDir, legacyFile);
+    if (ctx.fs.readFile(legacyRelPath) !== null) {
+      return {
+        check: "Agent deny mechanism",
+        message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.sh`,
+        evidence: evidencePath(legacyRelPath),
+        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.sh.`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Read a canonical hook template's text from the packaged `workflow/hooks/` tree.
+ *
+ * Swallows read errors and returns null as a fallback when the template is absent or
+ * unreadable, so drift checks can treat "no canonical template" and "installed copy
+ * differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
+ *
+ * @param templateFile - path under `workflow/hooks/` (e.g. `deny-dangerous.sh` or `hook-lib/patterns-shell.sh`)
+ * @returns the template's UTF-8 contents, or null when the file is missing or unreadable
+ */
+function readHookTemplateContent(templateFile: string): string | null {
+  const templatePath = getTemplatePath(`workflow/hooks/${templateFile}`);
+  if (!existsSync(templatePath)) return null;
+  try {
+    return readFileSync(templatePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+function installedTemplateRelPath(
+  hooksDir: string,
+  templateFile: string,
+): string {
+  return templateFile.startsWith("hook-lib/")
+    ? join(".goat-flow", templateFile)
+    : join(hooksDir, templateFile);
+}
+
+function checkTemplateDrift(
+  ctx: AuditContext,
+  agentId: string,
+  hooksDir: string,
+): AuditFailure | null {
+  for (const templateFile of DENY_HOOK_TEMPLATE_FILES) {
+    const templateContent = readHookTemplateContent(templateFile);
+    if (templateContent === null) continue;
+    const installedRelPath = installedTemplateRelPath(hooksDir, templateFile);
+    const installed = ctx.fs.readFile(installedRelPath);
+    if (installed === null) {
+      return {
+        check: "Agent deny mechanism",
+        message: `${templateFile} is missing for ${agentId}`,
+        evidence: evidencePath(installedRelPath),
+        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to update the hook files.`,
+      };
+    }
+    if (installed.trimEnd() !== templateContent.trimEnd()) {
+      return {
+        check: "Agent deny mechanism",
+        message: `${templateFile} for ${agentId} differs from the current goat-flow template (v${AUDIT_VERSION})`,
+        evidence: evidencePath(installedRelPath),
+        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to update the hook files.`,
+      };
+    }
+  }
+  return null;
+}
+
 /** Compare installed deny hooks against templates; recover from missing templates because installs may be partial. */
 function checkHookVersion(ctx: AuditContext): AuditFailure | null {
-  const templateFiles = [
-    "deny-dangerous.sh",
-    "hook-lib/patterns-shell.sh",
-    "hook-lib/patterns-paths.sh",
-    "hook-lib/patterns-writes.sh",
-    "hook-lib/deny-dangerous-self-test.sh",
-  ];
   for (const agentFacts of ctx.agents) {
-    if (!agentFacts.agent.hooksDir) continue;
-    const denyRelPath = join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
+    const hooksDir = agentFacts.agent.hooksDir;
+    if (!hooksDir) continue;
+    const legacyFailure = checkLegacyHookDrift(
+      ctx,
+      agentFacts.agent.id,
+      hooksDir,
+    );
+    if (legacyFailure) return legacyFailure;
+
+    const denyRelPath = join(hooksDir, "deny-dangerous.sh");
     if (ctx.fs.readFile(denyRelPath) === null) continue;
 
-    for (const templateFile of templateFiles) {
-      const templatePath = getTemplatePath(`workflow/hooks/${templateFile}`);
-      if (!existsSync(templatePath)) continue;
-      let templateContent: string;
-      try {
-        templateContent = readFileSync(templatePath, "utf-8");
-      } catch {
-        continue;
-      }
-      const installedRelPath = templateFile.startsWith("hook-lib/")
-        ? join(".goat-flow", templateFile)
-        : join(agentFacts.agent.hooksDir, templateFile);
-      const installed = ctx.fs.readFile(installedRelPath);
-      if (installed === null) {
-        return {
-          check: "Agent deny mechanism",
-          message: `${templateFile} is missing for ${agentFacts.agent.id}`,
-          evidence: evidencePath(installedRelPath),
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentFacts.agent.id}\` to update the hook files.`,
-        };
-      }
-      if (installed.trimEnd() !== templateContent.trimEnd()) {
-        return {
-          check: "Agent deny mechanism",
-          message: `${templateFile} for ${agentFacts.agent.id} differs from the current goat-flow template (v${AUDIT_VERSION})`,
-          evidence: evidencePath(installedRelPath),
-          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentFacts.agent.id}\` to update the hook files.`,
-        };
-      }
-    }
+    const templateFailure = checkTemplateDrift(
+      ctx,
+      agentFacts.agent.id,
+      hooksDir,
+    );
+    if (templateFailure) return templateFailure;
   }
   return null;
 }
@@ -160,8 +232,18 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     // on-disk shell hook can run the registered self-test.
     if (content === null) continue;
     const denyPath = join(ctx.projectPath, denyRelPath);
+    const dispatcherRelPath = join(
+      agentFacts.agent.hooksDir,
+      "deny-dangerous.sh",
+    );
+    const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
+    const env =
+      ctx.fs.readFile(dispatcherRelPath) === null
+        ? process.env
+        : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
     try {
       execFileSync("bash", [denyPath, "--self-test=smoke"], {
+        env,
         stdio: "pipe",
         timeout: 30000,
       });
@@ -379,16 +461,12 @@ function runConfiguredHookCommandSmoke(
     agentFacts.agent.id,
     configured.scriptFile,
   );
-  const result = spawnSync(
-    "bash",
-    [join(ctx.projectPath, configured.scriptPath)],
-    {
-      cwd: ctx.projectPath,
-      encoding: "utf8",
-      input: smoke.input,
-      timeout: 5000,
-    },
-  );
+  const result = spawnSync("bash", ["-lc", configured.command], {
+    cwd: ctx.projectPath,
+    encoding: "utf8",
+    input: smoke.input,
+    timeout: 5000,
+  });
   const status = result.status ?? (result.error ? -1 : 0);
   if (status === 126 || status === 127) {
     return {

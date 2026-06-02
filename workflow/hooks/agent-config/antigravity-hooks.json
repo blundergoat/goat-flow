@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.agents/hooks/deny-dangerous.sh\"",
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf '{\"decision\":\"deny\",\"reason\":\"Guard cannot start: git repository root unavailable.\"}\\n'; exit 0; } ;; esac; bash \"$root/.agents/hooks/deny-dangerous.sh\"",
             "timeout": 30
           }
         ]

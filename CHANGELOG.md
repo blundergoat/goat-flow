@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.9.1 - 2026-06-02
+
+Guardrail hotfix for 1.9.0 hook regressions and release-safety gaps.
+
+- **`deny-dangerous` nested-pipe bypass fixed** - The shell parser now preserves outer pipeline context while inspecting nested `bash -c` payloads, so commands like `bash -c "echo safe" | python3 -c "x"` are denied instead of being allowed by the benign nested shell segment. Bare `--self-test` now runs the full self-test suite by default, and the full suite includes the nested-pipe regression.
+- **No-`jq` JSON extraction fails closed** - Copilot-style hook payload parsing now has a shell fallback for escaped JSON strings when `jq` is unavailable. Escaped-quote payloads are inspected instead of truncated, and unsupported escape forms fail closed for shell and secret-path hooks.
+- **Submodule and bare-repo launcher hardening** - Agent launcher templates distinguish linked worktree gitdirs from absorbed submodule gitdirs and guard every `git rev-parse --show-toplevel` fallback. A missing worktree root now exits through the guard's deny path instead of falling through as an unguarded command failure.
+- **Audit validates the configured launcher path** - `runConfiguredHookCommandSmoke` now executes the registered launcher string rather than bypassing it with `bash <script>`, and per-agent self-tests use the installed dispatcher through `GOAT_DENY_DANGEROUS_HOOK`. Audit also flags stale 1.8.0 split guardrail files left behind after migration.
+- **Hook sync and install migration fixes** - Dashboard/CLI hook sync now adds the `.goat-flow/.gitignore` exceptions required for committed `hook-lib/` policy files. The installer preserves a disabled split-guardrail toggle when collapsing legacy guard hooks into `deny-dangerous`.
+- **Release command safety** - Removed `critique`, `fix`, and `eval` command aliases now return explicit migration guidance, and `npm publish` runs the existing `publish:check` gate through `prepublishOnly`.
+
 ## v1.9.0 - 2026-05-28
 
 Worktree-safe hook launchers - Claude and Antigravity guardrails now run correctly inside `git worktree add` checkouts.

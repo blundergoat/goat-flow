@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/deny-dangerous.sh\""
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; esac; bash \"$root/.claude/hooks/deny-dangerous.sh\""
           }
         ]
       }
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
           }
         ]
       },
@@ -92,7 +92,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
           }
         ]
       },
@@ -101,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel)\" ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
+            "command": "gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; }; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; /*) root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || { printf 'BLOCKED: Guard cannot start: git repository root unavailable.\\n' >&2; exit 2; } ;; esac; bash \"$root/.claude/hooks/gruff-code-quality.sh\""
           }
         ]
       }

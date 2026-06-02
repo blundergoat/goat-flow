@@ -11,22 +11,22 @@
 #   behaviour when .goat-flow/hook-lib is missing from a hook's directory.
 #
 #   Each deny hook re-execs into this script when invoked with
-#   `--self-test[=mode]`, so `deny-dangerous.sh --self-test` is equivalent to
-#   `deny-dangerous-self-test.sh --self-test --hook shell`.
+#   `--self-test[=mode]`, so `deny-dangerous.sh --self-test` runs the full
+#   regression corpus unless `--self-test=smoke` is requested explicitly.
 #
 # Usage:
 #   bash deny-dangerous-self-test.sh [--self-test[=smoke|full]] [--hook <name>]
 #
 #   Examples:
-#     bash deny-dangerous-self-test.sh                          # smoke
+#     bash deny-dangerous-self-test.sh                          # full
 #     bash deny-dangerous-self-test.sh --self-test=full         # full
 #     GOAT_DENY_DANGEROUS_HOOK=.claude/hooks/deny-dangerous.sh bash deny-dangerous-self-test.sh
 #
 # Modes:
 #   smoke   Fast coverage of the canonical block/allow cases per hook,
-#           plus the missing-hook-lib fail-closed checks. Default.
+#           plus the missing-hook-lib fail-closed checks.
 #   full    Smoke plus comprehensive per-hook block/allow coverage and
-#           Copilot/Antigravity JSON payload checks.
+#           Copilot/Antigravity JSON payload checks. Default.
 #
 # Exit:
 #   0 when every executed assertion passes; prints a PASS summary line.
@@ -36,12 +36,12 @@
 
 set -euo pipefail
 
-SELF_TEST_MODE="smoke"
+SELF_TEST_MODE="full"
 HOOK_FILTER=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --self-test) SELF_TEST_MODE="smoke" ;;
+    --self-test) SELF_TEST_MODE="full" ;;
     --self-test=*) SELF_TEST_MODE="${1#--self-test=}" ;;
     --hook)
       shift
@@ -186,6 +186,36 @@ expect_antigravity_secret_file_block() {
   fi
 }
 
+expect_no_jq_copilot_block() {
+  local hook="$1"
+  local payload="$2"
+  local label="$3"
+  selected_hook "$hook" || {
+    record_skip
+    return
+  }
+  executed=$((executed + 1))
+  local tmp bin output status tool
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  for tool in bash git dirname sed awk cat; do
+    ln -s "$(command -v "$tool")" "$bin/$tool"
+  done
+  set +e
+  output="$(printf '%s' "$payload" | PATH="$bin" bash "$(hook_path "$hook")" 2>&1)"
+  status=$?
+  set -e
+  rm -rf "$tmp"
+  if [[ "$status" -ne 0 ]]; then
+    record_fail "$hook no-jq Copilot payload should exit 0 for $label (exit=$status)"
+    return
+  fi
+  if [[ "$output" != *'"permissionDecision":"deny"'* ]]; then
+    record_fail "$hook no-jq Copilot payload should return deny JSON for $label"
+  fi
+}
+
 expect_missing_common_fails_closed() {
   local hook="$1"
   selected_hook "$hook" || {
@@ -290,6 +320,7 @@ run_full() {
   expect_block shell "rm --recursive src" "rm long recursive source tree"
   expect_block shell "true && rm -rf /" "chained rm"
   expect_block shell 'bash -c "echo ok; rm -rf /"' "bash -c chained rm"
+  expect_block shell 'bash -c "echo safe" | python3 -c "x"' "bash -c pipe to interpreter"
   expect_block shell 'echo Z2l0IHB1c2g= | base64 -d | sh' "base64 pipe shell"
   expect_block shell "powershell -c remove-item -recurse -force ." "powershell remove-item"
   expect_block shell "pwsh --command remove-item -recurse -force ." "powershell double-dash command remove-item"
@@ -368,6 +399,8 @@ run_full() {
   expect_copilot_block shell "rm -rf /" "rm -rf"
   expect_copilot_block paths "cat .env" ".env read"
   expect_copilot_block writes "git push" "git push"
+  expect_no_jq_copilot_block shell '{"toolName":"bash","toolArgs":"{\"command\":\"echo \\\"safe\\\"; rm -rf /\"}"}' "escaped quote command"
+  expect_no_jq_copilot_block shell '{"toolName":"bash","toolArgs":"{\"command\":\"echo \\u0020\"}"}' "unsupported unicode escape"
 
   expect_antigravity_block shell "rm -rf /" "rm -rf"
   expect_antigravity_block paths "cat .env" ".env read"

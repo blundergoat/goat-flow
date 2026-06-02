@@ -216,7 +216,7 @@ function handleProjectsStatusRequest(
 
   if (paths.length === 1) {
     const result = results[0];
-    if (result && result.state !== "error" && typeof result.path === "string") {
+    if (result?.state !== "error" && typeof result?.path === "string") {
       ctx.recordDashboardEvent(result.path, "project.switch", {
         state: result.state,
         identity: "identity" in result ? result.identity : "",
