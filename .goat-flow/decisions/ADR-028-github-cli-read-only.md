@@ -1,6 +1,6 @@
 # ADR-028: Treat GitHub CLI as read-only for agents
 
-**Status:** Implemented
+**Status:** Amended (2026-06-02) - see Amendment below
 **Date:** 2026-05-20
 
 ## Context
@@ -41,3 +41,34 @@ If a downstream project wants agent-authored GitHub writes, it must make that an
 This is reversible as a local project policy, not as the shared default. A project can remove or narrow the `gh` write block only after documenting a stronger approval flow and adding replacement tests for the write paths it permits.
 
 Revisit this ADR if the agent runtimes provide a reliable, auditable, per-command approval primitive for external shared-system writes that can distinguish direct user approval from forwarded third-party text.
+
+## Amendment (2026-06-02): Carve-out for `gh issue comment` and `gh pr comment`
+
+The "Allow all `gh` commands" alternative remains rejected. The hook continues to block PR review/merge/close, issue create/close/edit/delete/lock/transfer, release writes, repo mutations, label writes, workflow runs, gist/secret/variable/key/auth/codespace/project mutations, cache deletion, and `gh api` non-GET/HEAD methods or body-field forms.
+
+Two named subcommands are now allowed through `is_gh_write_operation`:
+
+- `gh issue comment`
+- `gh pr comment`
+
+### Why narrow the policy now
+
+The original incident command shape (`gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md`) is reopened by this amendment. The reasoning:
+
+- The 2026-05-20 incident root cause was an agent treating forwarded Slack text as user authorization, not the existence of the `gh comment` surface. A blanket block on comment subcommands papers over that misjudgment by removing the tool; it does not teach the agent to refuse forwarded-authorization patterns.
+- Comments are the lowest-blast-radius `gh` write: reversible (delete/edit), no code shipped, no branch protection bypassed, no CI triggered. This is materially different from `gh pr merge`, `gh pr review --approve`, `gh release create`, or `gh workflow run`, all of which remain blocked.
+- The original ADR conflated "comments" with "writes" — but `gh pr review` (formal review that can satisfy branch protection) and `gh pr merge` (ships code) are a different threat model than a conversation comment.
+
+### Compensating controls
+
+- The hook still blocks the `gh api` write path, so an agent cannot reach the comments endpoint through `gh api ... -X POST -f body=...` even though `gh issue comment` is allowed. Asymmetric on purpose: the named subcommand surface is auditable and obvious in a transcript; arbitrary `api` writes are not.
+- Comment writes still go through the host runtime's per-call permission prompt. The original ADR characterised this as insufficient on its own; it remains insufficient on its own. The carve-out is acceptable only because (a) the comment surface is low-stakes and reversible and (b) the prompt is the second line of defence, not the only one.
+- All other `gh` write paths remain hook-blocked and require the user to run them manually.
+
+### What stays blocked
+
+`gh pr review`, `gh pr merge`, `gh pr create`, `gh pr edit`, `gh pr close/reopen/ready/update-branch`, `gh issue create`, `gh issue close/reopen/edit/delete/lock/unlock/pin/unpin/transfer/develop`, all release/repo/label/workflow/run/gist/secret/variable/ssh-key/gpg-key/auth/codespace/extension/project/cache write subcommands, and `gh api` POST/PUT/PATCH/DELETE or body-field-bearing calls.
+
+### Reversibility of the amendment
+
+Revert by restoring `issue:comment` and `pr:comment` to the `is_gh_write_operation` case statement in `patterns-writes.sh` and flipping the corresponding `expect_allow` lines in `deny-dangerous-self-test.sh` back to `expect_block`. The regression corpus for the `gh api` comments endpoint stays as-is.

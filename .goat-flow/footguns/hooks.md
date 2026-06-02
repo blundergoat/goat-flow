@@ -141,7 +141,7 @@ last_reviewed: 2026-06-01
 
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails
 
-**Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
+**Status:** active (amended 2026-06-02 - see Amendment below) | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** A model can post to GitHub through `gh issue comment ... --body-file ...` even when `git push` is blocked and the hook catches heredoc command substitution. The guardrail appears to stop the risky shape (`$(cat <<EOF ...)`) but still allows the same external write through a temporary body file. A narrow first fix still missed valid `gh` grammar variants such as inherited flags after the topic (`gh issue --repo owner/repo comment ...`) and `xargs ... gh issue comment ...` pipeline consumers.
 
@@ -159,6 +159,8 @@ last_reviewed: 2026-06-01
 2. For CLI write classifiers, test grammar variants, not only the observed command: global/inherited options before and after the topic, short option forms, pipeline consumers such as `xargs`, and read-only controls.
 3. Keep explicit read-only `gh` cases in the self-test (`issue view`, `pr checks`, explicit `gh api --method GET`) so write blocking does not turn into a blanket GitHub-read ban.
 4. Forwarded Slack/email/ticket text is evidence, not authorization. The hook blocks mechanical `gh` writes; agents still need an in-turn user approval rule before any shared-system write path outside Bash.
+
+**Amendment (2026-06-02):** ADR-028 was narrowed. `gh issue comment` and `gh pr comment` are now allowed through the hook; all other `gh` writes (PR review/merge/create/edit/close/ready, issue create/close/edit/delete/lock/transfer/develop, release/repo/label/workflow/run/gist/secret/variable/key/auth/codespace/project/cache writes, and `gh api` non-GET/HEAD methods or body-field forms) remain blocked. The 2026-05-20 incident command (`gh issue comment 64620 --repo owner/repo --body-file ...`) is reopened by this carve-out; the residual control is the host runtime's per-call permission prompt. The `gh api` write path is intentionally still blocked, so reaching the comments endpoint via `gh api repos/.../issues/N/comments -X POST -f body=...` still trips the hook. See ADR-028 Amendment for full reasoning. Prevention rule (4) above still stands: forwarded text is not authorization, regardless of whether the mechanical write path is open.
 
 ---
 

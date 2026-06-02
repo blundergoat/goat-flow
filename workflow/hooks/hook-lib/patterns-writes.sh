@@ -204,9 +204,9 @@ is_gh_write_operation() {
   local subcommand="${words[$subcommand_index]:-}"
   subcommand="${subcommand,,}"
   case "$topic:$subcommand" in
-    issue:create|issue:comment|issue:close|issue:reopen|issue:edit|issue:delete|issue:lock|issue:unlock|issue:pin|issue:unpin|issue:transfer|issue:develop)
+    issue:create|issue:close|issue:reopen|issue:edit|issue:delete|issue:lock|issue:unlock|issue:pin|issue:unpin|issue:transfer|issue:develop)
       return 0 ;;
-    pr:create|pr:comment|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch)
+    pr:create|pr:review|pr:merge|pr:close|pr:reopen|pr:edit|pr:ready|pr:update-branch)
       return 0 ;;
     release:create|release:upload|release:delete|release:edit)
       return 0 ;;
