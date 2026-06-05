@@ -40,6 +40,12 @@ function spawnEperm(): NodeJS.ErrnoException {
   return error;
 }
 
+function completedEperm(): NodeJS.ErrnoException & { status: number } {
+  const error = spawnEperm() as NodeJS.ErrnoException & { status: number };
+  error.status = 0;
+  return error;
+}
+
 describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
@@ -249,6 +255,75 @@ describe("agent deny hook template comparison", () => {
       /configured hook command for deny-dangerous\.sh could not spawn bash \(EPERM:/,
     );
     assert.doesNotMatch(result.message, /exit -1/);
+  });
+
+  it("ignores sandbox error metadata when hook commands completed", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    childProcess.execFileSync = (() => {
+      throw completedEperm();
+    }) as typeof childProcess.execFileSync;
+    childProcess.spawnSync = (() =>
+      ({
+        status: 2,
+        signal: null,
+        error: spawnEperm(),
+        output: [
+          null,
+          "",
+          "BLOCKED: Policy repository: git push is not allowed.",
+        ],
+        pid: 0,
+        stdout: "",
+        stderr: "BLOCKED: Policy repository: git push is not allowed.",
+      }) as ReturnType<
+        typeof childProcess.spawnSync
+      >) as typeof childProcess.spawnSync;
+    syncBuiltinESMExports();
+
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: installedGuardrailContent(".codex/hooks", templates, {
+          ".codex/hooks.json": JSON.stringify({
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: ".codex/hooks/deny-dangerous.sh",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        }),
+        listDir: (path) =>
+          path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
+      }),
+    });
+
+    assert.equal(denyCheck.run(ctx), null);
   });
 
   it("fails when a configured hook command hides the script path in shell text", () => {

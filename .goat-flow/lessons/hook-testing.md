@@ -13,6 +13,8 @@ last_reviewed: 2026-06-05
 
 **Prevention:** When a sandbox finding involves audit/preflight hook checks, reproduce the exact runtime layer: direct hook script, configured command smoke, and a Node `child_process` probe. Audit and preflight diagnostics must surface `EPERM`/`ENOENT`/timeout as environment failures instead of syntax or hook-behavior defects. Evidence anchors: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `spawnFailureFor`), `scripts/preflight-checks.sh` (search: `spawnFailureMessage`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `reports sandbox spawn denial`).
 
+**Updated 2026-06-05:** A follow-up probe showed two subtler cases: Node `execFileSync` / `spawnSync` can attach `EPERM` error metadata while also reporting a successful child status and expected stdout/stderr, and `spawnSync(..., { input })` can hang while a shell-side `printf` pipe completes. Treating any `result.error` as fatal caused a false audit failure after the hook had actually completed; pushing runtime JSON through Node-owned stdin caused configured-command smoke timeouts. Prevention: check `status` before classifying child-process errors, and feed hook runtime payloads through a shell-side pipe when validating from Node in the Codex sandbox. Evidence anchors: `src/cli/audit/check-agent-deny-mechanism.ts` (search: `pipeSmokePayloadTo`), `scripts/preflight-checks.sh` (search: `GOAT_HOOK_SMOKE_PAYLOAD`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `ignores sandbox error metadata when hook commands completed`).
+
 ---
 
 ## Lesson: Manual hook matrices must avoid live-guard self-interference

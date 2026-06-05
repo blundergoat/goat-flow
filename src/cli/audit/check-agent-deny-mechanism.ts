@@ -79,11 +79,37 @@ function spawnFailureFor(error: unknown, action: string): SpawnFailure | null {
   return null;
 }
 
+function completedWithStatus(result: { status?: unknown }): boolean {
+  return typeof result.status === "number";
+}
+
+function commandCompletedSuccessfully(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 0
+  );
+}
+
 function spawnFailureFromResult(
   result: childProcess.SpawnSyncReturns<string>,
   action: string,
 ): SpawnFailure | null {
+  if (completedWithStatus(result)) return null;
   return result.error ? spawnFailureFor(result.error, action) : null;
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function runtimeSmokeEnv(input: string): NodeJS.ProcessEnv {
+  return { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input };
+}
+
+function pipeSmokePayloadTo(command: string): string {
+  return `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`;
 }
 
 /** Check deny-hook presence because unsupported agents and config-based agents need different handling. */
@@ -128,6 +154,7 @@ function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
           timeout: 5000,
         });
       } catch (error) {
+        if (commandCompletedSuccessfully(error)) continue;
         const spawnFailure = spawnFailureFor(
           error,
           `bash syntax check for ${hooksDir}/${file}`,
@@ -311,6 +338,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
         timeout: 30000,
       });
     } catch (error) {
+      if (commandCompletedSuccessfully(error)) continue;
       const spawnFailure = spawnFailureFor(
         error,
         `deny-dangerous self-test for ${agentFacts.agent.id}`,
@@ -572,12 +600,17 @@ function runConfiguredHookCommandSmoke(
   // project-configured launcher string by design (to validate the real
   // root-resolution/cd glue), so the runtime evidence level should only be run
   // against trusted target projects.
-  const result = childProcess.spawnSync("bash", ["-c", configured.command], {
-    cwd: ctx.projectPath,
-    encoding: "utf8",
-    input: smoke.input,
-    timeout: 5000,
-  });
+  const result = childProcess.spawnSync(
+    "bash",
+    ["-c", pipeSmokePayloadTo(configured.command)],
+    {
+      cwd: ctx.projectPath,
+      encoding: "utf8",
+      env: runtimeSmokeEnv(smoke.input),
+      input: "",
+      timeout: 5000,
+    },
+  );
   const spawnFailure = spawnFailureFromResult(
     result,
     `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
@@ -616,16 +649,16 @@ function runDirectHookRuntimeSmoke(
   denyRelPath: string,
 ): { ok: boolean; message?: string; howToFix?: string } {
   const smoke = runtimeSmokePayload(agentFacts.agent.id);
-  const result = childProcess.spawnSync(
-    "bash",
-    [join(ctx.projectPath, denyRelPath)],
-    {
-      cwd: ctx.projectPath,
-      encoding: "utf8",
-      input: smoke.input,
-      timeout: 5000,
-    },
+  const command = pipeSmokePayloadTo(
+    `bash ${shellSingleQuote(join(ctx.projectPath, denyRelPath))}`,
   );
+  const result = childProcess.spawnSync("bash", ["-c", command], {
+    cwd: ctx.projectPath,
+    encoding: "utf8",
+    env: runtimeSmokeEnv(smoke.input),
+    input: "",
+    timeout: 5000,
+  });
   const spawnFailure = spawnFailureFromResult(
     result,
     `registered deny hook runtime smoke for ${agentFacts.agent.id}`,

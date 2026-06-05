@@ -818,24 +818,18 @@ function collect(value, out = []) {
 }
 
 function runCommand(command, input) {
-  if (!/\s/u.test(command) && !command.includes("$(")) {
-    return spawnSync(command, [], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      input,
-      timeout: 5000,
-    });
-  }
-  return spawnSync("bash", ["-lc", command], {
+  return spawnSync("bash", ["-lc", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
     cwd: process.cwd(),
     encoding: "utf8",
-    input,
+    env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
+    input: "",
     timeout: 5000,
   });
 }
 
 function spawnFailureMessage(result, label) {
   if (!result.error) return null;
+  if (typeof result.status === "number") return null;
   const code = result.error.code ? `${result.error.code}: ` : "";
   return `${label} could not spawn (${code}${result.error.message}). The current sandbox or permission profile may block child-process execution.`;
 }
