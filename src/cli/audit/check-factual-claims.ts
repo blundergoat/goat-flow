@@ -267,7 +267,7 @@ const REMOVED_COMMANDS: RemovedCommand[] = [
  * @param removed Removed command patterns to flag.
  * @returns Content findings for removed command references.
  */
-export function scanRemovedCommands(
+function scanRemovedCommands(
   path: string,
   text: string,
   removed: RemovedCommand[] = REMOVED_COMMANDS,
