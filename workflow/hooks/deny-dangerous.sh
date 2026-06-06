@@ -323,55 +323,83 @@ tool_is_secret_file_operation() {
   esac
 }
 
-heredoc_body_is_inert() {
-  # SAFE BY DEFAULT. Mask a quoted heredoc body (hide it from chain-counting and
-  # content checks) ONLY when EVERY command in the opener's pipeline is a known
-  # NON-shell consumer - a data tool or a non-shell interpreter that treats the
-  # body as data or as its own (non-shell) language. Anything else - a shell, an
-  # `xargs`/`parallel` dispatcher, `source`/`.`, a `read`/`mapfile` variable
-  # handoff, a control keyword (while/for/if/do/then/done), `ssh`, or any
-  # unrecognised command - means we do NOT mask, so the body stays inspectable and
-  # an executed `rm -rf /` is caught however it is reached (line continuation,
-  # variable handoff, quote tricks). The opener arrives continuation-joined; its
-  # own redirects/args are still policy-checked separately, so masking the body
-  # never hides a dangerous opener. Trade-off (chosen deliberately): a >50-line
-  # heredoc to an unrecognised or compound-wrapped consumer may trip the chain cap
-  # - a safe false positive ("review and run manually"), never a bypass.
-  local opener="$1"
-  local scan segment first
+goat_first_word_is_inert() {
+  # A command that treats the heredoc body as data, or runs it as its OWN
+  # (non-shell) language - never as shell commands. Keep this list conservative:
+  # anything NOT listed (a shell, xargs/parallel, source/., read/mapfile, a control
+  # keyword, ssh, or any unknown command) makes the masker leave the body
+  # inspectable. NB the interpreters/clients here still execute the body AS THEIR
+  # OWN LANGUAGE (python `os.system`, sed `e`, awk `system()`, sql `\!`/`.shell`) -
+  # a deliberately accepted scope limit: deny-dangerous guards SHELL, not
+  # interpreter languages, the same reason `python - <<X` is not inspected.
+  case "$1" in
+    cat|tac|tee|head|tail|sort|uniq|wc|nl|rev|cut|tr|fold|fmt|column|paste|join|comm|expand|unexpand|strings|iconv|\
+    base64|base32|xxd|hexdump|od|md5sum|sha1sum|sha256sum|sha512sum|cksum|\
+    grep|egrep|fgrep|rg|ag|sed|gsed|awk|gawk|mawk|nawk|jq|yq|xq|mlr|\
+    python|python2|python3|php|node|nodejs|deno|ruby|perl|lua|\
+    psql|mysql|mariadb|sqlite3|mongosh|mongo|redis-cli|cqlsh|duckdb|\
+    echo|printf|true|false|:|mail|mailx|sendmail|less|more)
+      return 0 ;;
+  esac
+  return 1
+}
+
+heredoc_command_list_is_inert() {
+  local scan segment first inner match ps_re
   local -a segs=()
 
   # Strip quoted spans first (so a shell NAME used as data is not read as a
-  # command, and a quoted delimiter/pipe does not split), then break the pipeline
-  # on every command separator ; & | so each command's leading word is inspected.
+  # command, and a quoted delimiter/pipe does not split).
   # shellcheck disable=SC2001  # regex strip of quoted spans, not a glob
-  scan=$(printf '%s' "$opener" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")
-  IFS=';&|' read -ra segs <<< "$scan"
+  scan=$(printf '%s' "$1" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")
 
+  # Process substitutions route the body to/from their inner command: `cat >
+  # >(bash)`, `tee >(bash)` feed the heredoc body straight into that command's
+  # stdin. The `;&|` split below never looks inside `>(...)`/`<(...)`, so classify
+  # the whole inner command list here; `>(printf ''; bash)` is not inert even
+  # though its first command is. Replace each checked substitution with a token so
+  # the loop terminates and the leftover never confuses the segment split.
+  ps_re='[<>]\(([^()]*)\)'
+  while [[ "$scan" =~ $ps_re ]]; do
+    match="${BASH_REMATCH[0]}"
+    inner="${BASH_REMATCH[1]}"
+    heredoc_command_list_is_inert "$inner" || return 1
+    scan="${scan/"$match"/ __goat_ps__ }"
+  done
+
+  # Break the pipeline on every command separator ; & | and inspect each leading
+  # command word.
+  scan="${scan//$'\n'/;}"
+  IFS=';&|' read -ra segs <<< "$scan"
   (( ${#segs[@]} > 0 )) || return 1
   # An opener with many pipeline commands is not a simple inert-consumer pipeline;
-  # refuse to mask (inspect instead). This also bounds the per-segment normalize +
-  # first-word subshell forks below, so a crafted `cat <<X; cat; cat; ...` opener
-  # cannot fork-DoS the masker.
-  (( ${#segs[@]} > 32 )) && return 1
+  # refuse to mask (inspect instead). This also bounds the per-segment subshell
+  # forks so a crafted `cat <<X; cat; cat; ...` opener cannot fork-DoS the masker.
+  (( ${#segs[@]} > 64 )) && return 1
   for segment in "${segs[@]}"; do
     segment="${segment#"${segment%%[![:space:]]*}"}"
     [[ -z "$segment" ]] && continue
     first=$(first_word_base "$(normalize_command_candidate "$segment")")
-    case "$first" in
-      cat|tac|tee|head|tail|sort|uniq|wc|nl|rev|cut|tr|fold|fmt|column|paste|join|comm|expand|unexpand|strings|iconv|\
-      base64|base32|xxd|hexdump|od|md5sum|sha1sum|sha256sum|sha512sum|cksum|\
-      grep|egrep|fgrep|rg|ag|sed|gsed|awk|gawk|mawk|nawk|jq|yq|xq|mlr|\
-      python|python2|python3|php|node|nodejs|deno|ruby|perl|lua|\
-      psql|mysql|mariadb|sqlite3|mongosh|mongo|redis-cli|cqlsh|duckdb|\
-      echo|printf|true|false|:|mail|mailx|sendmail|less|more)
-        ;;
-      *)
-        # Unknown / shell / dispatcher / keyword / source / read - do not mask.
-        return 1 ;;
-    esac
+    goat_first_word_is_inert "$first" || return 1
   done
   return 0
+}
+
+heredoc_body_is_inert() {
+  # SAFE BY DEFAULT. Mask a quoted heredoc body (hide it from chain-counting and
+  # content checks) ONLY when EVERY command in the opener's pipeline - including
+  # every command in any process-substitution target - is a known NON-shell
+  # consumer. Anything else - a shell, an `xargs`/`parallel` dispatcher,
+  # `source`/`.`, a `read`/`mapfile` variable handoff, a control keyword
+  # (while/for/if/do/then/done), `ssh`, a `>(bash)` process substitution, or any
+  # unrecognised command - means we do NOT mask, so the body stays inspectable and
+  # an executed `rm -rf /` is caught however it is reached. The opener arrives
+  # continuation-joined; its own redirects/args are still policy-checked
+  # separately, so masking the body never hides a dangerous opener. Trade-off
+  # (chosen deliberately): a >50-line heredoc to an unrecognised or
+  # compound-wrapped consumer may trip the chain cap - a safe false positive
+  # ("review and run manually"), never a bypass.
+  heredoc_command_list_is_inert "$1"
 }
 
 mask_safe_quoted_heredoc_bodies() {
@@ -1426,7 +1454,7 @@ main() {
   _goat_subst_tmp="${command_policy//'$('/}"; _goat_subst_n=$(( _goat_subst_n + (${#command_policy} - ${#_goat_subst_tmp}) / 2 ))
   _goat_subst_tmp="${command_policy//'<('/}"; _goat_subst_n=$(( _goat_subst_n + (${#command_policy} - ${#_goat_subst_tmp}) / 2 ))
   _goat_subst_tmp="${command_policy//'>('/}"; _goat_subst_n=$(( _goat_subst_n + (${#command_policy} - ${#_goat_subst_tmp}) / 2 ))
-  if (( _goat_subst_n > 64 )); then
+  if (( _goat_subst_n > 32 )); then
     block "Command has too many command substitutions; review and run manually if intended."
   fi
 

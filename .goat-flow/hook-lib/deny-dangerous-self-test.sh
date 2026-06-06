@@ -624,6 +624,32 @@ run_full() {
   expect_allow shell "cat <<'X' | jq ."$'\n'"${_hd_body}X" "pipeline of inert consumers (cat|jq) stays allowed"
   expect_allow shell "psql -h h -U u db <<'SQL'"$'\n'"${_hd_body}SQL" "sql-client heredoc (inert consumer) stays allowed"
 
+  # --- Process substitution routes the body to its inner command: `>(bash)` feeds
+  # the body to a shell even though the outer command (cat/tee) is inert. The
+  # `;&|` split does not look inside `>(...)`, so the inner command list is checked
+  # separately. Benign inner consumers (>(cat), >(grep)) stay masked. ---
+  expect_block shell "cat > >(bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution >(bash) routing body to shell is scanned"
+  expect_block shell "tee >(bash) >/dev/null <<'X'"$'\n'"rm -rf /"$'\n'"X" "tee >(bash) routing body to shell is scanned"
+  expect_block shell "cat <<'X' | tee >(bash) >/dev/null"$'\n'"rm -rf /"$'\n'"X" "piped tee >(bash) routing body to shell is scanned"
+  expect_block shell "cat > >(printf ''; bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution command list with later shell is scanned"
+  expect_block shell "cat > >(: && bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution && shell is scanned"
+  expect_block shell "cat > >({ printf ''; bash; }) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution brace group shell is scanned"
+  expect_block shell "cat > >(if : ; then bash; fi) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution control-flow shell is scanned"
+  expect_allow shell "cat > >(cat) <<'X'"$'\n'"${_hd_body}X" "benign process substitution >(cat) stays allowed"
+  local _stages="cat <<'X'"
+  for ((_i = 1; _i <= 33; _i++)); do _stages+=" | cat"; done
+  expect_allow shell "$_stages"$'\n'"${_hd_body}X" "33-stage inert pipeline stays masked/allowed (segment cap 64)"
+
+  # --- ACCEPTED SCOPE LIMIT (product decision, 2026-06-06): an allowlisted
+  # interpreter/client runs the body in ITS OWN language, INCLUDING shell escapes
+  # (python `os.system`, sed `e`, sql `\!`/`.shell`). deny-dangerous guards SHELL,
+  # not interpreter languages - the same reason `python - <<X` is masked, and the
+  # price of not false-positiving on >50-line SQL migrations / sed-awk scripts.
+  # These bodies stay ALLOWED BY DESIGN. Do NOT "fix" to block without revisiting
+  # the decision (see footgun deny-dangerous.md, search: `accepted scope limit`). ---
+  expect_allow shell "psql <<'SQL'"$'\n'"\\! rm -rf /"$'\n'"SQL" "ACCEPTED scope: psql shell-escape in body is not inspected"
+  expect_allow shell "sed e <<'X'"$'\n'"rm -rf /"$'\n'"X" "ACCEPTED scope: sed 'e' shell-escape in body is not inspected"
+
   # --- Substitution-opener cap: a command packed with many `$(`/`<(`/`>(` is a
   # policy-parser DoS (each opener triggers a recursive re-scan). Cap blocks it
   # fast; a benign handful of nested substitutions stays allowed (covered above). ---
