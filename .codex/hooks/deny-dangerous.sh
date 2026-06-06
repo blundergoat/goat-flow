@@ -392,47 +392,6 @@ mask_safe_quoted_heredoc_bodies() {
   printf '%s' "${output%$'\n'}"
 }
 
-# Maximum command/process-substitution nesting depth in a command string.
-# Only $( , <( , >( openers add depth; arithmetic $(( and plain ( ) subshells
-# do not (a paren-type stack keeps them from inflating the count), and quoted
-# spans are skipped. check_command_substitutions flattens innermost-first, which
-# loses recursion depth, so this restores the deep-nesting cap.
-command_subst_nesting_depth() {
-  local s="$1"
-  local i char prev="" depth=0 max=0 stack="" in_single=0 in_double=0 escaped=0
-  for ((i = 0; i < ${#s}; i++)); do
-    char="${s:i:1}"
-    if [[ "$escaped" -eq 1 ]]; then escaped=0; prev=""; continue; fi
-    if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then escaped=1; prev=""; continue; fi
-    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
-      if [[ "$in_single" -eq 1 ]]; then in_single=0; else in_single=1; fi
-      prev=""; continue
-    fi
-    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
-      if [[ "$in_double" -eq 1 ]]; then in_double=0; else in_double=1; fi
-      prev=""; continue
-    fi
-    if [[ "$in_single" -eq 1 || "$in_double" -eq 1 ]]; then prev="$char"; continue; fi
-    if [[ "$char" == "(" ]]; then
-      if [[ "$prev" == "$" || "$prev" == "<" || "$prev" == ">" ]]; then
-        stack+="S"
-        depth=$((depth + 1))
-        [[ "$depth" -gt "$max" ]] && max="$depth"
-      else
-        stack+="P"
-      fi
-    elif [[ "$char" == ")" ]]; then
-      if [[ -n "$stack" ]]; then
-        local top="${stack: -1}"
-        stack="${stack%?}"
-        [[ "$top" == "S" ]] && depth=$((depth - 1))
-      fi
-    fi
-    prev="$char"
-  done
-  printf '%s' "$max"
-}
-
 check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
@@ -445,14 +404,6 @@ check_command_substitutions() {
     scan_remaining=$(sed -E "s/'[^']*'/__goat_single_quoted__/g" <<<"$remaining")
   else
     scan_remaining="$remaining"
-  fi
-
-  # The innermost-first flatten loop below loses recursion depth, so enforce the
-  # deep-nesting cap here from the actual $( / <( / >( nesting in this segment.
-  local nest_depth
-  nest_depth=$(command_subst_nesting_depth "$scan_remaining")
-  if (( depth + nest_depth > 3 )); then
-    block "Deeply nested command substitution. Simplify the command." || return $?
   fi
 
   while [[ "$scan_remaining" =~ \$\(([^()]*)\) ]]; do

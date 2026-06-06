@@ -546,8 +546,8 @@ run_full() {
   expect_block shell 'echo `rm -rf /`' "backtick subst rm"
   expect_block writes 'echo $(git push origin main)' "git push inside subst"
   expect_block shell 'echo $(echo $(echo $(echo $(rm -rf /))))' "deeply nested subst rm"
-  expect_block shell 'echo $(echo $(echo $(echo $(date))))' "deeply nested benign subst hits depth cap"
-  expect_allow shell 'echo $(echo $(echo $(date)))' "three-deep benign subst stays allowed"
+  expect_allow shell 'echo $(dirname $(dirname $(dirname $(pwd))))' "deep benign path nesting allowed (no depth cap)"
+  expect_allow shell 'echo $(( $(( $(( $(( 1 )) )) )) ))' "deeply nested arithmetic allowed (not command substitution)"
 
   # --- .env.example redirect handling. Regression: any redirect (even a bare
   # 2>&1 / 2>/dev/null) was treated as a write to .env.example. Reads with
