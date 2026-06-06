@@ -533,6 +533,8 @@ function dashboardAppFragment03(
 
     _setupOutputProjectPath: null as string | null,
 
+    _setupPromptRequestKey: null as string | null,
+
     _setupPromptTimer: null as ReturnType<typeof setTimeout> | null,
 
     // --- Launcher state ---

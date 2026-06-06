@@ -422,7 +422,7 @@
     },
     nextActionCommand() {
       const priority = this.nextPriority();
-      if (priority === 'setup') return '$ npx goat-flow setup . --agent ' + activeRunner;
+      if (priority === 'setup') return 'Generated setup prompt for ' + agentName(activeRunner);
       if (priority === 'harness') return '$ npx goat-flow audit . --harness --agent ' + this.failingHarnessAgent();
       if (priority === 'completeness') return '$ npx goat-flow quality . --agent ' + activeRunner;
       return null;
@@ -441,11 +441,14 @@
       if (priority === 'completeness') return 'View prompts';
       return 'View prompts';
     },
-    runPrimaryAction() {
+    async runPrimaryAction() {
       const priority = this.nextPriority();
       if (priority === 'setup') {
         if (terminalAvailable) {
-          launchInTerminal('goat-flow setup . --agent ' + activeRunner, activeRunner, { promptLabel: 'Run setup', cwdPath: projectPath, targetPath: projectPath });
+          const setupTarget = activeRunner;
+          const setupPrompt = await generateSetupPromptForAgent(setupTarget);
+          if (!setupPrompt) return;
+          await launchPreset(setupPrompt, activeRunner, 'Setup ' + agentName(setupTarget) + ' via ' + agentName(activeRunner), { cwdPath: projectPath, targetPath: projectPath });
           activeView = 'workspace';
           workspacePanel = 'terminal';
           return;
@@ -554,26 +557,6 @@
       if (row.status === 'unknown') return 'skipped';
       return 'warn';
     },
-    setupFixPrompt() {
-      return [
-        '/goat-plan implement goat-flow setup fixes for ' + activeRunner,
-        '',
-        'Context:',
-        '- Project: ' + projectPath,
-        '- Active agent: ' + activeRunner,
-        '- Dashboard setup checks are failing.',
-        '- Run or repair the equivalent of: goat-flow setup . --agent ' + activeRunner,
-        '',
-        'Goal:',
-        'Make the setup audit pass for this project and active agent.',
-        '',
-        'Constraints:',
-        '- Read existing project instructions before edits.',
-        '- Do not overwrite user changes.',
-        '- Keep edits scoped to goat-flow setup artifacts unless a broken reference requires a small fix.',
-        '- After changes, run the relevant validation checks and report exact commands/output.'
-      ].join('\n');
-    },
     harnessFixPrompt() {
       const scores = this.agentScores();
       if (scores.length === 0) {
@@ -626,27 +609,6 @@
         '- Do not invent incidents, lessons, or footgun evidence.',
         '- Update the milestone/checklist only for tasks actually completed.',
         '- Verify with the dashboard audit/typecheck commands and paste exact pass/fail output.'
-      ].join('\n');
-    },
-    qualityFixPrompt() {
-      const latest = homeQualityLatest;
-      const summary = latest ? (latest.blockerCount || 0) + ' blockers, ' + (latest.majorCount || 0) + ' major, ' + (latest.minorCount || 0) + ' minor' : 'no saved quality summary';
-      return [
-        '/goat-plan address goat-flow quality gaps for ' + activeRunner,
-        '',
-        'Context:',
-        '- Project: ' + projectPath,
-        '- Active agent: ' + activeRunner,
-        '- Latest quality summary: ' + summary,
-        '',
-        'Goal:',
-        'Run or refresh the quality assessment, then turn the highest-priority findings into actionable fixes.',
-        '',
-        'Constraints:',
-        '- Start by reading the relevant milestone/task file and project instructions.',
-        '- Fix blockers before major/minor issues.',
-        '- Do not broaden scope without checkpointing.',
-        '- Verify with the commands tied to the changed files and report exact output.'
       ].join('\n');
     }
   }"

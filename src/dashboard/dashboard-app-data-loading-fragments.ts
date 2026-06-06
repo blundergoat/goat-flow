@@ -363,6 +363,16 @@ function dashboardAppFragment08(
     async generateSetupPrompt(shouldForce = false) {
       await dashboardGenerateSetupPrompt(this, { force: shouldForce });
     },
+
+    /** Generate setup output for a specific setup target agent. */
+    async generateSetupPromptForAgent(
+      targetAgent: RunnerId,
+      shouldForce = false,
+    ) {
+      return dashboardGenerateSetupPromptForAgent(this, targetAgent, {
+        force: shouldForce,
+      });
+    },
   };
 }
 
