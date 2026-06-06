@@ -467,6 +467,18 @@
               <span class="gf-side-link-label">Quality</span>
             </button>
             <button
+              @click="activeView = 'reviews'"
+              class="gf-side-link"
+              :class="activeView === 'reviews' && 'gf-side-link-active'"
+              data-short="R"
+              aria-label="Reviews"
+            >
+              <svg class="gf-side-icon" aria-hidden="true">
+                <use href="#gf-side-icon-telemetry"></use>
+              </svg>
+              <span class="gf-side-link-label">Reviews</span>
+            </button>
+            <button
               @click="activeView = 'setup'"
               class="gf-side-link"
               :class="activeView === 'setup' && 'gf-side-link-active'"
@@ -694,6 +706,280 @@
 
           <!-- include: views/plans.html -->
           <!-- include: views/prompts.html -->
+          <div
+            x-show="activeView === 'reviews'"
+            x-cloak
+            style="height: calc(100vh - 3.5rem); overflow-y: auto"
+          >
+            <div
+              style="
+                max-width: 1100px;
+                margin: 0 auto;
+                padding: 24px 32px 24px;
+              "
+            >
+              <div
+                style="
+                  display: flex;
+                  align-items: flex-start;
+                  justify-content: space-between;
+                  gap: 20px;
+                  margin-bottom: 16px;
+                "
+              >
+                <div>
+                  <div
+                    class="gf-text-primary"
+                    style="font-size: 22px; font-weight: 600; margin-bottom: 4px"
+                  >
+                    Reviews
+                  </div>
+                  <div
+                    class="gf-text-muted"
+                    style="font-size: 13px; max-width: 720px; line-height: 1.5"
+                  >
+                    Security posture, integrity, and findings from the contract
+                    fixture.
+                  </div>
+                </div>
+                <button
+                  @click="reviewsArtifact = null; loadReviewFixture()"
+                  :disabled="reviewsLoading"
+                  class="gf-btn gf-btn-md gf-btn-secondary"
+                >
+                  <span x-show="!reviewsLoading">Reload fixture</span>
+                  <span x-show="reviewsLoading">Loading...</span>
+                </button>
+              </div>
+
+              <div
+                x-show="reviewsLoading"
+                class="gf-card gf-text-muted"
+                style="padding: 16px 18px; font-size: 13px"
+              >
+                Loading review artifact...
+              </div>
+
+              <div
+                x-show="reviewsError"
+                class="gf-card"
+                style="
+                  padding: 16px 18px;
+                  border-color: rgba(239, 68, 68, 0.45);
+                  color: var(--status-danger);
+                  font-size: 13px;
+                "
+                x-text="reviewsError"
+              ></div>
+
+              <template x-if="reviewsArtifact">
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <div
+                    class="gf-card"
+                    style="
+                      padding: 16px 18px;
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                      gap: 14px;
+                      align-items: start;
+                    "
+                  >
+                    <div>
+                      <div
+                        class="gf-text-secondary"
+                        style="
+                          font-size: 12px;
+                          font-weight: 700;
+                          text-transform: uppercase;
+                          letter-spacing: 0.04em;
+                          margin-bottom: 8px;
+                        "
+                      >
+                        Security posture
+                      </div>
+                      <div
+                        class="gf-text-primary"
+                        style="font-size: 24px; font-weight: 700"
+                        x-text="reviewsArtifact.posture.conclusion"
+                      ></div>
+                      <div
+                        class="gf-text-muted"
+                        style="font-size: 12px; margin-top: 6px"
+                        x-text="reviewsArtifact.target.mode + ' / ' + reviewsArtifact.target.agent + ' / ' + reviewsArtifact.generatedAt"
+                      ></div>
+                    </div>
+                    <div
+                      style="
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+                        gap: 8px;
+                      "
+                    >
+                      <template
+                        x-for="item in reviewRollupEntries()"
+                        :key="'review-rollup-' + item.severity"
+                      >
+                        <div
+                          style="
+                            padding: 10px 12px;
+                            text-align: center;
+                            border: 1px solid var(--border);
+                            border-radius: 6px;
+                            background: rgba(255, 255, 255, 0.02);
+                          "
+                        >
+                          <div
+                            style="font-size: 20px; font-weight: 700"
+                            :style="{ color: reviewSeverityColor(item.severity) }"
+                            x-text="item.count"
+                          ></div>
+                          <div
+                            class="gf-text-muted"
+                            style="font-size: 11px; margin-top: 2px"
+                            x-text="item.severity"
+                          ></div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <div
+                    class="gf-card"
+                    style="padding: 14px 18px"
+                    x-show="reviewsArtifact.integrity"
+                  >
+                    <div
+                      class="gf-text-secondary"
+                      style="font-size: 13px; font-weight: 600; margin-bottom: 8px"
+                    >
+                      Integrity
+                    </div>
+                    <div
+                      class="gf-text-muted"
+                      style="
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                        gap: 10px;
+                        font-size: 12px;
+                      "
+                    >
+                      <div>
+                        <strong class="gf-text-primary">Files</strong>
+                        <span
+                          x-text="reviewsArtifact.integrity.filesOpened.opened + '/' + reviewsArtifact.integrity.filesOpened.total"
+                        ></span>
+                      </div>
+                      <div>
+                        <strong class="gf-text-primary">Evidence</strong>
+                        <span
+                          x-text="reviewsArtifact.integrity.observed + ' observed / ' + reviewsArtifact.integrity.inferred + ' inferred'"
+                        ></span>
+                      </div>
+                      <div>
+                        <strong class="gf-text-primary">Flags</strong>
+                        <span
+                          x-text="reviewsArtifact.integrity.degradationFlags.length ? reviewsArtifact.integrity.degradationFlags.join(', ') : 'none'"
+                        ></span>
+                      </div>
+                      <div>
+                        <strong class="gf-text-primary">Contract</strong>
+                        <span
+                          x-text="'v' + reviewsArtifact.contractVersion"
+                        ></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 10px">
+                    <template
+                      x-for="finding in reviewsArtifact.findings"
+                      :key="finding.id"
+                    >
+                      <div class="gf-card" style="padding: 16px 18px">
+                        <div
+                          style="
+                            display: flex;
+                            align-items: flex-start;
+                            justify-content: space-between;
+                            gap: 16px;
+                            margin-bottom: 8px;
+                          "
+                        >
+                          <div>
+                            <div
+                              class="gf-text-primary"
+                              style="font-size: 15px; font-weight: 700"
+                              x-text="finding.id + ' / ' + finding.title"
+                            ></div>
+                            <div
+                              class="gf-text-muted"
+                              style="font-size: 12px; margin-top: 3px"
+                              x-text="finding.file + ' (search: ' + finding.anchor + ')'"
+                            ></div>
+                          </div>
+                          <div
+                            style="
+                              display: flex;
+                              align-items: center;
+                              gap: 6px;
+                              flex-wrap: wrap;
+                              justify-content: flex-end;
+                            "
+                          >
+                            <span
+                              style="
+                                font-size: 11px;
+                                font-weight: 700;
+                                text-transform: uppercase;
+                              "
+                              :style="{ color: reviewSeverityColor(finding.severity) }"
+                              x-text="finding.severity"
+                            ></span>
+                            <span
+                              class="gf-text-muted"
+                              style="font-size: 11px"
+                              x-text="finding.confidence + ' / ' + finding.proofClass"
+                            ></span>
+                          </div>
+                        </div>
+                        <p
+                          class="gf-text-secondary"
+                          style="
+                            margin: 0 0 10px;
+                            font-size: 13px;
+                            line-height: 1.5;
+                          "
+                          x-text="finding.body"
+                        ></p>
+                        <div
+                          class="gf-text-muted"
+                          style="
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                            gap: 10px;
+                            font-size: 12px;
+                          "
+                        >
+                          <div>
+                            <strong class="gf-text-primary">Entry</strong>
+                            <span x-text="finding.entry"></span>
+                          </div>
+                          <div>
+                            <strong class="gf-text-primary">Sink</strong>
+                            <span x-text="finding.sink"></span>
+                          </div>
+                          <div>
+                            <strong class="gf-text-primary">Boundary</strong>
+                            <span x-text="finding.trustBoundary"></span>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
           <!-- include: views/quality.html -->
           <!-- include: views/skills.html -->
           <!-- include: views/setup.html -->

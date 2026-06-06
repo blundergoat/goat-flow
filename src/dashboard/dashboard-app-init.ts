@@ -141,6 +141,7 @@ function dashboardRegisterViewWatchers(ctx: DashboardAlpineContext): void {
       void ctx.generateQuality({ fast: true });
       ctx.scheduleQualityHistory();
     }
+    if (view === "reviews") void ctx.loadReviewFixture();
     if (view === "skills") void ctx.loadSkillQualityInventory();
     if (view === "setup") {
       void ctx.detectStack();

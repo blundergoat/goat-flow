@@ -296,6 +296,55 @@ interface QualityHistoryLatest {
 }
 
 // ---------------------------------------------------------------------------
+// Review/security artifact types
+// ---------------------------------------------------------------------------
+
+type SecurityReviewSeverity = "Critical" | "High" | "Medium" | "Low";
+type SecurityReviewConfidence = "CONFIRMED" | "PROBABLE" | "THEORETICAL";
+type SecurityReviewProofClass =
+  | "RUNTIME"
+  | "CONTRACT-GREP"
+  | "STATIC"
+  | "NOT-REPRODUCED";
+
+interface SecurityReviewFinding {
+  id: string;
+  file: string;
+  anchor: string;
+  title: string;
+  body: string;
+  severity: SecurityReviewSeverity;
+  confidence: SecurityReviewConfidence;
+  proofClass: SecurityReviewProofClass;
+  evidence: "OBSERVED" | "INFERRED";
+  asset: string;
+  entry: string;
+  sink: string;
+  trustBoundary: string;
+  blastRadius: string;
+  source: { tool: string; ruleId: string | null; pillar: string | null };
+}
+
+interface SecurityReviewArtifact {
+  resultKind: "goat-flow-security-result";
+  contractVersion: string;
+  generatedAt: string;
+  target: { projectPath: string; mode: string; agent: string };
+  posture: {
+    conclusion: "confident" | "coverage-degraded" | "tool-limited";
+    rollupBySeverity: Record<SecurityReviewSeverity, number>;
+  };
+  findings: SecurityReviewFinding[];
+  integrity: {
+    filesOpened: { opened: number; total: number; paths: string[] };
+    observed: number;
+    inferred: number;
+    degradationFlags: string[];
+    conclusion: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Terminal types
 // ---------------------------------------------------------------------------
 

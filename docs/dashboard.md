@@ -20,9 +20,9 @@ The dashboard uses a persistent desktop side rail for primary navigation. The
 rail collapses to icon-only with hover tooltips, exposes an active-plan tooltip
 when collapsed, and keeps Projects, Prompts, and New Prompt grouped together.
 The header stays focused on the current project switcher, runner switcher, and
-utility actions. The 1.7.0 release scopes the rail to backed destinations only:
-Home, Prompts, Workspace, Skill Evaluator, Plans, Projects, Quality, and Setup.
-Dedicated harness and manager pages are deferred to 1.8.0.
+utility actions. The rail exposes backed destinations only: Home, Prompts,
+Workspace, Hooks, Plans, Skill Evaluator, Projects, Quality, and Setup -- each
+maps to a real view.
 
 ### Home
 
@@ -35,12 +35,6 @@ Plans milestone browser for the selected project (route ID `plans`). Surfaces
 The plan list can update `.goat-flow/tasks/.active` for the selected project.
 The `/api/tasks` backing endpoint and on-disk `.goat-flow/tasks/` directory
 keep their original names.
-
-### Coming Soon
-
-Placeholder destination for menu items whose feature pages are deferred to
-1.8.0 (dedicated harness and manager pages). Renders a lightweight Coming Soon
-view rather than a disabled menu item.
 
 ### Quality
 
@@ -122,6 +116,8 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/list` | GET | List registered projects from saved dashboard state, including identity-keyed project records |
 | `/api/projects/list` | POST | Save the dashboard's registered project list and migrate it to identity-keyed records |
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
+| `/api/hooks` | GET | Registered hook state for the selected project (each hook's enabled/disabled state and wired agents) |
+| `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
 | `/api/terminal/create` | POST | Start a terminal session |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |

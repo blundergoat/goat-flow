@@ -9,6 +9,11 @@ for (const file of ["index.html", "styles.css", "preset-prompts.json"]) {
   cpSync(`src/dashboard/${file}`, `dist/dashboard/${file}`);
 }
 
+cpSync(
+  "test/fixtures/reviews/security-target-goat-flow.json",
+  "dist/dashboard/review-security-fixture.json",
+);
+
 rmSync("dist/dashboard/views", { recursive: true, force: true });
 cpSync("src/dashboard/views", "dist/dashboard/views", { recursive: true });
 

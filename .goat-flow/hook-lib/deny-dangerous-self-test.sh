@@ -561,6 +561,42 @@ run_full() {
   expect_block paths "echo TOKEN > fixtures/.env.example" ".env.example subdir write"
   expect_allow paths "cat fixtures/.env.example 2>&1" "path-prefixed .env.example read with stderr dup"
 
+  # --- Heredoc body must not inflate the chain-segment cap. Regression: a quoted
+  # interpreter heredoc (python/php/cat) with a body over 50 lines was masked one
+  # placeholder per line, so the inert body tripped the 50-chained-segment cap - a
+  # false positive on ordinary inline smoke scripts. The body now collapses to a
+  # single segment. Shell-fed heredocs (bash <<'SH') stay inspectable AND counted,
+  # and a real delimiter must still end masking so trailing commands are scanned. ---
+  local _hd_body="" _sh_body="" _i
+  for ((_i = 1; _i <= 60; _i++)); do
+    _hd_body+="x = ${_i}"$'\n'
+    _sh_body+="echo ${_i}"$'\n'
+  done
+  expect_allow shell "python - <<'PY'"$'\n'"${_hd_body}print(x)"$'\n'"PY" "long quoted python heredoc body (60 lines) allowed"
+  expect_allow shell "php <<'PHP'"$'\n'"${_hd_body}echo 1;"$'\n'"PHP" "long quoted php heredoc body (60 lines) allowed"
+  expect_allow shell "cat <<'EOF'"$'\n'"${_hd_body}EOF" "long quoted cat heredoc body (60 lines) allowed"
+  expect_allow shell "python - <<'PY'"$'\n'"code = 'rm -rf /'"$'\n'"print(code)"$'\n'"PY" "rm -rf as quoted-heredoc data allowed (masked)"
+  expect_block shell "bash <<'SH'"$'\n'"${_sh_body}SH" "shell-fed heredoc body stays counted (60 lines blocks at cap)"
+  expect_block shell $'cat <<-\'EOF\'\n\thello\n\tEOF\nrm -rf /' "rm -rf after <<- tab heredoc still scanned"
+  local _chain="echo 1"
+  for ((_i = 2; _i <= 51; _i++)); do _chain+="; echo ${_i}"; done
+  expect_block shell "$_chain" "genuine 51-link shell chain blocks at cap"
+
+  # --- Stdin dispatchers (xargs / parallel) that run a shell execute the heredoc
+  # body AS shell, so the body must stay inspectable - not masked+collapsed.
+  # Regression: `xargs -I{} bash -c '{}' <<'X'` slips the direct shell-here-doc
+  # check (the `'{}'` sits between `-c` and `<<`), and collapsing the body removed
+  # the cap backstop that previously caught the long variant. Plain `xargs rm`
+  # (dispatcher, no shell) and `grep bash` (shell word, no dispatcher) must NOT be
+  # treated as executing, so inert bodies stay allowed. ---
+  expect_block shell "xargs -I{} bash -c '{}' <<'X'"$'\n'"rm -rf /"$'\n'"X" "xargs bash -c heredoc body is scanned"
+  expect_block shell "xargs -I{} sh -c '{}' <<'X'"$'\n'"rm -rf /"$'\n'"X" "xargs sh -c heredoc body is scanned"
+  expect_block shell "parallel bash -c '{}' <<'X'"$'\n'"rm -rf /"$'\n'"X" "parallel bash -c heredoc body is scanned"
+  expect_block shell "cat <<'X' | xargs -I{} bash -c '{}'"$'\n'"rm -rf /"$'\n'"X" "piped cat heredoc into xargs bash -c is scanned"
+  expect_block shell "/usr/bin/xargs -I{} bash -c '{}' <<'X'"$'\n'"rm -rf /"$'\n'"X" "abs-path xargs bash -c heredoc body is scanned"
+  expect_block shell "xargs -I{} bash -c '{}' <<'X'"$'\n'"${_sh_body}X" "long xargs bash -c heredoc blocks without cap-backstop reliance"
+  expect_allow shell "xargs rm <<'X'"$'\n'"foo.txt"$'\n'"bar.txt"$'\n'"X" "xargs rm heredoc (dispatcher, no shell) stays allowed"
+  expect_allow shell "grep bash <<'X'"$'\n'"${_hd_body}X" "grep bash heredoc (shell word, no dispatcher) stays allowed"
 }
 
 case "$SELF_TEST_MODE" in

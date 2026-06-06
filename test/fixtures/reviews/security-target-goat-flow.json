@@ -1,0 +1,105 @@
+{
+  "resultKind": "goat-flow-security-result",
+  "contractVersion": "1",
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "target": {
+    "projectPath": "/home/devgoat/projects/goat-flow",
+    "mode": "whole-repo",
+    "agent": "claude"
+  },
+  "threatModelSnapshot": {
+    "assets": ["dashboard token", "local filesystem", "terminal sessions"],
+    "trustBoundaries": ["browser to localhost dashboard", "dashboard to PTY runner"],
+    "attackerTypes": ["malicious local webpage", "untrusted prompt content"],
+    "criticalSurfaces": ["/api/terminal/create", "/ws/terminal/:id"]
+  },
+  "posture": {
+    "rollupBySeverity": {
+      "Critical": 0,
+      "High": 0,
+      "Medium": 1,
+      "Low": 0
+    },
+    "conclusion": "coverage-degraded"
+  },
+  "findings": [
+    {
+      "id": "S-01",
+      "kind": "security",
+      "file": "src/cli/server/dashboard.ts",
+      "anchor": "SIDE_EFFECTFUL_EXACT_API_ROUTES",
+      "lines": null,
+      "title": "Side-effectful route registry must include new mutation endpoints",
+      "body": "A dashboard mutation endpoint that is not registered here would miss the Origin gate, so every new POST or DELETE route needs a registry update in the same patch.",
+      "severity": "Medium",
+      "proofClass": "STATIC",
+      "evidence": "OBSERVED",
+      "footgun": null,
+      "source": {
+        "tool": "agent",
+        "ruleId": null,
+        "pillar": "security"
+      },
+      "asset": "local dashboard control plane",
+      "entry": "browser request to localhost dashboard",
+      "sink": "side-effectful dashboard route",
+      "trustBoundary": "browser origin to local privileged server",
+      "attackerPreconditions": "User has an active dashboard server and visits a malicious same-network or browser page that can target localhost.",
+      "confidence": "THEORETICAL",
+      "exploitability": "Requires a future route omission; current registry is explicit and audited by review.",
+      "blastRadius": "Local project state or terminal sessions could be changed without the intended same-origin check.",
+      "proofOfFix": "Add a regression that asserts every mutating API route is included in the side-effectful route registry."
+    }
+  ],
+  "attackPathSummary": [
+    "A malicious page targets an unregistered future mutation route and bypasses the Origin check."
+  ],
+  "falsePositivesRemoved": [
+    "Static asset reads are excluded because they do not mutate local state."
+  ],
+  "positiveObservations": [
+    "Existing terminal creation is already listed in the side-effectful route registry."
+  ],
+  "integrity": {
+    "filesOpened": {
+      "opened": 3,
+      "total": 3,
+      "paths": [
+        "src/cli/server/dashboard.ts",
+        "src/cli/server/dashboard-shell-routes.ts",
+        "src/cli/server/dashboard-terminal.ts"
+      ]
+    },
+    "observed": 1,
+    "inferred": 0,
+    "degradationFlags": ["fixture-not-live-run"],
+    "conclusion": "coverage-degraded",
+    "reviewMode": "whole-repo security fixture",
+    "provenance": "trusted",
+    "surfacesScanned": ["dashboard HTTP routes", "terminal launch route"],
+    "surfacesSkipped": ["dependency audit"],
+    "scannerTools": ["none"],
+    "unavailableTools": ["live headless runner"],
+    "proofClasses": {
+      "RUNTIME": 0,
+      "CONTRACT-GREP": 0,
+      "STATIC": 1,
+      "NOT-REPRODUCED": 0
+    },
+    "confidence": {
+      "CONFIRMED": 0,
+      "PROBABLE": 0,
+      "THEORETICAL": 1
+    }
+  },
+  "activeTestingGate": {
+    "required": false,
+    "reason": "No Critical or High finding is present in this fixture.",
+    "status": "not-required"
+  },
+  "persistGate": {
+    "artifactPath": "test/fixtures/reviews/security-target-goat-flow.json",
+    "wroteArtifact": true,
+    "confirmation": "Wrote security artifact to test/fixtures/reviews/security-target-goat-flow.json"
+  }
+}

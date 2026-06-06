@@ -132,6 +132,12 @@ function dashboardAppFragment01(
 
     fixCopyLabel: "Copy fixes",
 
+    reviewsLoading: false,
+
+    reviewsError: "",
+
+    reviewsArtifact: null as SecurityReviewArtifact | null,
+
     // --- Terminal state ---
     terminalAvailable: false,
 

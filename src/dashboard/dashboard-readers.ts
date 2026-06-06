@@ -214,6 +214,128 @@ function readErrorMessage(payload: JsonRecord): string | null {
   return typeof payload.error === "string" ? payload.error : null;
 }
 
+function readNumber(rawValue: unknown, fallback = 0): number {
+  return typeof rawValue === "number" && Number.isFinite(rawValue)
+    ? rawValue
+    : fallback;
+}
+
+function readSecurityReviewSeverity(rawValue: unknown): SecurityReviewSeverity {
+  return rawValue === "Critical" ||
+    rawValue === "High" ||
+    rawValue === "Medium" ||
+    rawValue === "Low"
+    ? rawValue
+    : "Low";
+}
+
+function readSecurityReviewConfidence(
+  rawValue: unknown,
+): SecurityReviewConfidence {
+  return rawValue === "CONFIRMED" ||
+    rawValue === "PROBABLE" ||
+    rawValue === "THEORETICAL"
+    ? rawValue
+    : "THEORETICAL";
+}
+
+function readSecurityReviewProofClass(
+  rawValue: unknown,
+): SecurityReviewProofClass {
+  return rawValue === "RUNTIME" ||
+    rawValue === "CONTRACT-GREP" ||
+    rawValue === "STATIC" ||
+    rawValue === "NOT-REPRODUCED"
+    ? rawValue
+    : "STATIC";
+}
+
+function readSecurityReviewFinding(rawValue: unknown): SecurityReviewFinding {
+  const payload = readRecord(rawValue, "Security review finding");
+  const source = readRecord(payload.source ?? {}, "Security review source");
+  return {
+    id: readString(payload.id, "S-00"),
+    file: readString(payload.file),
+    anchor: readString(payload.anchor),
+    title: readString(payload.title, "Untitled finding"),
+    body: readString(payload.body),
+    severity: readSecurityReviewSeverity(payload.severity),
+    confidence: readSecurityReviewConfidence(payload.confidence),
+    proofClass: readSecurityReviewProofClass(payload.proofClass),
+    evidence: payload.evidence === "INFERRED" ? "INFERRED" : "OBSERVED",
+    asset: readString(payload.asset),
+    entry: readString(payload.entry),
+    sink: readString(payload.sink),
+    trustBoundary: readString(payload.trustBoundary),
+    blastRadius: readString(payload.blastRadius),
+    source: {
+      tool: readString(source.tool, "agent"),
+      ruleId: source.ruleId === null ? null : readString(source.ruleId),
+      pillar: source.pillar === null ? null : readString(source.pillar),
+    },
+  };
+}
+
+function readSecurityReviewArtifact(rawValue: unknown): SecurityReviewArtifact {
+  const payload = readRecord(rawValue, "Security review artifact");
+  if (payload.resultKind !== "goat-flow-security-result") {
+    throw new Error("Security review artifact returned an invalid result kind");
+  }
+  const target = readRecord(payload.target ?? {}, "Security review target");
+  const posture = readRecord(payload.posture ?? {}, "Security review posture");
+  const rollup = readRecord(
+    posture.rollupBySeverity ?? {},
+    "Security review severity rollup",
+  );
+  const integrity = readRecord(
+    payload.integrity ?? {},
+    "Security review integrity",
+  );
+  const filesOpened = readRecord(
+    integrity.filesOpened ?? {},
+    "Security review files opened",
+  );
+  const conclusion =
+    posture.conclusion === "confident" ||
+    posture.conclusion === "coverage-degraded" ||
+    posture.conclusion === "tool-limited"
+      ? posture.conclusion
+      : "coverage-degraded";
+  return {
+    resultKind: "goat-flow-security-result",
+    contractVersion: readString(payload.contractVersion, "1"),
+    generatedAt: readString(payload.generatedAt),
+    target: {
+      projectPath: readString(target.projectPath),
+      mode: readString(target.mode),
+      agent: readString(target.agent),
+    },
+    posture: {
+      conclusion,
+      rollupBySeverity: {
+        Critical: readNumber(rollup.Critical),
+        High: readNumber(rollup.High),
+        Medium: readNumber(rollup.Medium),
+        Low: readNumber(rollup.Low),
+      },
+    },
+    findings: Array.isArray(payload.findings)
+      ? payload.findings.map(readSecurityReviewFinding)
+      : [],
+    integrity: {
+      filesOpened: {
+        opened: readNumber(filesOpened.opened),
+        total: readNumber(filesOpened.total),
+        paths: readStringArray(filesOpened.paths),
+      },
+      observed: readNumber(integrity.observed),
+      inferred: readNumber(integrity.inferred),
+      degradationFlags: readStringArray(integrity.degradationFlags),
+      conclusion: readString(integrity.conclusion),
+    },
+  };
+}
+
 /** Collapse a project path down to the display name shown in the UI. */
 function getProjectDisplayName(path: string): string {
   return path.split("/").filter(Boolean).pop() || path;

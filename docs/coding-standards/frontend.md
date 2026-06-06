@@ -11,8 +11,7 @@ This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScri
 
 ## Type System
 
-- All shared types in `src/cli/types.ts`
-- Prompt types in `src/cli/prompt/types.ts` (Fragment, ComposedPrompt, PromptVariables)
+- Shared types in `src/cli/types.ts`; audit/check types in `src/cli/audit/types.ts`; CLI command types in `src/cli/cli-types.ts`
 - Strict mode: no implicit any, strict null checks, strict property initialization
 - No `any`. Use `unknown` and narrow with type guards. Minimize `as` casts.
 - Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'antigravity' | 'copilot'`
@@ -23,8 +22,8 @@ This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScri
 - Framework: `node:test` (describe/it) + `node:assert/strict`
 - Run: `npm test` for the fast preflight suite; use `npm run test:slow` for the nested preflight/dashboard integration suite and `npm run test:full` before release-sensitive changes.
 - Tests in `test/` mirroring `src/cli/` structure
-- `createMockFS()` from `test/helpers/mock-fs.ts` for filesystem tests -- never touch real disk
-- `createTestProject()` from `test/helpers/test-project.ts` for integration fixtures
+- Integration tests isolate the filesystem with a real temp dir (`fs.mkdtemp` under `os.tmpdir()`) -- never touch the real project tree
+- Process/global-state helpers in `test/helpers/`: `setEnv` and `withStubbedDate` (`global-fixtures.ts`), `assertExists` (`assert-exists.ts`)
 
 ## Build Check Pattern
 
@@ -34,39 +33,42 @@ Each build check is a `BuildCheck` object in `src/cli/audit/check-goat-flow.ts` 
 {
   id: string,              // kebab-case identifier
   name: string,            // Human-readable check name
-  scope: 'setup' | 'harness',  // Which audit scope this belongs to
+  scope: 'setup' | 'agent',  // AuditScopeName -- which audit scope this belongs to
+  provenance: CheckEvidence,  // required: evidence/source backing this check
   run: (ctx: AuditContext) => AuditFailure | null,  // null = pass
 }
 ```
 
 `AuditContext` provides: `projectPath`, `facts`, `config`, `fs`, `structure`, `agents`, `agentFilter`.
 
-## Quality Check Pattern
+## Harness Check Pattern
 
-Each quality check is a `QualityCheck` object in the `src/cli/audit/harness/` directory:
+Each AI Harness Completeness check is a `HarnessCheck` object in the `src/cli/audit/harness/` directory:
 
 ```typescript
 {
   id: string,              // kebab-case identifier
+  name: string,            // Human-readable check name
   concern: AuditConcernKey,  // 'context' | 'constraints' | 'verification' | 'recovery' | 'feedback_loop'
-  weight: number,          // Relative weight within concern
-  run: (ctx: AuditContext) => QualityCheckResult,
+  type: HarnessCheckType,  // 'integrity' | 'advisory' | 'metric'
+  provenance: CheckEvidence,  // evidence/source backing this check
+  run: (ctx: AuditContext) => HarnessCheckResult,
 }
 ```
 
-`QualityCheckResult`: `{ score: number (0-100), findings: string[], recommendations: string[], howToFix?: string[] }`
+`HarnessCheckResult`: `{ status: 'pass' | 'fail', findings: string[], recommendations: string[], howToFix?: string[] }`
 
-Quality checks are advisory - they never affect exit code.
+Harness checks feed the AI Harness Completeness score and do not affect the deterministic audit exit code (only build checks do).
 
 ## Key Patterns
 
 - `AuditFailure`: returned by failing build checks. Fields: `check`, `message`, `evidence?`, `howToFix?`
 - `ReadonlyFS`: filesystem abstraction (exists, readFile, lineCount, readJson, listDir, isExecutable, glob). Auditor never writes.
-- Grade thresholds: A >= 90, B >= 75, C >= 60, D >= 40, F < 40
+- Grade thresholds: A >= 90, B >= 80, C >= 70, D >= 60, F < 60
 
 ## File Organization
 
 - New build check? Add `BuildCheck` to `audit/check-goat-flow.ts` or `audit/check-agent-setup.ts`
-- New quality check? Add `QualityCheck` to the appropriate file in `audit/harness/`
+- New harness check? Add a `HarnessCheck` to the appropriate file in `audit/harness/`
 - New fact? Add to `SharedFacts` or `AgentFacts` in `types.ts`, extract in `facts/shared/` or `facts/agent/`
-- New CLI command? Add to `Command` union and `COMMANDS` array in `cli.ts`
+- New CLI command? Add to the `Command` union in `cli-types.ts` and the command table in `cli-parser.ts`

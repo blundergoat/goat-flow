@@ -60,7 +60,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 3. Verification
 
-**Audit checks:** hooks in sync, commit guidance present, post-turn hook integrity (informational).
+**Audit checks:** hooks in sync, commit guidance present, evidence-before-claims rule present, post-turn hook integrity (informational).
 
 **Quality evaluates:**
 - Do the configured validation commands actually run and produce meaningful output?

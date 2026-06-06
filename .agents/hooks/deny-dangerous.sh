@@ -329,6 +329,8 @@ heredoc_opener_executes_shell() {
   local normalized
   local first_word
   local pipe_shell_re
+  local dispatch_re
+  local shell_word_re
 
   normalized=$(normalize_command_candidate "$before_heredoc")
   first_word=$(first_word_base "$normalized")
@@ -338,7 +340,21 @@ heredoc_opener_executes_shell() {
   esac
 
   pipe_shell_re='[|][[:space:]]*(env[[:space:]]+)?([^[:space:]/]+/)*(bash|sh|dash|zsh|ksh|fish|pwsh|powershell|cmd)([[:space:]]|$)'
-  [[ "$opener" =~ $pipe_shell_re ]]
+  [[ "$opener" =~ $pipe_shell_re ]] && return 0
+
+  # xargs / parallel turn their stdin - the heredoc body, fed directly or through
+  # a pipe - into commands; when they dispatch to a shell, the body lines ARE
+  # shell (e.g. `xargs -I{} bash -c '{}' <<'X' ... X`, or `cat <<'X' ... X |
+  # parallel sh -c '{}'`). The argument between `-c` and the body slips past the
+  # direct shell-here-doc check in patterns-shell.sh, so detect the
+  # dispatcher+shell pairing on the opener line here and keep the body
+  # inspectable - do NOT mask it. Plain `xargs rm`/`grep bash` (dispatcher xor
+  # shell, never both) stay maskable, so inert bodies are unaffected.
+  dispatch_re='(^|[[:space:]|])([^[:space:]|]*/)?(xargs|parallel)([[:space:]]|$)'
+  shell_word_re='(^|[[:space:]|])([^[:space:]|]*/)?(bash|sh|dash|zsh|ksh|fish|pwsh|powershell|cmd)([[:space:]]|$)'
+  [[ "$opener" =~ $dispatch_re ]] && [[ "$opener" =~ $shell_word_re ]] && return 0
+
+  return 1
 }
 
 mask_safe_quoted_heredoc_bodies() {
@@ -349,6 +365,7 @@ mask_safe_quoted_heredoc_bodies() {
   local in_body=0
   local mask_body=0
   local strip_tabs=0
+  local body_masked=0
   local stripped_line=""
   local single_quoted_re="(<<-?)[[:space:]]*'([^']+)'"
   local double_quoted_re='(<<-?)[[:space:]]*"([^"]+)"'
@@ -366,9 +383,20 @@ mask_safe_quoted_heredoc_bodies() {
         in_body=0
         mask_body=0
         strip_tabs=0
+        body_masked=0
         delimiter=""
       elif (( mask_body )); then
-        output+="__goat_quoted_heredoc_body__"$'\n'
+        # Collapse the whole inert body to ONE placeholder: a quoted-interpreter
+        # heredoc (e.g. python - <<'PY' ... PY) is a single command argument, not
+        # one chain link per line. Emitting one token per line let a body over 50
+        # lines trip the 50-chained-segment cap - a false positive on ordinary
+        # inline smoke scripts. Shell-fed heredocs keep mask_body=0 and fall to
+        # the else branch below, so they stay emitted line by line, inspectable
+        # and still counted.
+        if (( ! body_masked )); then
+          output+="__goat_quoted_heredoc_body__"$'\n'
+          body_masked=1
+        fi
       else
         output+="$line"$'\n'
       fi
@@ -386,6 +414,7 @@ mask_safe_quoted_heredoc_bodies() {
         mask_body=1
       fi
       in_body=1
+      body_masked=0
     fi
   done <<< "$input"
 

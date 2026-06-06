@@ -34,6 +34,18 @@ Use when assessing security posture before release, after auth/input/storage cha
 - **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 - **Threat Model Snapshot:** Output assets, trust boundaries, attacker types, and critical surfaces as an explicit artifact before scanning.
 
+### Headless JSON Emit
+
+When invoked with `--emit json --output <path>`, run non-interactively and write a contract artifact instead of a markdown report.
+
+- Resolve Step 0 from supplied input: target path/scope, review mode, provenance, depth, deployment context, and agent/runtime. If a required value is missing, write a contract-valid failure artifact with `integrity.conclusion: coverage-degraded` and a degradation flag; do not ask a follow-up.
+- Run the same scan phases and proof gate as interactive mode. Headless mode changes output transport only.
+- Convert blocking gates into run-through gates: evaluate the Critical/High cross-check trigger, active-testing need, proof gate, and persist gate; record the result in the artifact instead of pausing for the user.
+- If a composed background job trips a review/refuter Pass 3 trigger, verify the second runtime is installed and authenticated before spawning it. If unavailable, continue without the refuter and record `cross-model-refuter-failed`; version checks alone do not count.
+- Defer drill-in or active exploit testing to the UI unless the supplied input explicitly authorizes it. Record the deferred state in `activeTestingGate`.
+- Write JSON that validates as `SecurityResult` from `src/contracts/goat-security-contract.ts`, including `resultKind`, `contractVersion`, `target`, `threatModelSnapshot`, `posture`, `findings`, `integrity`, `activeTestingGate`, and `persistGate`.
+- Final stdout is limited to artifact path, validation status, and degradation flags so callers can parse it reliably.
+
 ## Quick Scan Path
 
 1. Identify trust boundaries, privileged surfaces, and the highest-risk changed files.
@@ -160,6 +172,8 @@ If `PROBABLE > CONFIRMED`, suggest `/goat-critique` cross-examination before clo
 ### Persist Gate
 
 This review produced findings S-01..S-NN that downstream artifacts may cite. Prompt: "Persist to `.goat-flow/logs/security/<date>-<artifact>.md`?" User confirms before writing. Not auto-persist.
+
+In `--emit json --output <path>` mode, write the JSON artifact to the caller-supplied path without prompting and set `persistGate.wroteArtifact`, `persistGate.artifactPath`, and `persistGate.confirmation` in the artifact. If the write fails, return a non-zero result and include the failure in stdout.
 
 ## Compliance Mode
 

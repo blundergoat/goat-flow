@@ -444,6 +444,41 @@ function dashboardAppFragment09(): DashboardAppFragment {
       dashboardCopyQuality(this);
     },
 
+    /** Load the committed review/security fixture for the M03 render spike. */
+    async loadReviewFixture() {
+      if (this.reviewsArtifact || this.reviewsLoading) return;
+      this.reviewsLoading = true;
+      this.reviewsError = "";
+      try {
+        const res = await dashboardFetch("/assets/review-security-fixture.json");
+        if (!res.ok) throw new Error(`Review fixture returned ${res.status}`);
+        this.reviewsArtifact = readSecurityReviewArtifact(await res.json());
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.reviewsError = msg || "Review fixture loading failed";
+        this.showToast(this.reviewsError, true);
+      } finally {
+        this.reviewsLoading = false;
+      }
+    },
+
+    reviewSeverityColor(severity: SecurityReviewSeverity): string {
+      if (severity === "Critical") return "var(--status-danger)";
+      if (severity === "High") return "var(--red-400)";
+      if (severity === "Medium") return "var(--status-waiting)";
+      return "var(--text-muted)";
+    },
+
+    reviewRollupEntries(): Array<{
+      severity: SecurityReviewSeverity;
+      count: number;
+    }> {
+      const rollup = this.reviewsArtifact?.posture.rollupBySeverity;
+      return (["Critical", "High", "Medium", "Low"] as const).map(
+        (severity) => ({ severity, count: rollup?.[severity] ?? 0 }),
+      );
+    },
+
     // -- Skill quality --
     /** Load skill-quality inventory; reports endpoint errors and resets stale caches because reports key by artifact. */
     async loadSkillQualityInventory() {
