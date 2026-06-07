@@ -6,9 +6,8 @@
 #   Optional PostToolUse hook that runs the matching gruff analyzer after
 #   a file edit (Edit / Write, or a multi-file edit payload) and surfaces only
 #   findings tied to the lines just changed. This keeps the quality feedback on
-#   the agent's current
-#   work instead of forcing cleanup of unrelated debt elsewhere in the
-#   same file.
+#   the agent's current work instead of forcing cleanup of unrelated debt
+#   elsewhere in the same file.
 #
 # Supported analyzers:
 #   - gruff-ts for .ts / .tsx / .mts / .cts / .js / .jsx / .mjs / .cjs
@@ -28,17 +27,16 @@
 #
 # Changed-line model:
 #   Prefer changed ranges from the PostToolUse payload when present.
-#   Otherwise parse `git diff --unified=0 -- <file>` for tracked files.
-#   Pathless fallback files also consult staged hunks when no unstaged hunk
-#   exists, because those paths can come from `git diff --cached`.
+#   Otherwise parse `git diff HEAD --unified=0 -- <file>` for tracked files,
+#   falling back to the index diff only on unborn branches with no HEAD.
 #   New/untracked files are treated as fully changed. If no range can be
 #   derived, the hook exits quietly apart from a short stderr diagnostic.
-#   Analyzers with native changed-region support own the filtering: gruff-py is
-#   invoked with `--changed-ranges`, `--changed-scope symbol`, and `--no-baseline`
-#   so symbol-aware scope is used and adoption baselines do not hide agent
-#   feedback. All other analyzers use the portable primary-line fallback above.
-#   Either way the surfaced findings are severity-sorted, floored, and capped
-#   identically.
+#   Analyzers with native changed-region support own the filtering: any analyzer
+#   advertising `--changed-ranges`, `--changed-scope`, and `--no-baseline` is
+#   invoked with those flags so symbol-aware scope is used and adoption baselines
+#   do not hide agent feedback. Other analyzers use the portable primary-line
+#   fallback above. Either way the surfaced findings are severity-sorted,
+#   floored, and capped identically.
 #
 # Output:
 #   Prints a scope/tally header
@@ -249,18 +247,6 @@ payload_file_paths() {
   fi
 }
 
-file_paths_for_payload() {
-  local payload="$1"
-  local root="$2"
-  local paths
-  paths="$(payload_file_paths "$payload")"
-  if [[ -n "$paths" ]]; then
-    printf '%s\n' "$paths"
-    return
-  fi
-  git_changed_supported_paths "$root"
-}
-
 # Discovery covers each ecosystem's standard install location - package-manager
 # bin dirs (vendor/bin for composer, node_modules/.bin for npm), an in-repo bin/,
 # the root virtualenv (.venv/bin), user-local installs (~/.local/bin), and finally
@@ -365,21 +351,22 @@ git_diff_ranges() {
   local root="$1"
   local rel_path="$2"
   local abs_path="$3"
-  local include_cached="${4:-0}"
-  local diff_output ranges
+  local allow_cached_fallback="${4:-1}"
+  local diff_output
   if ! git -C "$root" ls-files --error-unmatch -- "$rel_path" >/dev/null 2>&1; then
     if [[ -f "$abs_path" ]]; then
       all_file_range "$abs_path"
     fi
     return
   fi
-  diff_output="$(git -C "$root" diff --unified=0 -- "$rel_path" 2>/dev/null || true)"
-  ranges="$(parse_diff_ranges "$diff_output")"
-  if [[ -n "$ranges" || "$include_cached" -eq 0 ]]; then
-    printf '%s' "$ranges"
-    return
+  if git -C "$root" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+    diff_output="$(git -C "$root" diff HEAD --unified=0 -- "$rel_path" 2>/dev/null || true)"
+  else
+    diff_output="$(git -C "$root" diff --unified=0 -- "$rel_path" 2>/dev/null || true)"
+    if [[ -z "$diff_output" && "$allow_cached_fallback" -eq 1 ]]; then
+      diff_output="$(git -C "$root" diff --cached --unified=0 -- "$rel_path" 2>/dev/null || true)"
+    fi
   fi
-  diff_output="$(git -C "$root" diff --cached --unified=0 -- "$rel_path" 2>/dev/null || true)"
   parse_diff_ranges "$diff_output"
 }
 
@@ -388,21 +375,25 @@ changed_ranges() {
   local root="$2"
   local rel_path="$3"
   local abs_path="$4"
+  local file_count="${5:-1}"
+  local allow_cached_fallback="${6:-1}"
   local ranges
-  ranges="$(payload_ranges "$payload")"
-  if [[ -n "$ranges" ]]; then
-    printf '%s' "$ranges"
-    return
+  # Payload changed_ranges is a single flat list with no per-file attribution.
+  # Trust it only for single-file edits; multi-file payloads derive per-file
+  # ranges from git so one file's ranges are not applied to every file.
+  if [[ "$file_count" -le 1 ]]; then
+    ranges="$(payload_ranges "$payload")"
+    if [[ -n "$ranges" ]]; then
+      printf '%s' "$ranges"
+      return
+    fi
   fi
-  if [[ -n "$(payload_file_paths "$payload")" ]]; then
-    git_diff_ranges "$root" "$rel_path" "$abs_path" 0
-  else
-    git_diff_ranges "$root" "$rel_path" "$abs_path" 1
-  fi
+  git_diff_ranges "$root" "$rel_path" "$abs_path" "$allow_cached_fallback"
 }
 
 self_test() {
   local payload paths ranges variant report_output report_json first_line
+  local help_full help_missing counts
   if ! command -v jq >/dev/null 2>&1; then
     printf 'gruff-code-quality self-test: jq unavailable\n' >&2
     return 1
@@ -422,6 +413,47 @@ self_test() {
   variant="$(variant_for_path "src/a.mts")"
   [[ "$variant" == "gruff-ts" ]] || {
     printf 'gruff-code-quality self-test: variant mapping failed: %s\n' "$variant" >&2
+    return 1
+  }
+
+  # A single-file MultiEdit payload should return only the target file path, not
+  # any synthetic path from the edits array.
+  payload='{"tool_name":"MultiEdit","tool_input":{"file_path":"src/x.rs","edits":[{"old_string":"a","new_string":"b"}]}}'
+  paths="$(json_file_paths "$payload")"
+  [[ "$paths" == "src/x.rs" ]] || {
+    printf 'gruff-code-quality self-test: single-file MultiEdit path failed: %s\n' "$paths" >&2
+    return 1
+  }
+
+  # A single edited file trusts payload changed_ranges; several edited files
+  # must not share one range set, so changed_ranges falls back to per-file git
+  # ranges (empty under this bogus root).
+  payload='{"tool_name":"multi_replace_file_content","tool_input":{"edits":[{"file_path":"src/a.mts"},{"path":"src/b.php"}],"changed_ranges":[{"startLine":2,"endLine":4}]}}'
+  [[ "$(changed_ranges "$payload" "/nonexistent" "src/a.mts" "/nonexistent/src/a.mts" 1)" == "2-4" ]] || {
+    printf 'gruff-code-quality self-test: single-file payload range failed\n' >&2
+    return 1
+  }
+  [[ -z "$(changed_ranges "$payload" "/nonexistent" "src/a.mts" "/nonexistent/src/a.mts" 2)" ]] || {
+    printf 'gruff-code-quality self-test: multi-file payload range sharing not suppressed\n' >&2
+    return 1
+  }
+
+  help_full='usage: gruff analyse --format json --changed-ranges 1-2 --changed-scope symbol --no-baseline'
+  help_missing='usage: gruff analyse --format json --changed-ranges 1-2 --no-baseline'
+  supports_native_changed_regions "$help_full" || {
+    printf 'gruff-code-quality self-test: native capability probe failed\n' >&2
+    return 1
+  }
+  ! supports_native_changed_regions "$help_missing" || {
+    printf 'gruff-code-quality self-test: incomplete native capability probe passed\n' >&2
+    return 1
+  }
+
+  [[ "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=bogus normalized_timeout_seconds)" == "30" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=0 normalized_timeout_seconds)" == "30" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS='' normalized_timeout_seconds)" == "30" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=45 normalized_timeout_seconds)" == "45" ]] || {
+    printf 'gruff-code-quality self-test: timeout normalization failed\n' >&2
     return 1
   }
 
@@ -446,6 +478,19 @@ self_test() {
     printf 'gruff-code-quality self-test: severity floor failed\n' >&2
     return 1
   }
+  report_output='{"findings":[{"severity":"ERROR","line":3,"file":"x.ts","ruleId":"upper.error","message":"m"}]}'
+  report_json="$(changed_findings_report "$report_output" "x.ts" "/tmp/x.ts" "2-4" 3 20 0)"
+  [[ "$(printf '%s' "$report_json" | jq -r '.surfaced')" == "1" && "$(printf '%s' "$report_json" | jq -r '.e')" == "1" ]] || {
+    printf 'gruff-code-quality self-test: uppercase severity normalization failed\n' >&2
+    return 1
+  }
+  report_output='{"findings":[{"line":2,"file":"x.ts","ruleId":"missing.severity","message":"m"},{"severity":"error","line":3,"file":"x.ts","ruleId":"error.severity","message":"m"}]}'
+  report_json="$(changed_findings_report "$report_output" "x.ts" "/tmp/x.ts" "2-4" 1 20 0)"
+  counts="$(printf '%s' "$report_json" | jq -r '[.total, (.e + .w + .a)] | @tsv')"
+  [[ "$counts" == $'2\t2' ]] || {
+    printf 'gruff-code-quality self-test: severity counts do not sum to total: %s\n' "$counts" >&2
+    return 1
+  }
 
   # Native mode (analyzer owns scoping) surfaces a finding outside the literal
   # changed range; the portable fallback filters that same finding out.
@@ -465,13 +510,11 @@ self_test() {
 }
 
 # An analyzer "owns" changed-region filtering when it can scope the scan itself.
-# Only gruff-py advertises the symbol-aware trio (`--changed-ranges`,
-# `--changed-scope`, `--no-baseline`); when present the hook delegates scoping to
-# it instead of filtering by primary line. Any other binary uses the fallback.
+# When its help advertises the symbol-aware trio (`--changed-ranges`,
+# `--changed-scope`, `--no-baseline`), the hook delegates scoping to the
+# analyzer instead of filtering by primary line.
 supports_native_changed_regions() {
-  local binary="$1"
-  local help="$2"
-  [[ "$binary" == "gruff-py" ]] || return 1
+  local help="$1"
   [[ "$help" == *"--changed-ranges"* ]] || return 1
   [[ "$help" == *"--changed-scope"* ]] || return 1
   [[ "$help" == *"--no-baseline"* ]] || return 1
@@ -492,12 +535,19 @@ supports_json_format() {
   [[ "$help" == *"--format"* || "$help" == *"-format"* ]]
 }
 
+normalized_timeout_seconds() {
+  local timeout_seconds="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-}"
+  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || [[ "$timeout_seconds" -lt 1 ]]; then
+    timeout_seconds=30
+  fi
+  printf '%s' "$timeout_seconds"
+}
+
 run_gruff_json() {
   local binary_path="$1"
   local help="$2"
   local file_path="$3"
-  local binary="$4"
-  local ranges="$5"
+  local ranges="$4"
   local args timeout_seconds
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
@@ -505,7 +555,7 @@ run_gruff_json() {
     if [[ "$help" == *"--fail-on"* ]]; then
       args+=(--fail-on none)
     fi
-    if supports_native_changed_regions "$binary" "$help"; then
+    if supports_native_changed_regions "$help"; then
       args+=(--no-baseline --changed-ranges "$ranges" --changed-scope symbol)
     fi
   elif [[ "$help" == *"-format"* ]]; then
@@ -514,10 +564,7 @@ run_gruff_json() {
     return 64
   fi
 
-  timeout_seconds="$GRUFF_CODE_QUALITY_TIMEOUT_SECONDS"
-  if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || [[ "$timeout_seconds" -lt 1 ]]; then
-    timeout_seconds=30
-  fi
+  timeout_seconds="$(normalized_timeout_seconds)"
 
   if command -v timeout >/dev/null 2>&1; then
     timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>&1
@@ -592,13 +639,14 @@ changed_findings_report() {
     def sev_rank($s):
       # error > warning > everything else (advisory, or an unknown/missing severity)
       # so an unrecognised severity still clears the default advisory floor and stays visible.
-      if $s == "error" then 3 elif $s == "warning" then 2 else 1 end;
+      ($s | tostring | ascii_downcase) as $sev
+      | if $sev == "error" then 3 elif $sev == "warning" then 2 else 1 end;
 
     [ (.findings // [])[]
       | . as $finding
       | ($finding | line_or_null) as $line
       | select(($finding | same_file) and $line != null and ($native == 1 or in_changed_ranges($line)))
-      | { sev: (.severity // "unknown"),
+      | { sev: ((.severity // "unknown") | tostring | ascii_downcase),
           rank: sev_rank(.severity // ""),
           line: $line,
           file: ($finding | finding_path),
@@ -607,9 +655,9 @@ changed_findings_report() {
     | ($all | sort_by([ (3 - .rank), .file, .line, .ruleId ])) as $sorted
     | [ $sorted[] | select(.rank >= $floor_rank) ] as $surfaced
     | { total: ($all | length),
-        e: ([ $all[] | select(.sev == "error") ] | length),
-        w: ([ $all[] | select(.sev == "warning") ] | length),
-        a: ([ $all[] | select(.sev == "advisory") ] | length),
+        e: ([ $all[] | select(.rank == 3) ] | length),
+        w: ([ $all[] | select(.rank == 2) ] | length),
+        a: ([ $all[] | select(.rank == 1) ] | length),
         surfaced: ($surfaced | length),
         floored: (($all | length) - ($surfaced | length)),
         more: (if ($surfaced | length) > $max then ($surfaced | length) - $max else 0 end),
@@ -727,6 +775,8 @@ process_file() {
   local payload="$1"
   local root="$2"
   local file_path="$3"
+  local file_count="${4:-1}"
+  local allow_cached_fallback="${5:-1}"
   local rel_path abs_path binary binary_path config_file
   local ranges help output status suppressed ignored_desc uses_native_regions
   local max_findings floor_rank report_json scope_fields
@@ -757,7 +807,7 @@ process_file() {
     return 0
   fi
 
-  ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path")"
+  ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path" "$file_count" "$allow_cached_fallback")"
   if [[ -z "$ranges" ]]; then
     printf 'gruff-code-quality: no changed lines detected for %s; skipping gruff output\n' "$rel_path" >&2
     return 0
@@ -769,17 +819,17 @@ process_file() {
     return 0
   fi
   uses_native_regions=0
-  if supports_native_changed_regions "$binary" "$help"; then
+  if supports_native_changed_regions "$help"; then
     uses_native_regions=1
   fi
 
   set +e
-  output="$(run_gruff_json "$binary_path" "$help" "$rel_path" "$binary" "$ranges")"
+  output="$(run_gruff_json "$binary_path" "$help" "$rel_path" "$ranges")"
   status=$?
   set -e
 
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
-    printf 'gruff-code-quality: %s exceeded %ss or was killed; changed-line filtering skipped\n' "$binary" "$GRUFF_CODE_QUALITY_TIMEOUT_SECONDS" >&2
+    printf 'gruff-code-quality: %s exceeded %ss or was killed; changed-line filtering skipped\n' "$binary" "$(normalized_timeout_seconds)" >&2
     return 0
   fi
   if [[ -z "$output" ]]; then
@@ -859,7 +909,7 @@ process_file() {
 }
 
 main() {
-  local payload tool_name root file_path
+  local payload tool_name root file_path payload_paths allow_cached_fallback
   local -a file_paths
   if [[ "${1:-}" == "--self-test=smoke" ]]; then
     self_test
@@ -872,11 +922,19 @@ main() {
   supported_tool "$tool_name" || exit 0
 
   root="$(repo_root)"
-  mapfile -t file_paths < <(file_paths_for_payload "$payload" "$root")
+  cd "$root" || exit 0
+  payload_paths="$(payload_file_paths "$payload")"
+  allow_cached_fallback=0
+  if [[ -n "$payload_paths" ]]; then
+    mapfile -t file_paths <<< "$payload_paths"
+  else
+    mapfile -t file_paths < <(git_changed_supported_paths "$root")
+    allow_cached_fallback=1
+  fi
   [[ "${#file_paths[@]}" -gt 0 ]] || exit 0
 
   for file_path in "${file_paths[@]}"; do
-    process_file "$payload" "$root" "$file_path"
+    process_file "$payload" "$root" "$file_path" "${#file_paths[@]}" "$allow_cached_fallback"
   done
   exit 0
 }

@@ -56,7 +56,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Evidence:**
 - `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) now records the corrected Antigravity hook config.
 - `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) maps `gruff-code-quality` to Antigravity file-edit tool names.
-- `workflow/hooks/gruff-code-quality.sh` (search: `file_paths_for_payload`) falls back to git-changed supported files when a PostToolUse payload omits the edited path.
+- `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`) prefers payload paths, and `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`) falls back to git-changed supported files when a PostToolUse payload omits the edited path.
 - `workflow/hooks/agent-config/antigravity-hooks.json` (search: `run_command|view_file`) is the new Antigravity config template.
 - `.agents/hooks.json` (search: `deny-dangerous`) is the installed mirror that proves this controlling workspace no longer treats Antigravity as hookless.
 

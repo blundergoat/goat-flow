@@ -372,6 +372,135 @@ expect_missing_common_fails_closed_json() {
   fi
 }
 
+copy_policy_fixture() {
+  local hook="$1"
+  local root="$2"
+  local policy_dir="$root/.goat-flow/hooks/deny-dangerous"
+  mkdir -p "$policy_dir"
+  cp "$(hook_path "$hook")" "$root/.goat-flow/hooks/deny-dangerous.sh"
+  cp "$SCRIPT_DIR/patterns-shell.sh" "$policy_dir/patterns-shell.sh"
+  cp "$SCRIPT_DIR/patterns-paths.sh" "$policy_dir/patterns-paths.sh"
+  cp "$SCRIPT_DIR/patterns-writes.sh" "$policy_dir/patterns-writes.sh"
+}
+
+expect_script_path_fallback_policy_eval() {
+  selected_hook shell || {
+    record_skip
+    record_skip
+    return
+  }
+  local tmp project outside output status
+  tmp="$(mktemp -d)"
+  project="$tmp/project"
+  outside="$tmp/outside"
+  mkdir -p "$outside"
+  copy_policy_fixture shell "$project"
+
+  executed=$((executed + 1))
+  set +e
+  output="$(cd "$outside" && bash "$project/.goat-flow/hooks/deny-dangerous.sh" --check="echo safe" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 || -n "$output" ]]; then
+    record_fail "script-path root fallback should allow safe command outside git (exit=$status output=$output)"
+  fi
+
+  executed=$((executed + 1))
+  set +e
+  output="$(cd "$outside" && bash "$project/.goat-flow/hooks/deny-dangerous.sh" --check="rm -rf /" 2>&1)"
+  status=$?
+  set -e
+  rm -rf "$tmp"
+  if [[ "$status" -ne 2 ]]; then
+    record_fail "script-path root fallback should block dangerous command outside git (exit=$status)"
+    return
+  fi
+  if [[ "$output" != *"BLOCKED: Policy destructive:"* || "$output" == *"Policy hook unavailable"* ]]; then
+    record_fail "script-path root fallback should reach normal destructive policy"
+  fi
+}
+
+expect_script_path_fallback_missing_policy_fails_closed() {
+  selected_hook shell || {
+    record_skip
+    return
+  }
+  executed=$((executed + 1))
+  local tmp project outside output status
+  tmp="$(mktemp -d)"
+  project="$tmp/project"
+  outside="$tmp/outside"
+  mkdir -p "$project/.goat-flow/hooks" "$outside"
+  cp "$(hook_path shell)" "$project/.goat-flow/hooks/deny-dangerous.sh"
+  set +e
+  output="$(cd "$outside" && bash "$project/.goat-flow/hooks/deny-dangerous.sh" --check="echo safe" 2>&1)"
+  status=$?
+  set -e
+  rm -rf "$tmp"
+  if [[ "$status" -ne 2 ]]; then
+    record_fail "script-path root fallback should fail closed when policy store is missing (exit=$status)"
+  fi
+  if [[ "$output" != *"Policy hook unavailable"* || "$output" != *"policy"* ]]; then
+    record_fail "script-path root fallback missing policy should explain fail-closed reason"
+  fi
+}
+
+expect_git_common_dir_resolution_case() {
+  local label="$1"
+  local tmp="$2"
+  local dispatcher="$3"
+  local git_bin="$4"
+  local gcd="$5"
+  local top_level="$6"
+  local policy_root="$7"
+  executed=$((executed + 1))
+  copy_policy_fixture shell "$policy_root"
+  local output status
+  set +e
+  output="$(cd "$tmp" && PATH="$git_bin:$PATH" GOAT_STUB_GIT_COMMON_DIR="$gcd" GOAT_STUB_SHOW_TOPLEVEL="$top_level" bash "$dispatcher" --check="echo safe" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 || -n "$output" ]]; then
+    record_fail "git-common-dir resolver should allow safe command for $label (exit=$status output=$output)"
+  fi
+}
+
+expect_git_common_dir_resolution_cases() {
+  selected_hook shell || {
+    record_skip
+    record_skip
+    record_skip
+    record_skip
+    return
+  }
+  local tmp git_bin dispatcher
+  tmp="$(mktemp -d)"
+  git_bin="$tmp/bin"
+  dispatcher="$tmp/launcher/deny-dangerous.sh"
+  mkdir -p "$git_bin" "$tmp/launcher"
+  cp "$(hook_path shell)" "$dispatcher"
+  cat > "$git_bin/git" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "rev-parse" && "${2:-}" == "--git-common-dir" ]]; then
+  printf '%s\n' "$GOAT_STUB_GIT_COMMON_DIR"
+  exit 0
+fi
+if [[ "$1" == "rev-parse" && "${2:-}" == "--show-toplevel" ]]; then
+  [[ -n "${GOAT_STUB_SHOW_TOPLEVEL:-}" ]] || exit 1
+  printf '%s\n' "$GOAT_STUB_SHOW_TOPLEVEL"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$git_bin/git"
+
+  expect_git_common_dir_resolution_case "Unix absolute common dir" "$tmp" "$dispatcher" "$git_bin" "$tmp/unix/.git" "" "$tmp/unix"
+  expect_git_common_dir_resolution_case "absorbed submodule common dir" "$tmp" "$dispatcher" "$git_bin" "$tmp/parent/.git/modules/sub" "$tmp/submodule" "$tmp/submodule"
+  expect_git_common_dir_resolution_case "Windows slash common dir" "$tmp" "$dispatcher" "$git_bin" "C:/Users/dev/repo/.git" "" "$tmp/C:/Users/dev/repo"
+  expect_git_common_dir_resolution_case "Windows backslash common dir" "$tmp" "$dispatcher" "$git_bin" 'C:\Users\dev\repo\.git' "" "$tmp/C:/Users/dev/repo"
+  rm -rf "$tmp"
+}
+
 run_common_dependency_checks() {
   expect_missing_common_fails_closed shell
   expect_missing_common_fails_closed paths
@@ -382,6 +511,9 @@ run_common_dependency_checks() {
   expect_missing_common_fails_closed_json shell antigravity
   expect_missing_common_fails_closed_json paths antigravity
   expect_missing_common_fails_closed_json writes antigravity
+  expect_script_path_fallback_policy_eval
+  expect_script_path_fallback_missing_policy_fails_closed
+  expect_git_common_dir_resolution_cases
 }
 
 run_smoke() {
@@ -442,6 +574,32 @@ run_full() {
   expect_allow shell 'bash -c "echo hello"' "safe bash -c"
   expect_allow shell "python -c 'print(1)'" "safe python -c"
   expect_allow shell 'printf "%s\n" "rm -rf /"' "quoted rm literal"
+
+  # --- Wrapper-prefix normalization. First-word anchored policies must still
+  # inspect the real command behind launchers, while benign and no-command forms
+  # remain allowed. ---
+  expect_block shell "exec rm -rf /" "exec wrapped rm"
+  expect_block shell "timeout 5 rm -rf /" "timeout wrapped rm"
+  expect_block shell "timeout -s KILL 5 rm -rf /" "timeout signal wrapped rm"
+  expect_block shell "setsid rm -rf /" "setsid wrapped rm"
+  expect_block shell "stdbuf -oL rm -rf /" "stdbuf wrapped rm"
+  expect_block shell "ionice -c2 rm -rf /" "ionice wrapped rm"
+  expect_block shell "taskset -c 0 rm -rf /" "taskset wrapped rm"
+  expect_block shell "chrt -f 10 rm -rf /" "chrt wrapped rm"
+  expect_block shell "flock /tmp/goat-flow.lock rm -rf /" "flock lockfile wrapped rm"
+  expect_block shell "flock -c 'rm -rf /'" "flock command-string wrapped rm"
+  expect_block shell "sudo timeout 5 rm -rf /" "sudo timeout wrapped rm"
+  expect_block shell "exec timeout 5 rm -rf /" "exec timeout wrapped rm"
+  expect_block writes "timeout 5 git push --force origin main" "timeout wrapped git push"
+  expect_block paths "timeout 5 cat .env" "timeout wrapped secret read"
+  expect_allow shell "timeout 5 ls -la" "timeout wrapped safe ls"
+  expect_allow shell "exec ls" "exec wrapped safe ls"
+  expect_allow shell "setsid echo hi" "setsid wrapped safe echo"
+  expect_allow writes "timeout 5 git status" "timeout wrapped git status"
+  expect_allow shell "ionice -p 123" "ionice pid form has no command"
+  expect_allow shell "taskset -p 123" "taskset pid form has no command"
+  expect_allow shell "chrt -p 123" "chrt pid form has no command"
+  expect_allow shell "exec 2>/dev/null" "exec redirection-only form has no command"
 
   expect_block paths "cat ./.env" "./.env read"
   expect_block paths "cat ../.env" "../.env read"
@@ -626,14 +784,23 @@ run_full() {
   expect_block shell "cat > >(bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution >(bash) routing body to shell is scanned"
   expect_block shell "tee >(bash) >/dev/null <<'X'"$'\n'"rm -rf /"$'\n'"X" "tee >(bash) routing body to shell is scanned"
   expect_block shell "cat <<'X' | tee >(bash) >/dev/null"$'\n'"rm -rf /"$'\n'"X" "piped tee >(bash) routing body to shell is scanned"
+  expect_block shell "cat > >(tee >(bash)) <<'X'"$'\n'"rm -rf /"$'\n'"X" "nested process-substitution shell is scanned"
   expect_block shell "cat > >(printf ''; bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution command list with later shell is scanned"
   expect_block shell "cat > >(: && bash) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution && shell is scanned"
   expect_block shell "cat > >({ printf ''; bash; }) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution brace group shell is scanned"
   expect_block shell "cat > >(if : ; then bash; fi) <<'X'"$'\n'"rm -rf /"$'\n'"X" "process-substitution control-flow shell is scanned"
   expect_allow shell "cat > >(cat) <<'X'"$'\n'"${_hd_body}X" "benign process substitution >(cat) stays allowed"
+  expect_block shell "nohup bash <<'X'"$'\n'"rm -rf /"$'\n'"X" "nohup shell-fed heredoc body is scanned"
+  expect_block shell "timeout 5 bash <<'X'"$'\n'"rm -rf /"$'\n'"X" "timeout shell-fed heredoc body is scanned"
+  expect_block shell "command bash <<'X'"$'\n'"rm -rf /"$'\n'"X" "command shell-fed heredoc body is scanned"
+  expect_block shell "exec bash <<'X'"$'\n'"rm -rf /"$'\n'"X" "exec shell-fed heredoc body is scanned"
+  expect_block shell "setsid bash <<'X'"$'\n'"rm -rf /"$'\n'"X" "setsid shell-fed heredoc body is scanned"
   local _stages="cat <<'X'"
   for ((_i = 1; _i <= 33; _i++)); do _stages+=" | cat"; done
   expect_allow shell "$_stages"$'\n'"${_hd_body}X" "33-stage inert pipeline stays masked/allowed (segment cap 64)"
+  local _many_heredoc_subst="cat"
+  for ((_i = 1; _i <= 40; _i++)); do _many_heredoc_subst+=" >(:)"; done
+  expect_block shell "$_many_heredoc_subst <<'X'"$'\n'"rm -rf /"$'\n'"X" "many heredoc process substitutions block fast"
 
   # --- ACCEPTED SCOPE LIMIT (product decision, 2026-06-06): an allowlisted
   # interpreter/client runs the body in ITS OWN language, INCLUDING shell escapes
@@ -642,6 +809,7 @@ run_full() {
   # price of not false-positiving on >50-line SQL migrations / sed-awk scripts.
   # These bodies stay ALLOWED BY DESIGN. Do NOT "fix" to block without revisiting
   # the decision (see footgun deny-dangerous.md, search: `accepted scope limit`). ---
+  expect_allow shell "python3 <<'PY'"$'\n'"import os"$'\n'"os.system('rm -rf /')"$'\n'"PY" "ACCEPTED scope: python3 shell escape in body is not inspected"
   expect_allow shell "psql <<'SQL'"$'\n'"\\! rm -rf /"$'\n'"SQL" "ACCEPTED scope: psql shell-escape in body is not inspected"
   expect_allow shell "sed e <<'X'"$'\n'"rm -rf /"$'\n'"X" "ACCEPTED scope: sed 'e' shell-escape in body is not inspected"
 

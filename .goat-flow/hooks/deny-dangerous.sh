@@ -19,6 +19,11 @@ GOAT_GUARD_NAME="deny-dangerous.sh"
 GOAT_GUARD_SCOPE="deny-dangerous"
 GOAT_GUARD_SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 GOAT_HOOK_LIB_DIR=""
+GOAT_REQUIRED_HOOK_POLICY_FILES=(
+  "patterns-shell.sh"
+  "patterns-paths.sh"
+  "patterns-writes.sh"
+)
 
 deny_dangerous_json_escape() {
   local value="$1"
@@ -48,26 +53,77 @@ deny_dangerous_unavailable() {
   exit 2
 }
 
-resolve_goat_flow_root() {
-  local gcd root
-  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
+goat_policy_store_is_valid() {
+  local root="$1"
+  local policy_dir="$root/.goat-flow/hooks/deny-dangerous"
+  local required_hook_lib_file
+  [[ -n "$root" && -d "$policy_dir" ]] || return 1
+  for required_hook_lib_file in "${GOAT_REQUIRED_HOOK_POLICY_FILES[@]}"; do
+    [[ -r "$policy_dir/$required_hook_lib_file" ]] || return 1
+  done
+  return 0
+}
+
+goat_root_from_git_common_dir() {
+  local gcd="$1"
+  local top_level="${2:-}"
   case "$gcd" in
     */.git/modules/*|.git/modules/*)
-      root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-      printf '%s\n' "$root"
+      [[ -n "$top_level" ]] || return 1
+      printf '%s\n' "$top_level"
       ;;
     /*|[A-Za-z]:/*|[A-Za-z]:\\*)
       gcd="${gcd//\\//}"
       dirname "$gcd"
       ;;
     *)
-      root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-      printf '%s\n' "$root"
+      [[ -n "$top_level" ]] || return 1
+      printf '%s\n' "$top_level"
       ;;
   esac
 }
 
-GOAT_FLOW_ROOT="$(resolve_goat_flow_root)" || deny_dangerous_unavailable "git repository root unavailable"
+resolve_goat_flow_root_from_git() {
+  local gcd top_level=""
+  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
+  case "$gcd" in
+    */.git/modules/*|.git/modules/*)
+      top_level="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+      ;;
+    /*|[A-Za-z]:/*|[A-Za-z]:\\*)
+      ;;
+    *)
+      top_level="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+      ;;
+  esac
+  goat_root_from_git_common_dir "$gcd" "$top_level"
+}
+
+resolve_goat_flow_root_from_script_path() {
+  local script_dir="$GOAT_GUARD_SCRIPT_DIR"
+  local candidate=""
+  case "$script_dir" in
+    */.goat-flow/hooks|*/workflow/hooks)
+      candidate="$(CDPATH='' cd -- "$script_dir/../.." && pwd)" || return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  goat_policy_store_is_valid "$candidate" || return 1
+  printf '%s\n' "$candidate"
+}
+
+resolve_goat_flow_root() {
+  local root
+  if root="$(resolve_goat_flow_root_from_git)"; then
+    printf '%s\n' "$root"
+    return 0
+  fi
+  resolve_goat_flow_root_from_script_path
+}
+
+GOAT_FLOW_ROOT="$(resolve_goat_flow_root)" || deny_dangerous_unavailable "git repository root unavailable and script path does not locate a valid policy store"
 GOAT_HOOK_LIB_DIR="$GOAT_FLOW_ROOT/.goat-flow/hooks/deny-dangerous"
 
 read_payload() {
@@ -337,6 +393,8 @@ goat_first_word_is_inert() {
   # OWN LANGUAGE (python `os.system`, sed `e`, awk `system()`, sql `\!`/`.shell`) -
   # a deliberately accepted scope limit: deny-dangerous guards SHELL, not
   # interpreter languages, the same reason `python - <<X` is not inspected.
+  # Some data consumers can persist or exfiltrate the body (`tee`, mail tools);
+  # that is outside this single-shell-command guard's scope.
   case "$1" in
     cat|tac|tee|head|tail|sort|uniq|wc|nl|rev|cut|tr|fold|fmt|column|paste|join|comm|expand|unexpand|strings|iconv|\
     base64|base32|xxd|hexdump|od|md5sum|sha1sum|sha256sum|sha512sum|cksum|\
@@ -350,7 +408,7 @@ goat_first_word_is_inert() {
 }
 
 heredoc_command_list_is_inert() {
-  local scan segment first inner match ps_re
+  local scan segment first inner match ps_re substitution_count iterations
   local -a segs=()
 
   # Strip quoted spans first (so a shell NAME used as data is not read as a
@@ -364,8 +422,13 @@ heredoc_command_list_is_inert() {
   # the whole inner command list here; `>(printf ''; bash)` is not inert even
   # though its first command is. Replace each checked substitution with a token so
   # the loop terminates and the leftover never confuses the segment split.
+  substitution_count="$(count_substitution_openers "$scan")"
+  (( substitution_count > 32 )) && return 1
   ps_re='[<>]\(([^()]*)\)'
+  iterations=0
   while [[ "$scan" =~ $ps_re ]]; do
+    iterations=$((iterations + 1))
+    (( iterations > 32 )) && return 1
     match="${BASH_REMATCH[0]}"
     inner="${BASH_REMATCH[1]}"
     heredoc_command_list_is_inert "$inner" || return 1
@@ -730,6 +793,17 @@ split_shell_words_into() {
   fi
 }
 
+join_shell_words_from() {
+  local -n __goat_words_join_ref__="$1"
+  local start_index="$2"
+  local out=""
+  local i
+  for ((i = start_index; i < ${#__goat_words_join_ref__[@]}; i++)); do
+    out+="${__goat_words_join_ref__[$i]} "
+  done
+  printf '%s' "${out% }"
+}
+
 __goat_git_strip_globals() {
   __goat_git_aliased_push=0
   __goat_git_rest=""
@@ -976,11 +1050,340 @@ normalize_sudo_prefix() {
   printf '%s' "$c"
 }
 
+word_starts_with_redirection() {
+  local redirection_re='^([0-9]+)?[<>]'
+  [[ "$1" =~ $redirection_re ]]
+}
+
+normalize_exec_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -a)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      -*)
+        if [[ "$word" =~ ^-[cl]+$ ]]; then
+          i=$((i + 1))
+          continue
+        fi
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  word="${words[$i]}"
+  word_starts_with_redirection "$word" && return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_timeout_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -s|-k|--signal|--kill-after)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      --signal=*|--kill-after=*|-s?*|-k?*)
+        i=$((i + 1))
+        continue
+        ;;
+      --preserve-status|--foreground|--verbose|-v)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  i=$((i + 1)) # DURATION
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_setsid_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      --ctty|--fork|--wait)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        if [[ "$word" =~ ^-[cfw]+$ ]]; then
+          i=$((i + 1))
+          continue
+        fi
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_stdbuf_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -i|-o|-e|--input|--output|--error)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      -i?*|-o?*|-e?*|--input=*|--output=*|--error=*)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_ionice_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -p|--pid|-p?*|--pid=*)
+        return 1
+        ;;
+      -c|-n|--class|--classdata)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      -c?*|-n?*|--class=*|--classdata=*|-t|--ignore)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_taskset_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -p|--pid|-p?*|--pid=*)
+        return 1
+        ;;
+      -a|--all-tasks|-c|--cpu-list)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  i=$((i + 1)) # CPU mask/list
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_chrt_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -p|--pid|-p?*|--pid=*)
+        return 1
+        ;;
+      -f|-r|-o|-b|-i|-d|--fifo|--rr|--other|--batch|--idle|--deadline|--reset-on-fork|-R)
+        i=$((i + 1))
+        continue
+        ;;
+      -T|-P|-D|--sched-runtime|--sched-period|--sched-deadline)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      -T?*|-P?*|-D?*|--sched-runtime=*|--sched-period=*|--sched-deadline=*)
+        i=$((i + 1))
+        continue
+        ;;
+      --max|-m|--help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  i=$((i + 1)) # priority
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  join_shell_words_from words "$i"
+}
+
+normalize_flock_prefix() {
+  local c="$1"
+  local -a words=()
+  split_shell_words_into words "$c"
+  local i=0
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    case "$word" in
+      --)
+        i=$((i + 1))
+        break
+        ;;
+      -c|--command)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        printf '%s' "${words[$((i + 1))]}"
+        return 0
+        ;;
+      -c?*)
+        printf '%s' "${word#-c}"
+        return 0
+        ;;
+      --command=*)
+        printf '%s' "${word#--command=}"
+        return 0
+        ;;
+      -E|-w|--conflict-exit-code|--timeout)
+        [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+        i=$((i + 2))
+        continue
+        ;;
+      -E?*|-w?*|--conflict-exit-code=*|--timeout=*)
+        i=$((i + 1))
+        continue
+        ;;
+      -s|-x|-n|-u|-o|-F|--shared|--exclusive|--nb|--nonblock|--unlock|--close|--no-fork|--verbose)
+        i=$((i + 1))
+        continue
+        ;;
+      --help|--version)
+        return 1
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  if [[ "${words[$i]}" =~ ^[0-9]+$ && $((i + 1)) -ge "${#words[@]}" ]]; then
+    return 1
+  fi
+  i=$((i + 1)) # lock file/dir or fd
+  [[ "$i" -lt "${#words[@]}" ]] || return 1
+  if [[ "${words[$i]}" == "-c" || "${words[$i]}" == "--command" ]]; then
+    [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
+    printf '%s' "${words[$((i + 1))]}"
+    return 0
+  fi
+  join_shell_words_from words "$i"
+}
+
 normalize_command_candidate() {
   local c="$1"
   local stripped=""
   local word=""
   local base=""
+  local after_word=""
   local case_arm_re='^case[[:space:]][^)]*\)[[:space:]]*'
 
   while true; do
@@ -1055,6 +1458,58 @@ normalize_command_candidate() {
       c=$(normalize_sudo_prefix "$c")
       continue
     fi
+    after_word="${c#"$word"}"
+    after_word="${after_word#"${after_word%%[![:space:]]*}"}"
+    case "$base" in
+      exec)
+        if stripped=$(normalize_exec_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      timeout)
+        if stripped=$(normalize_timeout_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      setsid)
+        if stripped=$(normalize_setsid_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      stdbuf)
+        if stripped=$(normalize_stdbuf_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      ionice)
+        if stripped=$(normalize_ionice_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      taskset)
+        if stripped=$(normalize_taskset_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      chrt)
+        if stripped=$(normalize_chrt_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      flock)
+        if stripped=$(normalize_flock_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+    esac
     if stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
