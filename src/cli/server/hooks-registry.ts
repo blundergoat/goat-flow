@@ -42,7 +42,7 @@ const HOOKS: HookSpec[] = [
     description:
       "Run gruff-* on each edited file and surface findings on changed lines inline.",
     event: "PostToolUse",
-    matcher: "Edit|Write|MultiEdit",
+    matcher: "Edit|Write",
     scriptFiles: ["gruff-code-quality.sh"],
     primaryScript: "gruff-code-quality.sh",
     togglable: true,

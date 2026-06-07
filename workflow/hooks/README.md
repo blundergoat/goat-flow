@@ -15,7 +15,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | Purpose | Claude Code | Codex CLI | Antigravity | Copilot CLI |
 |---------|-------------|-----------|-------------|-------------|
 | Block before tool runs | PreToolUse | PreToolUse in `.codex/hooks.json` with `deny-dangerous.sh` matched to `Bash` | PreToolUse in `.agents/hooks.json` with `deny-dangerous.sh` matched to `run_command` and secret-bearing file tools | `preToolUse` in `.github/hooks/hooks.json` with `deny-dangerous.sh` |
-| Changed-line gruff quality | PostToolUse matched to `Edit`, `Write`, and `MultiEdit` | PostToolUse matched to `Edit`, `Write`, and `MultiEdit` | PostToolUse matched to `write_to_file`, `replace_file_content`, and `multi_replace_file_content` | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
+| Changed-line gruff quality | PostToolUse matched to `Edit` and `Write` | PostToolUse matched to `Edit` and `Write` | PostToolUse matched to `write_to_file`, `replace_file_content`, and `multi_replace_file_content` | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
 | Permission deny list | `.claude/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hooks | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed |
 | Config format | JSON | TOML + JSON | JSON | JSON |
 

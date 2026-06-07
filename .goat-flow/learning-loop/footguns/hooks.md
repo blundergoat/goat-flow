@@ -188,6 +188,26 @@ last_reviewed: 2026-06-07
 
 ---
 
+## Footgun: Re-adding a removed agent tool (MultiEdit) reprints "matches no known tool" every launch
+
+**Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+
+**Regression symptom:** Claude Code printed `Permission deny rule "MultiEdit(**/secrets/**)" matches no known tool — check for typos.` (x12) on every launch. Claude Code v2.x removed the `MultiEdit` tool (folded into `Edit`), and permission deny rules are validated against known tools at startup, so each `MultiEdit(...)` deny rule warns. This exact issue was fixed once already (CHANGELOG: "Stale `MultiEdit` permission rules removed (Claude Code v2.x)") and then silently came back.
+
+**Why it happened:** Commit `4e54072e` ("add gruff code quality hook and update matcher for multi-edit events") added the gruff PostToolUse hook and, modelling on the existing `Edit`/`Write` blocks, re-added 12 `MultiEdit(...)` deny rules plus a `"matcher": "MultiEdit"` hook entry to `.claude/settings.json` and `.codex/hooks.json`. Mirroring the `Edit`/`Write` pattern *looks* correct, but `MultiEdit` no longer exists. The prior fix lived only in CHANGELOG prose and a few file edits — **no test asserted the absence of MultiEdit**, so re-adding it kept every check green and shipped. Same blind spot as [the silent settings-drift footgun above]; deny rules referencing removed tools warn but never fail a build.
+
+**Evidence:**
+- Removed-tool deny rules surface as launch-time warnings, not test failures: pre-fix `npm run test:fast` was green with the 12 `MultiEdit(...)` rules present.
+- The `Edit(...)` deny rules covering the same 12 secret paths already exist, so dropping the `MultiEdit(...)` rules loses zero coverage (verified: deny count 57 → 45, all paths retain Read/Edit/Write).
+- Sources scrubbed: `.claude/settings.json`, `.codex/hooks.json`, template `workflow/hooks/agent-config/claude.json`, generators `src/cli/server/hooks-registry.ts` (matcher `Edit|Write`) + `workflow/install-goat-flow.sh` (`gruffHookEntries`), docs `workflow/hooks/README.md`, and the hook self-test in `workflow/hooks/gruff-code-quality.sh` (synced to the installed `.goat-flow/hooks/` copy or `audit` drift fails).
+
+**Prevention:**
+1. A "fixed" config regression needs a test, not just a CHANGELOG line. Guards now in place: `test/unit/agent-config-template-parity.test.ts` (search: `never denies a removed/unknown Claude tool`) locks every Claude deny rule to `{Bash,Read,Edit,Write}`; `test/unit/hook-registrar.test.ts` (search: `Edit|Write`) and `test/integration/setup-install.test.ts` (search: `/"matcher": "MultiEdit"/`) lock the gruff matcher.
+2. When mirroring `Edit`/`Write` permission or hook entries for a new tool, confirm the tool still exists in the target agent version first — Claude Code v2.x has `Edit`/`Write`/`NotebookEdit`, not `MultiEdit`.
+3. Editing a `workflow/hooks/*.sh` template means re-syncing the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `hook template ... and installed copy ... differ`) fails otherwise.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

@@ -406,7 +406,8 @@ describe("setup --apply installer", () => {
     const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
     assert.doesNotMatch(hooksJson, /\.codex\/hooks\/gruff-code-quality\.sh/);
     assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.sh/);
-    assert.match(hooksJson, /"matcher": "MultiEdit"/);
+    assert.match(hooksJson, /"matcher": "Write"/);
+    assert.doesNotMatch(hooksJson, /"matcher": "MultiEdit"/);
   });
 
   it("preserves single-quoted Codex filesystem deny entries during permission migration", () => {

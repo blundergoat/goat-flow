@@ -175,7 +175,7 @@ describe("hook registrar", () => {
       );
       assert.equal(
         getHookSpec("gruff-code-quality")?.matcher,
-        "Edit|Write|MultiEdit",
+        "Edit|Write",
       );
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);

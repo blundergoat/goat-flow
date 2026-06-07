@@ -741,7 +741,7 @@ function rootResolvingCommand(script) {
 function gruffHookEntries() {
   const script = "gruff-code-quality.sh";
   if (agent === "codex") {
-    return ["Edit", "Write", "MultiEdit"].map((matcher) => ({
+    return ["Edit", "Write"].map((matcher) => ({
       matcher,
       hooks: [
         {
@@ -763,7 +763,7 @@ function gruffHookEntries() {
       },
     ];
   }
-  return ["Edit", "Write", "MultiEdit"].map((matcher) => ({
+  return ["Edit", "Write"].map((matcher) => ({
     matcher,
     hooks: [{ type: "command", command: rootResolvingCommand(script) }],
   }));

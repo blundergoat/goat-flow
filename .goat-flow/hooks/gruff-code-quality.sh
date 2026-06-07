@@ -416,12 +416,12 @@ self_test() {
     return 1
   }
 
-  # A single-file MultiEdit payload should return only the target file path, not
-  # any synthetic path from the edits array.
-  payload='{"tool_name":"MultiEdit","tool_input":{"file_path":"src/x.rs","edits":[{"old_string":"a","new_string":"b"}]}}'
+  # A payload carrying both a top-level file_path and an edits array should
+  # return only the target file path, not any synthetic path from the array.
+  payload='{"tool_name":"Edit","tool_input":{"file_path":"src/x.rs","edits":[{"old_string":"a","new_string":"b"}]}}'
   paths="$(json_file_paths "$payload")"
   [[ "$paths" == "src/x.rs" ]] || {
-    printf 'gruff-code-quality self-test: single-file MultiEdit path failed: %s\n' "$paths" >&2
+    printf 'gruff-code-quality self-test: single-file edit path failed: %s\n' "$paths" >&2
     return 1
   }
 
