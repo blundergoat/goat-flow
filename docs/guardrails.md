@@ -16,15 +16,15 @@ modules in `.goat-flow/hooks/deny-dangerous/`.
 
 | Agent | Runtime mechanism | Primary locations |
 | --- | --- | --- |
-| Claude Code | `PreToolUse` shell hooks plus settings deny patterns | `.claude/hooks/*.sh`, `.claude/settings.json` |
-| Codex | `PreToolUse` shell hooks plus config TOML permission profile | `.codex/hooks/*.sh`, `.codex/hooks.json`, `.codex/config.toml` |
-| Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` | `.github/hooks/*.sh`, `.github/hooks/hooks.json` |
-| Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` | `.agents/hooks/*.sh`, `.agents/hooks.json`, `.goat-flow/hooks/deny-dangerous/` |
+| Claude Code | `PreToolUse` config entries invoking central hooks plus settings deny patterns | `.claude/settings.json`, `.goat-flow/hooks/` |
+| Codex | `PreToolUse` config entries invoking central hooks plus config TOML permission profile | `.codex/hooks.json`, `.codex/config.toml`, `.goat-flow/hooks/` |
+| Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` and invoking central hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/` |
+| Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` and invoking central hooks | `.agents/hooks.json`, `.goat-flow/hooks/` |
 
 ## Verification
 
-- `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`
-- `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=full`
+- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke`
+- `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full`
 - `goat-flow hooks list --json`
 - `goat-flow hooks sync`
 

@@ -63,7 +63,7 @@ last_reviewed: 2026-05-25
 **Goat-flow applicability — MAYBE (preventative):** Today `src/cli/prompt/compose-setup.ts` doesn't dedupe by `JSON.stringify` (`rg -n "JSON.stringify|Set<|dedupe|seen" src/cli/prompt/` returns nothing). But:
 - M28 architecture reviews flagged `compose-setup.ts`, `hooks.ts`, and `types.ts` as next bottlenecks — exactly where future merge / dedupe logic accretes.
 - Any future "skill X declared by both user and default" or "hook declared in two agent configs" dedupe will hit this shape if skills / hooks carry callback functions.
-- Skill quality artifact dedupe (`src/cli/quality/skill-quality.ts` search: `artifactsById`) currently dedupes by string id — safe today; would break if artifact entries gained a `transform` callback.
+- Skill quality artifact dedupe (`src/cli/quality/skill-quality-content.ts` search: `artifactsById`) currently dedupes by string id — safe today; would break if artifact entries gained a `transform` callback.
 
 **Prevention:**
 1. Never use `JSON.stringify` as a dedupe key for values that may contain functions, class instances, BigInts, or cycles. Use a typed `dedupeKey(item)` function that branches:

@@ -41,14 +41,14 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 ## Essential Commands
 
 ```bash
-shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
-bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 npm run typecheck
 npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 

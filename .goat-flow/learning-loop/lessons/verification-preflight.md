@@ -189,7 +189,7 @@ last_reviewed: 2026-06-07
 
 **Prevention:**
 1. In Bash regex helpers, copy `BASH_REMATCH[n]` into local variables before any recursive call or nested regex operation that can overwrite it.
-2. For shared hook templates, do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test=full`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh workflow/hooks/*.sh` and full `bash scripts/preflight-checks.sh`, because fixture clones exercise stricter paths than isolated hook runs.
+2. For shared hook templates, do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test=full`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh` and full `bash scripts/preflight-checks.sh`, because fixture clones exercise stricter paths than isolated hook runs.
 
 ---
 
@@ -203,7 +203,7 @@ last_reviewed: 2026-06-07
 
 **Recurrence update (2026-05-27):** M12 hook hardening passed functional hook checks, but the stale-name closeout grep still found active references to the old gruff hook id in `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and `.goat-flow/learning-loop/lessons/dashboard-testing.md` after the hook had already been renamed to `gruff-code-quality`. The remaining exact old-id hits are now limited to the migration alias and its regression tests.
 
-**Prevention:** After hook file renames, run the full preflight before declaring the rename done and treat drift failures as part of the hook change, not documentation cleanup. For the final old-name proof, use the milestone's exact `git grep` command over tracked files, then optionally run `rg --hidden --no-ignore` only to find local ignored residue. Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), `.github/copilot-instructions.md` (search: `deny-dangerous-self-test.sh`).
+**Prevention:** After hook file renames, run the full preflight before declaring the rename done and treat drift failures as part of the hook change, not documentation cleanup. For the final old-name proof, use the milestone's exact `git grep` command over tracked files, then optionally run `rg --hidden --no-ignore` only to find local ignored residue. Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), `.github/copilot-instructions.md` (search: `deny-dangerous.sh --self-test=smoke`).
 
 ---
 

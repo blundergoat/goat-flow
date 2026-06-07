@@ -86,8 +86,7 @@ src/dashboard/                   = browser dashboard frontend bundled into dist/
     ├── settings.html            = settings view
     ├── setup.html               = setup/audit view
     ├── skills.html              = skill inventory/evaluation view
-    └── workspace.html           = terminal workspace view
-    └── workspace.html           = workspace shell
+    └── workspace.html           = terminal workspace shell view
 ```
 
 ## workflow/ -- Setup templates, skills, and reference docs
