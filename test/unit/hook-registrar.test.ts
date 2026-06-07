@@ -173,10 +173,7 @@ describe("hook registrar", () => {
         listHookSpecs().some((hookSpec) => hookSpec.id === spec.id),
         true,
       );
-      assert.equal(
-        getHookSpec("gruff-code-quality")?.matcher,
-        "Edit|Write",
-      );
+      assert.equal(getHookSpec("gruff-code-quality")?.matcher, "Edit|Write");
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);
     });
