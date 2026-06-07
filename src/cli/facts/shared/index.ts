@@ -134,7 +134,7 @@ export function extractSharedFacts(
     gitignore: extractGitignoreFacts(fs),
     preflightScript: { exists: fs.exists("scripts/preflight-checks.sh") },
     skillConventions: {
-      exists: fs.exists(".goat-flow/skill-reference/skill-preamble.md"),
+      exists: fs.exists(".goat-flow/skill-docs/skill-preamble.md"),
     },
     // changelog removed - project-level concern, not AI workflow.
     decisions: extractDecisionsFacts(fs, configState.config.decisions.path),

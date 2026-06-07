@@ -7,7 +7,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | Script | Event | Required? | Purpose |
 |--------|-------|-----------|---------|
 | `deny-dangerous.sh` | PreToolUse | Required | Single dispatcher that blocks destructive shell commands, direct secret-path access, `git commit` / `git push`, destructive git flags, and GitHub writes via `gh` |
-| `hook-lib/*.sh` | Sourced policy store | Required with `deny-dangerous.sh` | Shared destructive-shell, secret-path, repository-write policy modules plus the central `deny-dangerous-self-test.sh` |
+| `deny-dangerous/*.sh` | Sourced policy store | Required with `deny-dangerous.sh` | Shared destructive-shell, secret-path, repository-write policy modules plus the central `deny-dangerous-self-test.sh` |
 | `gruff-code-quality.sh` | PostToolUse | Optional | Runs the matching `gruff-*` analyzer after file edits and surfaces findings whose reported line intersects changed lines |
 
 ## Agent Event Name Mapping
@@ -21,7 +21,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 
 ## Setup
 
-1. Copy `deny-dangerous.sh` to your agent's hooks directory and copy `hook-lib/` to `.goat-flow/hook-lib/`.
+1. Copy `deny-dangerous.sh` to `.goat-flow/hooks/` and copy `deny-dangerous/` to `.goat-flow/hooks/deny-dangerous/`.
 2. Copy the matching agent-config template(s) for your runtime:
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
@@ -33,7 +33,7 @@ Claude and Antigravity hook commands resolve the repository root with `git rev-p
 
 ## Failure Modes / Runtime Contracts
 
-- `.goat-flow/hook-lib/` must be present and tracked. If it is missing, `deny-dangerous.sh` denies with a clear hook-lib message instead of reaching an undefined policy function or exiting 127.
+- `.goat-flow/hooks/deny-dangerous/` must be present and tracked. If it is missing, `deny-dangerous.sh` denies with a clear policy-store message instead of reaching an undefined policy function or exiting 127.
 - Audit and preflight run the exact configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`; this catches stale paths, missing executable bits, and command-shape failures before an agent session sees them.
 - Claude and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout they fail closed as described above.
 - Codex and Copilot use direct project-local paths and therefore require project-root cwd for the configured command. Nested-cwd execution is outside the current contract unless those runtimes add a portable project-root variable.

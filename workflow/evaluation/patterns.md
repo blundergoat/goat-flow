@@ -1,4 +1,4 @@
-# Prompt: Create or Seed .goat-flow/patterns/
+# Prompt: Create or Seed .goat-flow/learning-loop/patterns/
 
 Paste this into your coding agent to create or update the patterns
 directory. Patterns capture proven approaches that worked well and
@@ -9,17 +9,17 @@ should be reused deliberately by future sessions.
 ## The Prompt
 
 ```
-Create or update `.goat-flow/patterns/` for this project.
+Create or update `.goat-flow/learning-loop/patterns/` for this project.
 
 Use category bucket files, not one giant log and not one file per pattern.
-Examples: `.goat-flow/patterns/verification.md`, `.goat-flow/patterns/refactoring.md`,
-`.goat-flow/patterns/workflow.md`.
+Examples: `.goat-flow/learning-loop/patterns/verification.md`, `.goat-flow/learning-loop/patterns/refactoring.md`,
+`.goat-flow/learning-loop/patterns/workflow.md`.
 
-IF .goat-flow/patterns/ already exists:
+IF .goat-flow/learning-loop/patterns/ already exists:
   MERGE with it carefully. Keep existing entries unless they are
   demonstrably wrong or superseded. Prefer updating over deleting.
 
-IF .goat-flow/patterns/ does NOT exist:
+IF .goat-flow/learning-loop/patterns/ does NOT exist:
   Create the directory with a README.md and seed with category bucket
   files for approaches that have proven effective.
 
@@ -53,12 +53,12 @@ RULES:
   entries)
 
 ROUTING:
-- If the agent did something wrong → `.goat-flow/lessons/` instead
-- If the trap is in the code itself → `.goat-flow/footguns/` instead
-- If it's a significant technical decision → `.goat-flow/decisions/`
+- If the agent did something wrong → `.goat-flow/learning-loop/lessons/` instead
+- If the trap is in the code itself → `.goat-flow/learning-loop/footguns/` instead
+- If it's a significant technical decision → `.goat-flow/learning-loop/decisions/`
 
 VERIFICATION:
-- Verify .goat-flow/patterns/README.md exists
+- Verify .goat-flow/learning-loop/patterns/README.md exists
 - Verify each bucket file has `category:` and `last_reviewed:` frontmatter
 - Verify every entry has Context and Approach sections
 - If merged with existing: verify no confirmed entry was removed without

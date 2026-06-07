@@ -374,8 +374,8 @@ const docPathsResolve: HarnessCheck = {
     "integrity",
     [
       "docs/harness-audit.md",
-      ".goat-flow/footguns/docs-and-crossrefs.md",
-      ".goat-flow/lessons/verification.md",
+      ".goat-flow/learning-loop/footguns/docs-and-crossrefs.md",
+      ".goat-flow/learning-loop/lessons/verification.md",
     ],
     "incident",
   ),
@@ -496,7 +496,7 @@ const boundaryGuidancePresentCheck: HarnessCheck = {
   evidenceKind: "structural",
   provenance: contextProvenance("advisory", [
     "docs/harness-audit.md",
-    ".goat-flow/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md",
+    ".goat-flow/learning-loop/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md",
     "CLAUDE.md",
     "AGENTS.md",
     ".github/copilot-instructions.md",

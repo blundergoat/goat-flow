@@ -113,7 +113,8 @@ describe("audit on well-configured project", () => {
     ]);
     assert.deepEqual(provenance.target_evidence_paths, ["project/local.md"]);
     assert.equal(
-      incidentProvenance([".goat-flow/footguns/hooks.md"]).source_type,
+      incidentProvenance([".goat-flow/learning-loop/footguns/hooks.md"])
+        .source_type,
       "incident",
     );
     assert.deepEqual(uniquePaths(["a.md", "a.md", "b.md"]), ["a.md", "b.md"]);

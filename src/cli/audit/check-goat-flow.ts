@@ -2,8 +2,8 @@
  * GOAT Flow Setup checks for `goat-flow audit`.
  * 15 setup-scope checks that validate project structure:
  *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
- *             decisions, session-logs, tasks, scratchpad)
- * + 1 skill-reference / skill-playbooks completeness and discoverability check
+ *             decisions, session-logs, plans, scratchpad)
+ * + 1 skill-docs completeness and discoverability check
  * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
@@ -28,40 +28,49 @@ function setupSpecProvenance(paths: string[]): CheckEvidence {
 // Paths covered by named checks - excluded from the catch-all.
 // config.yaml is also excluded (covered by config-parses).
 const NAMED_PATHS = new Set([
-  ".goat-flow/lessons/",
-  ".goat-flow/lessons/README.md",
-  ".goat-flow/footguns/",
-  ".goat-flow/footguns/README.md",
+  ".goat-flow/learning-loop/lessons/",
+  ".goat-flow/learning-loop/lessons/README.md",
+  ".goat-flow/learning-loop/footguns/",
+  ".goat-flow/learning-loop/footguns/README.md",
   ".goat-flow/architecture.md",
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
-  ".goat-flow/patterns/README.md",
-  ".goat-flow/decisions/",
-  ".goat-flow/decisions/README.md",
+  ".goat-flow/learning-loop/patterns/README.md",
+  ".goat-flow/learning-loop/decisions/",
+  ".goat-flow/learning-loop/decisions/README.md",
   ".goat-flow/logs/sessions/",
-  ".goat-flow/tasks/",
-  ".goat-flow/tasks/.gitignore",
-  ".goat-flow/tasks/README.md",
+  ".goat-flow/plans/",
+  ".goat-flow/plans/.gitignore",
+  ".goat-flow/plans/README.md",
   ".goat-flow/scratchpad/",
   ".goat-flow/scratchpad/.gitignore",
   ".goat-flow/scratchpad/README.md",
-  ".goat-flow/skill-reference/",
-  ".goat-flow/skill-reference/README.md",
-  ".goat-flow/skill-reference/skill-preamble.md",
-  ".goat-flow/skill-reference/skill-conventions.md",
-  ".goat-flow/skill-playbooks/",
-  ".goat-flow/skill-playbooks/README.md",
-  ".goat-flow/skill-playbooks/browser-use.md",
-  ".goat-flow/skill-playbooks/changelog.md",
-  ".goat-flow/skill-playbooks/code-comments.md",
-  ".goat-flow/skill-playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-playbooks/observability.md",
-  ".goat-flow/skill-playbooks/page-capture.md",
-  ".goat-flow/skill-playbooks/release-notes.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-docs/",
+  ".goat-flow/skill-docs/README.md",
+  ".goat-flow/skill-docs/skill-preamble.md",
+  ".goat-flow/skill-docs/skill-conventions.md",
+  ".goat-flow/skill-docs/playbooks/",
+  ".goat-flow/skill-docs/playbooks/README.md",
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/changelog.md",
+  ".goat-flow/skill-docs/playbooks/code-comments.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/observability.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/skill-quality-testing/",
+  ".goat-flow/skill-docs/skill-quality-testing/README.md",
+  ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+  ".goat-flow/hooks/",
+  ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/gruff-code-quality.sh",
+  ".goat-flow/hooks/deny-dangerous/",
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
   ".goat-flow/config.yaml",
 ]);
 
@@ -70,43 +79,47 @@ const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
 const READ_RULE_PATTERNS = [
   /Before declaring any tool(?: or capability)? unavailable/i,
-  /\.goat-flow\/skill-playbooks\//,
+  /\.goat-flow\/skill-docs\/playbooks\//,
   /Availability Check/i,
 ];
 const ROUTER_POINTER_PATTERNS = [
-  /\.goat-flow\/skill-playbooks\//,
-  /tool playbooks?|skill reference|skill playbooks?/i,
+  /\.goat-flow\/skill-docs\/playbooks\//,
+  /tool playbooks?|skill docs?|skill playbooks?/i,
 ];
-const REQUIRED_SKILL_REFERENCE_FILES = [
+const REQUIRED_SKILL_DOC_FILES = [
   // Meta references
-  ".goat-flow/skill-reference/README.md",
-  ".goat-flow/skill-reference/skill-preamble.md",
-  ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-docs/README.md",
+  ".goat-flow/skill-docs/skill-preamble.md",
+  ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks
-  ".goat-flow/skill-playbooks/README.md",
-  ".goat-flow/skill-playbooks/browser-use.md",
-  ".goat-flow/skill-playbooks/changelog.md",
-  ".goat-flow/skill-playbooks/code-comments.md",
-  ".goat-flow/skill-playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-playbooks/observability.md",
-  ".goat-flow/skill-playbooks/page-capture.md",
-  ".goat-flow/skill-playbooks/release-notes.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-docs/playbooks/README.md",
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/changelog.md",
+  ".goat-flow/skill-docs/playbooks/code-comments.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/observability.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/skill-quality-testing/README.md",
+  ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
 // Un-ignore patterns the goat-flow-gitignore template installs into
 // `.goat-flow/.gitignore`. The template ignores everything (`*`) by default,
 // then re-includes these committed surfaces. Pre-1.6.1 installs are missing
-// the skill-playbooks entries, which silently hides the playbook pack from
-// git even though the files exist on disk.
+// the old skill-doc entries, which silently hides the committed docs and hook
+// policy files from git even though the files exist on disk.
 const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
-  "!skill-reference/",
-  "!skill-reference/**",
-  "!skill-playbooks/",
-  "!skill-playbooks/**",
+  "!learning-loop/",
+  "!learning-loop/**",
+  "!skill-docs/",
+  "!skill-docs/**",
+  "!hooks/",
+  "!hooks/**",
+  "!plans/",
+  "!plans/**",
 ];
 
 /**
@@ -192,7 +205,7 @@ function markdownSection(content: string, heading: RegExp): string | null {
  *
  * Some installed instruction files encode READ/SCOPE/ACT/VERIFY as bold list
  * labels instead of headings; this fallback preserves compatibility with that
- * shape while keeping the skill-reference rule scoped to the Execution Loop.
+ * shape while keeping the skill-docs rule scoped to the Execution Loop.
  * The helper reads the provided string only; it does not touch project files.
  */
 function boldStepSection(content: string, step: string): string | null {
@@ -220,7 +233,7 @@ function hasSkillReferenceReadRule(content: string): boolean {
 }
 
 /**
- * Check that the Router Table exposes the skill-reference/playbook paths.
+ * Check that the Router Table exposes the skill-docs/playbook paths.
  *
  * Keeping this in Router Table makes the discovery path explicit for future
  * agents instead of relying on a one-off mention in surrounding prose.
@@ -255,17 +268,17 @@ const lessons: BuildCheck = {
   /** Run the Lessons check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/lessons"))
-      missing.push(".goat-flow/lessons/");
-    if (!ctx.fs.exists(".goat-flow/lessons/README.md"))
-      missing.push(".goat-flow/lessons/README.md");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/lessons"))
+      missing.push(".goat-flow/learning-loop/lessons/");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/lessons/README.md"))
+      missing.push(".goat-flow/learning-loop/lessons/README.md");
     if (missing.length === 0) return null;
     return {
       check: "Lessons",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
       howToFix:
-        "Create lessons directory by running `goat-flow setup` or `mkdir -p .goat-flow/lessons`.",
+        "Create lessons directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/lessons`.",
     };
   },
 };
@@ -281,17 +294,17 @@ const footguns: BuildCheck = {
   /** Run the Footguns check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/footguns"))
-      missing.push(".goat-flow/footguns/");
-    if (!ctx.fs.exists(".goat-flow/footguns/README.md"))
-      missing.push(".goat-flow/footguns/README.md");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/footguns"))
+      missing.push(".goat-flow/learning-loop/footguns/");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/footguns/README.md"))
+      missing.push(".goat-flow/learning-loop/footguns/README.md");
     if (missing.length === 0) return null;
     return {
       check: "Footguns",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
       howToFix:
-        "Create footguns directory by running `goat-flow setup` or `mkdir -p .goat-flow/footguns`.",
+        "Create footguns directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/footguns`.",
     };
   },
 };
@@ -370,13 +383,14 @@ const patterns: BuildCheck = {
   ]),
   /** Run the Patterns check. */
   run: (ctx) => {
-    if (ctx.fs.exists(".goat-flow/patterns/README.md")) return null;
+    if (ctx.fs.exists(".goat-flow/learning-loop/patterns/README.md"))
+      return null;
     return {
       check: "Patterns",
-      message: "Missing: .goat-flow/patterns/README.md",
-      evidence: ".goat-flow/patterns/README.md",
+      message: "Missing: .goat-flow/learning-loop/patterns/README.md",
+      evidence: ".goat-flow/learning-loop/patterns/README.md",
       howToFix:
-        "Create .goat-flow/patterns/ directory by running `goat-flow setup`.",
+        "Create .goat-flow/learning-loop/patterns/ directory by running `goat-flow setup`.",
     };
   },
 };
@@ -392,17 +406,17 @@ const decisions: BuildCheck = {
   /** Run the Decisions check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/decisions"))
-      missing.push(".goat-flow/decisions/");
-    if (!ctx.fs.exists(".goat-flow/decisions/README.md"))
-      missing.push(".goat-flow/decisions/README.md");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/decisions"))
+      missing.push(".goat-flow/learning-loop/decisions/");
+    if (!ctx.fs.exists(".goat-flow/learning-loop/decisions/README.md"))
+      missing.push(".goat-flow/learning-loop/decisions/README.md");
     if (missing.length === 0) return null;
     return {
       check: "Decisions",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
       howToFix:
-        "Create decisions directory by running `goat-flow setup` or `mkdir -p .goat-flow/decisions`.",
+        "Create decisions directory by running `goat-flow setup` or `mkdir -p .goat-flow/learning-loop/decisions`.",
     };
   },
 };
@@ -428,30 +442,30 @@ const sessionLogs: BuildCheck = {
   },
 };
 
-const tasks: BuildCheck = {
-  id: "tasks",
-  name: "Tasks",
+const plans: BuildCheck = {
+  id: "plans",
+  name: "Plans",
   scope: "setup",
   provenance: setupSpecProvenance([
     "workflow/manifest.json",
     ".goat-flow/architecture.md",
-    ".goat-flow/tasks/README.md",
+    ".goat-flow/plans/README.md",
   ]),
-  /** Run the Tasks check. */
+  /** Run the Plans check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/tasks")) missing.push(".goat-flow/tasks/");
-    if (!ctx.fs.exists(".goat-flow/tasks/.gitignore"))
-      missing.push(".goat-flow/tasks/.gitignore");
-    if (!ctx.fs.exists(".goat-flow/tasks/README.md"))
-      missing.push(".goat-flow/tasks/README.md");
+    if (!ctx.fs.exists(".goat-flow/plans")) missing.push(".goat-flow/plans/");
+    if (!ctx.fs.exists(".goat-flow/plans/.gitignore"))
+      missing.push(".goat-flow/plans/.gitignore");
+    if (!ctx.fs.exists(".goat-flow/plans/README.md"))
+      missing.push(".goat-flow/plans/README.md");
     if (missing.length === 0) return null;
     return {
-      check: "Tasks",
+      check: "Plans",
       message: `Missing: ${missing.join(", ")}`,
       evidence: missing[0],
       howToFix:
-        "Create tasks directory by running `goat-flow setup`. README.md signals the dir is local-session-state by design.",
+        "Create plans directory by running `goat-flow setup`. README.md signals the dir is local-session-state by design.",
     };
   },
 };
@@ -511,17 +525,17 @@ const goatFlowGitignoreContent: BuildCheck = {
     if (missing.length === 0) return null;
     return {
       check: "goat-flow gitignore exceptions",
-      message: `.goat-flow/.gitignore is missing required un-ignore entries: ${missing.join(", ")}. Stale gitignores from pre-1.6.1 silently hide the skill-playbooks pack from git.`,
+      message: `.goat-flow/.gitignore is missing required un-ignore entries: ${missing.join(", ")}. Stale gitignores silently hide committed skill docs, hook policy, or plan anchors from git.`,
       evidence: ".goat-flow/.gitignore",
       howToFix:
-        "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden.",
+        "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/` to track files that were previously hidden.",
     };
   },
 };
 
 const instructionFileSkillReferencePointer: BuildCheck = {
-  id: "instruction-file-skill-reference-pointer",
-  name: "Instruction file skill-playbooks pointer",
+  id: "instruction-file-skill-docs-pointer",
+  name: "Instruction file skill-docs pointer",
   scope: "setup",
   provenance: setupSpecProvenance([
     "workflow/manifest.json",
@@ -530,18 +544,18 @@ const instructionFileSkillReferencePointer: BuildCheck = {
     "workflow/skills/reference/README.md",
     "workflow/skills/playbooks/README.md",
   ]),
-  /** Run the Instruction file skill-playbooks pointer check. */
+  /** Run the Instruction file skill-docs pointer check. */
   run: (ctx) => {
-    const missingReferenceFiles = REQUIRED_SKILL_REFERENCE_FILES.filter(
+    const missingReferenceFiles = REQUIRED_SKILL_DOC_FILES.filter(
       (path) => !ctx.fs.exists(path),
     );
     if (missingReferenceFiles.length > 0) {
       return {
-        check: "Instruction file skill-playbooks pointer",
+        check: "Instruction file skill-docs pointer",
         message: `Shared reference/playbook pack is incomplete. Missing: ${missingReferenceFiles.join(", ")}`,
         evidence: missingReferenceFiles[0],
         howToFix:
-          "Refresh with `goat-flow install . --agent <agent>`. The index files are load-bearing and must be installed with the shared reference/playbook pack.",
+          "Refresh with `goat-flow install . --agent <agent>`. The index files are load-bearing and must be installed with the shared skill-docs/playbook pack.",
       };
     }
 
@@ -553,11 +567,11 @@ const instructionFileSkillReferencePointer: BuildCheck = {
     if (missingRequirements.length === 0) return null;
 
     return {
-      check: "Instruction file skill-playbooks pointer",
-      message: `Instruction file(s) missing skill-playbooks READ rule or Router Table pointer: ${missingRequirements.join(", ")}`,
+      check: "Instruction file skill-docs pointer",
+      message: `Instruction file(s) missing skill-docs READ rule or Router Table pointer: ${missingRequirements.join(", ")}`,
       evidence: missingRequirements[0]?.replace(/\s+\(.+\)$/, ""),
       howToFix:
-        'Append to the existing READ step: "Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc\'s "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool"." Add a Router Table row for tool playbooks: | Skill playbooks (tools) | `.goat-flow/skill-playbooks/` (README.md index; read BEFORE declaring a tool unavailable) |.',
+        'Append to the existing READ step: "Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc\'s "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool"." Add a Router Table row for tool playbooks: | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` (README.md index; read BEFORE declaring a tool unavailable) |.',
     };
   },
 };
@@ -674,7 +688,7 @@ export const SETUP_CHECKS: BuildCheck[] = [
   patterns,
   decisions,
   sessionLogs,
-  tasks,
+  plans,
   scratchpad,
   goatFlowGitignoreContent,
   instructionFileSkillReferencePointer,

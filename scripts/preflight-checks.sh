@@ -273,6 +273,7 @@ _record_section_elapsed() {
         elapsed=$(( now - section_start ))
         printf 'ELAPSED\t%s\t%d\n' "$current_section" "$elapsed" >> "$LEDGER"
     fi
+    return 0
 }
 
 section() {
@@ -287,6 +288,7 @@ section() {
     local phase
     phase=$(phase_for "$1")
     _emit_phase_if_changed "$phase"
+    return 0
 }
 
 # Sub-check helpers append one ROW per call; counters increment for the
@@ -322,7 +324,7 @@ phase_for() {
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
         "Skill Behavioral Contracts"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
-        "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Content Drift"|"Skill Reference + Playbooks Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
+        "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Content Drift"|"Skill Docs Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
         "Path Integrity"|"Markdown Links"|"Package README Links") printf 'LINKS' ;;
         *) printf 'OTHER' ;;
     esac
@@ -348,7 +350,7 @@ display_for() {
         "Learning-Loop Schema") printf 'Learning-loop schema' ;;
         "Content Drift") printf 'Content drift' ;;
         "Doc/Code Drift") printf 'Doc/code drift' ;;
-        "Skill Reference + Playbooks Sync") printf 'Skill reference sync' ;;
+        "Skill Docs Sync") printf 'Skill docs sync' ;;
         "Skill SKILL.md Parity") printf 'Skill SKILL.md parity' ;;
         "Path Integrity") printf 'Path integrity' ;;
         "Markdown Links") printf 'Markdown links' ;;
@@ -377,7 +379,7 @@ collapsed_desc_for() {
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
         "Content Drift") printf 'cold-path content lint · view-name drift' ;;
         "Doc/Code Drift") printf 'arch counts · setup IDs · code-map' ;;
-        "Skill Reference + Playbooks Sync") printf 'templates match installed' ;;
+        "Skill Docs Sync") printf 'templates match installed' ;;
         "Skill SKILL.md Parity") printf 'all installed match' ;;
         "Path Integrity") printf 'internal refs resolve' ;;
         "Markdown Links") printf 'all markdown links resolve' ;;
@@ -473,7 +475,7 @@ _compute_widths() {
         "Instruction Parity Contract" "Instruction File Quality"
         "Tests"
         "GOAT Flow Audit" "Learning-Loop Schema" "Content Drift" "Doc/Code Drift"
-        "Skill Reference + Playbooks Sync" "Skill SKILL.md Parity"
+        "Skill Docs Sync" "Skill SKILL.md Parity"
         "Path Integrity" "Markdown Links" "Package README Links"
     )
     for sec in "${known[@]}"; do
@@ -541,6 +543,7 @@ _emit_phase_if_changed() {
         printf '\n %s%s%s\n' "$DIM" "$phase" "$RST"
         _last_phase="$phase"
     fi
+    return 0
 }
 
 # Aggregate the just-completed section's status from its ledger rows
@@ -624,6 +627,7 @@ _emit_section_row() {
         done
         printf '     %s%s%s\n' "$DIM" "$GUIDE" "$RST"
     fi
+    return 0
 }
 
 _emit_footer() {
@@ -1207,7 +1211,7 @@ else
     fi
 
     installed_reference_fail=0
-    for installed_dir in .goat-flow/skill-reference .goat-flow/skill-playbooks; do
+    for installed_dir in .goat-flow/skill-docs .goat-flow/skill-docs/playbooks; do
         if [[ -d "$installed_dir" ]]; then
             while IFS= read -r -d '' f; do
                 ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
@@ -1398,8 +1402,8 @@ for (const f of files) filePaths.set(f, extractRouterPaths(f));
 
 function hasCoverage(pathSet, target) {
     if (pathSet.has(target)) return true;
-    // Parent-directory coverage: .goat-flow/skill-reference/ covers
-    // .goat-flow/skill-reference/README.md
+    // Parent-directory coverage: .goat-flow/skill-docs/ covers
+    // .goat-flow/skill-docs/README.md
     for (const p of pathSet) {
         if (target.startsWith(p + "/")) return true;
     }
@@ -1791,7 +1795,7 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     # in other current-state docs that reference the same counts.
     # Excludes: CHANGELOG.md and workflow/manifest-snapshots/** (frozen per
     # release), .goat-flow/logs/ (historical), .goat-flow/scratchpad/ (WIP),
-    # .goat-flow/lessons/ (narrative may include historical numbers).
+    # .goat-flow/learning-loop/lessons/ (narrative may include historical numbers).
     if [[ -n "$setup_count" ]]; then
         b8a3_ok=true
         for doc in CLAUDE.md AGENTS.md .goat-flow/code-map.md CONTRIBUTING.md; do
@@ -1830,7 +1834,7 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
             /^## scripts\/ -- Shell scripts/ { in_section=1; next }
             in_section && /^## / { in_section=0 }
             in_section
-        ' .goat-flow/code-map.md | grep -oE '^[a-z][a-zA-Z0-9_.-]*\.(sh|mjs)' | sort -u)
+        ' .goat-flow/code-map.md | grep -oE '[a-z][a-zA-Z0-9_.-]*\.(sh|mjs)' | sort -u || true)
         actual_scripts=$(find scripts/ -maxdepth 1 -type f \( -name '*.sh' -o -name '*.mjs' \) -printf '%f\n' | sort -u)
         if [[ "$listed_scripts" == "$actual_scripts" ]]; then
             pass "code-map.md scripts list matches scripts/ filesystem"
@@ -1906,124 +1910,124 @@ NODE
     fi
 fi
 
-# ── Skill Reference + Playbooks Sync ─────────────────────────────────
-section "Skill Reference + Playbooks Sync"
-if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-reference/README.md ]]; then
-    if diff -q workflow/skills/reference/README.md .goat-flow/skill-reference/README.md >/dev/null 2>&1; then
-        pass "skill-reference README.md: template and installed copy match"
+# ── Skill Docs Sync ─────────────────────────────────────────────────
+section "Skill Docs Sync"
+if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-docs/README.md ]]; then
+    if diff -q workflow/skills/reference/README.md .goat-flow/skill-docs/README.md >/dev/null 2>&1; then
+        pass "skill-docs README.md: template and installed copy match"
     else
-        fail "skill-reference README.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "skill-docs README.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-docs/) differ"
     fi
 else
-    skip "skill-reference README.md sync (one or both files missing)"
+    skip "skill-docs README.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skill-reference/skill-preamble.md ]]; then
-    if diff -q workflow/skills/reference/skill-preamble.md .goat-flow/skill-reference/skill-preamble.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skill-docs/skill-preamble.md ]]; then
+    if diff -q workflow/skills/reference/skill-preamble.md .goat-flow/skill-docs/skill-preamble.md >/dev/null 2>&1; then
         pass "skill-preamble.md: template and installed copy match"
     else
-        fail "skill-preamble.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "skill-preamble.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-docs/) differ"
     fi
 else
     skip "skill-preamble.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/skill-reference/skill-conventions.md ]]; then
-    if diff -q workflow/skills/reference/skill-conventions.md .goat-flow/skill-reference/skill-conventions.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/skill-docs/skill-conventions.md ]]; then
+    if diff -q workflow/skills/reference/skill-conventions.md .goat-flow/skill-docs/skill-conventions.md >/dev/null 2>&1; then
         pass "skill-conventions.md: template and installed copy match"
     else
-        fail "skill-conventions.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-reference/) differ"
+        fail "skill-conventions.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-docs/) differ"
     fi
 else
     skip "skill-conventions.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-playbooks/README.md ]]; then
-    if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-playbooks/README.md >/dev/null 2>&1; then
-        pass "skill-playbooks README.md: template and installed copy match"
+if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-docs/playbooks/README.md ]]; then
+    if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-docs/playbooks/README.md >/dev/null 2>&1; then
+        pass "skill-docs playbooks README.md: template and installed copy match"
     else
-        fail "skill-playbooks README.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "skill-docs playbooks README.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
-    skip "skill-playbooks README.md sync (one or both files missing)"
+    skip "skill-docs playbooks README.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-playbooks/browser-use.md ]]; then
-    if diff -q workflow/skills/playbooks/browser-use.md .goat-flow/skill-playbooks/browser-use.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-docs/playbooks/browser-use.md ]]; then
+    if diff -q workflow/skills/playbooks/browser-use.md .goat-flow/skill-docs/playbooks/browser-use.md >/dev/null 2>&1; then
         pass "browser-use.md: template and installed copy match"
     else
-        fail "browser-use.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "browser-use.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill-playbooks/code-comments.md ]]; then
-    if diff -q workflow/skills/playbooks/code-comments.md .goat-flow/skill-playbooks/code-comments.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill-docs/playbooks/code-comments.md ]]; then
+    if diff -q workflow/skills/playbooks/code-comments.md .goat-flow/skill-docs/playbooks/code-comments.md >/dev/null 2>&1; then
         pass "code-comments.md: template and installed copy match"
     else
-        fail "code-comments.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "code-comments.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "code-comments.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/skill-playbooks/gruff-code-quality.md ]]; then
-    if diff -q workflow/skills/playbooks/gruff-code-quality.md .goat-flow/skill-playbooks/gruff-code-quality.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/skill-docs/playbooks/gruff-code-quality.md ]]; then
+    if diff -q workflow/skills/playbooks/gruff-code-quality.md .goat-flow/skill-docs/playbooks/gruff-code-quality.md >/dev/null 2>&1; then
         pass "gruff-code-quality.md: template and installed copy match"
     else
-        fail "gruff-code-quality.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "gruff-code-quality.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "gruff-code-quality.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-playbooks/observability.md ]]; then
-    if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-playbooks/observability.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-docs/playbooks/observability.md ]]; then
+    if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-docs/playbooks/observability.md >/dev/null 2>&1; then
         pass "observability.md: template and installed copy match"
     else
-        fail "observability.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "observability.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "observability.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-playbooks/changelog.md ]]; then
-    if diff -q workflow/skills/playbooks/changelog.md .goat-flow/skill-playbooks/changelog.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-docs/playbooks/changelog.md ]]; then
+    if diff -q workflow/skills/playbooks/changelog.md .goat-flow/skill-docs/playbooks/changelog.md >/dev/null 2>&1; then
         pass "changelog.md: template and installed copy match"
     else
-        fail "changelog.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "changelog.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "changelog.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-playbooks/page-capture.md ]]; then
-    if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-playbooks/page-capture.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-docs/playbooks/page-capture.md ]]; then
+    if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-docs/playbooks/page-capture.md >/dev/null 2>&1; then
         pass "page-capture.md: template and installed copy match"
     else
-        fail "page-capture.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "page-capture.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "page-capture.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill-playbooks/release-notes.md ]]; then
-    if diff -q workflow/skills/playbooks/release-notes.md .goat-flow/skill-playbooks/release-notes.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill-docs/playbooks/release-notes.md ]]; then
+    if diff -q workflow/skills/playbooks/release-notes.md .goat-flow/skill-docs/playbooks/release-notes.md >/dev/null 2>&1; then
         pass "release-notes.md: template and installed copy match"
     else
-        fail "release-notes.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "release-notes.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-playbooks/skill-quality-testing.md ]]; then
-    if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-playbooks/skill-quality-testing.md >/dev/null 2>&1; then
+if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-docs/skill-quality-testing/README.md ]]; then
+    if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-docs/skill-quality-testing/README.md >/dev/null 2>&1; then
         pass "skill-quality-testing.md: template and installed copy match"
     else
-        fail "skill-quality-testing.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-playbooks/) differ"
+        fail "skill-quality-testing.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/skill-quality-testing/) differ"
     fi
 else
     skip "skill-quality-testing.md sync (one or both files missing)"
 fi
 for topical in tdd-iteration adversarial-framing deployment; do
     tpl="workflow/skills/playbooks/skill-quality-testing/${topical}.md"
-    inst=".goat-flow/skill-playbooks/skill-quality-testing/${topical}.md"
+    inst=".goat-flow/skill-docs/skill-quality-testing/${topical}.md"
     if [[ -f "$tpl" ]] && [[ -f "$inst" ]]; then
         if diff -q "$tpl" "$inst" >/dev/null 2>&1; then
             pass "skill-quality-testing/${topical}.md: template and installed copy match"
         else
-            fail "skill-quality-testing/${topical}.md: template (workflow/skills/playbooks/skill-quality-testing/) and installed (.goat-flow/skill-playbooks/skill-quality-testing/) differ"
+            fail "skill-quality-testing/${topical}.md: template (workflow/skills/playbooks/skill-quality-testing/) and installed (.goat-flow/skill-docs/skill-quality-testing/) differ"
         fi
     else
         skip "skill-quality-testing/${topical}.md sync (one or both files missing)"
@@ -2112,5 +2116,7 @@ fi
 
 # ── Summary ──────────────────────────────────────────────────────────
 # render_report runs from the EXIT trap registered near the top.
-[[ "$errors" -gt 0 ]] && exit 1
+if [[ "$errors" -gt 0 ]]; then
+    exit 1
+fi
 exit 0

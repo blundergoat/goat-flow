@@ -276,7 +276,7 @@ const LOCAL_ARTIFACT_MARKERS = [
   "local artifact",
   "local-state",
   ".goat-flow/logs",
-  ".goat-flow/tasks",
+  ".goat-flow/plans",
   "critique snapshot",
   "scratchpad",
   "quality report",

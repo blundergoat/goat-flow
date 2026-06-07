@@ -107,7 +107,9 @@ describe("skill new - description mode", () => {
     assertRecommendedReferenceSubtype(result, "playbook");
     assert.ok(result.written);
     assert.ok(
-      result.proposedPath?.endsWith(".goat-flow/skill-playbooks/lefthook.md"),
+      result.proposedPath?.endsWith(
+        ".goat-flow/skill-docs/playbooks/lefthook.md",
+      ),
     );
     assertExists(result.proposedPath);
     const content = readFileSync(result.proposedPath, "utf-8");

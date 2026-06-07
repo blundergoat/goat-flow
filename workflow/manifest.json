@@ -5,8 +5,8 @@
   "required_files": [
     ".goat-flow/.gitignore",
     ".goat-flow/config.yaml",
-    ".goat-flow/tasks/.gitignore",
-    ".goat-flow/tasks/README.md",
+    ".goat-flow/plans/.gitignore",
+    ".goat-flow/plans/README.md",
     ".goat-flow/logs/quality/README.md",
     ".goat-flow/logs/events/README.md",
     ".goat-flow/logs/critiques/README.md",
@@ -14,40 +14,42 @@
     ".goat-flow/logs/security/README.md",
     ".goat-flow/scratchpad/.gitignore",
     ".goat-flow/scratchpad/README.md",
-    ".goat-flow/lessons/README.md",
-    ".goat-flow/footguns/README.md",
-    ".goat-flow/decisions/README.md",
+    ".goat-flow/learning-loop/lessons/README.md",
+    ".goat-flow/learning-loop/footguns/README.md",
+    ".goat-flow/learning-loop/decisions/README.md",
     ".goat-flow/logs/sessions/.gitkeep",
-    ".goat-flow/skill-reference/README.md",
-    ".goat-flow/skill-reference/skill-preamble.md",
-    ".goat-flow/skill-reference/skill-conventions.md",
-    ".goat-flow/skill-playbooks/README.md",
-    ".goat-flow/skill-playbooks/browser-use.md",
-    ".goat-flow/skill-playbooks/changelog.md",
-    ".goat-flow/skill-playbooks/code-comments.md",
-    ".goat-flow/skill-playbooks/gruff-code-quality.md",
-    ".goat-flow/skill-playbooks/observability.md",
-    ".goat-flow/skill-playbooks/page-capture.md",
-    ".goat-flow/skill-playbooks/release-notes.md",
-    ".goat-flow/skill-playbooks/skill-quality-testing.md",
-    ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
-    ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
-    ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
-    ".goat-flow/hook-lib/patterns-shell.sh",
-    ".goat-flow/hook-lib/patterns-paths.sh",
-    ".goat-flow/hook-lib/patterns-writes.sh",
-    ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+    ".goat-flow/skill-docs/README.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+    ".goat-flow/skill-docs/playbooks/README.md",
+    ".goat-flow/skill-docs/playbooks/browser-use.md",
+    ".goat-flow/skill-docs/playbooks/changelog.md",
+    ".goat-flow/skill-docs/playbooks/code-comments.md",
+    ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+    ".goat-flow/skill-docs/playbooks/observability.md",
+    ".goat-flow/skill-docs/playbooks/page-capture.md",
+    ".goat-flow/skill-docs/playbooks/release-notes.md",
+    ".goat-flow/skill-docs/skill-quality-testing/README.md",
+    ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+    ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+    ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+    ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+    ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
     ".goat-flow/architecture.md",
     ".goat-flow/code-map.md",
     ".goat-flow/glossary.md",
-    ".goat-flow/patterns/README.md"
+    ".goat-flow/learning-loop/patterns/README.md"
   ],
 
   "required_dirs": [
-    ".goat-flow/decisions/",
-    ".goat-flow/footguns/",
-    ".goat-flow/lessons/",
-    ".goat-flow/patterns/",
+    ".goat-flow/learning-loop/decisions/",
+    ".goat-flow/learning-loop/footguns/",
+    ".goat-flow/learning-loop/lessons/",
+    ".goat-flow/learning-loop/patterns/",
     ".goat-flow/logs/sessions/",
     ".goat-flow/logs/quality/",
     ".goat-flow/logs/events/",
@@ -55,16 +57,18 @@
     ".goat-flow/logs/review/",
     ".goat-flow/logs/security/",
     ".goat-flow/scratchpad/",
-    ".goat-flow/skill-reference/",
-    ".goat-flow/skill-playbooks/",
-    ".goat-flow/hook-lib/",
-    ".goat-flow/tasks/"
+    ".goat-flow/skill-docs/",
+    ".goat-flow/skill-docs/playbooks/",
+    ".goat-flow/skill-docs/skill-quality-testing/",
+    ".goat-flow/hooks/",
+    ".goat-flow/hooks/deny-dangerous/",
+    ".goat-flow/plans/"
   ],
 
   "directory_purposes": {
-    ".goat-flow/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
-    ".goat-flow/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
-    ".goat-flow/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
+    ".goat-flow/learning-loop/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
+    ".goat-flow/learning-loop/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
+    ".goat-flow/learning-loop/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
     ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed.",
     ".goat-flow/logs/quality/": "Workspace-local, gitignored-by-design quality report history. Saved agent quality reports (JSON) and their captured prose companions (MD); feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. Only README.md is committed.",
     ".goat-flow/logs/events/": "Workspace-local, gitignored-by-design evidence envelope event log. Dashboard and future runtime producers append redacted JSONL records for local continuity; durable project knowledge must be promoted to lessons/, footguns/, or decisions/. Only README.md is committed.",
@@ -72,10 +76,12 @@
     ".goat-flow/logs/review/": "Workspace-local, gitignored-by-design review artifact history. Refutation ledgers and cross-model refuter outputs from `/goat-review` runs are stored here so review integrity evidence survives session interruptions. Only README.md is committed.",
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/skill-reference/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
-    ".goat-flow/skill-playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline (derives from changelog), and skill-quality-testing.md (index pointing at the skill-quality-testing/ subdir with tdd-iteration.md, adversarial-framing.md, deployment.md per ADR-023). Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
-    ".goat-flow/hook-lib/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
-    ".goat-flow/tasks/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
+    ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
+    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, and release-notes.md for per-release narrative discipline. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
+    ".goat-flow/hooks/": "Committed central hook runtime. Holds deny-dangerous.sh and gruff-code-quality.sh dispatchers plus hook-specific policy modules under subdirectories.",
+    ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
+    ".goat-flow/plans/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 
   "optional_files": {
@@ -155,14 +161,14 @@
         "prompt_invocation_style": "slash",
         "skill_source": "installed"
       },
-      "hooks_dir": ".claude/hooks/",
+      "hooks_dir": ".goat-flow/hooks/",
       "settings": ".claude/settings.json",
       "hook_config_file": ".claude/settings.json",
-      "deny_hook": ".claude/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".claude/settings.json",
-        "script_path": ".claude/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
       },
       "local_pattern": "*/CLAUDE.md",
       "hook_events": {
@@ -170,7 +176,8 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh"
+        "deny-dangerous.sh",
+        "gruff-code-quality.sh"
       ]
     },
     "codex": {
@@ -187,14 +194,14 @@
         "prompt_invocation_style": "dollar",
         "skill_source": "agent-mirror"
       },
-      "hooks_dir": ".codex/hooks/",
+      "hooks_dir": ".goat-flow/hooks/",
       "settings": ".codex/config.toml",
       "hook_config_file": ".codex/hooks.json",
-      "deny_hook": ".codex/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "both",
         "settings_path": ".codex/config.toml",
-        "script_path": ".codex/hooks/deny-dangerous.sh"
+        "script_path": ".goat-flow/hooks/deny-dangerous.sh"
       },
       "local_pattern": ".github/instructions/*.md",
       "hook_events": {
@@ -202,7 +209,8 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh"
+        "deny-dangerous.sh",
+        "gruff-code-quality.sh"
       ]
     },
     "antigravity": {
@@ -215,17 +223,17 @@
           "AGENTS.md",
           ".agents/skills/",
           ".agents/hooks.json",
-          ".agents/hooks/"
+          ".goat-flow/hooks/"
         ],
         "prompt_invocation_style": "slash",
         "skill_source": "agent-mirror"
       },
-      "hooks_dir": ".agents/hooks/",
+      "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".agents/hooks.json",
-      "deny_hook": ".agents/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".agents/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.sh"
       },
       "local_pattern": "*/AGENTS.md",
       "hook_events": {
@@ -233,7 +241,8 @@
         "post_turn": "Stop"
       },
       "hooks": [
-        "deny-dangerous.sh"
+        "deny-dangerous.sh",
+        "gruff-code-quality.sh"
       ]
     },
     "copilot": {
@@ -250,12 +259,12 @@
         "prompt_invocation_style": "slash",
         "skill_source": "github-mirror"
       },
-      "hooks_dir": ".github/hooks/",
+      "hooks_dir": ".goat-flow/hooks/",
       "hook_config_file": ".github/hooks/hooks.json",
-      "deny_hook": ".github/hooks/deny-dangerous.sh",
+      "deny_hook": ".goat-flow/hooks/deny-dangerous.sh",
       "deny_mechanism": {
         "type": "deny-script",
-        "path": ".github/hooks/deny-dangerous.sh"
+        "path": ".goat-flow/hooks/deny-dangerous.sh"
       },
       "local_pattern": ".github/instructions/**/*.instructions.md",
       "hook_events": {
@@ -263,8 +272,8 @@
         "post_turn": null
       },
       "hooks": [
-        "hooks.json",
-        "deny-dangerous.sh"
+        "deny-dangerous.sh",
+        "gruff-code-quality.sh"
       ]
     }
   },

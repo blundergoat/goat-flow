@@ -10,7 +10,7 @@
       <div>
         <h1>Plans</h1>
         <p>
-          Milestone state from <code>.goat-flow/tasks/</code> in the selected
+          Milestone state from <code>.goat-flow/plans/</code> in the selected
           project, with active plan selection.
         </p>
       </div>
@@ -37,7 +37,7 @@
         <span class="gf-empty-mark">M00</span>
         <h2>No plans directory found</h2>
         <p>
-          <code x-text="tasksState.taskRoot"></code>
+          <code x-text="tasksState.planRoot"></code>
           does not exist for the selected project.
         </p>
       </section>
@@ -143,8 +143,8 @@
             </div>
             <span
               class="gf-task-path"
-              x-text="tasksState.taskRoot"
-              :title="tasksState.taskRoot"
+              x-text="tasksState.planRoot"
+              :title="tasksState.planRoot"
             ></span>
           </div>
 

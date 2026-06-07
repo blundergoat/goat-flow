@@ -23,18 +23,18 @@ Build mode is the structural install gate. It validates files, directories, conf
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
-| `lessons` | Lessons | `.goat-flow/lessons/` and `.goat-flow/lessons/README.md` exist |
-| `footguns` | Footguns | `.goat-flow/footguns/` and `.goat-flow/footguns/README.md` exist |
+| `lessons` | Lessons | `.goat-flow/learning-loop/lessons/` and `.goat-flow/learning-loop/lessons/README.md` exist |
+| `footguns` | Footguns | `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/footguns/README.md` exist |
 | `architecture` | Architecture | `.goat-flow/architecture.md` exists |
 | `code-map` | Code map | `.goat-flow/code-map.md` exists |
 | `glossary` | Glossary | `.goat-flow/glossary.md` exists |
-| `patterns` | Patterns | `.goat-flow/patterns/README.md` exists |
-| `decisions` | Decisions | `.goat-flow/decisions/` exists |
+| `patterns` | Patterns | `.goat-flow/learning-loop/patterns/README.md` exists |
+| `decisions` | Decisions | `.goat-flow/learning-loop/decisions/` exists |
 | `session-logs` | Session logs | `.goat-flow/logs/sessions/` exists |
-| `tasks` | Tasks | `.goat-flow/tasks/`, `.goat-flow/tasks/.gitignore`, and `.goat-flow/tasks/README.md` exist |
+| `plans` | Plans | `.goat-flow/plans/`, `.goat-flow/plans/.gitignore`, and `.goat-flow/plans/README.md` exist |
 | `scratchpad` | Scratchpad | `.goat-flow/scratchpad/`, `.goat-flow/scratchpad/.gitignore`, and `.goat-flow/scratchpad/README.md` exist |
-| `goat-flow-gitignore` | goat-flow gitignore exceptions | `.goat-flow/.gitignore` exists and contains the `!skill-reference/`, `!skill-reference/**`, `!skill-playbooks/`, `!skill-playbooks/**` un-ignore entries. Catches pre-1.6.1 installs whose stale gitignore silently hid the playbook pack from git. Remediation re-runs the installer (always overwrites `.goat-flow/.gitignore`) and prompts a `git add` of the previously hidden directories |
-| `instruction-file-skill-reference-pointer` | Instruction file skill-playbooks pointer | Requires the full meta-reference and playbook pack, a READ-step rule to consult `.goat-flow/skill-playbooks/` and run playbook Availability Checks before declaring tools unavailable, and a Router Table pointer in each present instruction file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Missing `.goat-flow/skill-reference/` or `.goat-flow/skill-playbooks/` files fail here instead of falling through to `other-files` |
+| `goat-flow-gitignore` | goat-flow gitignore exceptions | `.goat-flow/.gitignore` exists and contains the `!learning-loop/`, `!learning-loop/**`, `!skill-docs/`, `!skill-docs/**`, `!hooks/`, `!hooks/**`, `!plans/`, and `!plans/**` un-ignore entries. Catches stale installs whose gitignore silently hides committed goat-flow surfaces from git. Remediation re-runs the installer and prompts a `git add` of the previously hidden directories |
+| `instruction-file-skill-docs-pointer` | Instruction file skill-docs/playbooks pointer | Requires the full skill-docs and playbook pack, a READ-step rule to consult `.goat-flow/skill-docs/playbooks/` and run playbook Availability Checks before declaring tools unavailable, and a Router Table pointer in each present instruction file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Missing `.goat-flow/skill-docs/` or `.goat-flow/skill-docs/playbooks/` files fail here instead of falling through to `other-files` |
 | `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including local log README surfaces |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
 | `config-version` | Config version | `.goat-flow/config.yaml` declares the current `AUDIT_VERSION` |
@@ -46,7 +46,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; for Copilot, `.github/copilot-instructions.md` must also reference `docs/coding-standards/git-commit.md` under a `## Commit Messages` section. Without `--agent`, this also detects orphaned agent artifacts and incomplete Copilot installs |
 | `agent-skills` | Agent skills | The selected agent has every canonical skill file, each installed skill declares the current `goat-flow-skill-version`, and no deprecated skill directories remain |
 | `agent-settings` | Agent settings | The selected agent's settings file parses as valid JSON or TOML |
-| `agent-guardrails` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, installed `deny-dangerous.sh` plus `.goat-flow/hook-lib/` match the workflow templates, `deny-dangerous-self-test.sh --self-test=smoke` passes when the hook scripts exist, and a runtime-shaped blocked Bash payload is denied through the registered hook path |
+| `agent-guardrails` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, installed `deny-dangerous.sh` plus `.goat-flow/hooks/deny-dangerous/` match the workflow templates, `deny-dangerous-self-test.sh --self-test=smoke` passes when the hook scripts exist, and a runtime-shaped blocked Bash payload is denied through the registered hook path |
 
 Aggregate-mode nuance:
 
@@ -72,10 +72,10 @@ Aggregate-mode nuance:
 | Verification | `commit-guidance` | `advisory` | Commit guidance exists at the canonical `docs/coding-standards/git-commit.md`; old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
 | Verification | `post-turn-hook-integrity` | `metric` | Reports whether any post-turn hook runs validation and whether it swallows failures; absence is no hook evidence, not proof. Metric failures do not fail the harness scope, but they reduce the concern score. |
-| Recovery | `milestone-tracking` | `integrity` | `.goat-flow/tasks/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |
+| Recovery | `milestone-tracking` | `integrity` | `.goat-flow/plans/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |
 | Recovery | `session-logs` | `integrity` | `.goat-flow/logs/sessions/` exists |
 | Feedback loop | `feedback-loop-active` | `integrity` | The lessons and footguns directories exist, with valid metadata and non-stale evidence references |
-| Feedback loop | `decisions-tracked` | `integrity` | `.goat-flow/decisions/` exists |
+| Feedback loop | `decisions-tracked` | `integrity` | `.goat-flow/learning-loop/decisions/` exists |
 
 ## Command Matrix
 

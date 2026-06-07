@@ -232,7 +232,10 @@ export function extractLearningLoopEntries(
 ): LearningLoopEntryFact[] {
   const footgunDir = listMarkdownEntries(fs, configState.config.footguns.path);
   const lessonDir = listMarkdownEntries(fs, configState.config.lessons.path);
-  const patternDir = listMarkdownEntries(fs, ".goat-flow/patterns/");
+  const patternDir = listMarkdownEntries(
+    fs,
+    ".goat-flow/learning-loop/patterns/",
+  );
   const decisionDir = listMarkdownEntries(
     fs,
     configState.config.decisions.path,

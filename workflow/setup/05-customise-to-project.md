@@ -8,16 +8,16 @@ This step should take the longest - it's doing real work, not copying templates.
 
 If existing documentation surfaces exist (e.g., `docs/footguns.md`, `docs/lessons.md`), migrate content into the canonical `.goat-flow/` directories. Merge with any existing `.goat-flow/` content - do not overwrite. Check for inbound references (README, CI, external links) before deleting originals.
 
-All learning loop surfaces use canonical paths: `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/`. No path overrides in config.yaml.
+All learning loop surfaces use canonical paths: `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/`. No path overrides in config.yaml.
 
 ## Check recovery references for stale paths
 
-If existing instruction files, settings, or local docs reference legacy task-state files or other stale recovery paths, update them to `.goat-flow/tasks/` or `.goat-flow/logs/sessions/`. Recovery uses milestone tracking plus optional local session logs; do not add notification hooks for recovery.
+If existing instruction files, settings, or local docs reference legacy task-state files or other stale recovery paths, update them to `.goat-flow/plans/` or `.goat-flow/logs/sessions/`. Recovery uses milestone tracking plus optional local session logs; do not add notification hooks for recovery.
 
 ## First: resume project context
 
 - Read the 2-3 most recent files in `.goat-flow/logs/sessions/` if they exist
-- Check whether `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/patterns/` already exist
+- Check whether `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, or `.goat-flow/learning-loop/patterns/` already exist
 - Merge with what's there - do not replace existing project memory
 
 ## Footguns - find real traps in the code
@@ -36,22 +36,22 @@ grep -rn 'TODO\|FIXME\|HACK\|XXX' src/ --include='*.ts' --include='*.php' --incl
 git log --oneline -50 | grep -iE 'fix|revert|hotfix|bug|broke|rollback'
 ```
 
-What looks broken but is intentional? (semi-manual workflows, expected auth failures, known data caveats, deliberately disabled features with re-enablement steps). Route findings to `.goat-flow/footguns/` with a `hallucination-risk: high` tag.
+What looks broken but is intentional? (semi-manual workflows, expected auth failures, known data caveats, deliberately disabled features with re-enablement steps). Route findings to `.goat-flow/learning-loop/footguns/` with a `hallucination-risk: high` tag.
 
 - Read config files for stale project names, hardcoded paths, outdated references
-- Write findings to `.goat-flow/footguns/` bucket files with real file paths as evidence
+- Write findings to `.goat-flow/learning-loop/footguns/` bucket files with real file paths as evidence
 - Every entry MUST cite specific file paths. Use `ACTUAL_MEASURED` evidence labels.
 - Every bucket file MUST start with YAML frontmatter that includes both `category: <name>` and `last_reviewed: <YYYY-MM-DD, today>`. `goat-flow stats --check` fails without `last_reviewed`. See `workflow/setup/reference/footguns-readme.md` for the exact format.
 - Every footgun entry MUST begin with a `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <label>` line. Agents scan only entries above `## Resolved Entries`; without `Status` the active/resolved split is undefined.
 - Add `hallucination-risk: high` when the area is easy to misread from names alone (generated code, env-specific config, external contracts)
-- If `.goat-flow/footguns/` already has entries, MERGE - do not replace
+- If `.goat-flow/learning-loop/footguns/` already has entries, MERGE - do not replace
 
 ## Lessons - extract from git history
 
 - Use the same `git log` scan - for each incident, what was the root cause and what should have been done differently?
-- Write to `.goat-flow/lessons/` category bucket files
+- Write to `.goat-flow/learning-loop/lessons/` category bucket files
 - Every bucket file MUST start with YAML frontmatter that includes both `category: <name>` and `last_reviewed: <YYYY-MM-DD, today>`. See `workflow/setup/reference/lessons-readme.md` for the exact format.
-- If `.goat-flow/lessons/` already has entries, MERGE - do not replace
+- If `.goat-flow/learning-loop/lessons/` already has entries, MERGE - do not replace
 
 ## Auto-seed the learning loop from strong git signals
 
@@ -75,7 +75,7 @@ Examples:
 
 ## Patterns - capture memory beyond mistakes
 
-- Ensure `.goat-flow/patterns/` directory exists with `README.md`. Use it for successful repeatable approaches, not incidents
+- Ensure `.goat-flow/learning-loop/patterns/` directory exists with `README.md`. Use it for successful repeatable approaches, not incidents
 
 ## Architecture and code map - make them real
 
@@ -102,9 +102,9 @@ Examples:
 - [ ] Every footgun entry references a real file path in this project
 - [ ] Every lesson references a real git commit or incident
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
-- [ ] Every `.goat-flow/footguns/*.md` and `.goat-flow/lessons/*.md` bucket has `category:` + `last_reviewed:` frontmatter; `node --import tsx src/cli/cli.ts stats --check` exits 0
+- [ ] Every `.goat-flow/learning-loop/footguns/*.md` and `.goat-flow/learning-loop/lessons/*.md` bucket has `category:` + `last_reviewed:` frontmatter; `node --import tsx src/cli/cli.ts stats --check` exits 0
 - [ ] Every `## Footgun:` entry begins with `**Status:**` (active | resolved)
-- [ ] `.goat-flow/patterns/README.md` exists
+- [ ] `.goat-flow/learning-loop/patterns/README.md` exists
 - [ ] If `docs/` surfaces exist, they are referenced (not duplicated) in `.goat-flow/`
 - [ ] Recovery references use current paths (not legacy task-state files)
 - [ ] If legacy task-state files exist, they are reported in the session log

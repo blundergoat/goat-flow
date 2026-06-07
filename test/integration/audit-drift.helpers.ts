@@ -49,9 +49,9 @@ export const COPILOT_HOOK_CONFIG_STUB =
   '{\n  "version": 1,\n  "hooks": { "preToolUse": [] }\n}\n';
 export const COPILOT_GRUFF_HOOK_ENTRY = {
   type: "command",
-  bash: ".github/hooks/gruff-code-quality.sh",
+  bash: ".goat-flow/hooks/gruff-code-quality.sh",
   powershell:
-    'if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/gruff-code-quality.sh } else { Write-Output \'{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run .github/hooks/gruff-code-quality.sh on Windows."}\' }',
+    'if (Get-Command bash -ErrorAction SilentlyContinue) { bash .goat-flow/hooks/gruff-code-quality.sh } else { Write-Output \'{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run .goat-flow/hooks/gruff-code-quality.sh on Windows."}\' }',
   timeoutSec: 30,
 };
 
@@ -176,61 +176,74 @@ export function setupFixture(): string {
       writeSkillFiles(root, agentDir, name);
     }
   }
-  // Installed: meta references under .goat-flow/skill-reference/
-  mkdirSync(join(root, ".goat-flow", "skill-reference"), { recursive: true });
+  // Installed: meta references under .goat-flow/skill-docs/
+  mkdirSync(join(root, ".goat-flow", "skill-docs"), { recursive: true });
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "README.md"),
+    join(root, ".goat-flow", "skill-docs", "README.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "skill-preamble.md"),
+    join(root, ".goat-flow", "skill-docs", "skill-preamble.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-reference", "skill-conventions.md"),
+    join(root, ".goat-flow", "skill-docs", "skill-conventions.md"),
     SHARED_STUB,
   );
-  // Installed: standalone playbooks under .goat-flow/skill-playbooks/
-  mkdirSync(join(root, ".goat-flow", "skill-playbooks"), { recursive: true });
+  // Installed: standalone playbooks under .goat-flow/skill-docs/playbooks/
+  mkdirSync(join(root, ".goat-flow", "skill-docs", "playbooks"), {
+    recursive: true,
+  });
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "README.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "browser-use.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "README.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "code-comments.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "browser-use.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "gruff-code-quality.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "code-comments.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "observability.md"),
+    join(
+      root,
+      ".goat-flow",
+      "skill-docs",
+      "playbooks",
+      "gruff-code-quality.md",
+    ),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "changelog.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "observability.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "page-capture.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "changelog.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "release-notes.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "page-capture.md"),
     SHARED_STUB,
   );
   writeFileSync(
-    join(root, ".goat-flow", "skill-playbooks", "skill-quality-testing.md"),
+    join(root, ".goat-flow", "skill-docs", "playbooks", "release-notes.md"),
     SHARED_STUB,
   );
-  mkdirSync(
-    join(root, ".goat-flow", "skill-playbooks", "skill-quality-testing"),
-    { recursive: true },
+  mkdirSync(join(root, ".goat-flow", "skill-docs", "skill-quality-testing"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(
+      root,
+      ".goat-flow",
+      "skill-docs",
+      "skill-quality-testing",
+      "README.md",
+    ),
+    SHARED_STUB,
   );
   for (const topical of [
     "tdd-iteration",
@@ -241,7 +254,7 @@ export function setupFixture(): string {
       join(
         root,
         ".goat-flow",
-        "skill-playbooks",
+        "skill-docs",
         "skill-quality-testing",
         `${topical}.md`,
       ),
@@ -252,8 +265,8 @@ export function setupFixture(): string {
 }
 
 /**
- * Write deny-dangerous hook fixtures - workflow source hooks plus their installed copies across
- * the .claude/.codex/.github hook dirs - so drift checks that compare hook manifests find parity.
+ * Write deny-dangerous hook fixtures - workflow source hooks plus the installed central hooks
+ * under .goat-flow/hooks - so drift checks that compare hook manifests find parity.
  * Writes files and creates directories on the filesystem under root.
  *
  * @param root - the temp fixture root the hook source and installed copies are written beneath
@@ -262,7 +275,7 @@ export function writeHookFixtures(root: string): void {
   mkdirSync(join(root, "workflow", "hooks", "agent-config"), {
     recursive: true,
   });
-  mkdirSync(join(root, "workflow", "hooks", "hook-lib"), {
+  mkdirSync(join(root, "workflow", "hooks", "deny-dangerous"), {
     recursive: true,
   });
   writeFileSync(
@@ -276,27 +289,37 @@ export function writeHookFixtures(root: string): void {
     "deny-dangerous-self-test.sh",
   ]) {
     writeFileSync(
-      join(root, "workflow", "hooks", "hook-lib", hookLibFile),
+      join(root, "workflow", "hooks", "deny-dangerous", hookLibFile),
       HOOK_STUB,
     );
   }
-  mkdirSync(join(root, ".goat-flow", "hook-lib"), { recursive: true });
+  mkdirSync(join(root, ".goat-flow", "hooks", "deny-dangerous"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+    HOOK_STUB,
+  );
   for (const hookLibFile of [
     "patterns-shell.sh",
     "patterns-paths.sh",
     "patterns-writes.sh",
     "deny-dangerous-self-test.sh",
   ]) {
-    writeFileSync(join(root, ".goat-flow", "hook-lib", hookLibFile), HOOK_STUB);
+    writeFileSync(
+      join(root, ".goat-flow", "hooks", "deny-dangerous", hookLibFile),
+      HOOK_STUB,
+    );
   }
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+    HOOK_STUB,
+  );
   writeFileSync(
     join(root, "workflow", "hooks", "agent-config", "copilot-hooks.json"),
     COPILOT_HOOK_CONFIG_STUB,
   );
-  for (const hooksDir of [".claude/hooks", ".codex/hooks", ".github/hooks"]) {
-    mkdirSync(join(root, hooksDir), { recursive: true });
-    writeFileSync(join(root, hooksDir, "deny-dangerous.sh"), HOOK_STUB);
-  }
+  mkdirSync(join(root, ".github", "hooks"), { recursive: true });
   writeFileSync(
     join(root, ".github", "hooks", "hooks.json"),
     COPILOT_HOOK_CONFIG_STUB,

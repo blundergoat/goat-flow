@@ -9,20 +9,20 @@
  *       workflow/skills/<name>/SKILL.md  vs
  *       .claude/skills/<name>/SKILL.md
  *       .agents/skills/<name>/SKILL.md
- *   - Shared meta references (template → installed in .goat-flow/skill-reference/):
- *       workflow/skills/reference/README.md                 vs .goat-flow/skill-reference/README.md
- *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-reference/skill-preamble.md
- *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-reference/skill-conventions.md
- *   - Standalone playbooks (template → installed in .goat-flow/skill-playbooks/):
- *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-playbooks/README.md
- *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-playbooks/browser-use.md
- *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-playbooks/code-comments.md
- *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-playbooks/gruff-code-quality.md
- *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-playbooks/observability.md
- *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-playbooks/changelog.md
- *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-playbooks/page-capture.md
- *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-playbooks/release-notes.md
- *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-playbooks/skill-quality-testing.md
+ *   - Shared meta references (template → installed in .goat-flow/skill-docs/):
+ *       workflow/skills/reference/README.md                 vs .goat-flow/skill-docs/README.md
+ *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-docs/skill-preamble.md
+ *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-docs/skill-conventions.md
+ *   - Standalone playbooks (template → installed in .goat-flow/skill-docs/playbooks/):
+ *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-docs/playbooks/README.md
+ *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-docs/playbooks/browser-use.md
+ *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-docs/playbooks/code-comments.md
+ *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-docs/playbooks/gruff-code-quality.md
+ *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-docs/playbooks/observability.md
+ *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-docs/playbooks/changelog.md
+ *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-docs/playbooks/page-capture.md
+ *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-docs/playbooks/release-notes.md
+ *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-docs/skill-quality-testing/README.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
  *     name is not in SKILL_NAMES. Names that appear in manifest.stale_names
  *     are reported as deprecated instead of a plain orphan.
@@ -113,7 +113,7 @@ function normalizeBody(body: string): string {
  * value changes still are.
  *
  * @param expected - Template markdown content from `workflow/skills`.
- * @param existing - Installed markdown content from an agent or skill-reference tree.
+ * @param existing - Installed markdown content from an agent or skill-docs tree.
  * @returns True when normalized frontmatter and body content match.
  */
 export function skillContentsEquivalent(
@@ -173,68 +173,67 @@ const SHARED_FILES: SharedFileSpec[] = [
   // Meta references (composed into every skill)
   {
     template: "workflow/skills/reference/README.md",
-    installed: ".goat-flow/skill-reference/README.md",
+    installed: ".goat-flow/skill-docs/README.md",
   },
   {
     template: "workflow/skills/reference/skill-preamble.md",
-    installed: ".goat-flow/skill-reference/skill-preamble.md",
+    installed: ".goat-flow/skill-docs/skill-preamble.md",
   },
   {
     template: "workflow/skills/reference/skill-conventions.md",
-    installed: ".goat-flow/skill-reference/skill-conventions.md",
+    installed: ".goat-flow/skill-docs/skill-conventions.md",
   },
   // Standalone playbooks (loaded on-demand)
   {
     template: "workflow/skills/playbooks/README.md",
-    installed: ".goat-flow/skill-playbooks/README.md",
+    installed: ".goat-flow/skill-docs/playbooks/README.md",
   },
   {
     template: "workflow/skills/playbooks/browser-use.md",
-    installed: ".goat-flow/skill-playbooks/browser-use.md",
+    installed: ".goat-flow/skill-docs/playbooks/browser-use.md",
   },
   {
     template: "workflow/skills/playbooks/code-comments.md",
-    installed: ".goat-flow/skill-playbooks/code-comments.md",
+    installed: ".goat-flow/skill-docs/playbooks/code-comments.md",
   },
   {
     template: "workflow/skills/playbooks/gruff-code-quality.md",
-    installed: ".goat-flow/skill-playbooks/gruff-code-quality.md",
+    installed: ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
   },
   {
     template: "workflow/skills/playbooks/observability.md",
-    installed: ".goat-flow/skill-playbooks/observability.md",
+    installed: ".goat-flow/skill-docs/playbooks/observability.md",
   },
   {
     template: "workflow/skills/playbooks/changelog.md",
-    installed: ".goat-flow/skill-playbooks/changelog.md",
+    installed: ".goat-flow/skill-docs/playbooks/changelog.md",
   },
   {
     template: "workflow/skills/playbooks/page-capture.md",
-    installed: ".goat-flow/skill-playbooks/page-capture.md",
+    installed: ".goat-flow/skill-docs/playbooks/page-capture.md",
   },
   {
     template: "workflow/skills/playbooks/release-notes.md",
-    installed: ".goat-flow/skill-playbooks/release-notes.md",
+    installed: ".goat-flow/skill-docs/playbooks/release-notes.md",
   },
   {
     template: "workflow/skills/playbooks/skill-quality-testing.md",
-    installed: ".goat-flow/skill-playbooks/skill-quality-testing.md",
+    installed: ".goat-flow/skill-docs/skill-quality-testing/README.md",
   },
   {
     template:
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
-    installed:
-      ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+    installed: ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   },
   {
     template:
       "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
     installed:
-      ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+      ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
   },
   {
     template: "workflow/skills/playbooks/skill-quality-testing/deployment.md",
-    installed: ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+    installed: ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
   },
 ];
 

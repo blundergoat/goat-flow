@@ -23,7 +23,7 @@ import {
   stubFS,
 } from "../../fixtures/projects/index.js";
 
-const RATIONALISATIONS_PATH = ".goat-flow/skill-reference/skill-preamble.md";
+const RATIONALISATIONS_PATH = ".goat-flow/skill-docs/skill-preamble.md";
 const evidenceBeforeClaims = HARNESS_CHECKS.find(
   (check) => check.id === "evidence-before-claims",
 );

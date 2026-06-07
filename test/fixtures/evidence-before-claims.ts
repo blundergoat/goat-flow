@@ -31,7 +31,7 @@ export function completeInstruction(title: string): string {
     "3. **Fix verification.** Do not claim a fix works without reproduction.",
     '4. **Hedged claims.** Do not use "should work" as verification.',
     "",
-    "The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-flow/skill-reference/skill-preamble.md` (search: `Rationalisations to reject`) names the rationalisations that defeat the red-flags.",
+    "The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`) names the rationalisations that defeat the red-flags.",
   ].join("\n");
 }
 

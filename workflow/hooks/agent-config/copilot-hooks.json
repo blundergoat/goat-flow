@@ -4,8 +4,8 @@
     "preToolUse": [
       {
         "type": "command",
-        "bash": ".github/hooks/deny-dangerous.sh",
-        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .github/hooks/deny-dangerous.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .github/hooks/deny-dangerous.sh on Windows.\"}' }",
+        "bash": ".goat-flow/hooks/deny-dangerous.sh",
+        "powershell": "if (Get-Command bash -ErrorAction SilentlyContinue) { bash .goat-flow/hooks/deny-dangerous.sh } else { Write-Output '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Bash, Git Bash, or WSL is required to run .goat-flow/hooks/deny-dangerous.sh on Windows.\"}' }",
         "timeoutSec": 30
       }
     ]

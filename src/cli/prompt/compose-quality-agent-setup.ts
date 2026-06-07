@@ -115,7 +115,7 @@ function appendIntroAndContext(
   );
   lines.push("");
   lines.push(
-    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
+    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/plans/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
   );
   lines.push("");
   appendRules(lines);
@@ -135,7 +135,7 @@ function appendRules(lines: string[]): void {
   lines.push("These apply to EVERY finding you report:");
   lines.push("");
   lines.push(
-    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored local/build/reporting paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/tasks/**`) are fine when they are part of normal validation or reporting. If a skill probe tries to modify tracked files or implement code, stop and report that as a finding.",
+    "- **No tracked-file writes.** Do NOT edit, create, rename, move, or delete tracked files. Redirection and write commands targeting gitignored local/build/reporting paths (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/plans/**`) are fine when they are part of normal validation or reporting. If a skill probe tries to modify tracked files or implement code, stop and report that as a finding.",
   );
   lines.push(
     "- **Mode vocabulary matters.** `reporting-only`, `read-only`, `no-write`, and `no implementation` mean no committed-file changes and no implementation in this assessment. Gitignored logs, critique snapshots, scratchpad notes, quality reports, and task checkbox updates are local workflow artifacts; they do not count as writes for this contract. Do not label allowed gitignored reporting/local-state artifacts as read-only violations.",
@@ -204,7 +204,7 @@ function appendGoatFlowOverview(
     "4. **Learning loop** (`.goat-flow/`) - config, architecture doc, footguns, lessons, decisions, session logs.",
   );
   lines.push(
-    "5. **Shared meta references** (under `.goat-flow/skill-reference/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog); skill-quality-testing.md index plus skill-quality-testing/tdd-iteration.md, skill-quality-testing/adversarial-framing.md, and skill-quality-testing/deployment.md (full-depth authoring methodology split across an index and three topical files per ADR-023; load the topical file matching your skill type).",
+    "5. **Shared meta references** (under `.goat-flow/skill-docs/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-docs/playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog); skill-quality-testing.md index plus skill-quality-testing/tdd-iteration.md, skill-quality-testing/adversarial-framing.md, and skill-quality-testing/deployment.md (full-depth authoring methodology split across an index and three topical files per ADR-023; load the topical file matching your skill type).",
   );
   lines.push("");
   lines.push(
@@ -230,10 +230,10 @@ function appendDesignNotes(lines: string[]): void {
     "**Design notes** (do NOT flag these as findings - they are intentional):",
   );
   lines.push(
-    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/tasks/`, scoped by the `.goat-flow/tasks/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them." When evaluating skills, do NOT flag writes to these gitignored paths as a design flaw or write-safety violation - a skill writing to `.goat-flow/logs/` or `.goat-flow/tasks/` is normal working-state behavior.',
+    '- Session logs (`.goat-flow/logs/sessions/*.md`), critique snapshots (`.goat-flow/logs/critiques/*.md`), scratchpad notes, and task/milestone files (`.goat-flow/plans/`, scoped by the `.goat-flow/plans/.active` marker - see ADR-017) are **intentionally gitignored**. They are local workspace artifacts, not committed content. This is by design - session logs should never be in version control. If the instruction file\'s DoD references session logs, it means "write them locally for the current agent\'s continuity," not "commit them." When evaluating skills, do NOT flag writes to these gitignored paths as a design flaw or write-safety violation - a skill writing to `.goat-flow/logs/` or `.goat-flow/plans/` is normal working-state behavior.',
   );
   lines.push(
-    "- `.goat-flow/tasks/.active` is an advisory local pointer, not a setup invariant. Missing `.active`, or `.active` naming a missing subdir, is normal local churn when work completes, users switch projects, or a project does not use goat-flow task files. Do NOT report this by itself as a setup-quality finding; evaluate whether `/goat` and `/goat-plan` handle the fallback gracefully.",
+    "- `.goat-flow/plans/.active` is an advisory local pointer, not a setup invariant. Missing `.active`, or `.active` naming a missing subdir, is normal local churn when work completes, users switch projects, or a project does not use goat-flow task files. Do NOT report this by itself as a setup-quality finding; evaluate whether `/goat` and `/goat-plan` handle the fallback gracefully.",
   );
   lines.push(
     "- Unchecked task or milestone checkboxes, milestone status fields, roadmap files, and task-file completion percentages are local workflow state. Do NOT report them as quality findings by themselves. Only report task-file issues when they cause an observed skill behavior failure, such as ignoring explicit user intent or corrupting task files.",
@@ -346,11 +346,11 @@ function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
   lines.push("");
   lines.push(`- Your instruction file: \`${ctx.instructionFile}\``);
   lines.push("- `.goat-flow/config.yaml`");
-  lines.push("- `.goat-flow/skill-reference/skill-preamble.md`");
-  lines.push("- `.goat-flow/skill-reference/skill-conventions.md`");
+  lines.push("- `.goat-flow/skill-docs/skill-preamble.md`");
+  lines.push("- `.goat-flow/skill-docs/skill-conventions.md`");
   lines.push("- `.goat-flow/architecture.md`");
   lines.push(
-    "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/patterns/` (if they exist)",
+    "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/learning-loop/patterns/` (if they exist)",
   );
   lines.push(
     `- All installed skill files in \`${ctx.skillsDir}\` - each \`SKILL.md\` plus any nested \`references/*.md\` packs`,
@@ -363,7 +363,7 @@ function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
     lines.push("- All hook scripts in your agent's hooks directory");
   lines.push("");
   lines.push(
-    "For the learning loop - `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/` - DO NOT broad-load. Use grep-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, run `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/footguns .goat-flow/lessons .goat-flow/decisions`, open only matching entries, reword once on zero hits, then record a retrieval miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
+    "For the learning loop - `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/` - DO NOT broad-load. Use grep-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, run `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/decisions`, open only matching entries, reword once on zero hits, then record a retrieval miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
   );
   lines.push("");
 }
@@ -385,8 +385,8 @@ function appendPrecheckAndSetupQuality(
   lines.push(
     `- If >${ctx.skillFacts.total}, list extras. Known stale names: ${ctx.skillFacts.stale_names.join(", ")}`,
   );
-  lines.push("- `.goat-flow/skill-reference/skill-preamble.md` exists?");
-  lines.push("- `.goat-flow/skill-reference/skill-conventions.md` exists?");
+  lines.push("- `.goat-flow/skill-docs/skill-preamble.md` exists?");
+  lines.push("- `.goat-flow/skill-docs/skill-conventions.md` exists?");
   lines.push("- `.goat-flow/config.yaml` exists and parseable?");
   lines.push("- No `playbooks/` directory (that's legacy)?");
   lines.push("");
@@ -401,7 +401,7 @@ function appendPrecheckAndSetupQuality(
   lines.push(
     "- For EVERY path in the router table, verify the file/directory exists. List any that don't resolve.",
   );
-  lines.push("- Does it include `.goat-flow/footguns/`?");
+  lines.push("- Does it include `.goat-flow/learning-loop/footguns/`?");
   lines.push("");
   appendSetupQuality(lines, ctx);
 }
@@ -432,10 +432,10 @@ function appendSetupQuality(
   lines.push("");
   lines.push("**Evidence quality - spot-check 3-5 entries:**");
   lines.push(
-    '- Pick 3-5 footgun entries from `.goat-flow/footguns/`. For each: (a) grep for the cited semantic anchor (function name, unique string, or `(search: "pattern")`) - does the code still exhibit the described behavior? (b) Is the `Status` field (active/resolved) accurate? An entry marked `active` that describes fixed behavior is a stale entry - report it. (c) Do the semantic anchors resolve to the described code?',
+    '- Pick 3-5 footgun entries from `.goat-flow/learning-loop/footguns/`. For each: (a) grep for the cited semantic anchor (function name, unique string, or `(search: "pattern")`) - does the code still exhibit the described behavior? (b) Is the `Status` field (active/resolved) accurate? An entry marked `active` that describes fixed behavior is a stale entry - report it. (c) Do the semantic anchors resolve to the described code?',
   );
   lines.push(
-    "- Pick 2-3 lesson entries from `.goat-flow/lessons/`. Are they from real incidents or synthetic?",
+    "- Pick 2-3 lesson entries from `.goat-flow/learning-loop/lessons/`. Are they from real incidents or synthetic?",
   );
   lines.push("");
   lines.push("**Setup hygiene:**");
@@ -443,7 +443,7 @@ function appendSetupQuality(
     "- Were existing project files (`.github/instructions/`, `docs/`, etc.) respected or overwritten?",
   );
   lines.push(
-    "- Did setup create duplicate surfaces (e.g., both `docs/footguns.md` and `.goat-flow/footguns/`)?",
+    "- Did setup create duplicate surfaces (e.g., both `docs/footguns.md` and `.goat-flow/learning-loop/footguns/`)?",
   );
   lines.push("- Was `.goat-flow/scratchpad/` created?");
   lines.push("");
@@ -502,7 +502,7 @@ function appendSkillTesting(lines: string[]): void {
     "2. **`/goat-debug`** - investigate a real module or risky pattern in this codebase",
   );
   lines.push(
-    "3. **`/goat-plan`** - ask for a milestone/task breakdown inline, then try a bare `.goat-flow/tasks/<name>` path. The bare path must produce read-only orientation only. If it writes milestone files despite inline/reporting-only/path-only input, report the mode confusion; do not frame gitignored task-file writes as committed-state read-only violations.",
+    "3. **`/goat-plan`** - ask for a milestone/task breakdown inline, then try a bare `.goat-flow/plans/<name>` path. The bare path must produce read-only orientation only. If it writes milestone files despite inline/reporting-only/path-only input, report the mode confusion; do not frame gitignored task-file writes as committed-state read-only violations.",
   );
   lines.push(
     "4. **`/goat-review`** - review a real source file for quality issues",
@@ -759,7 +759,7 @@ function appendRatingBands(lines: string[]): void {
   lines.push("");
   lines.push("### Top 5 Improvements");
   lines.push(
-    "Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md`.",
+    "Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.",
   );
   lines.push("For each:");
   lines.push("1. What to change");

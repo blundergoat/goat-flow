@@ -30,12 +30,18 @@ function makeTempProject(): string {
   mkdirSync(join(dir, ".goat-flow"), { recursive: true });
   writeFileSync(
     join(dir, ".goat-flow", "config.yaml"),
-    `version: ${AUDIT_VERSION}\nfootguns:\n  path: .goat-flow/footguns/\nlessons:\n  path: .goat-flow/lessons/\ndecisions:\n  path: .goat-flow/decisions/\ntasks:\n  path: .goat-flow/tasks/\nlogs:\n  path: .goat-flow/logs/\n`,
+    `version: ${AUDIT_VERSION}\nfootguns:\n  path: .goat-flow/learning-loop/footguns/\nlessons:\n  path: .goat-flow/learning-loop/lessons/\ndecisions:\n  path: .goat-flow/learning-loop/decisions/\nplans:\n  path: .goat-flow/plans/\nlogs:\n  path: .goat-flow/logs/\n`,
   );
-  mkdirSync(join(dir, ".goat-flow", "footguns"), { recursive: true });
-  mkdirSync(join(dir, ".goat-flow", "lessons"), { recursive: true });
-  mkdirSync(join(dir, ".goat-flow", "decisions"), { recursive: true });
-  mkdirSync(join(dir, ".goat-flow", "tasks"), { recursive: true });
+  mkdirSync(join(dir, ".goat-flow", "learning-loop", "footguns"), {
+    recursive: true,
+  });
+  mkdirSync(join(dir, ".goat-flow", "learning-loop", "lessons"), {
+    recursive: true,
+  });
+  mkdirSync(join(dir, ".goat-flow", "learning-loop", "decisions"), {
+    recursive: true,
+  });
+  mkdirSync(join(dir, ".goat-flow", "plans"), { recursive: true });
   mkdirSync(join(dir, ".goat-flow", "logs"), { recursive: true });
   return dir;
 }

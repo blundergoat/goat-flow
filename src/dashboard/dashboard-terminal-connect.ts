@@ -200,8 +200,8 @@ function dashboardConnectTerminal(
         // explicit and acceptable: a stuck badge after out-of-band answer is
         // far less harmful than a badge that never fires at all, which was
         // the bug we shipped five rounds trying to fix. See
-        // .goat-flow/lessons/design-decisions.md (search: `Three rounds of
-        // the same fix shape`) and .goat-flow/patterns/architecture.md
+        // .goat-flow/learning-loop/lessons/design-decisions.md (search: `Three rounds of
+        // the same fix shape`) and .goat-flow/learning-loop/patterns/architecture.md
         // (search: `Asymmetric trust - set state from output`).
         term.write(msg.data);
       } else if (type === "exit") {

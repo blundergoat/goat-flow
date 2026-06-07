@@ -26,11 +26,17 @@ import {
 } from "./agent-hook-writer.js";
 import { writeFileAtomic } from "./safe-exec.js";
 
-const DENY_DANGEROUS_HOOK_LIB_FILES = [
+const DENY_DANGEROUS_POLICY_FILES = [
   "patterns-shell.sh",
   "patterns-paths.sh",
   "patterns-writes.sh",
   "deny-dangerous-self-test.sh",
+];
+const LEGACY_AGENT_HOOK_DIRS = [
+  ".claude/hooks",
+  ".codex/hooks",
+  ".agents/hooks",
+  ".github/hooks",
 ];
 const LEGACY_DENY_DANGEROUS_SCRIPT_NAMES = [
   "guard-common.sh",
@@ -139,8 +145,10 @@ function scriptExists(
   );
   if (!agentScriptsExist) return false;
   if (spec.id !== "deny-dangerous") return true;
-  return DENY_DANGEROUS_HOOK_LIB_FILES.every((file) =>
-    existsSync(join(projectPath, ".goat-flow", "hook-lib", file)),
+  return DENY_DANGEROUS_POLICY_FILES.every((file) =>
+    existsSync(
+      join(projectPath, ".goat-flow", "hooks", "deny-dangerous", file),
+    ),
   );
 }
 
@@ -176,7 +184,9 @@ function agentInstalledSurfaceExists(
   const markers = [
     agent.settingsFile,
     agent.hookConfigFile,
-    agent.hooksDir,
+    profilePathIsUnique(profiles, "hooksDir", agent.hooksDir)
+      ? agent.hooksDir
+      : null,
     ...uniqueOptionalMarkers,
   ].filter((marker): marker is string => typeof marker === "string");
   return markers.some((marker) => existsSync(join(projectPath, marker)));
@@ -186,14 +196,25 @@ function hookScriptResidueExists(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
+  profiles: AgentProfile[],
 ): boolean {
-  if (!agent.hooksDir) return false;
   const scriptFiles =
     spec.id === "deny-dangerous"
       ? [...spec.scriptFiles, ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES]
       : spec.scriptFiles;
-  return scriptFiles.some((script) =>
-    existsSync(scriptTarget(projectPath, agent, script)),
+  if (
+    agent.hooksDir &&
+    profilePathIsUnique(profiles, "hooksDir", agent.hooksDir) &&
+    scriptFiles.some((script) =>
+      existsSync(scriptTarget(projectPath, agent, script)),
+    )
+  ) {
+    return true;
+  }
+  return LEGACY_AGENT_HOOK_DIRS.some((hooksDir) =>
+    scriptFiles.some((script) =>
+      existsSync(join(projectPath, hooksDir, script)),
+    ),
   );
 }
 
@@ -205,7 +226,7 @@ function shouldReconcileAgent(
 ): boolean {
   return (
     agentInstalledSurfaceExists(projectPath, agent, profiles) ||
-    hookScriptResidueExists(projectPath, agent, spec)
+    hookScriptResidueExists(projectPath, agent, spec, profiles)
   );
 }
 
@@ -243,18 +264,48 @@ function ensureGoatFlowGitignoreEntry(
 }
 
 /**
- * Keep the shared `.goat-flow/hook-lib/` policy store tracked by Git.
+ * Keep the shared `.goat-flow/hooks/deny-dangerous/` policy store tracked by Git.
  *
- * Adds both `!hook-lib/` and `!hook-lib/**` negations to `.goat-flow/.gitignore` so the
+ * Adds both `!hooks/` and `!hooks/**` negations to `.goat-flow/.gitignore` so the
  * deny-dangerous policy modules survive a fresh clone; without them a gitignored
  * `.goat-flow/` drops the store and the guard fails closed on checkout. Idempotent -
  * each entry is appended only when absent (writes `.goat-flow/.gitignore`).
  *
  * @param projectPath - target project root whose `.goat-flow/.gitignore` is updated
  */
-function ensureHookLibGitignoreEntries(projectPath: string): void {
-  ensureGoatFlowGitignoreEntry(projectPath, "!hook-lib/");
-  ensureGoatFlowGitignoreEntry(projectPath, "!hook-lib/**");
+function ensureHookGitignoreEntries(projectPath: string): void {
+  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/");
+  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/**");
+}
+
+function removeLegacyAgentScriptIfPresent(
+  projectPath: string,
+  hooksDir: string,
+  script: string,
+): void {
+  const target = join(projectPath, hooksDir, script);
+  assertWithinProject(projectPath, target);
+  try {
+    unlinkSync(target);
+  } catch {
+    /* target already gone - stale script pruning is idempotent */
+  }
+}
+
+function removeLegacyAgentHookScripts(
+  projectPath: string,
+  spec: HookSpec,
+): void {
+  for (const hooksDir of LEGACY_AGENT_HOOK_DIRS) {
+    for (const script of spec.scriptFiles) {
+      removeLegacyAgentScriptIfPresent(projectPath, hooksDir, script);
+    }
+    if (spec.id === "deny-dangerous") {
+      for (const script of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
+        removeLegacyAgentScriptIfPresent(projectPath, hooksDir, script);
+      }
+    }
+  }
 }
 
 function copyHookScripts(
@@ -271,11 +322,16 @@ function copyHookScripts(
     chmodSync(target, 0o755);
   }
   if (spec.id === "deny-dangerous") {
-    ensureHookLibGitignoreEntries(projectPath);
-    const targetDir = join(projectPath, ".goat-flow", "hook-lib");
+    ensureHookGitignoreEntries(projectPath);
+    const targetDir = join(
+      projectPath,
+      ".goat-flow",
+      "hooks",
+      "deny-dangerous",
+    );
     mkdirSync(targetDir, { recursive: true });
-    for (const file of DENY_DANGEROUS_HOOK_LIB_FILES) {
-      const source = getTemplatePath(`workflow/hooks/hook-lib/${file}`);
+    for (const file of DENY_DANGEROUS_POLICY_FILES) {
+      const source = getTemplatePath(`workflow/hooks/deny-dangerous/${file}`);
       const target = join(targetDir, file);
       assertWithinProject(projectPath, target);
       writeFileAtomic(target, readFileSync(source, "utf-8"), projectPath);
@@ -285,6 +341,7 @@ function copyHookScripts(
       removeScriptIfPresent(projectPath, agent, script);
     }
   }
+  removeLegacyAgentHookScripts(projectPath, spec);
 }
 
 function removeScriptIfPresent(
@@ -311,6 +368,7 @@ function removeHookScripts(
       removeScriptIfPresent(projectPath, agent, script);
     }
   }
+  removeLegacyAgentHookScripts(projectPath, spec);
 }
 
 /** Build the state payload for an agent that cannot host the requested hook. */

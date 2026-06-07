@@ -7,7 +7,7 @@ goat-flow-skill-version: "1.9.2"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-reference/skill-preamble.md` and `.goat-flow/skill-reference/skill-conventions.md` for shared conventions before proceeding.
+Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md` for shared conventions before proceeding.
 
 ## When to Use
 
@@ -42,7 +42,7 @@ goat-critique runs in one mode: full delegated, Phases 1-5 plus 5.5 meta-audit a
 **Intake checklist:**
 - Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
-- Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/footguns/` and `.goat-flow/lessons/`; record explicit misses instead of broad-loading buckets.
+- Use the preamble's grep-first learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
 - Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
 - **Differential mode detection:** Check `.goat-flow/logs/critiques/` for prior critiques of the same artifact slug within 30 days. If found, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
 - **Read context map:** Read the selected rubric's context map (see `references/rubric-examples.md`) and pass to each sub-agent's spawn directive.

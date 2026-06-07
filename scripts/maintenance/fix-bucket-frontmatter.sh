@@ -4,7 +4,7 @@
 #
 # Purpose:
 #   Repair missing `last_reviewed` frontmatter and `**Status:**` entry lines
-#   in `.goat-flow/footguns/*.md` and `.goat-flow/lessons/*.md`. Idempotent:
+#   in `.goat-flow/learning-loop/footguns/*.md` and `.goat-flow/learning-loop/lessons/*.md`. Idempotent:
 #   re-running leaves already-compliant files untouched.
 #
 # Context:
@@ -21,7 +21,7 @@
 #
 # Behaviour:
 #   - PROJECT_DIR defaults to the current working directory (`.`).
-#   - Touches only `.goat-flow/footguns/*.md` and `.goat-flow/lessons/*.md`.
+#   - Touches only `.goat-flow/learning-loop/footguns/*.md` and `.goat-flow/learning-loop/lessons/*.md`.
 #   - README.md files inside those dirs are skipped (templates, not buckets).
 #   - Adds `last_reviewed: <today>` to bucket frontmatter when absent.
 #   - Inserts `**Status:** active | **Created:** <frontmatter-date-or-today> | **Evidence:** OBSERVED`
@@ -187,7 +187,7 @@ echo "Repairing bucket frontmatter + Status fields in $PROJECT_DIR"
 echo "Today: $TODAY | dry-run: $([[ $DRY_RUN -eq 1 ]] && echo yes || echo no)"
 echo
 
-for dir in "$PROJECT_DIR/.goat-flow/footguns" "$PROJECT_DIR/.goat-flow/lessons"; do
+for dir in "$PROJECT_DIR/.goat-flow/learning-loop/footguns" "$PROJECT_DIR/.goat-flow/learning-loop/lessons"; do
   if [[ ! -d "$dir" ]]; then
     continue
   fi

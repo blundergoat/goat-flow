@@ -132,9 +132,9 @@ If preflight fails, fix the underlying issue. Do not bypass with `--no-verify`.
 - Files containing secrets or credentials
 
 Committed under `.goat-flow/`: `.goat-flow/architecture.md`,
-`.goat-flow/code-map.md`, `.goat-flow/patterns/`, `.goat-flow/config.yaml`,
-`.goat-flow/decisions/`, `.goat-flow/footguns/`, `.goat-flow/lessons/`,
-`.goat-flow/skill-reference/`, and the `.goat-flow/tasks/`,
+`.goat-flow/code-map.md`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/config.yaml`,
+`.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`,
+`.goat-flow/skill-docs/`, and the `.goat-flow/plans/`,
 `.goat-flow/scratchpad/`, `.goat-flow/logs/` directory anchors.
 
 ## Version Bumps

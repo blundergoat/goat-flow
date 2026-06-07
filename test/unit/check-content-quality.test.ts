@@ -208,7 +208,7 @@ describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
     const text =
       "The test was handling it correctly before the regression landed.";
     const findings = scanContentQuality(
-      ".goat-flow/footguns/x.md",
+      ".goat-flow/learning-loop/footguns/x.md",
       text,
       "restricted",
     );
@@ -221,7 +221,7 @@ describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
 
   it("still flags generic-instruction patterns in restricted mode", () => {
     const findings = scanContentQuality(
-      ".goat-flow/lessons/x.md",
+      ".goat-flow/learning-loop/lessons/x.md",
       "Follow best practices when recovering from this.",
       "restricted",
     );
@@ -233,7 +233,7 @@ describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
 
   it("still flags non-actionable patterns in restricted mode", () => {
     const findings = scanContentQuality(
-      ".goat-flow/footguns/x.md",
+      ".goat-flow/learning-loop/footguns/x.md",
       "Remember: the repo uses strict mode.",
       "restricted",
     );
@@ -295,7 +295,7 @@ describe("scanContentQuality: legacy execution loop", () => {
 
   it("does NOT flag historical prose mentioning CLASSIFY without arrow sequence", () => {
     const findings = scanContentQuality(
-      ".goat-flow/lessons/execution-loop.md",
+      ".goat-flow/learning-loop/lessons/execution-loop.md",
       "The pre-v1.2 loop included a CLASSIFY step that was absorbed into SCOPE.",
       "restricted",
     );
@@ -327,7 +327,7 @@ describe("scanContentQuality: legacy execution loop", () => {
 describe("scanContentQuality: prompt wrapper residue", () => {
   it("flags content/invoke wrapper tags as WARNING", () => {
     const findings = scanContentQuality(
-      ".goat-flow/decisions/INDEX.md",
+      ".goat-flow/learning-loop/decisions/INDEX.md",
       '# Decisions Index\n\n<content>\n</content>\n<invoke name="x">\n</invoke>',
     );
 
@@ -357,10 +357,11 @@ describe("runContentQualityChecks: target discovery", () => {
     const ctx = makeCtx({
       fs: stubFS({
         exists: (path) =>
-          path === ".goat-flow/decisions/" ||
-          path === ".goat-flow/decisions/ADR-025-block-all-git-push.md",
+          path === ".goat-flow/learning-loop/decisions/" ||
+          path ===
+            ".goat-flow/learning-loop/decisions/ADR-025-block-all-git-push.md",
         listDir: (path) =>
-          path === ".goat-flow/decisions/"
+          path === ".goat-flow/learning-loop/decisions/"
             ? [
                 "README.md",
                 "ADR-023-reference-pack-budget-tiers.md",
@@ -369,7 +370,8 @@ describe("runContentQualityChecks: target discovery", () => {
               ]
             : [],
         readFile: (path) =>
-          path === ".goat-flow/decisions/ADR-025-block-all-git-push.md"
+          path ===
+          ".goat-flow/learning-loop/decisions/ADR-025-block-all-git-push.md"
             ? "Follow best practices when blocking pushes."
             : null,
       }),
@@ -381,7 +383,7 @@ describe("runContentQualityChecks: target discovery", () => {
       result.findings.some(
         (finding) =>
           finding.path ===
-            ".goat-flow/decisions/ADR-025-block-all-git-push.md" &&
+            ".goat-flow/learning-loop/decisions/ADR-025-block-all-git-push.md" &&
           finding.rule === "generic-best-practices",
       ),
       "new ADR files must be scanned without updating a manual target list",
@@ -391,9 +393,12 @@ describe("runContentQualityChecks: target discovery", () => {
   it("scans the decisions INDEX so prompt wrapper residue cannot hide there", () => {
     const ctx = makeCtx({
       fs: stubFS({
-        exists: (path) => path === ".goat-flow/decisions/INDEX.md",
+        exists: (path) =>
+          path === ".goat-flow/learning-loop/decisions/INDEX.md",
         readFile: (path) =>
-          path === ".goat-flow/decisions/INDEX.md" ? "</content>" : null,
+          path === ".goat-flow/learning-loop/decisions/INDEX.md"
+            ? "</content>"
+            : null,
       }),
     });
 
@@ -402,7 +407,7 @@ describe("runContentQualityChecks: target discovery", () => {
     assert.ok(
       result.findings.some(
         (finding) =>
-          finding.path === ".goat-flow/decisions/INDEX.md" &&
+          finding.path === ".goat-flow/learning-loop/decisions/INDEX.md" &&
           finding.rule === "prompt-wrapper-residue",
       ),
       "decision index metadata must stay inside content-quality coverage",

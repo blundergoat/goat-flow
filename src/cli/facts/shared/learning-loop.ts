@@ -28,10 +28,13 @@ export {
 export { extractLearningLoopEntries } from "./learning-loop-entries.js";
 
 /** Known filesystem locations where footgun artifacts may appear. */
-const FOOTGUN_SURFACE_CANDIDATES = [".goat-flow/footguns/", "docs/footguns.md"];
+const FOOTGUN_SURFACE_CANDIDATES = [
+  ".goat-flow/learning-loop/footguns/",
+  "docs/footguns.md",
+];
 /** Known filesystem locations where lesson artifacts may appear. */
 const LESSON_SURFACE_CANDIDATES = [
-  ".goat-flow/lessons/",
+  ".goat-flow/learning-loop/lessons/",
   "docs/lessons/",
   "docs/lessons.md",
 ];

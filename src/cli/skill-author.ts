@@ -36,7 +36,7 @@ goat-flow-skill-version: "{{VERSION}}"
 
 ## Shared Conventions
 
-Always read \`.goat-flow/skill-reference/skill-preamble.md\` (Proof Gate, evidence discipline, mode system) and \`.goat-flow/skill-reference/skill-conventions.md\` before acting.
+Always read \`.goat-flow/skill-docs/skill-preamble.md\` (Proof Gate, evidence discipline, mode system) and \`.goat-flow/skill-docs/skill-conventions.md\` before acting.
 
 ## When to Use
 
@@ -98,7 +98,7 @@ goat-flow-skill-version: "{{VERSION}}"
 
 ## Shared Conventions
 
-Always read \`.goat-flow/skill-reference/skill-preamble.md\` (Proof Gate, evidence discipline) before routing.
+Always read \`.goat-flow/skill-docs/skill-preamble.md\` (Proof Gate, evidence discipline) before routing.
 
 ## When to Use
 
@@ -131,7 +131,7 @@ goat-flow-skill-version: "{{VERSION}}"
 
 ## Shared Conventions
 
-Always read \`.goat-flow/skill-reference/skill-preamble.md\` (Proof Gate, evidence discipline) before scanning.
+Always read \`.goat-flow/skill-docs/skill-preamble.md\` (Proof Gate, evidence discipline) before scanning.
 
 ## When to Use
 
@@ -259,7 +259,7 @@ interface SkillNewResult extends Record<"written", boolean> {
 }
 
 const SKILL_DIR = ".claude/skills";
-const PLAYBOOK_DIR = ".goat-flow/skill-playbooks";
+const PLAYBOOK_DIR = ".goat-flow/skill-docs/playbooks";
 
 /** User-facing validation error for invalid `skill new` mode combinations. */
 class SkillNewInputError extends Error {

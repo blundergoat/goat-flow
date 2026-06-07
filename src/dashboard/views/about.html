@@ -687,10 +687,10 @@
           >
             <template
               x-for="rec in [
-                { name: 'Footguns', desc: 'Architectural traps with semantic-anchor evidence. Stops the agent hitting the same code landmine twice.', path: '.goat-flow/footguns/' },
-                { name: 'Lessons', desc: 'Behavioural mistakes the agent made. Logged so the same error pattern is recognised and avoided.', path: '.goat-flow/lessons/' },
-                { name: 'Decisions', desc: 'Architecture Decision Records. Captures why a choice was made so future agents don\'t reverse it.', path: '.goat-flow/decisions/' },
-                { name: 'Patterns', desc: 'Proven approaches worth reusing. Categorised bucket files matching the footguns/lessons pattern.', path: '.goat-flow/patterns/' },
+                { name: 'Footguns', desc: 'Architectural traps with semantic-anchor evidence. Stops the agent hitting the same code landmine twice.', path: '.goat-flow/learning-loop/footguns/' },
+                { name: 'Lessons', desc: 'Behavioural mistakes the agent made. Logged so the same error pattern is recognised and avoided.', path: '.goat-flow/learning-loop/lessons/' },
+                { name: 'Decisions', desc: 'Architecture Decision Records. Captures why a choice was made so future agents don\'t reverse it.', path: '.goat-flow/learning-loop/decisions/' },
+                { name: 'Patterns', desc: 'Proven approaches worth reusing. Categorised bucket files matching the footguns/lessons pattern.', path: '.goat-flow/learning-loop/patterns/' },
                 { name: 'Session logs', desc: 'Checkout-local continuity notes for compaction or resume. Useful context, not committed project knowledge.', path: '.goat-flow/logs/sessions/' }
               ]"
               :key="rec.name"

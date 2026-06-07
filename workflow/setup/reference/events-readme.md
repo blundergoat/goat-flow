@@ -17,5 +17,5 @@ Use:
 - Treat these records as checkout-local continuity, not durable project knowledge
 
 These files are gitignored by design. If an event reveals a durable project
-lesson, footgun, or decision, promote the finding into `.goat-flow/lessons/`,
-`.goat-flow/footguns/`, or `.goat-flow/decisions/`.
+lesson, footgun, or decision, promote the finding into `.goat-flow/learning-loop/lessons/`,
+`.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/`.

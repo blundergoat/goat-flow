@@ -32,9 +32,9 @@ Rules:
 
 Create these directories and files if they don't already exist:
 
-- `.goat-flow/decisions/` - for architecture decision records when needed. Do not pre-fill with a blank template.
+- `.goat-flow/learning-loop/decisions/` - for architecture decision records when needed. Do not pre-fill with a blank template.
 - `.goat-flow/scratchpad/` - for ephemeral working notes and temporary coordination artifacts
-- `.goat-flow/tasks/` - for milestone and task tracking files (active plan subdir named by the `.active` marker; skills scope to that subdir - see ADR-017 if present)
+- `.goat-flow/plans/` - for milestone and task tracking files (active plan subdir named by the `.active` marker; skills scope to that subdir - see ADR-017 if present)
 - `.goat-flow/logs/sessions/` - for session logs (if not already created by step 01)
 
 
@@ -63,7 +63,7 @@ Use results for step 05:
 **Verification gate:**
 - [ ] `.goat-flow/architecture.md` exists with real content (not template fill)
 - [ ] `.goat-flow/code-map.md` exists
-- [ ] `.goat-flow/decisions/`, `.goat-flow/scratchpad/`, `.goat-flow/tasks/`, `.goat-flow/logs/sessions/` directories exist
+- [ ] `.goat-flow/learning-loop/decisions/`, `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/` directories exist
 - [ ] architecture.md mentions at least 2 real components by name
 - [ ] Every path mentioned in code-map.md actually exists
 

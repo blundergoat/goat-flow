@@ -128,7 +128,13 @@ Visible markdown
   it("renders a real dashboard footgun file without exposing frontmatter", async () => {
     const renderMarkdown = await loadRenderer();
     const raw = readFileSync(
-      resolve(PROJECT_ROOT, ".goat-flow", "footguns", "dashboard.md"),
+      resolve(
+        PROJECT_ROOT,
+        ".goat-flow",
+        "learning-loop",
+        "footguns",
+        "dashboard.md",
+      ),
       "utf-8",
     );
     const result = renderMarkdown(raw);

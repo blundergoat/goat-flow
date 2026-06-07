@@ -16,10 +16,10 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
   ```bash
   npx @blundergoat/goat-flow@latest install . --agent {agent}
   ```
-  The installer is the only path that overwrites `.goat-flow/.gitignore` from the current template. **Pre-1.6.1 installs have a stale `.goat-flow/.gitignore`** that is missing the `!skill-playbooks/` and `!skill-playbooks/**` un-ignore entries. The playbook files exist on disk but git silently hides them, so teammates and CI never see them. Skipping the installer leaves this misconfigured.
-- After the installer overwrites `.goat-flow/.gitignore`, run `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden. The `goat-flow-gitignore` audit check (in `goat-flow audit . --agent {agent}`) confirms the exceptions are present; fix any failure before moving on.
+  The installer is the only path that overwrites `.goat-flow/.gitignore` from the current template. Older installs may be missing the current committed-surface exceptions for `learning-loop/`, `skill-docs/`, `hooks/`, or `plans/`, which makes installed files exist locally but stay hidden from git. Skipping the installer leaves this misconfigured.
+- After the installer overwrites `.goat-flow/.gitignore`, run `git add .goat-flow/learning-loop/ .goat-flow/skill-docs/ .goat-flow/hooks/ .goat-flow/plans/` to track files that were previously hidden. The `goat-flow-gitignore` audit check (in `goat-flow audit . --agent {agent}`) confirms the exceptions are present; fix any failure before moving on.
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
-- If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/lessons/`, `.goat-flow/footguns/`, or `.goat-flow/decisions/` before removing them. Session logs are local continuity only.
+- If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/` before removing them. Session logs are local continuity only.
 
 ## What goat-flow is
 

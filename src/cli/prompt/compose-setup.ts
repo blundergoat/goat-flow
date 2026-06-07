@@ -142,7 +142,7 @@ function renderAuditPass(
   );
   lines.push("- Run `goat-flow audit` in CI to catch drift");
   lines.push(
-    "- Review `.goat-flow/footguns/` and `.goat-flow/lessons/` after incidents",
+    "- Review `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/` after incidents",
   );
 
   return lines.join("\n");

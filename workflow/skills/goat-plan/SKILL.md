@@ -7,12 +7,12 @@ goat-flow-skill-version: "1.9.2"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-reference/skill-preamble.md` for shared conventions.
-On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
+On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs milestone tracking. goat-plan manages gitignored coordination files in `.goat-flow/tasks/<active>/`.
+Use when work needs milestone tracking. goat-plan manages gitignored coordination files in `.goat-flow/plans/<active>/`.
 
 Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** tests → run them; debug → /goat-debug; review → /goat-review; security → /goat-security; gaps → /goat-qa; critique → /goat-critique; question → answer directly.
 
@@ -28,12 +28,12 @@ Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** test
 **Path-only guard runs first.** If the user message is only a task/milestone path, or an ambiguous context phrase such as "look at this task directory" or "here's the task dir", choose **Path-Only Intake / Read-Only Orientation**. Read only minimal index/status files. Do NOT update `.active`, milestone status fields, task checkboxes, or code. If `.active` points elsewhere, mention it and offer to switch only on approval. Implementation requires "start", "implement", "resume", "mark in progress and begin", or "fix code". Plan-file writes require "update", "rewrite", "write", "create", or "fix" tied to the plan file. Before any write after an ambiguous path, checkpoint and stop.
 
 **Check for existing milestones first:**
-- Treat `.goat-flow/tasks/.active` as an advisory local pointer (one-line file naming a subdir), not a setup invariant.
+- Treat `.goat-flow/plans/.active` as an advisory local pointer (one-line file naming a subdir), not a setup invariant.
 - If `.active` exists and names an existing subdir, scan only that subdir for milestone files.
-- If `.active` is missing or names a missing subdir, treat as normal local churn. List top-level entries in `.goat-flow/tasks/` excluding archives, prefer dirs with recent `M*.md` files, ask which plan is current, and offer to write/update `.active`. Do NOT report a stale/missing `.active` as a setup failure.
+- If `.active` is missing or names a missing subdir, treat as normal local churn. List top-level entries in `.goat-flow/plans/` excluding archives, prefer dirs with recent `M*.md` files, ask which plan is current, and offer to write/update `.active`. Do NOT report a stale/missing `.active` as a setup failure.
 - If milestones exist and the user hasn't given an explicit action verb: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
 - If the selected plan exists but appears stale: check whether code has moved on but milestones haven't been updated, flag it. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead.
-- Also check for legacy milestone files outside `.goat-flow/tasks/` (e.g. `milestones/`, `tasks/`). Sibling-version subdirs hold deferred or completed work and are NOT scanned unless `.active` is missing or points nowhere. If found, note them.
+- Also check for legacy milestone files outside `.goat-flow/plans/` (e.g. `milestones/`, `tasks/`). Sibling-version subdirs hold deferred or completed work and are NOT scanned unless `.active` is missing or points nowhere. If found, note them.
 
 **If starting fresh:** identify what is being built, the riskiest part, kill criteria, and run the preamble's grep-first learning-loop retrieval for the target area.
 
@@ -42,8 +42,8 @@ Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** test
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 1. **Named-File Update** - user asks to update, improve, tighten, rewrite, or fix a specific existing plan file. A path alone is not write approval. Proceed to Phase 2 § Mode 1 only for plan-file edits, not code implementation.
 2. **Read-Only Analysis** - analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "how would you approach", "sketch the milestones", "walk me through the plan", "reporting-only", "no-implementation". No files written; inline output; Phase 3 skipped; transition to file mode available later.
-3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Write concise milestone files directly to `.goat-flow/tasks/<active>/`.
-4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "write the milestone files", "start planning") OR Standard / System / Infrastructure scope with a clear build objective and no analysis signals. Write directly to `.goat-flow/tasks/<active>/`.
+3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Write concise milestone files directly to `.goat-flow/plans/<active>/`.
+4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "write the milestone files", "start planning") OR Standard / System / Infrastructure scope with a clear build objective and no analysis signals. Write directly to `.goat-flow/plans/<active>/`.
 
 If ambiguous, ask. Never silently pick.
 
@@ -111,7 +111,7 @@ The delivery path maps 1:1 to the mode picked in Step 0. Do exactly the mode's b
 ### Mode 0: Path-Only Intake / Read-Only Orientation
 
 - Read task directory README/index and milestone filenames/status fields only.
-- Do NOT mutate `.goat-flow/tasks/.active`, milestone status, checkboxes, or code.
+- Do NOT mutate `.goat-flow/plans/.active`, milestone status, checkboxes, or code.
 - Present: active marker, plan reference, milestone list/status, current in-progress item.
 - Ask: "Summary, status check, plan update, or start a specific milestone?"
 - Stop until the user answers with an explicit action.
@@ -128,7 +128,7 @@ User explicitly asked to edit an existing plan file. Path-only references do not
 
 Analysis signals triggered this mode.
 
-- Run Phase 1. Present milestones. Do NOT write files or modify `.goat-flow/tasks/`.
+- Run Phase 1. Present milestones. Do NOT write files or modify `.goat-flow/plans/`.
 - Skip Phase 3. Include summary format.
 
 **Transition out:** On "write these to files" / "let's go ahead", switch to Mode 4 using approved Phase 1 output. If prior-turn/session, re-read instructions, `.active`, named sources. Do NOT re-run breakdown.
@@ -145,7 +145,7 @@ Write artifacts immediately. Do NOT invoke/ask about `/goat-critique`; run it on
 
 ### File Artifact Rules (Modes 3 and 4)
 
-For a fresh plan, create a slugged task directory and update `.goat-flow/tasks/.active` to that slug in the same batch. Write one milestone per `.goat-flow/tasks/<active>/M*.md` file.
+For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.active` to that slug in the same batch. Write one milestone per `.goat-flow/plans/<active>/M*.md` file.
 
 **Filename format:** start with `M` so dashboard and task tooling can discover it; use a readable slug, e.g. `Milestone-prove-api-integration.md`.
 
@@ -155,7 +155,7 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/tasks/.
 
 **Backlog file:** If deferred items exist, write `backlog.md` with priority tiers (Next / Later / Maybe).
 
-**CHECKPOINT:** "Milestone files + ISSUE.md written to `.goat-flow/tasks/<active>/`. Ready to start implementation."
+**CHECKPOINT:** "Milestone files + ISSUE.md written to `.goat-flow/plans/<active>/`. Ready to start implementation."
 
 **Prompted README/ADR gate:** "Load-bearing decisions [X, Y, Z] - write ADRs + README now, or milestone files only?"
 
@@ -208,7 +208,7 @@ Plan is NOT complete until the human explicitly approves.
 ### After Human Approval
 
 - Confirm all statuses are `complete`
-- Plan files remain in `.goat-flow/tasks/` - human decides archival
+- Plan files remain in `.goat-flow/plans/` - human decides archival
 - Write a session log if the plan spanned multiple sessions
 
 ## Constraints
@@ -241,8 +241,8 @@ The output depends on the mode picked in Step 0:
 - **Mode 0 (Path-Only Intake):** status/orientation summary plus next-action question. No files.
 - **Mode 1 (Named-File Update):** the edited milestone file plus a concise delta shown to the user.
 - **Mode 2 (Read-Only Analysis):** the inline milestone breakdown in the response. No files.
-- **Mode 3 (Small File-Write):** milestone files in `.goat-flow/tasks/<active>/` plus a concise summary.
-- **Mode 4 (File-Write):** the milestone files in `.goat-flow/tasks/<active>/`.
+- **Mode 3 (Small File-Write):** milestone files in `.goat-flow/plans/<active>/` plus a concise summary.
+- **Mode 4 (File-Write):** the milestone files in `.goat-flow/plans/<active>/`.
 
 Summary format for presentation:
 

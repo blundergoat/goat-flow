@@ -35,18 +35,18 @@ Binary pass/fail. This is the structural setup gate - it validates that required
 Checks are grouped by **scope**:
 
 **setup scope** (GOAT Flow Setup) - 15 checks on goat-flow-owned surfaces:
-- `lessons` - `.goat-flow/lessons/` directory and README exist
-- `footguns` - `.goat-flow/footguns/` directory and README exist
+- `lessons` - `.goat-flow/learning-loop/lessons/` directory and README exist
+- `footguns` - `.goat-flow/learning-loop/footguns/` directory and README exist
 - `architecture` - `.goat-flow/architecture.md` exists
 - `code-map` - `.goat-flow/code-map.md` exists
 - `glossary` - `.goat-flow/glossary.md` exists
-- `patterns` - `.goat-flow/patterns/README.md` exists
-- `decisions` - `.goat-flow/decisions/` directory exists
+- `patterns` - `.goat-flow/learning-loop/patterns/README.md` exists
+- `decisions` - `.goat-flow/learning-loop/decisions/` directory exists
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists
-- `tasks` - `.goat-flow/tasks/` directory, `.gitignore`, and README exist (local-session state by design)
+- `tasks` - `.goat-flow/plans/` directory, `.gitignore`, and README exist (local-session state by design)
 - `scratchpad` - `.goat-flow/scratchpad/` directory, `.gitignore`, and README exist (local WIP by design)
 - `goat-flow-gitignore` - `.goat-flow/.gitignore` exists with the required ignore entries
-- `instruction-file-skill-reference-pointer` - the full meta-reference/playbook pack exists, and every present instruction file has both the READ-step availability-check rule and Router Table pointer to `.goat-flow/skill-playbooks/`; missing `.goat-flow/skill-reference/` or `.goat-flow/skill-playbooks/` files fail here instead of falling through to `other-files`
+- `instruction-file-skill-docs-pointer` - the full skill-docs/playbook pack exists, and every present instruction file has both the READ-step availability-check rule and Router Table pointer to `.goat-flow/skill-docs/playbooks/`; missing `.goat-flow/skill-docs/` or `.goat-flow/skill-docs/playbooks/` files fail here instead of falling through to `other-files`
 - `other-files` - Other required manifest surfaces not already covered by named setup checks exist (for example local log README paths)
 - `config-parses` - `.goat-flow/config.yaml` parses and validates supported configuration fields; legacy `agents:` entries are ignored
 - `config-version` - Config version matches current release

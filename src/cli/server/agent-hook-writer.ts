@@ -134,7 +134,7 @@ function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   // session was permanently wedged. Fall back to the cwd-independent
   // $CLAUDE_PROJECT_DIR before failing closed; the guard still runs, so
   // enforcement is unchanged. The guard re-resolves its OWN root from cwd
-  // (deny-dangerous.sh runs `git rev-parse` to find .goat-flow/hook-lib), so the
+  // (deny-dangerous.sh runs `git rev-parse` to find .goat-flow/hooks/deny-dangerous), so the
   // launcher must cd into $root before invoking it - resolving only the script
   // path still leaves the guard failing closed from /tmp. cd failure fails closed.
   const resolveRoot = `gcd="$(git rev-parse --git-common-dir 2>/dev/null)"; root=""`;

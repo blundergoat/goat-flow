@@ -17,11 +17,11 @@ const LEGACY_GUARDRAIL_HOOK_FILES = [
   "guard-secret-paths.sh",
   "guard-repository-writes.sh",
 ];
-const DENY_DANGEROUS_HOOK_LIB_FILES = [
-  ".goat-flow/hook-lib/patterns-shell.sh",
-  ".goat-flow/hook-lib/patterns-paths.sh",
-  ".goat-flow/hook-lib/patterns-writes.sh",
-  ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+const DENY_DANGEROUS_POLICY_FILES = [
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
 ];
 
 /** Detect shell lines that intentionally mask validation failures with `|| true`. */
@@ -246,8 +246,8 @@ function siblingGuardrailPaths(
 ): string[] {
   if (!denyHookPath) return [];
   if (denyHookPath.endsWith("/deny-dangerous.sh")) {
-    return DENY_DANGEROUS_HOOK_LIB_FILES.every((path) => fs.exists(path))
-      ? DENY_DANGEROUS_HOOK_LIB_FILES
+    return DENY_DANGEROUS_POLICY_FILES.every((path) => fs.exists(path))
+      ? DENY_DANGEROUS_POLICY_FILES
       : [];
   }
   const slash = denyHookPath.lastIndexOf("/");

@@ -39,8 +39,8 @@ e) Commit Messages
    - Point to the full reference at `docs/coding-standards/git-commit.md`; the detector seeds that doc from git history (Step 02).
 
 f) Key Resources
-   - **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`.
-   - **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable.
+   - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.
+   - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable.
    - Add only first-action resources here. The Router Table remains exhaustive.
 
 g) Essential Commands
@@ -50,7 +50,7 @@ g) Essential Commands
 h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
    ### READ
-   MUST read relevant files before changes. Never fabricate codebase facts. Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour. Use grep-first retrieval across learning-loop dirs; include decisions for architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+   MUST read relevant files before changes. Never fabricate codebase facts. Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour. Use grep-first retrieval across learning-loop dirs; include decisions for architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
    ### SCOPE
    Declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius. Expanding beyond scope means stop and re-scope.
    ### ACT
@@ -63,13 +63,13 @@ i) Definition of Done
    MUST confirm all six gates: lint/typecheck passes on changed files; no broken cross-references; no unapproved boundary changes; logs updated if tripped; working notes current; grep old pattern after renames.
 
 j) Artifact Routing
-   Map "add a footgun/lesson/decision/pattern" to `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/decisions/`, or `.goat-flow/patterns/`. These are documentation artifacts, not runtime code. Read the target directory's `README.md` before editing.
+   Map "add a footgun/lesson/decision/pattern" to `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/`, or `.goat-flow/learning-loop/patterns/`. These are documentation artifacts, not runtime code. Read the target directory's `README.md` before editing.
 
 k) Router Table
    MUST be the final section. Include at minimum:
-   - Learning loop dirs (`.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`)
-   - Skill reference (meta) (`.goat-flow/skill-reference/`)
-   - Tool playbooks (`.goat-flow/skill-playbooks/`)
+   - Learning loop dirs (`.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`)
+   - Skill reference (meta) (`.goat-flow/skill-docs/`)
+   - Tool playbooks (`.goat-flow/skill-docs/playbooks/`)
    - Orientation docs (`.goat-flow/code-map.md`, `.goat-flow/glossary.md`) when present
    - Architecture doc (`.goat-flow/architecture.md`)
    - Agent skills directory (`.claude/skills/`, `.agents/skills/`, or `.github/skills/`)

@@ -106,6 +106,7 @@ interface DashboardServer {
  */
 const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
   "POST /api/projects/list",
+  "POST /api/plans",
   "POST /api/tasks",
   "POST /api/quality/evaluate",
   "POST /api/quality/analyse",

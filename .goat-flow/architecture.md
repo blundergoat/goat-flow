@@ -11,7 +11,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `hook-lib/` policy templates, opt-in `gruff-code-quality.sh`, and per-agent config templates |
+| Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `deny-dangerous/` policy templates, opt-in `gruff-code-quality.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 19 build checks (15 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
@@ -68,7 +68,7 @@ src/dashboard/
 
 ## Key Constraints
 
-- **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/decisions/` capture specific design decisions.
+- **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/learning-loop/decisions/` capture specific design decisions.
 - **Cross-references are fragile.** 200+ markdown files with dense internal linking (committed surface plus installed skill mirrors and worktree caches). File renames require repo-wide grep.
 - **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file-path + semantic-anchor references (per ADR-024).
 
@@ -82,7 +82,7 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, the meta references at `.goat-flow/skill-reference/skill-preamble.md`, `.goat-flow/skill-reference/skill-conventions.md`, and the standalone playbooks indexed by `.goat-flow/skill-playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `observability.md`, `page-capture.md`, `release-notes.md`, and `skill-quality-testing.md` plus the topical files under `.goat-flow/skill-playbooks/skill-quality-testing/` | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `patterns/**`, `config.yaml`, `decisions/`, `footguns/**`, `lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `observability.md`, `page-capture.md`, `release-notes.md`, and `skill-quality-testing.md` plus the topical files under `.goat-flow/skill-docs/skill-quality-testing/` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `tasks/**`, `scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json`, `.goat-flow/project-id` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state. Coordinates a single work session - not project history. |
 | **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/review/*.txt`, `.goat-flow/logs/review/*.json`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, review refutation/refuter artifacts from goat-review runs, and security assessment history from goat-security runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
 

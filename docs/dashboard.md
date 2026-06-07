@@ -35,10 +35,10 @@ Shared placeholder view for manifest-backed destinations that do not yet have a 
 ### Plans
 
 Plans milestone browser for the selected project (route ID `plans`). Surfaces
-`.goat-flow/tasks/` plan directories, milestone status, and checkbox progress.
-The plan list can update `.goat-flow/tasks/.active` for the selected project.
-The `/api/tasks` backing endpoint and on-disk `.goat-flow/tasks/` directory
-keep their original names.
+`.goat-flow/plans/` plan directories, milestone status, and checkbox progress.
+The plan list can update `.goat-flow/plans/.active` for the selected project.
+The canonical backing endpoint is `/api/plans`; `/api/tasks` remains a
+deprecated compatibility alias for older dashboard clients.
 
 ### Quality
 
@@ -115,8 +115,9 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/skill-quality` | GET | Score one installed skill/reference artifact and return the metric breakdown plus a runner-prompt preview |
 | `/api/agents/installed` | GET | Detect installed agent runtimes |
 | `/api/browse` | GET | Directory browsing for the dashboard's path picker (project directories only, no hidden entries) |
-| `/api/tasks` | GET | Plan milestone state for the selected project |
-| `/api/tasks` | POST | Set the selected project's active plan in `.goat-flow/tasks/.active` |
+| `/api/plans` | GET | Plan milestone state for the selected project |
+| `/api/plans` | POST | Set the selected project's active plan in `.goat-flow/plans/.active` |
+| `/api/tasks` | GET/POST | Deprecated alias for `/api/plans` |
 | `/api/projects/list` | GET | List registered projects from saved dashboard state, including identity-keyed project records |
 | `/api/projects/list` | POST | Save the dashboard's registered project list and migrate it to identity-keyed records |
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |

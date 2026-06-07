@@ -211,10 +211,10 @@ const decisionsTracked: HarnessCheck = {
       return fail(
         ["No decisions directory"],
         [
-          "Create .goat-flow/decisions/ for tracking significant technical decisions",
+          "Create .goat-flow/learning-loop/decisions/ for tracking significant technical decisions",
         ],
         [
-          "Create .goat-flow/decisions/ and log significant technical decisions with context and rationale.",
+          "Create .goat-flow/learning-loop/decisions/ and log significant technical decisions with context and rationale.",
         ],
         details,
       );

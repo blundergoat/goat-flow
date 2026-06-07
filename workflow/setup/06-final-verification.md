@@ -34,10 +34,10 @@ Check these surfaces:
 - All installed skill files
 - All installed skill `references/*.md` files
 - Agent settings / hook config files
-- `.goat-flow/skill-reference/README.md`
-- `.goat-flow/skill-reference/skill-preamble.md`
-- `.goat-flow/skill-playbooks/README.md`
-- `.goat-flow/skill-playbooks/browser-use.md`
+- `.goat-flow/skill-docs/README.md`
+- `.goat-flow/skill-docs/skill-preamble.md`
+- `.goat-flow/skill-docs/playbooks/README.md`
+- `.goat-flow/skill-docs/playbooks/browser-use.md`
 - `.goat-flow/config.yaml`
 
 For each backtick-wrapped path or hook path:
@@ -58,15 +58,15 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-reference/` (meta) and `.goat-flow/skill-playbooks/` (tools) READ rules / Router Table rows from Step 02. Verify `docs/coding-standards/git-commit.md` exists with project-specific commit guidance and that the instruction file references it under `## Commit Messages`. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
+3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-docs/` (meta) and `.goat-flow/skill-docs/playbooks/` (tools) READ rules / Router Table rows from Step 02. Verify `docs/coding-standards/git-commit.md` exists with project-specific commit guidance and that the instruction file references it under `## Commit Messages`. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
 
 ## Duplicate surface check
 
 Fail if BOTH of these exist with independent content for the same artifact type:
-- `docs/footguns.md` AND `.goat-flow/footguns/` (with real entries, not a bridge)
-- `docs/lessons.md` AND `.goat-flow/lessons/` (with real entries)
+- `docs/footguns.md` AND `.goat-flow/learning-loop/footguns/` (with real entries, not a bridge)
+- `docs/lessons.md` AND `.goat-flow/learning-loop/lessons/` (with real entries)
 - `docs/architecture.md` AND `.goat-flow/architecture.md` (both with real content)
-- `docs/decisions/` AND `.goat-flow/decisions/` (both with real ADRs)
+- `docs/decisions/` AND `.goat-flow/learning-loop/decisions/` (both with real ADRs)
 
 If duplicates exist, migrate the better content to the canonical `.goat-flow/` path and remove or bridge the other. The router table must NOT point to BOTH old and new surfaces for the same artifact type.
 
@@ -108,7 +108,7 @@ Before finalising, add a gap report to the setup session log:
 - **Areas not assessed:** [list any parts of the codebase that setup didn't read or analyse]
 - **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
 - **Things skipped:** [list anything setup chose not to do, with reason]
-- **Harness-specific checks:** [confirm workspace boundary guidance, skill-reference snippets, and commit guidance were checked; list any exception, including generated insufficient-history commit-guidance stubs]
+- **Harness-specific checks:** [confirm workspace boundary guidance, skill-docs snippets, and commit guidance were checked; list any exception, including generated insufficient-history commit-guidance stubs]
 
 For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun - do not create a footgun entry for missing tests. The gap report goes in the session log only.
 
@@ -128,6 +128,6 @@ Use one shared local continuity file: `.goat-flow/logs/sessions/YYYY-MM-DD-setup
 - [ ] `goat-flow audit . --agent {agent}` passes
 - [ ] `goat-flow audit . --agent {agent} --harness` passes
 - [ ] All required files and directories in `workflow/manifest.json` exist
-- [ ] Workspace boundary guidance, skill-reference snippets, and commit guidance are present where required
+- [ ] Workspace boundary guidance, skill-docs snippets, and commit guidance are present where required
 - [ ] Stale-reference checks and Essential Commands smoke tests are complete
 - [ ] Shared setup session log finalised with time/tokens

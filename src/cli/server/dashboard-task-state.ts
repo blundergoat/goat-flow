@@ -1,10 +1,10 @@
 /**
- * Task-plan and milestone state model behind the dashboard's `/api/tasks` route.
+ * Plan and milestone state model behind the dashboard's `/api/plans` route.
  *
- * Reads `.goat-flow/tasks`, parsing each `M*.md` milestone into a compact summary (title, status,
+ * Reads `.goat-flow/plans`, parsing each `M*.md` milestone into a compact summary (title, status,
  * objective, checkbox progress) so the UI never receives raw Markdown, and writes the `.active`
  * marker to switch the selected plan. Plan-name inputs are validated to a single top-level directory
- * segment before any write so a request cannot escape the tasks root. Filesystem reads swallow
+ * segment before any write so a request cannot escape the plans root. Filesystem reads swallow
  * missing paths into empty state; the mutation helpers throw on malformed input or a non-existent
  * plan. Consumed by dashboard-project-routes.ts.
  */
@@ -40,6 +40,8 @@ interface DashboardTaskPlanSummary extends Record<"active", boolean> {
  * Task browser response where `.active` is advisory and may name a missing plan.
  */
 export interface DashboardTaskState {
+  planRoot: string;
+  /** Deprecated compatibility alias for callers still reading the old field name. */
   taskRoot: string;
   exists: boolean;
   active: string | null;
@@ -165,11 +167,12 @@ function listTaskPlanNames(taskRoot: string): string[] {
 }
 
 function emptyDashboardTaskState(
-  taskRoot: string,
+  planRoot: string,
   active: string | null,
 ): DashboardTaskState {
   return {
-    taskRoot,
+    planRoot,
+    taskRoot: planRoot,
     exists: false,
     active,
     activeExists: false,
@@ -195,17 +198,17 @@ export function buildDashboardTaskState(
   projectPath: string,
   requestedPlan: string | null,
 ): DashboardTaskState {
-  const taskRoot = resolveLocalStatePath(projectPath, "tasks");
-  const taskRootStats = statOrNull(taskRoot);
+  const planRoot = resolveLocalStatePath(projectPath, "plans");
+  const planRootStats = statOrNull(planRoot);
   const active =
-    readOptionalTextFile(join(taskRoot, ".active"))?.trim() || null;
-  if (!taskRootStats?.isDirectory()) {
-    return emptyDashboardTaskState(taskRoot, active);
+    readOptionalTextFile(join(planRoot, ".active"))?.trim() || null;
+  if (!planRootStats?.isDirectory()) {
+    return emptyDashboardTaskState(planRoot, active);
   }
 
-  const planNames = listTaskPlanNames(taskRoot);
+  const planNames = listTaskPlanNames(planRoot);
   const plans = planNames
-    .map((name) => buildTaskPlanSummary(taskRoot, name, active))
+    .map((name) => buildTaskPlanSummary(planRoot, name, active))
     .sort((a, b) => {
       const byMtime =
         new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
@@ -220,7 +223,7 @@ export function buildDashboardTaskState(
     activeExists,
     plans,
   );
-  const selectedPlanPath = selectedPlan ? join(taskRoot, selectedPlan) : null;
+  const selectedPlanPath = selectedPlan ? join(planRoot, selectedPlan) : null;
   const milestones = selectedPlanPath
     ? listTaskMilestoneFilenames(selectedPlanPath).map((filename) =>
         parseTaskMilestone(selectedPlanPath, filename),
@@ -228,7 +231,8 @@ export function buildDashboardTaskState(
     : [];
 
   return {
-    taskRoot,
+    planRoot,
+    taskRoot: planRoot,
     exists: true,
     active,
     activeExists,
@@ -257,7 +261,7 @@ function parseJsonObjectBody(body: string): Record<string, unknown> {
 }
 
 /**
- * Reject plan names that could escape the `.goat-flow/tasks` top level.
+ * Reject plan names that could escape the `.goat-flow/plans` top level.
  *
  * Throws when the plan name is hidden, relative, or path-like.
  */
@@ -269,7 +273,7 @@ function assertTopLevelPlanName(planName: string): void {
     planName.includes("\\") ||
     planName.startsWith(".")
   ) {
-    throw new Error("body.plan must name a top-level task plan directory");
+    throw new Error("body.plan must name a top-level plan directory");
   }
 }
 
@@ -293,28 +297,28 @@ export function readActiveTaskPlanBody(body: string): string {
 }
 
 /**
- * Persist the selected task plan by writing the `.active` marker, but only for a plan that already
+ * Persist the selected plan by writing the `.active` marker, but only for a plan that already
  * exists, so the dashboard can switch the active plan without ever creating task structure. Throws
- * when the tasks directory is absent or the requested plan does not exist.
+ * when the plans directory is absent or the requested plan does not exist.
  *
- * @param projectPath - absolute project root whose `.goat-flow/tasks` directory holds the plans
+ * @param projectPath - absolute project root whose `.goat-flow/plans` directory holds the plans
  * @param planName - validated top-level plan directory name to mark active; must already exist on disk
  */
 export function writeActiveTaskPlan(
   projectPath: string,
   planName: string,
 ): void {
-  const taskRoot = resolveLocalStatePath(projectPath, "tasks");
-  const taskRootStats = statOrNull(taskRoot);
-  if (!taskRootStats?.isDirectory()) {
-    throw new Error(".goat-flow/tasks does not exist for the selected project");
+  const planRoot = resolveLocalStatePath(projectPath, "plans");
+  const planRootStats = statOrNull(planRoot);
+  if (!planRootStats?.isDirectory()) {
+    throw new Error(".goat-flow/plans does not exist for the selected project");
   }
-  const planNames = listTaskPlanNames(taskRoot);
+  const planNames = listTaskPlanNames(planRoot);
   if (!planNames.includes(planName)) {
-    throw new Error(`task plan not found: ${planName}`);
+    throw new Error(`plan not found: ${planName}`);
   }
   writeFileSync(
-    resolveLocalStatePath(projectPath, "tasks/.active"),
+    resolveLocalStatePath(projectPath, "plans/.active"),
     `${planName}\n`,
   );
 }

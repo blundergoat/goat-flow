@@ -26,7 +26,7 @@ const TEMPLATE_REFERENCE_README = resolve(
 );
 const INSTALLED_REFERENCE_README = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/README.md",
+  ".goat-flow/skill-docs/README.md",
 );
 const TEMPLATE_PREAMBLE = resolve(
   PROJECT_ROOT,
@@ -34,7 +34,7 @@ const TEMPLATE_PREAMBLE = resolve(
 );
 const INSTALLED_PREAMBLE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/skill-preamble.md",
+  ".goat-flow/skill-docs/skill-preamble.md",
 );
 const TEMPLATE_CONVENTIONS = resolve(
   PROJECT_ROOT,
@@ -42,7 +42,7 @@ const TEMPLATE_CONVENTIONS = resolve(
 );
 const INSTALLED_CONVENTIONS = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-docs/skill-conventions.md",
 );
 const TEMPLATE_BROWSER_USE = resolve(
   PROJECT_ROOT,
@@ -50,7 +50,7 @@ const TEMPLATE_BROWSER_USE = resolve(
 );
 const INSTALLED_BROWSER_USE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
 );
 const TEMPLATE_CODE_COMMENTS = resolve(
   PROJECT_ROOT,
@@ -58,7 +58,7 @@ const TEMPLATE_CODE_COMMENTS = resolve(
 );
 const INSTALLED_CODE_COMMENTS = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/code-comments.md",
+  ".goat-flow/skill-docs/playbooks/code-comments.md",
 );
 const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
   PROJECT_ROOT,
@@ -66,7 +66,7 @@ const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
 );
 const INSTALLED_GRUFF_CODE_QUALITY = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
 );
 const TEMPLATE_OBSERVABILITY = resolve(
   PROJECT_ROOT,
@@ -74,7 +74,7 @@ const TEMPLATE_OBSERVABILITY = resolve(
 );
 const INSTALLED_OBSERVABILITY = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/observability.md",
+  ".goat-flow/skill-docs/playbooks/observability.md",
 );
 const TEMPLATE_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
@@ -82,7 +82,7 @@ const TEMPLATE_PAGE_CAPTURE = resolve(
 );
 const INSTALLED_PAGE_CAPTURE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/page-capture.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
 );
 const TEMPLATE_RELEASE_NOTES = resolve(
   PROJECT_ROOT,
@@ -90,7 +90,7 @@ const TEMPLATE_RELEASE_NOTES = resolve(
 );
 const INSTALLED_RELEASE_NOTES = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/release-notes.md",
+  ".goat-flow/skill-docs/playbooks/release-notes.md",
 );
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
@@ -98,7 +98,7 @@ const TEMPLATE_CHANGELOG = resolve(
 );
 const INSTALLED_CHANGELOG = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/changelog.md",
+  ".goat-flow/skill-docs/playbooks/changelog.md",
 );
 const TEMPLATE_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
@@ -106,7 +106,7 @@ const TEMPLATE_QUALITY_TESTING = resolve(
 );
 const INSTALLED_QUALITY_TESTING = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-playbooks/skill-quality-testing.md",
+  ".goat-flow/skill-docs/skill-quality-testing/README.md",
 );
 const TOPICAL_FILES = ["tdd-iteration", "adversarial-framing", "deployment"];
 const TOPICAL_PAIRS = TOPICAL_FILES.map((name) => ({
@@ -117,7 +117,7 @@ const TOPICAL_PAIRS = TOPICAL_FILES.map((name) => ({
   ),
   installed: resolve(
     PROJECT_ROOT,
-    `.goat-flow/skill-playbooks/skill-quality-testing/${name}.md`,
+    `.goat-flow/skill-docs/skill-quality-testing/${name}.md`,
   ),
 }));
 
@@ -134,7 +134,7 @@ function diffQuiet(expectedPath: string, actualPath: string): number {
 // Template and installed copies currently match (sanity check)
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: current state", () => {
-  it("template and installed skill-reference README.md match", () => {
+  it("template and installed skill-docs README.md match", () => {
     if (
       !existsSync(TEMPLATE_REFERENCE_README) ||
       !existsSync(INSTALLED_REFERENCE_README)
@@ -144,7 +144,7 @@ describe("preamble/conventions sync: current state", () => {
     assert.equal(
       diffQuiet(TEMPLATE_REFERENCE_README, INSTALLED_REFERENCE_README),
       0,
-      "skill-reference README.md: template and installed should match",
+      "skill-docs README.md: template and installed should match",
     );
   });
 

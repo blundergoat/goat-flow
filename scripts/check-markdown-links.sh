@@ -22,7 +22,7 @@ checked=0
 # material, node_modules, .git
 files_with_links=$(find docs/ workflow/setup/ workflow/skills/ .goat-flow/ \
   -name '*.md' \
-  -not -path '.goat-flow/tasks/*' \
+  -not -path '.goat-flow/plans/*' \
   -not -path '.goat-flow/logs/*' \
   -not -path '.goat-flow/scratchpad/*' \
   -not -path '*/_archived/*' \

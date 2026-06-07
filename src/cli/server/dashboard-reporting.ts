@@ -270,7 +270,7 @@ function readLessonBucketEntries(
         {
           title,
           created: parseLessonCreated(section),
-          path: `.goat-flow/lessons/${filename}`,
+          path: `.goat-flow/learning-loop/lessons/${filename}`,
           order: startOrder + index,
         },
       ];
@@ -419,8 +419,8 @@ function directorySignature(projectPath: string, relativeDir: string): string {
 function buildLearningLoopCacheSignature(projectPath: string): string {
   return hashString(
     [
-      directorySignature(projectPath, ".goat-flow/footguns"),
-      directorySignature(projectPath, ".goat-flow/lessons"),
+      directorySignature(projectPath, ".goat-flow/learning-loop/footguns"),
+      directorySignature(projectPath, ".goat-flow/learning-loop/lessons"),
     ].join("\n"),
   );
 }
@@ -442,25 +442,23 @@ export function buildAuditCacheSignature(
     ".codex/hooks.json",
     ".agents/hooks.json",
     ".github/hooks/hooks.json",
-    ".claude/hooks/deny-dangerous.sh",
-    ".codex/hooks/deny-dangerous.sh",
-    ".agents/hooks/deny-dangerous.sh",
-    ".github/hooks/deny-dangerous.sh",
-    ".goat-flow/hook-lib/patterns-shell.sh",
-    ".goat-flow/hook-lib/patterns-paths.sh",
-    ".goat-flow/hook-lib/patterns-writes.sh",
-    ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+    ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+    ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
   ];
   const directoryInputs = [
     ".claude/skills",
     ".agents/skills",
     ".github/skills",
-    ".goat-flow/decisions",
-    ".goat-flow/footguns",
-    ".goat-flow/lessons",
-    ".goat-flow/patterns",
-    ".goat-flow/skill-reference",
-    ".goat-flow/hook-lib",
+    ".goat-flow/learning-loop/decisions",
+    ".goat-flow/learning-loop/footguns",
+    ".goat-flow/learning-loop/lessons",
+    ".goat-flow/learning-loop/patterns",
+    ".goat-flow/skill-docs",
+    ".goat-flow/hooks/deny-dangerous",
   ];
   return hashString(
     [

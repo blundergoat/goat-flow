@@ -59,26 +59,26 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/code-map.md",
   ".goat-flow/glossary.md",
   // Shared meta references (composed into every skill)
-  ".goat-flow/skill-reference/README.md",
-  ".goat-flow/skill-reference/skill-preamble.md",
-  ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-docs/README.md",
+  ".goat-flow/skill-docs/skill-preamble.md",
+  ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks (loaded on-demand by skills/agents)
-  ".goat-flow/skill-playbooks/README.md",
-  ".goat-flow/skill-playbooks/browser-use.md",
-  ".goat-flow/skill-playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-playbooks/page-capture.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-docs/playbooks/README.md",
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ".goat-flow/skill-docs/skill-quality-testing/README.md",
+  ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
   // Public docs
   "docs/cli.md",
   "docs/skills.md",
   "docs/audit-and-quality.md",
   // ADR index. ADR-NNN files are discovered dynamically so new decisions do
   // not fall out of content-quality coverage.
-  ".goat-flow/decisions/README.md",
-  ".goat-flow/decisions/INDEX.md",
+  ".goat-flow/learning-loop/decisions/README.md",
+  ".goat-flow/learning-loop/decisions/INDEX.md",
   // Setup templates
   "workflow/setup/01-system-overview.md",
   "workflow/setup/02-instruction-file.md",
@@ -100,7 +100,7 @@ const STATIC_QUALITY_TARGETS = [
   "workflow/setup/reference/tasks-readme.md",
 ] as const;
 
-const DECISIONS_DIR = ".goat-flow/decisions/";
+const DECISIONS_DIR = ".goat-flow/learning-loop/decisions/";
 
 /** Learning-loop buckets. Scanned in restricted mode (no vague-term checks)
  *  because the Symptoms/Why/Evidence sections describe past incidents and
@@ -108,9 +108,9 @@ const DECISIONS_DIR = ".goat-flow/decisions/";
  *  non-actionable detectors still apply - those patterns should never appear
  *  in actionable Prevention blocks. */
 const LEARNING_LOOP_DIRS = [
-  ".goat-flow/footguns/",
-  ".goat-flow/lessons/",
-  ".goat-flow/patterns/",
+  ".goat-flow/learning-loop/footguns/",
+  ".goat-flow/learning-loop/lessons/",
+  ".goat-flow/learning-loop/patterns/",
 ] as const;
 
 const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [

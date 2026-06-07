@@ -16,4 +16,4 @@ Use:
 - Feed S-NN finding codes into downstream artifacts (milestones, critique hooks, implementation tasks)
 - Compare security posture across review runs on the same surface
 
-These files are gitignored by design. If a finding should become durable project knowledge, promote it into `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/decisions/`.
+These files are gitignored by design. If a finding should become durable project knowledge, promote it into `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, or `.goat-flow/learning-loop/decisions/`.

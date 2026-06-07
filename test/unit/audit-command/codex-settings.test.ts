@@ -259,7 +259,7 @@ describe("codex settings feature flags", () => {
         ...hooks,
         denyExists: true,
         denyIsRegistered: true,
-        denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+        denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
       },
     });
   }
@@ -301,7 +301,7 @@ describe("codex settings feature flags", () => {
         ...hooks,
         denyExists: true,
         denyIsRegistered: true,
-        denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+        denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
       },
     });
   }
@@ -338,7 +338,7 @@ describe("codex settings feature flags", () => {
         ...hooks,
         denyExists: true,
         denyIsRegistered: true,
-        denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+        denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
       },
     });
   }
@@ -408,7 +408,7 @@ describe("codex settings feature flags", () => {
         ...hooks,
         denyExists: true,
         denyIsRegistered: true,
-        denyRegisteredPath: ".codex/hooks/deny-dangerous.sh",
+        denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
       },
     });
   }

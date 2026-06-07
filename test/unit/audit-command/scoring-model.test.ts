@@ -278,7 +278,7 @@ describe("Audit scoring model", () => {
   it("no post-turn hook metric lowers verification score without failing the concern", () => {
     const baseFacts = makeCtx().facts;
     const evidenceFiles: Record<string, string> = {
-      ".goat-flow/skill-reference/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
       [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
     };
     const ctx = makeCtx({

@@ -40,7 +40,7 @@ export interface CheckEvidence {
   /** ISO-8601 date the evidence was last verified (YYYY-MM-DD). */
   verified_on: string;
   normative_level: NormativeLevel;
-  /** Optional repo-local paths (e.g. `.goat-flow/footguns/...`, session log) that back the check. */
+  /** Optional repo-local paths (e.g. `.goat-flow/learning-loop/footguns/...`, session log) that back the check. */
   evidence_paths?: string[];
   /** Evidence paths that resolve against the goat-flow framework/package, not the audited target project. */
   framework_evidence_paths?: string[];

@@ -43,9 +43,9 @@ const AGENT_PROFILE: AgentProfile = {
   localPattern: "*/CLAUDE.md",
   denyMechanism: {
     type: "deny-script",
-    path: ".claude/hooks/deny-dangerous.sh",
+    path: ".goat-flow/hooks/deny-dangerous.sh",
   },
-  denyHookFile: ".claude/hooks/deny-dangerous.sh",
+  denyHookFile: ".goat-flow/hooks/deny-dangerous.sh",
 };
 
 /** Provide a representative project-conventions document for extraction tests. */

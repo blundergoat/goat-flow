@@ -177,7 +177,7 @@ function analyzeDraft(
       reasoning,
       nextSteps: [
         {
-          action: "Place under .goat-flow/skill-playbooks/<name>.md",
+          action: "Place under .goat-flow/skill-docs/playbooks/<name>.md",
           template: "playbook",
         },
       ],
@@ -191,7 +191,7 @@ function analyzeDraft(
       reasoning,
       nextSteps: [
         {
-          action: "Place under .goat-flow/skill-playbooks/<name>.md",
+          action: "Place under .goat-flow/skill-docs/playbooks/<name>.md",
           template: "index",
         },
       ],
@@ -207,7 +207,7 @@ function analyzeDraft(
       reasoning,
       nextSteps: [
         {
-          action: "Place under .goat-flow/lessons/<category>.md",
+          action: "Place under .goat-flow/learning-loop/lessons/<category>.md",
         },
       ],
     };
@@ -218,7 +218,11 @@ function analyzeDraft(
       recommendedArtifact: { type: "learning-loop", subtype: "footgun" },
       confidence: 0.85,
       reasoning,
-      nextSteps: [{ action: "Place under .goat-flow/footguns/<category>.md" }],
+      nextSteps: [
+        {
+          action: "Place under .goat-flow/learning-loop/footguns/<category>.md",
+        },
+      ],
     };
   }
   if (signals.startsWithADR && signals.hasADRStructure) {
@@ -229,7 +233,8 @@ function analyzeDraft(
       reasoning,
       nextSteps: [
         {
-          action: "Place under .goat-flow/decisions/ADR-NNN-<title>.md",
+          action:
+            "Place under .goat-flow/learning-loop/decisions/ADR-NNN-<title>.md",
         },
       ],
     };
@@ -375,7 +380,7 @@ function matchReferenceIntent(
       nextSteps: [
         {
           action:
-            "Place under .goat-flow/skill-playbooks/<name>.md with an Availability Check section",
+            "Place under .goat-flow/skill-docs/playbooks/<name>.md with an Availability Check section",
         },
       ],
     };
@@ -422,7 +427,9 @@ function matchLearningLoopIntent(
       reasoning: [
         "description references past mistake / incident / postmortem",
       ],
-      nextSteps: [{ action: "Add to .goat-flow/lessons/<category>.md" }],
+      nextSteps: [
+        { action: "Add to .goat-flow/learning-loop/lessons/<category>.md" },
+      ],
     };
   }
   if (
@@ -433,7 +440,9 @@ function matchLearningLoopIntent(
       recommendedArtifact: { type: "learning-loop", subtype: "footgun" },
       confidence: 0.7,
       reasoning: ["description sounds like a footgun / trap warning"],
-      nextSteps: [{ action: "Add to .goat-flow/footguns/<category>.md" }],
+      nextSteps: [
+        { action: "Add to .goat-flow/learning-loop/footguns/<category>.md" },
+      ],
     };
   }
   if (
@@ -445,7 +454,10 @@ function matchLearningLoopIntent(
       confidence: 0.75,
       reasoning: ["description references a design/architecture decision"],
       nextSteps: [
-        { action: "Add an ADR under .goat-flow/decisions/ADR-NNN-<title>.md" },
+        {
+          action:
+            "Add an ADR under .goat-flow/learning-loop/decisions/ADR-NNN-<title>.md",
+        },
       ],
     };
   }

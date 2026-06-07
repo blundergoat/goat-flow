@@ -435,9 +435,7 @@ const skillReferenceFit: MetricScorer = (input) => {
     } else {
       score = 3;
       resultSignals.shouldDemote = true;
-      notes.push(
-        "artifact lacks skill structure - may belong in skill-reference/",
-      );
+      notes.push("artifact lacks skill structure - may belong in skill-docs/");
     }
     if (refSignals >= 3 && subtype === "workflow") {
       score = Math.max(0, score - 3);

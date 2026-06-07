@@ -2,15 +2,15 @@
 
 `guardrails` are goat-flow's runtime command-safety hooks. The shipped safety
 surface is one `deny-dangerous.sh` dispatcher per agent, backed by shared policy
-modules in `.goat-flow/hook-lib/`.
+modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
 | Surface | Path | Role |
 | --- | --- | --- |
 | Dispatcher | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, secret-path access, `git commit`, `git push`, destructive git flags, and GitHub write operations through `gh` |
-| Policy store | `.goat-flow/hook-lib/` | Shared policy modules sourced by each installed dispatcher |
-| Self-test | `.goat-flow/hook-lib/deny-dangerous-self-test.sh` | Runs smoke/full checks for the dispatcher and is what preflight invokes |
+| Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared policy modules sourced by each installed dispatcher |
+| Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Runs smoke/full checks for the dispatcher and is what preflight invokes |
 
 ## Agent Mapping
 
@@ -19,12 +19,12 @@ modules in `.goat-flow/hook-lib/`.
 | Claude Code | `PreToolUse` shell hooks plus settings deny patterns | `.claude/hooks/*.sh`, `.claude/settings.json` |
 | Codex | `PreToolUse` shell hooks plus config TOML permission profile | `.codex/hooks/*.sh`, `.codex/hooks.json`, `.codex/config.toml` |
 | Copilot CLI | `preToolUse` hooks registered in `.github/hooks/hooks.json` | `.github/hooks/*.sh`, `.github/hooks/hooks.json` |
-| Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` | `.agents/hooks/*.sh`, `.agents/hooks.json`, `.goat-flow/hook-lib/` |
+| Antigravity | `PreToolUse` hooks registered in `.agents/hooks.json` | `.agents/hooks/*.sh`, `.agents/hooks.json`, `.goat-flow/hooks/deny-dangerous/` |
 
 ## Verification
 
-- `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=smoke`
-- `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=full`
+- `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`
+- `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=full`
 - `goat-flow hooks list --json`
 - `goat-flow hooks sync`
 

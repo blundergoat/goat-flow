@@ -60,5 +60,5 @@ only real edits to frozen text.
 
 M06b kill criterion (from the milestone): "If snapshots become burdensome,
 drop and accept that CHANGELOG lint only compares claims within the current
-version." A decision record in `.goat-flow/decisions/` captures that
+version." A decision record in `.goat-flow/learning-loop/decisions/` captures that
 kill-switch when pulled.

@@ -59,7 +59,7 @@ Fallback-only subtype matches are intentionally low confidence. If a subtype onl
 |---|---|
 | `walk-roots.skills` | Skill directories to inventory. |
 | `walk-roots.references` | Reference directories to inventory. |
-| `composition` | Shared preamble/conventions paths, skill-reference regex, and composed byte cap. |
+| `composition` | Shared preamble/conventions paths, skill-reference-fit regex, and composed byte cap. |
 | `gate-vocabulary` | Regex sources for verification gates, explicit pass/fail language, and human-stop language. |
 | `tool-keywords-regex` | Regex source for external tool dependencies. |
 | `subtypes` | Detection rules, metric profile caps, and notes for artifact subtypes. |
@@ -74,7 +74,7 @@ Fallback-only subtype matches are intentionally low confidence. If a subtype onl
 - Avoid brittle provider-specific regexes unless a real project artifact needs them.
 - Keep the scoring rubric portable. Generic or uploaded skills must earn cold-start and evidence credit through explicit context, prerequisites, gates, and evidence rules; they should not be required to reference goat-flow's shared preamble unless they are installed goat-flow skills that actually inherit it.
 - Browser, MCP, and GitHub CLI dependencies count as external tools. Defaults include `browser-use`, `Playwright MCP`, `browser_*` commands, `mcp__*` tool names, and `gh`; ordinary shell/runtime commands such as `npm`, `git`, `node`, or `bash` do not trigger tool-dependency deductions by themselves.
-- Do not cite gitignored task, scratchpad, or log paths from committed fixtures or docs. When a local artifact exposes a useful failure shape, sanitize it into tracked test content without private domains, accounts, credentials, or `.goat-flow/tasks/**` references.
+- Do not cite gitignored task, scratchpad, or log paths from committed fixtures or docs. When a local artifact exposes a useful failure shape, sanitize it into tracked test content without private domains, accounts, credentials, or `.goat-flow/plans/**` references.
 
 ## Verification
 

@@ -15,4 +15,4 @@ Use:
 - Resume an interrupted critique by reading the snapshot and re-entering Phase 4
 - Compare critique runs across sessions on the same artifact
 
-These files are gitignored by design. If a finding should become durable project knowledge, promote it into `.goat-flow/footguns/`, `.goat-flow/lessons/`, or `.goat-flow/decisions/`.
+These files are gitignored by design. If a finding should become durable project knowledge, promote it into `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, or `.goat-flow/learning-loop/decisions/`.

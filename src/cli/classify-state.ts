@@ -90,10 +90,10 @@ function buildIncompleteDetails(
     );
   }
   if (!hasPreamble) {
-    missing.push("missing .goat-flow/skill-reference/skill-preamble.md");
+    missing.push("missing .goat-flow/skill-docs/skill-preamble.md");
   }
   if (!hasConventions) {
-    missing.push("missing .goat-flow/skill-reference/skill-conventions.md");
+    missing.push("missing .goat-flow/skill-docs/skill-conventions.md");
   }
 
   return `Config says current goat-flow ${CURRENT_VERSION_FAMILY}.x but install is incomplete: ${missing.join("; ")}`;
@@ -118,9 +118,9 @@ export function classifyProjectState(
     agentId && AGENT_INSTRUCTION_FILE[agentId]
       ? fs.exists(AGENT_INSTRUCTION_FILE[agentId])
       : hasAnyInstructionFile(fs);
-  const hasPreamble = fs.exists(".goat-flow/skill-reference/skill-preamble.md");
+  const hasPreamble = fs.exists(".goat-flow/skill-docs/skill-preamble.md");
   const hasConventions = fs.exists(
-    ".goat-flow/skill-reference/skill-conventions.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
   );
   const hasAIInstructions =
     fs.exists(".github/instructions") || hasInstructionFile;

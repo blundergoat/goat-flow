@@ -49,7 +49,7 @@ Live audit results for every supported agent. Per-agent cards show pass/fail acr
 
 ### Plans
 
-Plan milestone view for the selected project. Surfaces `.goat-flow/tasks/` plan
+Plan milestone view for the selected project. Surfaces `.goat-flow/plans/` plan
 directories, milestone status, and checkbox progress, and lets you set the
 active plan.
 
@@ -130,7 +130,7 @@ Use `--force` only when you want to overwrite existing settings, `.goat-flow/con
 
 The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
 
-The install includes `.goat-flow/skill-reference/` for shared meta references and `.goat-flow/skill-playbooks/` for tool/capability playbooks. Generated or repaired instruction files route agents to `.goat-flow/skill-playbooks/` before declaring a requested tool unavailable.
+The install includes `.goat-flow/skill-docs/` for shared meta references and `.goat-flow/skill-docs/playbooks/` for tool/capability playbooks. Generated or repaired instruction files route agents to `.goat-flow/skill-docs/playbooks/` before declaring a requested tool unavailable.
 
 ### 3. Generate the setup prompt
 

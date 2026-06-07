@@ -36,8 +36,8 @@ live there, not inline.
 
 ## Key Resources
 
-- **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
+- **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
+- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
@@ -55,7 +55,7 @@ Only include commands that exist and were verified in the target project. Agent 
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
-MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns/`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
+MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and `.goat-flow/learning-loop/patterns/`; include `.goat-flow/learning-loop/decisions/` when the task involves architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
@@ -97,31 +97,31 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human. Two corrections on same approach = MUST rewind.
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
-If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`, significant technical decisions go in `.goat-flow/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
+If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`, significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
 
 - `CLAUDE.md` exists and follows the canonical section order.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
-- Tool playbook pointer to `.goat-flow/skill-playbooks/` is present.
+- Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.
 - No hands-off agent files were changed.
 
 ## Artifact Routing
 
-Requests to add footguns, lessons, decisions, or patterns route to the matching `.goat-flow/` directory after reading that directory's `README.md`: footguns -> `.goat-flow/footguns/`, lessons -> `.goat-flow/lessons/`, decisions -> `.goat-flow/decisions/`, patterns -> `.goat-flow/patterns/`. Runtime code, hooks, and agent config changes are out of scope unless the user explicitly asks for them.
+Requests to add footguns, lessons, decisions, or patterns route to the matching `.goat-flow/` directory after reading that directory's `README.md`: footguns -> `.goat-flow/learning-loop/footguns/`, lessons -> `.goat-flow/learning-loop/lessons/`, decisions -> `.goat-flow/learning-loop/decisions/`, patterns -> `.goat-flow/learning-loop/patterns/`. Runtime code, hooks, and agent config changes are out of scope unless the user explicitly asks for them.
 
 ## Router Table
 
 | Resource | Path |
 |----------|------|
 | Instruction file | `CLAUDE.md` |
-| Learning loop | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/` |
-| Skill reference (meta) | `.goat-flow/skill-reference/` |
-| Skill playbooks (tools) | `.goat-flow/skill-playbooks/` |
+| Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
+| Skill reference (meta) | `.goat-flow/skill-docs/` |
+| Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
 | Claude skills/config | `.claude/skills/`, `.claude/settings.json`, `.claude/hooks/` when installed |
 | Project source/docs/config | adapt to detected project paths |
-| Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
+| Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `AGENTS.md`, `.github/copilot-instructions.md` when present |

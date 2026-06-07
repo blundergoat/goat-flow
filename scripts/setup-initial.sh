@@ -53,7 +53,7 @@ else
 fi
 
 # 3. Create core directories
-for dir in .goat-flow/decisions .goat-flow/footguns .goat-flow/lessons .goat-flow/tasks .goat-flow/logs/sessions scripts/maintenance; do
+for dir in .goat-flow/learning-loop/decisions .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/plans .goat-flow/logs/sessions scripts/maintenance; do
     if [[ ! -d "$dir" ]]; then
         mkdir -p "$dir"
         info "Created $dir/"

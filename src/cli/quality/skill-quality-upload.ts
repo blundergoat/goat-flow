@@ -122,7 +122,7 @@ const TIP_RULES: Array<{
     metric: "trigger-clarity",
     match: /description summarizes workflow rather than triggering conditions/,
     message:
-      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body - see `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
+      'Trim the description to triggering conditions only ("Use when …"). Workflow summaries (e.g. "dispatches subagent then runs review between tasks") cause agents to follow the description and skip the skill body - see `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` for the trap and verbatim source.',
     alwaysFire: true,
   },
   {
@@ -285,7 +285,7 @@ const TIP_RULES: Array<{
     metric: "skill-reference-fit",
     match: /lacks skill structure - may belong/,
     message:
-      "Consider moving this content under `.goat-flow/skill-playbooks/` as a playbook; it lacks the structural signals of a skill.",
+      "Consider moving this content under `.goat-flow/skill-docs/playbooks/` as a playbook; it lacks the structural signals of a skill.",
   },
   {
     metric: "skill-reference-fit",

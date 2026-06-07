@@ -16,11 +16,11 @@ import { validateProvenance, type CheckEvidence } from "./provenance-types.js";
 const FRAMEWORK_EVIDENCE_PREFIXES = [
   "workflow/",
   "docs/",
-  ".goat-flow/footguns/",
-  ".goat-flow/lessons/",
-  ".goat-flow/decisions/",
-  ".goat-flow/skill-reference/",
-  ".goat-flow/skill-playbooks/",
+  ".goat-flow/learning-loop/footguns/",
+  ".goat-flow/learning-loop/lessons/",
+  ".goat-flow/learning-loop/decisions/",
+  ".goat-flow/skill-docs/",
+  ".goat-flow/skill-docs/playbooks/",
 ];
 
 const FRAMEWORK_EVIDENCE_PATHS = new Set([
@@ -89,7 +89,7 @@ let provenanceValidated = false;
  * Validate provenance on every registered check against the target project or package root.
  *
  * In packaged installs, `evidence_paths` pointing at framework-repo docs
- * (`.goat-flow/footguns/*`, `.goat-flow/lessons/*`, `docs/*`) can't be
+ * (`.goat-flow/learning-loop/footguns/*`, `.goat-flow/learning-loop/lessons/*`, `docs/*`) can't be
  * resolved because those files aren't in `package.json` `files`. Skip the
  * existence check there - the paths are human-readable pointers for future
  * maintainers, not runtime contracts. In dev mode we keep the check so

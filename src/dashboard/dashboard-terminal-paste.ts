@@ -395,7 +395,7 @@ function dashboardGlobalLaunchContext(
     : "Write behavior: default to read-only analysis; do not write files in the selected target unless the user explicitly asks.";
   const routeLine =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
-      ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/tasks when this preset allows writes or the prompt explicitly requests files."
+      ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/plans when this preset allows writes or the prompt explicitly requests files."
       : preset?.route === "goat-critique" &&
           /^\/goat-critique\b/.test(presetPrompt)
         ? "goat-critique global mode: keep gitignored critique logs/artifacts in the controlling workspace; do not write goat-flow logs in the selected target unless the user explicitly makes that target the controlling workspace."

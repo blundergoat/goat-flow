@@ -7,8 +7,8 @@ goat-flow-skill-version: "1.9.2"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-reference/skill-preamble.md` for shared conventions.
-On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
+On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
@@ -31,7 +31,7 @@ Use when assessing security posture before release, after auth/input/storage cha
   - `references/file-upload-and-paths.md`
   - `references/supply-chain-and-cicd.md` - dependencies, install scripts, CI/CD, hooks, agent surfaces, active-testing gate
   - `references/project-policy-template.md` is a setup template, not a scan reference - skip during reviews.
-- **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
+- **Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/learning-loop/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 - **Threat Model Snapshot:** Output assets, trust boundaries, attacker types, and critical surfaces as an explicit artifact before scanning.
 
 ### Headless JSON Emit

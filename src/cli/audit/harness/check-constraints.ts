@@ -150,7 +150,7 @@ const denyCoversSecrets: HarnessCheck = {
   type: "integrity",
   provenance: constraintsProvenance("integrity", [
     "docs/harness-audit.md",
-    ".goat-flow/footguns/auditor.md",
+    ".goat-flow/learning-loop/footguns/auditor.md",
   ]),
   /** Run the Deny blocks direct literal secret paths check. */
   run: (ctx) => {
@@ -233,8 +233,8 @@ const denyBlocksDangerous: HarnessCheck = {
   type: "integrity",
   provenance: constraintsProvenance("integrity", [
     "docs/harness-audit.md",
-    ".goat-flow/footguns/auditor.md",
-    ".goat-flow/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/auditor.md",
+    ".goat-flow/learning-loop/footguns/hooks.md",
   ]),
   /** Run the Deny blocks dangerous commands check. */
   run: (ctx) => {
@@ -290,8 +290,8 @@ const denyBlocksPipeToShell: HarnessCheck = {
     "advisory",
     [
       "docs/harness-audit.md",
-      ".goat-flow/footguns/auditor.md",
-      ".goat-flow/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/auditor.md",
+      ".goat-flow/learning-loop/footguns/hooks.md",
     ],
     "incident",
   ),
@@ -433,7 +433,7 @@ const denyHookRegistered: HarnessCheck = {
   type: "integrity",
   provenance: constraintsProvenance(
     "integrity",
-    ["docs/harness-audit.md", ".goat-flow/footguns/auditor.md"],
+    ["docs/harness-audit.md", ".goat-flow/learning-loop/footguns/auditor.md"],
     "incident",
   ),
   run: (ctx) => {

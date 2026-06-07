@@ -364,7 +364,7 @@ const agentSkills: BuildCheck = {
   scope: "agent",
   provenance: specProvenance([
     "workflow/manifest.json",
-    ".goat-flow/footguns/skills.md",
+    ".goat-flow/learning-loop/footguns/skills.md",
   ]),
   /** Run the Agent skills check. */
   run: (ctx) => {
@@ -590,7 +590,7 @@ function checkCodexWorkspaceRootInvalidGlobs(
       ),
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
       howToFix:
-        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .codex/hooks/deny-dangerous.sh.",
+        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .goat-flow/hooks/deny-dangerous.sh.",
     };
   }
   return null;

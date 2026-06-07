@@ -35,10 +35,10 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
     valid: true,
     config: {
       version: "1.2.3",
-      footguns: { path: ".goat-flow/footguns/" },
-      lessons: { path: ".goat-flow/lessons/" },
-      decisions: { path: ".goat-flow/decisions/" },
-      tasks: { path: ".goat-flow/tasks/" },
+      footguns: { path: ".goat-flow/learning-loop/footguns/" },
+      lessons: { path: ".goat-flow/learning-loop/lessons/" },
+      decisions: { path: ".goat-flow/learning-loop/decisions/" },
+      plans: { path: ".goat-flow/plans/" },
       logs: { path: ".goat-flow/logs/" },
       agents: null,
       skills: { install: "all" },
@@ -71,9 +71,9 @@ function makeFixtureRepo(spec: {
   decisions?: Record<string, string>;
 }): string {
   const root = mkdtempSync(join(tmpdir(), "goatflow-stats-"));
-  const footgunsDir = join(root, ".goat-flow/footguns");
-  const lessonsDir = join(root, ".goat-flow/lessons");
-  const decisionsDir = join(root, ".goat-flow/decisions");
+  const footgunsDir = join(root, ".goat-flow/learning-loop/footguns");
+  const lessonsDir = join(root, ".goat-flow/learning-loop/lessons");
+  const decisionsDir = join(root, ".goat-flow/learning-loop/decisions");
   mkdirSync(footgunsDir, { recursive: true });
   mkdirSync(lessonsDir, { recursive: true });
   mkdirSync(decisionsDir, { recursive: true });
@@ -212,7 +212,7 @@ describe("goat-flow stats --check", () => {
       verdict.findings.some(
         (finding) =>
           finding.rule === "format" &&
-          finding.message.includes(".goat-flow/footguns"),
+          finding.message.includes(".goat-flow/learning-loop/footguns"),
       ),
       "expected a missing footgun-directory finding",
     );
@@ -220,7 +220,7 @@ describe("goat-flow stats --check", () => {
       verdict.findings.some(
         (finding) =>
           finding.rule === "format" &&
-          finding.message.includes(".goat-flow/lessons"),
+          finding.message.includes(".goat-flow/learning-loop/lessons"),
       ),
       "expected a missing lesson-directory finding",
     );
@@ -281,7 +281,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nSee `.goat-flow/footguns/hooks.md:1` for details.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nSee `.goat-flow/learning-loop/footguns/hooks.md:1` for details.\n",
       },
       lessons: {},
     });
@@ -425,8 +425,8 @@ describe("goat-flow stats --check", () => {
       (f) => f.rule === "decision-filename",
     );
     assertExists(finding, "expected a decision-filename finding");
-    assert.ok(finding.message.includes(".goat-flow/tasks/"));
-    assert.ok(finding.message.includes(".goat-flow/footguns/"));
+    assert.ok(finding.message.includes(".goat-flow/plans/"));
+    assert.ok(finding.message.includes(".goat-flow/learning-loop/footguns/"));
     assert.ok(finding.message.includes(".goat-flow/scratchpad/"));
   });
 
@@ -448,7 +448,7 @@ describe("goat-flow stats --check", () => {
         (f) =>
           f.rule === "decision-filename" &&
           f.file.endsWith("legacy-note.md") &&
-          f.message.includes(".goat-flow/tasks/"),
+          f.message.includes(".goat-flow/plans/"),
       ),
       "expected legacy decision note to fail with routing guidance",
     );

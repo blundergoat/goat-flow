@@ -271,7 +271,7 @@ function collectWarnings(section: BucketSection): StatsWarning[] {
 
 const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
 const ROUTING_HINT =
-  "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/tasks/; recurring hazards with evidence belong in .goat-flow/footguns/; reusable takeaways belong in .goat-flow/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
+  "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/plans/; recurring hazards with evidence belong in .goat-flow/learning-loop/footguns/; reusable takeaways belong in .goat-flow/learning-loop/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
 
 /** Match a second-level ADR heading exactly enough to avoid prose false positives. */
 function hasHeading(content: string, heading: string): boolean {

@@ -85,14 +85,14 @@ export function isFileRef(filePath: string): boolean {
 }
 
 /** Check whether a file reference can be validated for staleness without guessing. */
-/** Paths under these dirs are intentionally gitignored per `.goat-flow/tasks/.gitignore`
+/** Paths under these dirs are intentionally gitignored per `.goat-flow/plans/.gitignore`
  *  (milestone files + plan subdirs + `.active` marker are local-session state by
  *  design). References to them in lessons/footguns are navigation pointers,
  *  not resolvable artifacts - treating absence as "stale" false-positives on
  *  any clean checkout or CI run. Keep this list short and specific. */
 function isIntentionallyGitignored(filePath: string): boolean {
   return (
-    filePath.startsWith(".goat-flow/tasks/") ||
+    filePath.startsWith(".goat-flow/plans/") ||
     filePath.startsWith(".goat-flow/scratchpad/") ||
     filePath.startsWith(".goat-flow/logs/")
   );

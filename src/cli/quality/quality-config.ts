@@ -191,13 +191,17 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
       { dir: "workflow/skills", source: "workflow" },
     ],
     references: [
-      { dir: ".goat-flow/skill-reference", source: "shared-reference" },
-      { dir: ".goat-flow/skill-playbooks", source: "shared-reference" },
+      { dir: ".goat-flow/skill-docs", source: "shared-reference" },
+      { dir: ".goat-flow/skill-docs/playbooks", source: "shared-reference" },
+      {
+        dir: ".goat-flow/skill-docs/skill-quality-testing",
+        source: "shared-reference",
+      },
     ],
   },
   composition: {
-    skillPreamblePath: ".goat-flow/skill-reference/skill-preamble.md",
-    skillConventionsPath: ".goat-flow/skill-reference/skill-conventions.md",
+    skillPreamblePath: ".goat-flow/skill-docs/skill-preamble.md",
+    skillConventionsPath: ".goat-flow/skill-docs/skill-conventions.md",
     skillReferencePattern: "references\\/([^\\s)`\"']+\\.md)",
     maxComposedBytes: 32 * 1024,
   },

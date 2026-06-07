@@ -325,7 +325,7 @@ function readAdvisoryEnforcementReport(): ReturnType<
 /** Read task-state fixture data with every Plans view field populated. */
 function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
   return loadHelpers().readTaskState({
-    taskRoot: "/repo/.goat-flow/tasks",
+    taskRoot: "/repo/.goat-flow/plans",
     exists: true,
     active: "current",
     activeExists: true,
@@ -333,7 +333,7 @@ function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
     plans: [
       {
         name: "current",
-        path: "/repo/.goat-flow/tasks/current",
+        path: "/repo/.goat-flow/plans/current",
         modifiedAt: "2026-05-15T06:00:00.000Z",
         milestoneCount: 2,
         active: true,
@@ -342,7 +342,7 @@ function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
     milestones: [
       {
         filename: "Milestone-side-menu-navigation.md",
-        path: "/repo/.goat-flow/tasks/current/Milestone-side-menu-navigation.md",
+        path: "/repo/.goat-flow/plans/current/Milestone-side-menu-navigation.md",
         title: "Side Menu Navigation and Plans View",
         status: "in-progress",
         objective: "Build the side menu.",
@@ -491,7 +491,7 @@ describe("dashboard payload readers", () => {
     const expectedMilestoneCount = 2;
     const expectedMilestoneTaskTotal = 13;
     const expectedCompletedTasks = 4;
-    assert.equal(state.taskRoot, "/repo/.goat-flow/tasks");
+    assert.equal(state.taskRoot, "/repo/.goat-flow/plans");
     assert.equal(state.active, "current");
     assert.equal(state.activeExists, true);
     assert.equal(state.selectedPlan, "current");

@@ -7,27 +7,19 @@
 !architecture.md
 !code-map.md
 !glossary.md
-!patterns/
-!patterns/**
 !security-policy.md
 
 # Committed goat-flow directories
-!decisions/
-!decisions/**
-!footguns/
-!footguns/**
-!lessons/
-!lessons/**
-!skill-reference/
-!skill-reference/**
-!skill-playbooks/
-!skill-playbooks/**
-!hook-lib/
-!hook-lib/**
+!learning-loop/
+!learning-loop/**
+!skill-docs/
+!skill-docs/**
+!hooks/
+!hooks/**
 # Keep the local-workspace directories themselves committed so tools can rely on the paths.
 # Their own nested .gitignore files decide which contents stay local-only.
-!tasks/
-!tasks/**
+!plans/
+!plans/**
 !scratchpad/
 !scratchpad/**
 # Keep the session-log path and anchor file, but ignore the actual markdown logs.

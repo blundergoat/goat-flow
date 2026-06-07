@@ -67,8 +67,8 @@ function dashboardAppFragment07(
       dashboardSelectDir(this, dir);
     },
 
-    // -- Tasks --
-    /** Load task-plan state; reports endpoint errors and preserves newer project state because requests race. */
+    // -- Plans --
+    /** Load plan state; reports endpoint errors and preserves newer project state because requests race. */
     async loadTasks(planName?: string) {
       this.tasksLoading = true;
       this.tasksError = "";
@@ -79,7 +79,7 @@ function dashboardAppFragment07(
         : "";
       try {
         const res = await dashboardFetch(
-          `/api/tasks?path=${encodeURIComponent(requestProjectPath)}${planParam}`,
+          `/api/plans?path=${encodeURIComponent(requestProjectPath)}${planParam}`,
         );
         const payload = readRecord(await res.json(), "Tasks response");
         const error = readErrorMessage(payload);
@@ -97,13 +97,13 @@ function dashboardAppFragment07(
       }
     },
 
-    /** Select a task plan and reload milestones for that plan. */
+    /** Select a plan and reload milestones for that plan. */
     selectTaskPlan(planName: string) {
       this.selectedTaskPlan = planName;
       void this.loadTasks(planName);
     },
 
-    /** Persist the active task plan; reports endpoint errors and preserves newer project state because saves race. */
+    /** Persist the active plan; reports endpoint errors and preserves newer project state because saves race. */
     async setActiveTaskPlan(planName: string) {
       if (!planName || this.tasksActivePlanSaving) return;
       this.tasksActivePlanSaving = planName;
@@ -111,7 +111,7 @@ function dashboardAppFragment07(
       const requestProjectPath = this.projectPath;
       try {
         const res = await dashboardFetch(
-          `/api/tasks?path=${encodeURIComponent(requestProjectPath)}`,
+          `/api/plans?path=${encodeURIComponent(requestProjectPath)}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

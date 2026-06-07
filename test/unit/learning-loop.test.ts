@@ -53,10 +53,10 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
     valid: true,
     config: {
       version: "1.2.3",
-      footguns: { path: ".goat-flow/footguns/" },
-      lessons: { path: ".goat-flow/lessons/" },
-      decisions: { path: ".goat-flow/decisions/" },
-      tasks: { path: ".goat-flow/tasks/" },
+      footguns: { path: ".goat-flow/learning-loop/footguns/" },
+      lessons: { path: ".goat-flow/learning-loop/lessons/" },
+      decisions: { path: ".goat-flow/learning-loop/decisions/" },
+      plans: { path: ".goat-flow/plans/" },
       logs: { path: ".goat-flow/logs/" },
       agents: null,
       skills: { install: "all" },
@@ -138,11 +138,11 @@ describe("splitFootgunSections", () => {
     assert.equal(sections[0]?.title, "missing evidence");
     assert.deepEqual(
       collectFootgunStructureDiagnostics(
-        ".goat-flow/footguns/example.md",
+        ".goat-flow/learning-loop/footguns/example.md",
         body,
       ),
       [
-        '.goat-flow/footguns/example.md active footgun "missing evidence" missing file:line or (search: ...) evidence',
+        '.goat-flow/learning-loop/footguns/example.md active footgun "missing evidence" missing file:line or (search: ...) evidence',
       ],
     );
   });
@@ -205,7 +205,7 @@ describe("computeFreshness", () => {
 });
 
 describe("extractFootgunFacts freshness integration", () => {
-  const fixtureDir = ".goat-flow/footguns/";
+  const fixtureDir = ".goat-flow/learning-loop/footguns/";
   const pinnedNow = new Date("2026-04-18T12:00:00Z");
 
   it("produces per-bucket freshness and no diagnostics when frontmatter is complete", () => {
@@ -261,7 +261,7 @@ describe("extractFootgunFacts freshness integration", () => {
 });
 
 describe("extractLessonsFacts freshness + placeholder filtering", () => {
-  const fixtureDir = ".goat-flow/lessons/";
+  const fixtureDir = ".goat-flow/learning-loop/lessons/";
   const pinnedNow = new Date("2026-04-18T12:00:00Z");
 
   it("does not treat placeholder paths as stale refs", () => {
@@ -289,9 +289,9 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
     assert.deepEqual(facts.staleRefs, []);
   });
 
-  it("does not flag gitignored-by-design paths as stale (.goat-flow/tasks, scratchpad, logs)", () => {
-    // .goat-flow/tasks/*, scratchpad/*, and logs/* are intentionally gitignored
-    // per .goat-flow/tasks/.gitignore - they're local session state. Lessons
+  it("does not flag gitignored-by-design paths as stale (.goat-flow/plans, scratchpad, logs)", () => {
+    // .goat-flow/plans/*, scratchpad/*, and logs/* are intentionally gitignored
+    // per .goat-flow/plans/.gitignore - they're local session state. Lessons
     // reference them as navigation pointers, not committed artifacts. On CI
     // (fresh checkout) they don't exist, so treating absence as stale
     // false-positived the learning-loop schema check until this guard landed.
@@ -308,7 +308,7 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
 });
 
 describe("extractFootgunFacts search-anchor staleness", () => {
-  const fixtureDir = ".goat-flow/footguns/";
+  const fixtureDir = ".goat-flow/learning-loop/footguns/";
   const pinnedNow = new Date("2026-04-19T12:00:00Z");
 
   it("flags a search anchor whose needle no longer appears in the referenced file", () => {
@@ -395,18 +395,26 @@ describe("extractLearningLoopEntries", () => {
   it("excludes the decisions INDEX from shared decision counts and prompt entries", () => {
     const fs = stubFS(
       {
-        ".goat-flow/decisions/README.md": "# Decisions\n",
-        ".goat-flow/decisions/INDEX.md":
+        ".goat-flow/learning-loop/decisions/README.md": "# Decisions\n",
+        ".goat-flow/learning-loop/decisions/INDEX.md":
           "---\ncategory: index\n---\n\n# Decisions Index\n",
-        ".goat-flow/decisions/ADR-001-foo.md":
+        ".goat-flow/learning-loop/decisions/ADR-001-foo.md":
           "# ADR-001: Foo\n\n**Status:** Accepted\n**Date:** 2026-04-29\n\n## Context\n\nA real decision context.\n\n## Decision\n\nChoose Foo.\n\n## Consequences\n\nKnown trade-offs.\n",
       },
       {
-        ".goat-flow/footguns/": [],
-        ".goat-flow/lessons/": [],
-        ".goat-flow/patterns/": [],
-        ".goat-flow/decisions": ["README.md", "INDEX.md", "ADR-001-foo.md"],
-        ".goat-flow/decisions/": ["README.md", "INDEX.md", "ADR-001-foo.md"],
+        ".goat-flow/learning-loop/footguns/": [],
+        ".goat-flow/learning-loop/lessons/": [],
+        ".goat-flow/learning-loop/patterns/": [],
+        ".goat-flow/learning-loop/decisions": [
+          "README.md",
+          "INDEX.md",
+          "ADR-001-foo.md",
+        ],
+        ".goat-flow/learning-loop/decisions/": [
+          "README.md",
+          "INDEX.md",
+          "ADR-001-foo.md",
+        ],
       },
     );
     const facts = extractSharedFacts(fs, stubConfig());
@@ -416,22 +424,22 @@ describe("extractLearningLoopEntries", () => {
       facts.learningLoopEntries
         .filter((entry) => entry.kind === "decision")
         .map((entry) => entry.sourcePath),
-      [".goat-flow/decisions/ADR-001-foo.md"],
+      [".goat-flow/learning-loop/decisions/ADR-001-foo.md"],
     );
   });
 
   it("preserves resolved footgun status for selector exclusion", () => {
     const fs = stubFS(
       {
-        ".goat-flow/footguns/auditor.md":
+        ".goat-flow/learning-loop/footguns/auditor.md":
           "---\ncategory: auditor\nlast_reviewed: 2026-05-16\n---\n\n## Footgun: active trap\n\n**Status:** active | **Created:** 2026-05-16 | **Evidence:** ACTUAL_MEASURED\n\n- `src/cli/cli.ts` (search: `quality`) - evidence.\n\n## Resolved Entries\n\n## Footgun: resolved trap\n\n**Status:** resolved | **Created:** 2026-05-15 | **Resolved:** 2026-05-16 | **Evidence:** ACTUAL_MEASURED\n\nOriginal symptoms.\n",
         "src/cli/cli.ts": "const quality = true;\n",
       },
       {
-        ".goat-flow/footguns/": ["auditor.md"],
-        ".goat-flow/lessons/": [],
-        ".goat-flow/patterns/": [],
-        ".goat-flow/decisions/": [],
+        ".goat-flow/learning-loop/footguns/": ["auditor.md"],
+        ".goat-flow/learning-loop/lessons/": [],
+        ".goat-flow/learning-loop/patterns/": [],
+        ".goat-flow/learning-loop/decisions/": [],
       },
     );
     const entries = extractLearningLoopEntries(fs, stubConfig());

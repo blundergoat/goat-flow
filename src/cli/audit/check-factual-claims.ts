@@ -1,7 +1,7 @@
 /**
  * Factual-claim extraction for cold-path docs.
  *
- * Catches the documented failure class from `.goat-flow/lessons/verification.md`
+ * Catches the documented failure class from `.goat-flow/learning-loop/lessons/verification.md`
  * ("Structural audit passing hides cold-path content drift"): README/doc prose
  * that claims wrong skill counts, wrong check counts, or points at files that
  * no longer exist. All counts compared against the code constants that are the

@@ -26,42 +26,44 @@ Each SKILL.md MUST include:
 
 **Exception:** The dispatcher (`goat/SKILL.md`) uses `How It Works` instead of `When to Use` and has no Output Format section. The validator accepts this.
 
-**IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill, and delete any stale Markdown files in that skill's `references/` directory that are no longer listed in `workflow/manifest.json` `skills.references`. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/footguns/`, `.goat-flow/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
+**IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill, and delete any stale Markdown files in that skill's `references/` directory that are no longer listed in `workflow/manifest.json` `skills.references`. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
 ## Shared meta references
 
 Install the meta references from `workflow/skills/reference/`:
-- `.goat-flow/skill-reference/README.md` from `workflow/skills/reference/README.md` - meta references index
-- `.goat-flow/skill-reference/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
-- `.goat-flow/skill-reference/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
+- `.goat-flow/skill-docs/README.md` from `workflow/skills/reference/README.md` - meta references index
+- `.goat-flow/skill-docs/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
+- `.goat-flow/skill-docs/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
 
 ## Standalone playbooks
 
 Install the playbook pack from `workflow/skills/playbooks/`:
-- `.goat-flow/skill-playbooks/README.md` from `workflow/skills/playbooks/README.md` - index for tool/capability playbooks and availability-check discipline
-- `.goat-flow/skill-playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
-- `.goat-flow/skill-playbooks/changelog.md` from `workflow/skills/playbooks/changelog.md` - changelog writing discipline for Keep a Changelog, SemVer, breaking markers, and version-surface sync
-- `.goat-flow/skill-playbooks/code-comments.md` from `workflow/skills/playbooks/code-comments.md` - inline comment, docstring, TODO/FIXME/HACK, and annotation discipline
-- `.goat-flow/skill-playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
-- `.goat-flow/skill-playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
-- `.goat-flow/skill-playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
-- `.goat-flow/skill-playbooks/skill-quality-testing.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
-- `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
-- `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
-- `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` from `workflow/skills/playbooks/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
+- `.goat-flow/skill-docs/playbooks/README.md` from `workflow/skills/playbooks/README.md` - index for tool/capability playbooks and availability-check discipline
+- `.goat-flow/skill-docs/playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
+- `.goat-flow/skill-docs/playbooks/changelog.md` from `workflow/skills/playbooks/changelog.md` - changelog writing discipline for Keep a Changelog, SemVer, breaking markers, and version-surface sync
+- `.goat-flow/skill-docs/playbooks/code-comments.md` from `workflow/skills/playbooks/code-comments.md` - inline comment, docstring, TODO/FIXME/HACK, and annotation discipline
+- `.goat-flow/skill-docs/playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
+- `.goat-flow/skill-docs/playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
+- `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
+- `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
+- `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
+- `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
+- `.goat-flow/skill-docs/skill-quality-testing/deployment.md` from `workflow/skills/playbooks/skill-quality-testing/deployment.md` - deployment checklist and reference-pack budget rules
 
 ## Gitignore exception check (load-bearing for git tracking)
 
-The playbook files are copied to disk by the installer, but `.goat-flow/.gitignore` ignores everything (`*`) by default and re-includes committed surfaces with `!` exceptions. Pre-1.6.1 installs are missing the `!skill-playbooks/` and `!skill-playbooks/**` exception lines, so the playbook pack is silently hidden from git even though the files exist locally.
+The skill-doc, hook, learning-loop, and plan anchor files are copied to disk by the installer, but `.goat-flow/.gitignore` ignores everything (`*`) by default and re-includes committed surfaces with `!` exceptions. Older installs may be missing the current `!learning-loop/`, `!skill-docs/`, `!hooks/`, or `!plans/` exception lines, so installed files can exist locally but stay hidden from git.
 
 Verify the parent gitignore is current after running the installer:
 
 ```bash
-grep -E '^!skill-playbooks/(\*\*)?$' .goat-flow/.gitignore
-grep -E '^!skill-reference/(\*\*)?$' .goat-flow/.gitignore
+grep -E '^!learning-loop/(\*\*)?$' .goat-flow/.gitignore
+grep -E '^!skill-docs/(\*\*)?$' .goat-flow/.gitignore
+grep -E '^!hooks/(\*\*)?$' .goat-flow/.gitignore
+grep -E '^!plans/(\*\*)?$' .goat-flow/.gitignore
 ```
 
-Both greps must return matches. If either is missing, the installer either did not run or was an older version. Re-run `npx @blundergoat/goat-flow@latest install . --agent <id>` (it always overwrites `.goat-flow/.gitignore`), then `git add .goat-flow/skill-playbooks/ .goat-flow/skill-reference/` to track files that were previously hidden. The `goat-flow-gitignore` audit check enforces this.
+All greps must return matches. If any is missing, the installer either did not run or was an older version. Re-run `npx @blundergoat/goat-flow@latest install . --agent <id>` (it always overwrites `.goat-flow/.gitignore`), then `git add .goat-flow/learning-loop/ .goat-flow/skill-docs/ .goat-flow/hooks/ .goat-flow/plans/` to track files that were previously hidden. The `goat-flow-gitignore` audit check enforces this.
 
 ## Clean stale cross-agent skills
 
@@ -88,22 +90,24 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] goat/SKILL.md (dispatcher) exists
 - [ ] All 7 skills have matching `goat-flow-skill-version` tags
 - [ ] No installed goat skill has unlisted stale `references/*.md` files
-- [ ] `.goat-flow/skill-reference/README.md` exists
-- [ ] `.goat-flow/skill-reference/skill-preamble.md` exists
-- [ ] `.goat-flow/skill-reference/skill-conventions.md` exists
-- [ ] `.goat-flow/skill-playbooks/README.md` exists
-- [ ] `.goat-flow/skill-playbooks/browser-use.md` exists
-- [ ] `.goat-flow/skill-playbooks/changelog.md` exists
-- [ ] `.goat-flow/skill-playbooks/code-comments.md` exists
-- [ ] `.goat-flow/skill-playbooks/observability.md` exists
-- [ ] `.goat-flow/skill-playbooks/page-capture.md` exists
-- [ ] `.goat-flow/skill-playbooks/release-notes.md` exists
-- [ ] `.goat-flow/skill-playbooks/skill-quality-testing.md` exists
-- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md` exists
-- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md` exists
-- [ ] `.goat-flow/skill-playbooks/skill-quality-testing/deployment.md` exists
-- [ ] `.goat-flow/.gitignore` contains `!skill-playbooks/` and `!skill-playbooks/**` un-ignore entries
-- [ ] `.goat-flow/.gitignore` contains `!skill-reference/` and `!skill-reference/**` un-ignore entries
+- [ ] `.goat-flow/skill-docs/README.md` exists
+- [ ] `.goat-flow/skill-docs/skill-preamble.md` exists
+- [ ] `.goat-flow/skill-docs/skill-conventions.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/README.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/browser-use.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/changelog.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/code-comments.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/observability.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/page-capture.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
+- [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
+- [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists
+- [ ] `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` exists
+- [ ] `.goat-flow/skill-docs/skill-quality-testing/deployment.md` exists
+- [ ] `.goat-flow/.gitignore` contains `!learning-loop/` and `!learning-loop/**` un-ignore entries
+- [ ] `.goat-flow/.gitignore` contains `!skill-docs/` and `!skill-docs/**` un-ignore entries
+- [ ] `.goat-flow/.gitignore` contains `!hooks/` and `!hooks/**` un-ignore entries
+- [ ] `.goat-flow/.gitignore` contains `!plans/` and `!plans/**` un-ignore entries
 - [ ] Instruction file router table references the skills directory
 
 **Progress marker:** Append one line to the shared setup session log:

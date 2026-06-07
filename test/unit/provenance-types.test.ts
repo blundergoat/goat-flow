@@ -121,7 +121,7 @@ describe("validateProvenance", () => {
       source_urls: [],
       verified_on: "2026-04-17",
       normative_level: "MUST",
-      evidence_paths: [".goat-flow/lessons/verification.md"],
+      evidence_paths: [".goat-flow/learning-loop/lessons/verification.md"],
     };
     assert.deepEqual(validateProvenance(evidence), []);
   });
@@ -132,7 +132,9 @@ describe("validateProvenance", () => {
       source_urls: [],
       verified_on: "2026-05-06",
       normative_level: "MUST",
-      framework_evidence_paths: [".goat-flow/footguns/auditor.md"],
+      framework_evidence_paths: [
+        ".goat-flow/learning-loop/footguns/auditor.md",
+      ],
       target_evidence_paths: ["CLAUDE.md"],
     };
     assert.deepEqual(validateProvenance(evidence), []);

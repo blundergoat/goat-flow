@@ -1,7 +1,7 @@
 /**
  * Project-management HTTP route handlers for the dashboard server.
  *
- * Backs `/api/tasks` (read/write the active milestone plan), `/api/projects/list` (load and persist
+ * Backs `/api/plans` (read/write the active milestone plan), `/api/projects/list` (load and persist
  * the recent-projects list to disk), and `/api/projects/status` (classify adoption for one or many
  * paths). Mutating routes validate every incoming path through the route context before any write and
  * report failures as JSON status bodies rather than throwing. Persistence and identity normalisation
@@ -33,45 +33,37 @@ function readDashboardState(ctx: DashboardRouteContext) {
   return loadDashboardState(ctx.dashboardStateFile, ctx.legacyProjectsListFile);
 }
 
-/** Return or update milestone/task state for the selected project. */
-async function handleTasksRequest(
+function planWriteErrorStatus(message: string): number {
+  return message.includes("does not exist") || message.includes("not found")
+    ? 404
+    : 400;
+}
+
+async function writeDashboardActivePlan(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
   url: URL,
   res: ServerResponse,
-): Promise<boolean> {
-  if (url.pathname !== "/api/tasks") return false;
-
-  const requestedPlan = url.searchParams.get("plan");
-  if (req.method === "POST") {
-    try {
-      const projectPath = ctx.validatedPath(
-        url.searchParams.get("path"),
-        "write-local-state",
-      );
-      const planName = readActiveTaskPlanBody(await ctx.readBody(req));
-      writeActiveTaskPlan(projectPath, planName);
-      ctx.jsonResponse(
-        res,
-        200,
-        buildDashboardTaskState(projectPath, planName),
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const status =
-        message.includes("does not exist") || message.includes("not found")
-          ? 404
-          : 400;
-      ctx.jsonResponse(res, status, { error: message });
-    }
-    return true;
+): Promise<void> {
+  try {
+    const projectPath = ctx.validatedPath(
+      url.searchParams.get("path"),
+      "write-local-state",
+    );
+    const planName = readActiveTaskPlanBody(await ctx.readBody(req));
+    writeActiveTaskPlan(projectPath, planName);
+    ctx.jsonResponse(res, 200, buildDashboardTaskState(projectPath, planName));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    ctx.jsonResponse(res, planWriteErrorStatus(message), { error: message });
   }
+}
 
-  if (req.method !== "GET") {
-    ctx.jsonResponse(res, 405, { error: "Method not allowed" });
-    return true;
-  }
-
+function readDashboardPlans(
+  ctx: DashboardRouteContext,
+  url: URL,
+  res: ServerResponse,
+): void {
   try {
     const projectPath = ctx.validatedPath(
       url.searchParams.get("path"),
@@ -80,13 +72,37 @@ async function handleTasksRequest(
     ctx.jsonResponse(
       res,
       200,
-      buildDashboardTaskState(projectPath, requestedPlan),
+      buildDashboardTaskState(projectPath, url.searchParams.get("plan")),
     );
   } catch (err) {
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+/** Return or update milestone/plan state for the selected project. */
+async function handleTasksRequest(
+  ctx: DashboardRouteContext,
+  req: IncomingMessage,
+  url: URL,
+  res: ServerResponse,
+): Promise<boolean> {
+  if (url.pathname !== "/api/plans" && url.pathname !== "/api/tasks") {
+    return false;
+  }
+
+  if (req.method === "POST") {
+    await writeDashboardActivePlan(ctx, req, url, res);
+    return true;
+  }
+
+  if (req.method !== "GET") {
+    ctx.jsonResponse(res, 405, { error: "Method not allowed" });
+    return true;
+  }
+
+  readDashboardPlans(ctx, url, res);
   return true;
 }
 
@@ -235,7 +251,7 @@ function handleProjectsStatusRequest(
  * shared path validator, state-file locations, and evidence recorder.
  *
  * @param ctx - per-server dashboard route context with path validation, state-file paths, and IO hooks
- * @returns the tasks, projects-list, and projects-status handlers; each resolves true once it has
+ * @returns the plans, projects-list, and projects-status handlers; each resolves true once it has
  *   answered a matching request, or false to let another handler claim the URL
  */
 export function createProjectRouteHandlers(ctx: DashboardRouteContext) {

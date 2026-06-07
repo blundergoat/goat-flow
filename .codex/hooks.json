@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/deny-dangerous.sh",
+            "command": ".goat-flow/hooks/deny-dangerous.sh",
             "statusMessage": "Deny dangerous hook"
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/gruff-code-quality.sh",
+            "command": ".goat-flow/hooks/gruff-code-quality.sh",
             "statusMessage": "gruff code quality"
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/gruff-code-quality.sh",
+            "command": ".goat-flow/hooks/gruff-code-quality.sh",
             "statusMessage": "gruff code quality"
           }
         ]

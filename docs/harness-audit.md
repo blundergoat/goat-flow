@@ -102,7 +102,7 @@ Verification loops are consistently reported as the single highest-impact harnes
 
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
 - `commit-guidance` - commit guidance is present at the canonical `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
-- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-reference/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
+- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
 - `post-turn-hook-integrity` - metric. If a post-turn hook exists, reports whether it runs validation and whether it exits 0 unconditionally (advisory mode). Absence means there is no hook-based validation evidence; it is not runtime proof. Metric failures do not fail the harness scope, but they do lower the concern score so limited evidence is not displayed as 100%.
 
 **Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. goat-flow core does not ship a post-turn hook - the integrity check only reports on project-specific hooks if present.
@@ -119,7 +119,7 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 
 **Recovery checks (2):**
 
-- `milestone-tracking` - `.goat-flow/tasks/` directory exists. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
+- `milestone-tracking` - `.goat-flow/plans/` directory exists. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists. Does not count entries.
 
 **Not checked here:** entry counts, recency, content quality of task or session files. A fresh install passes.
@@ -136,7 +136,7 @@ A fresh install with zero footguns and zero lessons is a valid PASS. The audit o
 
 **Feedback Loop checks (2):**
 
-- `feedback-loop-active` - `.goat-flow/footguns/` and `.goat-flow/lessons/` directories both exist. Entry count is reported but never used as a failure condition.
-- `decisions-tracked` - `.goat-flow/decisions/` directory exists. Record count is reported informationally.
+- `feedback-loop-active` - `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/` directories both exist. Entry count is reported but never used as a failure condition.
+- `decisions-tracked` - `.goat-flow/learning-loop/decisions/` directory exists. Record count is reported informationally.
 
 **Not checked here:** entry counts, recency (`**Created:**` dates), content accuracy, staleness of semantic-anchor references in footgun entries, whether active/resolved statuses are accurate. All of these are content-quality judgments that belong in `quality`.

@@ -11,39 +11,39 @@ import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
 import { makeCtx, stubAgentFacts, stubFS } from "../fixtures/projects/index.js";
 
-const skillReferenceCheck = SETUP_CHECKS.find(
-  (check) => check.id === "instruction-file-skill-reference-pointer",
+const skillDocsCheck = SETUP_CHECKS.find(
+  (check) => check.id === "instruction-file-skill-docs-pointer",
 );
-assertExists(skillReferenceCheck);
+assertExists(skillDocsCheck);
 
-const requiredSkillReferenceFiles = [
+const requiredSkillDocsFiles = [
   // Meta references
-  ".goat-flow/skill-reference/README.md",
-  ".goat-flow/skill-reference/skill-preamble.md",
-  ".goat-flow/skill-reference/skill-conventions.md",
+  ".goat-flow/skill-docs/README.md",
+  ".goat-flow/skill-docs/skill-preamble.md",
+  ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks
-  ".goat-flow/skill-playbooks/README.md",
-  ".goat-flow/skill-playbooks/browser-use.md",
-  ".goat-flow/skill-playbooks/changelog.md",
-  ".goat-flow/skill-playbooks/code-comments.md",
-  ".goat-flow/skill-playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-playbooks/observability.md",
-  ".goat-flow/skill-playbooks/page-capture.md",
-  ".goat-flow/skill-playbooks/release-notes.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
-  ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-docs/playbooks/README.md",
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/changelog.md",
+  ".goat-flow/skill-docs/playbooks/code-comments.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/observability.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/skill-quality-testing/README.md",
+  ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+  ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+  ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
-/** Produce a minimal compliant instruction file for skill-reference audit fixtures. */
-function compliantSkillReferenceInstruction(): string {
+/** Produce a minimal compliant instruction file for skill-docs audit fixtures. */
+function compliantSkillDocsInstruction(): string {
   return `# CLAUDE.md
 
 ## Execution Loop: READ -> SCOPE -> ACT -> VERIFY
 
 ### READ
-Before declaring any tool or capability unavailable, read the matching playbook in .goat-flow/skill-playbooks/ and run that doc's "Availability Check" section verbatim.
+Before declaring any tool or capability unavailable, read the matching playbook in .goat-flow/skill-docs/playbooks/ and run that doc's "Availability Check" section verbatim.
 
 ### SCOPE
 
@@ -55,11 +55,11 @@ Before declaring any tool or capability unavailable, read the matching playbook 
 
 | Resource | Path |
 |----------|------|
-| Skill playbooks | .goat-flow/skill-playbooks/ |
+| Skill playbooks | .goat-flow/skill-docs/playbooks/ |
 `;
 }
 
-function makeSkillReferenceCtx(options: {
+function makeSkillDocsCtx(options: {
   dirPresent: boolean;
   readmePresent?: boolean;
   instructionContent?: string;
@@ -70,10 +70,10 @@ function makeSkillReferenceCtx(options: {
     "CLAUDE.md": options.instructionContent ?? "",
   };
   if (options.dirPresent) {
-    present.add(".goat-flow/skill-reference");
-    for (const file of requiredSkillReferenceFiles) {
+    present.add(".goat-flow/skill-docs");
+    for (const file of requiredSkillDocsFiles) {
       if (
-        file !== ".goat-flow/skill-reference/README.md" ||
+        file !== ".goat-flow/skill-docs/README.md" ||
         options.readmePresent !== false
       ) {
         present.add(file);
@@ -200,15 +200,15 @@ describe("audit build: harness scope fails on missing deny", () => {
   });
 });
 
-describe("audit build: skill-reference discoverability", () => {
-  it("fails when skill-reference exists but an instruction file lacks the required routing", () => {
-    const ctx = makeSkillReferenceCtx({
+describe("audit build: skill-docs discoverability", () => {
+  it("fails when skill-docs exists but an instruction file lacks the required routing", () => {
+    const ctx = makeSkillDocsCtx({
       dirPresent: true,
       instructionContent: "# CLAUDE.md\n",
     });
 
-    assert.equal(skillReferenceCheck.skip, undefined);
-    const result = skillReferenceCheck.run(ctx);
+    assert.equal(skillDocsCheck.skip, undefined);
+    const result = skillDocsCheck.run(ctx);
 
     assertExists(result);
     assert.match(result.message, /CLAUDE\.md/);
@@ -218,14 +218,14 @@ describe("audit build: skill-reference discoverability", () => {
   });
 
   it("fails when the path appears outside the READ rule and Router Table", () => {
-    const ctx = makeSkillReferenceCtx({
+    const ctx = makeSkillDocsCtx({
       dirPresent: true,
       instructionContent:
-        "# CLAUDE.md\n\n## Ask First\n\nBoundary: .goat-flow/skill-reference/\n",
+        "# CLAUDE.md\n\n## Ask First\n\nBoundary: .goat-flow/skill-docs/\n",
     });
 
-    assert.equal(skillReferenceCheck.skip, undefined);
-    const result = skillReferenceCheck.run(ctx);
+    assert.equal(skillDocsCheck.skip, undefined);
+    const result = skillDocsCheck.run(ctx);
 
     assertExists(result);
     assert.match(result.message, /READ rule/);
@@ -233,55 +233,55 @@ describe("audit build: skill-reference discoverability", () => {
   });
 
   it("passes when present instruction files contain the READ rule and Router Table pointer", () => {
-    const ctx = makeSkillReferenceCtx({
+    const ctx = makeSkillDocsCtx({
       dirPresent: true,
-      instructionContent: compliantSkillReferenceInstruction(),
+      instructionContent: compliantSkillDocsInstruction(),
     });
 
-    assert.equal(skillReferenceCheck.skip, undefined);
-    assert.equal(skillReferenceCheck.run(ctx), null);
+    assert.equal(skillDocsCheck.skip, undefined);
+    assert.equal(skillDocsCheck.run(ctx), null);
   });
 
   it("fails when the project has no shared reference/playbook pack", () => {
-    const ctx = makeSkillReferenceCtx({
+    const ctx = makeSkillDocsCtx({
       dirPresent: false,
       instructionContent: "# CLAUDE.md\n",
     });
 
-    assert.equal(skillReferenceCheck.skip, undefined);
-    const result = skillReferenceCheck.run(ctx);
+    assert.equal(skillDocsCheck.skip, undefined);
+    const result = skillDocsCheck.run(ctx);
 
     assertExists(result);
     assert.match(result.message, /Shared reference\/playbook pack/);
-    assert.match(result.message, /\.goat-flow\/skill-reference\/README\.md/);
-    assert.equal(result.evidence, ".goat-flow/skill-reference/README.md");
+    assert.match(result.message, /\.goat-flow\/skill-docs\/README\.md/);
+    assert.equal(result.evidence, ".goat-flow/skill-docs/README.md");
   });
 
-  it("fails when the skill-reference directory has no README index", () => {
-    const ctx = makeSkillReferenceCtx({
+  it("fails when the skill-docs directory has no README index", () => {
+    const ctx = makeSkillDocsCtx({
       dirPresent: true,
       readmePresent: false,
-      instructionContent: compliantSkillReferenceInstruction(),
+      instructionContent: compliantSkillDocsInstruction(),
     });
 
-    const result = skillReferenceCheck.run(ctx);
+    const result = skillDocsCheck.run(ctx);
 
     assertExists(result);
     assert.match(result.message, /Shared reference\/playbook pack/);
     assert.match(result.message, /README\.md/);
-    assert.equal(result.evidence, ".goat-flow/skill-reference/README.md");
+    assert.equal(result.evidence, ".goat-flow/skill-docs/README.md");
   });
 
   it("reports only present instruction files that dropped the pointer", () => {
-    const ctx = makeSkillReferenceCtx({
+    const ctx = makeSkillDocsCtx({
       dirPresent: true,
       instructionFiles: {
-        "CLAUDE.md": compliantSkillReferenceInstruction(),
+        "CLAUDE.md": compliantSkillDocsInstruction(),
         "AGENTS.md": "# AGENTS.md\n",
       },
     });
 
-    const result = skillReferenceCheck.run(ctx);
+    const result = skillDocsCheck.run(ctx);
 
     assertExists(result);
     assert.doesNotMatch(result.message, /CLAUDE\.md/);

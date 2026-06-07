@@ -495,11 +495,19 @@ async function main() {
 /** Writes a temporary goat-flow project because profiling needs a repeatable large-repo audit fixture. */
 function writeSyntheticProject(fileCount, agents = ["codex"]) {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-profile-"));
-  mkdirSync(join(root, ".goat-flow", "footguns"), { recursive: true });
-  mkdirSync(join(root, ".goat-flow", "lessons"), { recursive: true });
-  mkdirSync(join(root, ".goat-flow", "decisions"), { recursive: true });
+  mkdirSync(join(root, ".goat-flow", "learning-loop", "footguns"), {
+    recursive: true,
+  });
+  mkdirSync(join(root, ".goat-flow", "learning-loop", "lessons"), {
+    recursive: true,
+  });
+  mkdirSync(join(root, ".goat-flow", "learning-loop", "decisions"), {
+    recursive: true,
+  });
   mkdirSync(join(root, ".goat-flow", "scratchpad"), { recursive: true });
-  mkdirSync(join(root, ".goat-flow", "hook-lib"), { recursive: true });
+  mkdirSync(join(root, ".goat-flow", "hooks", "deny-dangerous"), {
+    recursive: true,
+  });
   mkdirSync(join(root, "src"), { recursive: true });
 
   writeFileSync(
@@ -518,7 +526,7 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
     "deny-dangerous-self-test.sh",
   ]) {
     writeFileSync(
-      join(root, ".goat-flow", "hook-lib", file),
+      join(root, ".goat-flow", "hooks", "deny-dangerous", file),
       "#!/usr/bin/env bash\nexit 0\n",
     );
   }
@@ -539,16 +547,16 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
   }
 
   if (agents.includes("codex")) {
-    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
     mkdirSync(join(root, ".agents", "skills", "goat"), { recursive: true });
     writeFileSync(join(root, "AGENTS.md"), "# AGENTS.md\n\nSynthetic.\n");
     writeFileSync(join(root, ".codex", "config.toml"), CODEX_CONFIG);
     writeFileSync(
       join(root, ".codex", "hooks.json"),
-      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/deny-dangerous.sh"}]}]}}\n',
+      '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".goat-flow/hooks/deny-dangerous.sh"}]}]}}\n',
     );
     writeFileSync(
-      join(root, ".codex", "hooks", "deny-dangerous.sh"),
+      join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(
@@ -559,6 +567,7 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
 
   if (agents.includes("copilot")) {
     mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
     mkdirSync(join(root, ".github", "skills", "goat"), { recursive: true });
     writeFileSync(
       join(root, ".github", "copilot-instructions.md"),
@@ -571,10 +580,10 @@ function writeSyntheticProject(fileCount, agents = ["codex"]) {
     );
     writeFileSync(
       join(root, ".github", "hooks", "hooks.json"),
-      '{"hooks":{"preToolUse":[{"command":".github/hooks/deny-dangerous.sh"}]}}\n',
+      '{"hooks":{"preToolUse":[{"command":".goat-flow/hooks/deny-dangerous.sh"}]}}\n',
     );
     writeFileSync(
-      join(root, ".github", "hooks", "deny-dangerous.sh"),
+      join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
       "#!/usr/bin/env bash\nexit 0\n",
     );
     writeFileSync(

@@ -37,17 +37,17 @@ const CLAUDE_DANGEROUS_PAYLOAD =
 
 const GENERATED_AGENT_SURFACES = [
   ".claude/settings.json",
-  ".claude/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous.sh",
   ".codex/hooks.json",
-  ".codex/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous.sh",
   ".agents/hooks.json",
-  ".agents/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous.sh",
   ".github/hooks/hooks.json",
-  ".github/hooks/deny-dangerous.sh",
-  ".goat-flow/hook-lib/patterns-shell.sh",
-  ".goat-flow/hook-lib/patterns-paths.sh",
-  ".goat-flow/hook-lib/patterns-writes.sh",
-  ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+  ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
 ];
 
 /** Writes a cleaned temporary target project for hook-registrar assertions. */
@@ -354,19 +354,16 @@ describe("hook registrar", () => {
 
       assertPresent(root, [
         ".codex/hooks.json",
-        ".codex/hooks/deny-dangerous.sh",
-        ".goat-flow/hook-lib/patterns-shell.sh",
-        ".goat-flow/hook-lib/patterns-paths.sh",
-        ".goat-flow/hook-lib/patterns-writes.sh",
-        ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+        ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
       ]);
       assertMissing(root, [
         ".claude/settings.json",
-        ".claude/hooks/deny-dangerous.sh",
         ".agents/hooks.json",
-        ".agents/hooks/deny-dangerous.sh",
         ".github/hooks/hooks.json",
-        ".github/hooks/deny-dangerous.sh",
       ]);
       assert.match(
         readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
@@ -375,7 +372,7 @@ describe("hook registrar", () => {
     });
   });
 
-  it("unignores hook-lib when enabling deny-dangerous on a stale goat-flow gitignore", () => {
+  it("unignores hooks when enabling deny-dangerous on a stale goat-flow gitignore", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -388,8 +385,8 @@ describe("hook registrar", () => {
         join(root, ".goat-flow", ".gitignore"),
         "utf-8",
       );
-      assert.match(gitignore, /^!hook-lib\/$/m);
-      assert.match(gitignore, /^!hook-lib\/\*\*$/m);
+      assert.match(gitignore, /^!hooks\/$/m);
+      assert.match(gitignore, /^!hooks\/\*\*$/m);
     });
   });
 
@@ -402,9 +399,9 @@ describe("hook registrar", () => {
 
       assertMissing(root, [
         ".codex/hooks.json",
-        ".codex/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.sh",
         ".agents/hooks.json",
-        ".agents/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.sh",
       ]);
     });
   });
@@ -418,7 +415,7 @@ describe("hook registrar", () => {
 
       assertPresent(root, [
         ".agents/hooks.json",
-        ".agents/hooks/gruff-code-quality.sh",
+        ".goat-flow/hooks/gruff-code-quality.sh",
       ]);
       const config = JSON.parse(
         readFileSync(join(root, ".agents", "hooks.json"), "utf-8"),

@@ -207,7 +207,7 @@ interface ProjectEntry {
   details: string;
 }
 
-/** Milestone summary from the selected project's `.goat-flow/tasks/`. */
+/** Milestone summary from the selected project's `.goat-flow/plans/`. */
 interface TaskMilestoneSummary {
   filename: string;
   path: string;
@@ -219,7 +219,7 @@ interface TaskMilestoneSummary {
   modifiedAt: string;
 }
 
-/** Top-level task directory summary from `.goat-flow/tasks/`. */
+/** Top-level plan directory summary from `.goat-flow/plans/`. */
 interface TaskPlanSummary extends Record<"active", boolean> {
   name: string;
   path: string;
@@ -227,8 +227,10 @@ interface TaskPlanSummary extends Record<"active", boolean> {
   milestoneCount: number;
 }
 
-/** Response from `/api/tasks` after reading or changing active task-plan state. */
+/** Response from `/api/plans` after reading or changing active plan state. */
 interface TaskState {
+  planRoot: string;
+  /** Deprecated compatibility alias for older `/api/tasks` callers. */
   taskRoot: string;
   exists: boolean;
   active: string | null;

@@ -164,10 +164,10 @@ export function stubConfig(
     valid: true,
     config: {
       version: AUDIT_VERSION,
-      footguns: { path: ".goat-flow/footguns/" },
-      lessons: { path: ".goat-flow/lessons/" },
-      decisions: { path: ".goat-flow/decisions/" },
-      tasks: { path: ".goat-flow/tasks/" },
+      footguns: { path: ".goat-flow/learning-loop/footguns/" },
+      lessons: { path: ".goat-flow/learning-loop/lessons/" },
+      decisions: { path: ".goat-flow/learning-loop/decisions/" },
+      plans: { path: ".goat-flow/plans/" },
       logs: { path: ".goat-flow/logs/" },
       agents: null,
       skills: { install: "all" },
@@ -200,9 +200,9 @@ export const STUB_AGENT_PROFILE: AgentProfile = {
   settingsFile: ".claude/settings.json",
   hookConfigFile: ".claude/settings.json",
   skillsDir: ".claude/skills",
-  hooksDir: ".claude/hooks",
+  hooksDir: ".goat-flow/hooks",
   denyMechanism: { type: "settings-deny", path: ".claude/settings.json" },
-  denyHookFile: ".claude/hooks/deny-dangerous.sh",
+  denyHookFile: ".goat-flow/hooks/deny-dangerous.sh",
   localPattern: "*/CLAUDE.md",
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
@@ -285,7 +285,7 @@ export function stubAgentFacts(
       denyBlocksPipeToShell: false,
       denyBlocksCloudDestructive: false,
       denyIsRegistered: true,
-      denyRegisteredPath: ".claude/hooks/deny-dangerous.sh",
+      denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,
@@ -306,7 +306,10 @@ export function stubAgentFacts(
 
 export const STUB_STRUCTURE: ProjectStructure = {
   required_files: [".goat-flow/config.yaml", ".goat-flow/architecture.md"],
-  required_dirs: [".goat-flow/footguns/", ".goat-flow/lessons/"],
+  required_dirs: [
+    ".goat-flow/learning-loop/footguns/",
+    ".goat-flow/learning-loop/lessons/",
+  ],
   skills: {
     canonical: [
       "goat",
@@ -366,7 +369,7 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
           totalRefs: 0,
           validRefs: 0,
           formatDiagnostic: null,
-          path: ".goat-flow/footguns/",
+          path: ".goat-flow/learning-loop/footguns/",
         },
         lessons: {
           exists: true,
@@ -377,12 +380,12 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
           duplicateSurfacePaths: [],
           buckets: [],
           formatDiagnostic: null,
-          path: ".goat-flow/lessons/",
+          path: ".goat-flow/learning-loop/lessons/",
         },
         decisions: {
           dirExists: true,
           fileCount: 0,
-          path: ".goat-flow/decisions/",
+          path: ".goat-flow/learning-loop/decisions/",
           hasRealContent: false,
         },
         config: {
@@ -494,10 +497,10 @@ export async function writeAuditSetupFixture(
   for (const dir of manifest.required_dirs) {
     if (
       !options.skillReferenceDir &&
-      (dir.startsWith(".goat-flow/skill-reference/") ||
-        dir.startsWith(".goat-flow/skill-playbooks/") ||
-        dir === ".goat-flow/skill-reference/" ||
-        dir === ".goat-flow/skill-playbooks/")
+      (dir.startsWith(".goat-flow/skill-docs/") ||
+        dir.startsWith(".goat-flow/skill-docs/playbooks/") ||
+        dir === ".goat-flow/skill-docs/" ||
+        dir === ".goat-flow/skill-docs/playbooks/")
     ) {
       continue;
     }
@@ -507,14 +510,14 @@ export async function writeAuditSetupFixture(
   for (const file of manifest.required_files) {
     if (
       !options.skillReferenceDir &&
-      (file.startsWith(".goat-flow/skill-reference/") ||
-        file.startsWith(".goat-flow/skill-playbooks/"))
+      (file.startsWith(".goat-flow/skill-docs/") ||
+        file.startsWith(".goat-flow/skill-docs/playbooks/"))
     ) {
       continue;
     }
     if (
       options.skillReferenceReadme === false &&
-      file === ".goat-flow/skill-reference/README.md"
+      file === ".goat-flow/skill-docs/README.md"
     ) {
       continue;
     }
@@ -522,7 +525,7 @@ export async function writeAuditSetupFixture(
       file === ".goat-flow/config.yaml"
         ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
         : file === ".goat-flow/.gitignore"
-          ? "*\n!.gitignore\n!skill-reference/\n!skill-reference/**\n!skill-playbooks/\n!skill-playbooks/**\n"
+          ? "*\n!.gitignore\n!learning-loop/\n!learning-loop/**\n!skill-docs/\n!skill-docs/**\n!hooks/\n!hooks/**\n!plans/\n!plans/**\n"
           : "# Stub\n";
     await writeProjectFile(root, file, content);
   }
@@ -533,7 +536,7 @@ export async function writeAuditSetupFixture(
 ## Execution Loop: READ -> SCOPE -> ACT -> VERIFY
 
 ### READ
-Before declaring any tool or capability unavailable, read the matching playbook in .goat-flow/skill-playbooks/ and run that doc's "Availability Check" section verbatim.
+Before declaring any tool or capability unavailable, read the matching playbook in .goat-flow/skill-docs/playbooks/ and run that doc's "Availability Check" section verbatim.
 
 ### SCOPE
 
@@ -545,7 +548,7 @@ Before declaring any tool or capability unavailable, read the matching playbook 
 
 | Resource | Path |
 |----------|------|
-| Skill playbooks | .goat-flow/skill-playbooks/ |
+| Skill playbooks | .goat-flow/skill-docs/playbooks/ |
 `
     : "# CLAUDE.md\n";
 

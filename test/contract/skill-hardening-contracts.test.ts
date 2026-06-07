@@ -79,7 +79,7 @@ describe("skill hardening contracts", () => {
       assert.match(body, /A path alone is not write approval/, path);
       assert.match(
         body,
-        /Do NOT mutate `\.goat-flow\/tasks\/\.active`, milestone status, checkboxes, or code/,
+        /Do NOT mutate `\.goat-flow\/plans\/\.active`, milestone status, checkboxes, or code/,
         path,
       );
     });
@@ -256,7 +256,7 @@ describe("skill hardening contracts", () => {
   it("keeps shared report-only and interrupt freeze contracts installed", () => {
     for (const path of [
       "workflow/skills/reference/skill-preamble.md",
-      ".goat-flow/skill-reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
     ]) {
       const body = read(path);
       assert.match(body, /Report-Only Skill Contract/, path);
@@ -276,7 +276,7 @@ describe("skill hardening contracts", () => {
 
     for (const path of [
       "workflow/skills/reference/skill-conventions.md",
-      ".goat-flow/skill-reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const body = read(path);
       assert.match(body, /Interrupt Freeze Protocol/, path);
@@ -288,7 +288,7 @@ describe("skill hardening contracts", () => {
   it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
     for (const path of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
-      ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+      ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ]) {
       const body = read(path);
       assert.match(body, /release gate before merging/, path);
@@ -347,9 +347,9 @@ describe("ADR-023 word budget tiers", () => {
   it("always-loaded shared references stay within the 1500-word cap", () => {
     for (const path of [
       "workflow/skills/reference/skill-preamble.md",
-      ".goat-flow/skill-reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
       "workflow/skills/reference/skill-conventions.md",
-      ".goat-flow/skill-reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const words = bodyWordCount(path);
       assert.ok(
@@ -362,7 +362,7 @@ describe("ADR-023 word budget tiers", () => {
   it("skill-quality-testing root index stays within the 400-word cap", () => {
     for (const path of [
       "workflow/skills/playbooks/skill-quality-testing.md",
-      ".goat-flow/skill-playbooks/skill-quality-testing.md",
+      ".goat-flow/skill-docs/skill-quality-testing/README.md",
     ]) {
       const words = bodyWordCount(path);
       assert.ok(
@@ -375,11 +375,11 @@ describe("ADR-023 word budget tiers", () => {
   it("progressive reference packs stay within the 3000-word cap per file", () => {
     for (const path of [
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
-      ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
       "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
-      ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md",
+      ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
-      ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md",
+      ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ]) {
       const words = bodyWordCount(path);
       assert.ok(

@@ -29,10 +29,10 @@ const LEGACY_DENY_HOOK_FILES = [
 
 const DENY_HOOK_TEMPLATE_FILES = [
   "deny-dangerous.sh",
-  "hook-lib/patterns-shell.sh",
-  "hook-lib/patterns-paths.sh",
-  "hook-lib/patterns-writes.sh",
-  "hook-lib/deny-dangerous-self-test.sh",
+  "deny-dangerous/patterns-shell.sh",
+  "deny-dangerous/patterns-paths.sh",
+  "deny-dangerous/patterns-writes.sh",
+  "deny-dangerous/deny-dangerous-self-test.sh",
 ];
 
 interface SpawnFailure {
@@ -210,15 +210,24 @@ function checkLegacyHookDrift(
   agentId: string,
   hooksDir: string,
 ): AuditFailure | null {
-  for (const legacyFile of LEGACY_DENY_HOOK_FILES) {
-    const legacyRelPath = join(hooksDir, legacyFile);
-    if (ctx.fs.readFile(legacyRelPath) !== null) {
-      return {
-        check: "Agent deny mechanism",
-        message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.sh`,
-        evidence: evidencePath(legacyRelPath),
-        howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.sh.`,
-      };
+  const candidateDirs = [
+    hooksDir,
+    ".claude/hooks",
+    ".codex/hooks",
+    ".agents/hooks",
+    ".github/hooks",
+  ];
+  for (const candidateDir of candidateDirs) {
+    for (const legacyFile of LEGACY_DENY_HOOK_FILES) {
+      const legacyRelPath = join(candidateDir, legacyFile);
+      if (ctx.fs.readFile(legacyRelPath) !== null) {
+        return {
+          check: "Agent deny mechanism",
+          message: `${legacyFile} is a legacy guardrail hook for ${agentId}; migrate to deny-dangerous.sh`,
+          evidence: evidencePath(legacyRelPath),
+          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} install . --agent ${agentId}\` to remove legacy guard hooks and install deny-dangerous.sh.`,
+        };
+      }
     }
   }
   return null;
@@ -231,7 +240,7 @@ function checkLegacyHookDrift(
  * unreadable, so drift checks can treat "no canonical template" and "installed copy
  * differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
  *
- * @param templateFile - path under `workflow/hooks/` (e.g. `deny-dangerous.sh` or `hook-lib/patterns-shell.sh`)
+ * @param templateFile - path under `workflow/hooks/` (e.g. `deny-dangerous.sh` or `deny-dangerous/patterns-shell.sh`)
  * @returns the template's UTF-8 contents, or null when the file is missing or unreadable
  */
 function readHookTemplateContent(templateFile: string): string | null {
@@ -248,8 +257,8 @@ function installedTemplateRelPath(
   hooksDir: string,
   templateFile: string,
 ): string {
-  return templateFile.startsWith("hook-lib/")
-    ? join(".goat-flow", templateFile)
+  return templateFile.startsWith("deny-dangerous/")
+    ? join(".goat-flow", "hooks", templateFile)
     : join(hooksDir, templateFile);
 }
 
@@ -314,7 +323,8 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
     if (!agentFacts.agent.hooksDir) continue;
     const denyRelPath = join(
       ".goat-flow",
-      "hook-lib",
+      "hooks",
+      "deny-dangerous",
       "deny-dangerous-self-test.sh",
     );
     const content = ctx.fs.readFile(denyRelPath);
@@ -356,7 +366,7 @@ function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
         message: `deny-dangerous-self-test.sh --self-test=smoke failed for ${agentFacts.agent.id}`,
         evidence: evidencePath(denyRelPath),
         howToFix:
-          "Run `bash .goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test=smoke` to see which cases fail.",
+          "Run `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke` to see which cases fail.",
       };
     }
   }
@@ -737,8 +747,8 @@ export const agentDenyMechanism: BuildCheck = {
   name: "Agent deny mechanism",
   scope: "agent",
   provenance: incidentProvenance([
-    ".goat-flow/footguns/auditor.md",
-    ".goat-flow/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/auditor.md",
+    ".goat-flow/learning-loop/footguns/hooks.md",
   ]),
   /** Run the Agent deny mechanism check. */
   run: (ctx) => {

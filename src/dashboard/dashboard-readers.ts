@@ -718,7 +718,7 @@ function readFiniteNumber(rawValue: unknown, fallback = 0): number {
     : fallback;
 }
 
-/** Read one top-level task directory summary from `/api/tasks`. */
+/** Read one top-level plan directory summary from `/api/plans`. */
 function readTaskPlanSummary(rawPlan: unknown): TaskPlanSummary | null {
   if (!isRecord(rawPlan)) return null;
   const name = readString(rawPlan.name);
@@ -733,7 +733,7 @@ function readTaskPlanSummary(rawPlan: unknown): TaskPlanSummary | null {
   };
 }
 
-/** Read one milestone summary from `/api/tasks`. */
+/** Read one milestone summary from `/api/plans`. */
 function readTaskMilestoneSummary(
   rawMilestone: unknown,
 ): TaskMilestoneSummary | null {
@@ -754,11 +754,13 @@ function readTaskMilestoneSummary(
   };
 }
 
-/** Read the selected project's `.goat-flow/tasks/` state. */
+/** Read the selected project's `.goat-flow/plans/` state. */
 function readTaskState(rawState: unknown): TaskState {
   const payload = readRecord(rawState, "Tasks response");
+  const planRoot = readString(payload.planRoot, readString(payload.taskRoot));
   return {
-    taskRoot: readString(payload.taskRoot),
+    planRoot,
+    taskRoot: planRoot,
     exists: payload.exists === true,
     active: readString(payload.active) || null,
     activeExists: payload.activeExists === true,

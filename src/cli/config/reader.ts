@@ -21,6 +21,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   "agents",
   "skills",
   "line-limits",
+  "plans",
   "toolchain",
   "userRole",
   "telemetry",
@@ -36,10 +37,10 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
 /** Built-in default values used when config.yaml is missing or omits fields. */
 const CONFIG_DEFAULTS: GoatFlowConfig = {
   version: AUDIT_VERSION,
-  footguns: { path: ".goat-flow/footguns/" },
-  lessons: { path: ".goat-flow/lessons/" },
-  decisions: { path: ".goat-flow/decisions/" },
-  tasks: { path: ".goat-flow/tasks/" },
+  footguns: { path: ".goat-flow/learning-loop/footguns/" },
+  lessons: { path: ".goat-flow/learning-loop/lessons/" },
+  decisions: { path: ".goat-flow/learning-loop/decisions/" },
+  plans: { path: ".goat-flow/plans/" },
   logs: { path: ".goat-flow/logs/" },
   agents: null,
   skills: { install: "all" },
@@ -73,7 +74,7 @@ function cloneDefaults(): GoatFlowConfig {
     footguns: { ...CONFIG_DEFAULTS.footguns },
     lessons: { ...CONFIG_DEFAULTS.lessons },
     decisions: { ...CONFIG_DEFAULTS.decisions },
-    tasks: { ...CONFIG_DEFAULTS.tasks },
+    plans: { ...CONFIG_DEFAULTS.plans },
     logs: { ...CONFIG_DEFAULTS.logs },
     agents: CONFIG_DEFAULTS.agents,
     skills: { install: CONFIG_DEFAULTS.skills.install },
@@ -217,7 +218,7 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   if (!isRecord(raw)) return merged;
 
   mergeVersion(raw.version, merged);
-  // Path overrides for footguns/lessons/decisions/tasks/logs removed in v1.1.0.
+  // Path overrides for footguns/lessons/decisions/plans/logs removed in v1.1.0.
   // Canonical paths (.goat-flow/*) are always used.
   // Legacy `agents:` is intentionally ignored. Use `--agent <id>` to scope commands.
   mergeSkills(raw.skills, merged);

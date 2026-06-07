@@ -45,7 +45,7 @@ Default destinations:
 | Artifact | Destination |
 |---|---|
 | Skill | `.claude/skills/<name>/SKILL.md` |
-| Playbook/reference | `.goat-flow/skill-playbooks/<name>.md` |
+| Playbook/reference | `.goat-flow/skill-docs/playbooks/<name>.md` |
 
 The command does not edit `workflow/manifest.json`.
 

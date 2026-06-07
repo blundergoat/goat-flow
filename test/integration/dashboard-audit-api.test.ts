@@ -265,7 +265,7 @@ describe("dashboard /api/audit", () => {
 
       await writeProjectFile(
         project.root,
-        ".codex/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous.sh",
         "#!/usr/bin/env bash\nexit 1\n",
       );
       const afterHook = await fetchProfiledAudit(project.root);
@@ -278,13 +278,13 @@ describe("dashboard /api/audit", () => {
 
       await writeProjectFile(
         project.root,
-        ".goat-flow/lessons/cache.md",
+        ".goat-flow/learning-loop/lessons/cache.md",
         "# Lesson: Cache\nAAAA\n",
       );
       await fetchProfiledAudit(project.root);
       await writeProjectFile(
         project.root,
-        ".goat-flow/lessons/cache.md",
+        ".goat-flow/learning-loop/lessons/cache.md",
         "# Lesson: Cache\nBBBB\n",
       );
       const afterLesson = await fetchProfiledAudit(project.root);

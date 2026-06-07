@@ -20,7 +20,7 @@ const RED_FLAG_CLAUSES = [
   "Fix verification",
   "Hedged claims",
 ] as const;
-const RATIONALISATIONS_PATH = ".goat-flow/skill-reference/skill-preamble.md";
+const RATIONALISATIONS_PATH = ".goat-flow/skill-docs/skill-preamble.md";
 const RATIONALISATIONS_HEADING = "Rationalisations to reject";
 
 function verificationDetails(
@@ -69,8 +69,8 @@ const hooksRegistered: HarnessCheck = {
     "integrity",
     [
       "docs/harness-audit.md",
-      ".goat-flow/footguns/hooks.md",
-      ".goat-flow/footguns/auditor.md",
+      ".goat-flow/learning-loop/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/auditor.md",
     ],
     "incident",
   ),
@@ -280,8 +280,8 @@ const evidenceBeforeClaims: HarnessCheck = {
     [
       "CLAUDE.md",
       RATIONALISATIONS_PATH,
-      ".goat-flow/lessons/review-feedback.md",
-      ".goat-flow/lessons/agent-behavior.md",
+      ".goat-flow/learning-loop/lessons/review-feedback.md",
+      ".goat-flow/learning-loop/lessons/agent-behavior.md",
     ],
     "incident",
     EVIDENCE_BEFORE_CLAIMS_VERIFIED_ON,
@@ -362,7 +362,7 @@ const postTurnHookIntegrity: HarnessCheck = {
   type: "metric",
   provenance: verificationProvenance("metric", [
     "docs/harness-audit.md",
-    ".goat-flow/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/hooks.md",
   ]),
   /** Run the Post-turn hook integrity check. */
   run: (ctx) => {

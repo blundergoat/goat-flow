@@ -6,10 +6,10 @@
 
 | If it's... | It belongs in... |
 |------------|------------------|
-| A lesson from an agent mistake | `.goat-flow/lessons/` |
-| A trap in the code/architecture | `.goat-flow/footguns/` |
-| A significant technical decision | `.goat-flow/decisions/` |
+| A lesson from an agent mistake | `.goat-flow/learning-loop/lessons/` |
+| A trap in the code/architecture | `.goat-flow/learning-loop/footguns/` |
+| A significant technical decision | `.goat-flow/learning-loop/decisions/` |
 | A session wrap-up summary | `.goat-flow/logs/sessions/` |
-| A plan or milestone file | `.goat-flow/tasks/` (also local-only) |
+| A plan or milestone file | `.goat-flow/plans/` (also local-only) |
 
 Drop anything here that helps you get the job done right now and doesn't need to be part of the project's history.

@@ -1,6 +1,6 @@
 /**
  * Raw manifest-JSON layer: reads `workflow/manifest.json`, validates its
- * optional skill-reference shape, and resolves the required-instruction-section
+ * optional skill-docs shape, and resolves the required-instruction-section
  * list that harness checks compare agent instruction files against.
  *
  * Split out of `manifest.ts` to break an import cycle. `manifest.ts` imports
@@ -41,7 +41,7 @@ function validateOneSkillReference(
 }
 
 /**
- * Validate optional skill-reference metadata before consumers read it.
+ * Validate optional skill-docs metadata before consumers read it.
  *
  * Throws `ManifestValidationError` on malformed references because stale or
  * misspelled reference lists change what the installer copies.
@@ -77,7 +77,7 @@ export function validateSkillReferenceSchema(json: ManifestJson): void {
 }
 
 /**
- * Read and skill-reference-validate the on-disk `workflow/manifest.json`.
+ * Read and skill-docs-validate the on-disk `workflow/manifest.json`.
  *
  * @returns the parsed manifest JSON - throws on a missing or malformed file, or
  *   when `skills.references` is structurally invalid (`ManifestValidationError`).

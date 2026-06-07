@@ -56,13 +56,13 @@ The setup audit requires these phrases. Paste or adapt them with the required wo
 
 READ step:
 
-> Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+> Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
 
 Router Table row:
 
 | Resource | Path |
 |----------|------|
-| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
 
 ## Optional: project infrastructure
 
@@ -86,8 +86,8 @@ After writing/updating the instruction file:
 - [ ] Router Table is the final section
 - [ ] Examples and boundaries reference real project files
 - [ ] Workspace boundary guidance distinguishes controlling goat-flow workspace from selected target project without hardcoded absolute paths
-- [ ] READ step keeps the canonical skill-playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-playbooks/`, and "Availability Check"
-- [ ] Router table includes the canonical `.goat-flow/skill-playbooks/` tool playbooks row
+- [ ] READ step keeps the canonical skill-docs/playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-docs/playbooks/`, and "Availability Check"
+- [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
 - [ ] `docs/coding-standards/git-commit.md` exists with project-specific commit guidance or the generated insufficient-history stub header, and the instruction file references it under `## Commit Messages`
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost

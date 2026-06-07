@@ -28,30 +28,30 @@ function extractPackagedDenyHookFacts(): ReturnType<typeof extractHookFacts> {
     "utf8",
   );
   const secretTemplate = readFileSync(
-    resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-paths.sh"),
+    resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/patterns-paths.sh"),
     "utf8",
   );
   const destructiveTemplate = readFileSync(
-    resolve(PROJECT_ROOT, "workflow/hooks/hook-lib/patterns-shell.sh"),
+    resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/patterns-shell.sh"),
     "utf8",
   );
   const fs = stubFS({
     exists: (path) =>
       [
-        ".claude/hooks/deny-dangerous.sh",
-        ".goat-flow/hook-lib/patterns-shell.sh",
-        ".goat-flow/hook-lib/patterns-paths.sh",
-        ".goat-flow/hook-lib/patterns-writes.sh",
-        ".goat-flow/hook-lib/deny-dangerous-self-test.sh",
+        ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
       ].includes(path),
     readFile: (path) => {
-      if (path === ".goat-flow/hook-lib/patterns-shell.sh") {
+      if (path === ".goat-flow/hooks/deny-dangerous/patterns-shell.sh") {
         return destructiveTemplate;
       }
-      if (path === ".goat-flow/hook-lib/patterns-paths.sh") {
+      if (path === ".goat-flow/hooks/deny-dangerous/patterns-paths.sh") {
         return secretTemplate;
       }
-      if (path === ".claude/hooks/deny-dangerous.sh") {
+      if (path === ".goat-flow/hooks/deny-dangerous.sh") {
         return gitTemplate;
       }
       return null;
@@ -72,7 +72,9 @@ describe("hook fact extraction", () => {
               hooks: {
                 Stop: [{ hooks: [{ command: ".claude/hooks/post-turn.sh" }] }],
                 PreToolUse: [
-                  { hooks: [{ command: ".claude/hooks/deny-dangerous.sh" }] },
+                  {
+                    hooks: [{ command: ".goat-flow/hooks/deny-dangerous.sh" }],
+                  },
                 ],
               },
             }
@@ -87,7 +89,7 @@ describe("hook fact extraction", () => {
       hooks: {
         Stop: [{ hooks: [{ command: ".claude/hooks/post-turn.sh" }] }],
         PreToolUse: [
-          { hooks: [{ command: ".claude/hooks/deny-dangerous.sh" }] },
+          { hooks: [{ command: ".goat-flow/hooks/deny-dangerous.sh" }] },
         ],
       },
     };
@@ -100,7 +102,7 @@ describe("hook fact extraction", () => {
     });
     assert.deepEqual(buildDenyRegistration(STUB_AGENT_PROFILE, config.parsed), {
       denyIsRegistered: true,
-      denyRegisteredPath: ".claude/hooks/deny-dangerous.sh",
+      denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
     });
     assert.equal(extractSkillFacts(fs, STUB_AGENT_PROFILE).hasDispatcher, true);
   });

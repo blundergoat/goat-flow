@@ -174,7 +174,7 @@ describe("validateProvenance: optional evidence_paths existence (fix for blocker
     source_urls: [],
     verified_on: "2026-04-20",
     normative_level: "MUST" as const,
-    evidence_paths: [".goat-flow/footguns/does-not-exist.md"],
+    evidence_paths: [".goat-flow/learning-loop/footguns/does-not-exist.md"],
   };
 
   it("returns no errors when pathExists is undefined (packaged mode)", () => {

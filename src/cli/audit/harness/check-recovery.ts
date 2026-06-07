@@ -47,33 +47,33 @@ const milestoneTracking: HarnessCheck = {
   provenance: recoveryProvenance("integrity", [
     "docs/harness-audit.md",
     ".goat-flow/architecture.md",
-    ".goat-flow/tasks/README.md",
+    ".goat-flow/plans/README.md",
   ]),
   /** Run the Milestone tracking configured check. */
   run: (ctx) => {
-    const tasksDir = ".goat-flow/tasks";
+    const plansDir = ".goat-flow/plans";
     const buildDetails = (fileCount: number): HarnessCheckDetails => ({
       recovery: ctx.agents.map((af) => ({
         agent: af.agent.id,
-        dir: tasksDir,
+        dir: plansDir,
         fileCount,
       })),
     });
-    if (!ctx.fs.exists(tasksDir)) {
+    if (!ctx.fs.exists(plansDir)) {
       return fail(
-        ["No tasks directory found"],
-        ["Create .goat-flow/tasks/ for milestone tracking"],
+        ["No plans directory found"],
+        ["Create .goat-flow/plans/ for milestone tracking"],
         [
-          "Create .goat-flow/tasks/ so optional task, roadmap, and milestone notes have a stable home.",
+          "Create .goat-flow/plans/ so optional task, roadmap, and milestone notes have a stable home.",
         ],
         buildDetails(0),
       );
     }
-    const allMdFiles = collectMarkdownFiles(ctx.fs, tasksDir);
+    const allMdFiles = collectMarkdownFiles(ctx.fs, plansDir);
     if (allMdFiles.length === 0) {
       return pass(
         [
-          "Tasks directory exists (empty - valid for new projects; task tracking is optional)",
+          "Plans directory exists (empty - valid for new projects; plan tracking is optional)",
         ],
         buildDetails(0),
       );
@@ -85,7 +85,7 @@ const milestoneTracking: HarnessCheck = {
     }
     const totalMarkers = markerCounts.reduce((sum, count) => sum + count, 0);
     const findings = [
-      `Tasks directory exists with ${allMdFiles.length} markdown file(s) and ${totalMarkers} checkbox marker(s)`,
+      `Plans directory exists with ${allMdFiles.length} markdown file(s) and ${totalMarkers} checkbox marker(s)`,
       "Task and milestone content is optional local workflow state; checkbox completion, status, testing gates, and roadmap progress are not audited.",
     ];
     return pass(findings, buildDetails(allMdFiles.length));

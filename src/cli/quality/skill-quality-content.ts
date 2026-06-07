@@ -88,14 +88,20 @@ function referenceArtifactId(
   return id;
 }
 
+function sharedReferenceName(refDir: string, filename: string): string | null {
+  if (filename !== "README.md") return filename.replace(/\.md$/, "");
+  const directoryName = basename(refDir);
+  return directoryName === "skill-quality-testing" ? directoryName : null;
+}
+
 /**
  * Build the synthetic path used when uploaded markdown is evaluated as a reference.
  *
  * @param name - user-supplied artifact name; used only to label the synthetic record, never to read disk.
- * @returns a project-relative playbook path under `.goat-flow/skill-playbooks/`; no file is created.
+ * @returns a project-relative playbook path under `.goat-flow/skill-docs/playbooks/`; no file is created.
  */
 export function uploadedSharedReferencePath(name: string): string {
-  return `.goat-flow/skill-playbooks/${name}.md`;
+  return `.goat-flow/skill-docs/playbooks/${name}.md`;
 }
 
 /** Forward-slash a relative project path so artifact records render the same
@@ -183,8 +189,8 @@ export function discoverArtifacts(
     for (const entry of readdirSync(refDir, { withFileTypes: true })) {
       const filePath = join(refDir, entry.name);
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-      if (entry.name === "README.md" || !isSafeEntry(filePath)) continue;
-      const name = entry.name.replace(/\.md$/, "");
+      const name = sharedReferenceName(refDir, entry.name);
+      if (name === null || !isSafeEntry(filePath)) continue;
       referenceCandidates.push({
         name,
         path: relPosix(projectRoot, filePath),

@@ -7,8 +7,8 @@ goat-flow-skill-version: "1.9.2"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-reference/skill-preamble.md` for shared conventions.
-On full-depth, also read `.goat-flow/skill-reference/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
+On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
@@ -33,11 +33,11 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Size sizing (before Pass 1):** measure the diff. If it exceeds **20 files OR 3000 changed lines**, propose chunking by file group and ask. If the user proceeds un-chunked, record as `large-diff-unchunked` for Review Integrity.
 
-**Spec source (opt-in):** if `.goat-flow/tasks/.active` exists, read it to find the active plan subdir and scan for a milestone file with `Status: in-progress` or `testing-gate`. If found, offer: "Include Spec Drift check against M[NN] exit criteria?" Default: skip for quick, offer for full. Note the choice in Review Integrity.
+**Spec source (opt-in):** if `.goat-flow/plans/.active` exists, read it to find the active plan subdir and scan for a milestone file with `Status: in-progress` or `testing-gate`. If found, offer: "Include Spec Drift check against M[NN] exit criteria?" Default: skip for quick, offer for full. Note the choice in Review Integrity.
 
 **Temporary review artifacts:** write under `.goat-flow/logs/review/` only with a random suffix (`goat-review-<artifact>.<random>.txt`). Never write to repo root.
 
-**Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
+**Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/learning-loop/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 
 ### Review Scope Snapshot (mandatory)
 
@@ -54,7 +54,7 @@ If any value is undetermined, write `unknown` and add a degradation flag.
 
 ### Step 0.5 - Intent Reconstruction (mandatory)
 
-Before Pass 1, reconstruct WHY this change exists. Read in priority order: (1) PR description and linked issues via `gh pr view <ref> --json body,title` and `gh issue view <n>`, (2) commit message of HEAD, (3) active milestone exit criteria from `.goat-flow/tasks/.active`. If none exist, flag `intent-unstated` in Review Integrity.
+Before Pass 1, reconstruct WHY this change exists. Read in priority order: (1) PR description and linked issues via `gh pr view <ref> --json body,title` and `gh issue view <n>`, (2) commit message of HEAD, (3) active milestone exit criteria from `.goat-flow/plans/.active`. If none exist, flag `intent-unstated` in Review Integrity.
 
 Output three-bullet reconstruction:
 - **Stated intent:** what the change claims to do
@@ -135,7 +135,7 @@ Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
 
 ### Footgun Cross-Check
 
-Check each finding with targeted grep-first retrieval against `.goat-flow/footguns/`. When a direct match exists, include it. Omit the footgun tag when no direct match is found after the one allowed reword.
+Check each finding with targeted grep-first retrieval against `.goat-flow/learning-loop/footguns/`. When a direct match exists, include it. Omit the footgun tag when no direct match is found after the one allowed reword.
 
 **BLOCKING GATE:** Present findings plus Top 5 Risks and Review Integrity, then pause. If Pass 3 is pending, Ship Verdict must be `PENDING REFUTER/HUMAN`; after response/refuter, present final verdict.
 
@@ -197,7 +197,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 **Both modes:**
 - MUST run external call-site search for any contract-change suspicion before resolving (Blast Radius Rule); prefer `rg`, fall back to host search or `grep -rniE`, and flag `coverage-degraded` if skipped
 - MUST tag every surfaced finding with `[SEVERITY:ACTION]`
-- MUST grep `.goat-flow/footguns/` per finding; omit the tag on no direct match after the allowed reword
+- MUST grep `.goat-flow/learning-loop/footguns/` per finding; omit the tag on no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order
 - MUST emit Review Integrity on every run
 - MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines

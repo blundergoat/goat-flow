@@ -85,7 +85,7 @@ The dispatcher classifies intent conversationally - not by keyword lookup. It as
 | Test gaps, coverage, verification planning | /goat-qa |
 | Critique a plan/assessment | /goat-critique |
 
-**Planning Route:** For planning requests, the dispatcher routes intent only: Hotfix → direct execution; anything larger with a clear build/plan verb → `/goat-plan`. Bare or ambiguous task paths are read-only context, not planning or implementation requests. `/goat-plan` owns `.goat-flow/tasks/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection. `/goat-plan` defaults to File-Write at Standard+ scope only when a clear build objective exists; analysis signals ("break this down for me", "how would you approach") trigger Read-Only Analysis mode instead.
+**Planning Route:** For planning requests, the dispatcher routes intent only: Hotfix → direct execution; anything larger with a clear build/plan verb → `/goat-plan`. Bare or ambiguous task paths are read-only context, not planning or implementation requests. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection. `/goat-plan` defaults to File-Write at Standard+ scope only when a clear build objective exists; analysis signals ("break this down for me", "how would you approach") trigger Read-Only Analysis mode instead.
 
 **Task path classifier examples:**
 
@@ -130,7 +130,7 @@ flowchart TD
     D4 -->|"CHECKPOINT"| Close["Closing\nLearning loop"]
 ```
 
-No fixes until human reviews diagnosis. Confidence levels: HIGH = reproduced, MEDIUM = traced but not reproduced, LOW = inferred from code reading. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
+No fixes until human reviews diagnosis. Confidence levels: HIGH = reproduced, MEDIUM = traced but not reproduced, LOW = inferred from code reading. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
 
 **Investigate mode:**
 
@@ -155,7 +155,7 @@ For onboarding ("I'm new to this project"), use investigate mode - covers stack 
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Small File-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/tasks/` in Small File-Write, File-Write, and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
+Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Small File-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/plans/` in Small File-Write, File-Write, and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
 
 ```mermaid
 flowchart TD
@@ -214,7 +214,7 @@ MUST NOT flag pre-existing issues as part of this change. MUST attempt to dispro
 
 ## /goat-critique
 
-Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 3 sub-agents, 5 phases. Rationale: `.goat-flow/decisions/ADR-021-goat-critique-full-mode-only.md`.
+Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 3 sub-agents, 5 phases. Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
 
 | Sub-agents | Phases |
 |------------|--------|
@@ -308,11 +308,11 @@ Every skill shares:
 - **Step 0** - context gathering before any work begins
 - **BLOCKING GATEs** - agent stops and waits for human decision
 - **CHECKPOINTs** - agent reports status and continues unless interrupted
-- **Footgun check** - cross-reference `.goat-flow/footguns/` for known traps
+- **Footgun check** - cross-reference `.goat-flow/learning-loop/footguns/` for known traps
 - **Learning loop** - log lessons and footguns after completion
 - **Ceremony scaling** - hotfixes skip ceremony, system changes get full treatment
 
-See `.goat-flow/skill-reference/skill-preamble.md` (installed) or `workflow/skills/reference/skill-preamble.md` (source template) for the canonical shared conventions.
+See `.goat-flow/skill-docs/skill-preamble.md` (installed) or `workflow/skills/reference/skill-preamble.md` (source template) for the canonical shared conventions.
 
 ## Where Skills Live
 

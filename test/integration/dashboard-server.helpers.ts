@@ -394,7 +394,7 @@ export async function makeDashboardCacheProject(): Promise<{
     hookLibFiles.set(
       file,
       await readFile(
-        join(PROJECT_PATH, "workflow", "hooks", "hook-lib", file),
+        join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous", file),
         "utf-8",
       ),
     );
@@ -402,15 +402,23 @@ export async function makeDashboardCacheProject(): Promise<{
   await writeProjectFile(
     root,
     ".goat-flow/.gitignore",
-    "*\n!.gitignore\n!config.yaml\n!hook-lib/\n!hook-lib/**\n!footguns/\n!footguns/**\n!lessons/\n!lessons/**\n",
+    "*\n!.gitignore\n!config.yaml\n!learning-loop/\n!learning-loop/**\n!skill-docs/\n!skill-docs/**\n!hooks/\n!hooks/**\n!plans/\n!plans/**\n",
   );
   await writeProjectFile(
     root,
     ".goat-flow/config.yaml",
     'version: "1.3.2"\nagents:\n  - codex\n',
   );
-  await writeProjectFile(root, ".goat-flow/footguns/README.md", "# Footguns\n");
-  await writeProjectFile(root, ".goat-flow/lessons/README.md", "# Lessons\n");
+  await writeProjectFile(
+    root,
+    ".goat-flow/learning-loop/footguns/README.md",
+    "# Footguns\n",
+  );
+  await writeProjectFile(
+    root,
+    ".goat-flow/learning-loop/lessons/README.md",
+    "# Lessons\n",
+  );
   await writeProjectFile(root, "AGENTS.md", "# AGENTS.md\nAlpha\n");
   await writeProjectFile(
     root,
@@ -421,11 +429,15 @@ export async function makeDashboardCacheProject(): Promise<{
   await writeProjectFile(
     root,
     ".codex/hooks.json",
-    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".codex/hooks/deny-dangerous.sh"}]}]}}\n',
+    '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":".goat-flow/hooks/deny-dangerous.sh"}]}]}}\n',
   );
-  await writeProjectFile(root, ".codex/hooks/deny-dangerous.sh", denyHook);
+  await writeProjectFile(root, ".goat-flow/hooks/deny-dangerous.sh", denyHook);
   for (const [file, content] of hookLibFiles) {
-    await writeProjectFile(root, `.goat-flow/hook-lib/${file}`, content);
+    await writeProjectFile(
+      root,
+      `.goat-flow/hooks/deny-dangerous/${file}`,
+      content,
+    );
   }
   return {
     root,
@@ -494,23 +506,23 @@ export async function makeDashboardSetupPromptProject(options: {
     hookLibFiles.set(
       file,
       await readFile(
-        join(PROJECT_PATH, "workflow", "hooks", "hook-lib", file),
+        join(PROJECT_PATH, "workflow", "hooks", "deny-dangerous", file),
         "utf-8",
       ),
     );
   }
   const commonDirs = [
-    ".goat-flow/footguns",
-    ".goat-flow/lessons",
-    ".goat-flow/tasks",
+    ".goat-flow/learning-loop/footguns",
+    ".goat-flow/learning-loop/lessons",
+    ".goat-flow/plans",
     ".goat-flow/logs/sessions",
-    ".goat-flow/skill-reference",
-    ".goat-flow/patterns",
+    ".goat-flow/skill-docs",
+    ".goat-flow/learning-loop/patterns",
     ".goat-flow/scratchpad",
-    ".goat-flow/hook-lib",
-    ".codex/hooks",
+    ".goat-flow/hooks/deny-dangerous",
   ];
-  if (options.decisionsDir) commonDirs.push(".goat-flow/decisions");
+  if (options.decisionsDir)
+    commonDirs.push(".goat-flow/learning-loop/decisions");
   for (const dir of commonDirs) {
     await mkdir(join(root, dir), { recursive: true });
   }
@@ -532,9 +544,17 @@ skills:
   );
   await writeProjectFile(root, ".goat-flow/code-map.md", "# Code Map\n");
   await writeProjectFile(root, ".goat-flow/glossary.md", "# Glossary\n");
-  await writeProjectFile(root, ".goat-flow/footguns/README.md", "# Footguns\n");
-  await writeProjectFile(root, ".goat-flow/lessons/README.md", "# Lessons\n");
-  await writeProjectFile(root, ".goat-flow/tasks/.gitignore", "*\n");
+  await writeProjectFile(
+    root,
+    ".goat-flow/learning-loop/footguns/README.md",
+    "# Footguns\n",
+  );
+  await writeProjectFile(
+    root,
+    ".goat-flow/learning-loop/lessons/README.md",
+    "# Lessons\n",
+  );
+  await writeProjectFile(root, ".goat-flow/plans/.gitignore", "*\n");
   await writeProjectFile(
     root,
     "docs/coding-standards/git-commit.md",
@@ -542,12 +562,12 @@ skills:
   );
   await writeProjectFile(
     root,
-    ".goat-flow/skill-reference/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
     "# Preamble\n",
   );
   await writeProjectFile(
     root,
-    ".goat-flow/skill-reference/skill-conventions.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
     "# Conventions\n",
   );
   await writeProjectFile(root, "AGENTS.md", dashboardSetupInstruction());
@@ -564,7 +584,7 @@ skills:
               hooks: [
                 {
                   type: "command",
-                  command: ".codex/hooks/deny-dangerous.sh",
+                  command: ".goat-flow/hooks/deny-dangerous.sh",
                 },
               ],
             },
@@ -575,9 +595,13 @@ skills:
       2,
     ),
   );
-  await writeProjectFile(root, ".codex/hooks/deny-dangerous.sh", denyHook);
+  await writeProjectFile(root, ".goat-flow/hooks/deny-dangerous.sh", denyHook);
   for (const [file, content] of hookLibFiles) {
-    await writeProjectFile(root, `.goat-flow/hook-lib/${file}`, content);
+    await writeProjectFile(
+      root,
+      `.goat-flow/hooks/deny-dangerous/${file}`,
+      content,
+    );
   }
   if (options.installSkills) {
     for (const skill of [

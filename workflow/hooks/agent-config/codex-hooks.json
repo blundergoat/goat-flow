@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/deny-dangerous.sh",
+            "command": ".goat-flow/hooks/deny-dangerous.sh",
             "statusMessage": "Deny dangerous hook"
           }
         ]

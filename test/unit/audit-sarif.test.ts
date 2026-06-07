@@ -233,7 +233,7 @@ describe("renderAuditSarif", () => {
             status: "fail",
             failure: {
               check: "Tasks directory",
-              message: "Missing .goat-flow/tasks/",
+              message: "Missing .goat-flow/plans/",
             },
             provenance: {
               ...BASE_PROVENANCE,

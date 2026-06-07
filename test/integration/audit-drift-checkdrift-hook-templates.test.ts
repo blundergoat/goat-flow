@@ -60,7 +60,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "content" &&
-            finding.path === ".codex/hooks/deny-dangerous.sh",
+            finding.path === ".goat-flow/hooks/deny-dangerous.sh",
         ),
         `expected .codex hook drift, findings=${JSON.stringify(report.findings)}`,
       );
@@ -86,7 +86,7 @@ describe("checkDrift: hook templates", () => {
         report.findings.some(
           (finding) =>
             finding.kind === "missing" &&
-            finding.path === ".codex/hooks/deny-dangerous.sh",
+            finding.path === ".goat-flow/hooks/deny-dangerous.sh",
         ),
         `expected missing .codex hook finding, findings=${JSON.stringify(report.findings)}`,
       );

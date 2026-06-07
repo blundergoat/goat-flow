@@ -321,7 +321,7 @@ describe("gruff-code-quality hook", () => {
     );
     assert.match(
       result.stdout,
-      /For triage: consult \.goat-flow\/skill-playbooks\/gruff-code-quality\.md/,
+      /For triage: consult \.goat-flow\/skill-docs\/playbooks\/gruff-code-quality\.md/,
     );
   });
 
@@ -386,7 +386,7 @@ describe("gruff-code-quality hook", () => {
     assert.doesNotMatch(result.stdout, /suppressed/);
     assert.match(
       result.stdout,
-      /For triage: consult \.goat-flow\/skill-playbooks\/gruff-code-quality\.md/,
+      /For triage: consult \.goat-flow\/skill-docs\/playbooks\/gruff-code-quality\.md/,
     );
   });
 
@@ -541,7 +541,7 @@ describe("gruff-code-quality hook", () => {
     );
     assert.match(
       result.stdout,
-      /For triage: consult \.goat-flow\/skill-playbooks\/gruff-code-quality\.md/,
+      /For triage: consult \.goat-flow\/skill-docs\/playbooks\/gruff-code-quality\.md/,
     );
     assert.deepEqual(readArgumentInvocations(root), [
       "analyse --format json --fail-on none --no-baseline --changed-ranges 9-9 --changed-scope symbol src/sample.py",

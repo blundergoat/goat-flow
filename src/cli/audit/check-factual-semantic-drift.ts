@@ -127,7 +127,7 @@ function driftCodeMapDashboardViews(
 /** Top-level committed playbooks, excluding README.md because it is the index; output is stable sorted. */
 function readTopLevelSkillPlaybooks(ctx: AuditContext): string[] {
   return ctx.fs
-    .listDir(".goat-flow/skill-playbooks")
+    .listDir(".goat-flow/skill-docs/playbooks")
     .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
     .sort();
 }
@@ -151,7 +151,7 @@ function driftSkillPlaybookInventory(
       path,
       message: `${path} omits top-level skill playbook(s): ${missing.join(", ")}. Live playbooks are ${actual.join(", ")}.`,
       suggestion:
-        "Update the committed skill-playbooks inventory to include every top-level .goat-flow/skill-playbooks/*.md playbook except README.md.",
+        "Update the committed skill-docs playbook inventory to include every top-level .goat-flow/skill-docs/playbooks/*.md playbook except README.md.",
     },
   ];
 }
@@ -421,7 +421,7 @@ function driftCopilotDecision(decisionText: string): ContentFinding[] {
       {
         severity: "warning",
         rule: "adr020-copilot-drift",
-        path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+        path: ".goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md",
         message:
           "ADR-020 still says Copilot support is accepted while the manifest-backed runtime supports only claude/codex/antigravity.",
         suggestion:
@@ -435,7 +435,7 @@ function driftCopilotDecision(decisionText: string): ContentFinding[] {
       {
         severity: "warning",
         rule: "adr020-copilot-drift",
-        path: ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+        path: ".goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md",
         message:
           "ADR-020 no longer reflects the live manifest-backed runtime: Copilot is shipped in code but the ADR is not accepted.",
         suggestion:
@@ -460,7 +460,7 @@ function driftScannerRemovalDecision(decisionText: string): ContentFinding[] {
     {
       severity: "warning",
       rule: "adr013-stale-implementation-detail",
-      path: ".goat-flow/decisions/ADR-013-remove-scanner-system.md",
+      path: ".goat-flow/learning-loop/decisions/ADR-013-remove-scanner-system.md",
       message:
         "ADR-013 still contains stale classifier states, file paths, or audit-count details from the pre-simplification implementation.",
       suggestion:
@@ -536,13 +536,13 @@ export function scanSemanticDrift(ctx: AuditContext): {
     findings.push(...driftSetupOverview(setupOverview));
 
   const copilotDecision = readAndTrack(
-    ".goat-flow/decisions/ADR-020-add-copilot-cli.md",
+    ".goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md",
   );
   if (copilotDecision !== null)
     findings.push(...driftCopilotDecision(copilotDecision));
 
   const scannerRemovalDecision = readAndTrack(
-    ".goat-flow/decisions/ADR-013-remove-scanner-system.md",
+    ".goat-flow/learning-loop/decisions/ADR-013-remove-scanner-system.md",
   );
   if (scannerRemovalDecision !== null)
     findings.push(...driftScannerRemovalDecision(scannerRemovalDecision));

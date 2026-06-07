@@ -37,16 +37,30 @@ describe("setup --apply installer", () => {
       true,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
-      true,
-    );
-    assert.equal(
-      existsSync(join(root, ".goat-flow", "hook-lib", "patterns-shell.sh")),
+      existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
       true,
     );
     assert.equal(
       existsSync(
-        join(root, ".goat-flow", "hook-lib", "deny-dangerous-self-test.sh"),
+        join(
+          root,
+          ".goat-flow",
+          "hooks",
+          "deny-dangerous",
+          "patterns-shell.sh",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "hooks",
+          "deny-dangerous",
+          "deny-dangerous-self-test.sh",
+        ),
       ),
       true,
     );
@@ -68,16 +82,340 @@ describe("setup --apply installer", () => {
       false,
     );
     assert.equal(
-      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
+      existsSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
       true,
     );
     assert.equal(
       existsSync(
-        join(root, ".goat-flow", "hook-lib", "deny-dangerous-self-test.sh"),
+        join(
+          root,
+          ".goat-flow",
+          "hooks",
+          "deny-dangerous",
+          "deny-dangerous-self-test.sh",
+        ),
       ),
       true,
     );
     assert.match(result.stdout, /removed stale hook/);
+  });
+
+  it("migrates legacy tasks workspace and config to plans without overwriting collisions", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".goat-flow", "tasks", "legacy"), {
+      recursive: true,
+    });
+    mkdirSync(join(root, ".goat-flow", "tasks", "current"), {
+      recursive: true,
+    });
+    mkdirSync(join(root, ".goat-flow", "plans", "current"), {
+      recursive: true,
+    });
+    writeFileSync(join(root, ".goat-flow", "tasks", ".active"), "legacy\n");
+    writeFileSync(
+      join(root, ".goat-flow", "tasks", "legacy", "M01-old.md"),
+      "# Old plan\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "tasks", "current", "M01-old.md"),
+      "# Colliding old plan\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "plans", "current", "M01-current.md"),
+      "# Current plan\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.9.0"',
+        "",
+        "tasks:",
+        '  path: ".goat-flow/tasks/"',
+        "",
+        "skills:",
+        "  install: all",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "plans", "legacy", "M01-old.md")),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(root, ".goat-flow", "plans", "current", "M01-current.md"),
+      ),
+      true,
+    );
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "tasks", "current", "M01-old.md")),
+      true,
+    );
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(config, /^plans:\n  path: "\.goat-flow\/plans\/"/m);
+    assert.doesNotMatch(config, /^tasks:/m);
+    assert.match(result.stdout, /legacy tasks config migrated to plans/);
+    assert.match(result.stdout, /target exists, left old entry in place/);
+  });
+
+  it("preserves custom legacy tasks config paths while renaming the key to plans", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.9.0"',
+        "",
+        "tasks:",
+        '  path: ".custom-goat-flow/milestones/"',
+        "",
+        "skills:",
+        "  install: all",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(
+      config,
+      /^plans:\n  path: "\.custom-goat-flow\/milestones\/"/m,
+    );
+    assert.doesNotMatch(config, /^tasks:/m);
+    assert.match(result.stdout, /legacy tasks config migrated to plans/);
+  });
+
+  it("migrates legacy learning-loop dirs without overwriting target collisions", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".goat-flow", "footguns"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "lessons"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "patterns"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "decisions"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow", "learning-loop", "footguns"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, ".goat-flow", "footguns", "legacy-only.md"),
+      "# Legacy footgun\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "footguns", "collision.md"),
+      "# Old collision\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "learning-loop", "footguns", "collision.md"),
+      "# Existing collision\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "lessons", "legacy-lesson.md"),
+      "# Legacy lesson\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "patterns", "legacy-pattern.md"),
+      "# Legacy pattern\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "decisions", "ADR-999-legacy.md"),
+      "# Legacy decision\n",
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(
+        join(root, ".goat-flow", "learning-loop", "footguns", "legacy-only.md"),
+      ),
+      true,
+    );
+    assert.equal(
+      readFileSync(
+        join(root, ".goat-flow", "learning-loop", "footguns", "collision.md"),
+        "utf-8",
+      ),
+      "# Existing collision\n",
+    );
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "footguns", "collision.md")),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "learning-loop",
+          "lessons",
+          "legacy-lesson.md",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "learning-loop",
+          "patterns",
+          "legacy-pattern.md",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "learning-loop",
+          "decisions",
+          "ADR-999-legacy.md",
+        ),
+      ),
+      true,
+    );
+    assert.match(result.stdout, /\.goat-flow\/footguns\/legacy-only\.md/);
+    assert.match(result.stdout, /target exists, left old entry in place/);
+  });
+
+  it("migrates old hook-lib content and prunes fat per-agent hook copies", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".goat-flow", "hook-lib"), { recursive: true });
+    mkdirSync(join(root, ".claude", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".agents", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "hook-lib", "local-policy-note.txt"),
+      "preserve me\n",
+    );
+    for (const legacyHook of [
+      join(root, ".claude", "hooks", "deny-dangerous.sh"),
+      join(root, ".codex", "hooks", "deny-dangerous.sh"),
+      join(root, ".agents", "hooks", "gruff-code-quality.sh"),
+      join(root, ".github", "hooks", "gruff-code-quality.sh"),
+    ]) {
+      writeFileSync(legacyHook, "#!/usr/bin/env bash\nexit 0\n");
+    }
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "hooks",
+          "deny-dangerous",
+          "local-policy-note.txt",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "hook-lib", "local-policy-note.txt")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(root, ".claude", "hooks", "deny-dangerous.sh")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "deny-dangerous.sh")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(root, ".agents", "hooks", "gruff-code-quality.sh")),
+      false,
+    );
+    assert.equal(
+      existsSync(join(root, ".github", "hooks", "gruff-code-quality.sh")),
+      false,
+    );
+    assert.match(
+      result.stdout,
+      /\.goat-flow\/hook-lib\/ → \.goat-flow\/hooks\/deny-dangerous\//,
+    );
+    assert.match(result.stdout, /removed stale per-agent copy/);
+  });
+
+  it("migrates legacy skill docs without overwriting target collisions", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".goat-flow", "skill-reference"), {
+      recursive: true,
+    });
+    mkdirSync(join(root, ".goat-flow", "skill-playbooks"), {
+      recursive: true,
+    });
+    mkdirSync(join(root, ".goat-flow", "skill-docs", "playbooks"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, ".goat-flow", "skill-reference", "local-doctrine.md"),
+      "# Local doctrine\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "skill-playbooks", "local-playbook.md"),
+      "# Local playbook\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "skill-playbooks", "collision.md"),
+      "# Old playbook collision\n",
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "skill-docs", "playbooks", "collision.md"),
+      "# Existing playbook collision\n",
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "skill-docs", "local-doctrine.md")),
+      true,
+    );
+    assert.equal(
+      existsSync(
+        join(
+          root,
+          ".goat-flow",
+          "skill-docs",
+          "playbooks",
+          "local-playbook.md",
+        ),
+      ),
+      true,
+    );
+    assert.equal(
+      readFileSync(
+        join(root, ".goat-flow", "skill-docs", "playbooks", "collision.md"),
+        "utf-8",
+      ),
+      "# Existing playbook collision\n",
+    );
+    assert.equal(
+      existsSync(join(root, ".goat-flow", "skill-playbooks", "collision.md")),
+      true,
+    );
+    assert.match(
+      result.stdout,
+      /\.goat-flow\/skill-reference\/local-doctrine\.md → \.goat-flow\/skill-docs\/local-doctrine\.md/,
+    );
+    assert.match(result.stdout, /target exists, left old entry in place/);
   });
 
   // Fixture writes the 1.8.0 split-hook layout because upgrade pruning must collapse files and registrations.

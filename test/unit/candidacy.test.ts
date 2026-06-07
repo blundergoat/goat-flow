@@ -122,7 +122,7 @@ describe("runCandidacyCheck - draft mode", () => {
     assertReferenceSubtype(result, "playbook");
     assert.ok(
       result.nextSteps.some((step) =>
-        step.action.includes(".goat-flow/skill-playbooks/<name>.md"),
+        step.action.includes(".goat-flow/skill-docs/playbooks/<name>.md"),
       ),
     );
   });
@@ -139,7 +139,7 @@ describe("runCandidacyCheck - draft mode", () => {
     assertReferenceSubtype(result, "index");
     assert.ok(
       result.nextSteps.some((step) =>
-        step.action.includes(".goat-flow/skill-playbooks/<name>.md"),
+        step.action.includes(".goat-flow/skill-docs/playbooks/<name>.md"),
       ),
     );
   });

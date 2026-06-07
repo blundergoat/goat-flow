@@ -328,6 +328,70 @@ prune_unlisted_hook_files() {
   done
 }
 
+move_file_no_overwrite() {
+  local src="$1" dst="$2"
+  [[ -f "$src" ]] || return 0
+  mkdir -p "$(dirname "$dst")"
+  if [[ -e "$dst" ]]; then
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $src → $dst (target exists, left old file in place)"
+    return 0
+  fi
+  mv "$src" "$dst"
+  COPIED=$((COPIED + 1))
+  echo "  ✓ $src → $dst"
+}
+
+migrate_dir_no_overwrite() {
+  local src="$1" dst="$2"
+  [[ -d "$src" ]] || return 0
+  if [[ ! -e "$dst" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    mv "$src" "$dst"
+    COPIED=$((COPIED + 1))
+    echo "  ✓ $src/ → $dst/"
+    return 0
+  fi
+
+  mkdir -p "$dst"
+  local moved=false
+  local entry base target
+  shopt -s dotglob nullglob
+  for entry in "$src"/*; do
+    base="$(basename "$entry")"
+    target="$dst/$base"
+    if [[ -e "$target" ]]; then
+      SKIPPED=$((SKIPPED + 1))
+      echo "  · $entry → $target (target exists, left old entry in place)"
+      continue
+    fi
+    mv "$entry" "$target"
+    moved=true
+    COPIED=$((COPIED + 1))
+    echo "  ✓ $entry → $target"
+  done
+  shopt -u dotglob nullglob
+  rmdir "$src" 2>/dev/null || true
+  if [[ "$moved" == false ]]; then
+    echo "  · $src/ (no movable entries)"
+  fi
+}
+
+prune_legacy_agent_hook_copies() {
+  local script
+  for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
+    [[ -d "$legacy_hooks_dir" ]] || continue
+    for script in deny-dangerous.sh gruff-code-quality.sh; do
+      if [[ -f "$legacy_hooks_dir/$script" ]]; then
+        rm -f "$legacy_hooks_dir/$script"
+        REMOVED=$((REMOVED + 1))
+        echo "  ✗ $legacy_hooks_dir/$script (removed stale per-agent copy)"
+      fi
+    done
+    prune_unlisted_hook_files "$legacy_hooks_dir"
+  done
+}
+
 touch_anchor() {
   local dst="$1"
   if [[ -f "$dst" ]]; then
@@ -426,6 +490,59 @@ lines.splice(index, removeUntil - index);
 while (lines.length > 1 && lines[index] === "" && lines[index - 1] === "") {
   lines.splice(index, 1);
 }
+fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+console.log("changed");
+NODE
+}
+
+migrate_config_tasks_entry() {
+  local path="$1"
+  node - "$path" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const content = fs.readFileSync(path, "utf8");
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+
+function indentOf(line) {
+  return line.match(/^\s*/u)?.[0] ?? "";
+}
+
+function topLevelBlockRange(lines, key) {
+  const keyRe = new RegExp(`^${key}\\s*:\\s*(?:#.*)?$`, "u");
+  const index = lines.findIndex((line) => keyRe.test(line));
+  if (index === -1) return null;
+  let end = index + 1;
+  while (end < lines.length) {
+    const line = lines[end];
+    const trimmed = line.trim();
+    if (trimmed !== "" && indentOf(line).length === 0) break;
+    end += 1;
+  }
+  return { index, end };
+}
+
+let lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines = lines.slice(0, -1);
+
+const tasksRange = topLevelBlockRange(lines, "tasks");
+if (!tasksRange) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const plansRange = topLevelBlockRange(lines, "plans");
+if (plansRange) {
+  lines.splice(tasksRange.index, tasksRange.end - tasksRange.index);
+} else {
+  lines[tasksRange.index] = lines[tasksRange.index].replace(/^tasks/u, "plans");
+  for (let i = tasksRange.index + 1; i < tasksRange.end; i += 1) {
+    lines[i] = lines[i].replace(/\.goat-flow\/tasks\//gu, ".goat-flow/plans/");
+    lines[i] = lines[i].replace(/\.goat-flow\/tasks\b/gu, ".goat-flow/plans");
+  }
+}
+
 fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
 console.log("changed");
 NODE
@@ -1096,10 +1213,27 @@ echo ""
 cd "$PROJECT"
 
 # ==========================================================================
-# 1. Create .goat-flow/ directories
+# 1. Migrate old .goat-flow/ layout without overwriting user content
+# ==========================================================================
+echo "Migrations:"
+migrate_dir_no_overwrite ".goat-flow/footguns" ".goat-flow/learning-loop/footguns"
+migrate_dir_no_overwrite ".goat-flow/lessons" ".goat-flow/learning-loop/lessons"
+migrate_dir_no_overwrite ".goat-flow/patterns" ".goat-flow/learning-loop/patterns"
+migrate_dir_no_overwrite ".goat-flow/decisions" ".goat-flow/learning-loop/decisions"
+migrate_dir_no_overwrite ".goat-flow/tasks" ".goat-flow/plans"
+migrate_dir_no_overwrite ".goat-flow/hook-lib" ".goat-flow/hooks/deny-dangerous"
+migrate_dir_no_overwrite ".goat-flow/skill-reference" ".goat-flow/skill-docs"
+move_file_no_overwrite ".goat-flow/skill-playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
+migrate_dir_no_overwrite ".goat-flow/skill-playbooks/skill-quality-testing" ".goat-flow/skill-docs/skill-quality-testing"
+migrate_dir_no_overwrite ".goat-flow/skill-playbooks" ".goat-flow/skill-docs/playbooks"
+rmdir .goat-flow/skill-playbooks 2>/dev/null || true
+echo ""
+
+# ==========================================================================
+# 2. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/footguns .goat-flow/lessons .goat-flow/patterns .goat-flow/decisions .goat-flow/tasks .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-reference .goat-flow/skill-playbooks; do
+for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
   if [[ ! -d "$dir" ]]; then
     mkdir -p "$dir"
     echo "  ✓ $dir/"
@@ -1110,28 +1244,28 @@ done
 echo ""
 
 # ==========================================================================
-# 2. Copy .gitignore (always overwrite)
+# 3. Copy .gitignore (always overwrite)
 # ==========================================================================
 echo "Gitignore + READMEs:"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/goat-flow-gitignore" ".goat-flow/.gitignore"
-copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/tasks-gitignore" ".goat-flow/tasks/.gitignore"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/plans-gitignore" ".goat-flow/plans/.gitignore"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/scratchpad-gitignore" ".goat-flow/scratchpad/.gitignore"
-copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/lessons-readme.md" ".goat-flow/lessons/README.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/footguns-readme.md" ".goat-flow/footguns/README.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/patterns-readme.md" ".goat-flow/patterns/README.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/tasks-readme.md" ".goat-flow/tasks/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/lessons-readme.md" ".goat-flow/learning-loop/lessons/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/footguns-readme.md" ".goat-flow/learning-loop/footguns/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/patterns-readme.md" ".goat-flow/learning-loop/patterns/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/plans-readme.md" ".goat-flow/plans/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/scratchpad-readme.md" ".goat-flow/scratchpad/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/quality-readme.md" ".goat-flow/logs/quality/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/events-readme.md" ".goat-flow/logs/events/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/critiques-readme.md" ".goat-flow/logs/critiques/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/review-readme.md" ".goat-flow/logs/review/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/security-readme.md" ".goat-flow/logs/security/README.md"
-copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/decisions/README.md"
+copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/learning-loop/decisions/README.md"
 touch_anchor ".goat-flow/logs/sessions/.gitkeep"
 echo ""
 
 # ==========================================================================
-# 2b. Maintain project root .gitignore (append-only)
+# 3b. Maintain project root .gitignore (append-only)
 # ==========================================================================
 echo "Project .gitignore:"
 if [[ "$(ensure_gitignore_entry ".gitignore" "node_modules/")" == "changed" ]]; then
@@ -1144,61 +1278,53 @@ fi
 echo ""
 
 # ==========================================================================
-# 3. Migrate legacy skill-reference layout (1.5.1 → 1.5.2 split)
-#    The `skill-reference/` dir was split into:
-#      - skill-reference/   (meta only: skill-preamble.md, skill-conventions.md)
-#      - skill-playbooks/   (browser-use.md, changelog.md, code-comments.md, gruff-code-quality.md, observability.md, page-capture.md, release-notes.md, skill-quality-testing.md + topical dir)
-#    On upgrade, sweep the legacy locations so the installed layout matches.
+# 4. Sweep transitional skill-doc files from older installed layouts.
+#    Current installs keep doctrine at .goat-flow/skill-docs/ and standalone
+#    playbooks at .goat-flow/skill-docs/playbooks/.
 # ==========================================================================
 legacy_reference_files=(
-  ".goat-flow/skill-reference/browser-use.md"
-  ".goat-flow/skill-reference/page-capture.md"
-  ".goat-flow/skill-reference/skill-quality-testing.md"
+  ".goat-flow/skill-docs/browser-use.md"
+  ".goat-flow/skill-docs/page-capture.md"
+  ".goat-flow/skill-docs/skill-quality-testing.md"
 )
-legacy_reference_dir=".goat-flow/skill-reference/skill-quality-testing"
 removed_any=false
 for legacy_file in "${legacy_reference_files[@]}"; do
   if [[ -f "$legacy_file" ]]; then
     rm -f "$legacy_file"
-    echo "  ✓ migrated $legacy_file → .goat-flow/skill-playbooks/"
+    echo "  ✓ migrated $legacy_file → .goat-flow/skill-docs/playbooks/"
     removed_any=true
   fi
 done
-if [[ -d "$legacy_reference_dir" ]]; then
-  rm -rf "$legacy_reference_dir"
-  echo "  ✓ migrated $legacy_reference_dir/ → .goat-flow/skill-playbooks/"
-  removed_any=true
-fi
 if [[ "$removed_any" == true ]]; then
   echo ""
 fi
 
 # ==========================================================================
-# 4. Copy shared reference files (always overwrite - verbatim copies)
+# 5. Copy shared reference files (always overwrite - verbatim copies)
 # ==========================================================================
-echo "Meta references → .goat-flow/skill-reference/:"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-reference/README.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-reference/skill-preamble.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-reference/skill-conventions.md"
+echo "Meta references → .goat-flow/skill-docs/:"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-docs/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-docs/skill-preamble.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-docs/skill-conventions.md"
 
-echo "Standalone playbooks → .goat-flow/skill-playbooks/:"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-playbooks/README.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-playbooks/browser-use.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-playbooks/code-comments.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-playbooks/gruff-code-quality.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-playbooks/observability.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-playbooks/changelog.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-playbooks/page-capture.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-playbooks/release-notes.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-playbooks/skill-quality-testing.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-playbooks/skill-quality-testing/tdd-iteration.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-playbooks/skill-quality-testing/adversarial-framing.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/deployment.md" ".goat-flow/skill-playbooks/skill-quality-testing/deployment.md"
+echo "Standalone playbooks → .goat-flow/skill-docs/playbooks/:"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-docs/playbooks/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-docs/playbooks/browser-use.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-docs/playbooks/code-comments.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-docs/playbooks/gruff-code-quality.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-docs/playbooks/observability.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-docs/playbooks/changelog.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-docs/playbooks/page-capture.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/deployment.md" ".goat-flow/skill-docs/skill-quality-testing/deployment.md"
 copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/security-policy.md" ".goat-flow/security-policy.md"
 echo ""
 
 # ==========================================================================
-# 5. Install skills (always overwrite - verbatim from templates)
+# 6. Install skills (always overwrite - verbatim from templates)
 # ==========================================================================
 echo "Skills → $SKILLS_DIR/:"
 for skill in "${SKILL_NAMES[@]}"; do
@@ -1217,7 +1343,7 @@ done
 echo ""
 
 # ==========================================================================
-# 4b. Remove deprecated skills (only with --clean-deprecated or --force)
+# 6b. Remove deprecated skills (only with --clean-deprecated or --force)
 # ==========================================================================
 if $CLEAN_DEPRECATED || $FORCE; then
   readarray -t STALE_NAMES < <(manifest_eval stale-skills)
@@ -1242,30 +1368,33 @@ if $CLEAN_DEPRECATED || $FORCE; then
 fi
 
 # ==========================================================================
-# 6. Install hooks (always overwrite - verbatim copy)
+# 7. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh"
   chmod +x "$HOOKS_DIR/deny-dangerous.sh"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh"
+  chmod +x "$HOOKS_DIR/gruff-code-quality.sh"
   prune_unlisted_hook_files "$HOOKS_DIR"
-  echo "Hook library → .goat-flow/hook-lib/:"
-  for hook_lib_script in \
+  prune_legacy_agent_hook_copies
+  echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"
+  for hook_policy_script in \
     patterns-shell.sh \
     patterns-paths.sh \
     patterns-writes.sh \
     deny-dangerous-self-test.sh
   do
-    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-lib/$hook_lib_script" ".goat-flow/hook-lib/$hook_lib_script"
-    chmod +x ".goat-flow/hook-lib/$hook_lib_script"
+    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/$hook_policy_script" ".goat-flow/hooks/deny-dangerous/$hook_policy_script"
+    chmod +x ".goat-flow/hooks/deny-dangerous/$hook_policy_script"
   done
-  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hook-lib/")" == "changed" ]]; then
+  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/")" == "changed" ]]; then
     COPIED=$((COPIED + 1))
-    echo "  ✓ .goat-flow/.gitignore (hook-lib/ un-ignored)"
+    echo "  ✓ .goat-flow/.gitignore (hooks/ un-ignored)"
   fi
-  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hook-lib/**")" == "changed" ]]; then
+  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/**")" == "changed" ]]; then
     COPIED=$((COPIED + 1))
-    echo "  ✓ .goat-flow/.gitignore (hook-lib/** un-ignored)"
+    echo "  ✓ .goat-flow/.gitignore (hooks/** un-ignored)"
   fi
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     echo "Hooks config:"
@@ -1282,7 +1411,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 7. Install agent settings (skip if exists, unless --force)
+# 8. Install agent settings (skip if exists, unless --force)
 # ==========================================================================
 echo "Settings:"
 SETTINGS_SKIPPED=false
@@ -1335,7 +1464,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 8. Scaffold or maintain config.yaml
+# 9. Scaffold or maintain config.yaml
 # ==========================================================================
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
@@ -1357,6 +1486,10 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("legacy agents allowlist removed")
   fi
+  if [[ "$(migrate_config_tasks_entry "$CONFIG_PATH")" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("legacy tasks config migrated to plans")
+  fi
   if [[ "$(ensure_config_hooks_entry "$CONFIG_PATH")" == "changed" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("hook toggles added")
@@ -1377,20 +1510,20 @@ fi
 echo ""
 
 # ==========================================================================
-# 9. Write .active marker if exactly one version-named subdir exists
+# 10. Write .active marker if exactly one version-named subdir exists
 # ==========================================================================
-# Convention: .goat-flow/tasks/.active is a one-line file naming the active
+# Convention: .goat-flow/plans/.active is a one-line file naming the active
 # plan subdir (e.g. "1.2.2"). Skills (goat, goat-plan) read it to scope their
 # scan. See ADR-017. We only write it automatically when there is no ambiguity.
 echo "Active plan marker:"
-ACTIVE_FILE=".goat-flow/tasks/.active"
+ACTIVE_FILE=".goat-flow/plans/.active"
 if [[ -f "$ACTIVE_FILE" ]] && ! $FORCE; then
   SKIPPED=$((SKIPPED + 1))
   echo "  · $ACTIVE_FILE (exists, skipped)"
 else
   shopt -s nullglob
   version_subdirs=()
-  for d in .goat-flow/tasks/[0-9]*.[0-9]*.[0-9]*/; do
+  for d in .goat-flow/plans/[0-9]*.[0-9]*.[0-9]*/; do
     [[ -d "$d" ]] && version_subdirs+=("$(basename "$d")")
   done
   shopt -u nullglob
@@ -1416,27 +1549,32 @@ echo ""
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)
 if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]]; then
   echo "⚠ Settings file was preserved (not overwritten)."
-  echo "  The guardrail hooks in $HOOKS_DIR were installed but may not be"
+  echo "  The central guardrail hooks in $HOOKS_DIR were installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"
-  echo "  PreToolUse hook entries pointing at the guardrail scripts."
+  echo "  PreToolUse hook entries pointing at .goat-flow/hooks/deny-dangerous.sh."
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
     # shellcheck disable=SC2016,SC1003 # literal JSON snippet preserves nested shell quoting for copy/paste guidance.
-    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash -c '\''gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\"; root=\"\"; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd=\"${gcd//\\\\//}\"; root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; esac; [ -f \"$root/.claude/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.claude/hooks/deny-dangerous.sh\" ] || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; cd \"$root\" || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; bash \"$root/.claude/hooks/deny-dangerous.sh\"'\''"}]}'
+    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash -c '\''gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\"; root=\"\"; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd=\"${gcd//\\\\//}\"; root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; esac; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; cd \"$root\" || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'\''"}]}'
   fi
   echo ""
 fi
 
-# Hint about previously-hidden playbook/reference files (pre-1.6.1 upgrade case).
-# Pre-1.6.1 .goat-flow/.gitignore lacked the !skill-playbooks/ exception, so
+# Hint about previously-hidden committed goat-flow surfaces.
+# Older .goat-flow/.gitignore templates lacked one or more current exceptions, so
 # upgraders may have files on disk that git still treats as untracked-but-ignored.
 # Detect by asking git itself, only inside a git repo, and only when at least
 # one of the directories holds files. No automatic `git add` - that is the
 # user's decision.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   hidden_paths=()
-  for hint_dir in ".goat-flow/skill-playbooks" ".goat-flow/skill-reference"; do
+  for hint_dir in \
+    ".goat-flow/learning-loop" \
+    ".goat-flow/skill-docs" \
+    ".goat-flow/hooks" \
+    ".goat-flow/plans"
+  do
     if [[ -d "$hint_dir" ]] && \
        git -C . check-ignore -q "$hint_dir/." 2>/dev/null; then
       hidden_paths+=("$hint_dir/")
@@ -1450,7 +1588,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "  The installer refreshed .goat-flow/.gitignore, but git tracks the"
     echo "  ignore state per file. To track these (recommended), run:"
     echo "    git add ${hidden_paths[*]}"
-    echo "  Skip this step if you intentionally keep the playbook pack local."
+    echo "  Skip this step only for surfaces you intentionally keep local."
     echo ""
   fi
 fi

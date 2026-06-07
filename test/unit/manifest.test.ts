@@ -106,11 +106,11 @@ function fixtureAgent(
     hooks_dir: ".claude/hooks/",
     settings: ".claude/settings.json",
     hook_config_file: ".claude/settings.json",
-    deny_hook: ".claude/hooks/deny-dangerous.sh",
+    deny_hook: ".goat-flow/hooks/deny-dangerous.sh",
     deny_mechanism: {
       type: "both",
       settings_path: ".claude/settings.json",
-      script_path: ".claude/hooks/deny-dangerous.sh",
+      script_path: ".goat-flow/hooks/deny-dangerous.sh",
     },
     local_pattern: "*/CLAUDE.md",
     hook_events: {

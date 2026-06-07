@@ -41,10 +41,10 @@ for agent_dir in $skill_dirs; do
 done
 
 # ── 2. .goat-flow/ paths in installed skills must resolve ───────────
-# Exception: paths under .goat-flow/tasks/, .goat-flow/scratchpad/, and
+# Exception: paths under .goat-flow/plans/, .goat-flow/scratchpad/, and
 # .goat-flow/logs/ are intentionally gitignored (local session state per
-# .goat-flow/tasks/.gitignore). Skills reference them as navigation pointers
-# (e.g. `.goat-flow/tasks/.active` - the active-plan marker); treating
+# .goat-flow/plans/.gitignore). Skills reference them as navigation pointers
+# (e.g. `.goat-flow/plans/.active` - the active-plan marker); treating
 # absence as drift false-positives on every clean checkout and CI run.
 for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
@@ -54,7 +54,7 @@ for agent_dir in $skill_dirs; do
         clean=$(echo "$ref_path" | sed 's/[`'"'"'",;)]*$//' | sed 's/^[`'"'"'"]//')
         # Skip intentionally-gitignored runtime-state paths.
         case "$clean" in
-            .goat-flow/tasks/*|.goat-flow/scratchpad/*|.goat-flow/logs/*) continue ;;
+            .goat-flow/plans/*|.goat-flow/scratchpad/*|.goat-flow/logs/*) continue ;;
         esac
         if [[ "$clean" == .goat-flow/* ]] && [[ ! -e "${root}/${clean}" ]]; then
             err "Installed skill references missing path: ${clean}"
@@ -96,7 +96,7 @@ done
 # ── 4. config.yaml path fields must exist (if populated) ────────────
 config="${root}/.goat-flow/config.yaml"
 if [[ -f "$config" ]]; then
-    for field in footguns lessons decisions tasks logs; do
+    for field in footguns lessons decisions plans logs; do
         path_val=$(grep -A1 "^${field}:" "$config" 2>/dev/null | grep 'path:' | sed 's/.*path:\s*//' | tr -d '"'"'" || true)
         if [[ -n "$path_val" ]] && [[ ! -e "${root}/${path_val}" ]]; then
             err "config.yaml ${field}.path does not exist: ${path_val}"
@@ -147,7 +147,7 @@ done
 # in coding-standards prose are usually conceptual identifiers, not literal
 # paths, so they would false-positive. Resolves relative to the doc's dir
 # first, then repo root, then by basename anywhere under the repo (catches
-# refs like `skill-preamble.md` that live under `.goat-flow/skill-reference/`).
+# refs like `skill-preamble.md` that live under `.goat-flow/skill-docs/`).
 # Skips fenced code blocks.
 docs_dir="${root}/docs"
 if [[ -d "$docs_dir" ]]; then

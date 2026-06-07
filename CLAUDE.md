@@ -15,7 +15,7 @@ User's explicit instruction (this session) > CLAUDE.md > `.goat-flow/architectur
 
 **Ask First** - before touching a boundary, ask and wait for approval. Include: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked, rollback command.
 
-Boundaries: instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`); workflow/manifest (`workflow/setup/`, `workflow/skills/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill reference (`.goat-flow/skill-reference/`); skill playbooks (`.goat-flow/skill-playbooks/`); server runtime (`src/cli/server/terminal.ts`, `src/cli/server/dashboard.ts`); agent configs (`.claude/**`, `.codex/**`, `.agents/**`); CI/hooks (`.github/workflows/**`, `.github/actions/**`, `.github/hooks/**`, `.github/skills/**`); any add/remove/rename; changes spanning 3+ docs.
+Boundaries: instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`); workflow/manifest (`workflow/setup/`, `workflow/skills/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill reference (`.goat-flow/skill-docs/`); skill playbooks (`.goat-flow/skill-docs/playbooks/`); server runtime (`src/cli/server/terminal.ts`, `src/cli/server/dashboard.ts`); agent configs (`.claude/**`, `.codex/**`, `.agents/**`); CI/hooks (`.github/workflows/**`, `.github/actions/**`, `.github/hooks/**`, `.github/skills/**`); any add/remove/rename; changes spanning 3+ docs.
 
 **Never:** If interrupted or told no changes, freeze writes; run only read-only status/diff checks until the user explicitly asks for cleanup, revert, or apply. Delete docs without replacement. Modify .env/secrets. Push. Commit unless asked. Invent hypothetical examples. Overwrite existing files without checking destination (`ls` before `mv`/`cp`/Write; use `mv -n`). Delete/move/overwrite 5+ files in one operation without listing targets and getting confirmation.
 
@@ -35,27 +35,27 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 
 ## Key Resources
 
-- **Learning loop** (grep before every change): `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-playbooks/README.md` is the full index (examples: `.goat-flow/skill-playbooks/browser-use.md`, `.goat-flow/skill-playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
+- **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
+- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
 ```bash
-shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hook-lib/*.sh
-bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hook-lib/*.sh
+shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh .claude/hooks/*.sh .codex/hooks/*.sh .agents/hooks/*.sh .github/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 npm run typecheck
 npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.goat-flow/hook-lib/deny-dangerous-self-test.sh --self-test` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test` (hook check).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
-MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/footguns/`, `.goat-flow/lessons/`, and `.goat-flow/patterns/`; include `.goat-flow/decisions/` when the task involves architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
+MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use grep-first retrieval across `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and `.goat-flow/learning-loop/patterns/`; include `.goat-flow/learning-loop/decisions/` when the task involves architecture, policy, or setup work. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Open matching entries only, reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
 BAD: "The CLI has 20 audit checks" (guessed without reading)
 GOOD: Read check-goat-flow.ts → 15 setup checks, check-agent-setup.ts → 4 agent checks (19 total)
 
@@ -91,13 +91,13 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 3. **Fix verification.** Do not claim a fix works without running the reproduction steps that originally demonstrated the bug. "Looks correct" is not verification.
 4. **Hedged claims.** Do not use "should work", "probably fine", "looks good" as verification. These are guesses, not evidence.
 
-The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-flow/skill-reference/skill-preamble.md` (search: `Rationalisations to reject`) names the specific rationalisations that defeat the red-flags ("I'm confident", "Just this once", "Linter passed", etc.). Apply both before any completion or fix claim.
+The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`) names the specific rationalisations that defeat the red-flags ("I'm confident", "Just this once", "Linter passed", etc.). Apply both before any completion or fix claim.
 
 - **Stop-the-line:** When tests break, builds fail, or behaviour regresses - stop expanding scope. Preserve evidence, return to diagnosis, re-plan before continuing.
 - Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human. Two corrections on same approach = MUST rewind.
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
-If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`, significant technical decisions go in `.goat-flow/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
+If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED`, significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
 
@@ -105,14 +105,14 @@ MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh,
 
 ## Artifact Routing
 
-When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/footguns/<category>.md`; lessons -> `.goat-flow/lessons/<category>.md`; decisions -> `.goat-flow/decisions/ADR-NNN.md`; patterns -> `.goat-flow/patterns/<category>.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
+When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/learning-loop/footguns/<category>.md`; lessons -> `.goat-flow/learning-loop/lessons/<category>.md`; decisions -> `.goat-flow/learning-loop/decisions/ADR-NNN.md`; patterns -> `.goat-flow/learning-loop/patterns/<category>.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
 
 ## Router Table
 | Resource | Path |
 |----------|------|
-| Learning loop | `.goat-flow/footguns/`, `.goat-flow/lessons/`, `.goat-flow/patterns/`, `.goat-flow/decisions/` |
-| Skill reference (meta) | `.goat-flow/skill-reference/` (skill-preamble.md + skill-conventions.md, composed into every skill) |
-| Skill playbooks (tools) | `.goat-flow/skill-playbooks/` (README.md index; read BEFORE declaring a tool unavailable) |
+| Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
+| Skill reference (meta) | `.goat-flow/skill-docs/` (skill-preamble.md + skill-conventions.md, composed into every skill) |
+| Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` (README.md index; read BEFORE declaring a tool unavailable) |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
 | Skills | `.claude/skills/` |
@@ -121,5 +121,5 @@ When asked to add, create, or update a goat-flow artifact, route it to the artif
 | Scripts | `scripts/` |
 | Config | `.goat-flow/config.yaml` |
 | Documentation | `docs/` |
-| Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/tasks/` |
+| Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `AGENTS.md`, `.github/copilot-instructions.md` |

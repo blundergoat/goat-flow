@@ -64,7 +64,7 @@ Every new `BuildCheck` and `HarnessCheck` must also ship a `provenance` record u
 
 ## How to Add a New Skill Template
 
-Skill templates live in `workflow/skills/` as directories (e.g., `workflow/skills/goat-debug/SKILL.md`), mirroring the installed layout (e.g., `.claude/skills/goat-debug/SKILL.md`). Shared conventions are in `workflow/skills/reference/` (skill-preamble.md, skill-conventions.md); setup copies these to `.goat-flow/skill-reference/` on install. Standalone tool/capability playbooks (browser-use, page-capture, skill-quality-testing) live in `workflow/skills/playbooks/` and install to `.goat-flow/skill-playbooks/`. Skills are installed verbatim from templates to project skill directories. Add your template directory and register it in the setup flow.
+Skill templates live in `workflow/skills/` as directories (e.g., `workflow/skills/goat-debug/SKILL.md`), mirroring the installed layout (e.g., `.claude/skills/goat-debug/SKILL.md`). Shared conventions are in `workflow/skills/reference/` (skill-preamble.md, skill-conventions.md); setup copies these to `.goat-flow/skill-docs/` on install. Standalone tool/capability playbooks (browser-use, page-capture, skill-quality-testing) live in `workflow/skills/playbooks/` and install to `.goat-flow/skill-docs/playbooks/`. Skills are installed verbatim from templates to project skill directories. Add your template directory and register it in the setup flow.
 
 ## How to Add a New Stack to the Detector
 
