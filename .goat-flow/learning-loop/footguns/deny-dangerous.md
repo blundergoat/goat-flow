@@ -83,6 +83,7 @@ last_reviewed: 2026-06-06
 - Pre-split: monolithic guard 1,997 lines + 629-line self-test; first split replaced them with three guards totaling 393 lines + a 195-line self-test - a coverage cliff behind green smoke.
 - Pre-restoration probes wrongly allowed `git -C /tmp push`, `git -c core.sshCommand=foo push`, `/usr/bin/git push`, `gh --repo owner/repo issue comment`, `gh workflow run deploy.yml`, `rm -r src`, `cat .envrc`, `cat '.'env`, `python3 -c 'print(open(".env").read())'`; and wrongly blocked `rm -rf ./node_modules`, `rg "&& rm -rf /" src/`, `bash -c "echo hello"`, `python -c 'print(1)'`.
 - 2026-06-07 wrapper-prefix bypass: `normalize_command_candidate` stripped `command`/`builtin`/`time`/`nohup`/`nice`/`sudo`/`env`, but not `exec`, `timeout`, `setsid`, `stdbuf`, `ionice`, `taskset`, `chrt`, or `flock`, so first-word rules could miss wrapped `rm -rf`, `git push --force`, `git reset --hard`, `git clean -fdx`, and `find -delete`. Fix: add conservative wrapper grammars that strip only command-bearing forms and leave no-command forms like `ionice -p`, `taskset -p`, `chrt -p`, and `exec 2>/dev/null` allowed. Regression cases: self-test (search: `Wrapper-prefix normalization`).
+- 2026-06-07 startup-unavailable hang: `deny_dangerous_unavailable` read stdin before checking invocation mode, so a broken policy store plus `--self-test=full` could block on interactive or delayed stdin instead of failing closed. Fix: skip startup payload reads for `--self-test`/`--check`/TTY invocations; real hook JSON payloads still get JSON deny responses. Regression case: self-test (search: `self-test startup should not read stdin`).
 - Anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git -C push`, `quoted destructive search literal`).
 
 **Prevention:**
@@ -90,6 +91,7 @@ last_reviewed: 2026-06-06
 2. Compare line count and self-test case count before approving a split; a large drop is a review smell until removed coverage maps to new tests.
 3. Run representative old-case probes across all split hooks: wrapper-prefixed git pushes, global/inherited `gh` flags, read-only search literals with dangerous text, safe-scoped recursive deletion, split-quoted secret paths, and structured payloads for each registered agent.
 4. Keep the central self-test broad enough to fail on both bypasses and false positives; smoke checks alone prove only headline examples.
+5. Startup failure handlers must not unconditionally read stdin before CLI mode is known; diagnostics and self-tests need deterministic fail-closed output even when stdin is a TTY or delayed pipe.
 
 ---
 
@@ -107,7 +109,7 @@ last_reviewed: 2026-06-06
 
 **Prevention:**
 1. Any future `git push` deny edit must include runtime probes for env options, quoted assignments, shell control keywords, function bodies, and `sh`/`bash -c` plus `-lc` wrappers, not only direct push and pipe/semicolon chains.
-2. Keep the workflow hook, `scripts/` copy, and all installed agent hook copies byte-identical after policy changes.
+2. Keep the workflow hook source and installed `.goat-flow/hooks` mirror byte-identical after policy changes.
 3. Prefer normalizing to the shell command word before calling `is_git_push`; don't add one-off regexes for the latest bypass only.
 
 ---

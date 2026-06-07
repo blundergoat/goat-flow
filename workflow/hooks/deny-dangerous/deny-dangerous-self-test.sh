@@ -333,6 +333,38 @@ expect_missing_common_fails_closed() {
   fi
 }
 
+expect_missing_common_self_test_does_not_read_stdin() {
+  local hook="$1"
+  selected_hook "$hook" || {
+    record_skip
+    return
+  }
+  if ! command -v timeout >/dev/null 2>&1; then
+    record_skip
+    return
+  fi
+  executed=$((executed + 1))
+  local tmp output status
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/.goat-flow/hooks"
+  cp "$(hook_path "$hook")" "$tmp/.goat-flow/hooks/deny-dangerous.sh"
+  set +e
+  output="$(cd "$tmp" && git init -q && timeout 1 bash .goat-flow/hooks/deny-dangerous.sh --self-test=full < <(sleep 2) 2>&1)"
+  status=$?
+  set -e
+  rm -rf "$tmp"
+  if [[ "$status" -eq 124 ]]; then
+    record_fail "$hook missing policy store self-test startup should not read stdin"
+    return
+  fi
+  if [[ "$status" -ne 2 ]]; then
+    record_fail "$hook missing policy store self-test startup should fail closed (exit=$status)"
+  fi
+  if [[ "$output" != *"Policy hook unavailable"* || "$output" != *"policy"* ]]; then
+    record_fail "$hook missing policy store self-test startup should explain the missing store"
+  fi
+}
+
 expect_missing_common_fails_closed_json() {
   local hook="$1"
   local mode="$2"
@@ -503,6 +535,7 @@ EOF
 
 run_common_dependency_checks() {
   expect_missing_common_fails_closed shell
+  expect_missing_common_self_test_does_not_read_stdin shell
   expect_missing_common_fails_closed paths
   expect_missing_common_fails_closed writes
   expect_missing_common_fails_closed_json shell copilot

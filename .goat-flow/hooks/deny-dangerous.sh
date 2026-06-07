@@ -24,6 +24,7 @@ GOAT_REQUIRED_HOOK_POLICY_FILES=(
   "patterns-paths.sh"
   "patterns-writes.sh"
 )
+GOAT_DENY_DANGEROUS_ORIGINAL_ARGS=("$@")
 
 deny_dangerous_json_escape() {
   local value="$1"
@@ -35,11 +36,26 @@ deny_dangerous_json_escape() {
   printf '%s' "$value"
 }
 
+deny_dangerous_startup_payload_available() {
+  local arg
+  for arg in "${GOAT_DENY_DANGEROUS_ORIGINAL_ARGS[@]}"; do
+    case "$arg" in
+      --self-test|--self-test=*|--check|--check=*)
+        return 1
+        ;;
+    esac
+  done
+  [[ ! -t 0 ]]
+}
+
 deny_dangerous_unavailable() {
   local detail="$1"
   local message payload escaped
   message="Policy hook unavailable: deny-dangerous.sh cannot start: $detail. Re-run goat-flow setup so .goat-flow/hooks/deny-dangerous is installed and tracked."
-  payload="$(cat || true)"
+  payload=""
+  if deny_dangerous_startup_payload_available; then
+    payload="$(cat || true)"
+  fi
   escaped="$(deny_dangerous_json_escape "$message")"
   if [[ "$payload" == *'"toolName"'* && "$payload" != *'"tool_name"'* ]]; then
     printf '{"permissionDecision":"deny","permissionDecisionReason":"%s"}\n' "$escaped"
