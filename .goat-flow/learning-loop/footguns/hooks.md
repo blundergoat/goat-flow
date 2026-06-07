@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-06-06
+last_reviewed: 2026-06-07
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
@@ -165,6 +165,26 @@ last_reviewed: 2026-06-06
 1. After Codex upgrades, run `goat-flow audit . --agent codex --harness`, not just the default setup audit.
 2. If Codex settings were preserved, compare `.codex/config.toml` with `workflow/hooks/agent-config/codex.toml` and add the permission profile plus exact denies only for sensitive root files present in the checkout.
 3. Improve the installer/setup prompt to distinguish "hook registration" (`.codex/hooks.json`) from "filesystem deny profile" (`.codex/config.toml`) when settings are preserved.
+
+---
+
+## Footgun: Optional hook migration must remove old registrations and re-add enabled central entries
+
+**Status:** active | **Created:** 2026-06-07 | **Evidence:** OBSERVED
+
+**Symptoms:** The installer can successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure only appears after upgrade because fresh installs use the new template shape and disabled optional hooks do not expose the stale entry.
+
+**Why it happens:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration. Since gruff is optional, migration must remove stale managed entries everywhere and then re-add the central registration only when `.goat-flow/config.yaml` explicitly enables `gruff-code-quality`.
+
+**Evidence:**
+- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
+- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
+- `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
+
+**Prevention:**
+1. Any future optional hook must be in the installer managed-hook removal list before legacy files are pruned.
+2. Do not preserve old hook entries by path during a centralization migration; regenerate from the current registry/config toggle.
+3. Add upgrade fixtures for enabled and disabled optional hooks whenever a hook's install path changes.
 
 ---
 

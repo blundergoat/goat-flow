@@ -345,6 +345,11 @@ function parseFinding(
   if (!blastRadius.ok) return blastRadius;
   const proofOfFix = expectNonEmptyString(raw.proofOfFix, `${path}.proofOfFix`);
   if (!proofOfFix.ok) return proofOfFix;
+  const diffMetadata = parseDiffMetadata(
+    raw.diffMetadata,
+    `${path}.diffMetadata`,
+  );
+  if (!diffMetadata.ok) return diffMetadata;
   return {
     ok: true,
     value: {
@@ -369,6 +374,41 @@ function parseFinding(
       exploitability: exploitability.value,
       blastRadius: blastRadius.value,
       proofOfFix: proofOfFix.value,
+      ...(diffMetadata.value ? { diffMetadata: diffMetadata.value } : {}),
+    },
+  };
+}
+
+function parseDiffMetadata(
+  raw: unknown,
+  path: string,
+):
+  | { ok: true; value: SecurityFinding["diffMetadata"] | null }
+  | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, value: null };
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const changedFileCount = expectNonNegativeInteger(
+    raw.changedFileCount,
+    `${path}.changedFileCount`,
+  );
+  if (!changedFileCount.ok) return changedFileCount;
+  const riskyBuckets = expectStringArray(
+    raw.riskyBuckets,
+    `${path}.riskyBuckets`,
+  );
+  if (!riskyBuckets.ok) return riskyBuckets;
+  const introduction = expectEnumValue(
+    raw.introduction,
+    `${path}.introduction`,
+    ["added", "modified", "pre-existing context"] as const,
+  );
+  if (!introduction.ok) return introduction;
+  return {
+    ok: true,
+    value: {
+      changedFileCount: changedFileCount.value,
+      riskyBuckets: riskyBuckets.value,
+      introduction: introduction.value,
     },
   };
 }

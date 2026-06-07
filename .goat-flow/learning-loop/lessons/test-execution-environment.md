@@ -3,6 +3,18 @@ category: test-execution-environment
 last_reviewed: 2026-06-07
 ---
 
+## Lesson: Test runners need CI-runtime reproduction when local Node is newer
+
+**Status:** active | **Created:** 2026-06-07
+
+**What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
+
+**Root cause:** The package advertised `node >=20.11.0`, but the first implementation was verified only on a newer local runtime. A green local `npm test` did not prove the CI-supported runtime could load TypeScript tests.
+
+**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. Evidence anchor: `scripts/run-tests.mjs` (search: `--import`).
+
+---
+
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30

@@ -1,6 +1,6 @@
 ---
 category: deny-dangerous
-last_reviewed: 2026-06-06
+last_reviewed: 2026-06-07
 ---
 
 **Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
@@ -20,9 +20,9 @@ last_reviewed: 2026-06-06
 2. "Write to X" detection must check the redirect *target*; `2>&1`/`2>/dev/null` are not writes.
 3. When a finding fingers a downstream guard (a catch-all), trace its input token to the tokenizer before relaxing it; chain-count caps must hold at every recursion depth.
 
-**Release-gate recurrence (2026-06-06):** Pre-1.10.0 adversarial QA measured two remaining parser traps. Path-prefixed `.env.example` redirect targets (`echo x > ./.env.example`, `echo x > fixtures/.env.example`, `echo x > $HOME/proj/.env.example`, `echo x > /home/devgoat/projects/goat-flow/.env.example`) returned exit 0 even though bare `.env.example` writes blocked; root cause is `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_env_example_redirect_write`) matching only bare redirect targets while `check_secret_segment` (search: `env_example_read_only=1`) preserves read-only classification for `echo`/`cat`. Deep benign substitutions (`echo $(echo $(echo $(echo $(date))))`) also returned exit 0 despite the depth guard; `workflow/hooks/deny-dangerous.sh` (search: `while [[ "$scan_remaining" =~ \$\(([^()]*)\) ]]`) flattens nested substitutions while always calling `check_command_segments "$inner" $((depth + 1))`, so `prepare_segment_context` (search: `Deeply nested command substitution`) never sees depth 4 for benign nested `$()`. Destructive/repository commands at the same depth still blocked in the measured probes (`rm -rf /`, `git push origin main`), so this is a depth-cap enforcement defect rather than a direct destructive bypass.
+**Release-gate recurrence (2026-06-06):** Pre-1.10.0 adversarial QA measured two remaining parser traps. Path-prefixed `.env.example` redirect targets (`echo x > ./.env.example`, `echo x > fixtures/.env.example`, `echo x > $HOME/proj/.env.example`, `echo x > /home/devgoat/projects/goat-flow/.env.example`) returned exit 0 even though bare `.env.example` writes blocked; root cause is `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_env_example_redirect_write`) matching only bare redirect targets while `check_secret_segment` (search: `env_example_read_only=1`) preserves read-only classification for `echo`/`cat`. Deep benign substitutions (`echo $(echo $(echo $(echo $(date))))`) also returned exit 0 despite the old depth guard; that guard was later removed because dangerous content at any depth is blocked by depth-independent policy checks, while a hard nesting cap false-positived legitimate shell idioms. Current anchors: `workflow/hooks/deny-dangerous.sh` (search: `find_matching_shell_paren`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `deep benign path nesting allowed`).
 
-**Resolved 2026-06-06:** Finding 1 fixed; finding 2 reverted (won't-fix). (1) `is_env_example_redirect_write` now allows an optional path prefix before the `.env.example` basename (`(\>|\>\>|\>\|)[[:space:]]*['\"]?([^[:space:]>|'\"]*/)?\.env\.example`), so `> ./.env.example`, `> sub/.env.example`, and `> $HOME/x/.env.example` block while `2>&1` / `2>/dev/null` / redirect-to-other-file stay reads. Regression case: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `.env.example subdir write`). (2) The depth-cap fix (a `command_subst_nesting_depth` helper enforcing `>3` nesting) was **reverted** after pre-1.10.0 release-gate QA (3 independent agents) found it added false positives - nested arithmetic `$(( $(( $(( $(( 1 )) )) )) ))` and legitimate idioms like `echo $(dirname $(dirname $(dirname $(pwd))))` - for **zero security benefit**: dangerous content at any depth already blocks at its own segment (4-deep `rm` via the rm check, 3-deep `git push` via the repository check - not the cap). Finding 2 is reclassified **by-design**: the cap not firing on nested `$()` is harmless because per-segment policy checks are depth-independent. Revert guards: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `deep benign path nesting allowed`), (search: `deeply nested arithmetic allowed`).
+**Resolved 2026-06-06:** Finding 1 fixed; finding 2 reverted (won't-fix). (1) `is_env_example_redirect_write` now allows an optional path prefix before the `.env.example` basename (`(\>|\>\>|\>\|)[[:space:]]*['\"]?([^[:space:]>|'\"]*/)?\.env\.example`), so `> ./.env.example`, `> sub/.env.example`, and `> $HOME/x/.env.example` block while `2>&1` / `2>/dev/null` / redirect-to-other-file stay reads. Regression case: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `.env.example subdir write`). (2) The depth-cap fix (a `command_subst_nesting_depth` helper enforcing `>3` nesting) was **reverted** after pre-1.10.0 release-gate QA (3 independent agents) found it added false positives - nested arithmetic `$(( $(( $(( $(( 1 )) )) )) ))` and legitimate idioms like `echo $(dirname $(dirname $(dirname $(pwd))))` - for **zero security benefit**: dangerous content at any depth already blocks at its own segment (4-deep `rm` via the rm check, 3-deep `git push` via the repository check - not the cap). Finding 2 is reclassified **by-design**: the cap not firing on nested `$()` is harmless because per-segment policy checks are depth-independent. Revert guards: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `deep benign path nesting allowed`), (search: `deeply nested arithmetic allowed`), and `workflow/hooks/deny-dangerous.sh` (search: `count_substitution_openers`).
 
 ---
 
@@ -194,6 +194,26 @@ last_reviewed: 2026-06-06
 - `workflow/hooks/deny-dangerous.sh` (search: `detect_output_mode`; `def extract_path(value)`).
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
 - 2026-06-05 recurrence: stringified Copilot `toolArgs.path` / `file_path` denied safe `view` / `edit` until `extract_path` normalized object and string forms.
+
+---
+
+## Footgun: Shell substitution scanners must be quote-aware inside the substitution body
+
+**Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A regex-only `$()` / `<()` scanner can stop at a `)` that appears inside a quoted string within the substitution body. PR #48 review canaries showed `echo $(echo ")"; git push origin main)` and `cat <(echo ")"; git push origin main)` were allowed because the parser treated the quoted `)` as the substitution close and left the dangerous command outside the recursive policy walk.
+
+**Why it happens:** The shell has nested grammar inside command and process substitutions. A top-level tokenizer that tracks quotes before entering `$(` is not enough; the matcher that finds the closing `)` must also track quotes, escapes, and nested parentheses inside the substitution body. The same area also needs a literal-text distinction: single-quoted `$(` strings are data and must not count toward parser DoS caps.
+
+**Evidence:**
+- `workflow/hooks/deny-dangerous.sh` (search: `find_matching_shell_paren`) - quote-aware matching-paren scan used by `check_command_substitutions`.
+- `workflow/hooks/deny-dangerous.sh` (search: `count_substitution_openers`) - skips single-quoted substitution-looking text while still counting executable substitution openers.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `quoted paren inside command subst`) - locks the command/process substitution bypass canaries and the single-quoted false-positive allow case.
+
+**Prevention:**
+1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
+2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
+3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
 
 ---
 

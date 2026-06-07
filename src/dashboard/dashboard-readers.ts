@@ -250,6 +250,14 @@ function readSecurityReviewProofClass(
     : "STATIC";
 }
 
+function readSecurityReviewEvidence(
+  rawValue: unknown,
+): SecurityReviewFinding["evidence"] {
+  return rawValue === "OBSERVED" || rawValue === "INFERRED"
+    ? rawValue
+    : "INFERRED";
+}
+
 function readSecurityReviewFinding(rawValue: unknown): SecurityReviewFinding {
   const payload = readRecord(rawValue, "Security review finding");
   const source = readRecord(payload.source ?? {}, "Security review source");
@@ -262,7 +270,7 @@ function readSecurityReviewFinding(rawValue: unknown): SecurityReviewFinding {
     severity: readSecurityReviewSeverity(payload.severity),
     confidence: readSecurityReviewConfidence(payload.confidence),
     proofClass: readSecurityReviewProofClass(payload.proofClass),
-    evidence: payload.evidence === "INFERRED" ? "INFERRED" : "OBSERVED",
+    evidence: readSecurityReviewEvidence(payload.evidence),
     asset: readString(payload.asset),
     entry: readString(payload.entry),
     sink: readString(payload.sink),
@@ -280,6 +288,11 @@ function readSecurityReviewArtifact(rawValue: unknown): SecurityReviewArtifact {
   const payload = readRecord(rawValue, "Security review artifact");
   if (payload.resultKind !== "goat-flow-security-result") {
     throw new Error("Security review artifact returned an invalid result kind");
+  }
+  if (payload.contractVersion !== "1") {
+    throw new Error(
+      "Security review artifact returned an invalid contract version",
+    );
   }
   const target = readRecord(payload.target ?? {}, "Security review target");
   const posture = readRecord(payload.posture ?? {}, "Security review posture");
@@ -303,7 +316,7 @@ function readSecurityReviewArtifact(rawValue: unknown): SecurityReviewArtifact {
       : "coverage-degraded";
   return {
     resultKind: "goat-flow-security-result",
-    contractVersion: readString(payload.contractVersion, "1"),
+    contractVersion: "1",
     generatedAt: readString(payload.generatedAt),
     target: {
       projectPath: readString(target.projectPath),

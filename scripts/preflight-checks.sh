@@ -822,7 +822,7 @@ function collect(value, out = []) {
 }
 
 function runCommand(command, input) {
-  return spawnSync("bash", ["-lc", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
+  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
     cwd: process.cwd(),
     encoding: "utf8",
     env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },

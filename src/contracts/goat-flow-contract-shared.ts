@@ -73,7 +73,12 @@ export interface BaseIntegrity {
   observed: number;
   inferred: number;
   degradationFlags: string[];
-  conclusion: "confident" | "coverage-degraded" | "high-inference" | "partial";
+  conclusion:
+    | "confident"
+    | "coverage-degraded"
+    | "high-inference"
+    | "partial"
+    | "tool-limited";
 }
 
 export function isRecord(
@@ -232,6 +237,12 @@ export function parseBaseIntegrity(
     `${path}.filesOpened.paths`,
   );
   if (!paths.ok) return paths;
+  if (opened.value > total.value) {
+    return {
+      ok: false,
+      error: `${path}.filesOpened.opened must be less than or equal to total`,
+    };
+  }
   const observed = expectNonNegativeInteger(raw.observed, `${path}.observed`);
   if (!observed.ok) return observed;
   const inferred = expectNonNegativeInteger(raw.inferred, `${path}.inferred`);
@@ -246,6 +257,7 @@ export function parseBaseIntegrity(
     "coverage-degraded",
     "high-inference",
     "partial",
+    "tool-limited",
   ] as const);
   if (!conclusion.ok) return conclusion;
   return {
@@ -265,7 +277,7 @@ export function parseBaseIntegrity(
 }
 
 function containsUnresolvedMarker(value: string): boolean {
-  return /\b(?:TBD|TODO|FIXME|PLACEHOLDER|UNKNOWN)\b|<[^>\n]+>|\?\?\?/iu.test(
+  return /(?:\b(?:TBD|TODO|FIXME|PLACEHOLDER)\b|<\s*(?:TODO|TBD|FIXME|PLACEHOLDER|UNKNOWN)[^>\n]*>|\?\?\?)/iu.test(
     value,
   );
 }

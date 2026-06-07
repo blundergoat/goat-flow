@@ -353,6 +353,85 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /removed stale per-agent copy/);
   });
 
+  it("migrates enabled gruff hook registrations to the central hook path before pruning legacy copies", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".codex", "hooks", "gruff-code-quality.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    writeFileSync(
+      join(root, ".codex", "hooks.json"),
+      JSON.stringify(
+        {
+          hooks: {
+            PostToolUse: [
+              {
+                matcher: "Edit",
+                hooks: [
+                  {
+                    type: "command",
+                    command: ".codex/hooks/gruff-code-quality.sh",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.9.0"',
+        "hooks:",
+        "  deny-dangerous:",
+        "    enabled: true",
+        "  gruff-code-quality:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "gruff-code-quality.sh")),
+      false,
+    );
+    const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
+    assert.doesNotMatch(hooksJson, /\.codex\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /"matcher": "MultiEdit"/);
+  });
+
+  it("preserves single-quoted Codex filesystem deny entries during permission migration", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex"), { recursive: true });
+    writeFileSync(
+      join(root, ".codex", "config.toml"),
+      [
+        "default_permissions = 'goat-flow'",
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "'private/**' = 'deny'",
+        "'**/.env*' = 'deny'",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(root, ".codex", "config.toml"), "utf-8");
+    assert.match(config, /"private\/\*\*" = "deny"/);
+    assert.match(config, /"\*\*\/\.env\*" = "deny"/);
+  });
+
   it("migrates legacy skill docs without overwriting target collisions", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "skill-reference"), {

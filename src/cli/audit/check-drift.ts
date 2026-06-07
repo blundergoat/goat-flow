@@ -583,6 +583,43 @@ function expectedHookConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+function compareHookArtifact(
+  fs: ReadonlyFS,
+  templateRoot: string,
+  findings: DriftFinding[],
+  templateRel: string,
+  installedRel: string,
+  expectedFromTemplate: (template: string) => string,
+): void {
+  const template = readTemplate(templateRoot, templateRel);
+  if (template === null) {
+    findings.push({
+      kind: "missing",
+      path: templateRel,
+      message: `declared hook artifact ${installedRel} has no template at ${templateRel}`,
+    });
+    return;
+  }
+  const expected = expectedFromTemplate(template);
+  if (!fs.exists(installedRel)) {
+    findings.push({
+      kind: "missing",
+      path: installedRel,
+      message: `hook template ${templateRel} has no installed copy at ${installedRel}`,
+    });
+    return;
+  }
+  const installed = fs.readFile(installedRel);
+  if (installed === null) return;
+  if (installed.trimEnd() !== expected.trimEnd()) {
+    findings.push({
+      kind: "content",
+      path: installedRel,
+      message: `hook template (${templateRel}) and installed copy (${installedRel}) differ`,
+    });
+  }
+}
+
 /** Compare installed hook scripts against their workflow templates. */
 function compareHooks(
   fs: ReadonlyFS,
@@ -596,35 +633,29 @@ function compareHooks(
     if (!fs.exists(agent.hooks_dir)) continue;
     for (const hookFile of agent.hooks) {
       const templateRel = hookTemplateRel(agentId, agent, hookFile);
-      const template = readTemplate(templateRoot, templateRel);
       const installedRel = pathPosix.join(agent.hooks_dir, hookFile);
       checked++;
-      if (template === null) {
-        findings.push({
-          kind: "missing",
-          path: templateRel,
-          message: `declared hook ${installedRel} has no template at ${templateRel}`,
-        });
-        continue;
-      }
-      const expected = expectedHookConfig(fs, agentId, agent, template);
-      if (!fs.exists(installedRel)) {
-        findings.push({
-          kind: "missing",
-          path: installedRel,
-          message: `hook template ${templateRel} has no installed copy at ${installedRel}`,
-        });
-        continue;
-      }
-      const installed = fs.readFile(installedRel);
-      if (installed === null) continue;
-      if (installed.trimEnd() !== expected.trimEnd()) {
-        findings.push({
-          kind: "content",
-          path: installedRel,
-          message: `hook template (${templateRel}) and installed copy (${installedRel}) differ`,
-        });
-      }
+      compareHookArtifact(
+        fs,
+        templateRoot,
+        findings,
+        templateRel,
+        installedRel,
+        (template) => expectedHookConfig(fs, agentId, agent, template),
+      );
+    }
+    if (agentId === "copilot" && agent.hook_config_file) {
+      const templateRel = "workflow/hooks/agent-config/copilot-hooks.json";
+      const installedRel = agent.hook_config_file;
+      checked++;
+      compareHookArtifact(
+        fs,
+        templateRoot,
+        findings,
+        templateRel,
+        installedRel,
+        (template) => expectedHookConfig(fs, agentId, agent, template),
+      );
     }
   }
   return checked;

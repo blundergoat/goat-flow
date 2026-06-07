@@ -630,6 +630,7 @@ const fs = require("node:fs");
 const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
   "deny-dangerous.sh",
+  "gruff-code-quality.sh",
   "deny-dangerous.self-test.sh",
   "guard-common.sh",
   "guard-destructive-shell.sh",
@@ -639,6 +640,7 @@ const managedScripts = [
 ];
 const managedHookIds = [
   "deny-dangerous",
+  "gruff-code-quality",
   "guard-destructive-shell",
   "guard-secret-paths",
   "guard-repository-writes",
@@ -661,6 +663,22 @@ function entryReferencesManagedHook(value) {
   return managedScripts.some((script) => JSON.stringify(value).includes(script));
 }
 
+function removeManagedHookEntries(currentHooks) {
+  let changed = false;
+  for (const [event, entries] of Object.entries(currentHooks)) {
+    if (!Array.isArray(entries)) continue;
+    const filtered = entries.filter((entry) => !entryReferencesManagedHook(entry));
+    if (filtered.length === 0) {
+      delete currentHooks[event];
+      changed = true;
+    } else if (JSON.stringify(entries) !== JSON.stringify(filtered)) {
+      currentHooks[event] = filtered;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function appendTemplateEventEntries(currentHooks, templateHooks) {
   let changed = false;
   for (const [event, templateEntries] of Object.entries(templateHooks)) {
@@ -678,6 +696,105 @@ function appendTemplateEventEntries(currentHooks, templateHooks) {
     }
   }
   return changed;
+}
+
+function configuredHookEnabled(hookId) {
+  let content = "";
+  try {
+    content = fs.readFileSync(".goat-flow/config.yaml", "utf8");
+  } catch {
+    return false;
+  }
+  let inHooks = false;
+  let currentHook = "";
+  for (const line of content.split(/\r?\n/u)) {
+    if (/^\S/u.test(line) && !/^hooks\s*:/u.test(line)) {
+      inHooks = false;
+      currentHook = "";
+    }
+    if (/^hooks\s*:/u.test(line)) {
+      inHooks = true;
+      continue;
+    }
+    if (!inHooks) continue;
+    const hookMatch = line.match(/^  ([A-Za-z0-9_-]+):\s*$/u);
+    if (hookMatch) {
+      currentHook = hookMatch[1];
+      continue;
+    }
+    if (currentHook === hookId || (hookId === "gruff-code-quality" && currentHook === "gruff-on-change")) {
+      const enabledMatch = line.match(/^    enabled:\s*(true|false)\s*$/u);
+      if (enabledMatch) return enabledMatch[1] === "true";
+    }
+  }
+  return false;
+}
+
+function rootResolvingCommand(script) {
+  const unavailable =
+    agent === "antigravity"
+      ? "{ printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }"
+      : "{ printf '\\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\\'' >&2; exit 2; }";
+  return `bash -c 'gcd="$(git rev-parse --git-common-dir 2>/dev/null)"; root=""; case "$gcd" in */.git/modules/*|.git/modules/*) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd="\${gcd//\\\\//}"; root="$(dirname "$gcd")" ;; *) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; esac; [ -f "$root/.goat-flow/hooks/${script}" ] || root="\${CLAUDE_PROJECT_DIR:-}"; [ -f "$root/.goat-flow/hooks/${script}" ] || ${unavailable}; cd "$root" || ${unavailable}; bash "$root/.goat-flow/hooks/${script}"'`;
+}
+
+function gruffHookEntries() {
+  const script = "gruff-code-quality.sh";
+  if (agent === "codex") {
+    return ["Edit", "Write", "MultiEdit"].map((matcher) => ({
+      matcher,
+      hooks: [
+        {
+          type: "command",
+          command: ".goat-flow/hooks/gruff-code-quality.sh",
+          statusMessage: "gruff code quality",
+        },
+      ],
+    }));
+  }
+  if (agent === "copilot") {
+    const path = ".goat-flow/hooks/gruff-code-quality.sh";
+    return [
+      {
+        type: "command",
+        bash: path,
+        powershell: `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`,
+        timeoutSec: 30,
+      },
+    ];
+  }
+  return ["Edit", "Write", "MultiEdit"].map((matcher) => ({
+    matcher,
+    hooks: [{ type: "command", command: rootResolvingCommand(script) }],
+  }));
+}
+
+function appendGruffHookEntries(currentHooks) {
+  if (!configuredHookEnabled("gruff-code-quality")) return false;
+  const event = agent === "copilot" ? "postToolUse" : "PostToolUse";
+  const currentEntries = Array.isArray(currentHooks[event]) ? currentHooks[event] : [];
+  const nextEntries = [...currentEntries, ...gruffHookEntries()];
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
+  currentHooks[event] = nextEntries;
+  return true;
+}
+
+function gruffAntigravityDefinition() {
+  return {
+    enabled: true,
+    PostToolUse: [
+      {
+        matcher: "write_to_file|replace_file_content|multi_replace_file_content",
+        hooks: [
+          {
+            type: "command",
+            command: rootResolvingCommand("gruff-code-quality.sh"),
+            timeout: 30,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 const current = readJson(dst);
@@ -707,12 +824,21 @@ if (agent === "antigravity") {
       changed = true;
     }
   }
+  if (configuredHookEnabled("gruff-code-quality")) {
+    const gruff = gruffAntigravityDefinition();
+    if (JSON.stringify(current["gruff-code-quality"]) !== JSON.stringify(gruff)) {
+      current["gruff-code-quality"] = gruff;
+      changed = true;
+    }
+  }
 } else if (isObject(template.hooks)) {
   if (!isObject(current.hooks)) {
     current.hooks = {};
     changed = true;
   }
+  changed = removeManagedHookEntries(current.hooks) || changed;
   changed = appendTemplateEventEntries(current.hooks, template.hooks) || changed;
+  changed = appendGruffHookEntries(current.hooks) || changed;
 }
 
 if (changed) {
@@ -809,12 +935,28 @@ const lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
 
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
-const noneEntryPattern = /^\s*"([^"]+)"\s*=\s*"none"\s*(?:#.*)?$/u;
+const tomlStringPattern = String.raw`(?:"((?:\\.|[^"\\])*)"|'([^']*)')`;
+const noneEntryPattern = new RegExp(
+  String.raw`^\s*${tomlStringPattern}\s*=\s*(?:"none"|'none')\s*(?:#.*)?$`,
+  "u",
+);
 const inlineTablePattern = /^\s*"[^"]+"\s*=\s*\{([^}]*)\}\s*(?:#.*)?$/u;
-const inlineEntryPattern = /"([^"]+)"\s*=\s*"none"/gu;
-const filesystemAccessEntryPattern = /"([^"]+)"\s*=\s*"(none|deny)"/gu;
-const legacyAccessPattern = /^\s*"[^"]+"\s*=\s*"none"\s*(?:#.*)?$/u;
-const legacyInlineAccessPattern = /"[^"]+"\s*=\s*"none"/u;
+const inlineEntryPattern = new RegExp(
+  String.raw`${tomlStringPattern}\s*=\s*(?:"none"|'none')`,
+  "gu",
+);
+const filesystemAccessEntryPattern = new RegExp(
+  String.raw`${tomlStringPattern}\s*=\s*(?:"(none|deny)"|'(none|deny)')`,
+  "gu",
+);
+const legacyAccessPattern = new RegExp(
+  String.raw`^\s*${tomlStringPattern}\s*=\s*(?:"none"|'none')\s*(?:#.*)?$`,
+  "u",
+);
+const legacyInlineAccessPattern = new RegExp(
+  String.raw`${tomlStringPattern}\s*=\s*(?:"none"|'none')`,
+  "u",
+);
 const legacyProjectRootsPattern = /":project_roots"/u;
 
 function parseTomlBasicString(value) {
@@ -823,6 +965,14 @@ function parseTomlBasicString(value) {
   } catch {
     return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
   }
+}
+
+function tomlKeyFromMatch(match) {
+  return match[1] ?? match[2] ?? "";
+}
+
+function tomlModeFromMatch(match) {
+  return match[3] ?? match[4] ?? "";
 }
 
 function readActivePermissionProfile(configLines) {
@@ -954,7 +1104,8 @@ for (const region of regions) {
       usesLegacyAccess = true;
     }
     for (const entry of line.matchAll(filesystemAccessEntryPattern)) {
-      const [, pattern, mode] = entry;
+      const pattern = tomlKeyFromMatch(entry);
+      const mode = tomlModeFromMatch(entry);
       if ((mode === "none" || mode === "deny") && pattern) {
         activeDenyPatterns.add(pattern);
       }
@@ -966,15 +1117,18 @@ for (const region of regions) {
       ) {
         additionalDenyPatterns.add(pattern);
       }
+      if (mode === "none" && isInvalidNoneKey(pattern)) {
+        hasInvalidEntry = true;
+      }
     }
     const noneMatch = line.match(noneEntryPattern);
-    if (noneMatch && isInvalidNoneKey(noneMatch[1])) {
+    if (noneMatch && isInvalidNoneKey(tomlKeyFromMatch(noneMatch))) {
       hasInvalidEntry = true;
     }
     const inlineMatch = line.match(inlineTablePattern);
     if (inlineMatch) {
       for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
-        if (isInvalidNoneKey(entry[1])) hasInvalidEntry = true;
+        if (isInvalidNoneKey(tomlKeyFromMatch(entry))) hasInvalidEntry = true;
       }
     }
   }

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join, sep } from "node:path";
-import { run } from "node:test";
-import { tap } from "node:test/reporters";
 
 const mode = process.argv[2] ?? "fast";
 
@@ -68,24 +67,29 @@ if (mode === "performance") {
   process.env.GOAT_FLOW_PERF_TESTS = "1";
 }
 
-let failed = false;
-const stream = run({
-  concurrency: mode === "slow" ? 1 : 8,
-  coverage: mode === "coverage",
-  execArgv: ["--import", "tsx"],
-  files,
+const args = [
+  "--import",
+  "tsx",
+  "--test",
+  "--test-concurrency",
+  mode === "slow" ? "1" : "8",
+];
+if (mode === "coverage") {
+  args.push("--experimental-test-coverage");
+}
+args.push(...files);
+
+const result = spawnSync(process.execPath, args, {
+  env: process.env,
+  stdio: "inherit",
 });
 
-stream.on("test:fail", () => {
-  failed = true;
-});
-stream.on("error", (error) => {
-  failed = true;
-  console.error(error);
-});
-
-const reporter = stream.compose(tap);
-reporter.pipe(process.stdout);
-reporter.on("end", () => {
-  process.exitCode = failed ? 1 : 0;
-});
+if (result.error) {
+  console.error(result.error);
+  process.exit(1);
+}
+if (result.signal) {
+  console.error(`Test runner terminated by signal ${result.signal}.`);
+  process.exit(1);
+}
+process.exit(result.status ?? 1);

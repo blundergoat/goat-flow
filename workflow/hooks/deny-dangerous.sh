@@ -561,47 +561,152 @@ mask_safe_quoted_heredoc_bodies() {
   printf '%s' "${output%$'\n'}"
 }
 
+find_matching_shell_paren() {
+  local input="$1"
+  local open_index="$2"
+  local depth=0
+  local in_single=0
+  local in_double=0
+  local escaped=0
+  local i=0
+  local char=""
+
+  for ((i = open_index; i < ${#input}; i++)); do
+    char="${input:i:1}"
+
+    if [[ "$escaped" -eq 1 ]]; then
+      escaped=0
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
+      escaped=1
+      continue
+    fi
+    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      if [[ "$in_single" -eq 1 ]]; then
+        in_single=0
+      else
+        in_single=1
+      fi
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        in_double=0
+      else
+        in_double=1
+      fi
+      continue
+    fi
+    if [[ "$in_single" -eq 1 || "$in_double" -eq 1 ]]; then
+      continue
+    fi
+
+    if [[ "$char" == "(" ]]; then
+      depth=$((depth + 1))
+    elif [[ "$char" == ")" ]]; then
+      depth=$((depth - 1))
+      if [[ "$depth" -eq 0 ]]; then
+        printf '%s\n' "$i"
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
 check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
+  local residual=""
+  local residual_unquoted=""
+  local i=0
+  local close_index=""
+  local char=""
+  local next=""
+  local next2=""
   local inner=""
-  local match=""
-  local scan_remaining
+  local in_single=0
+  local in_double=0
+  local escaped=0
 
-  if [[ "$remaining" == *\'* ]]; then
-    # shellcheck disable=SC2001  # ERE alternation; parameter expansion uses globs
-    scan_remaining=$(sed -E "s/'[^']*'/__goat_single_quoted__/g" <<<"$remaining")
-  else
-    scan_remaining="$remaining"
+  for ((i = 0; i < ${#remaining}; i++)); do
+    char="${remaining:i:1}"
+
+    if [[ "$escaped" -eq 1 ]]; then
+      residual+="$char"
+      escaped=0
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
+      residual+="$char"
+      escaped=1
+      continue
+    fi
+    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      if [[ "$in_single" -eq 1 ]]; then
+        in_single=0
+      else
+        in_single=1
+      fi
+      residual+="$char"
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        in_double=0
+      else
+        in_double=1
+      fi
+      residual+="$char"
+      continue
+    fi
+
+    if [[ "$in_single" -eq 0 ]]; then
+      next="${remaining:i+1:1}"
+      next2="${remaining:i+2:1}"
+      if [[ "$char$next" == "\$(" && "$next2" == "(" ]]; then
+        if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
+          inner="${remaining:i+3:close_index-i-3}"
+          check_command_substitutions "$inner" "$depth" || return $?
+          residual+="__goat_arith__"
+          i="$close_index"
+          continue
+        fi
+      elif [[ "$char$next" == "\$(" ]]; then
+        if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
+          inner="${remaining:i+2:close_index-i-2}"
+          if [[ -n "$inner" ]]; then
+            check_command_segments "$inner" $((depth + 1)) || return $?
+          fi
+          residual+="__goat_subst__"
+          i="$close_index"
+          continue
+        fi
+      elif [[ "$in_double" -eq 0 && ( "$char$next" == '<(' || "$char$next" == '>(' ) ]]; then
+        if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
+          inner="${remaining:i+2:close_index-i-2}"
+          if [[ -n "$inner" ]]; then
+            check_command_segments "$inner" $((depth + 1)) || return $?
+          fi
+          residual+="__goat_proc_subst__"
+          i="$close_index"
+          continue
+        fi
+      fi
+    fi
+
+    residual+="$char"
+  done
+
+  residual_unquoted="$residual"
+  if [[ "$residual" == *\'* ]]; then
+    # shellcheck disable=SC2001  # ERE pattern; parameter expansion uses globs
+    residual_unquoted=$(sed -E "s/'[^']*'//g" <<<"$residual")
   fi
 
-  while [[ "$scan_remaining" =~ \$\(([^()]*)\) ]]; do
-    match="${BASH_REMATCH[0]}"
-    inner="${BASH_REMATCH[1]}"
-    if [[ -n "$inner" ]]; then
-      check_command_segments "$inner" $((depth + 1)) || return $?
-    fi
-    scan_remaining="${scan_remaining/$match/__goat_subst__}"
-  done
-
-  local proc_subst_re='[<>]\(([^()]*)\)'
-  while [[ "$scan_remaining" =~ $proc_subst_re ]]; do
-    match="${BASH_REMATCH[0]}"
-    inner="${BASH_REMATCH[1]}"
-    if [[ -n "$inner" ]]; then
-      check_command_segments "$inner" $((depth + 1)) || return $?
-    fi
-    scan_remaining="${scan_remaining/$match/__goat_proc_subst__}"
-  done
-
-  # Arithmetic expansion $(( ... )) is not command substitution. Any dangerous
-  # nested $(...) inside it was already stripped and policy-checked by the loop
-  # above, so a remaining "$((" opener is pure arithmetic; mask it so the
-  # residual catch-all below does not misfire on benign arithmetic.
-  local arith_open="\$(("
-  scan_remaining="${scan_remaining//"$arith_open"/__goat_arith__}"
-
-  if [[ "$scan_remaining" =~ \$\( ]]; then
+  if [[ "$residual_unquoted" =~ \$\( || "$residual_unquoted" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
@@ -1736,10 +1841,6 @@ prepare_segment_context() {
   local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
   local saved_has_redirect saved_has_pipe
 
-  if [ "$depth" -gt 3 ]; then
-    block "Deeply nested command substitution. Simplify the command." || return $?
-  fi
-
   policy_cmd=$(strip_unquoted_shell_comments "$cmd")
   check_command_substitutions "$policy_cmd" "$depth" || return $?
 
@@ -1833,8 +1934,36 @@ count_substitution_openers() {
   local input="$1"
   local count=0
   local i ch next next2
+  local in_single=0
+  local in_double=0
+  local escaped=0
   for ((i = 0; i < ${#input}; i += 1)); do
     ch="${input:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      escaped=0
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$ch" == "\\" ]]; then
+      escaped=1
+      continue
+    fi
+    if [[ "$in_double" -eq 0 && "$ch" == "'" ]]; then
+      if [[ "$in_single" -eq 1 ]]; then
+        in_single=0
+      else
+        in_single=1
+      fi
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$ch" == '"' ]]; then
+      if [[ "$in_double" -eq 1 ]]; then
+        in_double=0
+      else
+        in_double=1
+      fi
+      continue
+    fi
+    [[ "$in_single" -eq 1 ]] && continue
     next="${input:i+1:1}"
     next2="${input:i+2:1}"
     if [[ "$ch$next" == "\$(" ]]; then

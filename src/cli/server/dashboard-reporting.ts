@@ -296,7 +296,12 @@ function sortRecentLessons(
 function readRecentLessons(
   projectPath: string,
 ): DashboardReport["recentLessons"] {
-  const lessonsDir = join(projectPath, ".goat-flow", "lessons");
+  const lessonsDir = join(
+    projectPath,
+    ".goat-flow",
+    "learning-loop",
+    "lessons",
+  );
   const filenames = listLessonBuckets(lessonsDir);
 
   const lessons: RecentLessonSummary[] = [];
