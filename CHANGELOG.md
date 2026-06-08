@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.10.1 - 2026-06-08
+## v1.10.1 - 2026-06-09
 
 Patch: upgrades now prune the stale Claude `MultiEdit` deny rules 1.10.0 left in existing projects, land dormant `gruff.hook.v1` analyzer-contract groundwork, back out the premature Reviews dashboard stub (deferred to 1.20.0), and make an internal docs pass.
 
