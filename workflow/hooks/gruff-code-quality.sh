@@ -917,7 +917,7 @@ process_file_contract() {
   # path from `.path` or `.file`, and accept an exact or trailing-segment match
   # so a port that echoes ./src/x.ts, a back-slashed path, or an absolute path
   # still resolves to the edited file.
-  ignored_match="$(printf '%s' "$output" | jq -r --arg p "$rel_path" 'def norm: tostring | gsub("\\\\"; "/") | sub("^\\./"; ""); ($p | norm) as $rel | first((.ignored.paths // [])[] | ((.path // .file // "") | norm) as $ip | select($ip == $rel or ($ip | endswith("/" + $rel))) | (.source // "config") + (if (.pattern // "") != "" then " " + .pattern else "" end)) // empty' 2>/dev/null || true)"
+  ignored_match="$(printf '%s' "$output" | jq -r --arg p "$rel_path" 'def norm: tostring | gsub("\\\\"; "/") | sub("^\\./"; ""); ($p | norm) as $rel | first((.ignored.paths // [])[] | ((.path? // .file? // "") | norm) as $ip | select($ip == $rel or ($ip | endswith("/" + $rel))) | (.source // "config") + (if (.pattern // "") != "" then " " + .pattern else "" end)) // empty' 2>/dev/null || true)"
   if [[ -n "$ignored_match" ]]; then
     printf 'gruff-code-quality: skipped %s %s - ignored by %s; out of scope, do not modify to satisfy gruff.\n' "$binary" "$rel_path" "$ignored_match"
     return 0
