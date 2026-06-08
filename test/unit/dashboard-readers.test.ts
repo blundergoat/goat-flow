@@ -98,10 +98,6 @@ type HelperContext = {
       modifiedAt: string;
     }>;
   };
-  readSecurityReviewArtifact: (_value: unknown) => {
-    contractVersion: string;
-    findings: Array<{ evidence: "OBSERVED" | "INFERRED" }>;
-  };
 };
 
 type SupportedAgent = {
@@ -160,7 +156,6 @@ globalThis.__helpers = {
   readInjectedSupportedAgents,
   readDashboardReport,
   readTaskState,
-  readSecurityReviewArtifact,
 };`,
     context,
   );
@@ -506,56 +501,5 @@ describe("dashboard payload readers", () => {
     assert.equal(state.milestones[0]?.objective, "Build the side menu.");
     assert.equal(state.milestones[0]?.completedTasks, expectedCompletedTasks);
     assert.equal(state.milestones[0]?.totalTasks, expectedMilestoneTaskTotal);
-  });
-
-  it("degrades unknown security evidence to inferred", () => {
-    const artifact = loadHelpers().readSecurityReviewArtifact({
-      resultKind: "goat-flow-security-result",
-      contractVersion: "1",
-      generatedAt: "2026-06-07T00:00:00.000Z",
-      target: { projectPath: "/repo", mode: "diff", agent: "agent" },
-      posture: {
-        conclusion: "confident",
-        rollupBySeverity: { Critical: 0, High: 0, Medium: 0, Low: 1 },
-      },
-      findings: [
-        {
-          id: "S-01",
-          file: "src/app.ts",
-          anchor: "handler",
-          title: "Finding",
-          body: "Concrete body.",
-          severity: "Low",
-          confidence: "CONFIRMED",
-          proofClass: "STATIC",
-          evidence: "MAYBE",
-          asset: "asset",
-          entry: "entry",
-          sink: "sink",
-          trustBoundary: "boundary",
-          blastRadius: "local",
-          source: { tool: "agent", ruleId: null, pillar: "security" },
-        },
-      ],
-      integrity: {
-        filesOpened: { opened: 0, total: 0, paths: [] },
-        observed: 0,
-        inferred: 1,
-        degradationFlags: [],
-      },
-    });
-
-    assert.equal(artifact.findings[0]?.evidence, "INFERRED");
-  });
-
-  it("rejects unknown security artifact contract versions", () => {
-    assert.throws(
-      () =>
-        loadHelpers().readSecurityReviewArtifact({
-          resultKind: "goat-flow-security-result",
-          contractVersion: "2",
-        }),
-      /invalid contract version/,
-    );
   });
 });

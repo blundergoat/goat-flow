@@ -298,59 +298,6 @@ interface QualityHistoryLatest {
 }
 
 // ---------------------------------------------------------------------------
-// Review/security artifact types
-// ---------------------------------------------------------------------------
-
-type SecurityReviewSeverity = "Critical" | "High" | "Medium" | "Low";
-type SecurityReviewConfidence = "CONFIRMED" | "PROBABLE" | "THEORETICAL";
-type SecurityReviewProofClass =
-  | "RUNTIME"
-  | "CONTRACT-GREP"
-  | "STATIC"
-  | "NOT-REPRODUCED";
-
-/** Browser-side mirror of a security finding as rendered by the dashboard; kept
- * structurally in step with the `SecurityResult` contract the server parses. */
-interface SecurityReviewFinding {
-  id: string;
-  file: string;
-  anchor: string;
-  title: string;
-  body: string;
-  severity: SecurityReviewSeverity;
-  confidence: SecurityReviewConfidence;
-  proofClass: SecurityReviewProofClass;
-  evidence: "OBSERVED" | "INFERRED";
-  asset: string;
-  entry: string;
-  sink: string;
-  trustBoundary: string;
-  blastRadius: string;
-  source: { tool: string; ruleId: string | null; pillar: string | null };
-}
-
-/** Browser-side mirror of the whole security artifact the dashboard loads and
- * renders; mirrors the server-parsed `SecurityResult` shape. */
-interface SecurityReviewArtifact {
-  resultKind: "goat-flow-security-result";
-  contractVersion: string;
-  generatedAt: string;
-  target: { projectPath: string; mode: string; agent: string };
-  posture: {
-    conclusion: "confident" | "coverage-degraded" | "tool-limited";
-    rollupBySeverity: Record<SecurityReviewSeverity, number>;
-  };
-  findings: SecurityReviewFinding[];
-  integrity: {
-    filesOpened: { opened: number; total: number; paths: string[] };
-    observed: number;
-    inferred: number;
-    degradationFlags: string[];
-    conclusion: string;
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Terminal types
 // ---------------------------------------------------------------------------
 
