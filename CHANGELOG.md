@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.10.2 - 2026-06-09
+
+Patch: hook launchers now match the central `.goat-flow/hooks` layout, optional gruff startup failures fail soft, and the deny hook closes an `xargs` pipeline bypass.
+
+- **Central hook launchers resolve the active worktree** - Claude and Antigravity launchers now use `git rev-parse --show-toplevel` for `.goat-flow/hooks` lookup, so linked worktrees run the hook scripts checked out beside the files being edited instead of borrowing scripts from the primary checkout through `--git-common-dir`. `$CLAUDE_PROJECT_DIR` remains the fallback for sessions whose shell cwd has moved outside the repo.
+- **Optional `gruff-code-quality` no longer hard-denies when missing** - Missing gruff hook scripts now exit 0 with a skipped diagnostic for Claude and Antigravity PostToolUse hooks. The required `deny-dangerous` guard still fails closed with Claude `BLOCKED:` output or Antigravity deny JSON.
+- **`deny-dangerous` catches piped `xargs rm -r`** - The shell policy now scans each pipeline segment for `xargs` payloads, blocking cases like `find . -type f | xargs -r rm -rf` while allowing harmless literal echo payloads. The full self-test corpus covers the regression.
+- **Gruff payload fallback filters unsupported paths first** - PostToolUse payload paths are normalized to supported in-repo analyzer targets before they suppress the git-changed fallback, so an unrelated payload path like `package.json` does not hide gruff findings for dirty TypeScript/PHP/Go/Rust/Python files.
+
 ## v1.10.1 - 2026-06-09
 
 Patch: upgrades now prune the stale Claude `MultiEdit` deny rules 1.10.0 left in existing projects, land dormant `gruff.hook.v1` analyzer-contract groundwork, back out the premature Reviews dashboard stub (deferred to 1.20.0), and make an internal docs pass.

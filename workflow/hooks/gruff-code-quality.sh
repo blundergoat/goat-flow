@@ -260,6 +260,27 @@ payload_file_paths() {
   fi
 }
 
+payload_supported_file_paths() {
+  local root="$1"
+  local payload="$2"
+  local file_path rel_path normalized_root
+  normalized_root="${root//\\//}"
+  payload_file_paths "$payload" | while IFS= read -r file_path; do
+    [[ -n "$file_path" ]] || continue
+    file_path="${file_path//\\//}"
+    case "$file_path" in
+      "$normalized_root"/*) rel_path="${file_path#"$normalized_root"/}" ;;
+      /*) continue ;;
+      *) rel_path="$(relative_path "$normalized_root" "$file_path")" ;;
+    esac
+    case "$rel_path" in
+      ""|.|..|../*|*/../*) continue ;;
+    esac
+    supported_candidate_path "$rel_path" || continue
+    printf '%s\n' "$rel_path"
+  done | awk '!seen[$0]++'
+}
+
 # Discovery covers each ecosystem's standard install location - package-manager
 # bin dirs (vendor/bin for composer, node_modules/.bin for npm), an in-repo bin/,
 # the root virtualenv (.venv/bin), user-local installs (~/.local/bin), and finally
@@ -1133,7 +1154,7 @@ main() {
 
   root="$(repo_root)"
   cd "$root" || exit 0
-  payload_paths="$(payload_file_paths "$payload")"
+  payload_paths="$(payload_supported_file_paths "$root" "$payload")"
   allow_cached_fallback=0
   if [[ -n "$payload_paths" ]]; then
     mapfile -t file_paths <<< "$payload_paths"

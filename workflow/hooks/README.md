@@ -29,13 +29,13 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
    - Copilot: `agent-config/copilot-hooks.json` -> `.github/hooks/hooks.json`
 3. `gruff-code-quality.sh` is opt-in through `.goat-flow/config.yaml`, the dashboard Hooks page, or `goat-flow hooks enable gruff-code-quality`.
 
-Claude and Antigravity hook commands resolve the repository root with `git rev-parse --git-common-dir` and take its parent directory, so the launcher always points at the main repo's `.claude/hooks/` (or `.agents/hooks/`) even inside a worktree at `.claude/worktrees/<branch>/`. The launcher falls back to `--show-toplevel` when `--git-common-dir` returns a relative `.git` path (i.e. the main checkout from its working directory). If neither resolution succeeds, the configured command fails closed before the hook script starts: Claude emits a stderr `BLOCKED:` message with exit 2, and Antigravity emits deny JSON with exit 0. Codex and Copilot hook commands use direct project-local script paths because their configs are expected to run from the selected project root.
+Claude and Antigravity hook commands resolve the active repository root with `git rev-parse --show-toplevel`, so linked worktrees run the `.goat-flow/hooks/` scripts checked out beside the files being edited. They then fall back to `$CLAUDE_PROJECT_DIR` for sessions whose persisted shell cwd has moved outside any git checkout. Missing `deny-dangerous.sh` still fails closed before a tool runs: Claude emits a stderr `BLOCKED:` message with exit 2, and Antigravity emits deny JSON with exit 0. Missing `gruff-code-quality.sh` fails soft with a short skipped diagnostic because it is an optional PostToolUse analyzer. Codex and Copilot hook commands use direct project-local script paths because their configs are expected to run from the selected project root.
 
 ## Failure Modes / Runtime Contracts
 
 - `.goat-flow/hooks/deny-dangerous/` must be present and tracked. If it is missing, `deny-dangerous.sh` denies with a clear policy-store message instead of reaching an undefined policy function or exiting 127.
 - Audit and preflight run the exact configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`; this catches stale paths, missing executable bits, and command-shape failures before an agent session sees them.
-- Claude and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout they fail closed as described above.
+- Claude and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout, `deny-dangerous.sh` fails closed unless `$CLAUDE_PROJECT_DIR` identifies the project root; `gruff-code-quality.sh` fails soft.
 - Codex and Copilot use direct project-local paths and therefore require project-root cwd for the configured command. Nested-cwd execution is outside the current contract unless those runtimes add a portable project-root variable.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
 

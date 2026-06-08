@@ -123,24 +123,21 @@ function shellSingleQuote(value: string): string {
 function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   const path = commandPath(agent, spec.primaryScript);
   if (agent.id === "codex") return path;
-  const failClosed =
-    agent.id === "antigravity"
-      ? `{ printf '{"decision":"deny","reason":"Policy hook unavailable: git repository root unavailable."}\\n'; exit 0; }`
-      : `{ printf 'BLOCKED: Policy hook unavailable: git repository root unavailable.\\n' >&2; exit 2; }`;
-  // dirname(--git-common-dir) is the main repo root in linked worktrees; absorbed submodule gitdirs live under .git/modules and must use their own worktree root.
-  // Git resolution yields no root at all when the shell cwd is outside any repo
-  // (e.g. an agent that cd'd into /tmp for scratch work). Failing closed there
-  // blocked EVERY later command - including the cd back into the repo - so the
-  // session was permanently wedged. Fall back to the cwd-independent
-  // $CLAUDE_PROJECT_DIR before failing closed; the guard still runs, so
-  // enforcement is unchanged. The guard re-resolves its OWN root from cwd
-  // (deny-dangerous.sh runs `git rev-parse` to find .goat-flow/hooks/deny-dangerous), so the
-  // launcher must cd into $root before invoking it - resolving only the script
-  // path still leaves the guard failing closed from /tmp. cd failure fails closed.
-  const resolveRoot = `gcd="$(git rev-parse --git-common-dir 2>/dev/null)"; root=""`;
-  const selectRoot = `case "$gcd" in */.git/modules/*|.git/modules/*) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd="\${gcd//\\\\//}"; root="$(dirname "$gcd")" ;; *) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; esac`;
-  const ensureRoot = `[ -f "$root/${path}" ] || root="\${CLAUDE_PROJECT_DIR:-}"; [ -f "$root/${path}" ] || ${failClosed}`;
-  const script = `${resolveRoot}; ${selectRoot}; ${ensureRoot}; cd "$root" || ${failClosed}; bash "$root/${path}"`;
+  const unavailable =
+    spec.id === "gruff-code-quality"
+      ? `{ printf 'gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n' >&2; exit 0; }`
+      : agent.id === "antigravity"
+        ? `{ printf '{"decision":"deny","reason":"Policy hook unavailable: git repository root unavailable."}\\n'; exit 0; }`
+        : `{ printf 'BLOCKED: Policy hook unavailable: git repository root unavailable.\\n' >&2; exit 2; }`;
+  // Central hook scripts live in the active worktree under .goat-flow/hooks.
+  // Resolve the active tree first so linked worktrees run the policy checked out
+  // beside the files being edited, then fall back to Claude's project-root env
+  // when a session has cd'd outside any git checkout. The launcher cd's into
+  // the resolved root because deny-dangerous.sh resolves its policy store from
+  // cwd; cd failure uses the same hook-specific unavailable behavior.
+  const resolveRoot = `root="$(git rev-parse --show-toplevel 2>/dev/null || true)"`;
+  const ensureRoot = `[ -f "$root/${path}" ] || root="\${CLAUDE_PROJECT_DIR:-}"; [ -f "$root/${path}" ] || ${unavailable}`;
+  const script = `${resolveRoot}; ${ensureRoot}; cd "$root" || ${unavailable}; bash "$root/${path}"`;
   return `bash -c ${shellSingleQuote(script)}`;
 }
 

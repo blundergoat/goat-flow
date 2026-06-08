@@ -189,6 +189,7 @@ describe("hook registrar", () => {
       writeAgentHookState(root, PROFILES.claude, denySpec, true);
       writeAgentHookState(root, PROFILES.claude, gruffSpec, true);
       writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
+      writeAgentHookState(root, PROFILES.antigravity, gruffSpec, true);
 
       const claudeSettings = readFileSync(
         join(root, ".claude", "settings.json"),
@@ -198,41 +199,66 @@ describe("hook registrar", () => {
         join(root, ".agents", "hooks.json"),
         "utf-8",
       );
+      const claudeConfig = JSON.parse(claudeSettings) as {
+        hooks?: {
+          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const antigravityConfig = JSON.parse(antigravityHooks) as {
+        "gruff-code-quality"?: {
+          PostToolUse?: Array<{ hooks?: Array<{ command?: string }> }>;
+        };
+      };
+      const claudeGruffCommands =
+        claudeConfig.hooks?.PostToolUse?.flatMap(
+          (entry) => entry.hooks?.map((hook) => hook.command ?? "") ?? [],
+        ) ?? [];
+      const antigravityGruffCommand =
+        antigravityConfig["gruff-code-quality"]?.PostToolUse?.[0]?.hooks?.[0]
+          ?.command ?? "";
 
       assert.match(
         claudeSettings,
         /Policy hook unavailable: git repository root unavailable\./u,
+      );
+      assert.ok(
+        claudeGruffCommands.every((command) =>
+          command.includes("gruff-code-quality: hook unavailable"),
+        ),
+      );
+      assert.ok(
+        claudeGruffCommands.every(
+          (command) => !command.includes("BLOCKED: Policy hook unavailable"),
+        ),
       );
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
       assert.match(
         antigravityHooks,
         /Policy hook unavailable: git repository root unavailable\./u,
       );
+      assert.match(
+        antigravityGruffCommand,
+        /gruff-code-quality: hook unavailable/u,
+      );
+      assert.doesNotMatch(antigravityGruffCommand, /"decision":"deny"/u);
       assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
     });
   });
 
-  it("generated Claude launchers resolve worktrees, submodules, bare repos, and outside-repo cwd", () => {
+  it("generated Claude launchers resolve active worktrees, submodules, bare repos, and outside-repo cwd", () => {
     withTempProject((root) => {
       const main = join(root, "main");
       const worktree = join(root, "main-worktree");
       mkdirSync(main, { recursive: true });
       runGit(main, ["init", "-q"]);
       writeFileSync(join(main, "README.md"), "# main\n");
-      writeFileSync(join(main, ".gitignore"), ".claude/\n.goat-flow/\n");
+      writeFileSync(join(main, ".gitignore"), ".claude/\n");
       commitAll(main, "initial main");
 
       const mainLauncher = installClaudeDenyHook(main);
-      assert.match(
-        mainLauncher,
-        /\/\*\|\[A-Za-z\]:\/\*\|\[A-Za-z\]:\\\\\*\)/u,
-        "launcher should treat Windows drive-letter git-common-dir paths as absolute",
-      );
-      assert.match(
-        mainLauncher,
-        /\$\{gcd\/\/\\\\\/\/\}/u,
-        "launcher should normalize defensive backslash drive paths before dirname",
-      );
+      commitAll(main, "install central hooks");
+      assert.match(mainLauncher, /git rev-parse --show-toplevel/u);
+      assert.doesNotMatch(mainLauncher, /git-common-dir/u);
       runGit(main, [
         "worktree",
         "add",
@@ -243,13 +269,13 @@ describe("hook registrar", () => {
       ]);
 
       assert.equal(
-        existsSync(join(worktree, ".claude", "hooks", "deny-dangerous.sh")),
-        false,
-        "worktree fixture should prove hooks exist only in the main checkout",
+        existsSync(join(worktree, ".goat-flow", "hooks", "deny-dangerous.sh")),
+        true,
+        "worktree fixture should prove central hooks exist in the active checkout",
       );
       assert.match(
-        runGit(worktree, ["rev-parse", "--git-common-dir"]),
-        /\.git$/u,
+        runGit(worktree, ["rev-parse", "--show-toplevel"]),
+        /main-worktree$/u,
       );
       assertLauncherAllows(mainLauncher, worktree);
 
@@ -258,12 +284,9 @@ describe("hook registrar", () => {
       runGit(subSource, ["init", "-q"]);
       writeFileSync(join(subSource, "README.md"), "# submodule\n");
       const sourceLauncher = installClaudeDenyHook(subSource);
-      assert.match(
-        sourceLauncher,
-        /\.git\/modules/u,
-        "launcher carries submodule branch",
-      );
-      commitAll(subSource, "initial submodule");
+      assert.match(sourceLauncher, /git rev-parse --show-toplevel/u);
+      assert.doesNotMatch(sourceLauncher, /git-common-dir/u);
+      commitAll(subSource, "initial submodule with central hooks");
 
       const parent = join(root, "parent");
       mkdirSync(parent, { recursive: true });

@@ -63,9 +63,11 @@ last_reviewed: 2026-06-07
 2. Keep the pre-1.9 gitignore regression fixture and `git check-ignore` assertion for `.goat-flow/hooks/deny-dangerous/patterns-shell.sh`.
 3. Before release, test the clone path: commit hook config plus hooks, clone fresh, then run `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`.
 
-## Footgun: Hook launchers using --show-toplevel resolve to the worktree, not the main repo
+## Footgun: Legacy per-agent hook launchers using --show-toplevel resolve to the worktree, not the main repo
 
 **Status:** active | **Created:** 2026-05-28 | **Evidence:** ACTUAL_MEASURED
+
+**Current scope:** Active for legacy per-agent hook copies; superseded for central `.goat-flow/hooks` launchers, which must use the active worktree root.
 
 **Symptoms:** A Claude or Antigravity session inside a `git worktree add` checkout fails every Bash with a PreToolUse error like `bash: /path/to/repo/.claude/worktrees/<branch>/.claude/hooks/<guard>.sh: No such file or directory`. Direct self-tests in the main repo pass; guards run fine outside the worktree. The same shape appears after a hook rename if a stale launcher references the old script name.
 
@@ -73,12 +75,14 @@ last_reviewed: 2026-06-07
 
 **Evidence:**
 - Pre-fix runtime probe: a fresh worktree at `<project>/.claude/worktrees/feat+x/` with `.claude/` gitignored started every Bash with `bash: <worktree>/.claude/hooks/patterns-shell.sh: No such file or directory`. The repro inside goat-flow succeeded only because `git ls-files | grep '^\.claude/hooks/'` lists all guard scripts; a fresh worktree inherited them via the branch checkout.
-- Anchors: `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (each search: `git rev-parse --git-common-dir`); the normalizer at `src/cli/facts/agent/hook-registration.ts` (search: `Hook launchers prefix the script path`) now strips both `$(...)` and `$var/` prefixes when extracting the script path for audit.
+- 2026-06-09 recurrence after the 1.10 central-hook migration: PR review on `blundergoat/gruff-ts#7` caught generated `.agents/hooks.json` launchers still resolving through `git rev-parse --git-common-dir`, which now points at the primary checkout in a linked worktree and can run stale `.goat-flow/hooks` scripts from the wrong checkout. Central hooks are committed under `.goat-flow/hooks`, so the active worktree root is now the correct root.
+- Anchors: central-hook launchers in `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (each search: `git rev-parse --show-toplevel`); generated launcher tests in `test/unit/hook-registrar.test.ts` (search: `resolve active worktrees`); the normalizer at `src/cli/facts/agent/hook-registration.ts` (search: `Hook launchers prefix the script path`) strips both `$(...)` and `$var/` prefixes when extracting the script path for audit.
 
 **Prevention:**
-1. Hook launchers MUST resolve to the main repo root, not the current tree. Use `git rev-parse --git-common-dir` and take its parent when absolute (worktree) or fall back to `--show-toplevel` when relative (main checkout).
-2. When renaming or splitting a guard, regenerate every launcher string the installer writes, not just the hook script; a stale launcher reproduces this even when the main repo has the new scripts.
-3. Add worktree coverage to any future configured-command smoke probe: run the literal launcher from a fresh worktree, not just the main checkout, before claiming it works.
+1. Central `.goat-flow/hooks` launchers MUST resolve to the active worktree root with `git rev-parse --show-toplevel`, because those scripts are committed with the worktree. Do not use `--git-common-dir` for central hook lookup; that can borrow stale scripts from the primary checkout.
+2. The old main-root rule only applies to legacy per-agent hook copies stored under ignored `.claude/hooks/` or `.agents/hooks/`.
+3. When renaming or splitting a guard, regenerate every launcher string the installer writes, not just the hook script; a stale launcher reproduces this even when the main repo has the new scripts.
+4. Add worktree coverage to any future configured-command smoke probe: run the literal launcher from a fresh worktree, not just the main checkout, before claiming it works.
 
 ## Footgun: Hook launchers fail closed when the shell cwd is outside any git repo, wedging every Bash
 

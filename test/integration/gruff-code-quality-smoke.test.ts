@@ -416,6 +416,36 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/example.ts"]);
   });
 
+  it("falls back to git-changed supported files when payload paths are unsupported", () => {
+    const root = makeRoot();
+    initGit(root);
+    writeMockGruff(root);
+    writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(
+      join(root, "src", "fallback.ts"),
+      "const existingDebt = true;\nconst unchanged = 1;\nconst touched = 'before';\n",
+    );
+    git(root, ["add", "src/fallback.ts"]);
+    writeFileSync(
+      join(root, "src", "fallback.ts"),
+      "const existingDebt = true;\nconst unchanged = 1;\nconst touched = 'after';\n",
+    );
+
+    const result = runHook(
+      root,
+      { tool_name: "Edit", tool_input: { file_path: "package.json" } },
+      "/usr/bin:/bin",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /\[warning\] src\/fallback\.ts:3 changed\.rule - changed line finding/,
+    );
+    assert.deepEqual(readInvocations(root), ["src/fallback.ts"]);
+  });
+
   it("treats new Write files as fully changed", () => {
     const root = makeRoot();
     initGit(root);

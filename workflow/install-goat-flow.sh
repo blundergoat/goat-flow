@@ -730,12 +730,19 @@ function configuredHookEnabled(hookId) {
   return false;
 }
 
+function hookUnavailableCommand(script) {
+  if (script === "gruff-code-quality.sh") {
+    return "{ printf '\\''gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n'\\'' >&2; exit 0; }";
+  }
+  return agent === "antigravity"
+    ? "{ printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }"
+    : "{ printf '\\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\\'' >&2; exit 2; }";
+}
+
 function rootResolvingCommand(script) {
   const unavailable =
-    agent === "antigravity"
-      ? "{ printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }"
-      : "{ printf '\\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\\'' >&2; exit 2; }";
-  return `bash -c 'gcd="$(git rev-parse --git-common-dir 2>/dev/null)"; root=""; case "$gcd" in */.git/modules/*|.git/modules/*) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd="\${gcd//\\\\//}"; root="$(dirname "$gcd")" ;; *) root="$(git rev-parse --show-toplevel 2>/dev/null || true)" ;; esac; [ -f "$root/.goat-flow/hooks/${script}" ] || root="\${CLAUDE_PROJECT_DIR:-}"; [ -f "$root/.goat-flow/hooks/${script}" ] || ${unavailable}; cd "$root" || ${unavailable}; bash "$root/.goat-flow/hooks/${script}"'`;
+    hookUnavailableCommand(script);
+  return `bash -c 'root="$(git rev-parse --show-toplevel 2>/dev/null || true)"; [ -f "$root/.goat-flow/hooks/${script}" ] || root="\${CLAUDE_PROJECT_DIR:-}"; [ -f "$root/.goat-flow/hooks/${script}" ] || ${unavailable}; cd "$root" || ${unavailable}; bash "$root/.goat-flow/hooks/${script}"'`;
 }
 
 function gruffHookEntries() {
@@ -1782,7 +1789,7 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
     echo ""
     echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
     # shellcheck disable=SC2016,SC1003 # literal JSON snippet preserves nested shell quoting for copy/paste guidance.
-    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash -c '\''gcd=\"$(git rev-parse --git-common-dir 2>/dev/null)\"; root=\"\"; case \"$gcd\" in */.git/modules/*|.git/modules/*) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; /*|[A-Za-z]:/*|[A-Za-z]:\\\\*) gcd=\"${gcd//\\\\//}\"; root=\"$(dirname \"$gcd\")\" ;; *) root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\" ;; esac; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; cd \"$root\" || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'\''"}]}'
+    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash -c '\''root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; cd \"$root\" || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'\''"}]}'
   fi
   echo ""
 fi

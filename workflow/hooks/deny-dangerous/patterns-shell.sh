@@ -229,6 +229,25 @@ check_pipeline_shell_consumers() {
   done
 }
 
+check_xargs_destructive_payload() {
+  local candidate="$1"
+  local normalized xargs_payload
+  normalized="$(normalize_command_candidate "$candidate")"
+  if xargs_payload="$(strip_xargs_payload_command "$normalized")" && rm_has_recursive "$xargs_payload"; then
+    block "xargs feeding rm -r hides recursive deletion targets. Review the input list and run manually." || return $?
+  fi
+}
+
+check_pipeline_xargs_destructive_payloads() {
+  local pipe_scan="${CMD_UNQUOTED//||/__GOAT_OR__}"
+  local -a pipeline_parts
+  local pipe_index
+  IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
+  for ((pipe_index = 0; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
+    check_xargs_destructive_payload "${pipeline_parts[$pipe_index]}" || return $?
+  done
+}
+
 check_destructive_segment() {
   local cmd="$1"
   local depth="${2:-0}"
@@ -252,10 +271,7 @@ check_destructive_segment() {
     fi
   fi
 
-  local xargs_payload=""
-  if xargs_payload="$(strip_xargs_payload_command "$CMD_NORMALIZED")" && rm_has_recursive "$xargs_payload"; then
-    block "xargs feeding rm -r hides recursive deletion targets. Review the input list and run manually." || return $?
-  fi
+  check_pipeline_xargs_destructive_payloads || return $?
 
   if find_has_destructive_action "$CMD_NORMALIZED"; then
     block "find deletion action (-delete / -exec rm -r) can remove many files. Review matches and run manually." || return $?

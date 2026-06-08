@@ -1,6 +1,6 @@
 ---
 category: deny-dangerous
-last_reviewed: 2026-06-07
+last_reviewed: 2026-06-09
 ---
 
 **Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
@@ -70,6 +70,25 @@ last_reviewed: 2026-06-07
 3. Keep workflow, `scripts/`, and installed agent hook mirrors byte-identical after heredoc edits.
 4. Before masking a heredoc body, ask "what executes this body?" - not just the first word. A stdin dispatcher (`xargs`/`parallel`) running a shell, or a shell anywhere downstream of a pipe, makes the body shell. Never let the chain-count cap be the only thing blocking a hidden shell body; the masking classifier must be correct on its own.
 5. Decide "is the body inert?" with an ALLOWLIST of safe consumers, never a blocklist of shells. A blocklist is a losing game (line continuations, `b"ash"`/`b\ash` quote tricks, `command`/`exec` wrappers, `read`/`mapfile` variable handoff, `ssh`). Default to "inspect"; mask only when every command in the (continuation-joined) opener pipeline is a known non-shell consumer. A masking false positive is recoverable ("run manually"); a masking miss is a silent bypass.
+
+---
+
+## Footgun: Dispatcher checks must inspect pipeline segments, not only the whole command
+
+**Status:** active | **Created:** 2026-06-09 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Direct `xargs rm -rf < list.txt` blocks, but the equivalent pipeline `printf '%s\n' /tmp/build-old | xargs rm -rf` or `find . -type f | xargs -r rm -rf` returns exit 0. The command is destructive, but the guard only sees the whole command as starting with `printf` or `find`, so `strip_xargs_payload_command` never runs on the right-hand pipeline segment.
+
+**Why it happens:** `patterns-shell.sh` already had an `xargs` payload parser, but `check_destructive_segment` applied it only to `CMD_NORMALIZED` for the full segment. Existing pipeline scanning checked shell/interpreter consumers, not destructive dispatcher payloads. Any policy that unwraps a dispatcher must decide whether it applies to the whole segment, each pipeline command, or both.
+
+**Evidence:**
+- Pre-fix runtime probes returned exit 0 with no block output for `printf '%s\n' /tmp/build-old | xargs rm -rf` and `find . -type f | xargs -r rm -rf`; direct controls `rm -rf /` and `xargs rm -rf < list.txt` still returned exit 2.
+- Fix anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `check_pipeline_xargs_destructive_payloads`) scans every pipeline segment; self-test cases in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `piped xargs recursive rm`) lock both block shapes and the allow control `xargs echo rm -rf`.
+
+**Prevention:**
+1. For every dispatcher/parser helper (`xargs`, `parallel`, `gh`, shell consumers), test direct, piped, option-bearing, and harmless literal forms.
+2. Whole-segment checks are not enough when the first command produces input for a later command; split the pipeline and run the dispatcher classifier on each executable segment.
+3. Always include a literal allow control so the fix does not become a broad "text contains rm -rf" block.
 
 ---
 
