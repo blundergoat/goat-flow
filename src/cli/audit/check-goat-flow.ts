@@ -684,6 +684,7 @@ const hookVersionCurrent: BuildCheck = {
   name: "Hook version",
   scope: "setup",
   provenance: setupSpecProvenance([
+    ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     "src/cli/constants.ts",
   ]),

@@ -204,7 +204,7 @@ function appendGoatFlowOverview(
     "4. **Learning loop** (`.goat-flow/`) - config, architecture doc, footguns, lessons, decisions, session logs.",
   );
   lines.push(
-    "5. **Shared meta references** (under `.goat-flow/skill-docs/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-docs/playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog); skill-quality-testing.md index plus skill-quality-testing/tdd-iteration.md, skill-quality-testing/adversarial-framing.md, and skill-quality-testing/deployment.md (full-depth authoring methodology split across an index and three topical files per ADR-023; load the topical file matching your skill type).",
+    "5. **Shared meta references** (under `.goat-flow/skill-docs/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-docs/playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog). **Skill-authoring methodology** lives under `.goat-flow/skill-docs/skill-quality-testing/`: README.md index plus tdd-iteration.md, adversarial-framing.md, and deployment.md (full-depth authoring methodology split per ADR-023; load the topical file matching your skill type).",
   );
   lines.push("");
   lines.push(
@@ -388,7 +388,9 @@ function appendPrecheckAndSetupQuality(
   lines.push("- `.goat-flow/skill-docs/skill-preamble.md` exists?");
   lines.push("- `.goat-flow/skill-docs/skill-conventions.md` exists?");
   lines.push("- `.goat-flow/config.yaml` exists and parseable?");
-  lines.push("- No `playbooks/` directory (that's legacy)?");
+  lines.push(
+    "- No root-level legacy `playbooks/` directory? Do not flag current `.goat-flow/skill-docs/playbooks/` or `workflow/skills/playbooks/` directories as legacy.",
+  );
   lines.push("");
   lines.push("**Instruction file (from Step 0 output):**");
   lines.push("- Line count (target: under 125, hard limit: 150)?");
@@ -554,7 +556,7 @@ function appendSystemAssessment(
   );
   lines.push("- Is the Definition of Done practical or checkbox theater?");
   lines.push(
-    "- Is `skill-preamble.md` (loaded every invocation) worth its token cost? Is `skill-conventions.md` (loaded on full-depth) referenced when it should be? Are the `skill-quality-testing.md` index and its topical files (tdd-iteration / adversarial-framing / deployment) consulted when skills are created or hardened, or do they sit unused?",
+    "- Is `skill-preamble.md` (loaded every invocation) worth its token cost? Is `skill-conventions.md` (loaded on full-depth) referenced when it should be? Are the `skill-quality-testing/README.md` index and its topical files (tdd-iteration / adversarial-framing / deployment) consulted when skills are created or hardened, or do they sit unused?",
   );
   lines.push(
     "- Are footguns/lessons actually consulted during skill execution, or ignored noise?",
@@ -598,7 +600,7 @@ function appendContradictions(
     "- Any skill that references `workflow/` paths - those are framework-internal and don't exist in target projects",
   );
   lines.push(
-    '- Any stale references to removed concepts: "playbooks", "coding-standards" as a first-class surface, "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
+    '- Any stale references to removed concepts: root-level "playbooks/" (not `.goat-flow/skill-docs/playbooks/`), "coding-standards" as a generated setup pack (not `docs/coding-standards/git-commit.md`), "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
   );
   lines.push(
     "- Does the instruction file execution loop match the skill-preamble's description?",
