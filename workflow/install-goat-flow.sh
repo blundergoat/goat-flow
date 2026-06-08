@@ -1496,8 +1496,9 @@ echo ""
 
 # ==========================================================================
 # 4. Sweep transitional skill-doc files from older installed layouts.
-#    Current installs keep doctrine at .goat-flow/skill-docs/ and standalone
-#    playbooks at .goat-flow/skill-docs/playbooks/.
+#    Current installs keep doctrine at .goat-flow/skill-docs/, standalone
+#    playbooks at .goat-flow/skill-docs/playbooks/, and skill-authoring
+#    methodology at .goat-flow/skill-docs/skill-quality-testing/.
 # ==========================================================================
 legacy_reference_files=(
   ".goat-flow/skill-docs/browser-use.md"
@@ -1508,7 +1509,11 @@ removed_any=false
 for legacy_file in "${legacy_reference_files[@]}"; do
   if [[ -f "$legacy_file" ]]; then
     rm -f "$legacy_file"
-    echo "  ✓ migrated $legacy_file → .goat-flow/skill-docs/playbooks/"
+    if [[ "$legacy_file" == ".goat-flow/skill-docs/skill-quality-testing.md" ]]; then
+      echo "  ✓ migrated $legacy_file → .goat-flow/skill-docs/skill-quality-testing/README.md"
+    else
+      echo "  ✓ migrated $legacy_file → .goat-flow/skill-docs/playbooks/"
+    fi
     removed_any=true
   fi
 done

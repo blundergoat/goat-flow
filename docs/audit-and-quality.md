@@ -34,7 +34,7 @@ Binary pass/fail. This is the structural setup gate - it validates that required
 
 Checks are grouped by **scope**:
 
-**setup scope** (GOAT Flow Setup) - 15 checks on goat-flow-owned surfaces:
+**setup scope** (GOAT Flow Setup) - 16 checks on goat-flow-owned surfaces:
 - `lessons` - `.goat-flow/learning-loop/lessons/` directory and README exist
 - `footguns` - `.goat-flow/learning-loop/footguns/` directory and README exist
 - `architecture` - `.goat-flow/architecture.md` exists
@@ -50,6 +50,7 @@ Checks are grouped by **scope**:
 - `other-files` - Other required manifest surfaces not already covered by named setup checks exist (for example local log README paths)
 - `config-parses` - `.goat-flow/config.yaml` parses and validates supported configuration fields; legacy `agents:` entries are ignored
 - `config-version` - Config version matches current release
+- `hook-version` - Installed hook dispatchers in `.goat-flow/hooks/` carry the current `goat-flow-hook-version` stamp; a missing or behind stamp means a partial upgrade
 
 **agent scope** (Agent Setup) - 4 registered checks. In aggregate mode, only `agent-instruction` can actively fail without `--agent <id>`:
 - `agent-instruction` - selected agent instruction file exists; aggregate mode also detects orphaned agent artifacts whose instruction file is missing
@@ -91,7 +92,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.10.0
+  Config:                 valid, version 1.10.1
   InstructionFile:        118 lines
 
 Agent Setup:              PASS

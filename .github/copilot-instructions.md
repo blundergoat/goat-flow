@@ -1,4 +1,4 @@
-# Copilot Instructions - v1.10.0 (2026-05-20)
+# Copilot Instructions - v1.10.1 (2026-06-08)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).

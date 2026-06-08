@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor.
+**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split.
 **Milestone:** Quality-report follow-up (reports 1-4, persistent MAJOR finding across four runs)
 
 ## Context
@@ -37,7 +37,7 @@ A single 400-word cap is defensible for progressive packs (small, pick-one-of-ma
 | Dispatcher skill | ≤555 words | `goat/SKILL.md` |
 | Functional skill | <2500 words | `goat-debug/SKILL.md`, `goat-plan/SKILL.md`, `goat-qa/SKILL.md`, `goat-review/SKILL.md`, `goat-critique/SKILL.md`, `goat-security/SKILL.md` |
 | Always-loaded shared content | <1500 words per file | `skill-preamble.md`, `skill-conventions.md` (loaded by every goat-* skill on invocation) |
-| Progressive reference pack | <3000 words per file | Files under per-skill `references/` subdirs and `.goat-flow/skill-docs/playbooks/<pack>/` subdirs (loaded only when a skill enters the mode that needs them) |
+| Progressive reference pack | <3000 words per file | Files under per-skill `references/` subdirs, `.goat-flow/skill-docs/skill-quality-testing/`, and `.goat-flow/skill-docs/playbooks/` (loaded only when a skill enters the mode that needs them) |
 
 Under the new tiers:
 
@@ -69,11 +69,11 @@ The installed `.goat-flow/skill-docs/skill-quality-testing/README.md` file becom
 
 ## Consequences
 
-- `skill-quality-testing.md` becomes a short index; three new topical files ship under `.goat-flow/skill-docs/skill-quality-testing/` (installed) and `workflow/skills/playbooks/skill-quality-testing/` (template).
+- The workflow source `workflow/skills/playbooks/skill-quality-testing.md` remains the short index template; the installed index is `.goat-flow/skill-docs/skill-quality-testing/README.md`. Three new topical files ship under `.goat-flow/skill-docs/skill-quality-testing/` (installed) and `workflow/skills/playbooks/skill-quality-testing/` (template).
 - Drift-check plumbing grows: `scripts/preflight-checks.sh`, `src/cli/audit/check-drift.ts` `SHARED_FILES` array, `workflow/install-goat-flow.sh`, `workflow/manifest.json`, and the `test/integration/audit-drift.test.ts` + `test/integration/preamble-sync.test.ts` fixture lists each gain the three new pairs.
 - `src/cli/audit/check-content-quality.ts` picks up the three new files so content-quality lint applies to the split content the same way it applied to the monolith.
-- Agents consulting `skill-quality-testing.md` for authoring guidance now read a short index, then load only the topical file their skill type needs (often just one).
-- The budget rule's new home is `deployment.md` (`.goat-flow/skill-docs/skill-quality-testing/deployment.md` (search: `Token budget met per the four-tier model`)). Cross-references that previously pointed at the old `skill-quality-testing.md` budget line are forward-compatible because the file still exists as the index - but new cross-references should target `deployment.md` directly.
+- Agents consulting skill-quality-testing guidance now read the short installed index at `.goat-flow/skill-docs/skill-quality-testing/README.md`, then load only the topical file their skill type needs (often just one).
+- The budget rule's new home is `deployment.md` (`.goat-flow/skill-docs/skill-quality-testing/deployment.md` (search: `Token budget met per the four-tier model`)). Cross-references that previously pointed at the old `skill-quality-testing.md` budget line are forward-compatible through the workflow template filename, but installed-surface cross-references should target `README.md` or `deployment.md` directly.
 - Future split work: if any of the three topical files exceeds 3000w, it splits further under the same model. `tdd-iteration.md` is the one to watch - it already sits at ~2800w carrying the bulk of the methodology, and any future content additions should be evaluated for whether they belong in a new topical file instead.
 
 **2026-05-02 amendment:** Dispatcher budget raised from <500 to ≤555. The dispatcher gained a structured Route Snapshot output contract, multi-intent decomposition protocol, GATHER checklist, and contract-test-mandated phrases (Proof Gate, "verification planning") that the original 500w budget didn't anticipate. The file was trimmed from 585w to 552w in the same pass - net reduction despite added features.

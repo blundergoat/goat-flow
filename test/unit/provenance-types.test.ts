@@ -166,9 +166,9 @@ describe("validateProvenance", () => {
 });
 
 describe("check evidence constants validate", () => {
-  it("all 36 registered build and harness checks satisfy the schema", () => {
+  it("all 37 registered build and harness checks satisfy the schema", () => {
     const checks = registeredChecks();
-    const expectedRegisteredCheckCount = 36;
+    const expectedRegisteredCheckCount = 37;
     assert.equal(checks.length, expectedRegisteredCheckCount);
     assertChecksHaveValidProvenance(checks);
   });

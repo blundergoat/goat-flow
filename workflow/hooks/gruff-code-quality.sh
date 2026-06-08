@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # gruff-code-quality.sh
+# goat-flow-hook-version: 1.10.1
 #
 # Purpose:
 #   Optional PostToolUse hook that runs the matching gruff analyzer after

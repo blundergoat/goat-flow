@@ -1,12 +1,13 @@
 /**
  * GOAT Flow Setup checks for `goat-flow audit`.
- * 15 setup-scope checks that validate project structure:
+ * 16 setup-scope checks that validate project structure:
  *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
  *             decisions, session-logs, plans, scratchpad)
  * + 1 skill-docs completeness and discoverability check
  * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
  * + 1 catch-all (other-files)
  * + 2 config (config-parses, config-version)
+ * + 1 hook-version (installed hook dispatcher version stamps current)
  */
 import type { BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
@@ -678,7 +679,51 @@ const configVersionCurrent: BuildCheck = {
   },
 };
 
-/** 15 setup-scope build checks */
+const hookVersionCurrent: BuildCheck = {
+  id: "hook-version",
+  name: "Hook version",
+  scope: "setup",
+  provenance: setupSpecProvenance([
+    ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/gruff-code-quality.sh",
+    "src/cli/constants.ts",
+  ]),
+  /** Run the Hook version check. */
+  run: (ctx) => {
+    // Central hook dispatchers carry a `# goat-flow-hook-version: X.Y.Z` stamp. An
+    // installed dispatcher whose stamp is missing (installed before the stamp
+    // shipped) or behind the current release is a partial upgrade - re-sync. A
+    // dispatcher that is not installed is skipped (gruff-code-quality is optional).
+    for (const hookFile of ["deny-dangerous.sh", "gruff-code-quality.sh"]) {
+      const relPath = `.goat-flow/hooks/${hookFile}`;
+      const content = ctx.fs.readFile(relPath);
+      if (content === null) continue;
+      const stamped = content.match(
+        /goat-flow-hook-version:\s*([0-9]+\.[0-9]+\.[0-9]+)/,
+      );
+      if (!stamped) {
+        return {
+          check: "Hook version",
+          message: `${relPath} has no goat-flow-hook-version stamp (installed before ${AUDIT_VERSION})`,
+          evidence: relPath,
+          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} hooks sync\` to update the hook files.`,
+        };
+      }
+      const stampedVersion = stamped[1];
+      if (stampedVersion !== AUDIT_VERSION) {
+        return {
+          check: "Hook version",
+          message: `${relPath} is goat-flow-hook-version ${stampedVersion} but the current release is ${AUDIT_VERSION}`,
+          evidence: relPath,
+          howToFix: `Re-run \`npx @blundergoat/goat-flow@${AUDIT_VERSION} hooks sync\` to update the hook files.`,
+        };
+      }
+    }
+    return null;
+  },
+};
+
+/** 16 setup-scope build checks */
 export const SETUP_CHECKS: BuildCheck[] = [
   lessons,
   footguns,
@@ -695,4 +740,5 @@ export const SETUP_CHECKS: BuildCheck[] = [
   otherFiles,
   configExistsAndParses,
   configVersionCurrent,
+  hookVersionCurrent,
 ];

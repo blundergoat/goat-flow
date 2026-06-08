@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-06-03
+last_reviewed: 2026-06-08
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -36,7 +36,7 @@ last_reviewed: 2026-06-03
 - `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) fails when shared skill-doc templates and installed copies differ.
 - `src/cli/audit/check-drift.ts` (search: `workflow/skills/reference/skill-preamble.md`) also checks shared-reference template/install parity through the audit path.
 
-**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks such as `skill-quality-testing.md`, update the matching `workflow/skills/playbooks/` and `.goat-flow/skill-docs/playbooks/` surfaces instead. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
+**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surfaces too. Exception: the `skill-quality-testing` methodology source starts at `workflow/skills/playbooks/skill-quality-testing.md` plus topical files under `workflow/skills/playbooks/skill-quality-testing/`, but installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
 
 ## Footgun: Skill reference-pack merges can leave stale installed files behind
 

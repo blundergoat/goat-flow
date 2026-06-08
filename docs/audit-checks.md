@@ -1,8 +1,8 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently registers **36 deterministic checks**:
+`npx goat-flow audit` currently registers **37 deterministic checks**:
 
-- **19 build checks**: 15 setup-scope checks plus 4 agent-scope checks
+- **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
 - **17 harness checks**: additional checks enabled by `--harness`
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
@@ -19,7 +19,7 @@ Source of truth:
 
 Build mode is the structural install gate. It validates files, directories, config, skills, settings, and deny wiring. It does **not** execute the project's lint, test, or build toolchain commands.
 
-### Setup Scope (15)
+### Setup Scope (16)
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
@@ -38,6 +38,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including local log README surfaces |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
 | `config-version` | Config version | `.goat-flow/config.yaml` declares the current `AUDIT_VERSION` |
+| `hook-version` | Hook version | Installed hook dispatchers in `.goat-flow/hooks/` (`deny-dangerous.sh`, `gruff-code-quality.sh`) carry the current `goat-flow-hook-version` stamp; a missing or behind stamp signals a partial upgrade and the fix re-runs `hooks sync` |
 
 ### Agent Scope (4)
 
@@ -55,7 +56,7 @@ Aggregate-mode nuance:
 
 ## Harness Checks
 
-`npx goat-flow audit . --harness` adds **17** deterministic harness-completeness checks on top of the 19 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
+`npx goat-flow audit . --harness` adds **17** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -81,8 +82,8 @@ Aggregate-mode nuance:
 
 | Command | Checks included | Notes |
 |---------|-----------------|-------|
-| `npx goat-flow audit .` | 15 setup + 4 agent = 19 build checks | Structural install gate only |
-| `npx goat-flow audit . --agent <id>` | Same 19 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx goat-flow audit . --harness` | 19 build + 17 harness = 36 checks | Adds harness completeness, still deterministic |
+| `npx goat-flow audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
+| `npx goat-flow audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
+| `npx goat-flow audit . --harness` | 20 build + 17 harness = 37 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.

@@ -2,6 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
+# goat-flow-hook-version: 1.10.1
 #
 # Single goat-flow PreToolUse guardrail dispatcher. It contains the shared
 # payload parser/normalizer and sources policy modules from the committed

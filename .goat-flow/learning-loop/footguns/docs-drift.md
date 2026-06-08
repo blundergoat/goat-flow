@@ -1,6 +1,6 @@
 ---
 category: docs-drift
-last_reviewed: 2026-05-30
+last_reviewed: 2026-06-08
 ---
 
 ## Footgun: Cold-path docs drift while structural audit passes
@@ -64,3 +64,4 @@ last_reviewed: 2026-05-30
 5. **Block citations of gitignored paths from committed files** - add a preflight grep for `\.goat-flow/(scratchpad|plans|logs/sessions|logs/quality|logs/critiques|logs/security|logs/uploads)/` inside `*.md` and `*.ts` files (excluding the gitignored trees themselves and the documented "where to write artifacts" instructions). The `instruction-file-skill-docs-pointer` audit check already understands which paths are gitignored; reuse that classification here.
 6. **Block competitor / third-party skill names in goat-flow-owned committed surfaces** - maintain a small denylist (`Valyu`, `MySQL skill`, `prime corpus`, `frontend-design skill`, `writing-skills`, plus any future external skill references discovered) and grep `*.md` / `*.ts` outside `node_modules`, `.claude/worktrees`, `.goat-flow/scratchpad`, `.goat-flow/plans`, `.goat-flow/logs`. Generic patterns must be stated provider-neutrally (`<VENDOR>_API_KEY`, `a domain skill`, `a vendor-SDK skill`).
 7. **Do not format illustrative basenames as path-like code spans** unless they resolve from the repo root. If a filename is an example rather than an actual path, write it in prose or include a valid parent directory.
+8. **Instruction-header dates drift every release because `bump-version.sh` updates the version but not the date.** The Round 4 fix (2026-05-11) corrected the stale `(2026-05-04)` headers by hand, but it recurred at 1.10.1: `CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md` shipped `v1.10.1 (2026-05-20)` while the release date was 2026-06-08, because `scripts/bump-version.sh` (search: `update_file`) seds only the version string in the `# {FILE} - v{VERSION} ({DATE})` header. Fix the script to also set the `({DATE})` to the CHANGELOG's latest release date (or add a preflight check comparing each header date to it); until then, update the three header dates by hand as part of every release bump.
