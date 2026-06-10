@@ -67,11 +67,14 @@ strip_xargs_payload_command() {
         i=$((i + 1))
         continue
         ;;
-      -I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
+      # Flags that consume a following operand - skip the flag AND its value.
+      # -a/--arg-file read the input list from a FILE; without them the filename
+      # is misread as the command, letting `xargs -a list rm -rf` slip through.
+      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
         i=$((i + 2))
         continue
         ;;
-      -I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
+      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
         i=$((i + 1))
         continue
         ;;

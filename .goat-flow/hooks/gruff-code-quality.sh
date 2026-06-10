@@ -562,6 +562,24 @@ self_test() {
     return 1
   }
 
+  # An ignored file that also carries a generic diagnostic must NOT be reported
+  # as a config error - the caller renders it as "skipped - ignored" instead.
+  report_output='{"findings":[],"diagnostics":[{"type":"info","message":"path ignored by config"}],"filesDiscovered":0,"ignored":{"paths":[{"path":"x.css"}]}}'
+  config_error="$(config_error_message "$report_output")"
+  [[ -z "$config_error" ]] || {
+    printf 'gruff-code-quality self-test: ignored-file diagnostic must not be a config error: %s\n' "$config_error" >&2
+    return 1
+  }
+
+  # With no ignore signal, a zero-files generic diagnostic still surfaces so a
+  # port reporting config trouble as an untyped diagnostic is not swallowed.
+  report_output='{"findings":[],"diagnostics":[{"type":"runtime","message":"analyzer produced no files"}],"filesDiscovered":0}'
+  config_error="$(config_error_message "$report_output")"
+  [[ "$config_error" == "analyzer produced no files" ]] || {
+    printf 'gruff-code-quality self-test: zero-files diagnostic without ignore should surface: %s\n' "$config_error" >&2
+    return 1
+  }
+
   [[ "$(min_severity_rank warning)" == "2" && "$(min_severity_rank error)" == "3" && "$(min_severity_rank bogus)" == "1" ]] || {
     printf 'gruff-code-quality self-test: min_severity_rank mapping failed\n' >&2
     return 1
@@ -717,6 +735,12 @@ valid_gruff_json() {
   printf '%s' "$output" | jq -e 'type == "object" and (.findings | type == "array")' >/dev/null 2>&1
 }
 
+# Extract a config-error message to surface to the agent, or empty when the run
+# is clean. Definitive config rejections (schemaOk=false, or a diagnostic typed
+# config-error) always surface. A generic untyped diagnostic only counts as a
+# config error when NO files were analysed AND the file was not ignored -
+# otherwise an ignored-but-OK file (which the caller renders as "skipped -
+# ignored") would be mislabelled "could not analyse".
 config_error_message() {
   local output="$1"
   printf '%s' "$output" | jq -r '
@@ -728,11 +752,12 @@ config_error_message() {
         | (.message? // .detail? // .reason? // .error? // empty)
       ] | first // "") as $any_diag
     | ((.filesDiscovered? // .paths.analysedFiles? // -1) == 0) as $zero_files
+    | ((((.ignored.paths? // []) + (.paths.ignoredPaths? // []) + (.ignoredPaths? // []) + (.paths.skipped? // [])) | length) > 0) as $has_ignore
     | if (.config.schemaOk == false) then
         (.config.error // "project gruff config rejected")
       elif ($config_diag | length) > 0 then
         $config_diag
-      elif $zero_files and (($any_diag | length) > 0) then
+      elif $zero_files and (($any_diag | length) > 0) and ($has_ignore | not) then
         $any_diag
       else
         empty
