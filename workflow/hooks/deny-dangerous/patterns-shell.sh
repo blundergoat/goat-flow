@@ -221,7 +221,7 @@ check_pipeline_shell_consumers() {
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
   for ((pipe_index = 1; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     if is_shell_command "${pipeline_parts[$pipe_index]}"; then
-      block "Pipe to shell. Download or inspect first, then run." || return $?
+      block "Pipe to shell. Download or inspect first, then run; to feed a local script, redirect from a file (cmd < file) instead of piping." || return $?
     fi
     if is_interpreter_command "${pipeline_parts[$pipe_index]}"; then
       block "Pipe to interpreter. Download or inspect first, then run." || return $?

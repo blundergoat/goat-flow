@@ -691,7 +691,7 @@ check_command_substitutions() {
   remaining_unquoted="${remaining_unquoted//\\\`/}"
 
   if [[ "$remaining_unquoted" == *\`* ]]; then
-    block "Backtick command substitution hides nested execution. Use a direct command instead." || return $?
+    block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
   fi
 }
 

@@ -1,6 +1,6 @@
 ---
 category: deny-dangerous
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-11
 ---
 
 **Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
@@ -30,12 +30,13 @@ last_reviewed: 2026-06-09
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A hook can block top-level `true; rm -rf /` while allowing the same command nested inside `bash -c "true; rm -rf /"` or `echo "$(true; rm -rf /)"`.
+**Symptoms:** Pre-fix, the hook blocked top-level `true; rm -rf /` while allowing the same command nested inside `bash -c "true; rm -rf /"` or `echo "$(true; rm -rf /)"`. Current self-tests lock these as blocked; the active trap is that recursive execution paths can regress if they call `check_segment` directly instead of `check_command_segments`.
 
-**Why it happens:** Top-level input is split on `&&`, `||`, semicolons, and newlines before each segment is checked. Recursive paths for command substitution, process substitution, and `bash -c` can call the raw segment checker directly; if the nested string starts with a read-only verb (`echo`), the whitelist returns before the destructive segment is inspected.
+**Why it happens:** Top-level input is split on `&&`, `||`, semicolons, and newlines before each segment is checked. A regression can reappear if recursive paths for command substitution, process substitution, and `bash -c` call the raw segment checker directly; if the nested string starts with a read-only verb (`echo`), the whitelist returns before the destructive segment is inspected.
 
 **Evidence:**
 - `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`) - split destructive guardrail owns recursive deletion, shell execution, and destructive-command policy; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `rm -rf`) - central self-test locks representative destructive-command blocking.
+- Current regression anchors: `workflow/hooks/deny-dangerous.sh` (search: `check_command_segments`) recurses through the command segment splitter; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`; `rm behind ; inside subst`) locks nested chained destructive commands as blocked.
 - Runtime proof before the fix: `bash workflow/hooks/deny-dangerous.sh --self-test=full` returned `FAIL [bash -c semicolon dangerous]: expected 2, got 0`, `FAIL [bash -c and-chain dangerous]: expected 2, got 0`, `FAIL [bash -c semicolon git push]: expected 2, got 0`.
 
 **Prevention:**
@@ -77,9 +78,9 @@ last_reviewed: 2026-06-09
 
 **Status:** active | **Created:** 2026-06-09 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Direct `xargs rm -rf < list.txt` blocks, but the equivalent pipeline `printf '%s\n' /tmp/build-old | xargs rm -rf` or `find . -type f | xargs -r rm -rf` returns exit 0. The command is destructive, but the guard only sees the whole command as starting with `printf` or `find`, so `strip_xargs_payload_command` never runs on the right-hand pipeline segment.
+**Symptoms:** Pre-fix, direct `xargs rm -rf < list.txt` blocked, but equivalent pipelines such as `printf '%s\n' /tmp/build-old | xargs rm -rf` or `find . -type f | xargs -r rm -rf` returned exit 0. Current self-tests lock these as blocked; the active trap is that dispatcher parsers must run on each pipeline segment, not only the whole command.
 
-**Why it happens:** `patterns-shell.sh` already had an `xargs` payload parser, but `check_destructive_segment` applied it only to `CMD_NORMALIZED` for the full segment. Existing pipeline scanning checked shell/interpreter consumers, not destructive dispatcher payloads. Any policy that unwraps a dispatcher must decide whether it applies to the whole segment, each pipeline command, or both.
+**Why it happens:** `patterns-shell.sh` already had an `xargs` payload parser, but the pre-fix `check_destructive_segment` applied it only to `CMD_NORMALIZED` for the full segment. Existing pipeline scanning checked shell/interpreter consumers, not destructive dispatcher payloads. Any policy that unwraps a dispatcher must decide whether it applies to the whole segment, each pipeline command, or both.
 
 **Evidence:**
 - Pre-fix runtime probes returned exit 0 with no block output for `printf '%s\n' /tmp/build-old | xargs rm -rf` and `find . -type f | xargs -r rm -rf`; direct controls `rm -rf /` and `xargs rm -rf < list.txt` still returned exit 2.

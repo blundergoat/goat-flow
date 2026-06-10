@@ -37,7 +37,7 @@ Order findings by severity, not by file or discovery order.
 - Tag evidence quality: **OBSERVED** (directly verified in code) | **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing) | **UNVERIFIED** (cannot re-read cited evidence) | **HUMAN-PENDING: \<what needs checking\>** (requires manual verification the agent cannot perform)
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Before citing a symbol, CLI flag, or config key, verify it against a repo search, `--help`, or the actual config file
-- On completion claims, the 5 hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
+- On completion claims, the hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
 
 ## Proof Classification
 
