@@ -7,6 +7,290 @@
  * stay small and the network behaviour lives in one place per concern.
  */
 
+/** Confirm disabling a guarded hook before removing that safety surface. */
+function dashboardConfirmHookToggle(
+  hook: HookState,
+  shouldEnable: boolean,
+): boolean {
+  if (shouldEnable || !hook.requiresConfirmDialog) return true;
+  return window.confirm(
+    `Disabling ${hook.name} removes the guardrail. Continue?`,
+  );
+}
+
+/** Replace one hook row after the server accepts a toggle request. */
+function dashboardApplyHookToggleResult(
+  ctx: DashboardAppContext,
+  hook: HookState,
+  shouldEnable: boolean,
+): void {
+  ctx.hooksState = ctx.hooksState.map((item: HookState) =>
+    item.id === hook.id ? hook : item,
+  );
+  ctx.showToast(`${hook.name} ${shouldEnable ? "enabled" : "disabled"}`);
+}
+
+/**
+ * Persist one hook toggle. Stale project responses are ignored, and request failures recover into
+ * the Hooks banner/toast because guardrail rows must remain visible when a save fails.
+ */
+async function dashboardToggleHookState(
+  ctx: DashboardAppContext,
+  hook: HookState,
+  shouldEnable: boolean,
+): Promise<void> {
+  if (!hook.togglable || ctx.hookSavingId) return;
+  if (!dashboardConfirmHookToggle(hook, shouldEnable)) return;
+  ctx.hookSavingId = hook.id;
+  ctx.hooksError = "";
+  const requestProjectPath = ctx.projectPath;
+  try {
+    const res = await dashboardFetch(
+      `/api/hooks/${encodeURIComponent(hook.id)}/toggle?path=${encodeURIComponent(requestProjectPath)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: shouldEnable }),
+      },
+    );
+    const payload = readRecord(await res.json(), "Hook toggle response");
+    const error = readErrorMessage(payload);
+    if (error) throw new Error(error);
+    if (ctx.projectPath !== requestProjectPath) return;
+    dashboardApplyHookToggleResult(
+      ctx,
+      payload.hook as HookState,
+      shouldEnable,
+    );
+  } catch (err) {
+    if (ctx.projectPath !== requestProjectPath) return;
+    ctx.hooksError = err instanceof Error ? err.message : String(err);
+    ctx.showToast(ctx.hooksError || "Hook update failed", true);
+  } finally {
+    if (ctx.hookSavingId === hook.id) ctx.hookSavingId = null;
+  }
+}
+
+/** Return whether a quality request still belongs to the current project and runner. */
+function dashboardIsCurrentQualityRequest(
+  ctx: DashboardAppContext,
+  projectPath: string,
+  runner: RunnerId,
+): boolean {
+  return ctx.projectPath === projectPath && ctx.activeRunner === runner;
+}
+
+/** Load the latest home-page quality summary and recover failures into the shared toast channel. */
+async function dashboardGenerateHomeQualitySummary(
+  ctx: DashboardAppContext,
+): Promise<void> {
+  ctx.homeQualityLoading = true;
+  ctx.homeQualityLatest = null;
+  const requestProjectPath = ctx.projectPath;
+  const requestAgent = ctx.activeRunner;
+  try {
+    const res = await dashboardFetch(
+      `/api/quality/history?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=agent-setup&limit=1`,
+    );
+    const payload = readRecord(await res.json(), "Home quality response");
+    if (
+      !dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)
+    )
+      return;
+    const error = readErrorMessage(payload);
+    if (error) {
+      ctx.showToast(error, true);
+    } else {
+      ctx.homeQualityLatest = readQualityHistoryLatest(payload.latest);
+    }
+  } catch (err) {
+    if (
+      !dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)
+    )
+      return;
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.showToast(msg || "Home quality loading failed", true);
+  }
+  if (dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)) {
+    ctx.homeQualityLoading = false;
+  }
+}
+
+/** Convert a raw skill-inventory payload into valid skill artifact rows. */
+function dashboardReadSkillQualityArtifacts(
+  payload: JsonRecord,
+): SkillQualityArtifact[] {
+  return Array.isArray(payload.artifacts)
+    ? payload.artifacts.filter(
+        (artifact): artifact is SkillQualityArtifact =>
+          isRecord(artifact) &&
+          artifact.kind === "skill" &&
+          typeof artifact.id === "string" &&
+          typeof artifact.name === "string" &&
+          typeof artifact.path === "string" &&
+          typeof artifact.source === "string",
+      )
+    : [];
+}
+
+/** Clear a selected skill-quality report when the refreshed inventory no longer contains it. */
+function dashboardPruneMissingSkillQualitySelection(
+  ctx: DashboardAppContext,
+): void {
+  if (!ctx.skillQualitySelectedId) return;
+  const stillExists = ctx.skillQualityArtifacts.some(
+    (artifact: SkillQualityArtifact) =>
+      artifact.id === ctx.skillQualitySelectedId,
+  );
+  if (stillExists) return;
+  ctx.skillQualitySelectedId = null;
+  ctx.skillQualityReport = null;
+}
+
+/** Return whether a skill-quality inventory response still belongs to the visible request. */
+function dashboardIsCurrentSkillInventoryRequest(
+  ctx: DashboardAppContext,
+  projectPath: string,
+  runner: RunnerId,
+  generation: number,
+): boolean {
+  return (
+    ctx.projectPath === projectPath &&
+    ctx.activeRunner === runner &&
+    ctx.skillQualityPrefetchGeneration === generation
+  );
+}
+
+/**
+ * Load skill-quality inventory. Endpoint failures recover through toasts, and stale project/runner
+ * responses are ignored so a late fetch cannot overwrite the currently visible Skills tab state.
+ */
+async function dashboardLoadSkillQualityInventory(
+  ctx: DashboardAppContext,
+): Promise<void> {
+  const requestProjectPath = ctx.projectPath;
+  const requestRunner = ctx.activeRunner;
+  const requestGeneration = Number(ctx.skillQualityPrefetchGeneration) + 1;
+  ctx.skillQualityPrefetchGeneration = requestGeneration;
+  ctx.skillQualityPrefetching = false;
+  try {
+    const res = await dashboardFetch(
+      `/api/skill-quality/inventory?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}`,
+    );
+    const payload = readRecord(await res.json(), "Skill quality inventory");
+    const error = readErrorMessage(payload);
+    if (error) {
+      ctx.showToast(error, true);
+      return;
+    }
+    if (
+      !dashboardIsCurrentSkillInventoryRequest(
+        ctx,
+        requestProjectPath,
+        requestRunner,
+        requestGeneration,
+      )
+    ) {
+      return;
+    }
+    ctx.skillQualityArtifacts = dashboardReadSkillQualityArtifacts(payload);
+    dashboardPruneMissingSkillQualitySelection(ctx);
+    ctx.skillQualityReports = {};
+    ctx.skillQualityAuditedAt = null;
+    ctx.skillQualityPrefetching = false;
+    void ctx.prefetchSkillReports(
+      requestProjectPath,
+      requestRunner,
+      requestGeneration,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.showToast(msg || "Skill quality inventory failed", true);
+  }
+}
+
+/**
+ * Fetch one skill-quality report during sidebar prefetch. Per-artifact fetch/decode failures are
+ * swallowed as a best-effort fallback so one bad skill report does not block the rest of the list.
+ */
+async function dashboardPrefetchOneSkillReport(
+  ctx: DashboardAppContext,
+  art: SkillQualityArtifact,
+  projectPath: string,
+  runner: string,
+  generation: number,
+): Promise<void> {
+  try {
+    const res = await dashboardFetch(
+      `/api/skill-quality?path=${encodeURIComponent(projectPath)}&agent=${encodeURIComponent(runner)}&artifact=${encodeURIComponent(art.id)}`,
+    );
+    const payload = readRecord(await res.json(), "Skill quality report");
+    if (readErrorMessage(payload)) return;
+    if (
+      ctx.projectPath !== projectPath ||
+      ctx.activeRunner !== runner ||
+      ctx.skillQualityPrefetchGeneration !== generation
+    ) {
+      return;
+    }
+    // /api/skill-quality returns this app's own SkillQualityReport shape; JsonRecord does not
+    // structurally overlap it, so TS requires the assertion go through unknown. Source is same-origin.
+    ctx.skillQualityReports[art.id] = payload;
+  } catch {
+    // Best-effort sidebar grades: one failed artifact falls back to no cached grade.
+    return;
+  }
+}
+
+/** Finalise a matching prefetch batch and auto-select the first skill when none is selected. */
+function dashboardCompleteSkillReportPrefetch(
+  ctx: DashboardAppContext,
+  projectPath: string,
+  runner: string,
+  generation: number,
+): void {
+  if (
+    ctx.projectPath !== projectPath ||
+    ctx.activeRunner !== runner ||
+    ctx.skillQualityPrefetchGeneration !== generation
+  ) {
+    return;
+  }
+  ctx.skillQualityAuditedAt = Date.now();
+  ctx.skillQualityPrefetching = false;
+  if (!ctx.skillQualitySelectedId && ctx.skillQualityArtifacts.length > 0) {
+    const first = ctx.skillQualityArtifacts[0];
+    if (first) void ctx.loadSkillQualityReport(first.id);
+  }
+}
+
+/**
+ * Prefetch reports for every skill artifact. Empty inventories return early, and per-artifact
+ * failures are swallowed by dashboardPrefetchOneSkillReport so sidebar grades stay best effort.
+ */
+async function dashboardPrefetchSkillReports(
+  ctx: DashboardAppContext,
+  projectPath: string,
+  runner: string,
+  generation: number,
+): Promise<void> {
+  const artifacts = [...ctx.skillQualityArtifacts];
+  if (artifacts.length === 0) return;
+  ctx.skillQualityPrefetching = true;
+  await Promise.all(
+    artifacts.map((art) =>
+      dashboardPrefetchOneSkillReport(
+        ctx,
+        art,
+        projectPath,
+        runner,
+        generation,
+      ),
+    ),
+  );
+  dashboardCompleteSkillReportPrefetch(ctx, projectPath, runner, generation);
+}
+
 /**
  * Build the agent-detection / plans / hooks fragment of the app's async data-loading methods.
  * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the
@@ -15,7 +299,7 @@
  * @param supportedAgents - agents the server can launch, used to scope installed-agent detection
  * @returns the fragment object of agent/plans/hooks loader methods merged into the Alpine app
  */
-function dashboardAppFragment07(
+function dashboardAgentPlanHookLoadersFragment(
   supportedAgents: SupportedAgent[],
 ): DashboardAppFragment {
   return {
@@ -189,7 +473,7 @@ function dashboardAppFragment07(
   };
 }
 
-function dashboardAppFragment08(
+function dashboardHookSetupActionsFragment(
   supportedAgents: SupportedAgent[],
 ): DashboardAppFragment {
   return {
@@ -310,43 +594,7 @@ function dashboardAppFragment08(
 
     /** Persist one hook toggle; reports failed requests while preserving rows because guardrail state is sensitive. */
     async toggleHook(hook: HookState, shouldEnable: boolean) {
-      if (!hook.togglable || this.hookSavingId) return;
-      if (!shouldEnable && hook.requiresConfirmDialog) {
-        const confirmed = window.confirm(
-          `Disabling ${hook.name} removes the guardrail. Continue?`,
-        );
-        if (!confirmed) return;
-      }
-      this.hookSavingId = hook.id;
-      this.hooksError = "";
-      const requestProjectPath = this.projectPath;
-      try {
-        const res = await dashboardFetch(
-          `/api/hooks/${encodeURIComponent(hook.id)}/toggle?path=${encodeURIComponent(requestProjectPath)}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: shouldEnable }),
-          },
-        );
-        const payload = readRecord(await res.json(), "Hook toggle response");
-        const error = readErrorMessage(payload);
-        if (error) throw new Error(error);
-        if (this.projectPath !== requestProjectPath) return;
-        const nextHook = payload.hook as HookState;
-        this.hooksState = this.hooksState.map((item: HookState) =>
-          item.id === nextHook.id ? nextHook : item,
-        );
-        this.showToast(
-          `${nextHook.name} ${shouldEnable ? "enabled" : "disabled"}`,
-        );
-      } catch (err) {
-        if (this.projectPath !== requestProjectPath) return;
-        this.hooksError = err instanceof Error ? err.message : String(err);
-        this.showToast(this.hooksError || "Hook update failed", true);
-      } finally {
-        if (this.hookSavingId === hook.id) this.hookSavingId = null;
-      }
+      await dashboardToggleHookState(this, hook, shouldEnable);
     },
 
     /** Reapply the current desired hook state to repair installed drift. */
@@ -386,7 +634,7 @@ function dashboardAppFragment08(
  * project/agent mid-flight and a late reply must not overwrite newer state. Merged by
  * dashboardMergeAppFragments.
  */
-function dashboardAppFragment09(): DashboardAppFragment {
+function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
   return {
     /** Generate setup output after setup detection gets a paint. */
     scheduleSetupPrompt() {
@@ -412,96 +660,30 @@ function dashboardAppFragment09(): DashboardAppFragment {
 
     /** Load the latest quality-history summary; reports errors as toasts and ignores stale responses. */
     async generateHomeQualitySummary() {
-      this.homeQualityLoading = true;
-      this.homeQualityLatest = null;
-      const requestProjectPath = this.projectPath;
-      const requestAgent = this.activeRunner;
-      const isCurrentRequest = (): boolean =>
-        this.projectPath === requestProjectPath &&
-        this.activeRunner === requestAgent;
-      try {
-        const res = await dashboardFetch(
-          `/api/quality/history?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=agent-setup&limit=1`,
-        );
-        const payload = readRecord(await res.json(), "Home quality response");
-        if (!isCurrentRequest()) return;
-        const error = readErrorMessage(payload);
-        if (error) {
-          this.showToast(error, true);
-        } else {
-          this.homeQualityLatest = readQualityHistoryLatest(payload.latest);
-        }
-      } catch (err) {
-        if (!isCurrentRequest()) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(msg || "Home quality loading failed", true);
-      }
-      if (isCurrentRequest()) this.homeQualityLoading = false;
+      await dashboardGenerateHomeQualitySummary(this);
     },
 
     /** Copy the current quality prompt to the clipboard. */
     copyQuality() {
       dashboardCopyQuality(this);
     },
+  };
+}
 
+/**
+ * Build skill-quality inventory loaders.
+ *
+ * Inventory and prefetch live together because both share the same project/runner generation guard:
+ * stale responses must not overwrite the Skills tab after the user switches workspace or runner.
+ * Prefetch swallows per-artifact failures as a best-effort fallback so one bad report does not hide
+ * the rest of the inventory.
+ */
+function dashboardSkillQualityInventoryLoadersFragment(): DashboardAppFragment {
+  return {
     // -- Skill quality --
     /** Load skill-quality inventory; reports endpoint errors and resets stale caches because reports key by artifact. */
     async loadSkillQualityInventory() {
-      const requestProjectPath = this.projectPath;
-      const requestRunner = this.activeRunner;
-      const requestGeneration = Number(this.skillQualityPrefetchGeneration) + 1;
-      this.skillQualityPrefetchGeneration = requestGeneration;
-      this.skillQualityPrefetching = false;
-      try {
-        const res = await dashboardFetch(
-          `/api/skill-quality/inventory?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}`,
-        );
-        const payload = readRecord(await res.json(), "Skill quality inventory");
-        const error = readErrorMessage(payload);
-        if (error) {
-          this.showToast(error, true);
-          return;
-        }
-        if (
-          this.projectPath !== requestProjectPath ||
-          this.activeRunner !== requestRunner ||
-          this.skillQualityPrefetchGeneration !== requestGeneration
-        ) {
-          return;
-        }
-        this.skillQualityArtifacts = Array.isArray(payload.artifacts)
-          ? payload.artifacts.filter(
-              (artifact): artifact is SkillQualityArtifact =>
-                isRecord(artifact) &&
-                artifact.kind === "skill" &&
-                typeof artifact.id === "string" &&
-                typeof artifact.name === "string" &&
-                typeof artifact.path === "string" &&
-                typeof artifact.source === "string",
-            )
-          : [];
-        if (
-          this.skillQualitySelectedId &&
-          !this.skillQualityArtifacts.some(
-            (artifact: SkillQualityArtifact) =>
-              artifact.id === this.skillQualitySelectedId,
-          )
-        ) {
-          this.skillQualitySelectedId = null;
-          this.skillQualityReport = null;
-        }
-        this.skillQualityReports = {};
-        this.skillQualityAuditedAt = null;
-        this.skillQualityPrefetching = false;
-        void this.prefetchSkillReports(
-          requestProjectPath,
-          requestRunner,
-          requestGeneration,
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(msg || "Skill quality inventory failed", true);
-      }
+      await dashboardLoadSkillQualityInventory(this);
     },
 
     /** Fetch reports for every artifact in parallel so the sidebar can show
@@ -512,47 +694,12 @@ function dashboardAppFragment09(): DashboardAppFragment {
       runner: string,
       generation: number,
     ) {
-      const artifacts = [...this.skillQualityArtifacts];
-      if (artifacts.length === 0) return;
-      this.skillQualityPrefetching = true;
-      const fetches = artifacts.map(async (art) => {
-        try {
-          const res = await dashboardFetch(
-            `/api/skill-quality?path=${encodeURIComponent(projectPath)}&agent=${encodeURIComponent(runner)}&artifact=${encodeURIComponent(art.id)}`,
-          );
-          const payload = readRecord(await res.json(), "Skill quality report");
-          if (readErrorMessage(payload)) return;
-          if (
-            this.projectPath !== projectPath ||
-            this.activeRunner !== runner ||
-            this.skillQualityPrefetchGeneration !== generation
-          ) {
-            return;
-          }
-          // /api/skill-quality returns this app's own SkillQualityReport shape;
-          // JsonRecord doesn't structurally overlap it, so TS requires the
-          // assertion go through `unknown` (TS2352). Source is same-origin.
-          this.skillQualityReports[art.id] = payload;
-        } catch {
-          /* per-artifact fetch is best effort; one failure must not affect the rest */
-        }
-      });
-      await Promise.all(fetches);
-      if (
-        this.projectPath === projectPath &&
-        this.activeRunner === runner &&
-        this.skillQualityPrefetchGeneration === generation
-      ) {
-        this.skillQualityAuditedAt = Date.now();
-        this.skillQualityPrefetching = false;
-        if (
-          !this.skillQualitySelectedId &&
-          this.skillQualityArtifacts.length > 0
-        ) {
-          const first = this.skillQualityArtifacts[0];
-          if (first) void this.loadSkillQualityReport(first.id);
-        }
-      }
+      await dashboardPrefetchSkillReports(
+        this,
+        projectPath,
+        runner,
+        generation,
+      );
     },
   };
 }

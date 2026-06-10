@@ -339,7 +339,15 @@ describe("dashboard terminal launch flow", () => {
     const source = readDashboardAppSource();
     assert.match(
       source,
-      /if \(\(view === "workspace" \|\| view === "setup"\) && ctx\.terminalAvailable\) \{\s+void ctx\.loadXterm\(\)\.catch\(\(\) => \{\}\);\s+\}/,
+      /function dashboardShouldWarmXterm\([\s\S]{0,220}\(view === "workspace" \|\| view === "setup"\) && ctx\.terminalAvailable/,
+    );
+    assert.match(
+      source,
+      /function dashboardWarmXtermForView\([\s\S]{0,260}dashboardShouldWarmXterm\(ctx, view\)[\s\S]{0,120}ctx\.loadXterm\(\)\.catch\(\(\) => \{\}\)/,
+    );
+    assert.match(
+      source,
+      /ctx\.\$watch\("activeView"[\s\S]{0,120}dashboardWarmXtermForView\(ctx, view\)/,
     );
   });
 
@@ -449,7 +457,10 @@ describe("dashboard terminal launch flow", () => {
     );
     assert.match(source, /return tail\.length === 0/);
     assert.match(source, /get terminalDetached\(\): boolean/);
-    assert.match(source, /s\.id === session\.id && s\.status === "active"/);
+    assert.match(
+      source,
+      /serverSession\.id === session\.id && serverSession\.status === "active"/,
+    );
     assert.match(
       source,
       /s\.id === id && s\.ended !== true && s\.connected === true/,

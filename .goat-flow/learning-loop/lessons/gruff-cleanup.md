@@ -95,6 +95,16 @@ last_reviewed: 2026-06-10
 
 **Prevention:** After splitting dashboard classic scripts, update `src/dashboard/index.html` and every VM helper source list in the same patch. Run the focused VM suites before expanding the refactor. Evidence anchors: `src/dashboard/index.html` (search: `dashboard-app-merge.js`), `test/unit/dashboard-terminal-launch/helpers.ts` (search: `readDashboardAppSource`), `test/unit/dashboard-readers.test.ts` (search: `MODEL_READERS_PATH`).
 
+## Lesson: Static source-shape tests must follow helper extractions
+
+**Status:** active | **Created:** 2026-06-10
+
+**What happened:** During M01 dashboard state-fragment gruff cleanup, extracting the detached-terminal predicate from `dashboardAppFragment02` into `isTerminalDetached` cleared targeted gruff but the focused VM suite failed. `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` still asserted the old inline regex `s.id === session.id && s.status === "active"`.
+
+**Root cause:** I treated the dashboard terminal VM suite as mostly behavioral coverage and did not pre-scan its `readDashboardAppSource()` assertions after moving source-shape logic into helpers.
+
+**Prevention:** When extracting helpers from dashboard classic-script fragments, grep the focused VM tests for `readDashboardAppSource` and the moved expression or symbol before the first rerun. Update static assertions to the new stable helper/caller contract, then rerun the focused suite. Evidence anchors: `src/dashboard/dashboard-app-state-fragments.ts` (search: `function isTerminalDetached`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `serverSession\.id === session\.id`).
+
 ## Lesson: Dashboard asset renames need a clean dist build
 
 **Status:** active | **Created:** 2026-05-31
