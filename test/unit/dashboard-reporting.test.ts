@@ -63,4 +63,46 @@ describe("dashboard reporting", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // Fixture purpose: writes temp learning-loop files on disk so one stale generated index plus one missing index covers Home's freshness counts.
+  it("includes generated-index freshness in the learning-loop summary", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-dashboard-report-"));
+    try {
+      const footgunsDir = join(root, ".goat-flow", "learning-loop", "footguns");
+      const lessonsDir = join(root, ".goat-flow", "learning-loop", "lessons");
+      mkdirSync(footgunsDir, { recursive: true });
+      mkdirSync(lessonsDir, { recursive: true });
+      writeFileSync(
+        join(footgunsDir, "runtime.md"),
+        [
+          "---",
+          "category: runtime",
+          "last_reviewed: 2026-06-10",
+          "---",
+          "",
+          "## Footgun: Stale dashboard index",
+          "",
+          "**Status:** active | **Created:** 2026-06-10 | **Evidence:** unit fixture",
+          "",
+          "**Symptoms:** Home should report stale generated indexes.",
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(join(footgunsDir, "INDEX.md"), "stale index\n");
+
+      const enriched = enrichDashboardReport(minimalReport(), root, true);
+      const learningLoop = enriched.learningLoop;
+      assert.ok(learningLoop);
+      const footgunIndex = learningLoop.indexes.find(
+        (entry) => entry.bucket === "footguns",
+      );
+
+      assert.equal(footgunIndex?.state, "stale");
+      assert.equal(learningLoop.indexStaleCount, 1);
+      assert.equal(learningLoop.indexMissingCount, 1);
+      assert.equal(learningLoop.status, "needs-review");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

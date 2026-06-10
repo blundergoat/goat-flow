@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-06-04
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -130,6 +130,16 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Why it matters:** Terminal automation failures are expensive because fake timers, xterm output, WebSocket frames, and runner composer behavior can all appear plausible. Skipping the learning loop repeats old failed fix shapes, wastes live reproduction time, and erodes trust since the repo already recorded the exact family of incidents.
 
 **Prevention:** For any dashboard terminal, runner prompt, pasted-text, WebSocket, xterm, or auto-submit bug, run learning-loop retrieval before proposing or editing code. Use concrete symptom terms first: `Pasted text`, `paste again to expand`, `manual Enter`, `dashboardHandlePasteSubmitOutput`, `Workspace terminal`, `Claude Code`, and the affected runner. If a matching footgun exists, map every hypothesis to it before changing `src/dashboard/dashboard-terminal.ts`; if none after one reword, state the miss. Anchors: `.goat-flow/learning-loop/footguns/dashboard.md` (search: `Dashboard terminal prompts can be dropped before browser attachment`), `.goat-flow/learning-loop/lessons/test-execution-environment.md` (search: `Browser terminal fixes need live runner proof`), `src/dashboard/dashboard-terminal-paste.ts` (search: `dashboardHandlePasteSubmitOutput`), and `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `falls back quickly for Claude pasted terminal text when no paste echo arrives`).
+
+## Lesson: Step 0 retrieval was advisory; required emission makes the skip visible
+
+**Status:** active | **Created:** 2026-06-10
+
+**What happened:** Agents skipped the learning loop and re-tripped on documented traps. Old doctrine required retrieval but no visible Step 0 output, so a skip stayed silent until the user noticed.
+
+**Evidence:** `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: "Retrieval terms must name the concrete failure class"; "Recurring terminal bugs must start with learning-loop retrieval"); `.goat-flow/skill-docs/skill-preamble.md` (search: "Relevant prior learnings:").
+
+**Prevention:** `skill-preamble.md` now requires every functional goat-* skill Step 0 to emit `Relevant prior learnings:`; misses include `Terms searched:`. `test/contract/skill-hardening-contracts.test.ts` pins both preamble copies.
 
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 

@@ -7,6 +7,7 @@
  */
 import { DECISION_META_FILES } from "../facts/shared/decision-files.js";
 import type { SharedFacts, BucketFreshness, ReadonlyFS } from "../types.js";
+import type { IndexFreshness } from "./index-freshness.js";
 
 /** Aggregated per-surface view over one learning-loop directory (footguns or lessons). */
 export interface BucketSection {
@@ -25,6 +26,8 @@ export interface StatsReport {
   footguns: BucketSection;
   lessons: BucketSection;
   decisions?: DecisionsSection;
+  /** Generated-index freshness per bucket (`index-fresh` check); absent when not collected. */
+  indexes?: IndexFreshness[];
 }
 
 /**
@@ -45,7 +48,7 @@ interface DecisionFileSummary {
  */
 interface StatsWarning {
   file: string;
-  rule: "decision-metadata" | "empty-learning-loop";
+  rule: "decision-metadata" | "empty-learning-loop" | "index-missing";
   message: string;
 }
 
@@ -74,7 +77,8 @@ interface StatsFinding {
     | "format"
     | "bucket-size"
     | "decision-filename"
-    | "decision-structure";
+    | "decision-structure"
+    | "index-stale";
   message: string;
 }
 
@@ -107,13 +111,14 @@ function buildSection(
 /**
  * Build the full stats report from the learning-loop slice of shared facts.
  *
- * @param shared Footgun, lesson, and optional decision facts from the shared extraction pipeline.
+ * @param shared Footgun, lesson, optional decision, and optional index-freshness facts from the shared extraction pipeline.
  * @returns Report shape consumed by all text, JSON, Markdown, and check renderers.
  */
 export function buildStatsReport(shared: {
   footguns: SharedFacts["footguns"];
   lessons: SharedFacts["lessons"];
   decisions?: DecisionsSection;
+  indexes?: IndexFreshness[];
 }): StatsReport {
   return {
     footguns: buildSection(
@@ -125,6 +130,7 @@ export function buildStatsReport(shared: {
       shared.lessons.invalidLineRefs.length,
     ),
     ...(shared.decisions ? { decisions: shared.decisions } : {}),
+    ...(shared.indexes ? { indexes: shared.indexes } : {}),
   };
 }
 
@@ -340,6 +346,28 @@ function collectDecisionFindings(section: DecisionsSection): StatsFinding[] {
   );
 }
 
+/** Map stale generated indexes to blocking findings (the `index-fresh` check's failure arm). */
+function collectIndexFindings(indexes: IndexFreshness[]): StatsFinding[] {
+  return indexes
+    .filter((entry) => entry.state === "stale")
+    .map((entry) => ({
+      file: entry.indexPath,
+      rule: "index-stale" as const,
+      message: `${entry.indexPath}: generated index is stale; re-run \`goat-flow index\``,
+    }));
+}
+
+/** Map absent generated indexes to advisory warnings so a fresh install never false-fails. */
+function collectIndexWarnings(indexes: IndexFreshness[]): StatsWarning[] {
+  return indexes
+    .filter((entry) => entry.state === "missing")
+    .map((entry) => ({
+      file: entry.indexPath,
+      rule: "index-missing" as const,
+      message: `${entry.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
+    }));
+}
+
 /**
  * Run the `--check` verdict against an already-built stats report.
  *
@@ -351,11 +379,13 @@ export function checkStats(report: StatsReport): StatsCheckReport {
     ...collectFindings(report.footguns),
     ...collectFindings(report.lessons),
     ...(report.decisions ? collectDecisionFindings(report.decisions) : []),
+    ...(report.indexes ? collectIndexFindings(report.indexes) : []),
   ];
   const warnings = [
     ...collectWarnings(report.footguns),
     ...collectWarnings(report.lessons),
     ...(report.decisions?.warnings ?? []),
+    ...(report.indexes ? collectIndexWarnings(report.indexes) : []),
   ];
   return {
     status: findings.length === 0 ? "pass" : "fail",

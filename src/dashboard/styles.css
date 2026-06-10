@@ -3221,6 +3221,56 @@ body {
   font-size: 12px;
   line-height: 1.35;
 }
+.pill-error {
+  color: var(--red-400);
+}
+.learning-index-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.learning-index-chip {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid var(--border-faint);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.learning-index-chip.is-fresh {
+  border-color: var(--status-pass-border);
+  color: var(--green-400);
+}
+.learning-index-chip.is-stale {
+  border-color: var(--amber-border);
+  color: var(--amber-400);
+}
+.learning-index-chip.is-missing {
+  border-color: var(--neutral-border);
+  color: var(--text-muted);
+}
+.learning-index-actions {
+  margin-top: 8px;
+}
+.learning-index-actions .gf-btn {
+  width: 100%;
+  min-height: 27px;
+}
+.learning-index-actions .gf-btn:disabled,
+.learning-index-actions .gf-btn:disabled:hover {
+  background: var(--surface-elevated);
+  border-color: var(--border-default);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
 .next-action {
   display: flex;
   align-items: center;

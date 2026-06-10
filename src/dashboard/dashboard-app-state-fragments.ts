@@ -34,6 +34,10 @@ function dashboardCoreStateFragment(
 
     auditing: false,
 
+    indexRegenerating: false,
+
+    indexRegenerateError: "",
+
     toast: "",
 
     toastError: false,

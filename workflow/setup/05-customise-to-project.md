@@ -77,6 +77,16 @@ Examples:
 
 - Ensure `.goat-flow/learning-loop/patterns/` directory exists with `README.md`. Use it for successful repeatable approaches, not incidents
 
+## Regenerate generated learning-loop indexes
+
+After the final footgun, lesson, pattern, or decision edit in this step, regenerate the generated bucket indexes before running the verification gate:
+
+```bash
+node --import tsx src/cli/cli.ts index
+```
+
+Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale. See `docs/cli.md` for the lifecycle reference.
+
 ## Architecture and code map - make them real
 
 - Review `.goat-flow/architecture.md` and `.goat-flow/code-map.md` created in step 04
@@ -102,6 +112,7 @@ Examples:
 - [ ] Every footgun entry references a real file path in this project
 - [ ] Every lesson references a real git commit or incident
 - [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
+- [ ] Generated learning-loop indexes were regenerated after the final learning-loop edit: `node --import tsx src/cli/cli.ts index`
 - [ ] Every `.goat-flow/learning-loop/footguns/*.md` and `.goat-flow/learning-loop/lessons/*.md` bucket has `category:` + `last_reviewed:` frontmatter; `node --import tsx src/cli/cli.ts stats --check` exits 0
 - [ ] Every `## Footgun:` entry begins with `**Status:**` (active | resolved)
 - [ ] `.goat-flow/learning-loop/patterns/README.md` exists

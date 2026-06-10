@@ -40,6 +40,7 @@ Commands:
   dashboard         Launch browser dashboard with audit, setup, and terminal
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
+  index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   hooks list        List registered hook state for this project
@@ -94,6 +95,7 @@ Examples:
   goat-flow hooks sync                 Re-apply hook toggles from config.yaml
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
+  goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
   goat-flow skill ./repo new "<description>"

@@ -29,6 +29,10 @@ import {
 } from "./install-invocation.js";
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import {
+  emitIndexGenerationInstallResult,
+  handleIndexCommand,
+} from "./learning-loop-index/command.js";
+import {
   ensureGitCommitInstructions,
   type CommitConventionDetection,
 } from "./prompt/commit-guidance.js";
@@ -434,6 +438,7 @@ function handleInstallCommand(options: ParsedCLI): void {
     return;
   }
   emitCommitGuidanceInstallResult(options.projectPath);
+  emitIndexGenerationInstallResult(options.projectPath);
 }
 
 /** Handle the removed info command; throws CLIError with the current audit replacement. */
@@ -525,12 +530,20 @@ async function handleStatsCommand(options: ParsedCLI): Promise<void> {
     renderStatsCheckText,
   } = await import("./stats/render.js");
 
+  const { collectIndexFreshness } = await import("./stats/index-freshness.js");
+  const { resolveIndexBucketPaths } =
+    await import("./learning-loop-index/parse-bucket.js");
+
   const fs = createFS(options.projectPath);
   const configState = loadConfig(options.projectPath, fs);
   const report = buildStatsReport({
     footguns: extractFootgunFacts(fs, configState),
     lessons: extractLessonsFacts(fs, configState),
     decisions: buildDecisionsSection(fs, configState.config.decisions.path),
+    indexes: collectIndexFreshness(
+      fs,
+      resolveIndexBucketPaths(configState.config),
+    ),
   });
 
   if (options.shouldCheck) {
@@ -657,6 +670,7 @@ const COMMAND_HANDLERS: Partial<
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
+  index: handleIndexCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,

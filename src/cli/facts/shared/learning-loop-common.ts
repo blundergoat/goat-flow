@@ -149,10 +149,13 @@ export function findCompetingArtifactSurfaces(
 
 /**
  * Read a learning-loop location into a stable, sorted set of markdown entries.
- * Handles both config shapes uniformly: a directory (every non-README `.md`,
- * sorted lexicographically) and a single flat `.md` file (one entry). The sort is
- * load-bearing - downstream entry ordering and report output must be deterministic
- * across machines, so directory listing order is never trusted.
+ * Handles both config shapes uniformly: a directory (every `.md` except the
+ * README.md/INDEX.md metadata files, sorted lexicographically) and a single flat
+ * `.md` file (one entry). INDEX.md is generated bucket metadata (`goat-flow index`),
+ * not entry content - including it would count phantom legacy entries and force
+ * entry frontmatter onto a generated file. The sort is load-bearing - downstream
+ * entry ordering and report output must be deterministic across machines, so
+ * directory listing order is never trusted.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param dir - directory path, or a single `.md` file path for flat-file config mode
@@ -171,7 +174,10 @@ export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
   const files = exists
     ? fs
         .listDir(dir)
-        .filter((file) => file.endsWith(".md") && file !== "README.md")
+        .filter(
+          (file) =>
+            file.endsWith(".md") && file !== "README.md" && file !== "INDEX.md",
+        )
         .sort((a, b) => a.localeCompare(b))
         .flatMap((file) => {
           const path = dir.endsWith("/") ? `${dir}${file}` : `${dir}/${file}`;

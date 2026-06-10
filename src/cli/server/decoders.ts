@@ -32,6 +32,11 @@ interface ProjectsListBody {
   projectTitles: Record<string, string>;
 }
 
+/** Dashboard project-path payload for single-project write actions. */
+interface ProjectPathBody {
+  path: string;
+}
+
 /** Base64 upload item after structural validation; file safety checks run in the upload handler. */
 interface TerminalUploadFile {
   name: string;
@@ -210,6 +215,25 @@ export function decodeProjectsListBody(
       projectTitles: projectTitles.value,
     },
   };
+}
+
+/**
+ * Decode a body carrying the target project path for a dashboard write action.
+ *
+ * @param body Raw request body.
+ * @returns Typed project-path payload or a path-specific decoder error.
+ */
+export function decodeProjectPathBody(
+  body: string,
+): DecodeResult<ProjectPathBody> {
+  const parsed = parseJson(body, "body");
+  if (!parsed.ok) return parsed;
+  const raw = parsed.value;
+  if (!isRecord(raw)) return err("body", "must be a JSON object");
+  if (!Object.hasOwn(raw, "path")) return err("body.path", "is required");
+  return typeof raw.path === "string"
+    ? { ok: true, value: { path: raw.path } }
+    : err("body.path", "must be a string");
 }
 
 /**

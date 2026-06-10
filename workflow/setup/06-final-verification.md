@@ -24,6 +24,8 @@ The audit validates structural requirements: required files/dirs exist, config p
 
 Do NOT silently skip unfixable checks. The exception must be visible in the session log so the next agent knows why the audit isn't passing.
 
+- Run `goat-flow stats --check`; if it reports `index-stale`, run `goat-flow index`, then re-run `goat-flow stats --check`. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale. See `docs/cli.md` for the lifecycle reference.
+
 ## Stale-reference reconciliation
 
 Before declaring setup complete, verify the generated surfaces do not reference dead files or old step names.

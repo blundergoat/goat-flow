@@ -166,6 +166,38 @@ async function dashboardRunAudit(
   dashboardRefreshAgentsAfterAudit(ctx);
 }
 
+/** Regenerate learning-loop indexes for the selected project, then refresh the Home audit payload. */
+async function dashboardRegenerateLearningLoopIndex(
+  ctx: DashboardAppContext,
+): Promise<void> {
+  if (ctx.indexRegenerating) return;
+  const requestProjectPath = ctx.projectPath;
+  ctx.indexRegenerating = true;
+  ctx.indexRegenerateError = "";
+  try {
+    const res = await dashboardFetch("/api/index/regenerate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: requestProjectPath }),
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const payload = readRecord(await res.json(), "Index regenerate response");
+    const error = readErrorMessage(payload);
+    if (error) throw new Error(error);
+    if (ctx.projectPath !== requestProjectPath) return;
+    await dashboardRunAudit(ctx, true);
+    if (!ctx.toastError) ctx.showToast("Learning-loop index regenerated");
+  } catch (err) {
+    if (ctx.projectPath !== requestProjectPath) return;
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.indexRegenerateError =
+      msg.length > 0 ? msg : "Index regeneration failed";
+    ctx.showToast(ctx.indexRegenerateError, true);
+  } finally {
+    ctx.indexRegenerating = false;
+  }
+}
+
 /**
  * Build the custom-prompt editor fragment: the draft being edited and its open/closed editor flags.
  * One input to dashboardMergeAppFragments; the validation getters that read this draft live in the
@@ -615,6 +647,11 @@ function dashboardAuditAndNavigationActionsFragment(): DashboardAppFragment {
     /** Load an audit snapshot; reports network/server errors as toasts because the dashboard must stay usable. */
     async runAudit(includeFresh = false) {
       await dashboardRunAudit(this, includeFresh);
+    },
+
+    /** Regenerate learning-loop indexes for the selected project and refresh Home. */
+    async regenerateLearningLoopIndex() {
+      await dashboardRegenerateLearningLoopIndex(this);
     },
   };
 }

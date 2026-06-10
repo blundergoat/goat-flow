@@ -19,6 +19,16 @@ function read(path: string): string {
   return readFileSync(resolve(PROJECT_ROOT, path), "utf-8");
 }
 
+/** Extract one Markdown H2 section so doctrine assertions cannot match examples elsewhere. */
+function readSection(path: string, heading: string): string {
+  const body = read(path);
+  const marker = `## ${heading}`;
+  const start = body.indexOf(marker);
+  assert.notEqual(start, -1, `${path} missing ${marker}`);
+  const next = body.indexOf("\n## ", start + marker.length);
+  return next === -1 ? body.slice(start) : body.slice(start, next);
+}
+
 /** Build every installed mirror path for a skill so parity tests stay exhaustive. */
 function skillPaths(skill: string): string[] {
   return MIRRORS.map((root) => `${root}/${skill}/SKILL.md`);
@@ -282,6 +292,18 @@ describe("skill hardening contracts", () => {
       assert.match(body, /Interrupt Freeze Protocol/, path);
       assert.match(body, /freeze writes immediately/, path);
       assert.match(body, /Only run read-only status or diff checks/, path);
+    }
+  });
+
+  it("keeps functional-skill Step 0 learning-loop emission doctrine installed", () => {
+    for (const path of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const section = readSection(path, "Learning-Loop Retrieval");
+      assert.match(section, /MUST emit/, path);
+      assert.match(section, /Relevant prior learnings:/, path);
+      assert.match(section, /Terms searched:/, path);
     }
   });
 

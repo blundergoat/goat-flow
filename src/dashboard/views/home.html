@@ -301,16 +301,47 @@
       return this.atAGrade() + ' of ' + total + ' agents at A' + gapText;
     },
     learningSummary() { return report?.learningLoop || null; },
+    learningIndexEntries() {
+      const entries = this.learningSummary()?.indexes;
+      return Array.isArray(entries) ? entries : [];
+    },
+    learningIndexRows() {
+      return this.learningIndexEntries().filter((entry) => entry.state !== 'no-bucket');
+    },
+    learningIndexCount(state) {
+      return this.learningIndexEntries().filter((entry) => entry.state === state).length;
+    },
+    learningIndexAvailable() {
+      return this.learningIndexRows().length > 0;
+    },
+    learningIndexButtonDisabled() {
+      return this.setupBlocked() || this.indexRegenerating || !this.learningIndexAvailable();
+    },
+    learningIndexButtonLabel() {
+      if (this.indexRegenerating) return 'Regenerating...';
+      if (this.setupBlocked()) return 'Setup first';
+      if (!this.learningIndexAvailable()) return 'No indexes';
+      return 'Regenerate index';
+    },
+    learningIndexStateLabel(state) {
+      if (state === 'fresh') return 'fresh';
+      if (state === 'stale') return 'stale';
+      if (state === 'missing') return 'missing';
+      return 'not installed';
+    },
     learningPillTone() {
       if (this.setupBlocked()) return 'na';
       const summary = this.learningSummary();
       if (!summary || summary.status === 'unavailable') return 'na';
+      if (this.learningIndexCount('stale') > 0 || this.learningIndexCount('missing') > 0) return 'warn';
       return summary.status === 'fresh' ? 'ok' : 'warn';
     },
     learningPillValue() {
       if (this.setupBlocked()) return 'Setup first';
       const summary = this.learningSummary();
       if (!summary || summary.status === 'unavailable') return 'N/A';
+      if (this.learningIndexCount('stale') > 0) return 'Index stale';
+      if (this.learningIndexCount('missing') > 0) return 'Index missing';
       return summary.status === 'fresh' ? 'Fresh' : 'Needs review';
     },
     learningPillDetail() {
@@ -327,6 +358,10 @@
       if (stale > 0) parts.push(stale + ' stale');
       if (oversized > 0) parts.push(oversized + ' oversized');
       if (summary.invalidLineRefCount > 0) parts.push(summary.invalidLineRefCount + ' bad refs');
+      const indexStale = this.learningIndexCount('stale');
+      const indexMissing = this.learningIndexCount('missing');
+      if (indexStale > 0) parts.push(indexStale + ' stale index' + (indexStale === 1 ? '' : 'es'));
+      if (indexMissing > 0) parts.push(indexMissing + ' missing index' + (indexMissing === 1 ? '' : 'es'));
       return parts.join(', ');
     },
     learningOldest() {
@@ -745,6 +780,36 @@
               x-text="learningPillValue()"
             ></div>
             <div class="pill-detail" x-text="learningPillDetail()"></div>
+            <div
+              class="learning-index-row"
+              x-show="learningIndexRows().length > 0"
+            >
+              <template
+                x-for="entry in learningIndexRows()"
+                :key="entry.bucket"
+              >
+                <span
+                  class="learning-index-chip"
+                  :class="'is-' + entry.state"
+                  :title="entry.indexPath"
+                  x-text="entry.bucket + ': ' + learningIndexStateLabel(entry.state)"
+                ></span>
+              </template>
+            </div>
+            <div class="learning-index-actions">
+              <button
+                type="button"
+                class="gf-btn gf-btn-sm gf-btn-secondary"
+                @click="regenerateLearningLoopIndex()"
+                :disabled="learningIndexButtonDisabled()"
+                x-text="learningIndexButtonLabel()"
+              ></button>
+            </div>
+            <div
+              class="pill-detail pill-error"
+              x-show="indexRegenerateError"
+              x-text="indexRegenerateError"
+            ></div>
           </div>
 
           <div class="pill" :class="qualityPillTone()">

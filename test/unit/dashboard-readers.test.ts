@@ -73,6 +73,25 @@ type HelperContext = {
         summary: Record<string, number>;
       } | null;
     }[];
+    learningLoop: {
+      recordCount: number;
+      footgunCount: number;
+      lessonCount: number;
+      staleCount: number;
+      invalidLineRefCount: number;
+      oversizedCount: number;
+      indexes: Array<{
+        bucket: string;
+        dirPath: string;
+        indexPath: string;
+        state: string;
+      }>;
+      indexStaleCount: number;
+      indexMissingCount: number;
+      oldestLastReviewed: string | null;
+      topBucketsNeedingAction: { path: string; reason: string }[];
+      status: string;
+    } | null;
   };
   readTaskState: (_value: unknown) => {
     taskRoot: string;
@@ -499,5 +518,88 @@ describe("dashboard payload readers", () => {
     assert.equal(state.milestones[0]?.objective, "Build the side menu.");
     assert.equal(state.milestones[0]?.completedTasks, expectedCompletedTasks);
     assert.equal(state.milestones[0]?.totalTasks, expectedMilestoneTaskTotal);
+  });
+
+  it("preserves learning-loop index freshness and defaults absent fields", () => {
+    const helpers = loadHelpers();
+    const report = helpers.readDashboardReport({
+      status: "pass",
+      target: "/repo",
+      overall: { status: "pass" },
+      scopes: {
+        setup: scope(),
+        agent: scope(),
+        harness: scope(),
+      },
+      learningLoop: {
+        recordCount: 2,
+        footgunCount: 1,
+        lessonCount: 1,
+        staleCount: 0,
+        invalidLineRefCount: 0,
+        oversizedCount: 0,
+        indexes: [
+          {
+            bucket: "footguns",
+            dirPath: ".goat-flow/learning-loop/footguns/",
+            indexPath: ".goat-flow/learning-loop/footguns/INDEX.md",
+            state: "stale",
+          },
+          {
+            bucket: "lessons",
+            dirPath: ".goat-flow/learning-loop/lessons/",
+            indexPath: ".goat-flow/learning-loop/lessons/INDEX.md",
+            state: "not-a-state",
+          },
+        ],
+        indexStaleCount: 1,
+        indexMissingCount: 0,
+        oldestLastReviewed: "2026-06-10",
+        topBucketsNeedingAction: [],
+        status: "needs-review",
+      },
+      recentLessons: [],
+      agentScores: [],
+    });
+    const legacyReport = helpers.readDashboardReport({
+      status: "pass",
+      target: "/repo",
+      overall: { status: "pass" },
+      scopes: {
+        setup: scope(),
+        agent: scope(),
+        harness: scope(),
+      },
+      learningLoop: {
+        recordCount: 1,
+        footgunCount: 1,
+        lessonCount: 0,
+        staleCount: 0,
+        invalidLineRefCount: 0,
+        oversizedCount: 0,
+        oldestLastReviewed: null,
+        topBucketsNeedingAction: [],
+        status: "fresh",
+      },
+      recentLessons: [],
+      agentScores: [],
+    });
+
+    assert.deepEqual(JSON.parse(JSON.stringify(report.learningLoop?.indexes)), [
+      {
+        bucket: "footguns",
+        dirPath: ".goat-flow/learning-loop/footguns/",
+        indexPath: ".goat-flow/learning-loop/footguns/INDEX.md",
+        state: "stale",
+      },
+    ]);
+    assert.equal(report.learningLoop?.indexStaleCount, 1);
+    assert.equal(report.learningLoop?.indexMissingCount, 0);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(legacyReport.learningLoop?.indexes)),
+      [],
+    );
+    assert.equal(legacyReport.learningLoop?.indexStaleCount, 0);
+    assert.equal(legacyReport.learningLoop?.indexMissingCount, 0);
   });
 });

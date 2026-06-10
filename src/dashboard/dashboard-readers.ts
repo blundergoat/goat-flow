@@ -97,6 +97,16 @@ function readStringArray(rawValue: unknown): string[] {
     : [];
 }
 
+/** Read an array with one row decoder, dropping invalid rows. */
+function readArray<T>(
+  rawValue: unknown,
+  reader: (entry: unknown) => T | null,
+): T[] {
+  return Array.isArray(rawValue)
+    ? rawValue.map(reader).filter((entry): entry is T => entry !== null)
+    : [];
+}
+
 /** Read a `{ [key: string]: string }` map, silently dropping invalid entries. */
 function readStringMap(rawValue: unknown): Record<string, string> {
   if (!isRecord(rawValue)) return {};
@@ -286,12 +296,9 @@ function readAuditCheckProvenance(
 }
 
 /** Read one optional string discriminator only when it is in the allowed API vocabulary. */
-function readEnumValue<T extends string>(
-  value: unknown,
-  allowed: string,
-): T | undefined {
+function readEnumValue(value: unknown, allowed: string): string | undefined {
   return typeof value === "string" && allowed.includes(`|${value}|`)
-    ? (value as T)
+    ? value
     : undefined;
 }
 
@@ -301,10 +308,9 @@ function applyAuditCheckOptionalFields(
   rawCheck: Record<string, unknown>,
   status: AuditStatus,
 ): void {
-  const type = readEnumValue<NonNullable<AuditCheck["type"]>>(
-    rawCheck.type,
-    AUDIT_CHECK_TYPES,
-  );
+  const type = readEnumValue(rawCheck.type, AUDIT_CHECK_TYPES) as
+    | NonNullable<AuditCheck["type"]>
+    | undefined;
   if (type) check.type = type;
   if (rawCheck.acknowledged === true) check.acknowledged = true;
   const acknowledged = check.acknowledged === true;
@@ -314,15 +320,15 @@ function applyAuditCheckOptionalFields(
   check.impact =
     readAuditCheckImpact(rawCheck.impact) ??
     defaultCheckImpact(status, check.type, acknowledged);
-  const evidenceKind = readEnumValue<NonNullable<AuditCheck["evidenceKind"]>>(
+  const evidenceKind = readEnumValue(
     rawCheck.evidenceKind,
     AUDIT_EVIDENCE_KINDS,
-  );
+  ) as NonNullable<AuditCheck["evidenceKind"]> | undefined;
   if (evidenceKind) check.evidenceKind = evidenceKind;
-  const assurance = readEnumValue<NonNullable<AuditCheck["assurance"]>>(
+  const assurance = readEnumValue(
     rawCheck.assurance,
     AUDIT_ASSURANCE_LEVELS,
-  );
+  ) as NonNullable<AuditCheck["assurance"]> | undefined;
   if (assurance) check.assurance = assurance;
   const failure = readAuditFailure(rawCheck.failure);
   if (failure) check.failure = failure;
@@ -377,16 +383,8 @@ function readAuditScope(rawScope: unknown, context: string): AuditScope {
 
   return {
     status,
-    checks: Array.isArray(payload.checks)
-      ? payload.checks
-          .map((check) => readAuditCheck(check))
-          .filter((check): check is AuditCheck => check !== null)
-      : [],
-    failures: Array.isArray(payload.failures)
-      ? payload.failures
-          .map((failure) => readAuditFailure(failure))
-          .filter((failure): failure is AuditFailure => failure !== null)
-      : [],
+    checks: readArray(payload.checks, readAuditCheck),
+    failures: readArray(payload.failures, readAuditFailure),
     summary: readStringRecord(payload.summary),
   };
 }
@@ -476,13 +474,7 @@ function readEnforcementCapability(
     id,
     label,
     status,
-    sources: Array.isArray(rawCapability.sources)
-      ? rawCapability.sources
-          .map((source) => readEnforcementSource(source))
-          .filter(
-            (source): source is EnforcementCapabilitySource => source !== null,
-          )
-      : [],
+    sources: readArray(rawCapability.sources, readEnforcementSource),
     summary,
     evidence: readStringArray(rawCapability.evidence),
   };
@@ -496,11 +488,10 @@ function readAgentEnforcementCapability(
   const agent = readRunnerId(rawEnforcement.agent);
   const name = readString(rawEnforcement.name);
   if (!agent || !name || rawEnforcement.advisory !== true) return null;
-  const capabilities = Array.isArray(rawEnforcement.capabilities)
-    ? rawEnforcement.capabilities
-        .map((item) => readEnforcementCapability(item))
-        .filter((item): item is EnforcementCapability => item !== null)
-    : [];
+  const capabilities = readArray(
+    rawEnforcement.capabilities,
+    readEnforcementCapability,
+  );
   return {
     agent,
     name,
@@ -559,6 +550,31 @@ function readLearningLoopBucketAction(
   return { path, reason };
 }
 
+/** Read one generated learning-loop index freshness row from the audit payload. */
+function readLearningLoopIndexFreshness(
+  rawIndex: unknown,
+): LearningLoopIndexFreshness | null {
+  if (!isRecord(rawIndex)) return null;
+  const bucket = readString(rawIndex.bucket);
+  const dirPath = readString(rawIndex.dirPath);
+  const indexPath = readString(rawIndex.indexPath);
+  const state = readString(rawIndex.state);
+  if (
+    !bucket ||
+    !dirPath ||
+    !indexPath ||
+    !["fresh", "stale", "missing", "no-bucket"].includes(state)
+  ) {
+    return null;
+  }
+  return {
+    bucket,
+    dirPath,
+    indexPath,
+    state: state as LearningLoopIndexFreshness["state"],
+  };
+}
+
 /** Read compact learning-loop health from the audit payload. */
 function readLearningLoopSummary(
   rawSummary: unknown,
@@ -583,18 +599,17 @@ function readLearningLoopSummary(
     staleCount: rawSummary.staleCount,
     invalidLineRefCount: rawSummary.invalidLineRefCount,
     oversizedCount: rawSummary.oversizedCount,
+    indexes: readArray(rawSummary.indexes, readLearningLoopIndexFreshness),
+    indexStaleCount: readFiniteNumber(rawSummary.indexStaleCount),
+    indexMissingCount: readFiniteNumber(rawSummary.indexMissingCount),
     oldestLastReviewed:
       typeof rawSummary.oldestLastReviewed === "string"
         ? rawSummary.oldestLastReviewed
         : null,
-    topBucketsNeedingAction: Array.isArray(rawSummary.topBucketsNeedingAction)
-      ? rawSummary.topBucketsNeedingAction
-          .map((entry) => readLearningLoopBucketAction(entry))
-          .filter(
-            (entry): entry is { path: string; reason: string } =>
-              entry !== null,
-          )
-      : [],
+    topBucketsNeedingAction: readArray(
+      rawSummary.topBucketsNeedingAction,
+      readLearningLoopBucketAction,
+    ),
     status: status as "fresh" | "needs-review" | "unavailable",
   };
 }
@@ -668,19 +683,8 @@ function readTaskState(rawState: unknown): TaskState {
     active: readString(payload.active) || null,
     activeExists: payload.activeExists === true,
     selectedPlan: readString(payload.selectedPlan) || null,
-    plans: Array.isArray(payload.plans)
-      ? payload.plans
-          .map((plan) => readTaskPlanSummary(plan))
-          .filter((plan): plan is TaskPlanSummary => plan !== null)
-      : [],
-    milestones: Array.isArray(payload.milestones)
-      ? payload.milestones
-          .map((milestone) => readTaskMilestoneSummary(milestone))
-          .filter(
-            (milestone): milestone is TaskMilestoneSummary =>
-              milestone !== null,
-          )
-      : [],
+    plans: readArray(payload.plans, readTaskPlanSummary),
+    milestones: readArray(payload.milestones, readTaskMilestoneSummary),
   };
 }
 
@@ -700,11 +704,7 @@ function readDashboardReport(rawReport: unknown): DashboardClientReport {
   }
 
   return {
-    agentScores: Array.isArray(payload.agentScores)
-      ? payload.agentScores
-          .map((score) => readAgentScore(score))
-          .filter((score): score is AgentScore => score !== null)
-      : [],
+    agentScores: readArray(payload.agentScores, readAgentScore),
     status,
     scopes: {
       setup: readAuditScope(scopesPayload.setup, "Audit response setup scope"),
@@ -720,11 +720,7 @@ function readDashboardReport(rawReport: unknown): DashboardClientReport {
     },
     overall: { status: overallStatus },
     learningLoop: readLearningLoopSummary(payload.learningLoop),
-    recentLessons: Array.isArray(payload.recentLessons)
-      ? payload.recentLessons
-          .map((lesson) => readRecentLesson(lesson))
-          .filter((lesson): lesson is RecentLesson => lesson !== null)
-      : [],
+    recentLessons: readArray(payload.recentLessons, readRecentLesson),
     target: readString(payload.target),
   };
 }

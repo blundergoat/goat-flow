@@ -138,6 +138,14 @@ interface DashboardClientScopes {
   harness?: AuditScope;
 }
 
+/** Generated learning-loop index state for one bucket. */
+interface LearningLoopIndexFreshness {
+  bucket: string;
+  dirPath: string;
+  indexPath: string;
+  state: "fresh" | "stale" | "missing" | "no-bucket";
+}
+
 /** Dashboard audit report returned by `/api/audit`. */
 interface DashboardClientReport {
   agentScores: AgentScore[];
@@ -151,6 +159,9 @@ interface DashboardClientReport {
     staleCount: number;
     invalidLineRefCount: number;
     oversizedCount: number;
+    indexes: LearningLoopIndexFreshness[];
+    indexStaleCount: number;
+    indexMissingCount: number;
     oldestLastReviewed: string | null;
     topBucketsNeedingAction: { path: string; reason: string }[];
     status: "fresh" | "needs-review" | "unavailable";
