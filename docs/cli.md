@@ -119,12 +119,21 @@ npx goat-flow manifest --check            # Fail if manifest disagrees with live
 
 ### `goat-flow stats [--check] [--format json|markdown]`
 
-Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, or contains stale file references.
+Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, contains stale file references, or has a generated `INDEX.md` that no longer matches its bucket content (`index-stale`; a never-generated index is only an advisory warning).
 
 ```bash
 npx goat-flow stats                       # Learning-loop health report
-npx goat-flow stats --check               # CI gate for bucket hygiene
+npx goat-flow stats --check               # CI gate for bucket hygiene + index freshness
 npx goat-flow stats --format json         # Machine-readable report
+```
+
+### `goat-flow index [path]`
+
+Regenerate the generated learning-loop `INDEX.md` files for `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/` from bucket content. Each row maps one active entry to its source file with a grep-friendly `(search: "...")` anchor and a one-sentence hook; resolved entries are skipped. Output is deterministic - re-running with unchanged buckets produces a zero diff - and buckets whose directory is absent are skipped. Run it after adding, editing, renaming, or resolving any learning-loop entry; `stats --check` fails until you do.
+
+```bash
+npx goat-flow index                       # Regenerate all four bucket indexes
+npx goat-flow index ../other-project      # Regenerate indexes in another project
 ```
 
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
@@ -176,7 +185,7 @@ npx goat-flow status .                    # Check current project state
 
 ### `goat-flow dashboard [path]`
 
-Launch the web dashboard for auditing, setup, and terminal management.
+Launch the web dashboard for auditing, setup, and terminal management. The Home learning-loop card shows per-bucket index freshness and can regenerate the selected project's generated `INDEX.md` files. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale.
 
 ```bash
 npx goat-flow dashboard               # Launch on default port

@@ -67,11 +67,14 @@ strip_xargs_payload_command() {
         i=$((i + 1))
         continue
         ;;
-      -I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
+      # Flags that consume a following operand - skip the flag AND its value.
+      # -a/--arg-file read the input list from a FILE; without them the filename
+      # is misread as the command, letting `xargs -a list rm -rf` slip through.
+      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
         i=$((i + 2))
         continue
         ;;
-      -I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
+      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
         i=$((i + 1))
         continue
         ;;
@@ -221,11 +224,30 @@ check_pipeline_shell_consumers() {
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
   for ((pipe_index = 1; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     if is_shell_command "${pipeline_parts[$pipe_index]}"; then
-      block "Pipe to shell. Download or inspect first, then run." || return $?
+      block "Pipe to shell. Download or inspect first, then run; to feed a local script, redirect from a file (cmd < file) instead of piping." || return $?
     fi
     if is_interpreter_command "${pipeline_parts[$pipe_index]}"; then
       block "Pipe to interpreter. Download or inspect first, then run." || return $?
     fi
+  done
+}
+
+check_xargs_destructive_payload() {
+  local candidate="$1"
+  local normalized xargs_payload
+  normalized="$(normalize_command_candidate "$candidate")"
+  if xargs_payload="$(strip_xargs_payload_command "$normalized")" && rm_has_recursive "$xargs_payload"; then
+    block "xargs feeding rm -r hides recursive deletion targets. Review the input list and run manually." || return $?
+  fi
+}
+
+check_pipeline_xargs_destructive_payloads() {
+  local pipe_scan="${CMD_UNQUOTED//||/__GOAT_OR__}"
+  local -a pipeline_parts
+  local pipe_index
+  IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
+  for ((pipe_index = 0; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
+    check_xargs_destructive_payload "${pipeline_parts[$pipe_index]}" || return $?
   done
 }
 
@@ -252,10 +274,7 @@ check_destructive_segment() {
     fi
   fi
 
-  local xargs_payload=""
-  if xargs_payload="$(strip_xargs_payload_command "$CMD_NORMALIZED")" && rm_has_recursive "$xargs_payload"; then
-    block "xargs feeding rm -r hides recursive deletion targets. Review the input list and run manually." || return $?
-  fi
+  check_pipeline_xargs_destructive_payloads || return $?
 
   if find_has_destructive_action "$CMD_NORMALIZED"; then
     block "find deletion action (-delete / -exec rm -r) can remove many files. Review matches and run manually." || return $?

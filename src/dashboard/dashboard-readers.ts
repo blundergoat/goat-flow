@@ -97,6 +97,16 @@ function readStringArray(rawValue: unknown): string[] {
     : [];
 }
 
+/** Read an array with one row decoder, dropping invalid rows. */
+function readArray<T>(
+  rawValue: unknown,
+  reader: (entry: unknown) => T | null,
+): T[] {
+  return Array.isArray(rawValue)
+    ? rawValue.map(reader).filter((entry): entry is T => entry !== null)
+    : [];
+}
+
 /** Read a `{ [key: string]: string }` map, silently dropping invalid entries. */
 function readStringMap(rawValue: unknown): Record<string, string> {
   if (!isRecord(rawValue)) return {};
@@ -234,6 +244,97 @@ function readAuditFailure(rawFailure: unknown): AuditFailure | null {
   return failure;
 }
 
+const AUDIT_PROVENANCE_SOURCE_TYPES =
+  "|spec|vendor_docs|paper|incident|community|unknown|";
+const AUDIT_PROVENANCE_NORMATIVE_LEVELS = "|MUST|SHOULD|BEST_PRACTICE|";
+const AUDIT_CHECK_TYPES = "|integrity|advisory|metric|";
+const AUDIT_EVIDENCE_KINDS = "|semantic|structural|";
+const AUDIT_ASSURANCE_LEVELS = "|full|limited|";
+const AUDIT_EVIDENCE_PATH_KEYS = [
+  "evidence_paths",
+  "framework_evidence_paths",
+  "target_evidence_paths",
+] as const;
+
+/** Attach optional provenance evidence paths when the API sends the field as an array. */
+function assignEvidencePaths(
+  provenance: AuditCheckProvenance,
+  key: "evidence_paths" | "framework_evidence_paths" | "target_evidence_paths",
+  value: unknown,
+): void {
+  if (Array.isArray(value)) provenance[key] = readStringArray(value);
+}
+
+/** Read one audit-check provenance block and reject unknown contract discriminants. */
+function readAuditCheckProvenance(
+  rawProvenance: unknown,
+): AuditCheckProvenance | null {
+  if (!isRecord(rawProvenance)) return null;
+  const sourceType = readString(rawProvenance.source_type);
+  const verifiedOn = readString(rawProvenance.verified_on);
+  const normativeLevel = readString(rawProvenance.normative_level);
+  if (
+    !AUDIT_PROVENANCE_SOURCE_TYPES.includes(`|${sourceType}|`) ||
+    !verifiedOn ||
+    !AUDIT_PROVENANCE_NORMATIVE_LEVELS.includes(`|${normativeLevel}|`)
+  ) {
+    return null;
+  }
+
+  const provenance: AuditCheckProvenance = {
+    source_type: sourceType as AuditCheckProvenance["source_type"],
+    source_urls: readStringArray(rawProvenance.source_urls),
+    verified_on: verifiedOn,
+    normative_level: normativeLevel as AuditCheckProvenance["normative_level"],
+  };
+  for (const key of AUDIT_EVIDENCE_PATH_KEYS) {
+    assignEvidencePaths(provenance, key, rawProvenance[key]);
+  }
+  if (typeof rawProvenance.reason === "string")
+    provenance.reason = rawProvenance.reason;
+  return provenance;
+}
+
+/** Read one optional string discriminator only when it is in the allowed API vocabulary. */
+function readEnumValue(value: unknown, allowed: string): string | undefined {
+  return typeof value === "string" && allowed.includes(`|${value}|`)
+    ? value
+    : undefined;
+}
+
+/** Apply optional audit-check fields because scoring defaults depend on decoded type and acknowledgement. */
+function applyAuditCheckOptionalFields(
+  check: AuditCheck,
+  rawCheck: Record<string, unknown>,
+  status: AuditStatus,
+): void {
+  const type = readEnumValue(rawCheck.type, AUDIT_CHECK_TYPES) as
+    | NonNullable<AuditCheck["type"]>
+    | undefined;
+  if (type) check.type = type;
+  if (rawCheck.acknowledged === true) check.acknowledged = true;
+  const acknowledged = check.acknowledged === true;
+  check.displayStatus =
+    readAuditDisplayStatus(rawCheck.displayStatus) ??
+    defaultDisplayStatus(status, check.type, acknowledged);
+  check.impact =
+    readAuditCheckImpact(rawCheck.impact) ??
+    defaultCheckImpact(status, check.type, acknowledged);
+  const evidenceKind = readEnumValue(
+    rawCheck.evidenceKind,
+    AUDIT_EVIDENCE_KINDS,
+  ) as NonNullable<AuditCheck["evidenceKind"]> | undefined;
+  if (evidenceKind) check.evidenceKind = evidenceKind;
+  const assurance = readEnumValue(
+    rawCheck.assurance,
+    AUDIT_ASSURANCE_LEVELS,
+  ) as NonNullable<AuditCheck["assurance"]> | undefined;
+  if (assurance) check.assurance = assurance;
+  const failure = readAuditFailure(rawCheck.failure);
+  if (failure) check.failure = failure;
+  if (isRecord(rawCheck.details)) check.details = rawCheck.details;
+}
+
 /**
  * Read one audit check while preserving score-critical discriminants.
  *
@@ -247,25 +348,8 @@ function readAuditCheck(rawCheck: unknown): AuditCheck | null {
   const status = readAuditStatus(rawCheck.status);
   if (!id || !name || !status) return null;
 
-  const provenanceValue = rawCheck.provenance;
-  if (!isRecord(provenanceValue)) return null;
-  const sourceType = readString(provenanceValue.source_type);
-  const verifiedOn = readString(provenanceValue.verified_on);
-  const normativeLevel = readString(provenanceValue.normative_level);
-  if (
-    ![
-      "spec",
-      "vendor_docs",
-      "paper",
-      "incident",
-      "community",
-      "unknown",
-    ].includes(sourceType) ||
-    !verifiedOn ||
-    !["MUST", "SHOULD", "BEST_PRACTICE"].includes(normativeLevel)
-  ) {
-    return null;
-  }
+  const provenance = readAuditCheckProvenance(rawCheck.provenance);
+  if (!provenance) return null;
 
   const check: AuditCheck = {
     id,
@@ -273,62 +357,9 @@ function readAuditCheck(rawCheck: unknown): AuditCheck | null {
     status,
     displayStatus: "pass",
     impact: "none",
-    provenance: {
-      source_type: sourceType as AuditCheckProvenance["source_type"],
-      source_urls: readStringArray(provenanceValue.source_urls),
-      verified_on: verifiedOn,
-      normative_level:
-        normativeLevel as AuditCheckProvenance["normative_level"],
-      ...(Array.isArray(provenanceValue.evidence_paths)
-        ? {
-            evidence_paths: readStringArray(provenanceValue.evidence_paths),
-          }
-        : {}),
-      ...(Array.isArray(provenanceValue.framework_evidence_paths)
-        ? {
-            framework_evidence_paths: readStringArray(
-              provenanceValue.framework_evidence_paths,
-            ),
-          }
-        : {}),
-      ...(Array.isArray(provenanceValue.target_evidence_paths)
-        ? {
-            target_evidence_paths: readStringArray(
-              provenanceValue.target_evidence_paths,
-            ),
-          }
-        : {}),
-      ...(typeof provenanceValue.reason === "string"
-        ? { reason: provenanceValue.reason }
-        : {}),
-    },
+    provenance,
   };
-  if (
-    rawCheck.type === "integrity" ||
-    rawCheck.type === "advisory" ||
-    rawCheck.type === "metric"
-  ) {
-    check.type = rawCheck.type;
-  }
-  if (rawCheck.acknowledged === true) check.acknowledged = true;
-  check.displayStatus =
-    readAuditDisplayStatus(rawCheck.displayStatus) ??
-    defaultDisplayStatus(status, check.type, check.acknowledged === true);
-  check.impact =
-    readAuditCheckImpact(rawCheck.impact) ??
-    defaultCheckImpact(status, check.type, check.acknowledged === true);
-  if (
-    rawCheck.evidenceKind === "semantic" ||
-    rawCheck.evidenceKind === "structural"
-  ) {
-    check.evidenceKind = rawCheck.evidenceKind;
-  }
-  if (rawCheck.assurance === "full" || rawCheck.assurance === "limited") {
-    check.assurance = rawCheck.assurance;
-  }
-  const failure = readAuditFailure(rawCheck.failure);
-  if (failure) check.failure = failure;
-  if (isRecord(rawCheck.details)) check.details = rawCheck.details;
+  applyAuditCheckOptionalFields(check, rawCheck, status);
   return check;
 }
 
@@ -352,16 +383,8 @@ function readAuditScope(rawScope: unknown, context: string): AuditScope {
 
   return {
     status,
-    checks: Array.isArray(payload.checks)
-      ? payload.checks
-          .map((check) => readAuditCheck(check))
-          .filter((check): check is AuditCheck => check !== null)
-      : [],
-    failures: Array.isArray(payload.failures)
-      ? payload.failures
-          .map((failure) => readAuditFailure(failure))
-          .filter((failure): failure is AuditFailure => failure !== null)
-      : [],
+    checks: readArray(payload.checks, readAuditCheck),
+    failures: readArray(payload.failures, readAuditFailure),
     summary: readStringRecord(payload.summary),
   };
 }
@@ -451,13 +474,7 @@ function readEnforcementCapability(
     id,
     label,
     status,
-    sources: Array.isArray(rawCapability.sources)
-      ? rawCapability.sources
-          .map((source) => readEnforcementSource(source))
-          .filter(
-            (source): source is EnforcementCapabilitySource => source !== null,
-          )
-      : [],
+    sources: readArray(rawCapability.sources, readEnforcementSource),
     summary,
     evidence: readStringArray(rawCapability.evidence),
   };
@@ -471,11 +488,10 @@ function readAgentEnforcementCapability(
   const agent = readRunnerId(rawEnforcement.agent);
   const name = readString(rawEnforcement.name);
   if (!agent || !name || rawEnforcement.advisory !== true) return null;
-  const capabilities = Array.isArray(rawEnforcement.capabilities)
-    ? rawEnforcement.capabilities
-        .map((item) => readEnforcementCapability(item))
-        .filter((item): item is EnforcementCapability => item !== null)
-    : [];
+  const capabilities = readArray(
+    rawEnforcement.capabilities,
+    readEnforcementCapability,
+  );
   return {
     agent,
     name,
@@ -534,6 +550,32 @@ function readLearningLoopBucketAction(
   return { path, reason };
 }
 
+/** Read one generated learning-loop index freshness row from the audit payload. */
+function readLearningLoopIndexFreshness(
+  rawIndex: unknown,
+): LearningLoopIndexFreshness | null {
+  if (!isRecord(rawIndex)) return null;
+  const bucket = readString(rawIndex.bucket);
+  const dirPath = readString(rawIndex.dirPath);
+  const indexPath = readString(rawIndex.indexPath);
+  const state = readString(rawIndex.state);
+  if (
+    !bucket ||
+    !dirPath ||
+    !indexPath ||
+    !["fresh", "stale", "missing", "no-bucket"].includes(state)
+  ) {
+    return null;
+  }
+  return {
+    bucket,
+    dirPath,
+    indexPath,
+    state: state as LearningLoopIndexFreshness["state"],
+    entryCount: readFiniteNumber(rawIndex.entryCount),
+  };
+}
+
 /** Read compact learning-loop health from the audit payload. */
 function readLearningLoopSummary(
   rawSummary: unknown,
@@ -558,18 +600,17 @@ function readLearningLoopSummary(
     staleCount: rawSummary.staleCount,
     invalidLineRefCount: rawSummary.invalidLineRefCount,
     oversizedCount: rawSummary.oversizedCount,
+    indexes: readArray(rawSummary.indexes, readLearningLoopIndexFreshness),
+    indexStaleCount: readFiniteNumber(rawSummary.indexStaleCount),
+    indexMissingCount: readFiniteNumber(rawSummary.indexMissingCount),
     oldestLastReviewed:
       typeof rawSummary.oldestLastReviewed === "string"
         ? rawSummary.oldestLastReviewed
         : null,
-    topBucketsNeedingAction: Array.isArray(rawSummary.topBucketsNeedingAction)
-      ? rawSummary.topBucketsNeedingAction
-          .map((entry) => readLearningLoopBucketAction(entry))
-          .filter(
-            (entry): entry is { path: string; reason: string } =>
-              entry !== null,
-          )
-      : [],
+    topBucketsNeedingAction: readArray(
+      rawSummary.topBucketsNeedingAction,
+      readLearningLoopBucketAction,
+    ),
     status: status as "fresh" | "needs-review" | "unavailable",
   };
 }
@@ -643,19 +684,8 @@ function readTaskState(rawState: unknown): TaskState {
     active: readString(payload.active) || null,
     activeExists: payload.activeExists === true,
     selectedPlan: readString(payload.selectedPlan) || null,
-    plans: Array.isArray(payload.plans)
-      ? payload.plans
-          .map((plan) => readTaskPlanSummary(plan))
-          .filter((plan): plan is TaskPlanSummary => plan !== null)
-      : [],
-    milestones: Array.isArray(payload.milestones)
-      ? payload.milestones
-          .map((milestone) => readTaskMilestoneSummary(milestone))
-          .filter(
-            (milestone): milestone is TaskMilestoneSummary =>
-              milestone !== null,
-          )
-      : [],
+    plans: readArray(payload.plans, readTaskPlanSummary),
+    milestones: readArray(payload.milestones, readTaskMilestoneSummary),
   };
 }
 
@@ -675,11 +705,7 @@ function readDashboardReport(rawReport: unknown): DashboardClientReport {
   }
 
   return {
-    agentScores: Array.isArray(payload.agentScores)
-      ? payload.agentScores
-          .map((score) => readAgentScore(score))
-          .filter((score): score is AgentScore => score !== null)
-      : [],
+    agentScores: readArray(payload.agentScores, readAgentScore),
     status,
     scopes: {
       setup: readAuditScope(scopesPayload.setup, "Audit response setup scope"),
@@ -695,11 +721,7 @@ function readDashboardReport(rawReport: unknown): DashboardClientReport {
     },
     overall: { status: overallStatus },
     learningLoop: readLearningLoopSummary(payload.learningLoop),
-    recentLessons: Array.isArray(payload.recentLessons)
-      ? payload.recentLessons
-          .map((lesson) => readRecentLesson(lesson))
-          .filter((lesson): lesson is RecentLesson => lesson !== null)
-      : [],
+    recentLessons: readArray(payload.recentLessons, readRecentLesson),
     target: readString(payload.target),
   };
 }

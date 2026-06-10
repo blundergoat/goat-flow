@@ -7,6 +7,7 @@
  * routing lives elsewhere. Also re-exports normalizeAgentVersionOutput for the server's agent probes.
  */
 import { createAuditRouteHandlers } from "./dashboard-audit-routes.js";
+import { createIndexRouteHandlers } from "./dashboard-index-routes.js";
 import { createDashboardRouteContext } from "./dashboard-route-context.js";
 import type { DashboardRouteDependencies } from "./dashboard-route-types.js";
 import { normalizeAgentVersionOutput } from "./dashboard-route-types.js";
@@ -30,5 +31,6 @@ export function createDashboardRouteHandlers(deps: DashboardRouteDependencies) {
     ...createQualityRouteHandlers(ctx),
     ...createSkillQualityRouteHandlers(ctx),
     ...createProjectRouteHandlers(ctx),
+    ...createIndexRouteHandlers(ctx),
   };
 }

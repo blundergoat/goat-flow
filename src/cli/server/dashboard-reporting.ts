@@ -23,8 +23,13 @@ import { loadConfig } from "../config/reader.js";
 import { createFS } from "../facts/fs.js";
 import { extractSharedFacts } from "../facts/shared/index.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
+import { collectIndexFreshness } from "../stats/index-freshness.js";
 import { buildStatsReport, checkStats } from "../stats/stats.js";
 import type { AgentId } from "../types.js";
+import {
+  parseBucket,
+  resolveIndexBucketPaths,
+} from "../learning-loop-index/parse-bucket.js";
 import { resolveLocalStatePath } from "./local-paths.js";
 import type { DashboardReport } from "./types.js";
 
@@ -152,9 +157,14 @@ function buildDashboardLearningLoopSummary(
     const fs = createFS(projectPath);
     const configState = loadConfig(projectPath, fs);
     const shared = extractSharedFacts(fs, configState);
+    const indexes = collectIndexFreshness(
+      fs,
+      resolveIndexBucketPaths(configState.config),
+    );
     const stats = buildStatsReport({
       footguns: shared.footguns,
       lessons: shared.lessons,
+      indexes,
     });
     const check = checkStats(stats);
     const staleCount = check.findings.filter(
@@ -166,6 +176,12 @@ function buildDashboardLearningLoopSummary(
     ).length;
     const oversizedCount = check.findings.filter(
       (finding) => finding.rule === "bucket-size",
+    ).length;
+    const indexStaleCount = indexes.filter(
+      (entry) => entry.state === "stale",
+    ).length;
+    const indexMissingCount = indexes.filter(
+      (entry) => entry.state === "missing",
     ).length;
     const recordCount =
       stats.footguns.totalEntries + stats.lessons.totalEntries;
@@ -207,7 +223,10 @@ function buildDashboardLearningLoopSummary(
     const status =
       !shared.footguns.exists && !shared.lessons.exists
         ? "unavailable"
-        : staleCount > 2 || invalidLineRefCount > 0 || oversizedCount > 0
+        : staleCount > 2 ||
+            invalidLineRefCount > 0 ||
+            oversizedCount > 0 ||
+            indexStaleCount > 0
           ? "needs-review"
           : "fresh";
     return {
@@ -217,6 +236,12 @@ function buildDashboardLearningLoopSummary(
       staleCount,
       invalidLineRefCount,
       oversizedCount,
+      indexes: indexes.map((entry) => ({
+        ...entry,
+        entryCount: parseBucket(fs, entry.dirPath, entry.bucket).length,
+      })),
+      indexStaleCount,
+      indexMissingCount,
       oldestLastReviewed,
       topBucketsNeedingAction,
       status,
@@ -426,6 +451,8 @@ function buildLearningLoopCacheSignature(projectPath: string): string {
     [
       directorySignature(projectPath, ".goat-flow/learning-loop/footguns"),
       directorySignature(projectPath, ".goat-flow/learning-loop/lessons"),
+      directorySignature(projectPath, ".goat-flow/learning-loop/patterns"),
+      directorySignature(projectPath, ".goat-flow/learning-loop/decisions"),
     ].join("\n"),
   );
 }

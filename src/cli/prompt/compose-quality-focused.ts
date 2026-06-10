@@ -36,7 +36,7 @@ function focusedQualityModePrompt(
       "",
       `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; ${agentAuditCmd}; node --import tsx src/cli/cli.ts audit . --check-content --format json; bash scripts/preflight-checks.sh. Command output wins over prose.`,
       "",
-      "Use grep-first retrieval for .goat-flow/learning-loop/footguns/, .goat-flow/learning-loop/lessons/, and .goat-flow/learning-loop/decisions/. Do not broad-load those directories.",
+      "Use INDEX-first retrieval for .goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md. Do not broad-load those directories.",
       "",
       "Assessment checklist: Pre-check Results; Findings ordered by severity; What works; What is weak or ceremonial; Contradictions and false paths; Top 5 improvements; What was not verified. Use this checklist to decide the saved JSON scores and findings. Each saved finding's detail/evidence fields must include action type, exact file or semantic-anchor evidence, why it matters, and a verification command that would prove the fix.",
     ].join("\n");

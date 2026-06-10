@@ -108,6 +108,7 @@ const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
   "POST /api/projects/list",
   "POST /api/plans",
   "POST /api/tasks",
+  "POST /api/index/regenerate",
   "POST /api/quality/evaluate",
   "POST /api/quality/analyse",
   "POST /api/terminal/create",
@@ -177,6 +178,7 @@ export function serveDashboard(
       handleAgentDetectRequest,
       handleProjectsListRequest,
       handleProjectsStatusRequest,
+      handleIndexRegenerateRequest,
     } = createDashboardRouteHandlers({
       absDefault,
       devMode,
@@ -343,6 +345,7 @@ export function serveDashboard(
         () => Promise.resolve(handleAgentDetectRequest(url, res)),
         () => handleProjectsListRequest(req, url, res),
         () => Promise.resolve(handleProjectsStatusRequest(url, res)),
+        () => handleIndexRegenerateRequest(req, url, res),
         () => handleTerminalCreateRequest(req, url, res),
         () => handleTerminalListRequest(req, url, res),
         () => handleTerminalSessionsRequest(req, url, res),

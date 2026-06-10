@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.10.1"
+goat-flow-skill-version: "1.11.0"
 ---
 # /goat
 
@@ -24,7 +24,7 @@ Use when the user describes an outcome and wants the right workflow chosen. **If
 
 1. **UNDERSTAND** - classify intent and target. If multiple intents, number each and route independently. Ask only if ordering matters.
 2. **GATHER** - before routing, check:
-   - Footgun matches: grep `.goat-flow/learning-loop/footguns/` for the target area
+   - Footgun matches: grep `.goat-flow/learning-loop/footguns/INDEX.md` for the target area; open entries only on hits
    - Ask-first boundaries: scan the active instruction file's Ask First boundaries for the target files
    - If any check fails or is unavailable, note `gather-degraded` and route anyway
 3. **ROUTE** - dispatch using the route map. Emit a Route Snapshot:

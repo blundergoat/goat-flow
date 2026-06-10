@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-06-05
+last_reviewed: 2026-06-10
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -33,7 +33,7 @@ Some harness checks can report a missing directory as present if they rely on `c
 **Symptoms:** After deleting the old WIP goat-flow install from `api-main`, `/api/audit?path=/home/hxdev/projects/feature/api-main&quality=true&fresh=true` reported setup failure `Missing: .goat-flow/logs/sessions/`, while the Recovery concern simultaneously reported `Session logs directory exists`.
 
 **Evidence:**
-- `src/cli/facts/fs.ts` (search: `listDir(path: string)`) - catches `readdirSync` failures and returns `[]`.
+- `src/cli/facts/fs.ts` (search: `swallows readdir errors as a cached [] fallback`) - catches `readdirSync` failures and returns `[]`.
 - `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.exists(logsDir))`) - the session-log check now guards existence before `listDir()`; future harness checks need the same pattern.
 - Runtime probe from 2026-05-05: `createFS("/home/hxdev/projects/feature/api-main").exists(".goat-flow/logs/sessions")` returned `false`, while `listDir(".goat-flow/logs/sessions")` returned `[]`.
 
@@ -52,6 +52,24 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `src/cli/audit/check-content-quality.ts` and `src/cli/audit/check-factual-claims.ts` exist because structural correctness alone did not catch cold-path truth drift.
 
 **Prevention:** Keep structural audit and content-truth checks separate and explicit. Never treat a build PASS as proof that docs, ADRs, or prompts are semantically current.
+
+---
+
+## Footgun: Learning-loop record counts have two grammars that disagree on resolved entries
+
+**Status:** active | **Created:** 2026-06-10 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Two surfaces show different counts under the same bucket label. Measured 2026-06-10: the dashboard Home LEARNING LOOP pill said `94 footguns` while the Learning loop card's per-bucket bar said `footguns 78`. Both are correct - they use different counting grammars.
+
+**Evidence:**
+- `src/cli/server/dashboard-reporting.ts` (search: `footgunCount: stats.footguns.totalEntries`) - pill counts come from `buildStatsReport`, which counts every entry heading including `Status: resolved` footguns.
+- Same file (search: `entryCount: parseBucket`) - the card's bars use `parseBucket` from `src/cli/learning-loop-index/parse-bucket.ts`, which returns active entries only (the INDEX.md grammar, "active-entry rows" per its doc comment).
+- Measured gap: 94 total vs 78 active footguns (16 resolved); lessons matched at 212 because they have no resolved state, so the mismatch hides on buckets without resolved entries.
+- First Learning loop card draft rendered both numbers on one card; fixed by deriving the card's status line from the same `entryCount` data as its bars (search: `learningLoopStatusDetail` in `src/dashboard/views/home.html`).
+
+**Prevention:**
+1. Match the count source to the surface's concept: retrieval/index surfaces use `parseBucket` active counts; size/health surfaces use stats totals.
+2. Never render counts from both grammars under the same bucket label on one surface; if both must appear, label them distinctly ("active entries" vs total records).
 
 ---
 

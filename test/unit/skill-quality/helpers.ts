@@ -45,22 +45,10 @@ export function symlinkOrSkip(
   }
 }
 
-import {
-  discoverArtifacts,
-  findArtifact,
-} from "../../../src/cli/quality/skill-quality-content.js";
-import {
-  scoreArtifact,
-  scoreAllArtifacts,
-} from "../../../src/cli/quality/skill-quality.js";
-import {
-  evaluateContent,
-  evaluateUploadedBundle,
-} from "../../../src/cli/quality/skill-quality-upload.js";
-import {
-  cloneQualityConfig,
-  DEFAULT_QUALITY_CONFIG,
-} from "../../../src/cli/quality/quality-config.js";
+import { discoverArtifacts, findArtifact } from "../../src.js";
+import { scoreArtifact, scoreAllArtifacts } from "../../src.js";
+import { evaluateContent, evaluateUploadedBundle } from "../../src.js";
+import { cloneQualityConfig, DEFAULT_QUALITY_CONFIG } from "../../src.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..", "..");
 export const FULL_DISPATCHER_WORKFLOW_SCORE = 5;

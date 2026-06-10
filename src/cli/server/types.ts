@@ -10,6 +10,7 @@ import type {
   CheckImpact,
   HarnessCheckType,
 } from "../audit/types.js";
+import type { IndexFreshness } from "../stats/index-freshness.js";
 import type { AgentId } from "../types.js";
 /** Messages sent from the browser terminal to the WebSocket server. */
 export type ClientMessage =
@@ -183,6 +184,9 @@ export interface DashboardReport {
     staleCount: number;
     invalidLineRefCount: number;
     oversizedCount: number;
+    indexes: (IndexFreshness & { entryCount: number })[];
+    indexStaleCount: number;
+    indexMissingCount: number;
     oldestLastReviewed: string | null;
     topBucketsNeedingAction: { path: string; reason: string }[];
     status: "fresh" | "needs-review" | "unavailable";

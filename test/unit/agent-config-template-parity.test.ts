@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+/** Escape a deny glob before embedding it in a regex that checks template parity. */
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -37,17 +38,24 @@ describe("agent config template parity", () => {
       "utf-8",
     );
 
-    for (const pattern of ["**/.env*", "**/credentials*"]) {
-      assert.ok(
-        claudeReadPatterns.has(pattern),
-        `Claude template should deny Read(${pattern})`,
-      );
-      assert.match(
-        codexTemplate,
-        new RegExp(`"${escapeRegExp(pattern)}"\\s*=\\s*"deny"`),
-        `Codex template should deny ${pattern}`,
-      );
-    }
+    assert.ok(
+      claudeReadPatterns.has("**/.env*"),
+      "Claude template should deny Read(**/.env*)",
+    );
+    assert.match(
+      codexTemplate,
+      new RegExp(`"${escapeRegExp("**/.env*")}"\\s*=\\s*"deny"`),
+      "Codex template should deny **/.env*",
+    );
+    assert.ok(
+      claudeReadPatterns.has("**/credentials*"),
+      "Claude template should deny Read(**/credentials*)",
+    );
+    assert.match(
+      codexTemplate,
+      new RegExp(`"${escapeRegExp("**/credentials*")}"\\s*=\\s*"deny"`),
+      "Codex template should deny **/credentials*",
+    );
     assert.match(codexTemplate, /env\.example is intentionally denied/);
   });
 
@@ -68,12 +76,14 @@ describe("agent config template parity", () => {
         )
       : [];
     const knownTools = new Set(["Bash", "Read", "Edit", "Write"]);
-    for (const entry of claudeDeny) {
+    const unknownDenyRules = claudeDeny.filter((entry) => {
       const tool = entry.match(/^([A-Za-z]+)\(/u)?.[1];
-      assert.ok(
-        tool && knownTools.has(tool),
-        `Claude deny rule "${entry}" targets unknown tool "${tool ?? "?"}" — Claude Code will warn "matches no known tool" on launch (MultiEdit was removed in v2.x).`,
-      );
-    }
+      return !tool || !knownTools.has(tool);
+    });
+    assert.deepEqual(
+      unknownDenyRules,
+      [],
+      `Claude deny rules should only target known tools; got ${unknownDenyRules.join(", ")}`,
+    );
   });
 });

@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-06-03
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Do not convert a fix request into threshold tuning
@@ -12,6 +12,36 @@ last_reviewed: 2026-06-03
 **Root cause:** I treated "clear the gruff findings" as interchangeable with "make the report stop flagging them." That violated the requested fix intent. Threshold changes are policy changes, not code fixes, and they need explicit approval when the user asks to fix findings.
 
 **Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
+
+## Lesson: Gruff JSON captures must not go through noisy npm output
+
+**Status:** active | **Created:** 2026-06-10
+
+**What happened:** During the M01 gruff cleanup, redirecting `npm run gruff-ts -- analyse --format json --fail-on none .` to `/tmp/goat-flow-gruff-ts-before.json` produced invalid JSON because npm wrote its script banner before the analyzer payload. Parsing failed even though the analyzer itself had completed.
+
+**Root cause:** I treated an npm script as a transparent binary wrapper while capturing machine-readable output. npm can prepend lifecycle/script text unless invoked silently, which corrupts stdout-only JSON reports.
+
+**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/plans/1.11.0/M01-gruff-ts-zero-findings.md` (search: `For JSON captures, use the local binary directly`).
+
+## Lesson: Gruff error-behavior comments need rule vocabulary
+
+**Status:** active | **Created:** 2026-06-10
+
+**What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
+
+**Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
+
+**Prevention:** When `docs.missing-error-behavior-doc` survives a comment pass, read the installed rule vocabulary and use accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+
+## Lesson: Do not leave generated gruff defaults after an init probe
+
+**Status:** active | **Created:** 2026-06-09
+
+**What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names`, `dashboard state and CLI option DTOs`, and `test-quality.setup-bloat`.
+
+**Root cause:** I treated `init --force` as a harmless command run instead of a policy rewrite. In goat-flow, `.gruff-ts.yaml` carries durable tuning plus semantic anchors referenced by lessons, so a generated-default reset can break verification even when the hook implementation is correct.
+
+**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, restore the project-specific tuning anchors before broad verification. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `.gruff-ts.yaml` (search: `test-quality.setup-bloat`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 ## Lesson: Verify a gruff path-ignore by directory scan, not by naming the file
 
@@ -64,6 +94,16 @@ last_reviewed: 2026-06-03
 **Root cause:** I treated a browser classic-script split like a TypeScript module split. These files do not import each other; the HTML script order is the dependency graph, and VM tests must mirror that graph explicitly.
 
 **Prevention:** After splitting dashboard classic scripts, update `src/dashboard/index.html` and every VM helper source list in the same patch. Run the focused VM suites before expanding the refactor. Evidence anchors: `src/dashboard/index.html` (search: `dashboard-app-merge.js`), `test/unit/dashboard-terminal-launch/helpers.ts` (search: `readDashboardAppSource`), `test/unit/dashboard-readers.test.ts` (search: `MODEL_READERS_PATH`).
+
+## Lesson: Static source-shape tests must follow helper extractions
+
+**Status:** active | **Created:** 2026-06-10
+
+**What happened:** During M01 dashboard state-fragment gruff cleanup, extracting the detached-terminal predicate from `dashboardAppFragment02` into `isTerminalDetached` cleared targeted gruff but the focused VM suite failed. `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` still asserted the old inline regex `s.id === session.id && s.status === "active"`.
+
+**Root cause:** I treated the dashboard terminal VM suite as mostly behavioral coverage and did not pre-scan its `readDashboardAppSource()` assertions after moving source-shape logic into helpers.
+
+**Prevention:** When extracting helpers from dashboard classic-script fragments, grep the focused VM tests for `readDashboardAppSource` and the moved expression or symbol before the first rerun. Update static assertions to the new stable helper/caller contract, then rerun the focused suite. Evidence anchors: `src/dashboard/dashboard-app-state-fragments.ts` (search: `function isTerminalDetached`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `serverSession\.id === session\.id`).
 
 ## Lesson: Dashboard asset renames need a clean dist build
 

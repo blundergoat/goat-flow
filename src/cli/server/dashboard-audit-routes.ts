@@ -37,6 +37,13 @@ import {
 import { buildSetupDetectPayload } from "./setup-detect.js";
 import type { DashboardReport } from "./types.js";
 
+/** Route handlers exported by the dashboard audit/setup route group. */
+interface AuditRouteHandlers {
+  handleAuditRequest: (url: URL, res: ServerResponse) => boolean;
+  handleSetupDetectRequest: (url: URL, res: ServerResponse) => boolean;
+  handleSetupRequest: (url: URL, res: ServerResponse) => Promise<boolean>;
+}
+
 function isCacheEligible(
   agentFilter: AgentId | null,
   includeHarness: boolean,
@@ -90,6 +97,22 @@ function buildDashboardAuditReport(
   );
 }
 
+/** Convert unknown exceptions to the JSON-safe error message used by dashboard routes. */
+function routeErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Send a standard dashboard JSON error response for non-profiled routes. */
+function jsonErrorResponse(
+  ctx: DashboardRouteContext,
+  res: ServerResponse,
+  err: unknown,
+): void {
+  ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
+    error: routeErrorMessage(err),
+  });
+}
+
 function readCachedDashboardAudit(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -101,6 +124,100 @@ function readCachedDashboardAudit(
   return profiler.span("cache read", () =>
     readAuditCache(projectPath, ctx.packageVersion, signature),
   );
+}
+
+/** Record the dashboard audit event after either cache hit or fresh audit run. */
+function recordAuditRunEvent(
+  ctx: DashboardRouteContext,
+  projectPath: string,
+  includeHarness: boolean,
+  agentFilter: AgentId | null,
+  report: DashboardReport,
+  cached: boolean,
+): void {
+  ctx.recordDashboardEvent(projectPath, "audit.run", {
+    cached,
+    harness: includeHarness,
+    agent: agentFilter ?? "all",
+    status: report.status,
+  });
+}
+
+/** Send an audit report response with cache fields and optional profiling metadata. */
+function sendAuditReport(
+  ctx: DashboardRouteContext,
+  res: ServerResponse,
+  report: DashboardReport,
+  profiler: DashboardAuditProfiler,
+  cacheState: { cached: boolean; cachedAt: string | null },
+): void {
+  ctx.jsonResponse(
+    res,
+    200,
+    appendAuditProfile(
+      {
+        ...report,
+        cached: cacheState.cached,
+        cachedAt: cacheState.cachedAt,
+      },
+      profiler,
+    ),
+  );
+}
+
+/** Send a profiled audit error response so the dashboard can still render spans. */
+function sendAuditError(
+  ctx: DashboardRouteContext,
+  res: ServerResponse,
+  err: unknown,
+  profiler: DashboardAuditProfiler,
+): void {
+  ctx.jsonResponse(
+    res,
+    ctx.responseStatusForError(err, 500),
+    appendAuditProfile({ error: routeErrorMessage(err) }, profiler),
+  );
+}
+
+/** Read, enrich, record, and return a cached audit response when the cache matches. */
+function respondWithCachedAudit(
+  ctx: DashboardRouteContext,
+  res: ServerResponse,
+  cached: { report: DashboardReport; cachedAt: string },
+  projectPath: string,
+  includeHarness: boolean,
+  agentFilter: AgentId | null,
+  profiler: DashboardAuditProfiler,
+): void {
+  const report = profiler.span("learning-loop enrichment", () =>
+    enrichDashboardReport(cached.report, projectPath),
+  );
+  recordAuditRunEvent(
+    ctx,
+    projectPath,
+    includeHarness,
+    agentFilter,
+    report,
+    true,
+  );
+  sendAuditReport(ctx, res, report, profiler, {
+    cached: true,
+    cachedAt: cached.cachedAt,
+  });
+}
+
+/** Write the fresh audit result to the dashboard cache when the request is eligible. */
+function writeFreshAuditCache(
+  ctx: DashboardRouteContext,
+  projectPath: string,
+  signature: string | null,
+  report: DashboardReport,
+  profiler: DashboardAuditProfiler,
+): void {
+  if (signature === null) return;
+  profiler.span("cache write", () => {
+    writeAuditCache(projectPath, ctx.packageVersion, signature, report);
+  });
 }
 
 /** Parse optional agent filters without rejecting dashboard-wide requests. */
@@ -125,36 +242,11 @@ function recordSetupPrompt(
   });
 }
 
-/**
- * Bind the audit/setup route handlers to one server's request context so each closure can reach the
- * validated-path resolver, evidence recorder, and JSON responder without per-request wiring. The
- * closure shape is intentional because the context is resolved once per server, and binding it here
- * lets the handlers be registered as plain `(url, res)` callbacks. Each handler reports validation,
- * audit, and cache failures back to the client as a JSON error body instead of throwing, so a failed
- * request never crashes the server. The aggregate audit route also folds a disk cache over
- * `runAuditBatch` to avoid paying a full re-audit on every fresh Home load.
- *
- * @param ctx - per-server dashboard route context carrying path validation, the audit cache, and IO hooks
- * @returns the three audit/setup handlers; each returns true once it has owned and answered a matching
- *   request, or false to let the next handler try the URL
- */
-export function createAuditRouteHandlers(ctx: DashboardRouteContext): {
-  handleAuditRequest: (url: URL, res: ServerResponse) => boolean;
-  handleSetupDetectRequest: (url: URL, res: ServerResponse) => boolean;
-  handleSetupRequest: (url: URL, res: ServerResponse) => Promise<boolean>;
-} {
-  const { jsonResponse } = ctx;
-
-  /**
-   * Run both evaluation systems and return the shared DashboardReport consumed
-   * by Home, Setup, and Quality. Aggregate dashboard requests intentionally use
-   * dashboard-summary facts: stack-derived setup details come from
-   * `/api/setup/detect`, while this route must preserve report/scopes/agentScores
-   * without paying setup-time stack detection on every fresh Home load.
-   *
-   * Reports validation, audit, and cache failures as JSON instead of throwing.
-   */
-  function handleAuditRequest(url: URL, res: ServerResponse): boolean {
+/** Build the `/api/audit` handler bound to one dashboard route context. */
+function createHandleAuditRequest(
+  ctx: DashboardRouteContext,
+): AuditRouteHandlers["handleAuditRequest"] {
+  return function handleAuditRequest(url: URL, res: ServerResponse): boolean {
     if (url.pathname !== "/api/audit") return false;
 
     const includeHarness = url.searchParams.get("quality") === "true";
@@ -183,26 +275,14 @@ export function createAuditRouteHandlers(ctx: DashboardRouteContext): {
         profiler,
       );
       if (cached) {
-        const report = profiler.span("learning-loop enrichment", () =>
-          enrichDashboardReport(cached.report, projectPath),
-        );
-        ctx.recordDashboardEvent(projectPath, "audit.run", {
-          cached: true,
-          harness: includeHarness,
-          agent: agentFilter ?? "all",
-          status: report.status,
-        });
-        jsonResponse(
+        respondWithCachedAudit(
+          ctx,
           res,
-          200,
-          appendAuditProfile(
-            {
-              ...report,
-              cached: true,
-              cachedAt: cached.cachedAt,
-            },
-            profiler,
-          ),
+          cached,
+          projectPath,
+          includeHarness,
+          agentFilter,
+          profiler,
         );
         return true;
       }
@@ -213,49 +293,40 @@ export function createAuditRouteHandlers(ctx: DashboardRouteContext): {
         includeHarness,
         profiler,
       );
-
-      if (auditCacheSignature !== null) {
-        profiler.span("cache write", () => {
-          writeAuditCache(
-            projectPath,
-            ctx.packageVersion,
-            auditCacheSignature,
-            report,
-          );
-        });
-      }
-
-      ctx.recordDashboardEvent(projectPath, "audit.run", {
+      writeFreshAuditCache(
+        ctx,
+        projectPath,
+        auditCacheSignature,
+        report,
+        profiler,
+      );
+      recordAuditRunEvent(
+        ctx,
+        projectPath,
+        includeHarness,
+        agentFilter,
+        report,
+        false,
+      );
+      sendAuditReport(ctx, res, report, profiler, {
         cached: false,
-        harness: includeHarness,
-        agent: agentFilter ?? "all",
-        status: report.status,
+        cachedAt: null,
       });
-      jsonResponse(
-        res,
-        200,
-        appendAuditProfile(
-          { ...report, cached: false, cachedAt: null },
-          profiler,
-        ),
-      );
     } catch (err) {
-      jsonResponse(
-        res,
-        ctx.responseStatusForError(err, 500),
-        appendAuditProfile(
-          {
-            error: err instanceof Error ? err.message : String(err),
-          },
-          profiler,
-        ),
-      );
+      sendAuditError(ctx, res, err, profiler);
     }
     return true;
-  }
+  };
+}
 
-  /** Detect setup inputs for the setup view and reports validation failures as JSON. */
-  function handleSetupDetectRequest(url: URL, res: ServerResponse): boolean {
+/** Build the `/api/setup/detect` handler bound to one dashboard route context. */
+function createHandleSetupDetectRequest(
+  ctx: DashboardRouteContext,
+): AuditRouteHandlers["handleSetupDetectRequest"] {
+  return function handleSetupDetectRequest(
+    url: URL,
+    res: ServerResponse,
+  ): boolean {
     if (url.pathname !== "/api/setup/detect") return false;
 
     try {
@@ -263,76 +334,117 @@ export function createAuditRouteHandlers(ctx: DashboardRouteContext): {
         url.searchParams.get("path"),
         "project-read",
       );
-      jsonResponse(res, 200, buildSetupDetectPayload(projectPath));
+      ctx.jsonResponse(res, 200, buildSetupDetectPayload(projectPath));
     } catch (err) {
-      jsonResponse(res, ctx.responseStatusForError(err, 500), {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      jsonErrorResponse(ctx, res, err);
     }
     return true;
-  }
+  };
+}
 
-  /** Compose setup output for one agent and return it to the dashboard. */
-  async function handleSetupRequest(
+/** Validate the setup agent parameter and send the route-owned 400 response when invalid. */
+function validateSetupAgentParam(
+  ctx: DashboardRouteContext,
+  res: ServerResponse,
+  agentParam: string | null,
+): AgentId | null {
+  if (!agentParam) {
+    ctx.jsonResponse(res, 400, {
+      error: `Missing required parameter: agent. Valid: ${KNOWN_AGENT_LIST}`,
+    });
+    return null;
+  }
+  if (!VALID_AGENTS.has(agentParam)) {
+    ctx.jsonResponse(res, 400, {
+      error: `Invalid agent: ${agentParam}. Valid: ${KNOWN_AGENT_LIST}`,
+    });
+    return null;
+  }
+  return agentParam as AgentId;
+}
+
+/** Compose the setup prompt output using dashboard-summary facts and static deny evidence. */
+async function composeDashboardSetupOutput(
+  projectPath: string,
+  agent: AgentId,
+): Promise<string> {
+  const fs = createFS(projectPath);
+  const configState = loadConfig(projectPath, fs);
+  const facts = extractProjectFacts(fs, {
+    agentFilter: agent,
+    projectPath,
+    configState,
+    includeStack: false,
+  });
+  const auditReport: AuditReport = runAudit(fs, projectPath, {
+    agentFilter: agent,
+    harness: true,
+    factProfile: "dashboard-summary",
+    denyMechanismEvidenceLevel: "static",
+  });
+  const { composeSetup } = await import("../prompt/compose-setup.js");
+  const output = composeSetup(auditReport, facts, agent, {
+    denyMechanismEvidenceLevel: "static",
+  });
+  return output ?? "No setup output generated.";
+}
+
+/** Build the `/api/setup` handler bound to one dashboard route context. */
+function createHandleSetupRequest(
+  ctx: DashboardRouteContext,
+): AuditRouteHandlers["handleSetupRequest"] {
+  return async function handleSetupRequest(
     url: URL,
     res: ServerResponse,
   ): Promise<boolean> {
     if (url.pathname !== "/api/setup") return false;
 
-    const agentParam = url.searchParams.get("agent");
-    if (!agentParam) {
-      jsonResponse(res, 400, {
-        error: `Missing required parameter: agent. Valid: ${KNOWN_AGENT_LIST}`,
-      });
-      return true;
-    }
-    if (!VALID_AGENTS.has(agentParam)) {
-      jsonResponse(res, 400, {
-        error: `Invalid agent: ${agentParam}. Valid: ${KNOWN_AGENT_LIST}`,
-      });
-      return true;
-    }
+    const agent = validateSetupAgentParam(
+      ctx,
+      res,
+      url.searchParams.get("agent"),
+    );
+    if (agent === null) return true;
 
-    const agent = agentParam as AgentId;
     try {
       const projectPath = ctx.validatedPath(
         url.searchParams.get("path"),
         "project-read",
       );
-      const fs = createFS(projectPath);
-      const configState = loadConfig(projectPath, fs);
-      const facts = extractProjectFacts(fs, {
-        agentFilter: agent,
+      const renderedOutput = await composeDashboardSetupOutput(
         projectPath,
-        configState,
-        includeStack: false,
-      });
-      const auditReport: AuditReport = runAudit(fs, projectPath, {
-        agentFilter: agent,
-        harness: true,
-        factProfile: "dashboard-summary",
-        denyMechanismEvidenceLevel: "static",
-      });
-      const { composeSetup } = await import("../prompt/compose-setup.js");
-      const output = composeSetup(auditReport, facts, agent, {
-        denyMechanismEvidenceLevel: "static",
-      });
-      const renderedOutput = output ?? "No setup output generated.";
+        agent,
+      );
       recordSetupPrompt(projectPath, agent, renderedOutput);
-      jsonResponse(res, 200, {
+      ctx.jsonResponse(res, 200, {
         output: renderedOutput,
       });
     } catch (err) {
-      jsonResponse(res, ctx.responseStatusForError(err, 500), {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      jsonErrorResponse(ctx, res, err);
     }
     return true;
-  }
+  };
+}
 
+/**
+ * Bind the audit/setup route handlers to one server's request context so each closure can reach the
+ * validated-path resolver, evidence recorder, and JSON responder without per-request wiring. The
+ * closure shape is intentional because the context is resolved once per server, and binding it here
+ * lets the handlers be registered as plain `(url, res)` callbacks. Each handler reports validation,
+ * audit, and cache failures back to the client as a JSON error body instead of throwing, so a failed
+ * request never crashes the server. The aggregate audit route also folds a disk cache over
+ * `runAuditBatch` to avoid paying a full re-audit on every fresh Home load.
+ *
+ * @param ctx - per-server dashboard route context carrying path validation, the audit cache, and IO hooks
+ * @returns the three audit/setup handlers; each returns true once it has owned and answered a matching
+ *   request, or false to let the next handler try the URL
+ */
+export function createAuditRouteHandlers(
+  ctx: DashboardRouteContext,
+): AuditRouteHandlers {
   return {
-    handleAuditRequest,
-    handleSetupDetectRequest,
-    handleSetupRequest,
+    handleAuditRequest: createHandleAuditRequest(ctx),
+    handleSetupDetectRequest: createHandleSetupDetectRequest(ctx),
+    handleSetupRequest: createHandleSetupRequest(ctx),
   };
 }

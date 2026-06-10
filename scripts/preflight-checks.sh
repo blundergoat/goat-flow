@@ -322,7 +322,7 @@ phase_for() {
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
         "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
-        "Skill Behavioral Contracts"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
+        "Skill Behavioral Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
         "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Content Drift"|"Skill Docs Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
         "Path Integrity"|"Markdown Links"|"Package README Links") printf 'LINKS' ;;
@@ -341,6 +341,7 @@ display_for() {
         "Skill and Reference Versions") printf 'Skill versions' ;;
         "Version Consistency") printf 'Version consistency' ;;
         "Skill Behavioral Contracts") printf 'Skill behavioural' ;;
+        "Reference Budgets") printf 'Reference budgets' ;;
         "Cross-Agent Consistency") printf 'Cross-agent' ;;
         "Instruction Parity Contract") printf 'Instruction parity' ;;
         "Instruction File Quality") printf 'Instruction quality' ;;
@@ -370,6 +371,7 @@ collapsed_desc_for() {
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
         "Skill Behavioral Contracts") printf 'goat-critique invocation' ;;
+        "Reference Budgets") printf 'ADR-023 headroom' ;;
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
@@ -472,6 +474,7 @@ _compute_widths() {
         "Deny Policy" "ADR Enforcement" "Gruff Policy"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
         "Skill Behavioral Contracts" "Cross-Agent Consistency"
+        "Reference Budgets"
         "Instruction Parity Contract" "Instruction File Quality"
         "Tests"
         "GOAT Flow Audit" "Learning-Loop Schema" "Content Drift" "Doc/Code Drift"
@@ -761,6 +764,7 @@ done < <(manifest_eval hook-dirs)
 configured_hook_smoke_output=$(
     node <<'NODE'
 const fs = require("node:fs");
+const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const guardScripts = ["deny-dangerous.sh"];
@@ -821,9 +825,18 @@ function collect(value, out = []) {
   return out;
 }
 
-function runCommand(command, input) {
+function smokeCwds(agent) {
+  const root = process.cwd();
+  const cwds = [{ label: "project root", cwd: root }];
+  if (agent === "copilot") return cwds;
+  const nested = path.join(root, ".goat-flow");
+  if (fs.existsSync(nested)) cwds.push({ label: ".goat-flow", cwd: nested });
+  return cwds;
+}
+
+function runCommand(command, input, cwd) {
   return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
-    cwd: process.cwd(),
+    cwd,
     encoding: "utf8",
     env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
     input: "",
@@ -865,25 +878,27 @@ for (const config of configs) {
   for (const entry of commands) {
     checked += 1;
     const smoke = payloadFor(config.mode, entry.script);
-    const result = runCommand(entry.command, smoke.input);
-    const spawnFailure = spawnFailureMessage(
-      result,
-      `${config.agent}: ${entry.script} configured command`,
-    );
-    if (spawnFailure) {
-      emit("FAIL", spawnFailure);
-      continue;
-    }
-    const status = result.status ?? (result.error ? -1 : 0);
-    if (status === 126 || status === 127) {
-      emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status}: ${entry.command}`);
-      continue;
-    }
-    const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
-    if (status === smoke.status && smoke.pattern.test(stream)) {
-      emit("PASS", `${config.agent}: ${entry.script} configured command smoke denied payload`);
-    } else {
-      emit("FAIL", `${config.agent}: ${entry.script} configured command smoke failed (exit ${status})`);
+    for (const smokeCwd of smokeCwds(config.agent)) {
+      const result = runCommand(entry.command, smoke.input, smokeCwd.cwd);
+      const spawnFailure = spawnFailureMessage(
+        result,
+        `${config.agent}: ${entry.script} configured command`,
+      );
+      if (spawnFailure) {
+        emit("FAIL", spawnFailure);
+        continue;
+      }
+      const status = result.status ?? (result.error ? -1 : 0);
+      if (status === 126 || status === 127) {
+        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${entry.command}`);
+        continue;
+      }
+      const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
+      if (status === smoke.status && smoke.pattern.test(stream)) {
+        emit("PASS", `${config.agent}: ${entry.script} configured command smoke denied payload from ${smokeCwd.label}`);
+      } else {
+        emit("FAIL", `${config.agent}: ${entry.script} configured command smoke failed from ${smokeCwd.label} (exit ${status})`);
+      }
     }
   }
 }
@@ -1332,6 +1347,75 @@ for f in "${goat_critique_files[@]}"; do
 done
 if [[ "$contract_ok" == true ]]; then
     pass "goat-critique direct invocation has no obsolete Codex delegation exception"
+fi
+
+# ── Reference Budget Headroom ────────────────────────────────────────
+section "Reference Budgets"
+budget_headroom_output=$(
+    node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const files = [
+  { cap: 1500, paths: [
+    "workflow/skills/reference/skill-preamble.md",
+    ".goat-flow/skill-docs/skill-preamble.md",
+    "workflow/skills/reference/skill-conventions.md",
+    ".goat-flow/skill-docs/skill-conventions.md",
+  ] },
+  { cap: 400, paths: [
+    "workflow/skills/playbooks/skill-quality-testing.md",
+    ".goat-flow/skill-docs/skill-quality-testing/README.md",
+  ] },
+  { cap: 3000, paths: [
+    ...[
+      "browser-use.md",
+      "changelog.md",
+      "code-comments.md",
+      "gruff-code-quality.md",
+      "observability.md",
+      "page-capture.md",
+      "release-notes.md",
+    ].flatMap((name) => [
+      `workflow/skills/playbooks/${name}`,
+      `.goat-flow/skill-docs/playbooks/${name}`,
+    ]),
+    ...[
+      "tdd-iteration.md",
+      "adversarial-framing.md",
+      "deployment.md",
+    ].flatMap((name) => [
+      `workflow/skills/playbooks/skill-quality-testing/${name}`,
+      `.goat-flow/skill-docs/skill-quality-testing/${name}`,
+    ]),
+  ] },
+];
+
+function bodyWordCount(file) {
+  const text = fs.readFileSync(file, "utf8").replace(/^---\n[\s\S]*?\n---\n?/, "");
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+const near = [];
+for (const tier of files) {
+  for (const file of tier.paths) {
+    if (!fs.existsSync(file)) continue;
+    const words = bodyWordCount(file);
+    if (words / tier.cap >= 0.9) {
+      near.push({ file, words, cap: tier.cap, ratio: words / tier.cap });
+    }
+  }
+}
+near.sort((a, b) => b.ratio - a.ratio || a.file.localeCompare(b.file));
+process.stdout.write(
+  near.map((entry) => `${entry.file} ${entry.words}/${entry.cap}`).join("; "),
+);
+NODE
+)
+if [[ -n "$budget_headroom_output" ]]; then
+    pass "ADR-023 headroom above 90%: $budget_headroom_output"
+else
+    pass "No ADR-023 reference files above 90% of their tier cap"
 fi
 
 # ── Cross-Agent Loop Consistency ─────────────────────────────────────

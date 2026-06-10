@@ -100,6 +100,7 @@ describe("artifact discovery", () => {
     ]);
   });
 
+  // Fixture purpose: writes a symlinked skill entry to cover walk-root filtering.
   it("skips symlink entries in skill walk roots", (testContext) => {
     const projectRoot = makeTempProject();
     mkdirSync(join(projectRoot, ".claude/skills/real"), { recursive: true });

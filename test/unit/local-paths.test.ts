@@ -166,6 +166,7 @@ describe("resolveLocalStatePath", () => {
     }
   });
 
+  // Fixture purpose: writes a symlinked state path to cover escape rejection.
   it("rejects state paths that escape through symlinked components", (testContext) => {
     const root = mkdtempSync(join(tmpdir(), "gf-local-state-"));
     const outside = mkdtempSync(join(tmpdir(), "gf-local-state-outside-"));

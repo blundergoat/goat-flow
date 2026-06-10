@@ -15,6 +15,111 @@ export type TimerControls = {
   clearInterval: typeof clearInterval;
 };
 
+type FakeTimerHandle = ReturnType<typeof setTimeout> &
+  ReturnType<typeof setInterval>;
+
+/** Scheduled callback metadata stored by the deterministic fake clock. */
+interface FakeTimerEntry {
+  at: number;
+  callback: () => void;
+  intervalMs?: number;
+}
+
+/** Mutable fake clock queues shared by the injected timer functions. */
+interface FakeTimerState {
+  now: number;
+  timers: Map<number, FakeTimerEntry>;
+  cancelled: Set<number>;
+}
+
+/** Create a fake timeout/interval handle that clear functions can coerce back to the scheduler id. */
+function createTimerHandle(id: number): FakeTimerHandle {
+  const handle = {
+    close: () => handle,
+    hasRef: () => true,
+    ref: () => handle,
+    refresh: () => handle,
+    unref: () => handle,
+    [Symbol.toPrimitive]: () => id,
+    [Symbol.dispose]: () => undefined,
+  };
+  return handle as FakeTimerHandle;
+}
+
+/** Read the fake scheduler id from a timeout/interval handle without depending on real timer objects. */
+function readTimerId(
+  handle:
+    | ReturnType<typeof setTimeout>
+    | ReturnType<typeof setInterval>
+    | undefined,
+): number | null {
+  if (handle === undefined) return null;
+  const id = Number(handle);
+  return Number.isFinite(id) ? id : null;
+}
+
+/** Find the earliest timer due at or before the target timestamp. */
+function findNextDueTimer(
+  timers: ReadonlyMap<number, FakeTimerEntry>,
+  target: number,
+): [number, FakeTimerEntry] | undefined {
+  return [...timers.entries()]
+    .filter(([, timer]) => timer.at <= target)
+    .sort((a, b) => a[1].at - b[1].at)[0];
+}
+
+/** Advance fake time by mutating timer queues and firing every callback due before the target. */
+function runDueTimers(state: FakeTimerState, target: number): void {
+  while (true) {
+    const due = findNextDueTimer(state.timers, target);
+    if (!due) break;
+    const [id, timer] = due;
+    state.timers.delete(id);
+    state.now = timer.at;
+    timer.callback();
+    if (timer.intervalMs !== undefined && !state.cancelled.has(id)) {
+      // A zero-delay interval would requeue at the same virtual timestamp and
+      // spin this loop forever; clamp to the next millisecond like real timers.
+      state.timers.set(id, {
+        ...timer,
+        at: state.now + Math.max(1, timer.intervalMs),
+      });
+    }
+    state.cancelled.delete(id);
+  }
+  state.now = target;
+}
+
+/** Schedule one fake timer and return a handle compatible with the injected browser timer API. */
+function scheduleFakeTimer(
+  state: FakeTimerState,
+  id: number,
+  callback: (...args: unknown[]) => void,
+  ms: number | undefined,
+  args: unknown[],
+  intervalMs?: number,
+): FakeTimerHandle {
+  state.timers.set(id, {
+    at: state.now + (ms ?? 0),
+    callback: () => callback(...args),
+    ...(intervalMs === undefined ? {} : { intervalMs }),
+  });
+  return createTimerHandle(id);
+}
+
+/** Cancel a fake timer by mutating active and just-fired interval bookkeeping. */
+function clearFakeTimer(
+  state: FakeTimerState,
+  handle:
+    | ReturnType<typeof setTimeout>
+    | ReturnType<typeof setInterval>
+    | undefined,
+): void {
+  const id = readTimerId(handle);
+  if (id === null) return;
+  if (!state.timers.delete(id)) state.cancelled.add(id);
+}
+
 /**
  * Build a deterministic fake clock. Registrations are recorded in a map keyed by virtual fire time rather than
  * handed to the real event loop, because the launch flow's retry/fallback timing must be driven step by step in a
@@ -35,13 +140,12 @@ export function createFakeTimers(): TimerControls & {
    */
   pending(): number;
 } {
-  let now = 0;
+  const state: FakeTimerState = {
+    now: 0,
+    timers: new Map(),
+    cancelled: new Set(),
+  };
   let nextId = 1;
-  const timers = new Map<
-    number,
-    { at: number; callback: () => void; intervalMs?: number }
-  >();
-  const cancelled = new Set<number>();
   const fakeSetTimeout = ((
     callback: (...args: unknown[]) => void,
     ms?: number,
@@ -49,17 +153,12 @@ export function createFakeTimers(): TimerControls & {
   ) => {
     const id = nextId;
     nextId += 1;
-    timers.set(id, {
-      at: now + (ms ?? 0),
-      callback: () => callback(...args),
-    });
-    return id as unknown as ReturnType<typeof setTimeout>;
+    return scheduleFakeTimer(state, id, callback, ms, args);
   }) as typeof setTimeout;
   // Fired intervals can be cleared by their own callback; cancelled keeps that
   // clear from being lost after the callback returns.
   const fakeClearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
-    const id = Number(handle);
-    if (!timers.delete(id)) cancelled.add(id);
+    clearFakeTimer(state, handle);
   }) as typeof clearTimeout;
   const fakeSetInterval = ((
     callback: (...args: unknown[]) => void,
@@ -68,18 +167,12 @@ export function createFakeTimers(): TimerControls & {
   ) => {
     const id = nextId;
     nextId += 1;
-    timers.set(id, {
-      at: now + (ms ?? 0),
-      callback: () => callback(...args),
-      intervalMs: ms ?? 0,
-    });
-    return id as unknown as ReturnType<typeof setInterval>;
+    return scheduleFakeTimer(state, id, callback, ms, args, ms ?? 0);
   }) as typeof setInterval;
   // Shares cancellation bookkeeping with timeouts because browser helpers use
   // both APIs through the same VM-injected fake clock.
   const fakeClearInterval = ((handle?: ReturnType<typeof setInterval>) => {
-    const id = Number(handle);
-    if (!timers.delete(id)) cancelled.add(id);
+    clearFakeTimer(state, handle);
   }) as typeof clearInterval;
   return {
     setTimeout: fakeSetTimeout,
@@ -91,26 +184,11 @@ export function createFakeTimers(): TimerControls & {
      * before moving the fake clock to the target timestamp.
      */
     tick(durationMs: number): void {
-      const target = now + durationMs;
-      while (true) {
-        const due = [...timers.entries()]
-          .filter(([, timer]) => timer.at <= target)
-          .sort((a, b) => a[1].at - b[1].at)[0];
-        if (!due) break;
-        const [id, timer] = due;
-        timers.delete(id);
-        now = timer.at;
-        timer.callback();
-        if (timer.intervalMs !== undefined && !cancelled.has(id)) {
-          timers.set(id, { ...timer, at: now + timer.intervalMs });
-        }
-        cancelled.delete(id);
-      }
-      now = target;
+      runDueTimers(state, state.now + durationMs);
     },
     // A non-zero pending count after a scenario catches leaked fallback work.
     pending(): number {
-      return timers.size;
+      return state.timers.size;
     },
   };
 }

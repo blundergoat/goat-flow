@@ -9,28 +9,32 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
-  runAudit,
   computeHarness,
-  runAuditBatch,
   createAuditFactsView,
-} from "../../../src/cli/audit/audit.js";
+  runAudit,
+  runAuditBatch,
+} from "../../src.js";
 import {
   renderAuditJson,
   renderAuditMarkdown,
   renderAuditText,
-} from "../../../src/cli/audit/render.js";
-import { renderAuditSarif } from "../../../src/cli/audit/sarif.js";
-import { parseCLIArgs } from "../../../src/cli/cli.js";
-import { SETUP_CHECKS } from "../../../src/cli/audit/check-goat-flow.js";
-import { AGENT_CHECKS } from "../../../src/cli/audit/check-agent-setup.js";
-import { HARNESS_CHECKS } from "../../../src/cli/audit/harness/index.js";
-import { extractBacktickPaths } from "../../../src/cli/audit/harness/helpers.js";
-import { AUDIT_VERSION, SKILL_NAMES } from "../../../src/cli/constants.js";
-import { PROFILES } from "../../../src/cli/detect/agents.js";
-import { composeSetup } from "../../../src/cli/prompt/compose-setup.js";
-import { extractProjectFacts } from "../../../src/cli/facts/orchestrator.js";
-import { extractHookFacts } from "../../../src/cli/facts/agent/hooks.js";
-import { extractSettingsFacts } from "../../../src/cli/facts/agent/settings.js";
+} from "../../src.js";
+import {
+  AGENT_CHECKS,
+  AUDIT_VERSION,
+  composeSetup,
+  createFS,
+  extractBacktickPaths,
+  extractHookFacts,
+  extractProjectFacts,
+  extractSettingsFacts,
+  HARNESS_CHECKS,
+  parseCLIArgs,
+  PROFILES,
+  renderAuditSarif,
+  SETUP_CHECKS,
+  SKILL_NAMES,
+} from "../../src.js";
 import {
   completeInstruction,
   INSTRUCTION_FILES,
@@ -59,23 +63,16 @@ export function codexWorkspaceRootsTable(
 ): string {
   return `":workspace_roots" = { ${entries.join(", ")} }`;
 }
-import { createFS } from "../../../src/cli/facts/fs.js";
-import type {
-  AuditContext,
-  AuditReport,
-  ProjectStructure,
-} from "../../../src/cli/audit/types.js";
+import type { AuditContext, AuditReport, ProjectStructure } from "../../src.js";
 import type {
   AgentId,
-  ReadonlyFS,
-  ProjectFacts,
   AgentFacts,
   AgentProfile,
-} from "../../../src/cli/types.js";
-import type {
-  LoadedConfig,
   GoatFlowConfig,
-} from "../../../src/cli/config/types.js";
+  LoadedConfig,
+  ProjectFacts,
+  ReadonlyFS,
+} from "../../src.js";
 
 // ---------------------------------------------------------------------------
 // Cached repo audits - shared across describes that audit this repo with

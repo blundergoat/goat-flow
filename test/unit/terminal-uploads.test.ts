@@ -200,6 +200,7 @@ describe("uploadDirForSession", () => {
     );
   });
 
+  // Fixture purpose: writes a symlinked upload path to cover escape rejection.
   it("rejects upload paths that escape through symlinked components", (testContext) => {
     const target = mkdtempSync(join(tmpdir(), "gf-upload-target-"));
     const outside = mkdtempSync(join(tmpdir(), "gf-upload-outside-"));

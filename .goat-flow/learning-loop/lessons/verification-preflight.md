@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-06-08
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -227,6 +227,8 @@ last_reviewed: 2026-06-08
 
 **Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
 
+**Recurrence update (2026-06-10):** Adding the Step 0 emission lesson made `stats --check` fail twice: first `bucket-size` because `.goat-flow/learning-loop/lessons/agent-behavior.md` exceeded `BUCKET_SIZE_WARN_BYTES`, then `stale-ref` because the evidence used bare `skill-preamble.md`. The fix was to compress the new entry, cite `.goat-flow/skill-docs/skill-preamble.md`, and re-run `goat-flow index` before rechecking. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 
 **Prevention:** Before closing add/rename/delete or learning-loop edits, run both a tracked-state check (`git status --short` / `git ls-files --error-unmatch <path>`) and the relevant old-pattern grep. Include source-owned provenance and detector metadata in the grep, not only markdown artifacts. Use `rg -uu` when ignored `.goat-flow` workspace state is the target. In durable artifacts, cite committed repo files, public URLs, or prose descriptions for external paths; do not backtick fake repo-local examples. When documenting deleted paths in a durable artifact, name the old filename or quote the failing command output in the milestone, but do not write the deleted path as if it still resolves. Evidence anchors: `src/cli/audit/harness/check-context.ts` (search: `boundary-guidance-present`) and `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`).
@@ -259,6 +261,8 @@ last_reviewed: 2026-06-08
 
 **Prevention:** Before full preflight after changing CLI command spawning, hook launchers, or TypeScript tests, run the direct sub-gates that preflight will aggregate: `npx knip` and `npm run format:check`. If preflight reports the TypeScript section as failed, reproduce the subtool reports directly and fix those exact findings before collecting final pass evidence.
 
+**Recurrence update (2026-06-10):** M05/M06b focused tests, format, stats, and typecheck were clean, but `npm run test:full` failed in the slow installer round-trip fixture because its copied repo ran preflight and exposed three ESLint errors plus two Knip unused exports from the new index/dashboard code. Direct `npx eslint ...` and `npx knip --include exports,types` reproduced the failures; fixing those exact findings was required before rerunning the full gate.
+
 ---
 
 ## Lesson: Verification grep patterns must not carry Markdown backticks into Bash
@@ -272,5 +276,7 @@ last_reviewed: 2026-06-08
 **Fix:** Discard the malformed output and rerun the sweep with a single-quoted regex that contains no Markdown quoting.
 
 **Prevention:** Before trusting a verification grep, check the command output for shell diagnostics as well as `rg` matches. When searching for literal Markdown text, use single quotes plus `-e` patterns or `rg -F` fixed-string searches instead of embedding backticks in a double-quoted regex.
+
+**Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
 
 ---

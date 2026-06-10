@@ -135,7 +135,7 @@ const TIP_RULES: Array<{
     metric: "trigger-clarity",
     match: /missing Availability Check/,
     message:
-      "Add an `## Availability Check` section showing how to verify the underlying tool is installed (e.g. `command -v <tool>`).",
+      "Add a grep-findable `## Availability Check` section before any tool-dependent workflow. Use `command -v <tool>` for runnable tools, or state why no CLI check applies.",
   },
   {
     metric: "workflow-completeness",
@@ -172,6 +172,18 @@ const TIP_RULES: Array<{
     match: /no troubleshooting\/fallback/,
     message:
       "Add a `## Fallback / Troubleshooting` section listing what to do when the documented path fails.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /missing verification gate/,
+    message:
+      "Add a `## Verification Gate` section with concrete pass/fail evidence the author must capture before claiming the playbook was applied.",
+  },
+  {
+    metric: "workflow-completeness",
+    match: /missing boundary language/,
+    message:
+      "Add boundary language such as `## Boundary`, `In scope`, `Out of scope`, or `Do not use when` so agents route adjacent work correctly.",
   },
   {
     metric: "gate-quality",
@@ -249,7 +261,7 @@ const TIP_RULES: Array<{
     metric: "tool-deps",
     match: /references tools without availability check/,
     message:
-      "Add an Availability Check (e.g. `command -v <tool>`) before invoking external tools, so the skill fails closed.",
+      "Add a grep-findable Availability Check before invoking external tools, so the skill fails closed instead of guessing capability availability.",
   },
   {
     metric: "tool-deps",

@@ -29,7 +29,7 @@ Trigger checklist: (1) GitHub returns "exceeds 20,000 lines"; (2) reviewer asks 
 
 1. **Frontmatter:** YAML with `goat-flow-reference-version` matching the current release. No other fields.
 2. **Title + 1-2 paragraph intent.** First paragraph: "Use this when ..." plus the WHAT. Second paragraph (optional): cross-references to sibling playbooks or scope boundaries.
-3. **`## Availability Check`** (required, first section). For runnable tools: the exact `command -v <tool>` or equivalent verification. For non-runnable discipline references: bullet list of load conditions and an explicit note that no CLI check applies. This is the section agents grep for before declaring a tool unavailable.
+3. **`## Availability Check`** (required and grep-findable before any tool-dependent workflow). For runnable tools: the exact `command -v <tool>` or equivalent verification. For non-runnable discipline references: bullet list of load conditions and an explicit note that no CLI check applies. Agents grep for this section before declaring a tool unavailable; it does not have to be the first H2 when a routing or boundary section earns the top slot.
 4. **`## Intent`.** The one big idea: who the customer is, what question they have, what failure mode the playbook prevents. Names the audience (often "a future maintainer with none of your context").
 5. **Body sections.** Discipline-specific - decision ladders, decision tables, when-to-use cases, anti-cases. Use code blocks for examples; bad-then-good is the conventional pairing.
 6. **`## Antipatterns`.** Bullet list of patterns to avoid, each one with the cost it has actually paid (not hypothetical). One-line bullets if the antipattern is self-explanatory; short paragraph if it needs context.

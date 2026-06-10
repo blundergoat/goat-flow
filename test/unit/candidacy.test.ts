@@ -256,18 +256,50 @@ describe("runCandidacyCheck - description mode", () => {
     assert.equal(result.recommendedArtifact.type, "reference");
   });
 
+  it("recommends reference (playbook) for reusable E2E testing standards", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "Write Playwright E2E testing standards.",
+    });
+    assertReferenceSubtype(result, "playbook");
+  });
+
+  it("recommends skill for adding a goat-debug mode", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "Make a new goat-debug mode.",
+    });
+    assertSkillSubtype(result, "workflow");
+  });
+
   it("recommends instruction-file for rule-shaped descriptions", () => {
     const result = runCandidacyCheck({
       kind: "description",
       text: "I want a rule that says we must never commit secrets.",
     });
-    assert.equal(result.recommendedArtifact.type, "instruction-file");
+    assertInstructionFileReason(result, "rule-shaped");
+  });
+
+  it("recommends instruction-file for shellcheck edit rules", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "Always run shellcheck on shell edits.",
+    });
+    assertInstructionFileReason(result, "rule-shaped");
   });
 
   it("recommends learning-loop (lesson) for incident-shaped descriptions", () => {
     const result = runCandidacyCheck({
       kind: "description",
       text: "I want to capture a lesson from a recent incident in CI.",
+    });
+    assertLearningLoopSubtype(result, "lesson");
+  });
+
+  it("recommends learning-loop for a learned GitHub CLI failure mode", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "We learned a specific GitHub CLI failure mode.",
     });
     assertLearningLoopSubtype(result, "lesson");
   });
@@ -292,6 +324,14 @@ describe("runCandidacyCheck - description mode", () => {
     const result = runCandidacyCheck({
       kind: "description",
       text: "I want a deterministic one-shot script that lists stale TODOs.",
+    });
+    assert.equal(result.recommendedArtifact.type, "cli-command");
+  });
+
+  it("recommends cli-command for generated markdown indexes", () => {
+    const result = runCandidacyCheck({
+      kind: "description",
+      text: "Generate indexes from markdown.",
     });
     assert.equal(result.recommendedArtifact.type, "cli-command");
   });

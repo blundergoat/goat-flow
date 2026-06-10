@@ -52,7 +52,7 @@ export const COPILOT_GRUFF_HOOK_ENTRY = {
   bash: ".goat-flow/hooks/gruff-code-quality.sh",
   powershell:
     'if (Get-Command bash -ErrorAction SilentlyContinue) { bash .goat-flow/hooks/gruff-code-quality.sh } else { Write-Output \'{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run .goat-flow/hooks/gruff-code-quality.sh on Windows."}\' }',
-  timeoutSec: 30,
+  timeoutSec: 90,
 };
 
 /** Captured subprocess result used by install-roundtrip drift assertions. */

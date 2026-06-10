@@ -151,7 +151,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 **Root cause:** The finding conflated two consumption models. "Must be FIRST" serves *human top-down scanning*; "must be PRESENT and findable" serves *grep/agent retrieval*. These playbooks are consumed by agents that grep for the heading, so position is nearly irrelevant and absence is the only real failure. The README's own justification even says "This is what agents grep for" - i.e. position-independent. Three agents rated by the letter of the rule; consensus amplified the miscalibration instead of catching it.
 
-**Evidence:** `workflow/skills/playbooks/README.md` (search: "First section MUST be"). First-H2 scan: gruff=`## Gruff at a glance`, page-capture=`## Boundary` (both have `## Availability Check` lower down); `skill-quality-testing.md` had none.
+**Evidence:** `workflow/skills/playbooks/README.md` (search: "grep-findable `## Availability Check`"). First-H2 scan: gruff=`## Gruff at a glance`, page-capture=`## Boundary` (both have `## Availability Check` lower down); `skill-quality-testing.md` had none.
 
 **Prevention:**
 1. For an ordering finding ("X must be first/before Y"), identify how the artifact is consumed (grep vs human scan vs parse) before assigning severity. Reorder findings are usually LOW when consumers locate by name; *absence* is the real defect.

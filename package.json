@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",

@@ -21,6 +21,115 @@ function dashboardResizeTerminalRef(
   return true;
 }
 
+/** Whether entering this view should warm xterm assets before a terminal is attached. */
+function dashboardShouldWarmXterm(
+  ctx: DashboardAlpineContext,
+  view: string,
+): boolean {
+  return (view === "workspace" || view === "setup") && ctx.terminalAvailable;
+}
+
+/** Fire-and-forget xterm warmup keeps navigation responsive; terminal overlays report failures. */
+function dashboardWarmXtermForView(
+  ctx: DashboardAlpineContext,
+  view: string,
+): void {
+  if (!dashboardShouldWarmXterm(ctx, view)) return;
+  void ctx.loadXterm().catch(() => {});
+}
+
+/** Return the xterm handle only when it can be fitted by the addon. */
+function dashboardRefitCapableXterm(
+  refs: TerminalRefs | undefined,
+): XTermInstance | null {
+  const xterm = refs?.xterm;
+  return xterm?._addonFit ? xterm : null;
+}
+
+/** Send the current xterm dimensions over an open backend WebSocket. */
+function dashboardSendTerminalResize(
+  ws: WebSocket | undefined,
+  xterm: XTermInstance,
+): void {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(
+    JSON.stringify({
+      type: "resize",
+      cols: xterm.cols,
+      rows: xterm.rows,
+    }),
+  );
+}
+
+/** Fit a terminal and notify the backend of its new dimensions. */
+function dashboardFitTerminalWithResize(
+  xterm: XTermInstance,
+  ws: WebSocket | undefined,
+): void {
+  xterm._addonFit?.fit();
+  dashboardSendTerminalResize(ws, xterm);
+}
+
+/** Retry active-view refits until the freshly-shown terminal container has layout width. */
+function dashboardPollActiveTerminalRefit(
+  ctx: DashboardAlpineContext,
+  refs: TerminalRefs,
+  xterm: XTermInstance,
+  attempts = 0,
+): void {
+  if (attempts > TERMINAL_REFIT_MAX_ATTEMPTS) return;
+  requestAnimationFrame(() => {
+    if (!dashboardResizeTerminalRef(ctx.activeSessionId ?? "", refs, xterm)) {
+      setTimeout(() => {
+        dashboardPollActiveTerminalRefit(ctx, refs, xterm, attempts + 1);
+      }, TERMINAL_REFIT_RETRY_DELAY_MS);
+    }
+  });
+}
+
+/** Refit the active terminal after the workspace view becomes visible. */
+function dashboardRefitWorkspaceViewTerminal(
+  ctx: DashboardAlpineContext,
+  view: string,
+): void {
+  if (view !== "workspace" || !ctx.activeSessionId) return;
+  const refs = ctx._terminalRefs[ctx.activeSessionId];
+  const xterm = dashboardRefitCapableXterm(refs);
+  if (!refs || !xterm) return;
+  void ctx.$nextTick(() => {
+    dashboardPollActiveTerminalRefit(ctx, refs, xterm);
+  });
+}
+
+/** Refit the active terminal when the workspace panel switches back to the terminal tab. */
+function dashboardRefitWorkspacePanelTerminal(
+  ctx: DashboardAlpineContext,
+  view: string,
+): void {
+  const xterm = ctx._terminalXterm;
+  if (view !== "terminal" || !xterm?._addonFit) return;
+  requestAnimationFrame(() => {
+    dashboardFitTerminalWithResize(xterm, ctx._terminalWs);
+  });
+}
+
+/** Refit and focus a newly selected terminal tab after Alpine has rendered it. */
+function dashboardRefitSelectedTerminal(
+  ctx: DashboardAlpineContext,
+  id: string | null,
+): void {
+  if (!id) return;
+  const refs = ctx._terminalRefs[id];
+  const xterm = dashboardRefitCapableXterm(refs);
+  if (!refs || !xterm) return;
+  void ctx.$nextTick(() => {
+    requestAnimationFrame(() => {
+      dashboardFitTerminalWithResize(xterm, refs.ws);
+      xterm.focus();
+    });
+  });
+}
+
 /**
  * Reset all skill-quality view state to empty, aborting any in-flight evaluation request first.
  * Called when the runner or project changes so a stale report/inventory never lingers across a
@@ -52,65 +161,14 @@ function dashboardResetSkillQualityState(ctx: DashboardAppContext): void {
  */
 function dashboardRegisterTerminalWatchers(ctx: DashboardAlpineContext): void {
   ctx.$watch("activeView", (view: string) => {
-    if ((view === "workspace" || view === "setup") && ctx.terminalAvailable) {
-      void ctx.loadXterm().catch(() => {});
-    }
-    if (view !== "workspace" || !ctx.activeSessionId) return;
-    const refs = ctx._terminalRefs[ctx.activeSessionId];
-    const xterm = refs?.xterm;
-    if (!xterm?._addonFit || !refs) return;
-    const poll = (attempts = 0): void => {
-      if (attempts > TERMINAL_REFIT_MAX_ATTEMPTS) return;
-      requestAnimationFrame(() => {
-        if (
-          !dashboardResizeTerminalRef(ctx.activeSessionId ?? "", refs, xterm)
-        ) {
-          setTimeout(() => {
-            poll(attempts + 1);
-          }, TERMINAL_REFIT_RETRY_DELAY_MS);
-        }
-      });
-    };
-    void ctx.$nextTick(() => {
-      poll();
-    });
+    dashboardWarmXtermForView(ctx, view);
+    dashboardRefitWorkspaceViewTerminal(ctx, view);
   });
   ctx.$watch("workspacePanel", (view: string) => {
-    const xterm = ctx._terminalXterm;
-    if (view !== "terminal" || !xterm?._addonFit) return;
-    requestAnimationFrame(() => {
-      xterm._addonFit?.fit();
-      if (ctx._terminalWs?.readyState === WebSocket.OPEN) {
-        ctx._terminalWs.send(
-          JSON.stringify({
-            type: "resize",
-            cols: xterm.cols,
-            rows: xterm.rows,
-          }),
-        );
-      }
-    });
+    dashboardRefitWorkspacePanelTerminal(ctx, view);
   });
   ctx.$watch("activeSessionId", (id: string | null) => {
-    if (!id) return;
-    const refs = ctx._terminalRefs[id];
-    const xterm = refs?.xterm;
-    if (!xterm?._addonFit || !refs) return;
-    void ctx.$nextTick(() => {
-      requestAnimationFrame(() => {
-        xterm._addonFit?.fit();
-        if (refs.ws?.readyState === WebSocket.OPEN) {
-          refs.ws.send(
-            JSON.stringify({
-              type: "resize",
-              cols: xterm.cols,
-              rows: xterm.rows,
-            }),
-          );
-        }
-        xterm.focus();
-      });
-    });
+    dashboardRefitSelectedTerminal(ctx, id);
   });
 }
 

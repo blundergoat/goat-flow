@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.10.1"
+goat-flow-skill-version: "1.11.0"
 ---
 # /goat-review
 
@@ -37,7 +37,7 @@ Use when reviewing a diff, PR, or set of changes. Also for quality audits of a c
 
 **Temporary review artifacts:** write under `.goat-flow/logs/review/` only with a random suffix (`goat-review-<artifact>.<random>.txt`). Never write to repo root.
 
-**Footgun check:** Use the preamble's grep-first learning-loop retrieval on `.goat-flow/learning-loop/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
+**Footgun check:** Use the preamble's learning-loop retrieval on `.goat-flow/learning-loop/footguns/` for the target area. Present matches or an explicit retrieval miss; do not broad-load the bucket.
 
 ### Review Scope Snapshot (mandatory)
 
@@ -135,7 +135,7 @@ Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
 
 ### Footgun Cross-Check
 
-Check each finding with targeted grep-first retrieval against `.goat-flow/learning-loop/footguns/`. When a direct match exists, include it. Omit the footgun tag when no direct match is found after the one allowed reword.
+Check each finding with targeted INDEX-first retrieval against `.goat-flow/learning-loop/footguns/INDEX.md`. When a direct match exists, include it. Omit the footgun tag when no direct match is found after the one allowed reword.
 
 **BLOCKING GATE:** Present findings plus Top 5 Risks and Review Integrity, then pause. If Pass 3 is pending, Ship Verdict must be `PENDING REFUTER/HUMAN`; after response/refuter, present final verdict.
 

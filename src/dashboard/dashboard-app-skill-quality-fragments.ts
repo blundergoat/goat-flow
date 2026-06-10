@@ -59,7 +59,7 @@ function dashboardSkillSummaryBanner(
   };
 }
 
-function dashboardAppFragment10(): DashboardAppFragment {
+function dashboardSkillQualityReportFragment(): DashboardAppFragment {
   return {
     /** Re-run the inventory + prefetch from scratch - used by the page-level
      *  "Re-audit all" button. */
@@ -171,7 +171,7 @@ function dashboardAppFragment10(): DashboardAppFragment {
   };
 }
 
-function dashboardAppFragment11(): DashboardAppFragment {
+function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
   return {
     /** Verdict-banner copy for the Skill Evaluator result.
      *
@@ -327,7 +327,7 @@ function dashboardAppFragment11(): DashboardAppFragment {
   };
 }
 
-function dashboardAppFragment12(): DashboardAppFragment {
+function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
   return {
     /** Copy a markdown summary of the current evaluation result to the user's
      *  clipboard. The format mirrors what the engine itself emits so the

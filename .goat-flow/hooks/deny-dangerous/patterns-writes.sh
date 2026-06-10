@@ -37,6 +37,23 @@ normalize_git_push_candidate() {
   normalize_command_candidate "$1"
 }
 
+normalize_git_policy_candidate() {
+  local c
+  c=$(normalize_command_candidate "$1")
+
+  local xargs_rest=""
+  if xargs_rest=$(strip_xargs_prefix "$c"); then
+    c="$xargs_rest"
+  fi
+
+  printf '%s' "$c"
+}
+
+is_git_commit() {
+  __goat_git_strip_globals "$1" || return 1
+  [[ "$__goat_git_rest" =~ ^commit([[:space:]]|$) ]]
+}
+
 is_gh_api_write() {
   local -n __goat_gh_words_ref__="$1"
   local start_index="$2"
@@ -251,15 +268,21 @@ check_repository_segment() {
     return 0
   fi
 
-  local push_scan="${CMD_LOWER//||/__GOAT_OR__}"
+  local repo_scan="${CMD_TRIMMED//||/__GOAT_OR__}"
   local -a pipe_parts
   local pipe_part
-  IFS='|' read -ra pipe_parts <<< "$push_scan"
+  IFS='|' read -ra pipe_parts <<< "$repo_scan"
   for pipe_part in "${pipe_parts[@]}"; do
-    local cmd_for_push
-    cmd_for_push=$(normalize_git_push_candidate "$pipe_part")
-    if is_git_push "$cmd_for_push"; then
+    local git_candidate
+    git_candidate=$(normalize_git_policy_candidate "$pipe_part")
+    if is_git_push "$git_candidate"; then
       block "git push is not allowed. Ask the user to push manually." || return $?
+    fi
+    if is_git_commit "$git_candidate"; then
+      block "git commit is not allowed. Ask the user to commit manually." || return $?
+    fi
+    if is_git_destructive "$git_candidate"; then
+      block "Destructive git operation (--no-verify / reset --hard / clean -f). Remove the flag, stash first, or run manually." || return $?
     fi
   done
 
@@ -272,18 +295,4 @@ check_repository_segment() {
     fi
   done
 
-  local git_rest=""
-  local git_subcommand=""
-  if __goat_git_strip_globals "$CMD_NORMALIZED"; then
-    git_rest="$__goat_git_rest"
-    git_subcommand="${git_rest%%[[:space:]]*}"
-    if [[ "$git_subcommand" == "commit" ]]; then
-      block "git commit is not allowed. Ask the user to commit manually." || return $?
-    fi
-  fi
-
-  if is_git_destructive "$CMD_NORMALIZED"; then
-    block "Destructive git operation (--no-verify / reset --hard / clean -f). Remove the flag, stash first, or run manually." || return $?
-  fi
 }
-

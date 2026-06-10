@@ -33,6 +33,39 @@ const TARGET_WORKSPACE_PATTERNS = [
 ];
 
 const BOUNDARY_HEADING_PATTERN = /\bworkspace\s+boundary\b/i;
+const CORE_DOC_FILES = [
+  "CONTRIBUTING.md",
+  ".goat-flow/code-map.md",
+  ".goat-flow/glossary.md",
+  "docs/cli.md",
+  "docs/audit-and-quality.md",
+];
+
+/** One unresolved documentation path plus the file that referenced it. */
+interface UnresolvedDocPath {
+  ref: string;
+  source: string;
+}
+
+/** Resolution summary for one documentation source file. */
+interface DocPathResolution {
+  resolved: number;
+  findings: string[];
+  unresolved: UnresolvedDocPath[];
+}
+
+/** Mutable aggregate carried across router, architecture, and core-doc checks. */
+interface DocPathAccumulator {
+  totalPaths: number;
+  resolvedCount: number;
+  findings: string[];
+  unresolved: UnresolvedDocPath[];
+  /**
+   * Set when a canonical doc is missing outright; fails the check even when
+   * every counted path resolves, so the finding cannot be balanced away.
+   */
+  hasHardFailure: boolean;
+}
 
 /** Escape text for dynamic regex construction. */
 function escapeRegex(text: string): string {
@@ -261,6 +294,149 @@ const executionLoopPresent: HarnessCheck = {
   },
 };
 
+/** Local-state paths are intentionally gitignored and may be absent on clean checkouts. */
+function isGitignoredLocalStatePath(path: string): boolean {
+  return (
+    path === ".goat-flow/dashboard-state.json" ||
+    path === ".goat-flow/project-id" ||
+    path.startsWith(".goat-flow/plans/") ||
+    path.startsWith(".goat-flow/scratchpad/") ||
+    path.startsWith(".goat-flow/logs/")
+  );
+}
+
+/**
+ * Resolve one backtick path reference from a documentation file.
+ *
+ * Line-number tokens report as unresolved even when the base file exists
+ * because semantic anchors are the durable contract for learning-loop docs.
+ */
+function resolveDocPath(
+  ctx: AuditContext,
+  source: string,
+  path: string,
+): { resolved: true } | { resolved: false; finding: string; ref: string } {
+  const lineRef = /^(?<file>.+\.[a-z0-9]+):\d+$/i.exec(path);
+  if (lineRef?.groups?.file && ctx.fs.exists(lineRef.groups.file)) {
+    return {
+      resolved: false,
+      ref: path,
+      finding: `${source}: line-number path \`${path}\` is brittle; use \`${lineRef.groups.file}\` plus a semantic anchor`,
+    };
+  }
+  if (isGitignoredLocalStatePath(path) || ctx.fs.exists(path)) {
+    return { resolved: true };
+  }
+  return {
+    resolved: false,
+    ref: path,
+    finding: `${source}: unresolved \`${path}\``,
+  };
+}
+
+/**
+ * Count resolved paths from one source file while preserving all diagnostics.
+ *
+ * @param ctx - audit context whose filesystem resolves the target project
+ * @param source - file that contained the backtick path references
+ * @param paths - path references extracted from that source
+ * @returns per-source resolution counts, findings, and unresolved references
+ */
+function countResolvedPaths(
+  ctx: AuditContext,
+  source: string,
+  paths: string[],
+): DocPathResolution {
+  const findings: string[] = [];
+  const unresolved: UnresolvedDocPath[] = [];
+  let resolved = 0;
+
+  for (const path of paths) {
+    const result = resolveDocPath(ctx, source, path);
+    if (result.resolved) {
+      resolved++;
+    } else {
+      findings.push(result.finding);
+      unresolved.push({ ref: result.ref, source });
+    }
+  }
+
+  return { resolved, findings, unresolved };
+}
+
+/** Mutate the doc-path accumulator with one source file's resolution result. */
+function addDocPathResolution(
+  accumulator: DocPathAccumulator,
+  pathCount: number,
+  resolution: DocPathResolution,
+): void {
+  accumulator.totalPaths += pathCount;
+  accumulator.resolvedCount += resolution.resolved;
+  accumulator.findings.push(...resolution.findings);
+  accumulator.unresolved.push(...resolution.unresolved);
+}
+
+/** Mutate the accumulator with router-table paths already collected from agent facts. */
+function collectRouterDocPaths(
+  ctx: AuditContext,
+  accumulator: DocPathAccumulator,
+): void {
+  for (const agentFacts of ctx.agents) {
+    accumulator.totalPaths += agentFacts.router.paths.length;
+    accumulator.resolvedCount += agentFacts.router.resolved;
+    if (agentFacts.router.unresolved.length === 0) continue;
+    accumulator.findings.push(
+      `${agentFacts.agent.id}: ${agentFacts.router.unresolved.length} dead router paths`,
+    );
+    for (const ref of agentFacts.router.unresolved) {
+      accumulator.unresolved.push({
+        ref,
+        source: agentFacts.agent.instructionFile,
+      });
+    }
+  }
+}
+
+/** Mutate the accumulator with architecture.md path checks and its pass diagnostic. */
+function collectArchitectureDocPaths(
+  ctx: AuditContext,
+  accumulator: DocPathAccumulator,
+): void {
+  if (!ctx.facts.shared.architecture.exists) {
+    accumulator.findings.push("architecture.md does not exist");
+    accumulator.hasHardFailure = true;
+    return;
+  }
+  const content = ctx.fs.readFile(".goat-flow/architecture.md");
+  if (!content) return;
+  const paths = extractBacktickPaths(content);
+  const resolution = countResolvedPaths(
+    ctx,
+    ".goat-flow/architecture.md",
+    paths,
+  );
+  addDocPathResolution(accumulator, paths.length, resolution);
+  if (resolution.findings.length === 0) {
+    accumulator.findings.push(
+      `All ${paths.length} architecture.md path references resolve`,
+    );
+  }
+}
+
+/** Mutate the accumulator with the curated core docs path checks. */
+function collectCoreDocPaths(
+  ctx: AuditContext,
+  accumulator: DocPathAccumulator,
+): void {
+  for (const file of CORE_DOC_FILES) {
+    const content = ctx.fs.readFile(file);
+    if (!content) continue;
+    const paths = extractBacktickPaths(content);
+    const resolution = countResolvedPaths(ctx, file, paths);
+    addDocPathResolution(accumulator, paths.length, resolution);
+  }
+}
+
 /**
  * Consolidate router, architecture, and core-doc path validation.
  *
@@ -271,109 +447,17 @@ const executionLoopPresent: HarnessCheck = {
  * docs all feed one dashboard detail payload.
  */
 function checkAllDocPaths(ctx: AuditContext) {
-  let totalPaths = 0;
-  let resolvedCount = 0;
-  const findings: string[] = [];
-  const unresolved: { ref: string; source: string }[] = [];
-
-  /** Local-state paths are intentionally gitignored and may be absent on clean checkouts. */
-  const isGitignoredLocalStatePath = (path: string): boolean =>
-    path === ".goat-flow/dashboard-state.json" ||
-    path === ".goat-flow/project-id" ||
-    path.startsWith(".goat-flow/plans/") ||
-    path.startsWith(".goat-flow/scratchpad/") ||
-    path.startsWith(".goat-flow/logs/");
-
-  /**
-   * Count paths that resolve while keeping brittle line-number refs visible.
-   *
-   * A `file:line` token reports as unresolved even when the base file exists
-   * because semantic anchors are the durable contract for learning-loop docs.
-   * The helper mutates only the enclosing unresolved-path accumulator so the
-   * dashboard can show every stale reference source in one payload.
-   */
-  const countResolvedPaths = (file: string, paths: string[]) => {
-    let resolved = 0;
-    const localFindings: string[] = [];
-    for (const path of paths) {
-      const lineRef = /^(?<file>.+\.[a-z0-9]+):\d+$/i.exec(path);
-      if (lineRef?.groups?.file && ctx.fs.exists(lineRef.groups.file)) {
-        localFindings.push(
-          `${file}: line-number path \`${path}\` is brittle; use \`${lineRef.groups.file}\` plus a semantic anchor`,
-        );
-        unresolved.push({ ref: path, source: file });
-        continue;
-      }
-      if (isGitignoredLocalStatePath(path)) {
-        resolved++;
-        continue;
-      }
-      if (ctx.fs.exists(path)) resolved++;
-      else {
-        localFindings.push(`${file}: unresolved \`${path}\``);
-        unresolved.push({ ref: path, source: file });
-      }
-    }
-    return { resolved, findings: localFindings };
+  const accumulator: DocPathAccumulator = {
+    totalPaths: 0,
+    resolvedCount: 0,
+    findings: [],
+    unresolved: [],
+    hasHardFailure: false,
   };
-
-  // Router tables enumerate the docs and directories the agent is expected to consult,
-  // so dead entries here are a high-signal context failure.
-  for (const agentFacts of ctx.agents) {
-    totalPaths += agentFacts.router.paths.length;
-    resolvedCount += agentFacts.router.resolved;
-    if (agentFacts.router.unresolved.length > 0) {
-      findings.push(
-        `${agentFacts.agent.id}: ${agentFacts.router.unresolved.length} dead router paths`,
-      );
-      for (const ref of agentFacts.router.unresolved) {
-        unresolved.push({ ref, source: agentFacts.agent.instructionFile });
-      }
-    }
-  }
-
-  // architecture.md is canonical and gets separate reporting instead of being folded
-  // into the generic doc-file loop below.
-  if (!ctx.facts.shared.architecture.exists) {
-    findings.push("architecture.md does not exist");
-  } else {
-    const content = ctx.fs.readFile(".goat-flow/architecture.md");
-    if (content) {
-      const paths = extractBacktickPaths(content);
-      totalPaths += paths.length;
-      const resolved = countResolvedPaths(".goat-flow/architecture.md", paths);
-      resolvedCount += resolved.resolved;
-      if (resolved.findings.length > 0) {
-        findings.push(...resolved.findings);
-      } else {
-        findings.push(
-          `All ${paths.length} architecture.md path references resolve`,
-        );
-      }
-    }
-  }
-
-  // Other doc files
-  const docFiles = [
-    "CONTRIBUTING.md",
-    ".goat-flow/code-map.md",
-    ".goat-flow/glossary.md",
-    "docs/cli.md",
-    "docs/audit-and-quality.md",
-  ];
-  // Keep this list curated and deterministic. The goal is to validate the core docs
-  // goat-flow owns, not recursively scan every user-authored markdown file.
-  for (const file of docFiles) {
-    const content = ctx.fs.readFile(file);
-    if (!content) continue;
-    const paths = extractBacktickPaths(content);
-    totalPaths += paths.length;
-    const resolved = countResolvedPaths(file, paths);
-    resolvedCount += resolved.resolved;
-    if (resolved.findings.length > 0) findings.push(...resolved.findings);
-  }
-
-  return { totalPaths, resolvedCount, findings, unresolved };
+  collectRouterDocPaths(ctx, accumulator);
+  collectArchitectureDocPaths(ctx, accumulator);
+  collectCoreDocPaths(ctx, accumulator);
+  return accumulator;
 }
 
 const docPathsResolve: HarnessCheck = {
@@ -393,22 +477,23 @@ const docPathsResolve: HarnessCheck = {
   ),
   /** Run the Documentation paths resolve check. */
   run: (ctx) => {
-    const { totalPaths, resolvedCount, findings, unresolved } =
+    const { totalPaths, resolvedCount, findings, unresolved, hasHardFailure } =
       checkAllDocPaths(ctx);
     const details = { docPaths: { totalPaths, resolvedCount, unresolved } };
 
+    // A missing canonical doc fails outright - resolved-path counts from other
+    // sources must not balance the finding away.
+    if (hasHardFailure) {
+      return fail(
+        findings,
+        [
+          "Fix missing docs and add backtick-quoted file paths for drift detection",
+        ],
+        undefined,
+        details,
+      );
+    }
     if (totalPaths === 0) {
-      // Missing files still produce findings even when there were no path literals to inspect.
-      if (findings.length > 0) {
-        return fail(
-          findings,
-          [
-            "Fix missing docs and add backtick-quoted file paths for drift detection",
-          ],
-          undefined,
-          details,
-        );
-      }
       return pass(
         ["No file path references found in docs to validate"],
         details,

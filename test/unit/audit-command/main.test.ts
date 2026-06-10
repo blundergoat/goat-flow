@@ -14,30 +14,26 @@ import {
   runAudit,
   stubFS,
 } from "./helpers.js";
-import { computeContent } from "../../../src/cli/audit/audit-content.js";
-import { shouldAutoRunDrift } from "../../../src/cli/audit/audit-drift-policy.js";
 import {
-  labelEvidencePathBases,
-  validateRegisteredCheckProvenance,
-} from "../../../src/cli/audit/audit-provenance.js";
-import { buildProjectStructure } from "../../../src/cli/audit/audit-structure.js";
-import {
+  agentDenyMechanism,
   agentSummary,
-  setupSummary,
-} from "../../../src/cli/audit/audit-summaries.js";
-import {
+  buildProjectStructure,
   checkSelectedInstructionAvailable,
+  computeContent,
+  CONSTRAINTS_CHECKS,
+  FEEDBACK_LOOP_CHECKS,
   incidentProvenance,
+  labelEvidencePathBases,
+  RECOVERY_CHECKS,
+  scanSemanticDrift,
+  setupSummary,
+  shouldAutoRunDrift,
   specProvenance,
   uniquePaths,
-} from "../../../src/cli/audit/check-agent-common.js";
-import { agentDenyMechanism } from "../../../src/cli/audit/check-agent-deny-mechanism.js";
-import { scanSemanticDrift } from "../../../src/cli/audit/check-factual-semantic-drift.js";
-import { CONSTRAINTS_CHECKS } from "../../../src/cli/audit/harness/check-constraints.js";
-import { FEEDBACK_LOOP_CHECKS } from "../../../src/cli/audit/harness/check-feedback-loop.js";
-import { RECOVERY_CHECKS } from "../../../src/cli/audit/harness/check-recovery.js";
-import { VERIFICATION_CHECKS } from "../../../src/cli/audit/harness/check-verification.js";
-import type { AuditContext } from "../../../src/cli/audit/types.js";
+  validateRegisteredCheckProvenance,
+  VERIFICATION_CHECKS,
+} from "../../src.js";
+import type { AuditContext } from "../../src.js";
 
 /**
  * Build a narrow audit context for pure helper contracts.

@@ -53,7 +53,7 @@ last_reviewed: 2026-05-31
 
 **Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. Later, the opposite bug appeared in the view layer: filtering metrics out of dashboard percentages hid score-only verification gaps and restored misleading 100% headlines.
 
-**Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type === "metric"`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
+**Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
 
 ---
 

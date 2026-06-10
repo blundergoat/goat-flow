@@ -90,7 +90,7 @@ The dashboard is the interface. Underneath, GOAT Flow installs a harness that ma
 | **Learning Loop** (footguns, lessons, decisions) | Same mistake recurring next session |
 | **Autonomy Tiers** (Always / Ask First / Never) | Agent overreach, missed approvals |
 
-Skills have phases and human gates. Hooks intercept tool calls before they execute. The learning loop gets read at session start so mistakes compound into context, not repetition.
+Skills have phases and human gates. Hooks intercept tool calls before they execute. The learning loop gets read at session start so mistakes compound into context, not repetition. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale, and the dashboard Home learning-loop card can regenerate indexes for the selected project.
 
 ## Why not just CLAUDE.md / Cursor rules?
 

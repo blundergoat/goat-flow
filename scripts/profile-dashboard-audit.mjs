@@ -23,6 +23,76 @@ const CODEX_CONFIG = [
   "",
 ].join("\n");
 
+/** Consume a value option, falling back to the current value when the value is omitted. */
+function readOptionValue(argv, index, fallback) {
+  return { value: argv[index + 1] ?? fallback, nextIndex: index + 1 };
+}
+
+/** Parse --project and return the index consumed by its value. */
+function consumeProjectArg(argv, index, args) {
+  const next = readOptionValue(argv, index, args.project);
+  args.project = next.value;
+  return next.nextIndex;
+}
+
+/** Parse --endpoint and throws when the mode is not one of the supported profile endpoints. */
+function consumeEndpointArg(argv, index, args) {
+  const next = readOptionValue(argv, index, args.endpoint);
+  if (!["fresh", "cached", "both"].includes(next.value)) {
+    throw new Error("--endpoint must be fresh, cached, or both");
+  }
+  args.endpoint = next.value;
+  return next.nextIndex;
+}
+
+/** Enable the synthetic-large fixture flag. */
+function consumeSyntheticLargeArg(_argv, index, args) {
+  args.syntheticLarge = true;
+  return index;
+}
+
+/** Parse --synthetic-files and throws when it is not a positive integer. */
+function consumeSyntheticFilesArg(argv, index, args) {
+  const next = readOptionValue(argv, index, "");
+  args.syntheticFiles = Number.parseInt(next.value, 10);
+  if (!Number.isFinite(args.syntheticFiles) || args.syntheticFiles < 1) {
+    throw new Error("--synthetic-files must be a positive integer");
+  }
+  return next.nextIndex;
+}
+
+/** Enable the synthetic agent-count comparison profile. */
+function consumeCompareAgentCountsArg(_argv, index, args) {
+  args.compareAgentCounts = true;
+  return index;
+}
+
+/** Print help and exits successfully because profiling should not continue after usage output. */
+function consumeHelpArg() {
+  printHelp();
+  process.exit(0);
+}
+
+const ARGUMENT_HANDLERS = new Map([
+  ["--project", consumeProjectArg],
+  ["--endpoint", consumeEndpointArg],
+  ["--synthetic-large", consumeSyntheticLargeArg],
+  ["--synthetic-files", consumeSyntheticFilesArg],
+  ["--compare-agent-counts", consumeCompareAgentCountsArg],
+  ["--help", consumeHelpArg],
+  ["-h", consumeHelpArg],
+]);
+
+/** Dispatch one CLI flag to its parser and throws on unknown options. */
+function consumeArg(argv, index, args) {
+  const arg = argv[index];
+  const handler = ARGUMENT_HANDLERS.get(arg);
+  if (!handler) {
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+  return handler(argv, index, args);
+}
+
 /** Parse CLI flags; throws on unknown or malformed options because profiling must not guess intent. */
 function parseArgs(argv) {
   const args = {
@@ -33,39 +103,7 @@ function parseArgs(argv) {
     compareAgentCounts: false,
   };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--project") {
-      args.project = argv[++i] ?? args.project;
-      continue;
-    }
-    if (arg === "--endpoint") {
-      const value = argv[++i] ?? args.endpoint;
-      if (!["fresh", "cached", "both"].includes(value)) {
-        throw new Error("--endpoint must be fresh, cached, or both");
-      }
-      args.endpoint = value;
-      continue;
-    }
-    if (arg === "--synthetic-large") {
-      args.syntheticLarge = true;
-      continue;
-    }
-    if (arg === "--synthetic-files") {
-      args.syntheticFiles = Number.parseInt(argv[++i] ?? "", 10);
-      if (!Number.isFinite(args.syntheticFiles) || args.syntheticFiles < 1) {
-        throw new Error("--synthetic-files must be a positive integer");
-      }
-      continue;
-    }
-    if (arg === "--compare-agent-counts") {
-      args.compareAgentCounts = true;
-      continue;
-    }
-    if (arg === "--help" || arg === "-h") {
-      printHelp();
-      process.exit(0);
-    }
-    throw new Error(`Unknown argument: ${arg}`);
+    i = consumeArg(argv, i, args);
   }
   return args;
 }

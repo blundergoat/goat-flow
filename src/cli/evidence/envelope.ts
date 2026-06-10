@@ -35,6 +35,7 @@ export type EvidenceEventKind =
   | "audit.run"
   | "setup.prompt"
   | "quality.prompt"
+  | "index.regenerate"
   | "project.save"
   | "project.remove"
   | "project.switch";

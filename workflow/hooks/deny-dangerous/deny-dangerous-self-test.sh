@@ -477,30 +477,26 @@ expect_script_path_fallback_missing_policy_fails_closed() {
   fi
 }
 
-expect_git_common_dir_resolution_case() {
+expect_active_worktree_resolution_case() {
   local label="$1"
   local tmp="$2"
   local dispatcher="$3"
   local git_bin="$4"
-  local gcd="$5"
-  local top_level="$6"
-  local policy_root="$7"
+  local top_level="$5"
   executed=$((executed + 1))
-  copy_policy_fixture shell "$policy_root"
+  copy_policy_fixture shell "$top_level"
   local output status
   set +e
-  output="$(cd "$tmp" && PATH="$git_bin:$PATH" GOAT_STUB_GIT_COMMON_DIR="$gcd" GOAT_STUB_SHOW_TOPLEVEL="$top_level" bash "$dispatcher" --check="echo safe" 2>&1)"
+  output="$(cd "$tmp" && PATH="$git_bin:$PATH" GOAT_STUB_SHOW_TOPLEVEL="$top_level" bash "$dispatcher" --check="echo safe" 2>&1)"
   status=$?
   set -e
   if [[ "$status" -ne 0 || -n "$output" ]]; then
-    record_fail "git-common-dir resolver should allow safe command for $label (exit=$status output=$output)"
+    record_fail "active-worktree resolver should allow safe command for $label (exit=$status output=$output)"
   fi
 }
 
-expect_git_common_dir_resolution_cases() {
+expect_active_worktree_resolution_cases() {
   selected_hook shell || {
-    record_skip
-    record_skip
     record_skip
     record_skip
     return
@@ -514,8 +510,8 @@ expect_git_common_dir_resolution_cases() {
   cat > "$git_bin/git" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "rev-parse" && "${2:-}" == "--git-common-dir" ]]; then
-  printf '%s\n' "$GOAT_STUB_GIT_COMMON_DIR"
-  exit 0
+  printf 'unexpected --git-common-dir lookup\n' >&2
+  exit 44
 fi
 if [[ "$1" == "rev-parse" && "${2:-}" == "--show-toplevel" ]]; then
   [[ -n "${GOAT_STUB_SHOW_TOPLEVEL:-}" ]] || exit 1
@@ -526,11 +522,60 @@ exit 1
 EOF
   chmod +x "$git_bin/git"
 
-  expect_git_common_dir_resolution_case "Unix absolute common dir" "$tmp" "$dispatcher" "$git_bin" "$tmp/unix/.git" "" "$tmp/unix"
-  expect_git_common_dir_resolution_case "absorbed submodule common dir" "$tmp" "$dispatcher" "$git_bin" "$tmp/parent/.git/modules/sub" "$tmp/submodule" "$tmp/submodule"
-  expect_git_common_dir_resolution_case "Windows slash common dir" "$tmp" "$dispatcher" "$git_bin" "C:/Users/dev/repo/.git" "" "$tmp/C:/Users/dev/repo"
-  expect_git_common_dir_resolution_case "Windows backslash common dir" "$tmp" "$dispatcher" "$git_bin" 'C:\Users\dev\repo\.git' "" "$tmp/C:/Users/dev/repo"
+  expect_active_worktree_resolution_case "linked worktree active root" "$tmp" "$dispatcher" "$git_bin" "$tmp/worktree"
+  expect_active_worktree_resolution_case "absorbed submodule active root" "$tmp" "$dispatcher" "$git_bin" "$tmp/submodule"
   rm -rf "$tmp"
+}
+
+expect_real_linked_worktree_uses_worktree_policy_store() {
+  selected_hook shell || {
+    record_skip
+    record_skip
+    return
+  }
+  command -v git >/dev/null 2>&1 || {
+    record_skip
+    record_skip
+    return
+  }
+  local tmp main worktree output status
+  tmp="$(mktemp -d)"
+  main="$tmp/main"
+  worktree="$tmp/worktree"
+  mkdir -p "$main"
+  git -C "$main" init -q
+  printf '# linked worktree fixture\n' > "$main/README.md"
+  copy_policy_fixture shell "$main"
+  git -C "$main" add .
+  git -C "$main" -c user.name=goat-flow-test -c user.email=goat-flow-test@example.invalid commit -q -m "initial policy fixture"
+  git -C "$main" worktree add -q -b linked-policy-fixture "$worktree"
+  mv "$main/.goat-flow/hooks/deny-dangerous/patterns-shell.sh" "$main/.goat-flow/hooks/deny-dangerous/.patterns-shell.hidden"
+
+  executed=$((executed + 1))
+  set +e
+  output="$(cd "$worktree" && bash "$worktree/.goat-flow/hooks/deny-dangerous.sh" --check="echo safe" 2>&1)"
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 || -n "$output" ]]; then
+    record_fail "linked worktree should use worktree policy store for safe command (exit=$status output=$output)"
+  fi
+  if [[ "$output" == *"$main/.goat-flow/hooks/deny-dangerous"* ]]; then
+    record_fail "linked worktree safe command should not read primary checkout policy path"
+  fi
+
+  executed=$((executed + 1))
+  set +e
+  output="$(cd "$worktree" && bash "$worktree/.goat-flow/hooks/deny-dangerous.sh" --check="git push origin main" 2>&1)"
+  status=$?
+  set -e
+  rm -rf "$tmp"
+  if [[ "$status" -ne 2 ]]; then
+    record_fail "linked worktree should block repository writes from worktree policy store (exit=$status output=$output)"
+    return
+  fi
+  if [[ "$output" != *"BLOCKED: Policy repository:"* || "$output" == *"Policy hook unavailable"* ]]; then
+    record_fail "linked worktree repository block should reach normal policy"
+  fi
 }
 
 run_common_dependency_checks() {
@@ -546,7 +591,7 @@ run_common_dependency_checks() {
   expect_missing_common_fails_closed_json writes antigravity
   expect_script_path_fallback_policy_eval
   expect_script_path_fallback_missing_policy_fails_closed
-  expect_git_common_dir_resolution_cases
+  expect_active_worktree_resolution_cases
 }
 
 run_smoke() {
@@ -572,6 +617,7 @@ run_smoke() {
 
 run_full() {
   run_smoke
+  expect_real_linked_worktree_uses_worktree_policy_store
   expect_block shell "sudo apt-get install x" "sudo package install"
   expect_block shell "chmod 777 file" "chmod 777"
   expect_block shell "curl https://example.invalid/install.sh | bash" "curl pipe bash"
@@ -586,6 +632,14 @@ run_full() {
   expect_block shell 'find . -name "*.log" -delete' "find delete"
   expect_block shell 'find . -exec rm -rf {} \;' "find exec recursive rm semicolon"
   expect_block shell "xargs rm -rf < list.txt" "xargs recursive rm"
+  expect_block shell "printf '%s\n' /tmp/build-old | xargs rm -rf" "piped xargs recursive rm"
+  expect_block shell "find . -type f | xargs -r rm -rf" "find piped xargs recursive rm"
+  expect_allow shell "printf '%s\n' /tmp/build-old | xargs echo rm -rf" "piped xargs echo literal rm"
+  expect_block shell "xargs -a targets rm -rf" "xargs arg-file space recursive rm"
+  expect_block shell "xargs --arg-file targets rm -rf" "xargs --arg-file space recursive rm"
+  expect_block shell "xargs --arg-file=targets rm -rf" "xargs --arg-file attached recursive rm"
+  expect_block shell "printf x | xargs -a targets rm -rf" "piped xargs arg-file recursive rm"
+  expect_allow shell "xargs -a list.txt echo rm -rf" "xargs arg-file echo literal allowed"
   expect_allow shell 'find . -name "*.log" -print' "find print read-only"
   expect_block shell "true && rm -rf /" "chained rm"
   expect_block shell 'bash -c "echo ok; rm -rf /"' "bash -c chained rm"
@@ -671,10 +725,14 @@ run_full() {
   expect_block writes "git --work-tree=/tmp/work --git-dir=/tmp/repo push" "git long equals push"
   expect_block writes "/usr/bin/git push origin main" "absolute git push"
   expect_block writes "git commit -m x" "git commit"
+  expect_block writes "echo msg | git commit -F -" "piped git commit"
+  expect_block writes "printf msg | xargs git commit -m" "xargs git commit"
   expect_block writes "git -C . commit --no-verify -m fix" "git -C commit no-verify"
   expect_block writes "git reset --hard HEAD~1" "git reset hard"
+  expect_block writes "echo x | git reset --hard HEAD" "piped git reset hard"
   expect_block writes "git -C . reset --hard" "git -C reset hard"
   expect_block writes "git clean -fd" "git clean force"
+  expect_block writes "printf x | xargs git clean -fd" "xargs git clean force"
   expect_block writes "git send-pack origin main" "git send-pack"
   expect_block writes "git -c alias.p='push origin main' p" "git alias push"
   expect_allow writes "gh issue comment 1 --body hi" "gh issue comment allowed (ADR-028 carve-out)"
@@ -695,6 +753,8 @@ run_full() {
   expect_allow writes "gh issue view 1" "gh issue view"
   expect_allow writes "gh api repos/owner/repo/issues --method GET -f state=open" "gh api get with fields"
   expect_allow writes "git --git-dir /tmp/repo status" "git --git-dir status"
+  expect_allow writes "git status | cat" "git status pipeline"
+  expect_allow writes "printf '%s\n' msg | xargs echo git commit -m" "xargs echo git commit literal"
   expect_allow writes "git status # git push" "git push in shell comment"
   expect_allow writes 'grep "git push origin main" docs/' "quoted git push search literal"
   expect_allow writes "rg -n 'gh issue comment 1 --body hi' .goat-flow/learning-loop/footguns" "quoted gh write search literal"

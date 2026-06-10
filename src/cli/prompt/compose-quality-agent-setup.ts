@@ -331,8 +331,8 @@ function appendGroundingAndReadNext(
 
 /**
  * Append the "Read next" reading list - instruction file, config, skill
- * references, architecture, skills - plus the grep-first learning-loop retrieval
- * protocol that forbids broad-loading footguns/lessons/decisions.
+ * references, architecture, skills - plus the INDEX-first learning-loop retrieval
+ * protocol that forbids broad-loading durable learning buckets.
  *
  * @param lines - prompt line buffer; appended to in place
  * @param ctx - resolved prompt context supplying instruction/skills/hook paths
@@ -363,7 +363,7 @@ function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
     lines.push("- All hook scripts in your agent's hooks directory");
   lines.push("");
   lines.push(
-    "For the learning loop - `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/` - DO NOT broad-load. Use grep-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, run `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/decisions`, open only matching entries, reword once on zero hits, then record a retrieval miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
+    "For the learning loop - `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` - DO NOT broad-load buckets. Use INDEX-first retrieval per `skill-preamble.md` Learning-Loop Retrieval: derive 2-4 search terms from the target area and expected failure class, read matching INDEX rows first, open source entries only on candidate hits, grep individual buckets only after the INDEX pass or on a known retrieval miss, reword once on zero hits, then record the miss. Broad-loading recreates the context-bloat failure this protocol exists to prevent.",
   );
   lines.push("");
 }

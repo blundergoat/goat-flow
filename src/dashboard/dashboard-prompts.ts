@@ -117,97 +117,125 @@ function dashboardPresetCats(ctx: DashboardPromptsContext): PresetCategory[] {
   ];
 }
 
+type PresetBadgeRule = {
+  enabled: boolean | undefined;
+  badge: PresetBadge;
+};
+
+/** Return flag-driven preset badges before dynamic surface/global-safe badges are appended. */
+function presetFlagBadgeRules(preset: Preset): PresetBadge[] {
+  return [
+    {
+      enabled: preset.internalOnly,
+      badge: {
+        label: "Internal",
+        title: "Intended for goat-flow framework maintenance",
+        tone: "danger",
+      },
+    },
+    {
+      enabled: preset.qualityMode,
+      badge: {
+        label: "Quality",
+        title: "Quality or skill-assessment workflow",
+        tone: "neutral",
+      },
+    },
+    {
+      enabled: preset.requiresPrOrIssue,
+      badge: {
+        label: "Needs PR",
+        title: "Requires a PR, issue, branch, or pasted diff context",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.requiresLocalDiff,
+      badge: {
+        label: "Needs diff",
+        title:
+          "Requires local changes, a branch comparison, or pasted diff context",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.requiresGh,
+      badge: {
+        label: "Needs gh",
+        title:
+          "Uses GitHub CLI when available; prompt must provide fallback context otherwise",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.mayCheckoutBranch,
+      badge: {
+        label: "May checkout",
+        title: "May ask to checkout a branch after clean-worktree confirmation",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.requiresCleanWorktree,
+      badge: {
+        label: "Clean worktree",
+        title:
+          "Requires a clean worktree or explicit user approval before checkout",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.mayWriteFiles,
+      badge: {
+        label: "May write",
+        title: "May write files only with prompt or user approval",
+        tone: "danger",
+      },
+    },
+    {
+      enabled: preset.requiresUiApp,
+      badge: {
+        label: "UI workflow",
+        title: "Best suited to app/UI testing",
+        tone: "ui",
+      },
+    },
+    {
+      enabled: preset.requiresDependencyFiles,
+      badge: {
+        label: "Dependency files",
+        title:
+          "Requires package manifests or lockfiles for dependency evidence",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.requiresGoatFlowInstall,
+      badge: {
+        label: "GOAT install",
+        title:
+          "Requires goat-flow to be installed in the selected target project",
+        tone: "warn",
+      },
+    },
+    {
+      enabled: preset.artifactRequired,
+      badge: {
+        label: "Artifact required",
+        title: "Requires a plan, report, or other artifact to assess",
+        tone: "warn",
+      },
+    },
+  ]
+    .filter((rule): rule is PresetBadgeRule & { enabled: true } =>
+      Boolean(rule.enabled),
+    )
+    .map((rule) => rule.badge);
+}
+
 /** Return compact prerequisite/fit badges for one preset because the card layout cannot show full metadata. */
 function dashboardPresetBadges(preset: Preset): PresetBadge[] {
-  const badges: PresetBadge[] = [];
-  if (preset.internalOnly) {
-    badges.push({
-      label: "Internal",
-      title: "Intended for goat-flow framework maintenance",
-      tone: "danger",
-    });
-  }
-  if (preset.qualityMode) {
-    badges.push({
-      label: "Quality",
-      title: "Quality or skill-assessment workflow",
-      tone: "neutral",
-    });
-  }
-  if (preset.requiresPrOrIssue) {
-    badges.push({
-      label: "Needs PR",
-      title: "Requires a PR, issue, branch, or pasted diff context",
-      tone: "warn",
-    });
-  }
-  if (preset.requiresLocalDiff) {
-    badges.push({
-      label: "Needs diff",
-      title:
-        "Requires local changes, a branch comparison, or pasted diff context",
-      tone: "warn",
-    });
-  }
-  if (preset.requiresGh) {
-    badges.push({
-      label: "Needs gh",
-      title:
-        "Uses GitHub CLI when available; prompt must provide fallback context otherwise",
-      tone: "warn",
-    });
-  }
-  if (preset.mayCheckoutBranch) {
-    badges.push({
-      label: "May checkout",
-      title: "May ask to checkout a branch after clean-worktree confirmation",
-      tone: "warn",
-    });
-  }
-  if (preset.requiresCleanWorktree) {
-    badges.push({
-      label: "Clean worktree",
-      title:
-        "Requires a clean worktree or explicit user approval before checkout",
-      tone: "warn",
-    });
-  }
-  if (preset.mayWriteFiles) {
-    badges.push({
-      label: "May write",
-      title: "May write files only with prompt or user approval",
-      tone: "danger",
-    });
-  }
-  if (preset.requiresUiApp) {
-    badges.push({
-      label: "UI workflow",
-      title: "Best suited to app/UI testing",
-      tone: "ui",
-    });
-  }
-  if (preset.requiresDependencyFiles) {
-    badges.push({
-      label: "Dependency files",
-      title: "Requires package manifests or lockfiles for dependency evidence",
-      tone: "warn",
-    });
-  }
-  if (preset.requiresGoatFlowInstall) {
-    badges.push({
-      label: "GOAT install",
-      title:
-        "Requires goat-flow to be installed in the selected target project",
-      tone: "warn",
-    });
-  }
-  if (preset.artifactRequired) {
-    badges.push({
-      label: "Artifact required",
-      title: "Requires a plan, report, or other artifact to assess",
-      tone: "warn",
-    });
-  }
+  const badges: PresetBadge[] = presetFlagBadgeRules(preset);
   const surfaces = new Set(preset.bestTargetSurfaces ?? []);
   if (surfaces.has("library") || surfaces.has("api")) {
     badges.push({

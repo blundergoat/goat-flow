@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # Critique Sub-Agent Directives (Reference Pack)
 
@@ -7,9 +7,9 @@ goat-flow-reference-version: "1.10.1"
 
 ## Sub-agent A (Risk Focus - backward-looking context)
 
-**Directive:** "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name - speculation without a named target gets retracted in Phase 3. Your context includes targeted grep-first past-mistake hits - use them."
+**Directive:** "Apply SKEPTIC/ANALYST/STRATEGIST. Focus on RISKS: what could go wrong, what the evidence says about cost/benefit, what the 2nd-order systemic impacts are (local fix → global break patterns), and what the fastest safe path looks like. For any 2nd-order claim, you MUST cite the downstream file or system by name - speculation without a named target gets retracted in Phase 3. Your context includes targeted INDEX-first past-mistake hits - use them."
 
-**Context reads:** artifact + architecture.md + targeted grep-first footgun/lesson hits + rubric
+**Context reads:** artifact + architecture.md + targeted INDEX-first footgun/lesson hits + rubric
 **Does NOT read:** git history, config.yaml
 
 ## Sub-agent B (Alternatives Focus - current-state context)

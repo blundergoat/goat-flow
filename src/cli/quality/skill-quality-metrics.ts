@@ -141,14 +141,34 @@ const workflowCompleteness: MetricScorer = (input) => {
       hasSection(content, /###\s+Step\s+\d/i);
     const hasTroubleshooting =
       hasSection(content, /Troubleshoot/i) || hasSection(content, /Fallback/i);
+    const hasVerificationGate = hasSection(
+      content,
+      /##\s+(Verification Gate|Verification|Acceptance)/i,
+    );
+    const hasBoundaryLanguage =
+      hasSection(content, /##\s+(Boundary|Scope|When to Load|When to Use)/i) ||
+      /\b(In scope|Out of scope|Do not use when|read-only)\b/i.test(content);
     const sectionCount = countHeadings(content, 2);
 
-    if (hasWorkflow || subtype === "index" || subtype === "meta") score += 5;
-    else notes.push("no workflow/steps section");
-    if (hasTroubleshooting || subtype === "meta") score += 5;
-    else notes.push("no troubleshooting/fallback");
-    if (sectionCount >= 3) score += 5;
-    else notes.push(`only ${sectionCount} top-level sections`);
+    if (subtype === "playbook") {
+      if (hasWorkflow) score += 3;
+      else notes.push("no workflow/steps section");
+      if (hasTroubleshooting) score += 3;
+      else notes.push("no troubleshooting/fallback");
+      if (hasVerificationGate) score += 3;
+      else notes.push("missing verification gate");
+      if (hasBoundaryLanguage) score += 3;
+      else notes.push("missing boundary language");
+      if (sectionCount >= 4) score += 3;
+      else notes.push(`only ${sectionCount} top-level sections`);
+    } else {
+      if (hasWorkflow || subtype === "index" || subtype === "meta") score += 5;
+      else notes.push("no workflow/steps section");
+      if (hasTroubleshooting || subtype === "meta") score += 5;
+      else notes.push("no troubleshooting/fallback");
+      if (sectionCount >= 3) score += 5;
+      else notes.push(`only ${sectionCount} top-level sections`);
+    }
   }
 
   return finalizeMetric(

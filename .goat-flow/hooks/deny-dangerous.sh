@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
-# goat-flow-hook-version: 1.10.1
+# goat-flow-hook-version: 1.11.0
 #
 # Single goat-flow PreToolUse guardrail dispatcher. It contains the shared
 # payload parser/normalizer and sources policy modules from the committed
@@ -81,39 +81,11 @@ goat_policy_store_is_valid() {
   return 0
 }
 
-goat_root_from_git_common_dir() {
-  local gcd="$1"
-  local top_level="${2:-}"
-  case "$gcd" in
-    */.git/modules/*|.git/modules/*)
-      [[ -n "$top_level" ]] || return 1
-      printf '%s\n' "$top_level"
-      ;;
-    /*|[A-Za-z]:/*|[A-Za-z]:\\*)
-      gcd="${gcd//\\//}"
-      dirname "$gcd"
-      ;;
-    *)
-      [[ -n "$top_level" ]] || return 1
-      printf '%s\n' "$top_level"
-      ;;
-  esac
-}
-
 resolve_goat_flow_root_from_git() {
-  local gcd top_level=""
-  gcd="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
-  case "$gcd" in
-    */.git/modules/*|.git/modules/*)
-      top_level="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-      ;;
-    /*|[A-Za-z]:/*|[A-Za-z]:\\*)
-      ;;
-    *)
-      top_level="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-      ;;
-  esac
-  goat_root_from_git_common_dir "$gcd" "$top_level"
+  local top_level
+  top_level="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [[ -n "$top_level" ]] || return 1
+  printf '%s\n' "$top_level"
 }
 
 resolve_goat_flow_root_from_script_path() {
@@ -719,7 +691,7 @@ check_command_substitutions() {
   remaining_unquoted="${remaining_unquoted//\\\`/}"
 
   if [[ "$remaining_unquoted" == *\`* ]]; then
-    block "Backtick command substitution hides nested execution. Use a direct command instead." || return $?
+    block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
   fi
 }
 

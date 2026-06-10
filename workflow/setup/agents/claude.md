@@ -60,14 +60,7 @@ BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
 ### SCOPE
-Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity + budgets (below). (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
-
-| Complexity | Typical read budget | Typical turn budget |
-|------------|-------------|-------------|
-| Hotfix | 2 reads | 3 turns |
-| Standard Feature | 4 reads | 10 turns |
-| System Change | 6 reads | 20 turns |
-| Infrastructure | 8 reads | 25 turns |
+Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
 
 Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
 

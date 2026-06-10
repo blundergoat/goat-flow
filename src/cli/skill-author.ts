@@ -1,16 +1,4 @@
-/**
- * Skill authoring CLI: `goat-flow skill new`.
- *
- * Three modes share the same engine:
- *   - description : route from "I want a skill that …" to a scaffolded SKILL.md.
- *   - draft       : validate an existing draft against the candidacy check; if
- *                   classification disagrees with the draft's location, suggest a `mv`.
- *   - interactive : prompt for description and name, then scaffold + write.
- *
- * Every mode runs through `runCandidacyCheck` first. If the recommendation is
- * not a skill or playbook reference, the command prints the result and stops
- * - it never silently scaffolds against the wrong artifact type.
- */
+/** Scaffolds and validates `goat-flow skill new` skill/playbook drafts. */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
@@ -21,10 +9,6 @@ import {
   type CandidacyResult,
 } from "./quality/candidacy.js";
 import { findArtifact, scoreArtifact } from "./quality/skill-quality.js";
-
-// ---------------------------------------------------------------------------
-// Templates
-// ---------------------------------------------------------------------------
 
 const WORKFLOW_TEMPLATE = `---
 name: {{NAME}}
@@ -176,7 +160,11 @@ Apply the Proof Gate from \`skill-preamble.md\`. Every CONFIRMED finding require
 BLOCKING GATE: human reviews findings before any action is taken.
 `;
 
-const PLAYBOOK_TEMPLATE = `# {{NAME}}
+const PLAYBOOK_TEMPLATE = `---
+goat-flow-reference-version: "{{VERSION}}"
+---
+
+# {{NAME}}
 
 ## Purpose
 
@@ -189,6 +177,12 @@ command -v {{NAME}} || echo "{{NAME}} not installed; use the manual fallback bel
 \`\`\`
 
 If the tool is unavailable, use the [Fallback / Troubleshooting](#fallback--troubleshooting) section.
+
+## Boundary
+
+- **Use when:** [describe the tool/capability situation this playbook handles].
+- **Do not use when:** [name the adjacent skill, playbook, or instruction-file route].
+- **Writes:** read-only guidance unless the workflow below names an explicit file-write action and verification gate.
 
 ## Workflow
 
@@ -211,6 +205,12 @@ If the tool is unavailable or fails:
 - **Manual approach**: [describe the manual procedure]
 - **Common errors**: [list likely failure modes and remedies]
 
+## Verification Gate
+
+- [ ] Availability check result recorded, or non-runnable reference load condition stated.
+- [ ] Boundary still routes adjacent work to the right skill, playbook, instruction file, or CLI.
+- [ ] Workflow output has concrete pass/fail evidence.
+
 ## When to Load
 
 Skills load this playbook when [describe the trigger - e.g., when user evidence requires browser interaction].
@@ -222,10 +222,6 @@ const TEMPLATES_BY_SUBTYPE: Record<string, string> = {
   report: REPORT_TEMPLATE,
   playbook: PLAYBOOK_TEMPLATE,
 };
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 /** Input contract for the three mutually exclusive `skill new` modes. */
 interface SkillNewOptions {

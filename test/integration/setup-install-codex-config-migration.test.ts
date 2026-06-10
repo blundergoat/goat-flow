@@ -32,6 +32,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*deprecated hooks flag/);
   });
 
+  // Fixture purpose: writes invalid permission globs to cover in-place profile migration.
   it("migrates invalid filesystem permission globs in place", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -78,6 +79,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture purpose: writes a legacy project-root anchor to cover workspace-root migration.
   it("migrates the legacy :project_roots anchor to :workspace_roots", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -109,6 +111,7 @@ describe("codex config migration", () => {
     assert.match(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
   });
 
+  // Fixture purpose: writes a missing active profile to cover default permission repair.
   it("repairs goat-flow default permissions when the active profile is missing", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -136,6 +139,7 @@ describe("codex config migration", () => {
     );
   });
 
+  // Fixture purpose: writes stale exact secret denies to cover broad-pattern migration.
   it("migrates stale exact env and credentials denies to broad patterns", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -190,6 +194,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture purpose: writes a custom active profile to cover non-goat-flow migration.
   it("migrates the active custom Codex permission profile", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -224,6 +229,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture purpose: writes an old goat-flow profile to cover custom deny preservation.
   it("migrates old goat-flow profiles and preserves custom deny entries", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -249,6 +255,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture purpose: writes inline workspace-root globs to cover table migration.
   it("migrates invalid globs inside an inline :workspace_roots table", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
@@ -274,6 +281,7 @@ describe("codex config migration", () => {
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture purpose: writes comment-only legacy text to cover no-op migration behavior.
   it("does not treat comment-only :project_roots references as legacy anchors", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

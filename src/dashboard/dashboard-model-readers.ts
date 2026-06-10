@@ -46,6 +46,21 @@ function readInjectedSupportedAgents(): SupportedAgent[] {
     : [];
 }
 
+/** Read an optional boolean flag from a decoded record without accepting truthy strings. */
+function readOptionalBoolean(
+  record: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  return typeof record[key] === "boolean" ? record[key] : undefined;
+}
+
+/** Read the optional preset cost tier, rejecting unknown strings from shell injection. */
+function readPresetCostTier(value: unknown): Preset["costTier"] | undefined {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : undefined;
+}
+
 /**
  * Read one preset definition from dashboard shell injection.
  *
@@ -60,12 +75,6 @@ function readPreset(rawPreset: unknown): Preset | null {
   const prompt = readString(rawPreset.prompt);
   const cat = readString(rawPreset.cat);
   if (!id || !name || !desc || !prompt || !cat) return null;
-  const costTier =
-    rawPreset.costTier === "low" ||
-    rawPreset.costTier === "medium" ||
-    rawPreset.costTier === "high"
-      ? rawPreset.costTier
-      : undefined;
   return {
     id,
     name,
@@ -74,61 +83,31 @@ function readPreset(rawPreset: unknown): Preset | null {
     cat,
     route: readString(rawPreset.route) || undefined,
     source: readString(rawPreset.source) || undefined,
-    globalSafe:
-      typeof rawPreset.globalSafe === "boolean"
-        ? rawPreset.globalSafe
-        : undefined,
-    internalOnly:
-      typeof rawPreset.internalOnly === "boolean"
-        ? rawPreset.internalOnly
-        : undefined,
-    qualityMode:
-      typeof rawPreset.qualityMode === "boolean"
-        ? rawPreset.qualityMode
-        : undefined,
-    requiresGh:
-      typeof rawPreset.requiresGh === "boolean"
-        ? rawPreset.requiresGh
-        : undefined,
-    requiresPrOrIssue:
-      typeof rawPreset.requiresPrOrIssue === "boolean"
-        ? rawPreset.requiresPrOrIssue
-        : undefined,
-    requiresLocalDiff:
-      typeof rawPreset.requiresLocalDiff === "boolean"
-        ? rawPreset.requiresLocalDiff
-        : undefined,
-    requiresUiApp:
-      typeof rawPreset.requiresUiApp === "boolean"
-        ? rawPreset.requiresUiApp
-        : undefined,
-    requiresDependencyFiles:
-      typeof rawPreset.requiresDependencyFiles === "boolean"
-        ? rawPreset.requiresDependencyFiles
-        : undefined,
-    requiresGoatFlowInstall:
-      typeof rawPreset.requiresGoatFlowInstall === "boolean"
-        ? rawPreset.requiresGoatFlowInstall
-        : undefined,
-    mayCheckoutBranch:
-      typeof rawPreset.mayCheckoutBranch === "boolean"
-        ? rawPreset.mayCheckoutBranch
-        : undefined,
-    requiresCleanWorktree:
-      typeof rawPreset.requiresCleanWorktree === "boolean"
-        ? rawPreset.requiresCleanWorktree
-        : undefined,
-    mayWriteFiles:
-      typeof rawPreset.mayWriteFiles === "boolean"
-        ? rawPreset.mayWriteFiles
-        : undefined,
-    artifactRequired:
-      typeof rawPreset.artifactRequired === "boolean"
-        ? rawPreset.artifactRequired
-        : undefined,
+    globalSafe: readOptionalBoolean(rawPreset, "globalSafe"),
+    internalOnly: readOptionalBoolean(rawPreset, "internalOnly"),
+    qualityMode: readOptionalBoolean(rawPreset, "qualityMode"),
+    requiresGh: readOptionalBoolean(rawPreset, "requiresGh"),
+    requiresPrOrIssue: readOptionalBoolean(rawPreset, "requiresPrOrIssue"),
+    requiresLocalDiff: readOptionalBoolean(rawPreset, "requiresLocalDiff"),
+    requiresUiApp: readOptionalBoolean(rawPreset, "requiresUiApp"),
+    requiresDependencyFiles: readOptionalBoolean(
+      rawPreset,
+      "requiresDependencyFiles",
+    ),
+    requiresGoatFlowInstall: readOptionalBoolean(
+      rawPreset,
+      "requiresGoatFlowInstall",
+    ),
+    mayCheckoutBranch: readOptionalBoolean(rawPreset, "mayCheckoutBranch"),
+    requiresCleanWorktree: readOptionalBoolean(
+      rawPreset,
+      "requiresCleanWorktree",
+    ),
+    mayWriteFiles: readOptionalBoolean(rawPreset, "mayWriteFiles"),
+    artifactRequired: readOptionalBoolean(rawPreset, "artifactRequired"),
     bestTargetSurfaces: readStringArray(rawPreset.bestTargetSurfaces),
     fallbackPrompt: readString(rawPreset.fallbackPrompt) || undefined,
-    costTier,
+    costTier: readPresetCostTier(rawPreset.costTier),
   };
 }
 

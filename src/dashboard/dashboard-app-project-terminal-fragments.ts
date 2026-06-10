@@ -8,14 +8,150 @@
  * formatting) are self-contained and noted on their own doc comments.
  */
 
+/** Reset per-run evaluator state and cancel any stale copied-report label timer. */
+function dashboardResetSkillEvaluatorRun(ctx: DashboardAppContext): void {
+  ctx.skillEvaluatorError = null;
+  ctx.skillEvaluatorResult = null;
+  ctx.skillEvaluatorReportCopied = false;
+  if (ctx._skillEvaluatorReportCopiedTimer) {
+    clearTimeout(ctx._skillEvaluatorReportCopiedTimer);
+    ctx._skillEvaluatorReportCopiedTimer = null;
+  }
+}
+
+/** Return whether the evaluator has markdown from uploaded files or pasted content. */
+function dashboardHasSkillEvaluatorInput(ctx: DashboardAppContext): boolean {
+  return (
+    ctx.skillEvaluatorFiles.length > 0 ||
+    ctx.skillEvaluatorContent.trim().length > 0
+  );
+}
+
+/** Build the evaluator request body, preferring uploaded files over pasted content. */
+function dashboardBuildSkillEvaluatorRequestBody(
+  ctx: DashboardAppContext,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (ctx.skillEvaluatorFiles.length > 0) {
+    body.files = ctx.skillEvaluatorFiles;
+  } else {
+    body.content = ctx.skillEvaluatorContent;
+  }
+  body.kind = "skill";
+  const name = ctx.skillEvaluatorName.trim();
+  if (name.length > 0) body.suggestedName = name;
+  return body;
+}
+
 /**
- * Build the skill-evaluator and project-list fragment: drop/remove/run methods for the ad-hoc
- * markdown evaluator plus the saved-project add/sort/audit methods. Most methods delegate to shared
- * helpers, but runSkillEvaluator owns its fetch inline because it has a one-off request/response
- * shape, and it catches a failure into the evaluator's error field and reports it in-view rather
- * than throwing, so a bad evaluate request never breaks the app. Merged by dashboardMergeAppFragments.
+ * Run one skill-evaluator request. Network, parse, and API errors are recovered into
+ * skillEvaluatorError so a failed evaluate request reports in-view instead of breaking Alpine.
  */
-function dashboardAppFragment13(): DashboardAppFragment {
+async function dashboardRunSkillEvaluator(
+  ctx: DashboardAppContext,
+): Promise<void> {
+  dashboardResetSkillEvaluatorRun(ctx);
+  if (!dashboardHasSkillEvaluatorInput(ctx)) {
+    ctx.skillEvaluatorError =
+      "Drop .md files, upload, or paste markdown first.";
+    return;
+  }
+  ctx.skillEvaluatorLoading = true;
+  // Verdicts depend on the project's quality profile, so a project switch
+  // while the request is in flight must not surface the old project's verdict
+  // or error. Loading still clears in finally; leaving it set would keep the
+  // Evaluate button disabled in the new project.
+  const requestProjectPath = ctx.projectPath;
+  try {
+    const url = `/api/quality/evaluate?path=${encodeURIComponent(requestProjectPath)}`;
+    const res = await dashboardFetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dashboardBuildSkillEvaluatorRequestBody(ctx)),
+    });
+    const data = readRecord(await res.json(), "Evaluate result");
+    if (ctx.projectPath !== requestProjectPath) return;
+    const error = readErrorMessage(data);
+    if (error) {
+      ctx.skillEvaluatorError = error;
+      return;
+    }
+    ctx.skillEvaluatorResult = data;
+  } catch (err) {
+    if (ctx.projectPath !== requestProjectPath) return;
+    ctx.skillEvaluatorError = err instanceof Error ? err.message : String(err);
+  } finally {
+    ctx.skillEvaluatorLoading = false;
+  }
+}
+
+/** Dump an xterm buffer and trim trailing blank lines for a readable download. */
+function dashboardDumpTerminalBuffer(buf: XTermBuffer): string {
+  const lines: string[] = [];
+  for (let i = 0; i < buf.length; i++) {
+    const line = buf.getLine(i);
+    if (line) lines.push(line.translateToString(true));
+  }
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines.join("\n");
+}
+
+/** Build scrollback text, including the alternate screen when a TUI currently owns it. */
+function dashboardTerminalScrollbackText(xterm: XTermInstance): string {
+  const normalText = dashboardDumpTerminalBuffer(xterm.buffer.normal);
+  const altActive = xterm.buffer.active === xterm.buffer.alternate;
+  const altText = altActive
+    ? dashboardDumpTerminalBuffer(xterm.buffer.alternate)
+    : "";
+  const parts: string[] = [];
+  if (normalText) parts.push(normalText);
+  if (altText) {
+    parts.push("", "--- alternate screen (current TUI view) ---", "", altText);
+  }
+  return parts.join("\n");
+}
+
+/** Download terminal scrollback text using the runner and short session id as the filename. */
+function dashboardDownloadTerminalScrollback(
+  runner: RunnerId | "terminal",
+  sessionId: string,
+  text: string,
+): void {
+  const shortId = sessionId.slice(0, 8);
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = url;
+  downloadLink.download = `${runner}-${shortId}.txt`;
+  downloadLink.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Export one live xterm tab's scrollback; no download occurs when the tab has no xterm handle. */
+function dashboardExportSessionScrollback(
+  ctx: DashboardAppContext,
+  sessionId: string,
+): void {
+  const refs = ctx._terminalRefs[sessionId];
+  if (!refs?.xterm) return;
+  const session = ctx.sessions.find((s: LocalSession) => s.id === sessionId);
+  const runner = session?.runner ?? "terminal";
+  dashboardDownloadTerminalScrollback(
+    runner,
+    sessionId,
+    dashboardTerminalScrollbackText(refs.xterm),
+  );
+}
+
+/**
+ * Build the skill-evaluator fragment: drop/remove/run methods for the ad-hoc markdown evaluator.
+ * runSkillEvaluator owns its fetch inline because it has a one-off request/response shape, and it
+ * catches a failure into the evaluator's error field and reports it in-view rather than throwing, so
+ * a bad evaluate request never breaks the app. Merged by dashboardMergeAppFragments.
+ */
+function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
   return {
     /** drop handler - read every dropped .md file and append to the list. */
     skillEvaluatorDrop(event: DragEvent) {
@@ -41,52 +177,19 @@ function dashboardAppFragment13(): DashboardAppFragment {
      * app. Loading state is always cleared in finally.
      */
     async runSkillEvaluator() {
-      this.skillEvaluatorError = null;
-      this.skillEvaluatorResult = null;
-      this.skillEvaluatorReportCopied = false;
-      if (this._skillEvaluatorReportCopiedTimer) {
-        clearTimeout(this._skillEvaluatorReportCopiedTimer);
-        this._skillEvaluatorReportCopiedTimer = null;
-      }
-      const hasFiles = this.skillEvaluatorFiles.length > 0;
-      const hasContent = this.skillEvaluatorContent.trim().length > 0;
-      if (!hasFiles && !hasContent) {
-        this.skillEvaluatorError =
-          "Drop .md files, upload, or paste markdown first.";
-        return;
-      }
-      this.skillEvaluatorLoading = true;
-      try {
-        const url = `/api/quality/evaluate?path=${encodeURIComponent(this.projectPath)}`;
-        const body: Record<string, unknown> = {};
-        if (hasFiles) {
-          body.files = this.skillEvaluatorFiles;
-        } else {
-          body.content = this.skillEvaluatorContent;
-        }
-        body.kind = "skill";
-        const name = this.skillEvaluatorName.trim();
-        if (name.length > 0) body.suggestedName = name;
-        const res = await dashboardFetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = readRecord(await res.json(), "Evaluate result");
-        const error = readErrorMessage(data);
-        if (error) {
-          this.skillEvaluatorError = error;
-          return;
-        }
-        this.skillEvaluatorResult = data;
-      } catch (err) {
-        this.skillEvaluatorError =
-          err instanceof Error ? err.message : String(err);
-      } finally {
-        this.skillEvaluatorLoading = false;
-      }
+      await dashboardRunSkillEvaluator(this);
     },
+  };
+}
 
+/**
+ * Build the saved-project action fragment.
+ *
+ * Project actions stay separate from the skill evaluator so this fragment remains a small dispatch
+ * surface over dashboard project helpers.
+ */
+function dashboardProjectActionsFragment(): DashboardAppFragment {
+  return {
     // -- Projects --
     async addProject() {
       await dashboardAddProject(this);
@@ -142,7 +245,17 @@ function dashboardAppFragment13(): DashboardAppFragment {
     _saveProjectsList() {
       this._saveDashboardState();
     },
+  };
+}
 
+/**
+ * Build shared dashboard utility methods.
+ *
+ * Clipboard fallback and toast state are used across views, while terminal availability is the small
+ * bridge that lets the shell decide whether terminal controls should render.
+ */
+function dashboardUtilityActionsFragment(): DashboardAppFragment {
+  return {
     // -- Clipboard + Toast --
     /**
      * Copy text to the clipboard, preferring the async Clipboard API. When that throws (the API is
@@ -197,14 +310,13 @@ function dashboardAppFragment13(): DashboardAppFragment {
 }
 
 /**
- * Build the terminal-session method fragment: the full surface for launching, attaching,
- * reconnecting, switching, exporting, and ending browser/backend terminal sessions. Almost every
- * method intentionally delegates to a shared `dashboard*` terminal helper, because the WebSocket and
- * xterm mechanics are shared with the non-fragmented code paths and must stay in one place; the
- * fragment is just the named Alpine entry points. exportSession is the deliberate exception and
- * builds the scrollback download inline. Merged into the app by dashboardMergeAppFragments.
+ * Build terminal launch and reconnect method shims.
+ *
+ * These methods intentionally delegate to shared `dashboard*` terminal helpers because the
+ * WebSocket and xterm mechanics are shared with the non-fragmented code paths and must stay in one
+ * place; the fragment is just the named Alpine entry point surface.
  */
-function dashboardAppFragment14(): DashboardAppFragment {
+function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
   return {
     /** Refresh terminal session state from the server. */
     async updateSessionCount() {
@@ -293,7 +405,18 @@ function dashboardAppFragment14(): DashboardAppFragment {
         targetPath,
       });
     },
+  };
+}
 
+/**
+ * Build terminal binding, export, and session-selection methods.
+ *
+ * These methods complete the terminal app surface after the launch/reconnect methods in
+ * dashboardTerminalLaunchActionsFragment. exportSession delegates to the scrollback helper because
+ * the xterm buffer walk is browser-only but easier to verify outside the Alpine fragment literal.
+ */
+function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
+  return {
     /** Bind a browser xterm instance to a backend PTY session. */
     connectTerminal(sessionId: string, wsUrl: string) {
       dashboardConnectTerminal(this, sessionId, wsUrl);
@@ -311,46 +434,7 @@ function dashboardAppFragment14(): DashboardAppFragment {
      * the session has no live xterm instance; trailing blank lines are trimmed from the normal buffer.
      */
     exportSession(sessionId: string) {
-      const refs = this._terminalRefs[sessionId];
-      if (!refs?.xterm) return;
-      const xterm = refs.xterm;
-      const dumpBuffer = (buf: XTermBuffer): string => {
-        const lines: string[] = [];
-        for (let i = 0; i < buf.length; i++) {
-          const line = buf.getLine(i);
-          if (line) lines.push(line.translateToString(true));
-        }
-        while (lines.length > 0 && lines[lines.length - 1] === "") {
-          lines.pop();
-        }
-        return lines.join("\n");
-      };
-      const normalText = dumpBuffer(xterm.buffer.normal);
-      const altActive = xterm.buffer.active === xterm.buffer.alternate;
-      const altText = altActive ? dumpBuffer(xterm.buffer.alternate) : "";
-      const parts: string[] = [];
-      if (normalText) parts.push(normalText);
-      if (altText) {
-        parts.push(
-          "",
-          "--- alternate screen (current TUI view) ---",
-          "",
-          altText,
-        );
-      }
-      const text = parts.join("\n");
-      const session = this.sessions.find(
-        (s: LocalSession) => s.id === sessionId,
-      );
-      const runner = session?.runner ?? "terminal";
-      const shortId = sessionId.slice(0, 8);
-      const blob = new Blob([text], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const downloadLink = document.createElement("a");
-      downloadLink.href = url;
-      downloadLink.download = `${runner}-${shortId}.txt`;
-      downloadLink.click();
-      URL.revokeObjectURL(url);
+      dashboardExportSessionScrollback(this, sessionId);
     },
 
     /** Exit the active terminal session from the workspace view. */
@@ -383,7 +467,7 @@ function dashboardAppFragment14(): DashboardAppFragment {
  * No state or I/O - they turn a date into a short "Xm/h/d ago" label. The two differ only in their
  * null/zero handling, called out on each method. Merged into the app by dashboardMergeAppFragments.
  */
-function dashboardAppFragment15(): DashboardAppFragment {
+function dashboardTimeFormattingFragment(): DashboardAppFragment {
   return {
     // -- Helpers --
     /**

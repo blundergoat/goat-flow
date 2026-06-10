@@ -1,4 +1,4 @@
-# Config-schema version. Required as of gruff-ts 0.1.4. See ADR-004 (decision log).
+# Config-schema version. Required as of gruff-ts 0.2.0. See ADR-004 (decision log).
 schemaVersion: gruff-ts.config.v0.1
 
 # Per-command default for `--fail-on`. CLI flag > this block > binary default.
@@ -67,6 +67,9 @@ allowlists:
   # default when present; an empty list disables that rule's blacklist branch.
   # Default: [process, handle, doit, run, execute, manage]
   # bannedGenericNames: [process, handle, doit, run, execute, manage]
+  # Exact public/CLI/DTO boolean names accepted by naming.boolean-prefix.
+  # Default: [all, apply, check, dev, enabled, force, fresh, harness, json, ok, verbose, yes]
+  # acceptedBooleanNames: [all, apply, check, dev, enabled, force, fresh, harness, json, ok, verbose, yes]
   # Accepted prefixes for boolean identifiers. Names without one of these
   # prefixes trigger naming.boolean-prefix.
   # Default: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
@@ -184,23 +187,12 @@ rules:
   # complexity/warning: Flags functions with high combined branch and nesting complexity.
   complexity.cognitive:
     enabled: true
-    # 2026-05-30: goat-flow has explicit dispatch/validation flows where 15
-    # creates cleanup churn; 20 still flags functions that are hard to verify.
-    threshold: 20
+    threshold: 15
     severity: warning
   # complexity/warning: Flags functions with many independent branch paths.
   complexity.cyclomatic:
     enabled: true
-    # 2026-05-30: keep ordinary helpers strict while allowing cohesive command
-    # dispatchers and boundary validators to branch explicitly.
-    threshold: 20
-    severity: warning
-  # complexity/warning: Flags functions with high approximate NPath complexity.
-  complexity.npath:
-    enabled: true
-    # 2026-05-30: NPath grows combinatorially on explicit routing/parsing
-    # branches; 512 keeps severe cases visible without over-flagging glue code.
-    threshold: 512
+    threshold: 15
     severity: warning
   # dead-code/advisory: Flags private methods without an apparent same-file call site.
   dead-code.unused-private-method:
@@ -209,20 +201,10 @@ rules:
   design.circular-import:
     enabled: true
   # design/advisory: Flags relative imports that climb too many parent directories.
-  # 2026-06-07: threshold raised 2 -> 3. Test files live three levels deep
-  # (test/<kind>/<area>/file.ts) and import production modules from src/, which is
-  # structurally a 3-parent climb. Converting these to package `imports` subpaths or
-  # tsconfig path aliases would blind gruff's edge-based rules
-  # (test-quality.missing-nearby-test, design.circular-import) because their
-  # resolver only follows relative specifiers. Keep relative edges; tune the floor
-  # to the repo's test layout. Tune-not-silence: 4+ climbs still flag.
   design.deep-relative-import:
     enabled: true
-    threshold: 3
+    threshold: 2
     severity: advisory
-  # design/warning: Flags functions that are both long and complex.
-  design.god-function:
-    enabled: true
   # design/advisory: Flags a production module that dominates project source lines.
   design.large-module-concentration:
     enabled: true
@@ -442,20 +424,29 @@ rules:
   # security/warning: Flags thrown non-Error values.
   security.throw-non-error:
     enabled: true
-  # security/warning: Flags dependencies installed from URL or git specs.
+  # security/warning: Flags external input reaching unsafe deserialization or dynamic code-loading sinks.
+  security.unsafe-deserialization:
+    enabled: true
+  # security/warning: Flags dependencies installed from URL, git, or local file specs.
   security.url-dependency:
     enabled: true
   # security/warning: Flags weak crypto primitives such as md5, sha1, or createCipher.
   security.weak-crypto:
     enabled: true
-  # sensitive-data/error: Flags vendor API key patterns.
+  # security/warning: Flags external XML reaching parsers configured to expand entities.
+  security.xxe-candidate:
+    enabled: true
+  # sensitive-data/error: Flags vendor API key patterns including GitHub, GitLab, npm, Google API, Slack, Discord, and Stripe/OpenAI-style keys.
   sensitive-data.api-key-pattern:
     enabled: true
   # sensitive-data/error: Flags AWS access key looking values.
   sensitive-data.aws-access-key:
     enabled: true
-  # sensitive-data/error: Flags database URLs that include passwords.
+  # sensitive-data/error: Flags database and HTTP(S) URLs that include passwords or embedded credentials.
   sensitive-data.database-url-password:
+    enabled: true
+  # sensitive-data/error: Flags GCP service-account key files (type service_account alongside a private key).
+  sensitive-data.gcp-service-account-key:
     enabled: true
   # sensitive-data/error: Flags environment-style secret values committed in text.
   sensitive-data.hardcoded-env-value:
@@ -470,7 +461,10 @@ rules:
   # sensitive-data/error: Flags JWT-looking token literals.
   sensitive-data.jwt-token:
     enabled: true
-  # sensitive-data/error: Flags PII-like identifier patterns.
+  # sensitive-data/error: Flags PHI identifiers such as Medicare (MBI) and medical record numbers.
+  sensitive-data.phi-pattern:
+    enabled: true
+  # sensitive-data/error: Flags PII-like identifier patterns including SSN-shaped values and Luhn-valid payment cards.
   sensitive-data.pii-pattern:
     enabled: true
   # sensitive-data/error: Flags private key block markers.
@@ -491,11 +485,6 @@ rules:
     enabled: true
     threshold: 7
     severity: warning
-  # size/warning: Flags stylesheets longer than the configured threshold.
-  size.stylesheet-length:
-    enabled: true
-    threshold: 1500
-    severity: warning
   # test-quality/advisory: Flags tests with conditional logic.
   test-quality.conditional-logic:
     enabled: true
@@ -510,9 +499,6 @@ rules:
     enabled: true
   # test-quality/advisory: Flags assertions against unexplained numeric literals.
   test-quality.magic-number-assertion:
-    enabled: true
-  # test-quality/advisory: Flags exported production files without nearby tests.
-  test-quality.missing-nearby-test:
     enabled: true
   # test-quality/advisory: Flags tests that only verify mock interaction.
   test-quality.mock-only-test:
@@ -539,6 +525,9 @@ rules:
     enabled: true
   # test-quality/advisory: Flags tests that rely only on snapshots.
   test-quality.snapshot-only-test:
+    enabled: true
+  # test-quality/advisory: Flags tests that primarily assert code shape rather than behavior.
+  test-quality.static-analysis-redundant-test:
     enabled: true
   # test-quality/warning: Flags tautological assertions.
   test-quality.trivial-assertion:

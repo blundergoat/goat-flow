@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # Skill Preamble
 
@@ -36,10 +36,8 @@ Order findings by severity, not by file or discovery order.
 - Before presenting findings, re-read each cited file and semantic anchor to confirm accuracy
 - Tag evidence quality: **OBSERVED** (directly verified in code) | **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing) | **UNVERIFIED** (cannot re-read cited evidence) | **HUMAN-PENDING: \<what needs checking\>** (requires manual verification the agent cannot perform)
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
-- Before citing a function or symbol name, verify it exists with a repo search
-- Before citing a CLI flag, verify it with `--help` or the command's docs
-- Before citing a config key, read the actual config file first
-- On completion claims, the 5 hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
+- Before citing a symbol, CLI flag, or config key, verify it against a repo search, `--help`, or the actual config file
+- On completion claims, the hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
 
 ## Proof Classification
 
@@ -96,7 +94,7 @@ Adapt ceremony to complexity. This is **pre-invocation routing guidance** for ch
 
 - **Quick:** compressed workflow, direct output
 - **Full:** selected skill protocol; critique on request
-- If arriving from the dispatcher with depth already chosen, skip the depth question
+- If the dispatcher already chose depth, skip the question
 
 ## Routing Boundary
 
@@ -108,26 +106,26 @@ For Hotfix complexity (1-2 files, obvious change), skip skills and run READ → 
 
 ## Step 0 Budget
 
-If Step 0 exceeds 5 reads without producing output or asking a question, checkpoint with what you have. Continue only when broader coverage is genuinely needed.
+If Step 0 exceeds 5 reads without output or a question, checkpoint with what you have; continue only when broader coverage is genuinely needed.
 
 ## Learning-Loop Retrieval
 
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Search with `rg -n -i -S '<term1>|<term2>|<term3>' .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions` (or `grep -rniE` if `rg` is missing).
-- Open only matching entries; follow related refs at most 2 hops when relevant.
-- On zero hits, reword once and re-search. If still empty, record a retrieval miss - do not broad-load a bucket.
+- Read the matching `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` rows first; open a source entry only on a candidate hit; follow related refs at most 2 hops. Grep individual buckets only after the INDEX pass or on a known retrieval miss.
+- On zero hits, reword once and re-scan. If still empty, record the miss - do not broad-load a bucket.
+- Step 0 of every functional goat-* skill MUST emit `Relevant prior learnings: <matching INDEX entries or none found>`; on `none found`, the next line MUST be `Terms searched: <terms>`. Emit even when the area feels familiar or continues prior work - a silent skip is indistinguishable from a miss. If an index is stale, emit, then run `goat-flow index`.
 
 ## Availability Check
 
-Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>` (plus `gh auth status` for `gh`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, and audit tools such as `npm audit`, `pip-audit`, or `cargo audit` before quoting results).
+Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>`, `gh auth status` for `gh`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, audit tools (`npm audit`, `pip-audit`, `cargo audit`) before quoting results.
 
-If unavailable, take the documented fallback: ask before installing, fall back to manual evidence, or skip the step and record `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, and never paraphrase tool output you didn't capture in this session.
+If unavailable: ask before installing, fall back to manual evidence, or skip the step and record `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, or paraphrase output you didn't capture this session.
 
 ## External Context Sources
 
-For GitHub issues, PRs, alerts, or CI runs, prefer `gh` (if authenticated) over asking the user to paste content: `gh issue view`, `gh pr view/diff/checks`, `gh run list`, `gh run view --log-failed`, and `gh api /repos/{owner}/{repo}/dependabot/alerts` for goat-security.
+For GitHub issues, PRs, alerts, or CI runs, prefer `gh` (if authenticated) over pasted content: `gh issue view`, `gh pr view/diff/checks`, `gh run view --log-failed`, and `gh api /repos/{owner}/{repo}/dependabot/alerts` for goat-security.
 
-Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste rather than guessing - never fabricate issue/PR bodies.
+Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste - never fabricate issue/PR bodies.
 
 ## Footgun Fast-Path
 
@@ -146,7 +144,7 @@ Routine success needs no durable write; gitignored logs/scratchpad/critiques/qua
 
 **Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory - not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
 
-**Bucket file frontmatter.** Every footgun / lesson bucket file starts with `category: <bucket-name>` and `last_reviewed: YYYY-MM-DD`. Bump `last_reviewed` on material body edits (skip cosmetic ones). `goat-flow stats --check` fails when `last_reviewed` is missing, malformed, older than the newest `**Created:**` / `**Updated:**` / `**Resolved:**` entry date, or when the bucket has stale file refs.
+**Bucket file frontmatter.** Bucket files start with `category:` and `last_reviewed: YYYY-MM-DD`; bump `last_reviewed` on material edits. `goat-flow stats --check` fails on missing/malformed dates, a date older than the newest entry date, or stale file refs.
 
 ## Human Gates
 

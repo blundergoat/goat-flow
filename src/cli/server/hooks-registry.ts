@@ -19,6 +19,8 @@ export interface HookSpec extends Record<"togglable", boolean> {
   primaryScript: string;
   defaultEnabled: boolean;
   requiresConfirmDialog: boolean;
+  /** Runner-side timeout agents register for this hook; omitted = agent default. */
+  timeoutSec?: number;
   unsupportedAgents?: Partial<Record<AgentId, string>>;
 }
 
@@ -48,6 +50,9 @@ const HOOKS: HookSpec[] = [
     togglable: true,
     defaultEnabled: false,
     requiresConfirmDialog: false,
+    // Above the script's internal 60s analyzer timeout so the hook's own
+    // timeout/config diagnostics print before the runner kills the wrapper.
+    timeoutSec: 90,
   },
 ];
 

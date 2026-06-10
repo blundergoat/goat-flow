@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # goat-security reference: supply chain, CI/CD, and agent surfaces
 

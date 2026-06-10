@@ -47,6 +47,7 @@ describe("config writer", () => {
     });
   });
 
+  // Fixture purpose: writes duplicate legacy hook comments to cover canonical hook ids.
   it("deduplicates generated hook comments and writes canonical hook ids", () => {
     withTempProject((root) => {
       const configPath = join(root, ".goat-flow", "config.yaml");

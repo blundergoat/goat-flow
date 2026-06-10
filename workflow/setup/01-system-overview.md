@@ -27,7 +27,7 @@ A framework that gives AI coding agents structured planning (with multi-perspect
 
 1. **Instruction file** (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`) - The execution loop, autonomy tiers, definition of done, and router table. Loaded every turn.
 2. **Skills** (6 functional + 1 dispatcher) - Plan (milestone task files), critique (`/goat-critique` multi-perspective analysis), QA, review, secure, debug. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
-3. **.goat-flow/ learning loop** - Footguns (architectural traps with file evidence), lessons (behavioural mistakes), decisions (ADRs), patterns (successful approaches), and optional local instruction files. Durable project knowledge lives in committed files; session logs and task files stay local to the checkout.
+3. **.goat-flow/ learning loop** - Footguns (architectural traps with file evidence), lessons (behavioural mistakes), decisions (ADRs), patterns (successful approaches), generated per-bucket `INDEX.md` files for fast retrieval, and optional local instruction files. Durable project knowledge lives in committed files; session logs and task files stay local to the checkout. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale. See `docs/cli.md` for the lifecycle reference.
 
 Every project gets the full system. The components are lightweight infrastructure, not ceremony proportional to codebase size.
 

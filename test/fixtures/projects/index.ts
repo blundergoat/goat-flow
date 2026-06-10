@@ -3,20 +3,16 @@
  * Exports stubFS, stubConfig, stubAgentFacts, and pre-built project fixtures.
  */
 import type {
-  ReadonlyFS,
-  ProjectFacts,
   AgentFacts,
   AgentProfile,
-} from "../../../src/cli/types.js";
-import type {
-  LoadedConfig,
-  GoatFlowConfig,
-} from "../../../src/cli/config/types.js";
-import type {
   AuditContext,
+  GoatFlowConfig,
+  LoadedConfig,
+  ProjectFacts,
   ProjectStructure,
-} from "../../../src/cli/audit/types.js";
-import { AUDIT_VERSION, SKILL_NAMES } from "../../../src/cli/constants.js";
+  ReadonlyFS,
+} from "../../src.js";
+import { AUDIT_VERSION, SKILL_NAMES } from "../../src.js";
 
 const HEALTHY_GOAT_FLOW_GITIGNORE = [
   "*",

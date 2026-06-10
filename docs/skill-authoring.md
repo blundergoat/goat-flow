@@ -30,6 +30,22 @@ The result recommends one of:
 
 Candidacy is deterministic. Borderline LLM-assisted candidacy is intentionally deferred.
 
+## Choose The Artifact
+
+Use the smallest durable artifact that fits the evidence:
+
+| Candidate shape | Route to | Evidence required |
+|---|---|---|
+| First-class workflow with Step 0, modes, blocking gates, or reports | goat-* skill | Repeated cross-task behavior that needs an invocation workflow |
+| Tool/capability runbook loaded on demand | `.goat-flow/skill-docs/playbooks/<name>.md` | Availability Check, boundary, workflow, fallback, verification gate |
+| Shared doctrine every skill inherits | `.goat-flow/skill-docs/` | Cross-skill invariant plus ADR-023 word-budget headroom |
+| Real incident or permanent caution | learning-loop lesson/footgun/pattern/decision | Actual evidence and prevention text |
+| Short project rule | instruction file | Hot-path rule that must always be visible |
+| Deterministic transform or validation | CLI/check/script | Repeatable operation better enforced by code |
+| One-off or speculative advice | no new artifact | No repeated evidence yet |
+
+Before editing shared references or playbooks, check the ADR-023 tier. Always-loaded shared references must stay under 1500 body words; top-level playbooks and progressive topical files must stay under 3000 body words.
+
 ## Scaffold From Description
 
 ```bash

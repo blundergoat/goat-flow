@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # gruff-code-quality.sh
-# goat-flow-hook-version: 1.10.1
+# goat-flow-hook-version: 1.11.0
 #
 # Purpose:
 #   Optional PostToolUse hook that runs the matching gruff analyzer after
@@ -24,7 +24,21 @@
 #   event. It also needs a matching `.gruff-*.yaml` or `.gruff-*.yml` config at
 #   the repo root, a matching gruff binary, and `jq` for JSON filtering. Missing
 #   prerequisites fail soft: the edit is not blocked and whole-file gruff
-#   output is not printed as a fallback.
+#   output is not printed as a fallback. If a config is present but the matching
+#   binary cannot be found, the hook prints a one-line stderr diagnostic instead
+#   of silently leaving that language uncovered.
+#
+# Binary discovery:
+#   Discovery covers standard install locations only: vendor/bin,
+#   node_modules/.bin, bin, .venv/bin, ~/.local/bin, then PATH. It deliberately
+#   does not auto-discover `*/.venv/bin` or build-output directories. Monorepos
+#   with a deliberately managed analyzer in a non-standard location can opt in
+#   explicitly with `GRUFF_TS_BIN`, `GRUFF_PHP_BIN`, `GRUFF_GO_BIN`,
+#   `GRUFF_RS_BIN`, or `GRUFF_PY_BIN`; the value must name an executable file.
+#   Timeout defaults to 60s via `GRUFF_CODE_QUALITY_TIMEOUT_SECONDS`; set
+#   `GRUFF_TS_TIMEOUT_SECONDS`, `GRUFF_PHP_TIMEOUT_SECONDS`,
+#   `GRUFF_GO_TIMEOUT_SECONDS`, `GRUFF_RS_TIMEOUT_SECONDS`, or
+#   `GRUFF_PY_TIMEOUT_SECONDS` for a language-specific override.
 #
 # Changed-line model:
 #   Prefer changed ranges from the PostToolUse payload when present.
@@ -73,7 +87,8 @@ fi
 FOOTER="For triage: consult .goat-flow/skill-docs/playbooks/gruff-code-quality.md"
 SUPPORTED_TOOLS=" edit write multiedit write_to_file replace_file_content multi_replace_file_content "
 SKIP_DIR_PATTERN='(^|/)(node_modules|vendor|\.goat-flow|dist|build|coverage|\.git|target|\.venv|\.mypy_cache|\.pytest_cache|\.ruff_cache)(/|$)'
-GRUFF_CODE_QUALITY_TIMEOUT_SECONDS="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-30}"
+BINARY_SEARCH_PATHS='vendor/bin, node_modules/.bin, bin, .venv/bin, ~/.local/bin, PATH'
+GRUFF_CODE_QUALITY_TIMEOUT_SECONDS="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-60}"
 # Max changed-line findings listed per file before the rest are summarised as
 # "(<m> more on changed lines)". Keeps a large edit from flooding the agent.
 GRUFF_CODE_QUALITY_MAX_FINDINGS="${GRUFF_CODE_QUALITY_MAX_FINDINGS:-20}"
@@ -227,6 +242,20 @@ variant_for_path() {
   esac
 }
 
+binary_env_name() {
+  local binary="$1"
+  local suffix="${binary#gruff-}"
+  suffix="${suffix//-/_}"
+  printf 'GRUFF_%s_BIN' "${suffix^^}"
+}
+
+timeout_env_name() {
+  local binary="$1"
+  local suffix="${binary#gruff-}"
+  suffix="${suffix//-/_}"
+  printf 'GRUFF_%s_TIMEOUT_SECONDS' "${suffix^^}"
+}
+
 supported_candidate_path() {
   local file_path="$1"
   local binary
@@ -260,16 +289,50 @@ payload_file_paths() {
   fi
 }
 
+payload_supported_file_paths() {
+  local root="$1"
+  local payload="$2"
+  local file_path rel_path normalized_root
+  normalized_root="${root//\\//}"
+  payload_file_paths "$payload" | while IFS= read -r file_path; do
+    [[ -n "$file_path" ]] || continue
+    file_path="${file_path//\\//}"
+    case "$file_path" in
+      "$normalized_root"/*) rel_path="${file_path#"$normalized_root"/}" ;;
+      # Windows drive-letter paths that missed the root match above are outside
+      # this repo, same as the rooted-path case below.
+      [A-Za-z]:/*) continue ;;
+      /*) continue ;;
+      *) rel_path="$(relative_path "$normalized_root" "$file_path")" ;;
+    esac
+    case "$rel_path" in
+      ""|.|..|../*|*/../*) continue ;;
+    esac
+    supported_candidate_path "$rel_path" || continue
+    printf '%s\n' "$rel_path"
+  done | awk '!seen[$0]++'
+}
+
 # Discovery covers each ecosystem's standard install location - package-manager
 # bin dirs (vendor/bin for composer, node_modules/.bin for npm), an in-repo bin/,
 # the root virtualenv (.venv/bin), user-local installs (~/.local/bin), and finally
 # PATH. It deliberately excludes a `*/.venv/bin` subdirectory glob and the
 # `target/debug` build-output dir: auto-executing a name-matched binary from an
 # arbitrary subtree or build artifact on every edit is RCE-shaped for little gain.
+# A per-language `GRUFF_<LANG>_BIN` override is explicit opt-in and therefore safe
+# for monorepos with a deliberately managed analyzer in a non-standard location.
 discover_binary() {
   local root="$1"
   local binary="$2"
-  local candidate
+  local candidate env_name override
+  env_name="$(binary_env_name "$binary")"
+  override="${!env_name:-}"
+  if [[ -n "$override" ]]; then
+    if [[ -x "$override" ]]; then
+      printf '%s' "$override"
+    fi
+    return 0
+  fi
   for candidate in \
     "$root/vendor/bin/$binary" \
     "$root/node_modules/.bin/$binary" \
@@ -407,6 +470,7 @@ changed_ranges() {
 self_test() {
   local payload paths ranges variant report_output report_json first_line
   local help_full help_missing counts
+  local tmp output override_path config_error
   if ! command -v jq >/dev/null 2>&1; then
     printf 'gruff-code-quality self-test: jq unavailable\n' >&2
     return 1
@@ -462,11 +526,57 @@ self_test() {
     return 1
   }
 
-  [[ "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=bogus normalized_timeout_seconds)" == "30" \
-     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=0 normalized_timeout_seconds)" == "30" \
-     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS='' normalized_timeout_seconds)" == "30" \
-     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=45 normalized_timeout_seconds)" == "45" ]] || {
+  [[ "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=bogus normalized_timeout_seconds gruff-ts)" == "60" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=0 normalized_timeout_seconds gruff-ts)" == "60" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS='' normalized_timeout_seconds gruff-ts)" == "60" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=45 normalized_timeout_seconds gruff-ts)" == "45" \
+     && "$(GRUFF_CODE_QUALITY_TIMEOUT_SECONDS=45 GRUFF_PHP_TIMEOUT_SECONDS=75 normalized_timeout_seconds gruff-php)" == "75" ]] || {
     printf 'gruff-code-quality self-test: timeout normalization failed\n' >&2
+    return 1
+  }
+
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/src" "$tmp/empty-bin" "$tmp/strands_agents/.venv/bin"
+  printf 'rules: {}\n' > "$tmp/.gruff-py.yaml"
+  printf 'print("x")\n' > "$tmp/src/sample.py"
+  output="$(PATH="$tmp/empty-bin" process_file '{"tool_name":"Edit","tool_input":{"file_path":"src/sample.py","changed_ranges":[{"startLine":1,"endLine":1}]}}' "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *".gruff-py.yaml present but gruff-py not found on search paths"* && "$output" == *"GRUFF_PY_BIN"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: binary-missing diagnostic failed: %s\n' "$output" >&2
+    return 1
+  }
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
+  chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
+  override_path="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/strands_agents/.venv/bin/gruff-py" discover_binary "$tmp" gruff-py)"
+  [[ "$override_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: env binary override failed: %s\n' "$override_path" >&2
+    return 1
+  }
+  rm -rf "$tmp"
+
+  report_output='{"findings":[],"diagnostics":[{"type":"config-error","message":"Unknown threshold size.file-length"}],"filesDiscovered":0}'
+  config_error="$(config_error_message "$report_output")"
+  [[ "$config_error" == "Unknown threshold size.file-length" ]] || {
+    printf 'gruff-code-quality self-test: JSON config-error surfacing failed: %s\n' "$config_error" >&2
+    return 1
+  }
+
+  # An ignored file that also carries a generic diagnostic must NOT be reported
+  # as a config error - the caller renders it as "skipped - ignored" instead.
+  report_output='{"findings":[],"diagnostics":[{"type":"info","message":"path ignored by config"}],"filesDiscovered":0,"ignored":{"paths":[{"path":"x.css"}]}}'
+  config_error="$(config_error_message "$report_output")"
+  [[ -z "$config_error" ]] || {
+    printf 'gruff-code-quality self-test: ignored-file diagnostic must not be a config error: %s\n' "$config_error" >&2
+    return 1
+  }
+
+  # With no ignore signal, a zero-files generic diagnostic still surfaces so a
+  # port reporting config trouble as an untyped diagnostic is not swallowed.
+  report_output='{"findings":[],"diagnostics":[{"type":"runtime","message":"analyzer produced no files"}],"filesDiscovered":0}'
+  config_error="$(config_error_message "$report_output")"
+  [[ "$config_error" == "analyzer produced no files" ]] || {
+    printf 'gruff-code-quality self-test: zero-files diagnostic without ignore should surface: %s\n' "$config_error" >&2
     return 1
   }
 
@@ -576,18 +686,25 @@ supports_json_format() {
 }
 
 normalized_timeout_seconds() {
-  local timeout_seconds="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-}"
+  local binary="${1:-}"
+  local timeout_seconds="" env_name
+  if [[ -n "$binary" ]]; then
+    env_name="$(timeout_env_name "$binary")"
+    timeout_seconds="${!env_name:-}"
+  fi
+  [[ -n "$timeout_seconds" ]] || timeout_seconds="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-}"
   if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]] || [[ "$timeout_seconds" -lt 1 ]]; then
-    timeout_seconds=30
+    timeout_seconds=60
   fi
   printf '%s' "$timeout_seconds"
 }
 
 run_gruff_json() {
   local binary_path="$1"
-  local help="$2"
-  local file_path="$3"
-  local ranges="$4"
+  local binary="$2"
+  local help="$3"
+  local file_path="$4"
+  local ranges="$5"
   local args timeout_seconds
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
@@ -604,7 +721,7 @@ run_gruff_json() {
     return 64
   fi
 
-  timeout_seconds="$(normalized_timeout_seconds)"
+  timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
   if command -v timeout >/dev/null 2>&1; then
     timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>&1
@@ -616,6 +733,36 @@ run_gruff_json() {
 valid_gruff_json() {
   local output="$1"
   printf '%s' "$output" | jq -e 'type == "object" and (.findings | type == "array")' >/dev/null 2>&1
+}
+
+# Extract a config-error message to surface to the agent, or empty when the run
+# is clean. Definitive config rejections (schemaOk=false, or a diagnostic typed
+# config-error) always surface. A generic untyped diagnostic only counts as a
+# config error when NO files were analysed AND the file was not ignored -
+# otherwise an ignored-but-OK file (which the caller renders as "skipped -
+# ignored") would be mislabelled "could not analyse".
+config_error_message() {
+  local output="$1"
+  printf '%s' "$output" | jq -r '
+    ([ (.diagnostics // [])[]
+      | select(((.type? // .code? // .kind? // .category? // "") | tostring | ascii_downcase | test("config[-_ ]?error|config")))
+      | (.message? // .detail? // .reason? // .error? // empty)
+    ] | first // "") as $config_diag
+    | ([ (.diagnostics // [])[]
+        | (.message? // .detail? // .reason? // .error? // empty)
+      ] | first // "") as $any_diag
+    | ((.filesDiscovered? // .paths.analysedFiles? // -1) == 0) as $zero_files
+    | ((((.ignored.paths? // []) + (.paths.ignoredPaths? // []) + (.ignoredPaths? // []) + (.paths.skipped? // [])) | length) > 0) as $has_ignore
+    | if (.config.schemaOk == false) then
+        (.config.error // "project gruff config rejected")
+      elif ($config_diag | length) > 0 then
+        $config_diag
+      elif $zero_files and (($any_diag | length) > 0) and ($has_ignore | not) then
+        $any_diag
+      else
+        empty
+      end
+  ' 2>/dev/null || true
 }
 
 # Map a min-severity name to its rank (advisory=1, warning=2, error=3). Any
@@ -817,6 +964,7 @@ print_scope_header() {
 # a pre-contract analyzer is unaffected.
 hook_capabilities() {
   local binary_path="$1"
+  local binary="${2:-}"
   if [[ -n "${HOOK_CAPS_CACHE[$binary_path]+x}" ]]; then
     printf '%s' "${HOOK_CAPS_CACHE[$binary_path]}"
     return 0
@@ -824,7 +972,7 @@ hook_capabilities() {
   local caps="" probe
   if command -v jq >/dev/null 2>&1; then
     if command -v timeout >/dev/null 2>&1; then
-      probe="$(timeout "$(normalized_timeout_seconds)" "$binary_path" hook --capabilities --format json 2>/dev/null || true)"
+      probe="$(timeout "$(normalized_timeout_seconds "$binary")" "$binary_path" hook --capabilities --format json 2>/dev/null || true)"
     else
       probe="$("$binary_path" hook --capabilities --format json 2>/dev/null || true)"
     fi
@@ -878,12 +1026,12 @@ hook_v1_report() {
 process_file_contract() {
   local binary_path="$1" binary="$2" rel_path="$3" ranges="$4" caps="$5"
   local cr_flag output status timeout_seconds report_json suppressed
-  local config_ok config_error ignored_match scope_fields
+  local config_error ignored_match scope_fields
   local max_findings floor_rank total err warn adv surfaced floored more
 
   cr_flag="$(printf '%s' "$caps" | jq -r '.flags.changedRanges // "--changed-ranges"' 2>/dev/null || true)"
   [[ -n "$cr_flag" ]] || cr_flag="--changed-ranges"
-  timeout_seconds="$(normalized_timeout_seconds)"
+  timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
   # Scope to the changed lines and let the analyzer return the attributable
   # findings. Capture stdout ONLY: the gruff.hook.v1 envelope is JSON on stdout,
@@ -903,7 +1051,7 @@ process_file_contract() {
   set -e
 
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
-    printf 'gruff-code-quality: %s hook exceeded %ss or was killed; skipped\n' "$binary" "$timeout_seconds" >&2
+    printf 'gruff-code-quality: %s hook exceeded %ss or was killed; skipped. Raise %s or GRUFF_CODE_QUALITY_TIMEOUT_SECONDS if this analyzer needs more time.\n' "$binary" "$timeout_seconds" "$(timeout_env_name "$binary")" >&2
     return 0
   fi
   [[ -n "$output" ]] || return 0
@@ -916,9 +1064,8 @@ process_file_contract() {
     return 0
   fi
 
-  config_ok="$(printf '%s' "$output" | jq -r 'if (.config.schemaOk == false) then "false" else "true" end' 2>/dev/null || true)"
-  if [[ "$config_ok" == "false" ]]; then
-    config_error="$(printf '%s' "$output" | jq -r '.config.error // "project gruff config rejected"' 2>/dev/null || true)"
+  config_error="$(config_error_message "$output")"
+  if [[ -n "$config_error" ]]; then
     printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "${config_error:-project gruff config rejected}"
     return 0
   fi
@@ -977,7 +1124,8 @@ process_file() {
   local file_path="$3"
   local file_count="${4:-1}"
   local allow_cached_fallback="${5:-1}"
-  local rel_path abs_path binary binary_path config_file
+  local rel_path abs_path binary binary_path config_file config_rel
+  local binary_env binary_override config_error
   local ranges help output status suppressed ignored_desc uses_native_regions
   local max_findings floor_rank report_json scope_fields
   local total err warn adv surfaced floored more
@@ -1000,7 +1148,17 @@ process_file() {
   [[ -f "$config_file" ]] || return 0
 
   binary_path="$(discover_binary "$root" "$binary")"
-  [[ -n "$binary_path" ]] || return 0
+  if [[ -z "$binary_path" ]]; then
+    binary_env="$(binary_env_name "$binary")"
+    binary_override="${!binary_env:-}"
+    if [[ -n "$binary_override" ]]; then
+      printf 'gruff-code-quality: %s is set but is not executable: %s; skipped\n' "$binary_env" "$binary_override" >&2
+    else
+      config_rel="${config_file#"$root"/}"
+      printf 'gruff-code-quality: %s present but %s not found on search paths (%s); set %s to an executable path for non-standard monorepo layouts; skipped\n' "$config_rel" "$binary" "$BINARY_SEARCH_PATHS" "$binary_env" >&2
+    fi
+    return 0
+  fi
 
   if ! command -v jq >/dev/null 2>&1; then
     printf 'gruff-code-quality: jq unavailable; changed-line filtering skipped\n' >&2
@@ -1017,7 +1175,7 @@ process_file() {
   # scoping, scope tagging, metadata, remediation and new-only - the hook only
   # renders. Pre-contract analyzers fall through to the legacy analyse path below.
   local hook_caps
-  hook_caps="$(hook_capabilities "$binary_path")"
+  hook_caps="$(hook_capabilities "$binary_path" "$binary")"
   if [[ -n "$hook_caps" ]]; then
     process_file_contract "$binary_path" "$binary" "$rel_path" "$ranges" "$hook_caps"
     return 0
@@ -1034,12 +1192,12 @@ process_file() {
   fi
 
   set +e
-  output="$(run_gruff_json "$binary_path" "$help" "$rel_path" "$ranges")"
+  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$rel_path" "$ranges")"
   status=$?
   set -e
 
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
-    printf 'gruff-code-quality: %s exceeded %ss or was killed; changed-line filtering skipped\n' "$binary" "$(normalized_timeout_seconds)" >&2
+    printf 'gruff-code-quality: %s exceeded %ss or was killed; changed-line filtering skipped. Raise %s or GRUFF_CODE_QUALITY_TIMEOUT_SECONDS if this analyzer needs more time.\n' "$binary" "$(normalized_timeout_seconds "$binary")" "$(timeout_env_name "$binary")" >&2
     return 0
   fi
   if [[ -z "$output" ]]; then
@@ -1059,6 +1217,12 @@ process_file() {
       return 0
     fi
     printf 'gruff-code-quality: %s exited %s with non-JSON output; changed-line filtering skipped\n' "$binary" "$status" >&2
+    return 0
+  fi
+
+  config_error="$(config_error_message "$output")"
+  if [[ -n "$config_error" ]]; then
+    printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "$config_error"
     return 0
   fi
 
@@ -1133,10 +1297,17 @@ main() {
 
   root="$(repo_root)"
   cd "$root" || exit 0
-  payload_paths="$(payload_file_paths "$payload")"
+  payload_paths="$(payload_supported_file_paths "$root" "$payload")"
   allow_cached_fallback=0
   if [[ -n "$payload_paths" ]]; then
     mapfile -t file_paths <<< "$payload_paths"
+  elif [[ -n "$(payload_file_paths "$payload")" ]]; then
+    # The payload named files but none are analyzable (docs/config edits, paths
+    # outside this repo): there is nothing to scan for THIS edit. Scanning
+    # git-changed files instead would surface findings unrelated to the edit,
+    # so the git fallback stays reserved for payloads carrying no paths at all
+    # (e.g. Antigravity file tools).
+    exit 0
   else
     mapfile -t file_paths < <(git_changed_supported_paths "$root")
     allow_cached_fallback=1

@@ -50,6 +50,7 @@ function makeTempProject(): string {
 // Router table with dead path is caught
 // ---------------------------------------------------------------------------
 describe("path-integrity script: router table", () => {
+  // Fixture purpose: writes a dead router path to cover missing-path reports.
   it("fails when router table references nonexistent path", () => {
     const dir = makeTempProject();
     try {
@@ -81,6 +82,7 @@ describe("path-integrity script: router table", () => {
     }
   });
 
+  // Fixture purpose: writes matching router paths to cover the valid case.
   it("passes when all router table paths exist", () => {
     const dir = makeTempProject();
     try {
@@ -115,6 +117,7 @@ describe("path-integrity script: router table", () => {
 // Copilot surfaces and nested skill references are covered
 // ---------------------------------------------------------------------------
 describe("path-integrity script: copilot surfaces", () => {
+  // Fixture purpose: writes a Copilot router table to cover dead path diagnostics.
   it("fails when .github/copilot-instructions.md router paths are dead", () => {
     const dir = makeTempProject();
     try {
@@ -148,6 +151,7 @@ describe("path-integrity script: copilot surfaces", () => {
     }
   });
 
+  // Fixture purpose: writes nested skill references to cover missing .goat-flow paths.
   it("fails when .github skill references point at missing .goat-flow paths", () => {
     const dir = makeTempProject();
     try {

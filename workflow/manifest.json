@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.10.1",
+  "version": "1.11.0",
 
   "required_files": [
     ".goat-flow/.gitignore",

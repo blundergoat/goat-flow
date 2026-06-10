@@ -311,6 +311,9 @@ function tokenize(text: string): DescriptionTokens {
 /** Detect whether description terms imply a reusable skill workflow. */
 function matchSkillIntent(tokens: DescriptionTokens): CandidacyResult | null {
   const { lower } = tokens;
+  const wantsGoatMode =
+    /\bgoat-[a-z0-9-]+\b.*\bmode\b/.test(lower) ||
+    /\bmode\b.*\bgoat-[a-z0-9-]+\b/.test(lower);
   const wantsWorkflow =
     /\b(workflow|protocol|process)\b/.test(lower) ||
     /\b(?:plan|implement|execute|run)\b/.test(lower);
@@ -322,6 +325,19 @@ function matchSkillIntent(tokens: DescriptionTokens): CandidacyResult | null {
   const writesFiles =
     /\b(write|create|edit|modify|generate|produce|update)\b/.test(lower);
 
+  if (wantsGoatMode) {
+    return {
+      recommendedArtifact: { type: "skill", subtype: "workflow" },
+      confidence: 0.8,
+      reasoning: ["description changes a goat-* skill mode"],
+      nextSteps: [
+        {
+          action:
+            "Edit the existing goat-* skill template and installed mirrors; keep Step 0, gates, and verification aligned",
+        },
+      ],
+    };
+  }
   if (wantsDispatch && !wantsWorkflow) {
     return {
       recommendedArtifact: { type: "skill", subtype: "dispatcher" },
@@ -367,6 +383,29 @@ function matchReferenceIntent(
   tokens: DescriptionTokens,
 ): CandidacyResult | null {
   const { lower } = tokens;
+  const wantsReferenceArtifact =
+    /\b(playbook|runbook|standards?|guidance|reference|how-?to)\b/.test(
+      lower,
+    ) ||
+    /\b(document|describe|explain|write)\b.*\b(standards?|guidance|runbook|playbook)\b/.test(
+      lower,
+    );
+  const isSkillModeChange = /\bgoat-[a-z0-9-]+\b.*\bmode\b/.test(lower);
+  if (wantsReferenceArtifact && !isSkillModeChange) {
+    return {
+      recommendedArtifact: { type: "reference", subtype: "playbook" },
+      confidence: 0.75,
+      reasoning: [
+        "description asks for reusable standards/guidance rather than an invocation workflow",
+      ],
+      nextSteps: [
+        {
+          action:
+            "Place under .goat-flow/skill-docs/playbooks/<name>.md with Availability Check, boundary, workflow, fallback, and verification gate sections",
+        },
+      ],
+    };
+  }
   if (
     /\b(document|describe|explain|reference|playbook)\s+(how|the way)/.test(
       lower,
@@ -380,7 +419,7 @@ function matchReferenceIntent(
       nextSteps: [
         {
           action:
-            "Place under .goat-flow/skill-docs/playbooks/<name>.md with an Availability Check section",
+            "Place under .goat-flow/skill-docs/playbooks/<name>.md with Availability Check, boundary, workflow, fallback, and verification gate sections",
         },
       ],
     };
@@ -416,6 +455,9 @@ function matchLearningLoopIntent(
 ): CandidacyResult | null {
   const { lower } = tokens;
   if (
+    /\blearn(?:ed|t)\b.*\b(failure mode|mistake|incident|lesson)\b/.test(
+      lower,
+    ) ||
     /\bremember|capture|record\b.*\b(mistake|incident|past|lesson)\b/.test(
       lower,
     ) ||
@@ -469,8 +511,11 @@ function matchCliCommandIntent(
 ): CandidacyResult | null {
   const { lower } = tokens;
   if (
-    /\b(one.?(?:shot|time)|deterministic|same way every time)\b/.test(lower) &&
-    !/\b(decision|gate|approve)\b/.test(lower)
+    /\bgenerate\b.*\b(index|indexes|indices)\b.*\b(markdown|md)\b/.test(
+      lower,
+    ) ||
+    (/\b(one.?(?:shot|time)|deterministic|same way every time)\b/.test(lower) &&
+      !/\b(decision|gate|approve)\b/.test(lower))
   ) {
     return {
       recommendedArtifact: { type: "cli-command" },
@@ -507,9 +552,9 @@ function analyzeDescription(text: string): CandidacyResult {
   const matchers = [
     matchLearningLoopIntent,
     matchCliCommandIntent,
-    matchSkillIntent,
-    matchReferenceIntent,
     matchInstructionRuleIntent,
+    matchReferenceIntent,
+    matchSkillIntent,
   ];
   for (const matcher of matchers) {
     const result = matcher(tokens);

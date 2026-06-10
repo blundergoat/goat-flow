@@ -69,6 +69,7 @@ type HomeRuntimeContext = ReturnType<typeof createContext> & {
 
 type PendingSetupResponse = {
   url: string;
+  /** Resolve the mocked setup response with the JSON payload awaited by the dashboard fetch. */
   resolve(payload: Record<string, unknown>): void;
 };
 
@@ -494,6 +495,7 @@ describe("Home harness summary", () => {
     );
   });
 
+  // Fixture purpose: writes high-score agent data because hard harness failures override averages.
   it("does not show Passing when high-score agents have hard harness failures", () => {
     const expectedHarnessAverage = 93;
     const harnessChecks = Array.from({ length: 14 }, (_, index) => ({

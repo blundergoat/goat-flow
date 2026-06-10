@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # Skill Deployment
 
@@ -83,7 +83,7 @@ deterministic scorer rules.
 
 **GREEN phase - write minimal skill:**
 - [ ] Name describes what you DO or the core insight
-- [ ] Frontmatter has `goat-flow-skill-version: "1.10.1"` and trigger-only `description`
+- [ ] Frontmatter has `goat-flow-skill-version: "1.11.0"` and trigger-only `description`
 - [ ] `description` is CSO-optimised (Context Search Optimization): "Use when [trigger]", not a workflow summary
 - [ ] Keywords throughout for search (error messages, symptoms, tool names)
 - [ ] Overview states the core principle in 1–2 sentences

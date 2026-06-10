@@ -191,43 +191,66 @@ function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+type HookSyntaxCheckResult =
+  | { status: "ok" }
+  | { status: "syntax-error"; path: string }
+  | { status: "spawn-failure"; failure: AuditFailure };
+
+/** List shell hook files and swallows unreadable fixture dirs the same way the audit check always has. */
+function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
+  try {
+    return ctx.fs.listDir(hooksDir).filter((file) => file.endsWith(".sh"));
+  } catch {
+    return [];
+  }
+}
+
+/** Spawn bash syntax validation for one hook and map process failures into audit evidence. */
+function checkHookFileSyntax(
+  ctx: AuditContext,
+  hooksDir: string,
+  file: string,
+): HookSyntaxCheckResult {
+  const hookPath = `${hooksDir}/${file}`;
+  // ctx.fs may be backed by an in-memory fixture, but bash -n needs a real workspace path.
+  const fullPath = join(ctx.projectPath, hooksDir, file);
+  try {
+    childProcess.execFileSync("bash", ["-n", fullPath], {
+      stdio: "pipe",
+      timeout: 5000,
+    });
+    return { status: "ok" };
+  } catch (error) {
+    if (commandCompletedSuccessfully(error)) return { status: "ok" };
+    const spawnFailure = spawnFailureFor(
+      error,
+      `bash syntax check for ${hookPath}`,
+    );
+    if (spawnFailure !== null) {
+      return {
+        status: "spawn-failure",
+        failure: {
+          check: "Agent deny mechanism",
+          message: spawnFailure.message,
+          evidence: evidencePath(hookPath),
+          howToFix: spawnFailure.howToFix,
+        },
+      };
+    }
+    return { status: "syntax-error", path: hookPath };
+  }
+}
+
 /** Check shell syntax; spawns bash and recover from unreadable hook dirs because fixtures may be partial. */
 function checkHookSyntax(ctx: AuditContext): AuditFailure | null {
   const failures: string[] = [];
   for (const agentFacts of ctx.agents) {
     if (!agentFacts.agent.hooksDir) continue;
     const hooksDir = agentFacts.agent.hooksDir;
-    let files: string[];
-    try {
-      files = ctx.fs.listDir(hooksDir);
-    } catch {
-      continue;
-    }
-    for (const file of files) {
-      if (!file.endsWith(".sh")) continue;
-      // ctx.fs may be backed by an in-memory fixture, but bash -n needs a real workspace path.
-      const fullPath = join(ctx.projectPath, hooksDir, file);
-      try {
-        childProcess.execFileSync("bash", ["-n", fullPath], {
-          stdio: "pipe",
-          timeout: 5000,
-        });
-      } catch (error) {
-        if (commandCompletedSuccessfully(error)) continue;
-        const spawnFailure = spawnFailureFor(
-          error,
-          `bash syntax check for ${hooksDir}/${file}`,
-        );
-        if (spawnFailure !== null) {
-          return {
-            check: "Agent deny mechanism",
-            message: spawnFailure.message,
-            evidence: evidencePath(`${hooksDir}/${file}`),
-            howToFix: spawnFailure.howToFix,
-          };
-        }
-        failures.push(`${hooksDir}/${file}`);
-      }
+    for (const file of listShellHookFiles(ctx, hooksDir)) {
+      const result = checkHookFileSyntax(ctx, hooksDir, file);
+      if (result.status === "spawn-failure") return result.failure;
+      if (result.status === "syntax-error") failures.push(result.path);
     }
   }
   if (failures.length === 0) return null;
@@ -645,6 +668,67 @@ function configuredHookCommandPathFailure(
   return null;
 }
 
+/** Return cwd labels used to replay configured hook launchers. */
+function configuredHookSmokeCwds(
+  ctx: AuditContext,
+  agentFacts: AuditContext["agents"][number],
+): Array<{
+  label: string;
+  cwd: string;
+}> {
+  const cwds = [{ label: "project root", cwd: ctx.projectPath }];
+  if (agentFacts.agent.id === "copilot") return cwds;
+  const nested = join(ctx.projectPath, ".goat-flow");
+  if (existsSync(nested)) {
+    cwds.push({ label: ".goat-flow", cwd: nested });
+  }
+  return cwds;
+}
+
+function configuredHookSmokeFailureFromResult(
+  result: childProcess.SpawnSyncReturns<string>,
+  agentFacts: AuditContext["agents"][number],
+  configured: ConfiguredHookCommand,
+  smoke: ReturnType<typeof runtimeSmokePayloadForScript>,
+  smokeCwd: { label: string; cwd: string },
+): {
+  ok: boolean;
+  message: string;
+  evidence: string;
+  howToFix?: string;
+} | null {
+  const spawnFailure = spawnFailureFromResult(
+    result,
+    `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
+  );
+  if (spawnFailure !== null) {
+    return {
+      ok: false,
+      message: spawnFailure.message,
+      evidence: configured.configPath,
+      howToFix: spawnFailure.howToFix,
+    };
+  }
+  const status = result.status ?? (result.error ? -1 : 0);
+  if (status === 126 || status === 127) {
+    return {
+      ok: false,
+      message: `${agentFacts.agent.id} configured hook command exited before ${configured.scriptFile} could start from ${smokeCwd.label} (exit ${status}): ${configured.scriptPath}`,
+      evidence: configured.configPath,
+    };
+  }
+  const stream =
+    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
+  if (status === smoke.expectedStatus && smoke.expectedPattern.test(stream)) {
+    return null;
+  }
+  return {
+    ok: false,
+    message: `${agentFacts.agent.id} configured hook command did not return the expected deny response for ${configured.scriptFile} from ${smokeCwd.label}: ${configured.scriptPath}`,
+    evidence: configured.configPath,
+  };
+}
+
 function runConfiguredHookCommandSmoke(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
@@ -669,45 +753,26 @@ function runConfiguredHookCommandSmoke(
   // project-configured launcher string by design (to validate the real
   // root-resolution/cd glue), so the runtime evidence level should only be run
   // against trusted target projects.
-  const result = childProcess.spawnSync(
-    "bash",
-    ["-c", pipeSmokePayloadTo(configured.command)],
-    {
-      cwd: ctx.projectPath,
-      encoding: "utf8",
-      env: runtimeSmokeEnv(smoke.input),
-      input: "",
-      timeout: 5000,
-    },
-  );
-  const spawnFailure = spawnFailureFromResult(
-    result,
-    `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
-  );
-  if (spawnFailure !== null) {
-    return {
-      ok: false,
-      message: spawnFailure.message,
-      evidence: configured.configPath,
-      howToFix: spawnFailure.howToFix,
-    };
-  }
-  const status = result.status ?? (result.error ? -1 : 0);
-  if (status === 126 || status === 127) {
-    return {
-      ok: false,
-      message: `${agentFacts.agent.id} configured hook command exited before ${configured.scriptFile} could start (exit ${status}): ${configured.scriptPath}`,
-      evidence: configured.configPath,
-    };
-  }
-  const stream =
-    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
-  if (status !== smoke.expectedStatus || !smoke.expectedPattern.test(stream)) {
-    return {
-      ok: false,
-      message: `${agentFacts.agent.id} configured hook command did not return the expected deny response for ${configured.scriptFile}: ${configured.scriptPath}`,
-      evidence: configured.configPath,
-    };
+  for (const smokeCwd of configuredHookSmokeCwds(ctx, agentFacts)) {
+    const result = childProcess.spawnSync(
+      "bash",
+      ["-c", pipeSmokePayloadTo(configured.command)],
+      {
+        cwd: smokeCwd.cwd,
+        encoding: "utf8",
+        env: runtimeSmokeEnv(smoke.input),
+        input: "",
+        timeout: 5000,
+      },
+    );
+    const failure = configuredHookSmokeFailureFromResult(
+      result,
+      agentFacts,
+      configured,
+      smoke,
+      smokeCwd,
+    );
+    if (failure !== null) return failure;
   }
   return { ok: true, message: "", evidence: configured.configPath };
 }

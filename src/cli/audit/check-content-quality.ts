@@ -249,6 +249,25 @@ const PROMPT_WRAPPER_RESIDUE: PatternRule[] = [
   },
 ];
 
+const STALE_SKILL_PLAYBOOKS_PATH: PatternRule[] = [
+  {
+    rule: "stale-skill-playbooks-path",
+    pattern:
+      /\.goat-flow\/skill-playbooks\/|(?<!skill-docs\/)skill-playbooks\//i,
+    severity: "warning",
+    /** Build the stale skill-playbooks path finding message. */
+    message: () =>
+      "Stale skill-playbooks path found. Current installed playbooks live under .goat-flow/skill-docs/playbooks/; workflow templates live under workflow/skills/playbooks/.",
+  },
+];
+
+const HISTORICAL_REFERENCE_DIRS = [DECISIONS_DIR, ...LEARNING_LOOP_DIRS];
+
+/** Preserve old paths in learning-loop history while rejecting them in active guidance. */
+function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
+  return !HISTORICAL_REFERENCE_DIRS.some((dir) => path.startsWith(dir));
+}
+
 /** One iteration of code-block state: toggled on fence lines, guards all matchers. */
 function isFenceLine(line: string): boolean {
   return /^\s*```/.test(line);
@@ -318,6 +337,15 @@ function scanLine(
   applyPatternRules(GENERIC_INSTRUCTIONS, line, lineNumber, path, findings);
   applyPatternRules(NON_ACTIONABLE, line, lineNumber, path, findings);
   applyPatternRules(PROMPT_WRAPPER_RESIDUE, line, lineNumber, path, findings);
+  if (shouldScanStaleSkillPlaybooksPath(path)) {
+    applyPatternRules(
+      STALE_SKILL_PLAYBOOKS_PATH,
+      line,
+      lineNumber,
+      path,
+      findings,
+    );
+  }
   if (!path.startsWith("workflow/setup/")) {
     applyPatternRules(LEGACY_EXECUTION_LOOP, line, lineNumber, path, findings);
   }

@@ -79,7 +79,7 @@ function assertPresent(root: string, paths: string[]): void {
   }
 }
 
-/** Run a git command in a fixture project and fail with stdout/stderr context. */
+/** Spawns a git command in a fixture project and fails with stdout/stderr context. */
 function runGit(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, {
     cwd,
@@ -108,7 +108,7 @@ function commitAll(root: string, message: string): void {
   ]);
 }
 
-/** Read the first generated Claude deny-dangerous launcher from settings. */
+/** Read the first generated Claude deny launcher because hook arrays are nested by event and matcher. */
 function readClaudeDenyLauncher(root: string): string {
   const settings = JSON.parse(
     readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
@@ -124,12 +124,59 @@ function readClaudeDenyLauncher(root: string): string {
   return command;
 }
 
-/** Seed a Claude hook-capable fixture and return the generated deny launcher. */
+/** Read the first generated Codex deny launcher because hook arrays are nested by event and matcher. */
+function readCodexDenyLauncher(root: string): string {
+  const settings = JSON.parse(
+    readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
+  ) as {
+    hooks?: {
+      PreToolUse?: Array<{
+        hooks?: Array<{ command?: string }>;
+      }>;
+    };
+  };
+  const command = settings.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
+  assert.equal(typeof command, "string");
+  return command;
+}
+
+/** Writes a Claude hook-capable fixture and return the generated deny launcher. */
 function installClaudeDenyHook(root: string): string {
   mkdirSync(join(root, ".claude"), { recursive: true });
   writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
   applyHookState(HOOK_ID, true, root);
   return readClaudeDenyLauncher(root);
+}
+
+type GeneratedHookEntry = { hooks?: Array<{ command?: string }> };
+
+/** Flatten generated hook entries into command strings for fixture assertions. */
+function generatedHookCommands(entries: GeneratedHookEntry[] = []): string[] {
+  return entries.flatMap(({ hooks = [] }) =>
+    hooks.map(({ command = "" }) => command),
+  );
+}
+
+/** Read generated Claude gruff hook commands because settings nest hooks by event and matcher. */
+function readClaudeGruffCommands(settingsJson: string): string[] {
+  const config = JSON.parse(settingsJson) as {
+    hooks?: {
+      PostToolUse?: GeneratedHookEntry[];
+    };
+  };
+  return generatedHookCommands(config.hooks?.PostToolUse);
+}
+
+/** Read the generated Antigravity gruff hook command because hooks are grouped by hook id. */
+function readAntigravityGruffCommand(hooksJson: string): string {
+  const config = JSON.parse(hooksJson) as {
+    "gruff-code-quality"?: {
+      PostToolUse?: GeneratedHookEntry[];
+    };
+  };
+  return (
+    generatedHookCommands(config["gruff-code-quality"]?.PostToolUse)[0] ?? ""
+  );
 }
 
 /** Execute the generated Claude launcher with a runtime-shaped payload. */
@@ -157,6 +204,19 @@ function assertLauncherAllows(command: string, cwd: string): void {
   );
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
+}
+
+/** Execute the generated Codex launcher with a runtime-shaped payload. */
+function runCodexLauncher(
+  command: string,
+  cwd: string,
+  payload = CLAUDE_SAFE_PAYLOAD,
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", ["-c", command], {
+    cwd,
+    encoding: "utf8",
+    input: payload,
+  });
 }
 
 describe("hook registrar", () => {
@@ -189,6 +249,7 @@ describe("hook registrar", () => {
       writeAgentHookState(root, PROFILES.claude, denySpec, true);
       writeAgentHookState(root, PROFILES.claude, gruffSpec, true);
       writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
+      writeAgentHookState(root, PROFILES.antigravity, gruffSpec, true);
 
       const claudeSettings = readFileSync(
         join(root, ".claude", "settings.json"),
@@ -198,41 +259,57 @@ describe("hook registrar", () => {
         join(root, ".agents", "hooks.json"),
         "utf-8",
       );
+      const claudeGruffCommands = readClaudeGruffCommands(claudeSettings);
+      const antigravityGruffCommand =
+        readAntigravityGruffCommand(antigravityHooks);
 
+      // every() on an empty list passes vacuously; require commands first.
+      assert.ok(
+        claudeGruffCommands.length > 0,
+        "expected generated Claude gruff commands",
+      );
       assert.match(
         claudeSettings,
         /Policy hook unavailable: git repository root unavailable\./u,
+      );
+      assert.ok(
+        claudeGruffCommands.every((command) =>
+          command.includes("gruff-code-quality: hook unavailable"),
+        ),
+      );
+      assert.ok(
+        claudeGruffCommands.every(
+          (command) => !command.includes("BLOCKED: Policy hook unavailable"),
+        ),
       );
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
       assert.match(
         antigravityHooks,
         /Policy hook unavailable: git repository root unavailable\./u,
       );
+      assert.match(
+        antigravityGruffCommand,
+        /gruff-code-quality: hook unavailable/u,
+      );
+      assert.doesNotMatch(antigravityGruffCommand, /"decision":"deny"/u);
       assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
     });
   });
 
-  it("generated Claude launchers resolve worktrees, submodules, bare repos, and outside-repo cwd", () => {
+  it("generated Claude launchers resolve active worktrees, submodules, bare repos, and outside-repo cwd", () => {
     withTempProject((root) => {
       const main = join(root, "main");
       const worktree = join(root, "main-worktree");
       mkdirSync(main, { recursive: true });
       runGit(main, ["init", "-q"]);
       writeFileSync(join(main, "README.md"), "# main\n");
-      writeFileSync(join(main, ".gitignore"), ".claude/\n.goat-flow/\n");
+      writeFileSync(join(main, ".gitignore"), ".claude/\n");
       commitAll(main, "initial main");
 
       const mainLauncher = installClaudeDenyHook(main);
-      assert.match(
-        mainLauncher,
-        /\/\*\|\[A-Za-z\]:\/\*\|\[A-Za-z\]:\\\\\*\)/u,
-        "launcher should treat Windows drive-letter git-common-dir paths as absolute",
-      );
-      assert.match(
-        mainLauncher,
-        /\$\{gcd\/\/\\\\\/\/\}/u,
-        "launcher should normalize defensive backslash drive paths before dirname",
-      );
+      commitAll(main, "install central hooks");
+      assert.match(mainLauncher, /git rev-parse --show-toplevel/u);
+      assert.doesNotMatch(mainLauncher, /git-common-dir/u);
       runGit(main, [
         "worktree",
         "add",
@@ -243,13 +320,13 @@ describe("hook registrar", () => {
       ]);
 
       assert.equal(
-        existsSync(join(worktree, ".claude", "hooks", "deny-dangerous.sh")),
-        false,
-        "worktree fixture should prove hooks exist only in the main checkout",
+        existsSync(join(worktree, ".goat-flow", "hooks", "deny-dangerous.sh")),
+        true,
+        "worktree fixture should prove central hooks exist in the active checkout",
       );
       assert.match(
-        runGit(worktree, ["rev-parse", "--git-common-dir"]),
-        /\.git$/u,
+        runGit(worktree, ["rev-parse", "--show-toplevel"]),
+        /main-worktree$/u,
       );
       assertLauncherAllows(mainLauncher, worktree);
 
@@ -258,12 +335,9 @@ describe("hook registrar", () => {
       runGit(subSource, ["init", "-q"]);
       writeFileSync(join(subSource, "README.md"), "# submodule\n");
       const sourceLauncher = installClaudeDenyHook(subSource);
-      assert.match(
-        sourceLauncher,
-        /\.git\/modules/u,
-        "launcher carries submodule branch",
-      );
-      commitAll(subSource, "initial submodule");
+      assert.match(sourceLauncher, /git rev-parse --show-toplevel/u);
+      assert.doesNotMatch(sourceLauncher, /git-common-dir/u);
+      commitAll(subSource, "initial submodule with central hooks");
 
       const parent = join(root, "parent");
       mkdirSync(parent, { recursive: true });
@@ -321,6 +395,40 @@ describe("hook registrar", () => {
       const withoutEnv = runClaudeLauncher(mainLauncher, scratch);
       assert.equal(withoutEnv.status, 2);
       assert.match(withoutEnv.stderr, /Policy hook unavailable/u);
+    });
+  });
+
+  it("generated Codex launchers resolve the active root without Claude env fallback", () => {
+    withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
+      writeFileSync(join(root, "README.md"), "# codex fixture\n");
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "\n");
+
+      applyHookState(HOOK_ID, true, root);
+
+      const launcher = readCodexDenyLauncher(root);
+      assert.match(launcher, /git rev-parse --show-toplevel/u);
+      assert.match(launcher, /cd "\$root"/u);
+      assert.doesNotMatch(launcher, /CLAUDE_PROJECT_DIR/u);
+      assert.doesNotMatch(launcher, /^\.goat-flow\/hooks/u);
+
+      const nested = join(root, "src", "cli");
+      mkdirSync(nested, { recursive: true });
+      const safe = runCodexLauncher(launcher, nested);
+      assert.equal(
+        safe.status,
+        0,
+        `Codex launcher should allow benign payload from nested cwd\nstdout:\n${safe.stdout}\nstderr:\n${safe.stderr}`,
+      );
+
+      const blocked = runCodexLauncher(
+        launcher,
+        nested,
+        CLAUDE_DANGEROUS_PAYLOAD,
+      );
+      assert.equal(blocked.status, 2);
+      assert.match(blocked.stderr, /BLOCKED: Policy/u);
     });
   });
 

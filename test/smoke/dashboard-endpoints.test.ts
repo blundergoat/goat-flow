@@ -97,14 +97,15 @@ class FakeWebSocket {
 
   /** Cast this focused fake to the WebSocket subset TerminalManager consumes. */
   asTerminalSocket(): TerminalWebSocket {
-    return this as unknown as TerminalWebSocket;
+    return this as TerminalWebSocket;
   }
 }
 
-function managerInternals(
-  manager: TerminalManager,
-): TestTerminalManagerInternals {
-  return manager as unknown as TestTerminalManagerInternals;
+type TestTerminalManager = TerminalManager & TestTerminalManagerInternals;
+
+/** Expose test-seeded private fields without widening the production TerminalManager API. */
+function managerInternals(manager: TerminalManager): TestTerminalManager {
+  return manager as TestTerminalManager;
 }
 
 /**
@@ -247,9 +248,11 @@ describe("terminal exports", () => {
     );
   });
 
+  // Fixture purpose: covers PATH lookup without runner execution; the mock throws if anything but lookup runs.
   it("resolves POSIX runner paths without executing the runner binary", () => {
     if (process.platform === "win32") return;
     const originalExecFileSync = childProcess.execFileSync;
+    // The fake lookup command records `which` usage and fails on anything that would execute a runner.
     const calls: Array<{ command: string; args: string[] }> = [];
     childProcess.execFileSync = ((
       command: string,

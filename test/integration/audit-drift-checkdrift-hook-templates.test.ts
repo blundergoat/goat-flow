@@ -125,6 +125,7 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
+  // Fixture purpose: writes enabled optional Copilot hooks because configured hooks are allowlisted.
   it("allows Copilot hook config entries for enabled optional hooks", () => {
     const root = setupFixture();
     try {

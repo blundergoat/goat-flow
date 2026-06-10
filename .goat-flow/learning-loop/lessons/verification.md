@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-06
+last_reviewed: 2026-06-10
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection

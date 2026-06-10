@@ -13,6 +13,8 @@ import {
 import { resolve, relative, join } from "node:path";
 import type { ReadonlyFS } from "../types.js";
 
+type ResolvePath = (path: string) => string;
+
 /** Read directory entries; swallows readdir errors so glob walkers treat missing trees as no matches. */
 function readDirEntries(path: string): Dirent[] {
   try {
@@ -192,30 +194,23 @@ function walkGlobSegmentExists(
   return false;
 }
 
-/**
- * Create a read-only filesystem abstraction rooted at the given path.
- * The adapter centralizes defensive filesystem handling because audit callers need stable null,
- * false, or empty-list results instead of platform-specific errno throws.
- *
- * @param rootPath Directory that relative fact reads resolve against.
- * @returns Cached, non-mutating filesystem helpers for audit and fact extraction.
- */
-export function createFS(rootPath: string): ReadonlyFS {
-  const root = resolve(rootPath);
-
-  /** Resolve caller-supplied relative paths under the adapter root. */
-  function resolvePath(relativePath: string): string {
+/** Build the resolver that anchors all fact reads under the selected project root. */
+function createPathResolver(root: string): ResolvePath {
+  /** Resolve one caller-supplied relative path under the adapter root. */
+  function resolveProjectPath(relativePath: string): string {
     return resolve(root, relativePath);
   }
+  return resolveProjectPath;
+}
 
-  // Request-scoped caches - discarded when the FS instance is discarded.
+/** Cache UTF-8 file reads; swallows read errors as null for missing or unreadable files. */
+function createCachedReadFile(
+  resolvePath: ResolvePath,
+): ReadonlyFS["readFile"] {
   const contentCache = new Map<string, string | null>();
-  const existsCache = new Map<string, boolean>();
-  const listDirCache = new Map<string, string[]>();
-  const globCache = new Map<string, string[]>();
 
-  /** Cache UTF-8 file reads; swallows read errors as null for missing or unreadable files. */
-  function cachedReadFile(path: string): string | null {
+  /** Read one UTF-8 file through the per-adapter cache; swallows read errors as a cached null fallback. */
+  function readCachedFile(path: string): string | null {
     const resolved = resolvePath(path);
     const cached = contentCache.get(resolved);
     if (cached !== undefined) return cached;
@@ -228,78 +223,103 @@ export function createFS(rootPath: string): ReadonlyFS {
       return null;
     }
   }
+  return readCachedFile;
+}
 
+/** Cache path existence; swallows stat errors and reports inaccessible paths as false. */
+function createExistsChecker(resolvePath: ResolvePath): ReadonlyFS["exists"] {
+  const existsCache = new Map<string, boolean>();
+
+  /** Check one path through the per-adapter existence cache; swallows stat errors as a cached false fallback. */
+  function cachedExists(path: string): boolean {
+    const resolved = resolvePath(path);
+    const cached = existsCache.get(resolved);
+    if (cached !== undefined) return cached;
+    try {
+      statSync(resolved);
+      existsCache.set(resolved, true);
+      return true;
+    } catch {
+      existsCache.set(resolved, false);
+      return false;
+    }
+  }
+  return cachedExists;
+}
+
+/** Count lines from cached content so repeated audit checks do not reread the same file. */
+function countCachedLines(
+  readFile: ReadonlyFS["readFile"],
+  path: string,
+): number {
+  const content = readFile(path);
+  if (content === null) return 0;
+  return content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
+}
+
+/** Parse JSON defensively; missing or malformed files recover to null. */
+function readCachedJson(
+  readFile: ReadonlyFS["readFile"],
+  path: string,
+): unknown {
+  const content = readFile(path);
+  if (content === null) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/** Cache directory listings; swallows readdir errors as [] by design. */
+function createDirectoryLister(
+  resolvePath: ResolvePath,
+): ReadonlyFS["listDir"] {
+  const listDirCache = new Map<string, string[]>();
+
+  /** List one directory through the per-adapter directory cache; swallows readdir errors as a cached [] fallback. */
+  function cachedListDir(path: string): string[] {
+    const resolved = resolvePath(path);
+    const cached = listDirCache.get(resolved);
+    if (cached !== undefined) return cached;
+    try {
+      const entries = readdirSync(resolved, { withFileTypes: true }).map(
+        (entry) => entry.name,
+      );
+      listDirCache.set(resolved, entries);
+      return entries;
+    } catch {
+      const empty: string[] = [];
+      listDirCache.set(resolved, empty);
+      return empty;
+    }
+  }
+  return cachedListDir;
+}
+
+/** Check executability; swallows access errors and falls back to shebang detection on Windows. */
+function isExecutablePath(
+  resolvePath: ResolvePath,
+  readFile: ReadonlyFS["readFile"],
+  path: string,
+): boolean {
+  try {
+    accessSync(resolvePath(path), constants.X_OK);
+    return true;
+  } catch {
+    if (process.platform !== "win32") return false;
+    const content = readFile(path);
+    return content !== null && content.startsWith("#!");
+  }
+}
+
+/** Create cache-backed glob helpers for the filesystem adapter. */
+function createGlobHelpers(
+  root: string,
+  resolvePath: ResolvePath,
+): Pick<ReadonlyFS, "glob" | "existsGlob"> {
+  const globCache = new Map<string, string[]>();
   return {
-    /** Return cached path existence; swallows stat errors and reports inaccessible paths as false. */
-    exists(path: string): boolean {
-      const resolved = resolvePath(path);
-      const cached = existsCache.get(resolved);
-      if (cached !== undefined) return cached;
-      try {
-        statSync(resolved);
-        existsCache.set(resolved, true);
-        return true;
-      } catch {
-        existsCache.set(resolved, false);
-        return false;
-      }
-    },
-
-    /** Read a UTF-8 file, returning null when the file is missing or unreadable. */
-    readFile(path: string): string | null {
-      return cachedReadFile(path);
-    },
-
-    /** Count lines from cached content so repeated audit checks do not reread the same file. */
-    lineCount(path: string): number {
-      const content = cachedReadFile(path);
-      if (content === null) return 0;
-      return content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
-    },
-
-    /** Parse JSON defensively; missing or malformed files recover to null. */
-    readJson(path: string): unknown {
-      const content = cachedReadFile(path);
-      if (content === null) return null;
-      try {
-        return JSON.parse(content);
-      } catch {
-        return null;
-      }
-    },
-
-    /** List directory names; swallows readdir errors as [] by design. */
-    listDir(path: string): string[] {
-      const resolved = resolvePath(path);
-      const cached = listDirCache.get(resolved);
-      if (cached !== undefined) return cached;
-      try {
-        const entries = readdirSync(resolved, { withFileTypes: true }).map(
-          (entry) => entry.name,
-        );
-        listDirCache.set(resolved, entries);
-        return entries;
-      } catch {
-        const empty: string[] = [];
-        listDirCache.set(resolved, empty);
-        return empty;
-      }
-    },
-
-    /** Check executability; swallows access errors and falls back to shebang detection on Windows. */
-    isExecutable(path: string): boolean {
-      try {
-        accessSync(resolvePath(path), constants.X_OK);
-        return true;
-      } catch {
-        if (process.platform === "win32") {
-          const content = cachedReadFile(path);
-          return content !== null && content.startsWith("#!");
-        }
-        return false;
-      }
-    },
-
     /** Expand the custom glob syntax and return a copy so callers cannot mutate the cache. */
     glob(pattern: string): string[] {
       const cached = globCache.get(pattern);
@@ -318,6 +338,49 @@ export function createFS(rootPath: string): ReadonlyFS {
       const parts = pattern.split("/");
       return walkGlobExists(root, resolvePath, parts, ".", 0);
     },
+  };
+}
+
+/**
+ * Create a read-only filesystem abstraction rooted at the given path.
+ * The adapter centralizes defensive filesystem handling because audit callers need stable null,
+ * false, or empty-list results instead of platform-specific errno throws.
+ *
+ * @param rootPath Directory that relative fact reads resolve against.
+ * @returns Cached, non-mutating filesystem helpers for audit and fact extraction.
+ */
+export function createFS(rootPath: string): ReadonlyFS {
+  const root = resolve(rootPath);
+  const resolvePath = createPathResolver(root);
+  const readFile = createCachedReadFile(resolvePath);
+  const exists = createExistsChecker(resolvePath);
+  const listDir = createDirectoryLister(resolvePath);
+  const globHelpers = createGlobHelpers(root, resolvePath);
+
+  return {
+    exists,
+
+    /** Read a UTF-8 file, returning null when the file is missing or unreadable. */
+    readFile,
+
+    /** Count lines from cached content so repeated audit checks do not reread the same file. */
+    lineCount(path: string): number {
+      return countCachedLines(readFile, path);
+    },
+
+    /** Parse JSON defensively; missing or malformed files recover to null. */
+    readJson(path: string): unknown {
+      return readCachedJson(readFile, path);
+    },
+
+    listDir,
+
+    /** Check executability; swallows access errors and falls back to shebang detection on Windows. */
+    isExecutable(path: string): boolean {
+      return isExecutablePath(resolvePath, readFile, path);
+    },
+
+    ...globHelpers,
   };
 }
 

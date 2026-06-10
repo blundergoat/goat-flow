@@ -7,8 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { HARNESS_CHECKS } from "../../../src/cli/audit/harness/index.js";
-import { computeHarness } from "../../../src/cli/audit/audit.js";
+import { computeHarness, HARNESS_CHECKS } from "../../src.js";
 import {
   completeInstruction,
   INSTRUCTION_FILES,

@@ -7,6 +7,197 @@
  * them by name.
  */
 
+/** Focus a custom prompt editor field after Alpine renders the editor. */
+function dashboardFocusCustomPromptField(id = "custom-prompt-name"): void {
+  requestAnimationFrame(() => {
+    const field = document.getElementById(id);
+    if (field instanceof HTMLElement) field.focus();
+  });
+}
+
+/** Return image files from a terminal drop event. */
+function dashboardDroppedTerminalImageFiles(event: DragEvent): File[] {
+  return Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+    file.type.startsWith("image/"),
+  );
+}
+
+/** Return true when a drag event includes at least one image file item. */
+function dashboardDragHasImageFiles(event: DragEvent): boolean {
+  const items = event.dataTransfer?.items;
+  if (!items || items.length === 0) return false;
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item?.kind === "file" && item.type.startsWith("image/")) return true;
+  }
+  return false;
+}
+
+/** Reset terminal drag highlight state after a drop or cancelled nested drag. */
+function dashboardResetTerminalDragState(ctx: DashboardAppContext): void {
+  ctx._terminalDragDepth = 0;
+  ctx.terminalDragActive = false;
+}
+
+/**
+ * Upload dropped terminal images. Fetch/parse/backend failures recover into toasts so a bad upload
+ * reports in-view instead of breaking the active terminal session.
+ */
+async function dashboardUploadTerminalImages(
+  ctx: DashboardAppContext,
+  files: File[],
+): Promise<void> {
+  const sessionId = ctx.activeSessionId;
+  if (!sessionId) return;
+  ctx.terminalUploading = true;
+  try {
+    const encoded = await encodeTerminalUploadFiles(files);
+    const res = await dashboardFetch(
+      `/api/terminal/${encodeURIComponent(sessionId)}/upload-image`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: encoded }),
+      },
+    );
+    const payload = readRecord(await res.json(), "Terminal upload response");
+    const error = readErrorMessage(payload);
+    if (error) {
+      ctx.showToast(error, true);
+      return;
+    }
+    showTerminalUploadResult(ctx, sessionId, readTerminalUploadResult(payload));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.showToast(msg || "Terminal image upload failed", true);
+  } finally {
+    ctx.terminalUploading = false;
+  }
+}
+
+/** Validate and route a terminal image drop to the active session upload path. */
+async function dashboardHandleTerminalImageDrop(
+  ctx: DashboardAppContext,
+  event: DragEvent,
+): Promise<void> {
+  dashboardResetTerminalDragState(ctx);
+  if (!ctx.activeSessionId || ctx.terminalEnded) {
+    ctx.showToast("No active terminal session for upload", true);
+    return;
+  }
+  const files = dashboardDroppedTerminalImageFiles(event);
+  if (files.length === 0) {
+    ctx.showToast(
+      "Only image files (.png, .jpg, .webp, .gif) can be dropped here",
+      true,
+    );
+    return;
+  }
+  await dashboardUploadTerminalImages(ctx, files);
+}
+
+/** Build the audit API URL for the selected project and cache policy. */
+function dashboardAuditUrl(projectPath: string, includeFresh: boolean): string {
+  const freshParam = includeFresh ? "&fresh=true" : "";
+  return `/api/audit?path=${encodeURIComponent(projectPath)}&quality=true${freshParam}`;
+}
+
+/** Apply a successful audit payload and refresh dependent setup/home state. */
+function dashboardApplyAuditPayload(
+  ctx: DashboardAppContext,
+  payload: JsonRecord,
+  includeFresh: boolean,
+): void {
+  const cached = payload.cached === true;
+  const cachedAt =
+    typeof payload.cachedAt === "string" ? payload.cachedAt : null;
+  ctx.report = readDashboardReport(payload);
+  ctx.auditCached = cached;
+  ctx.lastAuditTime = cachedAt ? new Date(cachedAt) : new Date();
+  if (includeFresh) {
+    ctx.setupOutputs = {};
+    ctx._setupOutputProjectPath = ctx.projectPath;
+    if (ctx.activeView === "setup") ctx.scheduleSetupPrompt();
+  }
+  if (ctx.activeView === "home") {
+    void ctx.generateHomeQualitySummary();
+  }
+}
+
+/** Convert audit load failures into the dashboard toast copy users can act on. */
+function dashboardShowAuditError(ctx: DashboardAppContext, err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  ctx.showToast(
+    msg.includes("Failed to fetch")
+      ? "Server not running. Start with: goat-flow dashboard ."
+      : msg,
+    true,
+  );
+}
+
+/** Refresh installed agents after an audit when the launcher has not loaded them yet. */
+function dashboardRefreshAgentsAfterAudit(ctx: DashboardAppContext): void {
+  if (ctx.agentsLoaded) return;
+  void ctx.fetchInstalledAgents().then((loaded: boolean) => {
+    if (!loaded) ctx.agentsLoaded = true;
+  });
+}
+
+/** Load an audit snapshot and recover network/server failures into toasts. */
+async function dashboardRunAudit(
+  ctx: DashboardAppContext,
+  includeFresh = false,
+): Promise<void> {
+  ctx.auditing = true;
+  ctx.toast = "";
+  try {
+    const res = await dashboardFetch(
+      dashboardAuditUrl(ctx.projectPath, includeFresh),
+    );
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const payload = readRecord(await res.json(), "Audit response");
+    const error = readErrorMessage(payload);
+    if (error) throw new Error(error);
+    dashboardApplyAuditPayload(ctx, payload, includeFresh);
+  } catch (err) {
+    dashboardShowAuditError(ctx, err);
+  }
+  ctx.auditing = false;
+  dashboardRefreshAgentsAfterAudit(ctx);
+}
+
+/** Regenerate learning-loop indexes for the selected project, then refresh the Home audit payload. */
+async function dashboardRegenerateLearningLoopIndex(
+  ctx: DashboardAppContext,
+): Promise<void> {
+  if (ctx.indexRegenerating) return;
+  const requestProjectPath = ctx.projectPath;
+  ctx.indexRegenerating = true;
+  ctx.indexRegenerateError = "";
+  try {
+    const res = await dashboardFetch("/api/index/regenerate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: requestProjectPath }),
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const payload = readRecord(await res.json(), "Index regenerate response");
+    const error = readErrorMessage(payload);
+    if (error) throw new Error(error);
+    if (ctx.projectPath !== requestProjectPath) return;
+    await dashboardRunAudit(ctx, true);
+    if (!ctx.toastError) ctx.showToast("Learning-loop index regenerated");
+  } catch (err) {
+    if (ctx.projectPath !== requestProjectPath) return;
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.indexRegenerateError =
+      msg.length > 0 ? msg : "Index regeneration failed";
+    ctx.showToast(ctx.indexRegenerateError, true);
+  } finally {
+    ctx.indexRegenerating = false;
+  }
+}
+
 /**
  * Build the custom-prompt editor fragment: the draft being edited and its open/closed editor flags.
  * One input to dashboardMergeAppFragments; the validation getters that read this draft live in the
@@ -14,7 +205,7 @@
  *
  * @returns the fragment object of custom-prompt editor state fields merged into the Alpine app
  */
-function dashboardAppFragment04(): DashboardAppFragment {
+function dashboardPromptBrowserStateFragment(): DashboardAppFragment {
   return {
     showCustomPromptEditor: false,
 
@@ -195,7 +386,7 @@ function dashboardAppFragment04(): DashboardAppFragment {
  * identically here and on the server, so the branchy logic lives in one shared place and these
  * methods only pass `this` so the helper sees live draft state. Merged by dashboardMergeAppFragments.
  */
-function dashboardAppFragment05(): DashboardAppFragment {
+function dashboardCustomPromptValidationFragment(): DashboardAppFragment {
   return {
     /** Return the first validation error for one draft field. */
     customPromptFieldError(field: string): string {
@@ -249,15 +440,22 @@ function dashboardAppFragment05(): DashboardAppFragment {
     customPromptPreviewDescription(): string {
       return this.customPromptDraft.desc.trim() || "No description yet";
     },
+  };
+}
 
+/**
+ * Build custom-prompt editor actions.
+ *
+ * These methods open, focus, save, duplicate, and delete the editor draft seeded by
+ * dashboardPromptBrowserStateFragment while keeping validation failures focused in-view.
+ */
+function dashboardCustomPromptEditorActionsFragment(): DashboardAppFragment {
+  return {
     /** Focus a custom prompt editor control after Alpine renders it. */
     focusCustomPromptField(id = "custom-prompt-name") {
       const self = this as typeof this & AlpineMagics<typeof this>;
       void self.$nextTick(() => {
-        requestAnimationFrame(() => {
-          const field = document.getElementById(id);
-          if (field instanceof HTMLElement) field.focus();
-        });
+        dashboardFocusCustomPromptField(id);
       });
     },
 
@@ -328,7 +526,12 @@ function dashboardAppFragment05(): DashboardAppFragment {
       this.customPromptSubmitAttempted = false;
       this.showPromptStartPicker = false;
     },
+  };
+}
 
+/** Build quality prompt and active-terminal send actions used by Prompts and Quality views. */
+function dashboardQualityPromptActionsFragment(): DashboardAppFragment {
+  return {
     /** Return quality-page prompt modes. */
     get qualityModes(): QualityModeOption[] {
       return dashboardQualityModes(this);
@@ -361,7 +564,17 @@ function dashboardAppFragment05(): DashboardAppFragment {
     async sendToProjectTarget(prompt: string, target: ServerSessionInfo) {
       await dashboardSendToProjectTarget(this, prompt, target);
     },
+  };
+}
 
+/**
+ * Build terminal image upload actions.
+ *
+ * Drag depth stays in this fragment with upload handling so nested drag events and backend upload
+ * fallback behavior are maintained by one terminal-specific surface.
+ */
+function dashboardTerminalImageUploadFragment(): DashboardAppFragment {
+  return {
     // --- Terminal image drag-drop ---
     handleTerminalDragEnter(event: DragEvent) {
       if (!this._dragHasImageFiles(event)) return;
@@ -369,19 +582,7 @@ function dashboardAppFragment05(): DashboardAppFragment {
       this._terminalDragDepth = Number(this._terminalDragDepth) + 1;
       this.terminalDragActive = true;
     },
-  };
-}
 
-/**
- * Build the terminal drag-and-drop fragment: the dragenter/over/leave/drop handlers that route
- * image files dropped onto the active terminal pane into an upload instead of letting the browser
- * navigate to the file. A depth counter (`_terminalDragDepth`) is used intentionally because nested
- * dragenter/leave events would otherwise flicker the highlight as the pointer crosses child nodes.
- * The drop/upload path catches a failed upload and reports it through the dashboard toast rather
- * than throwing, so a bad drop never breaks the terminal. Merged by dashboardMergeAppFragments.
- */
-function dashboardAppFragment06(): DashboardAppFragment {
-  return {
     /** Keep image drops routed to the active terminal pane instead of the browser. */
     handleTerminalDragOver(event: DragEvent) {
       if (!this._dragHasImageFiles(event)) return;
@@ -398,73 +599,24 @@ function dashboardAppFragment06(): DashboardAppFragment {
 
     /** Upload dropped image files to the active terminal session. */
     async handleTerminalDrop(event: DragEvent) {
-      this._terminalDragDepth = 0;
-      this.terminalDragActive = false;
-      if (!this.activeSessionId || this.terminalEnded) {
-        this.showToast("No active terminal session for upload", true);
-        return;
-      }
-      const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
-        file.type.startsWith("image/"),
-      );
-      if (files.length === 0) {
-        this.showToast(
-          "Only image files (.png, .jpg, .webp, .gif) can be dropped here",
-          true,
-        );
-        return;
-      }
-      await this._uploadTerminalImages(files);
+      await dashboardHandleTerminalImageDrop(this, event);
     },
 
     /** Detect image-file drags before showing the terminal drop target. */
     _dragHasImageFiles(event: DragEvent): boolean {
-      const items = event.dataTransfer?.items;
-      if (!items || items.length === 0) return false;
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index];
-        if (item?.kind === "file" && item.type.startsWith("image/"))
-          return true;
-      }
-      return false;
+      return dashboardDragHasImageFiles(event);
     },
 
     /** Encode and send dropped images to the backend terminal upload route; reports upload errors as toasts. */
     async _uploadTerminalImages(files: File[]) {
-      const sessionId = this.activeSessionId;
-      if (!sessionId) return;
-      this.terminalUploading = true;
-      try {
-        const encoded = await encodeTerminalUploadFiles(files);
-        const res = await dashboardFetch(
-          `/api/terminal/${encodeURIComponent(sessionId)}/upload-image`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ files: encoded }),
-          },
-        );
-        const payload = readRecord(
-          await res.json(),
-          "Terminal upload response",
-        );
-        const error = readErrorMessage(payload);
-        if (error) {
-          this.showToast(error, true);
-          return;
-        }
-        showTerminalUploadResult(
-          this,
-          sessionId,
-          readTerminalUploadResult(payload),
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(msg || "Terminal image upload failed", true);
-      } finally {
-        this.terminalUploading = false;
-      }
+      await dashboardUploadTerminalImages(this, files);
     },
+  };
+}
+
+/** Build dashboard lifecycle, navigation, and audit actions. */
+function dashboardAuditAndNavigationActionsFragment(): DashboardAppFragment {
+  return {
     // --- Init ---
     /** Register Alpine watchers and swallows lazy terminal warmup errors because init must keep mounting. */
     init() {
@@ -494,46 +646,12 @@ function dashboardAppFragment06(): DashboardAppFragment {
     // -- API Calls --
     /** Load an audit snapshot; reports network/server errors as toasts because the dashboard must stay usable. */
     async runAudit(includeFresh = false) {
-      this.auditing = true;
-      this.toast = "";
-      try {
-        const freshParam = includeFresh ? "&fresh=true" : "";
-        const res = await dashboardFetch(
-          `/api/audit?path=${encodeURIComponent(this.projectPath)}&quality=true${freshParam}`,
-        );
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const payload = readRecord(await res.json(), "Audit response");
-        const error = readErrorMessage(payload);
-        if (error) throw new Error(error);
-        const cached = payload.cached === true;
-        const cachedAt =
-          typeof payload.cachedAt === "string" ? payload.cachedAt : null;
-        this.report = readDashboardReport(payload);
-        this.auditCached = cached;
-        this.lastAuditTime = cachedAt ? new Date(cachedAt) : new Date();
-        if (includeFresh) {
-          this.setupOutputs = {};
-          this._setupOutputProjectPath = this.projectPath;
-          if (this.activeView === "setup") this.scheduleSetupPrompt();
-        }
-        if (this.activeView === "home") {
-          void this.generateHomeQualitySummary();
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(
-          msg.includes("Failed to fetch")
-            ? "Server not running. Start with: goat-flow dashboard ."
-            : msg,
-          true,
-        );
-      }
-      this.auditing = false;
-      if (!this.agentsLoaded) {
-        void this.fetchInstalledAgents().then((loaded: boolean) => {
-          if (!loaded) this.agentsLoaded = true;
-        });
-      }
+      await dashboardRunAudit(this, includeFresh);
+    },
+
+    /** Regenerate learning-loop indexes for the selected project and refresh Home. */
+    async regenerateLearningLoopIndex() {
+      await dashboardRegenerateLearningLoopIndex(this);
     },
   };
 }

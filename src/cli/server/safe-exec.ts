@@ -106,6 +106,21 @@ export interface ExecResult extends ExecResultBooleanFields {
   commandBasename: string;
 }
 
+/** Runtime defaults derived after pre-spawn validation succeeds. */
+interface ExecRuntimeConfig {
+  timeoutMs: number;
+  stdoutCap: number;
+  stderrCap: number;
+  commandBasename: string;
+  env: Record<string, string>;
+}
+
+/** Buffered stream state used to cap output without keeping unlimited data. */
+interface OutputCapture {
+  chunks: Buffer[];
+  bytes: number;
+}
+
 /** Rejected safety check before any child process is spawned. */
 class SafeExecRejection extends Error {
   readonly reason:
@@ -248,6 +263,113 @@ function capBuffer(
   };
 }
 
+/**
+ * Validate command and argv before spawn.
+ *
+ * @throws SafeExecRejection when the command is not explicitly allowed or argv is unsafe.
+ */
+function validateExecRequest(opts: ExecOptions): void {
+  if (!opts.allowList.includes(opts.command)) {
+    throw new SafeExecRejection(
+      "command-not-in-allow-list",
+      `command ${JSON.stringify(opts.command)} is not in the allow-list`,
+    );
+  }
+  rejectIfUnsafeArgs(opts.args);
+}
+
+/** Resolve timeout, caps, command display name, and environment after validation. */
+function buildExecRuntimeConfig(opts: ExecOptions): ExecRuntimeConfig {
+  return {
+    timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    stdoutCap: opts.stdoutCapBytes ?? DEFAULT_STDOUT_CAP_BYTES,
+    stderrCap: opts.stderrCapBytes ?? DEFAULT_STDOUT_CAP_BYTES,
+    commandBasename: basename(opts.command),
+    env: opts.env ?? defaultSafeEnv(),
+  };
+}
+
+/** Create an output accumulator for stdout or stderr. */
+function createOutputCapture(): OutputCapture {
+  return { chunks: [], bytes: 0 };
+}
+
+/** Append child-process data while retaining only enough bytes to produce a capped response. */
+function appendOutputChunk(
+  capture: OutputCapture,
+  chunk: Buffer,
+  capBytes: number,
+): void {
+  capture.bytes += chunk.length;
+  if (capture.bytes <= capBytes * 2) capture.chunks.push(chunk);
+}
+
+/** Start the timeout that first sends SIGTERM, then SIGKILL after the grace period. */
+function startTimeoutGuard(
+  child: ReturnType<typeof spawn>,
+  timeoutMs: number,
+  onTimeout: () => void,
+): NodeJS.Timeout {
+  const timer = setTimeout(() => {
+    onTimeout();
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      /* already gone */
+    }
+    setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }, KILL_GRACE_MS).unref();
+  }, timeoutMs);
+  timer.unref();
+  return timer;
+}
+
+/**
+ * Build the externally visible execution result from collected process state.
+ *
+ * @param runtime Runtime config derived from validated options.
+ * @param output Captured stdout and stderr accumulators.
+ * @param status Process close status and timeout state.
+ * @returns Redacted, capped execution result for API responses and evidence logs.
+ */
+function buildExecResult(
+  runtime: ExecRuntimeConfig,
+  output: { stdout: OutputCapture; stderr: OutputCapture },
+  status: {
+    exitCode: number | null;
+    signal: NodeJS.Signals | null;
+    hasTimedOut: boolean;
+    start: number;
+  },
+): ExecResult {
+  const out = capBuffer(
+    output.stdout.chunks,
+    output.stdout.bytes,
+    runtime.stdoutCap,
+  );
+  const err = capBuffer(
+    output.stderr.chunks,
+    output.stderr.bytes,
+    runtime.stderrCap,
+  );
+  return {
+    ok: !status.hasTimedOut && status.exitCode === 0,
+    exitCode: status.exitCode,
+    signal: status.signal,
+    stdout: out.text,
+    stderr: err.text,
+    timedOut: status.hasTimedOut,
+    truncated: out.truncated || err.truncated,
+    durationMs: Number((performance.now() - status.start).toFixed(2)),
+    commandBasename: runtime.commandBasename,
+  };
+}
+
 /** Writes redacted command-completion evidence only when a route opts in. */
 function recordExecEvidence(opts: ExecOptions, result: ExecResult): void {
   if (!opts.evidence) return;
@@ -287,66 +409,36 @@ function recordExecEvidence(opts: ExecOptions, result: ExecResult): void {
  * @returns A promise that resolves with the process result or rejects with `SafeExecRejection`.
  */
 export function execSafely(opts: ExecOptions): Promise<ExecResult> {
-  const allowList = opts.allowList;
-  if (!allowList.includes(opts.command)) {
-    return Promise.reject(
-      new SafeExecRejection(
-        "command-not-in-allow-list",
-        `command ${JSON.stringify(opts.command)} is not in the allow-list`,
-      ),
-    );
-  }
   try {
-    rejectIfUnsafeArgs(opts.args);
+    validateExecRequest(opts);
   } catch (err) {
     return Promise.reject(err instanceof Error ? err : new Error(String(err)));
   }
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const stdoutCap = opts.stdoutCapBytes ?? DEFAULT_STDOUT_CAP_BYTES;
-  const stderrCap = opts.stderrCapBytes ?? DEFAULT_STDOUT_CAP_BYTES;
-  const commandBasename = basename(opts.command);
-  const env = opts.env ?? defaultSafeEnv();
+  const runtime = buildExecRuntimeConfig(opts);
 
   return new Promise<ExecResult>((resolveExec) => {
     const start = performance.now();
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
+    const stdout = createOutputCapture();
+    const stderr = createOutputCapture();
     let hasTimedOut = false;
     let hasSettled = false;
 
     const child = spawn(opts.command, opts.args, {
       cwd: opts.cwd,
-      env,
+      env: runtime.env,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const timer = setTimeout(() => {
+    const timer = startTimeoutGuard(child, runtime.timeoutMs, () => {
       hasTimedOut = true;
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* already gone */
-      }
-      setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          /* already gone */
-        }
-      }, KILL_GRACE_MS).unref();
-    }, timeoutMs);
-    timer.unref();
+    });
 
     child.stdout.on("data", (chunk: Buffer) => {
-      stdoutBytes += chunk.length;
-      if (stdoutBytes <= stdoutCap * 2) stdoutChunks.push(chunk);
+      appendOutputChunk(stdout, chunk, runtime.stdoutCap);
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes += chunk.length;
-      if (stderrBytes <= stderrCap * 2) stderrChunks.push(chunk);
+      appendOutputChunk(stderr, chunk, runtime.stderrCap);
     });
 
     /** Writes evidence and resolves once because both spawn error and close can fire. */
@@ -354,26 +446,21 @@ export function execSafely(opts: ExecOptions): Promise<ExecResult> {
       if (hasSettled) return;
       hasSettled = true;
       clearTimeout(timer);
-      const out = capBuffer(stdoutChunks, stdoutBytes, stdoutCap);
-      const err = capBuffer(stderrChunks, stderrBytes, stderrCap);
-      const result: ExecResult = {
-        ok: !hasTimedOut && exitCode === 0,
-        exitCode,
-        signal,
-        stdout: out.text,
-        stderr: err.text,
-        timedOut: hasTimedOut,
-        truncated: out.truncated || err.truncated,
-        durationMs: Number((performance.now() - start).toFixed(2)),
-        commandBasename,
-      };
+      const result = buildExecResult(
+        runtime,
+        { stdout, stderr },
+        { exitCode, signal, hasTimedOut, start },
+      );
       recordExecEvidence(opts, result);
       resolveExec(result);
     }
 
     child.on("error", (e) => {
-      stderrChunks.push(Buffer.from(`spawn error: ${e.message}`, "utf-8"));
-      stderrBytes += e.message.length;
+      appendOutputChunk(
+        stderr,
+        Buffer.from(`spawn error: ${e.message}`, "utf-8"),
+        runtime.stderrCap,
+      );
       finish(null, null);
     });
     child.on("close", (code, signal) => {

@@ -15,7 +15,7 @@
  * @param defaultRunner - runner pre-selected in the launcher until the user picks another
  * @returns the fragment object of initial state fields merged into the Alpine app
  */
-function dashboardAppFragment01(
+function dashboardCoreStateFragment(
   supportedAgents: SupportedAgent[],
   defaultRunner: RunnerId,
 ): DashboardAppFragment {
@@ -33,6 +33,10 @@ function dashboardAppFragment01(
         window.matchMedia("(prefers-color-scheme: dark)").matches),
 
     auditing: false,
+
+    indexRegenerating: false,
+
+    indexRegenerateError: "",
 
     toast: "",
 
@@ -187,21 +191,73 @@ function dashboardAppFragment01(
   };
 }
 
+/** Resolve the active local terminal session from Alpine state. */
+function activeTerminalSession(
+  sessions: LocalSession[],
+  activeSessionId: string | null,
+): LocalSession | null {
+  if (activeSessionId === null) return null;
+  return sessions.find((session) => session.id === activeSessionId) ?? null;
+}
+
+/** Return true only when a browser tab is disconnected from a still-live backend session. */
+function isTerminalDetached(
+  session: LocalSession | null,
+  serverSessions: ServerSessionInfo[],
+): boolean {
+  if (!session || session.ended || session.connected) return false;
+  return serverSessions.some(
+    (serverSession) =>
+      serverSession.id === session.id && serverSession.status === "active",
+  );
+}
+
 /**
- * Build the active-session and session-list fragment: getters that derive the currently-focused
- * terminal session from `sessions`/`activeSessionId` plus the grouped server-session lists the UI
- * renders. These are intentional getters rather than methods, because they must recompute reactively
- * from raw state and the merge step preserves them (a plain spread would flatten a getter to its value).
- * The list getters hold a stable ordering contract the templates depend on: current-project
- * sessions sort newest-first, and other-project sessions sort by project name then newest-first, so
- * the rendered order is deterministic across re-renders rather than reflecting array insertion order.
- * Merged into the app by dashboardMergeAppFragments.
+ * Return true only in the pre-output startup gap. The ordered guards keep ended, awaiting-input,
+ * ready, and error sessions from showing a loading overlay after the terminal is already usable.
  */
-function dashboardAppFragment02(): DashboardAppFragment {
+function isTerminalWaitingForRunner(session: LocalSession | null): boolean {
+  if (!session) return false;
+  if (!session.connected || session.ended) return false;
+  if (session.awaitingInput) return false;
+  if (session.loadingPhase === "ready" || session.loadingPhase === "error")
+    return false;
+  const tail = session.outputTail ?? "";
+  return tail.length === 0;
+}
+
+/** Format the startup overlay for the active terminal session. */
+function terminalLoadingMessageFor(session: LocalSession | null): string {
+  if (!session) return "";
+  if (session.loadingPhase === "error") {
+    return `Failed to start: ${session.loadingError || "Could not start session."}`;
+  }
+  if (session.loadingPhase === "loading") {
+    return "Connected. Loading shell...";
+  }
+  return `Spinning up ${session.runner} session...`;
+}
+
+/** Resolve terminal handles by the active session id without materialising Alpine refs. */
+function terminalRefFor(
+  refs: Record<string, TerminalRefs>,
+  activeSessionId: string | null,
+): TerminalRefs | undefined {
+  return refs[activeSessionId ?? ""];
+}
+
+/**
+ * Build active terminal-session getters.
+ *
+ * These are intentional getters rather than methods, because they must recompute reactively from raw
+ * state and the merge step preserves them. Loading/transport getters and session-list ordering live
+ * in companion fragments so each fragment keeps one responsibility.
+ */
+function dashboardActiveTerminalSessionFragment(): DashboardAppFragment {
   return {
     /** Return the active local session. */
     get _activeSession(): LocalSession | null {
-      return this.sessions.find((s) => s.id === this.activeSessionId) || null;
+      return activeTerminalSession(this.sessions, this.activeSessionId);
     },
 
     /** Return the active terminal session ID. */
@@ -221,18 +277,19 @@ function dashboardAppFragment02(): DashboardAppFragment {
 
     /** Return whether the active terminal is detached from a live backend session. */
     get terminalDetached(): boolean {
-      const session = this._activeSession;
-      if (!session || session.ended || session.connected) return false;
-      return this.serverSessions.some(
-        (s) => s.id === session.id && s.status === "active",
-      );
+      return isTerminalDetached(this._activeSession, this.serverSessions);
     },
 
     /** Return whether the active terminal appears to be awaiting a user choice. */
     get terminalAwaitingInput(): boolean {
       return this._activeSession?.awaitingInput === true;
     },
+  };
+}
 
+/** Build active terminal loading, title, and transport getters. */
+function dashboardTerminalStatusAccessorsFragment(): DashboardAppFragment {
+  return {
     /**
      * True when the active terminal is connected but the runner has not
      * produced any output yet. Surfaces the gap between WebSocket attach
@@ -240,26 +297,12 @@ function dashboardAppFragment02(): DashboardAppFragment {
      * users see in-place progress instead of a silent terminal.
      */
     get terminalWaitingForRunner(): boolean {
-      const session = this._activeSession;
-      if (!session) return false;
-      if (!session.connected || session.ended) return false;
-      if (session.awaitingInput) return false;
-      if (session.loadingPhase === "ready" || session.loadingPhase === "error")
-        return false;
-      const tail = session.outputTail ?? "";
-      return tail.length === 0;
+      return isTerminalWaitingForRunner(this._activeSession);
     },
 
     /** Return the active terminal loading-overlay message. */
     terminalLoadingMessage(session: LocalSession | null): string {
-      if (!session) return "";
-      if (session.loadingPhase === "error") {
-        return `Failed to start: ${session.loadingError || "Could not start session."}`;
-      }
-      if (session.loadingPhase === "loading") {
-        return "Connected. Loading shell...";
-      }
-      return `Spinning up ${session.runner} session...`;
+      return terminalLoadingMessageFor(session);
     },
 
     /** Return the active terminal age label. */
@@ -281,14 +324,25 @@ function dashboardAppFragment02(): DashboardAppFragment {
 
     /** Return the active terminal WebSocket reference. */
     get _terminalWs(): WebSocket | undefined {
-      return this._terminalRefs[this.activeSessionId ?? ""]?.ws;
+      return terminalRefFor(this._terminalRefs, this.activeSessionId)?.ws;
     },
 
     /** Return the active xterm instance. */
     get _terminalXterm(): XTermInstance | undefined {
-      return this._terminalRefs[this.activeSessionId ?? ""]?.xterm;
+      return terminalRefFor(this._terminalRefs, this.activeSessionId)?.xterm;
     },
+  };
+}
 
+/**
+ * Build session-list getters plus Projects, Tasks, and Hooks state.
+ *
+ * The list getters hold a stable ordering contract the templates depend on: current-project
+ * sessions sort newest-first, and other-project sessions sort by project name then newest-first, so
+ * the rendered order is deterministic across re-renders rather than reflecting array insertion order.
+ */
+function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
+  return {
     /** Sessions whose project matches the current projectPath, newest first. */
     get currentProjectSessions(): ServerSessionInfo[] {
       return this.serverSessions
@@ -367,7 +421,7 @@ function dashboardAppFragment02(): DashboardAppFragment {
   };
 }
 
-function dashboardAppFragment03(
+function dashboardQualitySetupStateFragment(
   supportedAgents: SupportedAgent[],
   defaultRunner: RunnerId,
   defaultSetupAgents: SetupData["agents"],

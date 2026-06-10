@@ -440,7 +440,7 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
     type: "command",
     bash: path,
     powershell: `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`,
-    timeoutSec: 30,
+    timeoutSec: spec.timeoutSec ?? 30,
   };
 }
 

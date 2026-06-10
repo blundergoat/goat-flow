@@ -255,6 +255,29 @@ export function assertDashboardReport(value: unknown): Record<string, unknown> {
       /^(fresh|needs-review|unavailable)$/,
       "Dashboard report learningLoop.status should be valid",
     );
+    assert.ok(
+      Array.isArray(learningLoop.indexes),
+      "Dashboard report learningLoop.indexes should be an array",
+    );
+    for (const [index, entry] of (
+      learningLoop.indexes as unknown[]
+    ).entries()) {
+      const row = expectRecord(
+        entry,
+        `Dashboard report learningLoop.indexes[${index}]`,
+      );
+      assert.equal(typeof row.bucket, "string");
+      assert.match(
+        String(row.state),
+        /^(fresh|stale|missing|no-bucket)$/,
+        `Dashboard report learningLoop.indexes[${index}].state should be valid`,
+      );
+      assert.equal(
+        typeof row.entryCount,
+        "number",
+        `Dashboard report learningLoop.indexes[${index}].entryCount should be a number`,
+      );
+    }
   }
   assert.ok(
     Object.prototype.hasOwnProperty.call(report, "recentLessons"),

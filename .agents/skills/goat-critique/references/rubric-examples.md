@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # Critique Rubric Examples (Reference Pack)
 
@@ -7,40 +7,40 @@ goat-flow-reference-version: "1.10.1"
 
 ## Rubric Context Maps
 
-Each rubric has a context map that Step 0 reads and passes to sub-agent spawn directives. Footgun/lesson entries mean targeted grep-first hits from those buckets, not whole-directory reads. Agent C's isolation enforcement (Phase 2 step 1 grep check) is unchanged regardless of context map. Generic fallback uses the default split.
+Each rubric has a context map that Step 0 reads and passes to sub-agent spawn directives. Footgun/lesson entries mean targeted INDEX-first hits from those buckets, not whole-directory reads. Agent C's isolation enforcement (Phase 2 step 1 grep check) is unchanged regardless of context map. Generic fallback uses the default split.
 
 ### Plan
-- **A:** targeted grep-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
+- **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `.goat-flow/plans/.active`, `git log --oneline -20`, milestone logs
 - **C:** [] (isolation enforced)
 
 ### Security assessment
-- **A:** targeted grep-first footgun/lesson hits, threat-model docs, `.goat-flow/learning-loop/decisions/`
+- **A:** targeted INDEX-first footgun/lesson hits, threat-model docs, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, dependency manifests
 - **C:** [] (isolation enforced)
 
 ### Debug hypotheses
-- **A:** targeted grep-first footgun/lesson hits, `.goat-flow/logs/sessions/`
+- **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/logs/sessions/`
 - **B:** `git log --oneline -20`, config.yaml, test output
 - **C:** [] (isolation enforced)
 
 ### Review findings
-- **A:** targeted grep-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
+- **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, CI logs
 - **C:** [] (isolation enforced)
 
 ### Test strategy
-- **A:** targeted grep-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
+- **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, test manifests
 - **C:** [] (isolation enforced)
 
 ### Architecture/refactor
-- **A:** targeted grep-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`, dependency maps
+- **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`, dependency maps
 - **B:** `git log --oneline -20`, config.yaml, module boundaries
 - **C:** [] (isolation enforced)
 
 ### Generic (fallback)
-- **A:** targeted grep-first footgun/lesson hits
+- **A:** targeted INDEX-first footgun/lesson hits
 - **B:** `git log --oneline -20`, config.yaml
 - **C:** [] (isolation enforced)
 

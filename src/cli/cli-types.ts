@@ -23,6 +23,7 @@ export type Command =
   | "hooks"
   | "menu"
   | "stats"
+  | "index"
   | "skill";
 
 /**
@@ -90,6 +91,7 @@ export const COMMANDS: Command[] = [
   "hooks",
   "menu",
   "stats",
+  "index",
   "skill",
 ];
 

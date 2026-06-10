@@ -178,117 +178,155 @@ function normalizeSharedLoop(executionLoopBody) {
     .join("\n");
 }
 
+/** Validate shared H2/H3 and phrase contracts for one instruction file, mutating the failure report. */
+function validateInstructionFile(file, failures, setupLoopBodies) {
+  const abs = resolve(ROOT, file);
+  const label = pathLabel(file);
+  if (!existsSync(abs)) {
+    failures.push(`${label}: file does not exist`);
+    return;
+  }
+
+  const content = readFileSync(abs, "utf8");
+  const sections = h2Sections(content);
+  const sectionBodies = splitSections(content);
+
+  assertEqualArray(
+    sections,
+    CANONICAL_SECTIONS,
+    label,
+    "canonical H2 order",
+    failures,
+  );
+
+  if (sections.at(-1) !== "Router Table") {
+    failures.push(`${label}: Router Table must be the final H2 section`);
+  }
+
+  const executionLoop = sectionBodies.get("Execution Loop") ?? "";
+  const executionLoopHeadings = h3Sections(executionLoop);
+  assertEqualArray(
+    executionLoopHeadings.slice(0, H3_LOOP_SECTIONS.length),
+    H3_LOOP_SECTIONS,
+    label,
+    "Execution Loop H3 order",
+    failures,
+  );
+
+  for (const rule of SHARED_PHRASES) {
+    const section = sectionBodies.get(rule.section) ?? "";
+    requirePhrases(
+      label,
+      rule.section,
+      section,
+      rule.phrases,
+      rule.label,
+      failures,
+    );
+  }
+
+  const essentialCommands = sectionBodies.get("Essential Commands") ?? "";
+  const routerTable = sectionBodies.get("Router Table") ?? "";
+
+  if (SETUP_FILES.includes(file)) {
+    validateSetupInstructionFile(
+      label,
+      executionLoop,
+      essentialCommands,
+      routerTable,
+      failures,
+      setupLoopBodies,
+    );
+    return;
+  }
+
+  validateLiveInstructionFile(label, essentialCommands, routerTable, failures);
+}
+
+/** Mutate setup-guide parity state because setup files share generic commands and loop bodies. */
+function validateSetupInstructionFile(
+  label,
+  executionLoop,
+  essentialCommands,
+  routerTable,
+  failures,
+  setupLoopBodies,
+) {
+  setupLoopBodies.push({ label, body: normalizeSharedLoop(executionLoop) });
+  requirePhrases(
+    label,
+    "Essential Commands",
+    essentialCommands,
+    ["<lint command>", "<typecheck command>", "<test command>"],
+    "generic setup Essential Commands",
+    failures,
+  );
+  if (/workflow\/(setup|hooks)|workflow\/manifest\.json/.test(routerTable)) {
+    failures.push(
+      `${label}: Router Table must describe installed project resources, not workflow setup internals`,
+    );
+  }
+}
+
+/** Validate live instruction files because they must not retain setup placeholders. */
+function validateLiveInstructionFile(
+  label,
+  essentialCommands,
+  routerTable,
+  failures,
+) {
+  if (/<(?:lint|typecheck|test) command>/.test(essentialCommands)) {
+    failures.push(
+      `${label}: live Essential Commands still contains setup placeholders`,
+    );
+  }
+  if (!routerTable.includes("Peer instructions")) {
+    failures.push(
+      `${label}: Router Table must include peer instruction routing`,
+    );
+  }
+}
+
+/** Describe the first shared-loop difference for deterministic failure output. */
+function sharedLoopDriftDetail(referenceBody, entryBody) {
+  const refLines = referenceBody.split("\n");
+  const entryLines = entryBody.split("\n");
+  const diffAt = entryLines.findIndex((line, idx) => line !== refLines[idx]);
+  if (diffAt === -1) return "trailing content differs";
+  return `first diff at shared-loop line ${diffAt + 1}: ${JSON.stringify(refLines[diffAt] ?? "<missing>")} vs ${JSON.stringify(entryLines[diffAt] ?? "<missing>")}`;
+}
+
+/** Mutate the failure report when setup-guide shared Execution Loop bodies drift. */
+function validateSharedSetupLoopBodies(setupLoopBodies, failures) {
+  if (setupLoopBodies.length <= 1) return;
+  const [reference, ...rest] = setupLoopBodies;
+  for (const entry of rest) {
+    if (entry.body === reference.body) continue;
+    failures.push(
+      `${entry.label}: shared Execution Loop body drifted from ${reference.label} (${sharedLoopDriftDetail(reference.body, entry.body)})`,
+    );
+  }
+}
+
+/** Write the complete failure report to stderr and exits non-zero when parity failed. */
+function exitOnInstructionParityFailures(failures) {
+  if (failures.length === 0) return;
+  console.error("Instruction parity failed:");
+  for (const failure of failures) console.error(`- ${failure}`);
+  process.exit(1);
+}
+
 /** Validate shared instruction contracts because parity errors need a complete mismatch list before it exits. */
 function validateInstructionParity() {
   const failures = [];
   const setupLoopBodies = [];
 
   for (const file of ALL_FILES) {
-    const abs = resolve(ROOT, file);
-    const label = pathLabel(file);
-    if (!existsSync(abs)) {
-      failures.push(`${label}: file does not exist`);
-      continue;
-    }
-
-    const content = readFileSync(abs, "utf8");
-    const sections = h2Sections(content);
-    const sectionBodies = splitSections(content);
-
-    assertEqualArray(
-      sections,
-      CANONICAL_SECTIONS,
-      label,
-      "canonical H2 order",
-      failures,
-    );
-
-    if (sections.at(-1) !== "Router Table") {
-      failures.push(`${label}: Router Table must be the final H2 section`);
-    }
-
-    const executionLoop = sectionBodies.get("Execution Loop") ?? "";
-    const executionLoopHeadings = h3Sections(executionLoop);
-    assertEqualArray(
-      executionLoopHeadings.slice(0, H3_LOOP_SECTIONS.length),
-      H3_LOOP_SECTIONS,
-      label,
-      "Execution Loop H3 order",
-      failures,
-    );
-
-    for (const rule of SHARED_PHRASES) {
-      const section = sectionBodies.get(rule.section) ?? "";
-      requirePhrases(
-        label,
-        rule.section,
-        section,
-        rule.phrases,
-        rule.label,
-        failures,
-      );
-    }
-
-    const essentialCommands = sectionBodies.get("Essential Commands") ?? "";
-    const routerTable = sectionBodies.get("Router Table") ?? "";
-
-    if (SETUP_FILES.includes(file)) {
-      setupLoopBodies.push({ label, body: normalizeSharedLoop(executionLoop) });
-      requirePhrases(
-        label,
-        "Essential Commands",
-        essentialCommands,
-        ["<lint command>", "<typecheck command>", "<test command>"],
-        "generic setup Essential Commands",
-        failures,
-      );
-      if (
-        /workflow\/(setup|hooks)|workflow\/manifest\.json/.test(routerTable)
-      ) {
-        failures.push(
-          `${label}: Router Table must describe installed project resources, not workflow setup internals`,
-        );
-      }
-    } else {
-      if (/<(?:lint|typecheck|test) command>/.test(essentialCommands)) {
-        failures.push(
-          `${label}: live Essential Commands still contains setup placeholders`,
-        );
-      }
-      if (!routerTable.includes("Peer instructions")) {
-        failures.push(
-          `${label}: Router Table must include peer instruction routing`,
-        );
-      }
-    }
+    validateInstructionFile(file, failures, setupLoopBodies);
   }
 
-  // Shared Execution Loop body must stay byte-identical across setup guides (minus the per-agent ACT line),
-  // so a reworded red-flag or a dropped rule in one guide cannot pass parity while the other three go stale.
-  if (setupLoopBodies.length > 1) {
-    const [reference, ...rest] = setupLoopBodies;
-    for (const entry of rest) {
-      if (entry.body === reference.body) continue;
-      const refLines = reference.body.split("\n");
-      const entryLines = entry.body.split("\n");
-      const diffAt = entryLines.findIndex(
-        (line, idx) => line !== refLines[idx],
-      );
-      const detail =
-        diffAt === -1
-          ? "trailing content differs"
-          : `first diff at shared-loop line ${diffAt + 1}: ${JSON.stringify(refLines[diffAt] ?? "<missing>")} vs ${JSON.stringify(entryLines[diffAt] ?? "<missing>")}`;
-      failures.push(
-        `${entry.label}: shared Execution Loop body drifted from ${reference.label} (${detail})`,
-      );
-    }
-  }
-
-  if (failures.length > 0) {
-    console.error("Instruction parity failed:");
-    for (const failure of failures) console.error(`- ${failure}`);
-    process.exit(1);
-  }
+  validateSharedSetupLoopBodies(setupLoopBodies, failures);
+  exitOnInstructionParityFailures(failures);
 
   console.log(
     `Instruction parity passed: ${ALL_FILES.length} files share the required contract`,

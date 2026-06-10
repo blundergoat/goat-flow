@@ -100,6 +100,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /removed stale hook/);
   });
 
+  // Fixture purpose: writes colliding legacy task files to cover safe plans migration.
   it("migrates legacy tasks workspace and config to plans without overwriting collisions", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "tasks", "legacy"), {
@@ -165,6 +166,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /target exists, left old entry in place/);
   });
 
+  // Fixture purpose: writes a custom tasks path to cover config key migration.
   it("preserves custom legacy tasks config paths while renaming the key to plans", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -197,6 +199,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /legacy tasks config migrated to plans/);
   });
 
+  // Fixture purpose: writes legacy learning-loop dirs to cover collision-safe migration.
   it("migrates legacy learning-loop dirs without overwriting target collisions", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "footguns"), { recursive: true });
@@ -291,6 +294,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /target exists, left old entry in place/);
   });
 
+  // Fixture purpose: writes old hook-lib and per-agent hooks to cover pruning migration.
   it("migrates old hook-lib content and prunes fat per-agent hook copies", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "hook-lib"), { recursive: true });
@@ -353,6 +357,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /removed stale per-agent copy/);
   });
 
+  // Fixture purpose: writes old gruff hook registrations because pruning must preserve enabled central hooks.
   it("migrates enabled gruff hook registrations to the central hook path before pruning legacy copies", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
@@ -410,6 +415,7 @@ describe("setup --apply installer", () => {
     assert.doesNotMatch(hooksJson, /"matcher": "MultiEdit"/);
   });
 
+  // Fixture purpose: writes single-quoted Codex denies to cover quote-normalizing migration.
   it("preserves single-quoted Codex filesystem deny entries during permission migration", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex"), { recursive: true });
@@ -433,6 +439,7 @@ describe("setup --apply installer", () => {
     assert.match(config, /"\*\*\/\.env\*" = "deny"/);
   });
 
+  // Fixture purpose: writes stale Claude deny settings to cover removed-tool pruning.
   it("prunes stale removed-tool (MultiEdit) deny rules from existing Claude settings on upgrade", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -491,6 +498,7 @@ describe("setup --apply installer", () => {
     );
   });
 
+  // Fixture purpose: writes legacy skill docs to cover collision-safe skill-doc migration.
   it("migrates legacy skill docs without overwriting target collisions", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "skill-reference"), {
@@ -622,6 +630,7 @@ describe("setup --apply installer", () => {
     assert.match(result.stdout, /migrated deny hook registration/);
   });
 
+  // Fixture purpose: writes disabled split-hook config to cover deny-dangerous state migration.
   it("preserves disabled split guardrail config when migrating to deny-dangerous", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex", "hooks"), { recursive: true });

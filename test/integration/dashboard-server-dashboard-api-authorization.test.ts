@@ -26,6 +26,17 @@ describe("dashboard API authorization", () => {
     assert.deepEqual(await res.json(), { error: "Forbidden" });
   });
 
+  it("rejects index regeneration requests with a missing token", async () => {
+    const res = await fetch(`${baseUrl}/api/index/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: PROJECT_PATH }),
+    });
+    assert.equal(res.status, 403);
+    assertJsonResponse(res, "missing token index rejection");
+    assert.deepEqual(await res.json(), { error: "Forbidden" });
+  });
+
   it("rejects API requests with a wrong token", async () => {
     const res = await fetch(`${baseUrl}/api/terminal/create`, {
       method: "POST",
@@ -37,6 +48,20 @@ describe("dashboard API authorization", () => {
     });
     assert.equal(res.status, 403);
     assertJsonResponse(res, "wrong token rejection");
+    assert.deepEqual(await res.json(), { error: "Forbidden" });
+  });
+
+  it("rejects index regeneration requests with a wrong token", async () => {
+    const res = await fetch(`${baseUrl}/api/index/regenerate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goat-Flow-Dashboard-Token": "wrong-token",
+      },
+      body: JSON.stringify({ path: PROJECT_PATH }),
+    });
+    assert.equal(res.status, 403);
+    assertJsonResponse(res, "wrong token index rejection");
     assert.deepEqual(await res.json(), { error: "Forbidden" });
   });
 
@@ -67,6 +92,21 @@ describe("dashboard API authorization", () => {
     });
     assert.equal(res.status, 403);
     assertJsonResponse(res, "bad origin terminal upload rejection");
+    assert.deepEqual(await res.json(), { error: "Forbidden" });
+  });
+
+  it("rejects cross-origin index regeneration requests", async () => {
+    const res = await fetch(`${baseUrl}/api/index/regenerate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://evil.example",
+        "X-Goat-Flow-Dashboard-Token": dashboardToken,
+      },
+      body: JSON.stringify({ path: PROJECT_PATH }),
+    });
+    assert.equal(res.status, 403);
+    assertJsonResponse(res, "bad origin index rejection");
     assert.deepEqual(await res.json(), { error: "Forbidden" });
   });
 

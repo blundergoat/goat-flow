@@ -1,11 +1,25 @@
 # Changelog
 
+## v1.11.0 - 2026-06-11
+
+Harness hardening release: hook guardrails now run from the active checkout, gruff diagnostics are less brittle in monorepos, learning-loop memory is indexed and visible, and skill/playbook authoring has stronger routing checks before stale guidance ships.
+
+- **Hook guardrails resolve the active checkout** - Launchers run hooks from the current repo root; gruff startup failures skip rather than deny; version-stamped dispatchers flag partial upgrades.
+- **`deny-dangerous` blocks pipeline and `xargs` bypasses** - Catches destructive payloads like `find ... | xargs rm -rf` or piped `git commit`; safe pipelines stay allowed.
+- **Gruff hook diagnostics are safer in monorepos** - Scoped to edited paths, not blanket git changes; honours ignored files and reports timeout/config errors.
+- **Learning-loop indexes are generated, checked, and visible** - `goat-flow index` regenerates `INDEX.md` files, `stats --check` flags stale ones, dashboard shows freshness.
+- **goat-* Step 0 retrieval is observable** - Functional skills must emit `Relevant prior learnings:` (or `none found`), exposing skipped retrieval.
+- **Skill/playbook authoring routes harder cases correctly** - `quality candidacy` and `skill new` now distinguish skills, playbooks, instruction rules, and learning-loop entries.
+- **Reference/playbook quality gates are tighter** - Word-budget enforcement covers top-level playbooks, preflight warns near caps, and stale `skill-playbooks/` paths fail content checks.
+- **PR review follow-ups** - Gruff hook timeout raised to 90s, `doc-paths-resolve` fails on missing `architecture.md`, and dashboard staleness/timer guards added.
+- **Breaking changes** - None. Re-run `goat-flow setup` or `hooks sync` for hooks, and `goat-flow index` after editing learning-loop entries.
+
 ## v1.10.1 - 2026-06-09
 
 Patch: upgrades now prune the stale Claude `MultiEdit` deny rules 1.10.0 left in existing projects, land dormant `gruff.hook.v1` analyzer-contract groundwork, back out the premature Reviews dashboard stub (deferred to 1.20.0), and make an internal docs pass.
 
-- **Stale `MultiEdit` deny rules pruned on upgrade, not just on fresh installs** - 1.10.0 dropped `MultiEdit(...)` from the Claude template but only cleaned fresh and `--force` installs, so upgrades left existing `.claude/settings.json` files warning `MultiEdit ... matches no known tool` on every launch. `goat-flow setup`/`install` now runs a `migrate_claude_permission_deny` pass that strips deny rules for retired tools while keeping every still-valid and user-added deny. Verified across the `gruff-workspace` checkouts: 13 stale rules to 0, `Read`/`Edit`/`Write` secret-path coverage unchanged. A `setup-install.test.ts` regression locks in the prune-and-preserve behaviour.
-- **`gruff-code-quality` hook gains `gruff.hook.v1` contract support (dormant until analyzers ship it)** - When a gruff analyzer advertises the `gruff.hook.v1` capability, the PostToolUse hook calls `<binary> hook --format json --changed-ranges <ranges> <file>` and renders the analyzer-owned envelope directly - the analyzer owns changed-region scoping, finding scope, metadata, and remediation, so the hook no longer rebuilds them in Bash. Pre-contract analyzers keep the existing `analyse` path **unchanged**, so this stays invisible until an analyzer ships the contract, then `goat-flow hooks sync`/`setup` picks it up. Detection is timeout-guarded and shape-validated, and the consumer is hardened to tolerate per-port envelope variation. On bash older than 4.4 (e.g. macOS `/bin/bash`) the hook now fails soft with `requires bash 4.4+` instead of a cryptic `declare -A` error.
+- **Stale `MultiEdit` deny rules pruned on upgrade, not just on fresh installs** - 1.10.0 cleaned `MultiEdit(...)` only on fresh/`--force` installs, so upgrades kept warning `matches no known tool` on every launch. `goat-flow setup`/`install` now strips retired-tool deny rules while preserving valid and user-added ones - 13 stale to 0, `Read`/`Edit`/`Write` secret-path coverage intact, with a `setup-install.test.ts` regression.
+- **`gruff-code-quality` hook gains `gruff.hook.v1` contract support (dormant until analyzers ship it)** - When an analyzer advertises the `gruff.hook.v1` capability, the PostToolUse hook renders its `hook`-subcommand envelope directly, so the analyzer - not Bash - owns scoping, metadata, and remediation. Pre-contract analyzers keep the unchanged `analyse` path, so it stays dormant until an analyzer ships the contract, then `goat-flow hooks sync`/`setup` enables it. Detection is timeout-guarded and shape-validated; bash before 4.4 now fails soft with `requires bash 4.4+`.
 
 ## v1.10.0 - 2026-06-07
 

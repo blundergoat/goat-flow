@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-06-07
+last_reviewed: 2026-06-09
 ---
 
 ## Lesson: deny-dangerous self-test missed a whole false-positive class while green
@@ -109,7 +109,7 @@ last_reviewed: 2026-06-07
 
 **Prevention:** Any Bash hook that sources a shared helper must guard the source path explicitly and include a self-test that runs the hook from a temp directory without the helper. The expected result is a fail-closed guardrail message, never exit 127. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `deny_dangerous_unavailable`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`).
 
-## Lesson: Codex hook commands should not depend on shell substitution
+## Lesson: Codex hook commands must use the git-root wrapper shape
 
 **Status:** active | **Created:** 2026-05-27
 
@@ -117,7 +117,7 @@ last_reviewed: 2026-06-07
 
 **Root cause:** I assumed the Claude-style hook command string was safe for Codex too. The audit parser only needed to see the hook script path, but the runtime needed a command shape Codex can execute directly.
 
-**Prevention:** For Codex `.codex/hooks.json`, register direct project-local script paths such as `.goat-flow/hooks/deny-dangerous.sh` and verify the exact configured commands from the JSON file, not only direct `bash hook.sh` calls. Evidence anchors: `.codex/hooks.json` (search: `.goat-flow/hooks/deny-dangerous.sh`) and `src/cli/server/agent-hook-writer.ts` (search: `if (agent.id === "codex") return path`).
+**Updated 2026-06-09:** This lesson is narrowed, not a blanket ban on all shell substitution. Current Codex docs say hook commands run with the session cwd and repo-local hooks should resolve from the git root; bare `.goat-flow/hooks/...` commands fail from nested cwd. The current safe Codex shape is a `bash -c` wrapper that resolves `git rev-parse --show-toplevel`, checks `$root/.goat-flow/hooks/<script>`, `cd`s to `$root`, and then invokes `bash "$root/.goat-flow/hooks/<script>"`. Do not copy Claude-only `$CLAUDE_PROJECT_DIR` fallback into Codex unless Codex documents an equivalent project-root variable. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `git rev-parse --show-toplevel`), `.codex/hooks.json` (search: `git rev-parse --show-toplevel`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `direct configured command is replayed from nested cwd`).
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 

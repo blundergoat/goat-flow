@@ -19,6 +19,16 @@ function read(path: string): string {
   return readFileSync(resolve(PROJECT_ROOT, path), "utf-8");
 }
 
+/** Extract one Markdown H2 section so doctrine assertions cannot match examples elsewhere. */
+function readSection(path: string, heading: string): string {
+  const body = read(path);
+  const marker = `## ${heading}`;
+  const start = body.indexOf(marker);
+  assert.notEqual(start, -1, `${path} missing ${marker}`);
+  const next = body.indexOf("\n## ", start + marker.length);
+  return next === -1 ? body.slice(start) : body.slice(start, next);
+}
+
 /** Build every installed mirror path for a skill so parity tests stay exhaustive. */
 function skillPaths(skill: string): string[] {
   return MIRRORS.map((root) => `${root}/${skill}/SKILL.md`);
@@ -285,6 +295,18 @@ describe("skill hardening contracts", () => {
     }
   });
 
+  it("keeps functional-skill Step 0 learning-loop emission doctrine installed", () => {
+    for (const path of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const section = readSection(path, "Learning-Loop Retrieval");
+      assert.match(section, /MUST emit/, path);
+      assert.match(section, /Relevant prior learnings:/, path);
+      assert.match(section, /Terms searched:/, path);
+    }
+  });
+
   it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
     for (const path of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
@@ -311,6 +333,15 @@ describe("ADR-023 word budget tiers", () => {
   const ALWAYS_LOADED_CAP = 1500;
   const AUTHORING_INDEX_CAP = 400;
   const PROGRESSIVE_CAP = 3000;
+  const TOP_LEVEL_PLAYBOOKS = [
+    "browser-use.md",
+    "changelog.md",
+    "code-comments.md",
+    "gruff-code-quality.md",
+    "observability.md",
+    "page-capture.md",
+    "release-notes.md",
+  ] as const;
 
   const FUNCTIONAL_SKILLS = [
     "goat-debug",
@@ -373,19 +404,41 @@ describe("ADR-023 word budget tiers", () => {
   });
 
   it("progressive reference packs stay within the 3000-word cap per file", () => {
-    for (const path of [
+    const skillQualityTestingFiles = [
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
       ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
       "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
       ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
       ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
-    ]) {
-      const words = bodyWordCount(path);
-      assert.ok(
-        words < PROGRESSIVE_CAP,
-        `${path}: ${words} words meets or exceeds progressive cap ${PROGRESSIVE_CAP}`,
-      );
-    }
+    ];
+    const topLevelPlaybooks = TOP_LEVEL_PLAYBOOKS.flatMap((name) => [
+      `workflow/skills/playbooks/${name}`,
+      `.goat-flow/skill-docs/playbooks/${name}`,
+    ]);
+
+    const overBudget = [...skillQualityTestingFiles, ...topLevelPlaybooks]
+      .map((path) => ({ path, words: bodyWordCount(path) }))
+      .filter(({ words }) => words >= PROGRESSIVE_CAP);
+
+    assert.deepEqual(
+      overBudget,
+      [],
+      overBudget
+        .map(
+          ({ path, words }) =>
+            `${path}: ${words} words meets or exceeds progressive cap ${PROGRESSIVE_CAP}`,
+        )
+        .join("\n"),
+    );
+  });
+
+  it("progressive reference cap rejects at 3000 words or above", () => {
+    assert.deepEqual(
+      [PROGRESSIVE_CAP - 1, PROGRESSIVE_CAP].map(
+        (words) => words < PROGRESSIVE_CAP,
+      ),
+      [true, false],
+    );
   });
 });

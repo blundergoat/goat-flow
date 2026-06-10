@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.10.1"
+goat-flow-reference-version: "1.11.0"
 ---
 # Skill Playbooks
 
@@ -33,8 +33,24 @@ When you add a new tool to the project that future agents need to discover:
 
 1. Drop a `<tool>.md` file in this directory.
 2. Start with a YAML frontmatter block that includes `goat-flow-reference-version`.
-3. **First section MUST be `## Availability Check`** for every new playbook. For runnable tools/capabilities, include an exact shell-runnable verification command; for non-runnable authoring references, state the load condition and why no CLI check applies. This is what agents grep for.
-4. Add a row to the table above so the index stays complete.
+3. Include a grep-findable `## Availability Check` section before any workflow that depends on a tool. For runnable tools/capabilities, include an exact shell-runnable verification command; for non-runnable authoring references, state the load condition and why no CLI check applies.
+4. Include the boundary, workflow, fallback/troubleshooting, and verification gate an agent needs to apply the playbook without inherited context.
+5. Add a row to the table above so the index stays complete.
+6. Check the ADR-023 budget tier before adding content: top-level playbooks in this directory are progressive references and must stay under 3000 body words.
+
+## Admission checklist
+
+Use the smallest artifact that fits the evidence:
+
+| Candidate shape | Route to |
+|---|---|
+| First-class workflow with Step 0, modes, gates, or reports | goat-* skill |
+| Tool or capability runbook loaded on demand | `.goat-flow/skill-docs/playbooks/<name>.md` |
+| Shared doctrine every skill inherits | `.goat-flow/skill-docs/` |
+| Real incident or permanent caution | `.goat-flow/learning-loop/lessons/` or `footguns/` |
+| Short always-visible project rule | instruction file |
+| Deterministic transform or validation | CLI/check/script |
+| One-off or speculative advice | no new artifact yet |
 
 ## Why this index exists (provenance)
 
