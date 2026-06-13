@@ -313,7 +313,7 @@ prune_unlisted_hook_files() {
         echo "ERROR: refusing to prune unexpected hook path: $stale_hook" >&2
         exit 1
         ;;
-      guard-common.sh|guard-destructive-shell.sh|guard-secret-paths.sh|guard-repository-writes.sh|guardrails-self-test.sh|deny-dangerous.self-test.sh)
+      guard-common.sh|guard-destructive-shell.sh|guard-secret-paths.sh|guard-repository-writes.sh|guardrails-self-test.sh|deny-dangerous.self-test.sh|post-turn-validate.sh)
         ;;
       *)
         echo "ERROR: refusing to prune unknown stale hook: $stale_hook" >&2
@@ -381,7 +381,7 @@ prune_legacy_agent_hook_copies() {
   local script
   for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
     [[ -d "$legacy_hooks_dir" ]] || continue
-    for script in deny-dangerous.sh gruff-code-quality.sh; do
+    for script in deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
       if [[ -f "$legacy_hooks_dir/$script" ]]; then
         rm -f "$legacy_hooks_dir/$script"
         REMOVED=$((REMOVED + 1))
@@ -563,6 +563,18 @@ const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes)
 let changed = false;
 let legacyEnabled = "true";
 
+function insertHookEntry(lines, hooksIndex, hookId, enabled) {
+  const hookRe = new RegExp(`^  ${hookId}:\\s*$`, "u");
+  if (lines.some((line) => hookRe.test(line))) return false;
+  let insertAt = hooksIndex + 1;
+  while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
+    insertAt += 1;
+    while (insertAt < lines.length && /^    /.test(lines[insertAt])) insertAt += 1;
+  }
+  lines.splice(insertAt, 0, `  ${hookId}:`, `    enabled: ${enabled}`);
+  return true;
+}
+
 let hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
 if (hooksIndex !== -1) {
   const next = [];
@@ -582,18 +594,10 @@ if (hooksIndex !== -1) {
   }
   lines = next;
   hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
-  const hasDenyDangerous = lines.some((line) =>
-    /^  deny-dangerous:\s*$/u.test(line),
-  );
-  if (!hasDenyDangerous) {
-    let insertAt = hooksIndex + 1;
-    while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
-      insertAt += 1;
-      while (insertAt < lines.length && /^    /.test(lines[insertAt])) insertAt += 1;
-    }
-    lines.splice(insertAt, 0, "  deny-dangerous:", `    enabled: ${legacyEnabled}`);
-    changed = true;
-  }
+  changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
+  changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
+  changed = insertHookEntry(lines, hooksIndex, "plan-checkbox-guard", "true") || changed;
+  changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
   if (changed) {
     fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
     console.log("changed");
@@ -611,8 +615,42 @@ next += [
   "hooks:",
   "  deny-dangerous:",
   "    enabled: true",
+  "  post-turn-safety:",
+  "    enabled: true",
+  "  plan-checkbox-guard:",
+  "    enabled: true",
   "  gruff-code-quality:",
   "    enabled: false",
+  "",
+].join(eol);
+fs.writeFileSync(path, next);
+console.log("changed");
+NODE
+}
+
+ensure_config_plan_guard_entry() {
+  local path="$1"
+  node - "$path" <<'NODE'
+const fs = require("node:fs");
+
+const path = process.argv[2];
+const content = fs.readFileSync(path, "utf8");
+if (/^plan-guard\s*:/mu.test(content)) {
+  console.log("unchanged");
+  process.exit(0);
+}
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+let next = content;
+if (next.length > 0 && !/\r?\n$/u.test(next)) next += eol;
+next += [
+  "",
+  "# Workflow reminder settings for the plan checkbox guard.",
+  "plan-guard:",
+  "  enabled: true",
+  "  search-paths:",
+  "    - .goat-flow/plans",
+  "  max-depth: 3",
+  "  staleness-days: 14",
   "",
 ].join(eol);
 fs.writeFileSync(path, next);
@@ -631,6 +669,8 @@ const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
   "deny-dangerous.sh",
   "gruff-code-quality.sh",
+  "post-turn-safety.sh",
+  "plan-checkbox-guard.sh",
   "deny-dangerous.self-test.sh",
   "guard-common.sh",
   "guard-destructive-shell.sh",
@@ -641,6 +681,8 @@ const managedScripts = [
 const managedHookIds = [
   "deny-dangerous",
   "gruff-code-quality",
+  "post-turn-safety",
+  "plan-checkbox-guard",
   "guard-destructive-shell",
   "guard-secret-paths",
   "guard-repository-writes",
@@ -699,11 +741,12 @@ function appendTemplateEventEntries(currentHooks, templateHooks) {
 }
 
 function configuredHookEnabled(hookId) {
+  const defaultEnabled = new Set(["deny-dangerous", "post-turn-safety", "plan-checkbox-guard"]);
   let content = "";
   try {
     content = fs.readFileSync(".goat-flow/config.yaml", "utf8");
   } catch {
-    return false;
+    return defaultEnabled.has(hookId);
   }
   let inHooks = false;
   let currentHook = "";
@@ -727,12 +770,18 @@ function configuredHookEnabled(hookId) {
       if (enabledMatch) return enabledMatch[1] === "true";
     }
   }
-  return false;
+  return defaultEnabled.has(hookId);
 }
 
 function hookUnavailableCommand(script) {
   if (script === "gruff-code-quality.sh") {
     return "{ printf '\\''gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n'\\'' >&2; exit 0; }";
+  }
+  if (script === "post-turn-safety.sh") {
+    return "{ printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }";
+  }
+  if (script === "plan-checkbox-guard.sh") {
+    return "{ printf '\\''plan-checkbox-guard: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 1; }";
   }
   return agent === "antigravity"
     ? "{ printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }"
@@ -790,6 +839,70 @@ function appendGruffHookEntries(currentHooks) {
   return true;
 }
 
+function postTurnSafetyHookEntries() {
+  const script = "post-turn-safety.sh";
+  if (agent === "codex") {
+    return [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: rootResolvingCommand(script),
+            statusMessage: "Post-turn safety guard",
+          },
+        ],
+      },
+    ];
+  }
+  return [
+    {
+      hooks: [
+        {
+          type: "command",
+          command: rootResolvingCommand(script),
+          timeout: 60,
+        },
+      ],
+    },
+  ];
+}
+
+function appendPostTurnSafetyEntries(currentHooks) {
+  if (agent === "copilot" || !configuredHookEnabled("post-turn-safety")) return false;
+  const currentEntries = Array.isArray(currentHooks.Stop) ? currentHooks.Stop : [];
+  const nextEntries = [...currentEntries, ...postTurnSafetyHookEntries()];
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
+  currentHooks.Stop = nextEntries;
+  return true;
+}
+
+function planCheckboxGuardHookEntries() {
+  const script = "plan-checkbox-guard.sh";
+  return [
+    {
+      hooks: [
+        {
+          type: "command",
+          command: rootResolvingCommand(script),
+          timeout: 15,
+        },
+      ],
+    },
+  ];
+}
+
+function appendPlanCheckboxGuardEntries(currentHooks) {
+  // M02b Stop-payload spike: only Claude's Stop payload is verified. Codex
+  // Stop delivery never fired under codex exec 0.139.0, so codex (like
+  // copilot) is gated off; removeManagedHookEntries prunes stale entries.
+  if (agent === "copilot" || agent === "codex" || !configuredHookEnabled("plan-checkbox-guard")) return false;
+  const currentEntries = Array.isArray(currentHooks.Stop) ? currentHooks.Stop : [];
+  const nextEntries = [...currentEntries, ...planCheckboxGuardHookEntries()];
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
+  currentHooks.Stop = nextEntries;
+  return true;
+}
+
 function gruffAntigravityDefinition() {
   return {
     enabled: true,
@@ -801,6 +914,23 @@ function gruffAntigravityDefinition() {
             type: "command",
             command: rootResolvingCommand("gruff-code-quality.sh"),
             timeout: 90,
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function postTurnSafetyAntigravityDefinition() {
+  return {
+    enabled: true,
+    Stop: [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: rootResolvingCommand("post-turn-safety.sh"),
+            timeout: 60,
           },
         ],
       },
@@ -842,6 +972,17 @@ if (agent === "antigravity") {
       changed = true;
     }
   }
+  if (configuredHookEnabled("post-turn-safety")) {
+    const safety = postTurnSafetyAntigravityDefinition();
+    if (JSON.stringify(current["post-turn-safety"]) !== JSON.stringify(safety)) {
+      current["post-turn-safety"] = safety;
+      changed = true;
+    }
+  }
+  // plan-checkbox-guard is not re-added for Antigravity: the M02b spike could
+  // not verify its Stop payload (hook trust gates execution; no
+  // stop_hook_active loop guard observed). The managedHookIds delete above
+  // prunes any previously installed definition.
 } else if (isObject(template.hooks)) {
   if (!isObject(current.hooks)) {
     current.hooks = {};
@@ -850,6 +991,8 @@ if (agent === "antigravity") {
   changed = removeManagedHookEntries(current.hooks) || changed;
   changed = appendTemplateEventEntries(current.hooks, template.hooks) || changed;
   changed = appendGruffHookEntries(current.hooks) || changed;
+  changed = appendPostTurnSafetyEntries(current.hooks) || changed;
+  changed = appendPlanCheckboxGuardEntries(current.hooks) || changed;
 }
 
 if (changed) {
@@ -1609,6 +1752,10 @@ if $HOOKS_ENABLED; then
   chmod +x "$HOOKS_DIR/deny-dangerous.sh"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh"
   chmod +x "$HOOKS_DIR/gruff-code-quality.sh"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh"
+  chmod +x "$HOOKS_DIR/post-turn-safety.sh"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/plan-checkbox-guard.sh" "$HOOKS_DIR/plan-checkbox-guard.sh"
+  chmod +x "$HOOKS_DIR/plan-checkbox-guard.sh"
   prune_unlisted_hook_files "$HOOKS_DIR"
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"
@@ -1731,6 +1878,10 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("hook toggles added")
   fi
+  if [[ "$(ensure_config_plan_guard_entry "$CONFIG_PATH")" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("plan guard config added")
+  fi
   if $CONFIG_CHANGED; then
     COPIED=$((COPIED + 1))
     note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
@@ -1740,7 +1891,7 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     echo "  · $CONFIG_PATH (exists, no config changes)"
   fi
 else
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  plan-checkbox-guard:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n\nplan-guard:\n  enabled: true\n  search-paths:\n    - .goat-flow/plans\n  max-depth: 3\n  staleness-days: 14\n' "$VERSION" > "$CONFIG_PATH"
   COPIED=$((COPIED + 1))
   echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi

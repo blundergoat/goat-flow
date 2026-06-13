@@ -103,9 +103,9 @@ Verification loops are consistently reported as the single highest-impact harnes
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
 - `commit-guidance` - commit guidance is present at the canonical `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
 - `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
-- `post-turn-hook-integrity` - metric. If a post-turn hook exists, reports whether it runs validation and whether it exits 0 unconditionally (advisory mode). Absence means there is no hook-based validation evidence; it is not runtime proof. Metric failures do not fail the harness scope, but they do lower the concern score so limited evidence is not displayed as 100%.
+- `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks pass with a `limits` caveat that no build/test/lint validation ran.
 
-**Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. goat-flow core does not ship a post-turn hook - the integrity check only reports on project-specific hooks if present.
+**Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. The shipped `post-turn-safety` hook is universal changed-content safety scanning, not project validation. goat-flow no longer ships a project-validation Stop hook; audit still does not judge whether project-specific commands are sufficient.
 
 
 

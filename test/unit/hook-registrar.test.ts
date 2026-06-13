@@ -4,9 +4,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -44,6 +46,7 @@ const GENERATED_AGENT_SURFACES = [
   ".goat-flow/hooks/deny-dangerous.sh",
   ".github/hooks/hooks.json",
   ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/plan-checkbox-guard.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
@@ -179,6 +182,69 @@ function readAntigravityGruffCommand(hooksJson: string): string {
   );
 }
 
+/** Read matcherless Stop hook commands from Claude/Codex-style hook config. */
+function readStopHookCommands(settingsJson: string): string[] {
+  const config = JSON.parse(settingsJson) as {
+    hooks?: {
+      Stop?: GeneratedHookEntry[];
+    };
+  };
+  return generatedHookCommands(config.hooks?.Stop);
+}
+
+/** Read one generated Antigravity Stop hook command by goat-flow hook id. */
+function readAntigravityStopCommand(hooksJson: string, hookId: string): string {
+  const config = JSON.parse(hooksJson) as Record<
+    string,
+    { Stop?: GeneratedHookEntry[] } | undefined
+  >;
+  return generatedHookCommands(config[hookId]?.Stop)[0] ?? "";
+}
+
+/** Read the generated Antigravity post-turn safety command. */
+function readAntigravitySafetyCommand(hooksJson: string): string {
+  return readAntigravityStopCommand(hooksJson, "post-turn-safety");
+}
+
+/** Writes agent surfaces that make post-turn hook registration applicable in a fixture. */
+function writePostTurnCapableSurfaces(root: string): void {
+  mkdirSync(join(root, ".claude"), { recursive: true });
+  mkdirSync(join(root, ".codex"), { recursive: true });
+  mkdirSync(join(root, ".agents"), { recursive: true });
+  mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+  mkdirSync(join(root, ".goat-flow"), { recursive: true });
+  writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+  writeFileSync(join(root, ".codex", "config.toml"), "\n");
+  writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
+  writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
+}
+
+/** Execute the generated Claude launcher with a runtime-shaped payload. */
+function runLauncherWithPayload(
+  command: string,
+  cwd: string,
+  payload: string,
+  env: NodeJS.ProcessEnv = process.env,
+): ReturnType<typeof spawnSync> {
+  const payloadPath = join(
+    tmpdir(),
+    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  );
+  writeFileSync(payloadPath, payload);
+  const fd = openSync(payloadPath, "r");
+  try {
+    return spawnSync("bash", ["-c", command], {
+      cwd,
+      encoding: "utf8",
+      env,
+      stdio: [fd, "pipe", "pipe"],
+    });
+  } finally {
+    closeSync(fd);
+    rmSync(payloadPath, { force: true });
+  }
+}
+
 /** Execute the generated Claude launcher with a runtime-shaped payload. */
 function runClaudeLauncher(
   command: string,
@@ -186,12 +252,7 @@ function runClaudeLauncher(
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", ["-c", command], {
-    cwd,
-    encoding: "utf8",
-    env,
-    input: payload,
-  });
+  return runLauncherWithPayload(command, cwd, payload, env);
 }
 
 /** Assert the generated launcher allows a benign payload from this cwd. */
@@ -212,11 +273,7 @@ function runCodexLauncher(
   cwd: string,
   payload = CLAUDE_SAFE_PAYLOAD,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", ["-c", command], {
-    cwd,
-    encoding: "utf8",
-    input: payload,
-  });
+  return runLauncherWithPayload(command, cwd, payload);
 }
 
 describe("hook registrar", () => {
@@ -234,6 +291,7 @@ describe("hook registrar", () => {
         true,
       );
       assert.equal(getHookSpec("gruff-code-quality")?.matcher, "Edit|Write");
+      assert.equal(getHookSpec("plan-checkbox-guard")?.timeoutSec, 15);
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);
     });
@@ -541,6 +599,159 @@ describe("hook registrar", () => {
       );
       assert.equal(state.agents.antigravity.supported, true);
       assert.equal(state.agents.antigravity.installed, true);
+    });
+  });
+
+  it("sync installs post-turn default hooks without project validation", () => {
+    withTempProject((root) => {
+      writePostTurnCapableSurfaces(root);
+
+      const states = syncHookStates(root);
+      const safetyState = states.find(
+        (state) => state.id === "post-turn-safety",
+      );
+      const planGuardState = states.find(
+        (state) => state.id === "plan-checkbox-guard",
+      );
+
+      assert.ok(safetyState);
+      assert.ok(planGuardState);
+      assert.equal(
+        states.some((state) => state.id === "post-turn-validate"),
+        false,
+      );
+      assert.equal(safetyState.enabled, true);
+      assert.equal(planGuardState.enabled, true);
+      assert.equal(safetyState.agents.claude.installed, true);
+      assert.equal(safetyState.agents.codex.installed, true);
+      assert.equal(safetyState.agents.antigravity.installed, true);
+      assert.equal(safetyState.agents.copilot.supported, false);
+      assert.equal(planGuardState.agents.claude.installed, true);
+      // M02b spike outcome: only Claude's Stop payload is verified, so the
+      // guard skips codex/antigravity with a reason instead of registering.
+      assert.equal(planGuardState.agents.codex.supported, false);
+      assert.match(
+        planGuardState.agents.codex.reason ?? "",
+        /unverified/iu,
+      );
+      assert.equal(planGuardState.agents.antigravity.supported, false);
+      assert.match(
+        planGuardState.agents.antigravity.reason ?? "",
+        /unverified/iu,
+      );
+      assert.equal(planGuardState.agents.copilot.supported, false);
+      assertPresent(root, [
+        ".claude/settings.json",
+        ".codex/hooks.json",
+        ".agents/hooks.json",
+        ".goat-flow/hooks/post-turn-safety.sh",
+        ".goat-flow/hooks/plan-checkbox-guard.sh",
+      ]);
+      assertMissing(root, [".goat-flow/hooks/post-turn-validate.sh"]);
+
+      const claudeSettings = readFileSync(
+        join(root, ".claude", "settings.json"),
+        "utf-8",
+      );
+      const codexHooks = readFileSync(
+        join(root, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      const antigravityHooks = readFileSync(
+        join(root, ".agents", "hooks.json"),
+        "utf-8",
+      );
+      assert.match(
+        readStopHookCommands(claudeSettings).join("\n"),
+        /post-turn-safety\.sh/u,
+      );
+      assert.match(
+        readStopHookCommands(claudeSettings).join("\n"),
+        /plan-checkbox-guard\.sh/u,
+      );
+      assert.match(
+        readStopHookCommands(codexHooks).join("\n"),
+        /post-turn-safety\.sh/u,
+      );
+      assert.doesNotMatch(codexHooks, /plan-checkbox-guard\.sh/u);
+      assert.match(
+        readAntigravitySafetyCommand(antigravityHooks),
+        /post-turn-safety\.sh/u,
+      );
+      assert.doesNotMatch(antigravityHooks, /plan-checkbox-guard\.sh/u);
+      assert.doesNotMatch(claudeSettings, /post-turn-validate\.sh/u);
+      assert.doesNotMatch(codexHooks, /post-turn-validate\.sh/u);
+      assert.doesNotMatch(antigravityHooks, /post-turn-validate\.sh/u);
+    });
+  });
+
+  it("sync prunes stale plan-checkbox-guard entries from gated agents", () => {
+    withTempProject((root) => {
+      writePostTurnCapableSurfaces(root);
+      writeFileSync(
+        join(root, ".codex", "hooks.json"),
+        `${JSON.stringify(
+          {
+            hooks: {
+              Stop: [
+                {
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .goat-flow/hooks/plan-checkbox-guard.sh",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      writeFileSync(
+        join(root, ".agents", "hooks.json"),
+        `${JSON.stringify(
+          {
+            "plan-checkbox-guard": {
+              enabled: true,
+              Stop: [
+                {
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .goat-flow/hooks/plan-checkbox-guard.sh",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      syncHookStates(root);
+
+      const codexHooks = readFileSync(
+        join(root, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      const antigravityHooks = readFileSync(
+        join(root, ".agents", "hooks.json"),
+        "utf-8",
+      );
+      assert.doesNotMatch(codexHooks, /plan-checkbox-guard\.sh/u);
+      assert.doesNotMatch(antigravityHooks, /plan-checkbox-guard\.sh/u);
+      assert.match(
+        readStopHookCommands(codexHooks).join("\n"),
+        /post-turn-safety\.sh/u,
+      );
+      assert.match(
+        readAntigravitySafetyCommand(antigravityHooks),
+        /post-turn-safety\.sh/u,
+      );
     });
   });
 

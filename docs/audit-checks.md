@@ -38,7 +38,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 | `other-files` | Other required files | Every manifest-required file or directory not already covered by a named setup check exists, including local log README surfaces |
 | `config-parses` | Config file | `.goat-flow/config.yaml` exists, parses as YAML, and validates against the manifest-backed config contract |
 | `config-version` | Config version | `.goat-flow/config.yaml` declares the current `AUDIT_VERSION` |
-| `hook-version` | Hook version | Installed hook dispatchers in `.goat-flow/hooks/` (`deny-dangerous.sh`, `gruff-code-quality.sh`) carry the current `goat-flow-hook-version` stamp; a missing or behind stamp signals a partial upgrade and the fix re-runs `hooks sync` |
+| `hook-version` | Hook version | Installed hook dispatchers in `.goat-flow/hooks/` (`deny-dangerous.sh`, `gruff-code-quality.sh`, `post-turn-safety.sh`) carry the current `goat-flow-hook-version` stamp; a missing or behind stamp signals a partial upgrade and the fix re-runs `hooks sync` |
 
 ### Agent Scope (4)
 
@@ -72,7 +72,7 @@ Aggregate-mode nuance:
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | Commit guidance exists at the canonical `docs/coding-standards/git-commit.md`; old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
-| Verification | `post-turn-hook-integrity` | `metric` | Reports whether any post-turn hook runs validation and whether it swallows failures; absence is no hook evidence, not proof. Metric failures do not fail the harness scope, but they reduce the concern score. |
+| Verification | `post-turn-hook-integrity` | `metric` | For agents with a manifest-backed post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands and whether it swallows failures; absence or masking is no hook evidence, not proof. Agents with `supportsPostTurnHook=false` are skipped as not applicable instead of penalized. |
 | Recovery | `milestone-tracking` | `integrity` | `.goat-flow/plans/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |
 | Recovery | `session-logs` | `integrity` | `.goat-flow/logs/sessions/` exists |
 | Feedback loop | `feedback-loop-active` | `integrity` | The lessons and footguns directories exist, with valid metadata and non-stale evidence references |

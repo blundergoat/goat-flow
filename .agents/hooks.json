@@ -1,4 +1,19 @@
 {
+  "deny-dangerous": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }; cd \"$root\" || { printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
   "gruff-code-quality": {
     "enabled": true,
     "PostToolUse": [
@@ -14,16 +29,15 @@
       }
     ]
   },
-  "deny-dangerous": {
+  "post-turn-safety": {
     "enabled": true,
-    "PreToolUse": [
+    "Stop": [
       {
-        "matcher": "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }; cd \"$root\" || { printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'",
-            "timeout": 30
+            "command": "bash -c 'root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/post-turn-safety.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/post-turn-safety.sh\" ] || { printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }; cd \"$root\" || { printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/post-turn-safety.sh\"'",
+            "timeout": 60
           }
         ]
       }

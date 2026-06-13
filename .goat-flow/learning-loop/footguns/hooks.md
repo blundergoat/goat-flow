@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-06-09
+last_reviewed: 2026-06-13
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
@@ -241,6 +241,19 @@ Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-f
 4. When analyzer JSON has empty `findings` but config diagnostics or `filesDiscovered: 0`, surface the diagnostic before reporting a clean changed-line count.
 
 ---
+
+## Footgun: Registered Stop hooks can be dead config behind agent trust gates
+
+**Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+
+**Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
+
+**Evidence:**
+- M02b Evidence section, `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` (search: `Stop payload fields and supported-agent notes`).
+- `src/cli/server/hooks-registry.ts` (search: `unsupportedAgents`) gates `plan-checkbox-guard` to Claude with the spike reasons.
+- Affects `post-turn-safety` too: it stays registered for codex/antigravity Stop events, but no codex/antigravity Stop execution has been observed in this workspace (`.goat-flow/logs/plan-guard-state.json` had no real agent sessions before 2026-06-13).
+
+**Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload (or hook-side log write) from that agent; for Codex assume an interactive `/hooks` review is required per project, and for Antigravity assume `trusted_hooks.json` approval is required. Gate default registration on verified delivery, not documented support.
 
 ## Resolved Entries
 

@@ -31,6 +31,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Provision jq 1.6
+        run: |
+          set -euo pipefail
+          jq16_dir="$RUNNER_TEMP/goat-flow-jq16"
+          jq16_sha="af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44"
+          mkdir -p "$jq16_dir"
+          curl -fsSL -o "$jq16_dir/jq-linux64" "https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64"
+          printf '%s  jq-linux64\n' "$jq16_sha" > "$jq16_dir/jq-linux64.sha256"
+          (cd "$jq16_dir" && sha256sum --check jq-linux64.sha256)
+          chmod +x "$jq16_dir/jq-linux64"
+          echo "GOAT_FLOW_JQ16_BIN=$jq16_dir/jq-linux64" >> "$GITHUB_ENV"
+          echo "system jq: $(jq --version 2>/dev/null || echo unavailable)"
+          echo "pinned jq: $("$jq16_dir/jq-linux64" --version)"
+
       - name: Test
         run: npm run test:full
 

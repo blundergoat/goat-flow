@@ -194,7 +194,7 @@ npx goat-flow dashboard --dev         # Live reload mode
 
 ### `goat-flow hooks <list|enable|disable|sync> [hook-id] [path]`
 
-Manage the project's registered guardrail and quality hooks (`deny-dangerous`, `gruff-code-quality`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
+Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
 
 ```bash
 npx goat-flow hooks list                        # Show each hook's enabled/disabled state

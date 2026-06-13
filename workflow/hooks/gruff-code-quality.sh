@@ -22,11 +22,12 @@
 #   an edited file path from the payload, then falls back to git-changed
 #   supported files for runtimes that only expose the completed file tool
 #   event. It also needs a matching `.gruff-*.yaml` or `.gruff-*.yml` config at
-#   the repo root, a matching gruff binary, and `jq` for JSON filtering. Missing
-#   prerequisites fail soft: the edit is not blocked and whole-file gruff
-#   output is not printed as a fallback. If a config is present but the matching
-#   binary cannot be found, the hook prints a one-line stderr diagnostic instead
-#   of silently leaving that language uncovered.
+#   the repo root, a matching gruff binary, and jq >= 1.6 for JSON filtering
+#   (jq 1.5 is untested). Missing prerequisites fail soft: the edit is not
+#   blocked and whole-file gruff output is not printed as a fallback. If a config
+#   is present but the matching binary cannot be found, the hook prints a
+#   one-line stderr diagnostic instead of silently leaving that language
+#   uncovered.
 #
 # Binary discovery:
 #   Discovery covers standard install locations only: vendor/bin,
@@ -388,10 +389,10 @@ payload_ranges() {
       end;
     def range_text:
       if ((.startLine // .start // .line) != null) then
-        ((.startLine // .start // .line) | tonumber) as $start
-        | ((.endLine // .end // .line // $start) | tonumber) as $end
-        | select($start > 0 and $end >= $start)
-        | "\($start)-\($end)"
+        ((.startLine // .start // .line) | tonumber) as $rangeStart
+        | ((.endLine // .end // .line // $rangeStart) | tonumber) as $rangeEnd
+        | select($rangeStart > 0 and $rangeEnd >= $rangeStart)
+        | "\($rangeStart)-\($rangeEnd)"
       else
         empty
       end;

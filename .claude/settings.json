@@ -85,6 +85,26 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/post-turn-safety.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/post-turn-safety.sh\" ] || { printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }; cd \"$root\" || { printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/post-turn-safety.sh\"'",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/plan-checkbox-guard.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/plan-checkbox-guard.sh\" ] || { printf '\\''plan-checkbox-guard: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 1; }; cd \"$root\" || { printf '\\''plan-checkbox-guard: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 1; }; bash \"$root/.goat-flow/hooks/plan-checkbox-guard.sh\"'",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

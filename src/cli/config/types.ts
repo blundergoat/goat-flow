@@ -40,6 +40,15 @@ interface LearningLoopConfig {
 /** One togglable goat-flow hook entry from `.goat-flow/config.yaml`. */
 type GoatFlowHookConfig = Record<"enabled", boolean>;
 
+/** Optional plan-checkbox guard configuration. */
+interface PlanGuardConfig {
+  enabled: boolean;
+  searchPaths: string[];
+  maxDepth: number;
+  stalenessDays: number;
+  planFile: string | null;
+}
+
 /** Stable boolean keys retained because they mirror `.goat-flow/config.yaml`. */
 type GoatFlowConfigBooleanFields = Record<"telemetry", boolean>;
 
@@ -78,6 +87,8 @@ export interface GoatFlowConfig extends GoatFlowConfigBooleanFields {
   };
   /** Project-wide toggles for goat-flow-shipped hook scripts. */
   hooks: Record<string, GoatFlowHookConfig>;
+  /** Workflow-reminder Stop hook settings for active plan checkbox drift. */
+  planGuard: PlanGuardConfig;
   /**
    * Raw skill-quality configuration block (parsed but not normalized here).
    * Consumed by `loadQualityConfig` in `src/cli/quality/quality-config.ts`,

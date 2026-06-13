@@ -7,8 +7,15 @@
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   assertExtensionRoutesToExpectedGruff,
   assertFailSoftSkipPayloadsSilent,
@@ -27,9 +34,108 @@ import {
   writeSchemaErrorMockGruff,
 } from "./gruff-code-quality-smoke.helpers.js";
 
+const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const GRUFF_HOOK_COPIES = [
+  {
+    label: "workflow",
+    path: join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
+  },
+  {
+    label: "installed",
+    path: join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+  },
+] as const;
+
 after(cleanupHookTestDirs);
 
+/** Return true when a candidate jq binary exists and can be executed. */
+function isExecutableFile(path: string): boolean {
+  if (!existsSync(path)) return false;
+  const result = spawnSync(path, ["--version"], { encoding: "utf-8" });
+  return result.status === 0;
+}
+
+/** Locate the optional jq 1.6 binary used by the compatibility regression leg. */
+function resolveJq16Binary(): { path: string | null; skipReason: string } {
+  const fromEnv = process.env.GOAT_FLOW_JQ16_BIN;
+  if (fromEnv !== undefined && fromEnv.trim() !== "") {
+    if (!isExecutableFile(fromEnv)) {
+      throw new Error(
+        `GOAT_FLOW_JQ16_BIN is set but is not executable: ${fromEnv}`,
+      );
+    }
+    return { path: fromEnv, skipReason: "" };
+  }
+
+  for (const candidate of ["/tmp/jq16/jq", "/tmp/jq16/jq-linux64"]) {
+    if (isExecutableFile(candidate)) {
+      return { path: candidate, skipReason: "" };
+    }
+  }
+
+  return {
+    path: null,
+    skipReason:
+      "jq 1.6 binary not found; set GOAT_FLOW_JQ16_BIN or download jq-1.6 to /tmp/jq16/jq",
+  };
+}
+
+/** Run one hook copy's smoke self-test under a controlled PATH. */
+function runHookSelfTest(
+  hookPath: string,
+  pathPrefix: string,
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", [hookPath, "--self-test=smoke"], {
+    cwd: makeRoot(),
+    encoding: "utf-8",
+    env: { ...process.env, PATH: pathPrefix },
+  });
+}
+
+/** Assert one gruff hook self-test succeeds and prints the expected marker. */
+function assertSelfTestOk(
+  label: string,
+  result: ReturnType<typeof spawnSync>,
+): void {
+  assert.equal(
+    result.status,
+    0,
+    `${label} self-test failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+  );
+  assert.match(result.stdout, /gruff-code-quality self-test: ok/u);
+}
+
 describe("gruff-code-quality hook", () => {
+  it("passes the smoke self-test for both hook copies with system jq", () => {
+    for (const hook of GRUFF_HOOK_COPIES) {
+      assertSelfTestOk(
+        hook.label,
+        runHookSelfTest(hook.path, process.env.PATH ?? "/usr/bin:/bin"),
+      );
+    }
+  });
+
+  const jq16 = resolveJq16Binary();
+  it(
+    "passes the smoke self-test for both hook copies with pinned jq 1.6",
+    jq16.path === null ? { skip: jq16.skipReason } : {},
+    () => {
+      assert.ok(jq16.path, jq16.skipReason);
+      const version = spawnSync(jq16.path, ["--version"], {
+        encoding: "utf-8",
+      });
+      assert.equal(version.stdout.trim(), "jq-1.6");
+
+      const pinnedBin = makeRoot();
+      symlinkSync(jq16.path, join(pinnedBin, "jq"));
+      const pathPrefix = `${pinnedBin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
+
+      for (const hook of GRUFF_HOOK_COPIES) {
+        assertSelfTestOk(hook.label, runHookSelfTest(hook.path, pathPrefix));
+      }
+    },
+  );
+
   // Fixture purpose: writes temp source/git state to cover changed-line filtering and the triage footer.
   it("prints changed-line findings, suppressed count, and footer", () => {
     const root = makeRoot();

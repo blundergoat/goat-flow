@@ -129,6 +129,301 @@ describe("hook fact extraction", () => {
     });
   });
 
+  it("detects Antigravity top-level Stop hook registrations", () => {
+    const antigravityProfile = {
+      ...STUB_AGENT_PROFILE,
+      id: "antigravity" as const,
+      hookConfigFile: ".agents/hooks.json",
+      settingsFile: null,
+    };
+    const config = {
+      "post-turn-safety": {
+        enabled: true,
+        Stop: [
+          {
+            hooks: [
+              {
+                command:
+                  'bash -c \'root="$(git rev-parse --show-toplevel 2>/dev/null || true)"; bash "$root/.goat-flow/hooks/post-turn-safety.sh"\'',
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    assert.deepEqual(buildHookRegistration(antigravityProfile, config), {
+      postTurnRegistered: true,
+      postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+    });
+  });
+
+  it("prefers safety over unrelated scripts when multiple Stop hooks are registered", () => {
+    const config = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/other-stop.sh",
+              },
+            ],
+          },
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/post-turn-safety.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    assert.deepEqual(buildHookRegistration(STUB_AGENT_PROFILE, config), {
+      postTurnRegistered: true,
+      postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+    });
+  });
+
+  it("prefers safety over the plan checkbox guard in either Stop order", () => {
+    for (const stopEntries of [
+      [
+        {
+          hooks: [
+            {
+              command: ".goat-flow/hooks/plan-checkbox-guard.sh",
+            },
+          ],
+        },
+        {
+          hooks: [
+            {
+              command: ".goat-flow/hooks/post-turn-safety.sh",
+            },
+          ],
+        },
+      ],
+      [
+        {
+          hooks: [
+            {
+              command: ".goat-flow/hooks/post-turn-safety.sh",
+            },
+          ],
+        },
+        {
+          hooks: [
+            {
+              command: ".goat-flow/hooks/plan-checkbox-guard.sh",
+            },
+          ],
+        },
+      ],
+    ]) {
+      assert.deepEqual(
+        buildHookRegistration(STUB_AGENT_PROFILE, {
+          hooks: { Stop: stopEntries },
+        }),
+        {
+          postTurnRegistered: true,
+          postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+        },
+      );
+    }
+  });
+
+  it("does not count a guard-only Stop registration as post-turn safety or validation", () => {
+    const config = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/plan-checkbox-guard.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    assert.deepEqual(buildHookRegistration(STUB_AGENT_PROFILE, config), {
+      postTurnRegistered: false,
+      postTurnRegisteredPath: null,
+    });
+  });
+
+  it("prefers Antigravity safety when plan guard is registered first", () => {
+    const antigravityProfile = {
+      ...STUB_AGENT_PROFILE,
+      id: "antigravity" as const,
+      hookConfigFile: ".agents/hooks.json",
+      settingsFile: null,
+    };
+    const config = {
+      "plan-checkbox-guard": {
+        enabled: true,
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/plan-checkbox-guard.sh",
+              },
+            ],
+          },
+        ],
+      },
+      "post-turn-safety": {
+        enabled: true,
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/post-turn-safety.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    assert.deepEqual(buildHookRegistration(antigravityProfile, config), {
+      postTurnRegistered: true,
+      postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+    });
+  });
+
+  it("detects safety-only Stop hook registrations without validation evidence", () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/post-turn-safety.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fs = stubFS({
+      exists: (path) =>
+        path === ".goat-flow/hooks/post-turn-safety.sh" ||
+        path === STUB_AGENT_PROFILE.hookConfigFile,
+      readFile: (path) =>
+        path === ".goat-flow/hooks/post-turn-safety.sh"
+          ? [
+              "#!/usr/bin/env bash",
+              "printf 'post-turn-safety: ok\\n' >&2",
+              "",
+            ].join("\n")
+          : null,
+      isExecutable: (path) => path === ".goat-flow/hooks/post-turn-safety.sh",
+    });
+
+    const facts = extractHookFacts(
+      fs,
+      STUB_AGENT_PROFILE,
+      settings,
+      true,
+      true,
+    );
+
+    assert.equal(facts.postTurnRegistered, true);
+    assert.equal(
+      facts.postTurnRegisteredPath,
+      ".goat-flow/hooks/post-turn-safety.sh",
+    );
+    assert.equal(facts.postTurnExists, true);
+    assert.equal(facts.postTurnExecutable, true);
+    assert.equal(facts.postTurnHasValidation, false);
+  });
+
+  it("counts custom test-only post-turn hooks as validation", () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/custom-post-turn.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fs = stubFS({
+      exists: (path) =>
+        path === ".goat-flow/hooks/custom-post-turn.sh" ||
+        path === STUB_AGENT_PROFILE.hookConfigFile,
+      readFile: (path) =>
+        path === ".goat-flow/hooks/custom-post-turn.sh"
+          ? ["#!/usr/bin/env bash", "run_command 'npm run test:fast'", ""].join(
+              "\n",
+            )
+          : null,
+      isExecutable: (path) => path === ".goat-flow/hooks/custom-post-turn.sh",
+    });
+
+    const facts = extractHookFacts(
+      fs,
+      STUB_AGENT_PROFILE,
+      settings,
+      true,
+      true,
+    );
+
+    assert.equal(facts.postTurnRegistered, true);
+    assert.equal(
+      facts.postTurnRegisteredPath,
+      ".goat-flow/hooks/custom-post-turn.sh",
+    );
+    assert.equal(facts.postTurnExists, true);
+    assert.equal(facts.postTurnExecutable, true);
+    assert.equal(facts.postTurnHasValidation, true);
+  });
+
+  it("detects validation commands that mask failure with || true", () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                command: ".goat-flow/hooks/custom-post-turn.sh",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fs = stubFS({
+      exists: (path) => path === ".goat-flow/hooks/custom-post-turn.sh",
+      readFile: (path) =>
+        path === ".goat-flow/hooks/custom-post-turn.sh"
+          ? [
+              "#!/usr/bin/env bash",
+              "run_command 'npm run test:fast || true'",
+              "",
+            ].join("\n")
+          : null,
+    });
+
+    const facts = extractHookFacts(
+      fs,
+      STUB_AGENT_PROFILE,
+      settings,
+      true,
+      true,
+    );
+
+    assert.equal(facts.postTurnHasValidation, true);
+    assert.equal(facts.postTurnSwallowsFailures, true);
+  });
+
   it("detects current deny hook secret coverage from generalized path matcher", () => {
     const facts = extractPackagedDenyHookFacts();
     assert.equal(facts.bashDenyCoversSecrets, true);

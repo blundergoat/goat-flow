@@ -286,6 +286,14 @@ export function writeHookFixtures(root: string): void {
     join(root, "workflow", "hooks", "gruff-code-quality.sh"),
     HOOK_STUB,
   );
+  writeFileSync(
+    join(root, "workflow", "hooks", "post-turn-safety.sh"),
+    HOOK_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "hooks", "plan-checkbox-guard.sh"),
+    HOOK_STUB,
+  );
   for (const hookLibFile of [
     "patterns-shell.sh",
     "patterns-paths.sh",
@@ -317,6 +325,14 @@ export function writeHookFixtures(root: string): void {
   }
   writeFileSync(
     join(root, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+    HOOK_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "post-turn-safety.sh"),
+    HOOK_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh"),
     HOOK_STUB,
   );
   writeFileSync(

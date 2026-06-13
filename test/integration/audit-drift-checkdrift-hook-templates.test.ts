@@ -95,6 +95,60 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
+  it("reports post-turn safety hook content drift", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "post-turn-safety.sh"),
+        `${HOOK_STUB}\n# local safety drift\n`,
+      );
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(report.status, "fail");
+      assert.ok(
+        report.findings.some(
+          (finding) =>
+            finding.kind === "content" &&
+            finding.path === ".goat-flow/hooks/post-turn-safety.sh",
+        ),
+        `expected post-turn safety drift, findings=${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports plan checkbox guard hook content drift", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "plan-checkbox-guard.sh"),
+        `${HOOK_STUB}\n# local plan guard drift\n`,
+      );
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(report.status, "fail");
+      assert.ok(
+        report.findings.some(
+          (finding) =>
+            finding.kind === "content" &&
+            finding.path === ".goat-flow/hooks/plan-checkbox-guard.sh",
+        ),
+        `expected plan checkbox guard drift, findings=${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("compares Copilot hooks.json against the agent-config template", () => {
     const root = setupFixture();
     try {

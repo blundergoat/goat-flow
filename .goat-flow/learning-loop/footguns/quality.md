@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-05-27
+last_reviewed: 2026-06-11
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -40,6 +40,22 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 - `src/cli/prompt/compose-quality-common.ts` (search: `limits: ${concern.limits.join`) - quality prompts include limits beside score and metric counts.
 
 **Prevention:** When adding or changing a non-gating audit caveat, update every audit consumer in the same patch: core type, JSON reader types, text/Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
+
+## Footgun: Unsupported runtime capabilities must be skipped, not scored missing
+
+**Status:** active | **Created:** 2026-06-11 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A harness concern can remain capped below 100 for an agent even after all fixable setup work is complete, because the audit treats an unavailable platform feature as missing evidence. The 1.12.0 Verification workstream hit this with Copilot: `workflow/manifest.json` declares `hook_events.post_turn: null`, so Copilot cannot host a project-local post-turn hook, yet `post-turn-hook-integrity` originally lowered its Verification score to 75.
+
+**Why it happens:** Missing evidence and not-applicable evidence look similar unless the check consults manifest-backed capability metadata. A neutral pass would inflate evidence; a failure punishes an unfixable runtime gap. The correct representation is a skipped check that stays out of the concern denominator, while supported agents with missing or masked hooks still lose the score.
+
+**Evidence:**
+- `workflow/manifest.json` (search: `"post_turn": null`) - Copilot has no post-turn hook event.
+- `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) - the runtime capability derives from manifest hook events.
+- `src/cli/audit/harness/check-verification.ts` (search: `supportsPostTurnHook === false`) - `post-turn-hook-integrity` skips unsupported agents but still evaluates supported agents.
+- `test/unit/audit-command/scoring-model.test.ts` (search: `skips post-turn hook integrity for agents without a post-turn hook event`) - Copilot reaches Verification 100 without a fake hook pass, while supporting-agent no-hook and masked-hook fixtures keep the 25-point loss.
+
+**Prevention:** Any audit check tied to a runtime capability must first ask whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
 
 
 ## Footgun: Structural validation passes while content is still unanswerable

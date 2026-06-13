@@ -1,6 +1,42 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-06-07
+last_reviewed: 2026-06-13
+---
+
+## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
+
+**Status:** active | **Created:** 2026-06-13
+
+**What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
+
+**Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
+
+**Prevention:** For verification sweeps that must include gitignored content, use `command grep` (bypasses the function), `find`, or pass the ignored files as explicit operands (direct-file grep is unaffected). Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with `command grep`. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
+
+---
+
+## Lesson: Hook tests should feed stdin through files when child `cat` must see EOF
+
+**Status:** active | **Created:** 2026-06-13
+
+**What happened:** While implementing M02b, `test/integration/plan-checkbox-guard-hook.test.ts` repeatedly timed out when it invoked `workflow/hooks/plan-checkbox-guard.sh` with `spawnSync("bash", [HOOK_PATH], { input: payload })`. Tracing with `bash -x` showed the hook stalled at `payload="$(cat)"`: the child saw the payload bytes but did not receive EOF in this sandbox. The same hook sequence completed from a normal shell with file redirection and produced `baseline_exit=0`, `changed_repo_exit=2`, and `plan_changed_exit=0`.
+
+**Root cause:** I assumed Node's `spawnSync` `input` option was equivalent to a real stdin file for hook scripts. In this execution environment it was not reliable for hooks that read all stdin with `cat`, and it made correct hook behavior look like a product hang.
+
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/plan-checkbox-guard-hook.test.ts` (search: `payloadPath`), `test/unit/hook-registrar.test.ts` (search: `runLauncherWithPayload`).
+
+---
+
+## Lesson: Directory targets can break Node's test runner
+
+**Status:** active | **Created:** 2026-06-11
+
+**What happened:** While executing `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md`, the milestone's baseline command `node --import tsx --test test/unit/` failed before running tests: Node treated the directory argument as a module target and tried to import `test/unit/index.json`, producing `ERR_MODULE_NOT_FOUND`. The canonical repo runner `node scripts/run-tests.mjs fast` immediately passed with `# pass 661`, `# fail 0`.
+
+**Root cause:** I trusted a milestone's directory-shaped test command instead of checking `package.json` and `scripts/run-tests.mjs`. In this repo, test file discovery and slow/fast partitioning live in `scripts/run-tests.mjs`; direct Node `--test` invocations should name specific `*.test.ts` files, not a directory.
+
+**Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md` (search: `node scripts/run-tests.mjs fast`).
+
 ---
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer

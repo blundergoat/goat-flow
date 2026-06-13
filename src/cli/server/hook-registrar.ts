@@ -278,6 +278,10 @@ function ensureHookGitignoreEntries(projectPath: string): void {
   ensureGoatFlowGitignoreEntry(projectPath, "!hooks/**");
 }
 
+function ensurePlanGuardGitignoreEntries(projectPath: string): void {
+  ensureGoatFlowGitignoreEntry(projectPath, "logs/plan-guard-state.json");
+}
+
 function removeLegacyAgentScriptIfPresent(
   projectPath: string,
   hooksDir: string,
@@ -308,6 +312,14 @@ function removeLegacyAgentHookScripts(
   }
 }
 
+function hookScriptContent(script: string): string {
+  const source = readFileSync(
+    getTemplatePath(`workflow/hooks/${script}`),
+    "utf-8",
+  );
+  return source;
+}
+
 function copyHookScripts(
   projectPath: string,
   agent: AgentProfile,
@@ -316,9 +328,8 @@ function copyHookScripts(
   if (!agent.hooksDir) return;
   mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
   for (const script of spec.scriptFiles) {
-    const source = getTemplatePath(`workflow/hooks/${script}`);
     const target = scriptTarget(projectPath, agent, script);
-    writeFileAtomic(target, readFileSync(source, "utf-8"), projectPath);
+    writeFileAtomic(target, hookScriptContent(script), projectPath);
     chmodSync(target, 0o755);
   }
   if (spec.id === "deny-dangerous") {
@@ -340,6 +351,9 @@ function copyHookScripts(
     for (const script of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
       removeScriptIfPresent(projectPath, agent, script);
     }
+  }
+  if (spec.id === "plan-checkbox-guard") {
+    ensurePlanGuardGitignoreEntries(projectPath);
   }
   removeLegacyAgentHookScripts(projectPath, spec);
 }
@@ -436,6 +450,35 @@ function readDesired(projectPath: string, spec: HookSpec): boolean {
   return readHookEnabled(projectPath, spec.id, spec.defaultEnabled);
 }
 
+/**
+ * Check whether an agent's manifest declares the event a spec registers on, so
+ * unsupported-agent cleanup only touches configs that could host the entry.
+ * Keeps copilot (post_turn: null) out of Stop-spec config rewrites.
+ */
+function agentDeclaresSpecEvent(agent: AgentProfile, spec: HookSpec): boolean {
+  if (!agent.hookEvents) return false;
+  if (spec.event === "Stop") return agent.hookEvents.postTurn !== null;
+  return true;
+}
+
+/**
+ * Remove leftover hook config entries from an agent the registry now marks
+ * unsupported for this spec (e.g. plan-checkbox-guard gated off codex and
+ * antigravity after the M02b Stop-payload spike). Without this, flipping an
+ * agent to unsupported strands dead registrations that agents may still
+ * attempt to run. Scripts are shared across agents and stay untouched.
+ */
+function pruneUnsupportedAgentHookEntries(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+): void {
+  if (!isSupportedAgent(agent)) return;
+  if (!agentDeclaresSpecEvent(agent, spec)) return;
+  if (!hookConfigExists(projectPath, agent)) return;
+  writeAgentHookState(projectPath, agent, spec, false);
+}
+
 function reconcileHook(
   projectPath: string,
   spec: HookSpec,
@@ -443,7 +486,10 @@ function reconcileHook(
 ): void {
   const profiles = getAgentProfiles();
   for (const agent of profiles) {
-    if (unsupportedReasonForSpec(spec, agent)) continue;
+    if (unsupportedReasonForSpec(spec, agent)) {
+      pruneUnsupportedAgentHookEntries(projectPath, agent, spec);
+      continue;
+    }
     if (!isSupportedAgent(agent)) continue;
     if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
     if (enabled) copyHookScripts(projectPath, agent, spec);

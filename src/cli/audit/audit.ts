@@ -261,6 +261,7 @@ function applyCheckToConcern(
   acknowledged: boolean,
 ): void {
   concern.findings.push(...result.findings);
+  if (result.limits) concern.limits.push(...result.limits);
   if (check.type === "metric") {
     applyMetricCheck(concern, result);
     return;
@@ -274,6 +275,20 @@ function applyCheckToConcern(
     concern.status = "fail";
     addRemediation(concern, result);
   }
+}
+
+/** Render a harness check that is intentionally not applicable to this context. */
+function skippedHarnessCheck(check: HarnessCheck): CheckResult {
+  const impact = classifyCheckImpact("skipped", check.type);
+  return {
+    id: check.id,
+    name: check.name,
+    status: "skipped",
+    ...impact,
+    provenance: labelEvidencePathBases(check.provenance),
+    type: check.type,
+    evidenceKind: check.evidenceKind,
+  };
 }
 
 /**
@@ -304,6 +319,10 @@ export function computeHarness(ctx: AuditContext): {
 
   for (const check of HARNESS_CHECKS) {
     assertCheckCanRunWithoutStack(ctx, check);
+    if (check.skip?.(ctx)) {
+      checks.push(skippedHarnessCheck(check));
+      continue;
+    }
     const result = check.run(ctx);
     const acknowledged =
       check.type === "advisory" &&

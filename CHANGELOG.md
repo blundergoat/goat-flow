@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.12.0 - Unreleased
+
+Verification-score, universal post-turn safety, and jq compatibility release.
+
+- **Default post-turn hook is universal safety, not project validation** - `post-turn-safety` now installs by default for Claude, Codex, and Antigravity Stop events and scans changed content for obvious secrets, private keys, credential assignments, and merge conflict markers without requiring project toolchain setup.
+- **Plan checkbox guard added as workflow hygiene** - `plan-checkbox-guard` installs beside `post-turn-safety` and blocks only when repo changes move while the active plan still has open checkboxes and the plan file stayed unchanged; it writes ignored local state under `.goat-flow/logs/plan-guard-state.json` and does not count as safety or validation evidence. It registers for Claude only: the Stop-payload spike verified Claude's `session_id`/`transcript_path`/`cwd`/`stop_hook_active` fields, while Codex Stop delivery never fired headlessly (codex exec 0.139.0) and Antigravity's payload could not be captured behind its hook-trust gate, so both are skipped with an explicit reason until verified.
+- **Project-validation Stop hook removed** - goat-flow no longer ships `post-turn-validate` or `toolchain.post-turn-fast`; project-specific build, test, lint, typecheck, and format commands stay explicit verification gates instead of automatic default hook behaviour.
+- **Copilot is no longer capped for a hook event it cannot host** - Agents with `supportsPostTurnHook=false` are skipped for `post-turn-hook-integrity`, while supported agents still lose Verification points for missing, masked, or no-validation hooks.
+- **`gruff-code-quality` supports stock distro jq 1.6** - Payload-range extraction no longer binds a jq keyword as a variable, and CI now runs the hook self-test against a pinned jq 1.6 binary so Ubuntu 22.04 and Debian 12 installs stay covered.
+- **Upgrade note** - Existing projects should rerun `goat-flow setup` or `goat-flow hooks sync` to install the default safety hook, remove stale validation-hook residue, and refresh agent hook registrations.
+
 ## v1.11.0 - 2026-06-11
 
 Harness hardening release: hook guardrails now run from the active checkout, gruff diagnostics are less brittle in monorepos, learning-loop memory is indexed and visible, and skill/playbook authoring has stronger routing checks before stale guidance ships.

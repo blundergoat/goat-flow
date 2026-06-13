@@ -60,11 +60,11 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 3. Verification
 
-**Audit checks:** hooks in sync, commit guidance present, evidence-before-claims rule present, post-turn hook integrity (informational).
+**Audit checks:** hooks in sync, commit guidance present, evidence-before-claims rule present, post-turn hook integrity (score-only metric for runtimes with a post-turn event; skipped where the runtime has no such event).
 
 **Quality evaluates:**
 - Do the configured validation commands actually run and produce meaningful output?
-- Does the post-turn hook run real validation (lint, typecheck, shellcheck), or just exit 0?
+- Does the generated post-turn hook run literal validation commands (lint, typecheck, shellcheck), or just exit 0?
 - Does the hook report failures honestly, or swallow them with `|| true`?
 
 ### 4. Recovery

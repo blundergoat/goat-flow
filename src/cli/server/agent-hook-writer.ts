@@ -125,9 +125,13 @@ function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   const unavailable =
     spec.id === "gruff-code-quality"
       ? `{ printf 'gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n' >&2; exit 0; }`
-      : agent.id === "antigravity"
-        ? `{ printf '{"decision":"deny","reason":"Policy hook unavailable: git repository root unavailable."}\\n'; exit 0; }`
-        : `{ printf 'BLOCKED: Policy hook unavailable: git repository root unavailable.\\n' >&2; exit 2; }`;
+      : spec.id === "post-turn-safety"
+        ? `{ printf 'post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n' >&2; exit 2; }`
+        : spec.id === "plan-checkbox-guard"
+          ? `{ printf 'plan-checkbox-guard: hook unavailable: git repository root or hook script unavailable.\\n' >&2; exit 1; }`
+          : agent.id === "antigravity"
+            ? `{ printf '{"decision":"deny","reason":"Policy hook unavailable: git repository root unavailable."}\\n'; exit 0; }`
+            : `{ printf 'BLOCKED: Policy hook unavailable: git repository root unavailable.\\n' >&2; exit 2; }`;
   // Central hook scripts live in the active worktree under .goat-flow/hooks.
   // Resolve the active tree first so linked worktrees run the policy checked out
   // beside the files being edited. Claude/Antigravity also fall back to
@@ -177,6 +181,7 @@ function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
 
 /** Translate generic hook matchers into Antigravity's tool names while leaving other agents unchanged. */
 function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
+  if (spec.event === "Stop") return "";
   if (agent.id !== "antigravity") return spec.matcher;
   if (spec.id === "gruff-code-quality") {
     return [
@@ -211,6 +216,17 @@ function removeHookEntries(config: JsonObject, event: string, spec: HookSpec) {
 
 /** Create the Claude/Codex hook entries for each matcher segment in the managed spec. */
 function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
+  if (spec.event === "Stop") {
+    const command: JsonObject = {
+      type: "command",
+      command: shellCommand(agent, spec),
+    };
+    if (agent.id === "claude" && spec.timeoutSec !== undefined) {
+      command.timeout = spec.timeoutSec;
+    }
+    if (agent.id === "codex") command.statusMessage = spec.displayName;
+    return [{ hooks: [command] }];
+  }
   return matcherParts(spec.matcher).map((matcher) => {
     const command: JsonObject = {
       type: "command",
@@ -242,18 +258,27 @@ function antigravityHookDefinition(
   agent: AgentProfile,
   spec: HookSpec,
 ): JsonObject {
+  const command = {
+    type: "command",
+    command: shellCommand(agent, spec),
+    timeout: spec.timeoutSec ?? 30,
+  };
+  if (spec.event === "Stop") {
+    return {
+      enabled: true,
+      [hookEventKey(agent, spec)]: [
+        {
+          hooks: [command],
+        },
+      ],
+    };
+  }
   return {
     enabled: true,
     [hookEventKey(agent, spec)]: [
       {
         matcher: matcherForAgent(agent, spec),
-        hooks: [
-          {
-            type: "command",
-            command: shellCommand(agent, spec),
-            timeout: spec.timeoutSec ?? 30,
-          },
-        ],
+        hooks: [command],
       },
     ],
   };
@@ -278,29 +303,39 @@ function appendHookEntries(
   entries.push(...claudeCodexEntries(agent, spec));
 }
 
-function hasAllExpectedEntries(
+function hasAntigravityExpectedEntries(
   config: JsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
-  if (agent.id === "antigravity") {
-    const definition = config[spec.id];
-    if (!isObject(definition) || definition.enabled === false) return false;
-    const entries = definition[hookEventKey(agent, spec)];
-    return (
-      Array.isArray(entries) &&
-      entries.some(
-        (entry) =>
-          isObject(entry) &&
-          entry.matcher === matcherForAgent(agent, spec) &&
-          entryReferencesSpec(entry, spec),
-      )
+  const definition = config[spec.id];
+  if (!isObject(definition) || definition.enabled === false) return false;
+  const entries = definition[hookEventKey(agent, spec)];
+  if (!Array.isArray(entries)) return false;
+  if (spec.event === "Stop") {
+    return entries.some(
+      (entry) => isObject(entry) && entryReferencesSpec(entry, spec),
     );
   }
+  return entries.some(
+    (entry) =>
+      isObject(entry) &&
+      entry.matcher === matcherForAgent(agent, spec) &&
+      entryReferencesSpec(entry, spec),
+  );
+}
 
+function hasEventExpectedEntries(
+  config: JsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
   const hooks = isObject(config.hooks) ? config.hooks : {};
   const entries = hooks[hookEventKey(agent, spec)];
   if (!Array.isArray(entries)) return false;
+  if (spec.event === "Stop") {
+    return entries.some((entry) => entryReferencesSpec(entry, spec));
+  }
   if (agent.id === "copilot") {
     return entries.some((entry) => entryReferencesSpec(entry, spec));
   }
@@ -312,6 +347,17 @@ function hasAllExpectedEntries(
         entryReferencesSpec(entry, spec),
     ),
   );
+}
+
+function hasAllExpectedEntries(
+  config: JsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  if (agent.id === "antigravity") {
+    return hasAntigravityExpectedEntries(config, agent, spec);
+  }
+  return hasEventExpectedEntries(config, agent, spec);
 }
 
 export function readAgentHookState(

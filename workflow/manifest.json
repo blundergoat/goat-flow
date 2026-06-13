@@ -35,6 +35,8 @@
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/post-turn-safety.sh",
+    ".goat-flow/hooks/plan-checkbox-guard.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
@@ -79,7 +81,7 @@
     ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
     ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, and release-notes.md for per-release narrative discipline. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
-    ".goat-flow/hooks/": "Committed central hook runtime. Holds deny-dangerous.sh and gruff-code-quality.sh dispatchers plus hook-specific policy modules under subdirectories.",
+    ".goat-flow/hooks/": "Committed central hook runtime. Holds deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, plan-checkbox-guard.sh, and hook-specific policy modules under subdirectories.",
     ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
     ".goat-flow/plans/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
@@ -146,7 +148,8 @@
       "guard-secret-paths.sh",
       "guard-repository-writes.sh",
       "guardrails-self-test.sh",
-      "deny-dangerous.self-test.sh"
+      "deny-dangerous.self-test.sh",
+      "post-turn-validate.sh"
     ]
   },
 
@@ -177,7 +180,9 @@
       },
       "hooks": [
         "deny-dangerous.sh",
-        "gruff-code-quality.sh"
+        "gruff-code-quality.sh",
+        "post-turn-safety.sh",
+        "plan-checkbox-guard.sh"
       ]
     },
     "codex": {
@@ -210,7 +215,8 @@
       },
       "hooks": [
         "deny-dangerous.sh",
-        "gruff-code-quality.sh"
+        "gruff-code-quality.sh",
+        "post-turn-safety.sh"
       ]
     },
     "antigravity": {
@@ -242,7 +248,8 @@
       },
       "hooks": [
         "deny-dangerous.sh",
-        "gruff-code-quality.sh"
+        "gruff-code-quality.sh",
+        "post-turn-safety.sh"
       ]
     },
     "copilot": {
@@ -271,10 +278,7 @@
         "pre_tool": "preToolUse",
         "post_turn": null
       },
-      "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh"
-      ]
+      "hooks": ["deny-dangerous.sh", "gruff-code-quality.sh"]
     }
   },
 

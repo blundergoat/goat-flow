@@ -2,6 +2,7 @@
 
 **Date:** 2026-04-15
 **Status:** Implemented
+**Updated:** 2026-06-11 - ADR-036 partially supersedes the "no core post-turn hook" stance with a calibrated generate-at-install design; this ADR remains the reason stack-guessed `stop-lint.sh` must not return.
 
 ## Context
 

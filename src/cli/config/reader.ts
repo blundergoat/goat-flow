@@ -30,6 +30,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   "skill-overrides",
   "harness",
   "hooks",
+  "plan-guard",
   "terminal",
   "quality",
 ]);
@@ -65,6 +66,13 @@ const CONFIG_DEFAULTS: GoatFlowConfig = {
   terminal: { idleTimeoutMinutes: 480 },
   harness: { acknowledge: [] },
   hooks: {},
+  planGuard: {
+    enabled: true,
+    searchPaths: [".goat-flow/plans"],
+    maxDepth: 3,
+    stalenessDays: 14,
+    planFile: null,
+  },
 };
 
 /** Clone the default config object so callers can mutate it safely. */
@@ -99,6 +107,13 @@ function cloneDefaults(): GoatFlowConfig {
     terminal: { ...CONFIG_DEFAULTS.terminal },
     harness: { acknowledge: [...CONFIG_DEFAULTS.harness.acknowledge] },
     hooks: { ...CONFIG_DEFAULTS.hooks },
+    planGuard: {
+      enabled: CONFIG_DEFAULTS.planGuard.enabled,
+      searchPaths: [...CONFIG_DEFAULTS.planGuard.searchPaths],
+      maxDepth: CONFIG_DEFAULTS.planGuard.maxDepth,
+      stalenessDays: CONFIG_DEFAULTS.planGuard.stalenessDays,
+      planFile: CONFIG_DEFAULTS.planGuard.planFile,
+    },
   };
 }
 
@@ -258,6 +273,7 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
 
   mergeHarness(raw.harness, merged);
   mergeHooks(raw.hooks, merged);
+  mergePlanGuard(raw["plan-guard"], merged);
   mergeQuality(raw.quality, merged);
 
   return merged;
@@ -273,6 +289,33 @@ function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
     hooks[hookId] = { enabled: hookValue.enabled };
   }
   merged.hooks = hooks;
+}
+
+/** Apply plan-checkbox guard settings from the optional kebab-case config block. */
+function mergePlanGuard(value: unknown, merged: GoatFlowConfig): void {
+  if (!isRecord(value)) return;
+  if (typeof value.enabled === "boolean") {
+    merged.planGuard.enabled = value.enabled;
+  }
+  if (Array.isArray(value["search-paths"])) {
+    const searchPaths = value["search-paths"].filter(
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
+    );
+    if (searchPaths.length > 0) merged.planGuard.searchPaths = searchPaths;
+  }
+  const maxDepth = value["max-depth"];
+  if (Number.isInteger(maxDepth) && (maxDepth as number) >= 0) {
+    merged.planGuard.maxDepth = maxDepth as number;
+  }
+  const stalenessDays = value["staleness-days"];
+  if (Number.isInteger(stalenessDays) && (stalenessDays as number) >= 0) {
+    merged.planGuard.stalenessDays = stalenessDays as number;
+  }
+  const planFile = value["plan-file"];
+  if (typeof planFile === "string" && planFile.trim().length > 0) {
+    merged.planGuard.planFile = planFile.trim();
+  }
 }
 
 /** Pass through the raw quality config block; full validation lives in quality-config.ts. */
@@ -548,6 +591,61 @@ function validateHooksField(
   });
 }
 
+/** Validate optional plan-checkbox guard configuration. */
+function validatePlanGuardField(
+  raw: RawConfig,
+  _warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, "plan-guard", errors, (value) => {
+    if ("enabled" in value && typeof value.enabled !== "boolean") {
+      pushError(errors, "plan-guard.enabled", "must be a boolean");
+    }
+    if ("search-paths" in value) {
+      validateStringArray(
+        value["search-paths"],
+        "plan-guard.search-paths",
+        errors,
+      );
+    }
+    if ("max-depth" in value) {
+      const maxDepth = value["max-depth"];
+      if (
+        typeof maxDepth !== "number" ||
+        !Number.isInteger(maxDepth) ||
+        maxDepth < 0
+      ) {
+        pushError(
+          errors,
+          "plan-guard.max-depth",
+          "must be a non-negative integer",
+        );
+      }
+    }
+    if ("staleness-days" in value) {
+      const stalenessDays = value["staleness-days"];
+      if (
+        typeof stalenessDays !== "number" ||
+        !Number.isInteger(stalenessDays) ||
+        stalenessDays < 0
+      ) {
+        pushError(
+          errors,
+          "plan-guard.staleness-days",
+          "must be a non-negative integer",
+        );
+      }
+    }
+    if (
+      "plan-file" in value &&
+      (typeof value["plan-file"] !== "string" ||
+        value["plan-file"].trim().length === 0)
+    ) {
+      pushError(errors, "plan-guard.plan-file", "must be a non-empty string");
+    }
+  });
+}
+
 /** Validate the telemetry field when present. */
 function validateTelemetryField(
   raw: RawConfig,
@@ -663,6 +761,7 @@ const CONFIG_VALIDATORS: ConfigValidator[] = [
   validateSkillOverridesField,
   validateHarnessField,
   validateHooksField,
+  validatePlanGuardField,
   validateTerminalField,
 ];
 

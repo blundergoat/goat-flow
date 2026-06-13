@@ -17,6 +17,24 @@ skills:
   # goat-review:
   #   local_pr_base: deploy
 
+# ── Project Validation Commands ─────────────────
+# Project-specific commands for explicit verification gates and setup prompts.
+# The default post-turn safety hook does not run these commands.
+toolchain:
+  lint:
+    - >-
+      shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
+      workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh
+      .goat-flow/hooks/deny-dangerous/*.sh
+    - >-
+      bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
+      workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh
+      .goat-flow/hooks/deny-dangerous/*.sh
+  build:
+    - npm run typecheck
+  test:
+    - npm run test:fast
+
 # ── Telemetry ─────────────────────────────────
 # Opt-in: logs skill invocations to .goat-flow/logs/skill-usage.jsonl
 telemetry: false
@@ -34,10 +52,23 @@ learning-loop:
 # Togglable goat-flow hook state. Missing entries use registry defaults.
 # Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.
 hooks:
-  gruff-code-quality:
-    enabled: true
   deny-dangerous:
     enabled: true
+  gruff-code-quality:
+    enabled: true
+  post-turn-safety:
+    enabled: true
+  plan-checkbox-guard:
+    enabled: true
+
+# ── Plan Checkbox Guard ────────────────────────
+# Workflow reminder only: tracks active plan checkbox drift after agent turns.
+plan-guard:
+  enabled: true
+  search-paths:
+    - .goat-flow/plans
+  max-depth: 3
+  staleness-days: 14
 line-limits:
   target: 125
   limit: 150

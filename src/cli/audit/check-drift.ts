@@ -497,6 +497,14 @@ function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
   return parsed.hooks;
 }
 
+function expectedHookScript(
+  _fs: ReadonlyFS,
+  _hookFile: string,
+  template: string,
+): string {
+  return template;
+}
+
 /** Extract an explicit enabled boolean without treating missing config as disabled. */
 function enabledFromHookConfig(value: unknown): boolean | null {
   if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
@@ -543,6 +551,48 @@ function removeHookEntries(
   hooks[event] = next;
 }
 
+function parsedHookTemplate(template: string): Record<string, unknown> | null {
+  let config: unknown;
+  try {
+    config = JSON.parse(template);
+  } catch {
+    return null;
+  }
+  return isRecord(config) ? config : null;
+}
+
+function applyExplicitHookToggle(
+  fs: ReadonlyFS,
+  config: Record<string, unknown>,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  if (spec.unsupportedAgents?.copilot) return false;
+  const enabled = explicitHookEnabled(fs, spec.id);
+  if (enabled === null) return false;
+
+  const event = hookEventKey("copilot", spec);
+  removeHookEntries(config, event, spec);
+  if (!enabled) {
+    deleteHookEventIfEmpty(config, event);
+    return true;
+  }
+  ensureHookEntries(config, event).push(copilotHookEntry(agent, spec));
+  return true;
+}
+
+function applyExplicitHookToggles(
+  fs: ReadonlyFS,
+  config: Record<string, unknown>,
+  agent: AgentProfile,
+): boolean {
+  let changed = false;
+  for (const spec of listHookSpecs()) {
+    changed = applyExplicitHookToggle(fs, config, agent, spec) || changed;
+  }
+  return changed;
+}
+
 /**
  * Copilot keeps hook registrations in `.github/hooks/hooks.json`, which is
  * also the manifest-declared installed hook artifact. The static template only
@@ -557,27 +607,10 @@ function expectedHookConfig(
 ): string {
   if (agentId !== "copilot" || !isAgentId(agentId)) return template;
 
-  let config: unknown;
-  try {
-    config = JSON.parse(template);
-  } catch {
-    return template;
-  }
-  if (!isRecord(config)) return template;
+  const config = parsedHookTemplate(template);
+  if (config === null) return template;
 
-  let hasHookConfigChanged = false;
-  for (const spec of listHookSpecs()) {
-    const enabled = explicitHookEnabled(fs, spec.id);
-    if (enabled === null) continue;
-    hasHookConfigChanged = true;
-    const event = hookEventKey(agentId, spec);
-    removeHookEntries(config, event, spec);
-    if (!enabled) {
-      deleteHookEventIfEmpty(config, event);
-      continue;
-    }
-    ensureHookEntries(config, event).push(copilotHookEntry(agent, spec));
-  }
+  const hasHookConfigChanged = applyExplicitHookToggles(fs, config, agent);
 
   if (!hasHookConfigChanged) return template;
   return `${JSON.stringify(config, null, 2)}\n`;
@@ -625,6 +658,7 @@ function compareHooks(
   fs: ReadonlyFS,
   templateRoot: string,
   findings: DriftFinding[],
+  checkedHookArtifacts: Set<string>,
 ): number {
   let checked = 0;
   const manifest = loadManifest();
@@ -635,13 +669,17 @@ function compareHooks(
       const templateRel = hookTemplateRel(agentId, agent, hookFile);
       const installedRel = pathPosix.join(agent.hooks_dir, hookFile);
       checked++;
+      checkedHookArtifacts.add(installedRel);
       compareHookArtifact(
         fs,
         templateRoot,
         findings,
         templateRel,
         installedRel,
-        (template) => expectedHookConfig(fs, agentId, agent, template),
+        (template) =>
+          hookFile === agent.hook_config_file
+            ? expectedHookConfig(fs, agentId, agent, template)
+            : expectedHookScript(fs, hookFile, template),
       );
     }
     if (agentId === "copilot" && agent.hook_config_file) {
@@ -661,6 +699,45 @@ function compareHooks(
   return checked;
 }
 
+function shouldCompareRegistryHookScript(
+  fs: ReadonlyFS,
+  spec: HookSpec,
+  installedRel: string,
+): boolean {
+  if (fs.exists(installedRel)) return true;
+  if (spec.defaultEnabled) return true;
+  return explicitHookEnabled(fs, spec.id) === true;
+}
+
+/** Compare optional registry hook scripts when present or explicitly enabled. */
+function compareRegistryHookScripts(
+  fs: ReadonlyFS,
+  templateRoot: string,
+  findings: DriftFinding[],
+  checkedHookArtifacts: Set<string>,
+): number {
+  let checked = 0;
+  for (const spec of listHookSpecs()) {
+    for (const script of spec.scriptFiles) {
+      if (script.includes("/")) continue;
+      const installedRel = pathPosix.join(".goat-flow/hooks", script);
+      if (checkedHookArtifacts.has(installedRel)) continue;
+      if (!shouldCompareRegistryHookScript(fs, spec, installedRel)) continue;
+      checked++;
+      checkedHookArtifacts.add(installedRel);
+      compareHookArtifact(
+        fs,
+        templateRoot,
+        findings,
+        `workflow/hooks/${script}`,
+        installedRel,
+        (template) => expectedHookScript(fs, script, template),
+      );
+    }
+  }
+  return checked;
+}
+
 /**
  * Run all drift comparisons and return a consolidated report.
  *
@@ -672,9 +749,16 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   const templateRoot = options.templateRoot ?? getTemplatePath("");
   const findings: DriftFinding[] = [];
   let checked = 0;
+  const checkedHookArtifacts = new Set<string>();
   checked += compareSkills(fs, templateRoot, findings);
   checked += compareSharedFiles(fs, templateRoot, findings);
-  checked += compareHooks(fs, templateRoot, findings);
+  checked += compareHooks(fs, templateRoot, findings, checkedHookArtifacts);
+  checked += compareRegistryHookScripts(
+    fs,
+    templateRoot,
+    findings,
+    checkedHookArtifacts,
+  );
   findOrphans(fs, findings);
   return {
     status: findings.length === 0 ? "pass" : "fail",

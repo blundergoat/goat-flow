@@ -6,7 +6,7 @@
  */
 import type { AgentId } from "../types.js";
 
-type HookEvent = "PreToolUse" | "PostToolUse";
+type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
 
 /** Static manifest for one shipped hook and how agents register it. */
 export interface HookSpec extends Record<"togglable", boolean> {
@@ -53,6 +53,49 @@ const HOOKS: HookSpec[] = [
     // Above the script's internal 60s analyzer timeout so the hook's own
     // timeout/config diagnostics print before the runner kills the wrapper.
     timeoutSec: 90,
+  },
+  {
+    id: "post-turn-safety",
+    displayName: "Post-turn safety guard",
+    description:
+      "Scan changed content after an agent turn for built-in safety hazards such as obvious secrets, private keys, and merge conflict markers.",
+    event: "Stop",
+    matcher: "",
+    scriptFiles: ["post-turn-safety.sh"],
+    primaryScript: "post-turn-safety.sh",
+    togglable: true,
+    defaultEnabled: true,
+    requiresConfirmDialog: false,
+    timeoutSec: 60,
+    unsupportedAgents: {
+      copilot: "Copilot has no project-local post-turn hook event.",
+    },
+  },
+  {
+    id: "plan-checkbox-guard",
+    displayName: "Plan checkbox guard",
+    description:
+      "Remind agents to update the active milestone plan when repository changes move while open checkboxes remain untouched.",
+    event: "Stop",
+    matcher: "",
+    scriptFiles: ["plan-checkbox-guard.sh"],
+    primaryScript: "plan-checkbox-guard.sh",
+    togglable: true,
+    defaultEnabled: true,
+    requiresConfirmDialog: false,
+    timeoutSec: 15,
+    // Per the M02b Stop-payload spike (2026-06-13): only Claude delivered a
+    // verified payload (session_id/transcript_path/cwd/stop_hook_active).
+    // Codex and Antigravity Stop delivery is unverified, and a blocking guard
+    // without a proven stop_hook_active loop guard risks turn-end loops, so
+    // they are gated off until a verified capture supersedes this (ADR-038).
+    unsupportedAgents: {
+      copilot: "Copilot has no project-local post-turn hook event.",
+      codex:
+        "Codex Stop-hook delivery is unverified: registered .codex/hooks.json Stop hooks did not fire under codex exec 0.139.0.",
+      antigravity:
+        "Antigravity Stop payload is unverified: hook trust gates execution and no stop_hook_active loop guard was observed.",
+    },
   },
 ];
 

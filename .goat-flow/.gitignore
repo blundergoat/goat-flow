@@ -25,6 +25,7 @@
 # Keep the session-log path and anchor file, but ignore the actual markdown logs.
 # `logs/sessions/*.md` is workspace-local continuity state for the current checkout.
 !logs/
+logs/plan-guard-state.json
 !logs/sessions/
 !logs/sessions/.gitkeep
 logs/sessions/*.md

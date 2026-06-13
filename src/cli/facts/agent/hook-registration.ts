@@ -65,12 +65,13 @@ function preferredHookPathFromCommands(commands: string[]): string | null {
     const candidates = extractHookPathsFromCommand(command);
     for (const candidate of candidates) pushUniquePath(paths, candidate);
   }
-  return (
+  const preferred =
+    paths.find((path) => path.endsWith("/post-turn-safety.sh")) ??
     paths.find((path) => path.endsWith("/deny-dangerous.sh")) ??
     paths.find((path) => path.endsWith("/guard-repository-writes.sh")) ??
-    paths[0] ??
-    null
-  );
+    paths.find((path) => !path.endsWith("/plan-checkbox-guard.sh")) ??
+    null;
+  return preferred;
 }
 
 /** Return the parsed `hooks` object from settings when it exists. */
@@ -92,6 +93,32 @@ function readAntigravityHookDefinition(
   const definition = (hookConfigParsed as Record<string, unknown>)[hookId];
   if (!definition || typeof definition !== "object") return null;
   return definition as Record<string, unknown>;
+}
+
+/** Return the first Antigravity top-level hook definition registered for the post-turn event. */
+function readAntigravityPostTurnRegistration(
+  agent: AgentProfile,
+  hookConfigParsed: unknown,
+): HookRegistrationMatch | null {
+  if (agent.id !== "antigravity" || !agent.hookEvents?.postTurn) return null;
+  if (!hookConfigParsed || typeof hookConfigParsed !== "object") return null;
+
+  const commands: string[] = [];
+  for (const definition of Object.values(
+    hookConfigParsed as Record<string, unknown>,
+  )) {
+    if (!definition || typeof definition !== "object") continue;
+    const hookDefinition = definition as Record<string, unknown>;
+    if (hookDefinition.enabled === false) continue;
+    commands.push(
+      ...extractCommandsFromEventConfig(
+        hookDefinition,
+        agent.hookEvents.postTurn,
+      ),
+    );
+  }
+  const path = preferredHookPathFromCommands(commands);
+  return { isRegistered: path !== null, path };
 }
 
 /** Extract the shell command from one hook entry when it uses command mode. */
@@ -138,21 +165,28 @@ function extractCommandsFromEventEntry(entry: unknown): string[] {
   return commands;
 }
 
-/** Normalize one event's hook registration into a simple registered/path pair. */
-function normalizeEventConfig(
+/** Extract all shell commands from one normalized event config. */
+function extractCommandsFromEventConfig(
   hooks: Record<string, unknown>,
   event: string | null,
-): HookRegistrationMatch {
-  if (!event) return { isRegistered: false, path: null };
+): string[] {
+  if (!event) return [];
   const rawEvent = hooks[event];
-  if (rawEvent === undefined) return { isRegistered: false, path: null };
-  if (!Array.isArray(rawEvent)) return { isRegistered: false, path: null };
+  if (!Array.isArray(rawEvent)) return [];
 
   const commands: string[] = [];
   for (const entry of rawEvent) {
     commands.push(...extractCommandsFromEventEntry(entry));
   }
+  return commands;
+}
 
+/** Normalize one event's hook registration into a simple registered/path pair. */
+function normalizeEventConfig(
+  hooks: Record<string, unknown>,
+  event: string | null,
+): HookRegistrationMatch {
+  const commands = extractCommandsFromEventConfig(hooks, event);
   const path = preferredHookPathFromCommands(commands);
   return { isRegistered: path !== null, path };
 }
@@ -200,6 +234,17 @@ export function buildHookRegistration(
   postTurnRegistered: boolean;
   postTurnRegisteredPath: string | null;
 } {
+  const antigravityPostTurn = readAntigravityPostTurnRegistration(
+    agent,
+    hookConfigParsed,
+  );
+  if (antigravityPostTurn !== null) {
+    return {
+      postTurnRegistered: antigravityPostTurn.isRegistered,
+      postTurnRegisteredPath: antigravityPostTurn.path,
+    };
+  }
+
   const hooks = readHooksObject(hookConfigParsed);
   if (!hooks) {
     return {

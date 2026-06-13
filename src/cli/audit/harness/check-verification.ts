@@ -39,6 +39,103 @@ function verificationDetails(
   };
 }
 
+type AgentFacts = AuditContext["agents"][number];
+
+function isPostTurnSafetyHook(agentFacts: AgentFacts): boolean {
+  return (
+    agentFacts.hooks.postTurnRegisteredPath?.endsWith("post-turn-safety.sh") ??
+    false
+  );
+}
+
+function postTurnHookReason(agentFacts: AgentFacts): {
+  reason: string;
+  expected?: string;
+  actual?: string;
+} {
+  if (agentFacts.agent.supportsPostTurnHook === false) {
+    return {
+      reason: "post-turn hook not applicable",
+      expected: "agent supports a post-turn hook event",
+      actual: "no post-turn hook event",
+    };
+  }
+  if (!agentFacts.hooks.postTurnExists) {
+    return {
+      reason: "post-turn hook missing",
+      expected: "hook absent or meaningful validation",
+      actual: "missing",
+    };
+  }
+  if (!agentFacts.hooks.postTurnHasValidation) {
+    if (isPostTurnSafetyHook(agentFacts)) {
+      return {
+        reason:
+          "post-turn safety guard installed; project validation not configured",
+        expected: "universal safety guard or opt-in project validation",
+        actual: "safety guard only",
+      };
+    }
+    return {
+      reason: "post-turn hook has no validation logic",
+      expected: "meaningful validation",
+      actual: "no validation logic",
+    };
+  }
+  if (agentFacts.hooks.postTurnSwallowsFailures) {
+    return {
+      reason: "post-turn hook always exits 0",
+      expected: "validation failures are reported",
+      actual: "always exits 0",
+    };
+  }
+  return {
+    reason: "post-turn hook reports failures honestly",
+    expected: "validation failures are reported",
+    actual: "honest failure reporting",
+  };
+}
+
+function collectPostTurnHookFinding(
+  agentFacts: AgentFacts,
+  findings: string[],
+  safetyOnlyAgents: string[],
+): boolean {
+  if (agentFacts.agent.supportsPostTurnHook === false) return false;
+  if (!agentFacts.hooks.postTurnExists) return false;
+
+  if (agentFacts.hooks.postTurnHasValidation) {
+    findings.push(`${agentFacts.agent.id}: post-turn hook runs validation`);
+  } else if (isPostTurnSafetyHook(agentFacts)) {
+    findings.push(
+      `${agentFacts.agent.id}: post-turn safety guard installed (not project validation)`,
+    );
+    safetyOnlyAgents.push(agentFacts.agent.id);
+  } else {
+    findings.push(
+      `${agentFacts.agent.id}: post-turn hook has no validation logic`,
+    );
+  }
+
+  if (agentFacts.hooks.postTurnSwallowsFailures) {
+    findings.push(
+      `${agentFacts.agent.id}: post-turn hook always exits 0 (advisory mode)`,
+    );
+  } else if (agentFacts.hooks.postTurnHasValidation) {
+    findings.push(
+      `${agentFacts.agent.id}: post-turn hook reports failures honestly`,
+    );
+  }
+  return true;
+}
+
+function isBlockingPostTurnHookFinding(finding: string): boolean {
+  return (
+    finding.includes("no validation logic") ||
+    finding.includes("always exits 0")
+  );
+}
+
 /** Return the verification provenance. */
 function verificationProvenance(
   type: HarnessCheck["type"],
@@ -364,79 +461,34 @@ const postTurnHookIntegrity: HarnessCheck = {
     "docs/harness-audit.md",
     ".goat-flow/learning-loop/footguns/hooks.md",
   ]),
+  skip: (ctx) =>
+    ctx.agents.every(
+      (agentFacts) => agentFacts.agent.supportsPostTurnHook === false,
+    ),
   /** Run the Post-turn hook integrity check. */
   run: (ctx) => {
     const findings: string[] = [];
+    const safetyOnlyAgents: string[] = [];
     let hasPostTurnHook = false;
-    const details = verificationDetails(ctx, (agentFacts) => {
-      if (!agentFacts.hooks.postTurnExists) {
-        return {
-          reason: "post-turn hook missing",
-          expected: "hook absent or meaningful validation",
-          actual: "missing",
-        };
-      }
-      if (!agentFacts.hooks.postTurnHasValidation) {
-        return {
-          reason: "post-turn hook has no validation logic",
-          expected: "meaningful validation",
-          actual: "no validation logic",
-        };
-      }
-      if (agentFacts.hooks.postTurnSwallowsFailures) {
-        return {
-          reason: "post-turn hook always exits 0",
-          expected: "validation failures are reported",
-          actual: "always exits 0",
-        };
-      }
-      return {
-        reason: "post-turn hook reports failures honestly",
-        expected: "validation failures are reported",
-        actual: "honest failure reporting",
-      };
-    });
+    const details = verificationDetails(ctx, postTurnHookReason);
 
     for (const agentFacts of ctx.agents) {
-      if (!agentFacts.hooks.postTurnExists) continue;
-      hasPostTurnHook = true;
-
-      if (agentFacts.hooks.postTurnHasValidation) {
-        findings.push(`${agentFacts.agent.id}: post-turn hook runs validation`);
-      } else {
-        findings.push(
-          `${agentFacts.agent.id}: post-turn hook has no validation logic`,
-        );
-      }
-
-      if (agentFacts.hooks.postTurnSwallowsFailures) {
-        findings.push(
-          `${agentFacts.agent.id}: post-turn hook always exits 0 (advisory mode)`,
-        );
-      } else if (agentFacts.hooks.postTurnHasValidation) {
-        findings.push(
-          `${agentFacts.agent.id}: post-turn hook reports failures honestly`,
-        );
-      }
+      hasPostTurnHook =
+        collectPostTurnHookFinding(agentFacts, findings, safetyOnlyAgents) ||
+        hasPostTurnHook;
     }
 
     if (!hasPostTurnHook) {
       return fail(
-        ["No post-turn hooks installed; no hook-based validation evidence"],
+        ["No post-turn safety or validation hooks installed"],
         [
-          "Install a project-specific post-turn validation hook only if this project needs automatic post-action checks",
+          "Install the default post-turn safety guard, or opt into project-specific validation when this project needs automatic post-action checks",
         ],
         undefined,
         details,
       );
     }
-    if (
-      findings.some(
-        (finding) =>
-          finding.includes("no validation logic") ||
-          finding.includes("always exits 0"),
-      )
-    ) {
+    if (findings.some(isBlockingPostTurnHookFinding)) {
       return fail(
         findings,
         [
@@ -446,7 +498,14 @@ const postTurnHookIntegrity: HarnessCheck = {
         details,
       );
     }
-    return pass(findings, details);
+    const result = pass(findings, details);
+    if (safetyOnlyAgents.length > 0) {
+      result.limits = [
+        ...(result.limits ?? []),
+        `Post-turn safety is universal changed-content scanning only for ${safetyOnlyAgents.join(", ")}; it does not prove build, test, lint, typecheck, or format checks ran.`,
+      ];
+    }
+    return result;
   },
 };
 

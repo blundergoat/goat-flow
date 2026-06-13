@@ -260,6 +260,8 @@ export interface HarnessCheck {
   evidenceKind?: CheckEvidenceKind;
   /** True when the check reads `ctx.facts.stack` and must run only with full facts. */
   requiresStack?: boolean;
+  /** Return true when the harness check is intentionally not applicable. */
+  skip?: (ctx: AuditContext) => boolean;
   run: (ctx: AuditContext) => HarnessCheckResult;
 }
 
@@ -273,6 +275,8 @@ export interface HarnessCheckResult {
   displayStatus?: CheckDisplayStatus;
   /** Optional assurance label for checks that pass with caveats. */
   assurance?: CheckAssurance;
+  /** Non-gating caveats surfaced at the concern level. */
+  limits?: string[];
   /** Structured per-check detail for dashboard consumers. Discriminated by
    *  the parent `HarnessCheck.id`; each consuming page reads the keys it knows.
    *  Plain-text and markdown audit renderers ignore this block. */

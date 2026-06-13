@@ -356,15 +356,177 @@ describe("Audit scoring model", () => {
     );
     assert.ok(
       concerns.verification.limits.some((limit) =>
-        limit.includes("No post-turn hooks installed"),
+        limit.includes("No post-turn safety or validation hooks installed"),
       ),
       JSON.stringify(concerns.verification.limits),
     );
     assert.ok(
       concerns.verification.recommendations.some((recommendation) =>
-        recommendation.includes("project-specific post-turn validation hook"),
+        recommendation.includes("post-turn safety guard"),
       ),
       JSON.stringify(concerns.verification.recommendations),
+    );
+  });
+});
+
+describe("Audit scoring model", () => {
+  it("skips post-turn hook integrity for agents without a post-turn hook event", () => {
+    const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [PROFILES.copilot.instructionFile]: completeInstruction(
+        PROFILES.copilot.instructionFile,
+      ),
+    };
+    const ctx = makeCtx({
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          gitCommitInstructions: {
+            exists: true,
+            path: "docs/coding-standards/git-commit.md",
+            requiredPath: "docs/coding-standards/git-commit.md",
+            misplacedPaths: [],
+          },
+        },
+      },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
+      agents: [stubAgentFacts({ agent: PROFILES.copilot })],
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const metric = scope.checks.find(
+      (c) => c.id === "post-turn-hook-integrity",
+    )!;
+
+    assert.equal(metric.status, "skipped");
+    assert.equal(metric.displayStatus, "skipped");
+    assert.equal(metric.impact, "none");
+    assert.equal(concerns.verification.status, "pass");
+    assert.equal(concerns.verification.score, 100);
+    assert.equal(concerns.verification.metrics, 1);
+    assert.equal(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("No post-turn hooks installed"),
+      ),
+      false,
+    );
+  });
+
+  it("treats safety-only post-turn hooks as guardrail evidence, not validation evidence", () => {
+    const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
+    };
+    const hooks = {
+      ...stubAgentFacts().hooks,
+      postTurnExists: true,
+      postTurnRegistered: true,
+      postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+      postTurnExecutable: true,
+      postTurnHasValidation: false,
+      postTurnSwallowsFailures: false,
+    } satisfies AgentFacts["hooks"];
+    const ctx = makeCtx({
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          gitCommitInstructions: {
+            exists: true,
+            path: "docs/coding-standards/git-commit.md",
+            requiredPath: "docs/coding-standards/git-commit.md",
+            misplacedPaths: [],
+          },
+        },
+      },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
+      agents: [stubAgentFacts({ hooks })],
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const metric = scope.checks.find(
+      (c) => c.id === "post-turn-hook-integrity",
+    )!;
+
+    assert.equal(metric.status, "pass");
+    assert.equal(concerns.verification.status, "pass");
+    assert.equal(concerns.verification.score, 100);
+    assert.ok(
+      concerns.verification.findings.some((finding) =>
+        finding.includes("post-turn safety guard installed"),
+      ),
+      JSON.stringify(concerns.verification.findings),
+    );
+    assert.ok(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("does not prove build, test, lint, typecheck"),
+      ),
+      JSON.stringify(concerns.verification.limits),
+    );
+    assert.equal(
+      concerns.verification.findings.some((finding) =>
+        finding.includes("post-turn hook runs validation"),
+      ),
+      false,
+    );
+  });
+
+  it("keeps the 25-point loss when a supported post-turn hook masks validation failures", () => {
+    const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
+    };
+    const hooks = {
+      ...stubAgentFacts().hooks,
+      postTurnExists: true,
+      postTurnRegistered: true,
+      postTurnRegisteredPath: ".goat-flow/hooks/custom-post-turn.sh",
+      postTurnExecutable: true,
+      postTurnHasValidation: true,
+      postTurnSwallowsFailures: true,
+    } satisfies AgentFacts["hooks"];
+    const ctx = makeCtx({
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          gitCommitInstructions: {
+            exists: true,
+            path: "docs/coding-standards/git-commit.md",
+            requiredPath: "docs/coding-standards/git-commit.md",
+            misplacedPaths: [],
+          },
+        },
+      },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
+      agents: [stubAgentFacts({ hooks })],
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const metric = scope.checks.find(
+      (c) => c.id === "post-turn-hook-integrity",
+    )!;
+
+    assert.equal(metric.status, "fail");
+    assert.equal(metric.displayStatus, "warn");
+    assert.equal(metric.impact, "score-only");
+    assert.equal(concerns.verification.status, "pass");
+    assert.equal(concerns.verification.score, 75);
+    assert.ok(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("always exits 0"),
+      ),
+      JSON.stringify(concerns.verification.limits),
     );
   });
 });

@@ -67,6 +67,8 @@ const NAMED_PATHS = new Set([
   ".goat-flow/hooks/",
   ".goat-flow/hooks/deny-dangerous.sh",
   ".goat-flow/hooks/gruff-code-quality.sh",
+  ".goat-flow/hooks/post-turn-safety.sh",
+  ".goat-flow/hooks/plan-checkbox-guard.sh",
   ".goat-flow/hooks/deny-dangerous/",
   ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
@@ -686,6 +688,8 @@ const hookVersionCurrent: BuildCheck = {
   provenance: setupSpecProvenance([
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/post-turn-safety.sh",
+    ".goat-flow/hooks/plan-checkbox-guard.sh",
     "src/cli/constants.ts",
   ]),
   /** Run the Hook version check. */
@@ -693,8 +697,13 @@ const hookVersionCurrent: BuildCheck = {
     // Central hook dispatchers carry a `# goat-flow-hook-version: X.Y.Z` stamp. An
     // installed dispatcher whose stamp is missing (installed before the stamp
     // shipped) or behind the current release is a partial upgrade - re-sync. A
-    // dispatcher that is not installed is skipped (gruff-code-quality is optional).
-    for (const hookFile of ["deny-dangerous.sh", "gruff-code-quality.sh"]) {
+    // dispatcher that is not installed is skipped (optional hooks may be absent).
+    for (const hookFile of [
+      "deny-dangerous.sh",
+      "gruff-code-quality.sh",
+      "post-turn-safety.sh",
+      "plan-checkbox-guard.sh",
+    ]) {
       const relPath = `.goat-flow/hooks/${hookFile}`;
       const content = ctx.fs.readFile(relPath);
       if (content === null) continue;
