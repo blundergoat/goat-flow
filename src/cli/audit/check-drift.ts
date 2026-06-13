@@ -699,13 +699,27 @@ function compareHooks(
   return checked;
 }
 
+/**
+ * Decide whether the registry safety-net should compare one optional hook script.
+ *
+ * Drift only compares copies that actually exist on disk or that config explicitly
+ * enables - it never demands that a default-on hook be present. Whether a default
+ * guardrail like deny-dangerous is installed at all is the audit's agent-guardrail
+ * check's concern, not drift's; flagging it here would double-report and would mark
+ * hook-free installs (e.g. skills-only projects) as drifted. Gating on
+ * `spec.defaultEnabled` is therefore intentionally omitted.
+ *
+ * @param fs - ReadonlyFS rooted at the audited project.
+ * @param spec - Registry hook spec whose script is a comparison candidate.
+ * @param installedRel - Project-relative path of the installed hook script.
+ * @returns True when the installed copy is present or the hook is explicitly enabled.
+ */
 function shouldCompareRegistryHookScript(
   fs: ReadonlyFS,
   spec: HookSpec,
   installedRel: string,
 ): boolean {
   if (fs.exists(installedRel)) return true;
-  if (spec.defaultEnabled) return true;
   return explicitHookEnabled(fs, spec.id) === true;
 }
 
