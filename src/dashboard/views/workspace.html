@@ -262,11 +262,6 @@
                             :title="sessionTitleFor(s)"
                             x-text="sessionTitleFor(s)"
                           ></div>
-                          <span
-                            class="workspace-agent-chip"
-                            :class="sessionAgentClass(s)"
-                            x-text="s.runner"
-                          ></span>
                         </div>
                         <p
                           class="gf-text-muted"
@@ -301,10 +296,16 @@
                           style="
                             display: flex;
                             justify-content: flex-end;
+                            align-items: center;
                             gap: 6px;
                             padding-top: 6px;
                           "
                         >
+                          <span
+                            class="workspace-agent-chip"
+                            :class="sessionAgentClass(s)"
+                            x-text="s.runner"
+                          ></span>
                           <span class="gf-tooltip-wrap">
                             <button
                               @click.stop="confirmEndSessionId = (confirmEndSessionId === s.id ? null : s.id)"

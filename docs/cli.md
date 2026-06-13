@@ -22,7 +22,7 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 | `--harness` | Add AI Harness Completeness scope (17 checks, installed/not-installed per concern) |
 | `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
-| `--deny-runtime-smoke` | Execute the target's deny-hook code (its configured launcher string and managed script) for runtime proof. **Off by default** - an ordinary audit runs static deny-mechanism checks only and never executes the target checkout's hook code, so it is safe to point at an untrusted checkout. Enable only for a trusted target. |
+| `--untrusted-target` | Skip executing the target's deny-hook code (its configured launcher string and managed script). By default the audit runs that code for runtime proof; pass this when auditing a checkout you don't trust so the deny-mechanism check stays static (no execution). |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |

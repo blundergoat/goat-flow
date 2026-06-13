@@ -161,6 +161,8 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 **Reference verification:** After writing milestone files, grep every inline reference code and verify it resolves to a file on disk.
 
+For concrete Mode 0 and Mode 4 examples with expected paths and checkpoint output, see `references/milestone-examples.md`.
+
 ## Phase 3 - Between Milestones
 
 After each milestone completes, both gates must pass before the next begins. Apply the Proof Gate from `skill-preamble.md`.

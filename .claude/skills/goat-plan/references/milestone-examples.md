@@ -37,6 +37,54 @@ Assumptions are not tasks - they're beliefs about the system that affect the pla
 
 When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
 
+## Worked Example - Path-Only Intake
+
+User message: `.goat-flow/plans/oauth-refresh/`
+
+Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` has `Status: complete`; `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` has `Status: in-progress`.
+
+Expected output:
+
+```markdown
+Mode: Path-Only Intake. Orientation summary for `.goat-flow/plans/oauth-refresh/`: active pointer is `checkout-hardening`, so I did not switch plans. `oauth-refresh` has M01 complete and M02 in-progress. Current unchecked task: `[CORE] Implement refresh callback`. Next action needed from user: summary, status check, plan update, or start a specific milestone?
+```
+
+Expected outcome: no writes to `.goat-flow/plans/.active`, milestone status fields, task checkboxes, or code.
+
+## Worked Example - Mode 4 File-Write
+
+User message: `Create milestones for adding OAuth refresh-token rotation to the dashboard login flow.`
+
+Expected writes:
+- `.goat-flow/plans/.active` contains `oauth-refresh`
+- `.goat-flow/plans/oauth-refresh/ISSUE.md`
+- `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md`
+- `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md`
+
+Expected `M01-prove-refresh-token-rotation.md` shape:
+
+```markdown
+# Milestone 01: Prove refresh-token rotation
+Status: not-started
+
+## Objective
+Prove the OAuth provider issues rotated refresh tokens and that the app can persist the new token without breaking existing sessions.
+
+## Tasks
+- [ ] [RISKY] Verify the OAuth provider returns a replacement refresh token after refresh
+- [ ] [RISKY] Confirm the session store can atomically replace refresh-token metadata
+- [ ] [CORE] Add the minimal refresh-token persistence path
+
+## Testing Gate
+### Static / Contract Check
+- [ ] `npm run typecheck` exits 0
+
+### Manual
+- [ ] Refresh an expiring session in a local browser; expected: the user remains signed in and the stored refresh token changes
+```
+
+Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oauth-refresh/. Ready to start implementation.`
+
 ## Worked Example - Risk-Tagged Milestone
 
 ```markdown

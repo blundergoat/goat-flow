@@ -757,10 +757,7 @@ describe("hook registrar", () => {
       assert.equal(safetyState.agents.codex.supported, false);
       assert.match(safetyState.agents.codex.reason ?? "", /unverified/iu);
       assert.equal(safetyState.agents.antigravity.supported, false);
-      assert.match(
-        safetyState.agents.antigravity.reason ?? "",
-        /unverified/iu,
-      );
+      assert.match(safetyState.agents.antigravity.reason ?? "", /unverified/iu);
       assert.equal(safetyState.agents.copilot.supported, false);
       assert.equal(planGuardState.agents.claude.installed, true);
       // M02b spike outcome: only Claude's Stop payload is verified, so the

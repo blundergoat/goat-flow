@@ -27,9 +27,9 @@ Future tense. What needs to be delivered - not how. Each bullet is a testable re
 ```markdown
 ## What
 
-- Component X needs feature Y with property Z
-- File A needs restructuring into directory B with cross-references updated
-- ADR-NNN needs recording for decision D
+- Dashboard login needs refresh-token rotation so signed-in users can continue work after access tokens expire
+- Session storage needs atomic refresh-token replacement so concurrent requests cannot restore stale credentials
+- Operational documentation needs to explain the supported rotation behaviour and rollback trigger
 ```
 
 Do not duplicate file-level detail that the milestone files or diff already show. No past tense - this section reads as "here is what must ship" even if the work is already done (the Phase 4 revision flips tense to confirm delivery).
@@ -41,10 +41,11 @@ Checkbox list. Ordered by execution sequence. Each item is an action a developer
 ```markdown
 ## How
 
-- [ ] Do the first thing
-- [ ] Do the second thing that depends on the first
-- [ ] Run verification: `npm run typecheck`, check word budgets, grep for stale paths
-- [ ] Final pass: preflight, mirror sync, cross-reference check
+- [ ] Prove the OAuth provider returns a replacement refresh token
+- [ ] Wire refresh-token replacement into the login session flow
+- [ ] Add automated coverage for refresh success, stale-token rejection, and concurrent refresh attempts
+- [ ] Run verification: `npm run typecheck`, focused auth tests, and a local browser refresh-session check
+- [ ] Final pass: update milestone evidence, confirm cross-references, and prepare the human verification summary
 ```
 
 ### Out of scope (follow-ups)

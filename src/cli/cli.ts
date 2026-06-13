@@ -59,7 +59,7 @@ Flags:
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --deny-runtime-smoke Audit: execute the target's deny-hook code for runtime proof (default off; only enable on a trusted checkout)
+  --untrusted-target Audit: skip executing the target's deny-hook code (static checks only; use for a checkout you don't trust)
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --json            Hooks: emit machine-readable JSON (alias for --format json)
