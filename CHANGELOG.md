@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.12.0 - Unreleased
+## v1.12.0 - 2026-06-13
 
 Verification-score, universal post-turn safety, and jq compatibility release.
 

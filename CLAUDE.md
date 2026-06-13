@@ -1,4 +1,4 @@
-# CLAUDE.md - v1.11.0 (2026-06-11)
+# CLAUDE.md - v1.12.0 (2026-06-11)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).

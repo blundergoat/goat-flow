@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # plan-checkbox-guard.sh
-# goat-flow-hook-version: 1.11.0
+# goat-flow-hook-version: 1.12.0
 #
 # Universal Stop hook that catches changed-work / unchanged-plan drift.
 # It is workflow hygiene only: it does not run tests, linters, builds, or
