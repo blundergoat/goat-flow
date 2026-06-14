@@ -40,6 +40,16 @@ function withTempRepo(fn: (root: string) => void): void {
   }
 }
 
+function withUnbornTempRepo(fn: (root: string) => void): void {
+  const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
+  try {
+    runGit(root, ["init", "-q"]);
+    fn(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function writeFile(root: string, path: string, content: string | Buffer): void {
   const target = join(root, path);
   mkdirSync(dirname(target), { recursive: true });
@@ -236,6 +246,16 @@ describe("post-turn-safety hook", () => {
       writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
       runGit(root, ["add", "settings.env"]);
       runGit(root, ["restore", "--worktree", "--source=HEAD", "settings.env"]);
+
+      assertHookBlocks(root, /API token/u);
+    });
+  });
+
+  it("blocks staged-only secrets before the first commit", () => {
+    withUnbornTempRepo((root) => {
+      writeFile(root, "config.env", `API_KEY=${TEST_API_TOKEN}\n`);
+      runGit(root, ["add", "config.env"]);
+      writeFile(root, "config.env", "API_KEY=your_api_key_here\n");
 
       assertHookBlocks(root, /API token/u);
     });

@@ -262,6 +262,9 @@ scan_tracked_changes() {
   while IFS= read -r -d '' path; do
     scan_worktree_diff_file "$root" "$path"
   done < <(git ls-files -z 2>/dev/null || true)
+  while IFS= read -r -d '' path; do
+    scan_cached_diff_file "$root" "$path"
+  done < <(git diff --cached --name-only -z --diff-filter=ACMR -- 2>/dev/null || true)
 }
 
 scan_untracked_changes() {
