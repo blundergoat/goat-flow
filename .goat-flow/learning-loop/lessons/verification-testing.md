@@ -233,6 +233,17 @@ last_reviewed: 2026-06-14
 **Prevention:** For credential-scanner changes, run a matrix that includes must-block misses and must-allow placeholder assignments after each parser edit. Parse/normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), and `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
 ---
 
+## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family
+
+**Status:** active | **Created:** 2026-06-14
+
+**What happened:** While reducing `post-turn-safety` generic credential-assignment false positives, I scoped `scan_env_assignment` to env/config-shaped files and included Dockerfiles in that scope. The first live matrix still allowed `ARG CLIENT_SECRET=LiteralDockerSecret123` because the parser only recognized bare `KEY=value` and `export KEY=value`, not Dockerfile `ARG`/`ENV` prefixes.
+
+**Root cause:** I verified the path gate broadly but did not pair every newly claimed file family with a syntax-shaped fixture. The gate said "Dockerfile" while the parser still only understood shell/env assignment syntax.
+
+**Prevention:** When a scanner scope gate lists file families, add at least one block fixture for each family whose syntax differs from the default parser shape. For Dockerfiles, probe both `ARG KEY=value` and `ENV KEY=value`; for future config families, test their native assignment prefix or separator before documenting them as covered. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_env_assignment_file`), `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), and `test/integration/post-turn-safety-hook.test.ts` (search: `blocks Dockerfile ARG and ENV credential assignments`).
+---
+
 ## Lesson: Coverage classification by filename misjudges in both directions
 
 **Status:** active | **Created:** 2026-06-14

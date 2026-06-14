@@ -130,6 +130,8 @@ literal_assignment_value() {
   local after
   local bare
   local dotted_identifier_re
+  local first_segment
+  local first_segment_lower
   local operator_expression_re
   local raw
   local rest
@@ -185,19 +187,42 @@ literal_assignment_value() {
   if [[ "$bare" =~ ^[a-z_][a-z0-9_]*$ ]]; then
     return 1
   fi
-  dotted_identifier_re='^[a-z_][a-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$'
+  dotted_identifier_re='^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$'
   if [[ "$bare" =~ $dotted_identifier_re ]]; then
-    return 1
+    first_segment="${bare%%.*}"
+    first_segment_lower="$(printf '%s' "$first_segment" | tr '[:upper:]' '[:lower:]')"
+    case "$first_segment_lower" in
+      app|application|cfg|conf|config|configs|configuration|constant|constants|context|credentials|credential|creds|ctx|default|defaults|env|environ|environment|os|process|self|setting|settings|this)
+        return 1
+        ;;
+    esac
+    if ! has_credential_entropy "$first_segment"; then
+      return 1
+    fi
   fi
-  operator_expression_re='^[a-z_][a-z0-9_]*([-+*/%=]|==|!=)[A-Za-z_][A-Za-z0-9_]*$'
+  operator_expression_re='^([A-Za-z_][A-Za-z0-9_]*)([+*/%=]|==|!=)([A-Za-z_][A-Za-z0-9_]*)$'
   if [[ "$bare" =~ $operator_expression_re ]]; then
-    return 1
+    has_credential_entropy "${BASH_REMATCH[1]}" || return 1
   fi
   if [[ ! "$bare" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
     return 1
   fi
   has_credential_entropy "$bare" || return 1
   printf '%s' "$bare"
+}
+
+is_env_assignment_file() {
+  local basename
+  local lower_path
+
+  lower_path="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  basename="${lower_path##*/}"
+  case "$basename" in
+    .env*|*.env|*.env.*|dockerfile|dockerfile.*|*.dockerfile|*.sh|*.bash|*.zsh|*.ksh|*.yaml|*.yml|*.ini|*.toml|*.properties|*.conf|*.cfg)
+      return 0
+      ;;
+  esac
+  return 1
 }
 
 report_finding() {
@@ -224,11 +249,11 @@ scan_env_assignment() {
   local raw_value
   local value
 
-  key="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=].*/\2/p' | head -n 1)"
+  key="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=].*/\3/p' | head -n 1)"
   [ -n "$key" ] || return 0
   is_credential_key "$key" || return 0
 
-  raw_value="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*[:=][[:space:]]*(.*)$/\2/p' | head -n 1)"
+  raw_value="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*[:=][[:space:]]*(.*)$/\3/p' | head -n 1)"
   if ! value="$(literal_assignment_value "$raw_value")"; then
     return 0
   fi
@@ -291,7 +316,9 @@ scan_line() {
     report_token_if_real "$path" "API token" "${BASH_REMATCH[2]}"
   fi
 
-  scan_env_assignment "$path" "$line"
+  if is_env_assignment_file "$path"; then
+    scan_env_assignment "$path" "$line"
+  fi
 }
 
 is_scannable_file() {
