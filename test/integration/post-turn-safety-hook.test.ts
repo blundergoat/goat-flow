@@ -211,7 +211,9 @@ describe("post-turn-safety hook", () => {
         "Dockerfile",
         [
           "ARG CLIENT_SECRET=LiteralDockerSecret123",
+          "ARG AUTH_TOKEN LiteralDockerArgSecret123",
           'ENV API_TOKEN="LiteralDockerToken123"',
+          "ENV SECRET_KEY LiteralDockerEnvSecret123",
           "",
         ].join("\n"),
       );
@@ -220,7 +222,9 @@ describe("post-turn-safety hook", () => {
         root,
         /credential assignment \(CLIENT_SECRET\)/u,
       );
+      assert.match(result.stderr, /credential assignment \(AUTH_TOKEN\)/u);
       assert.match(result.stderr, /credential assignment \(API_TOKEN\)/u);
+      assert.match(result.stderr, /credential assignment \(SECRET_KEY\)/u);
     });
   });
 

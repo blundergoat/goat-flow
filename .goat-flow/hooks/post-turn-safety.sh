@@ -211,6 +211,20 @@ literal_assignment_value() {
   printf '%s' "$bare"
 }
 
+is_dockerfile_path() {
+  local basename
+  local lower_path
+
+  lower_path="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  basename="${lower_path##*/}"
+  case "$basename" in
+    dockerfile|dockerfile.*|*.dockerfile)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 is_env_assignment_file() {
   local basename
   local lower_path
@@ -249,11 +263,16 @@ scan_env_assignment() {
   local raw_value
   local value
 
-  key="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=].*/\3/p' | head -n 1)"
+  if is_dockerfile_path "$path"; then
+    key="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*(arg|ARG|env|ENV)[[:space:]]+([A-Za-z_][A-Za-z0-9_-]*)([[:space:]]*[:=][[:space:]]*|[[:space:]]+).*/\2/p' | head -n 1)"
+    raw_value="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*(arg|ARG|env|ENV)[[:space:]]+[A-Za-z_][A-Za-z0-9_-]*([[:space:]]*[:=][[:space:]]*|[[:space:]]+)(.*)$/\3/p' | head -n 1)"
+  else
+    key="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=].*/\3/p' | head -n 1)"
+    raw_value="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*[:=][[:space:]]*(.*)$/\3/p' | head -n 1)"
+  fi
   [ -n "$key" ] || return 0
   is_credential_key "$key" || return 0
 
-  raw_value="$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*((export|EXPORT|arg|ARG|env|ENV)[[:space:]]+)?[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*[:=][[:space:]]*(.*)$/\3/p' | head -n 1)"
   if ! value="$(literal_assignment_value "$raw_value")"; then
     return 0
   fi
