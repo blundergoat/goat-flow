@@ -365,17 +365,18 @@ const timer =
 child.on("close", (code) => {
   if (timer) clearTimeout(timer);
   if (forceKillTimer) clearTimeout(forceKillTimer);
-  process.stdout.write(Buffer.concat(chunks));
+  const outputChunks = [Buffer.concat(chunks)];
   if (timedOut) {
-    process.stdout.write(
-      `\n[preflight] command timed out after ${timeoutSeconds}s: ${[
+    outputChunks.push(
+      Buffer.from(`\n[preflight] command timed out after ${timeoutSeconds}s: ${[
         command,
         ...args,
-      ].join(" ")}\n`,
+      ].join(" ")}\n`),
     );
-    process.exit(124);
   }
-  process.exit(code === null ? 1 : code);
+  process.stdout.write(Buffer.concat(outputChunks), () => {
+    process.exit(timedOut ? 124 : code === null ? 1 : code);
+  });
 });
 NODE
     )" && status=0 || status=$?

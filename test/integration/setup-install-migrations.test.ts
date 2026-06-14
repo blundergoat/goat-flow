@@ -93,6 +93,43 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.match(settings, /post-turn-safety\.sh/u);
   });
 
+  it("prunes retired plan guard config from CRLF config files", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.12.0"',
+        "",
+        "hooks:",
+        "  post-turn-safety:",
+        "    enabled: true",
+        "",
+        "plan-guard:",
+        "  enabled: true",
+        "  search-paths:",
+        "    - .goat-flow/plans",
+        "",
+        "line-limits:",
+        "  target: 125",
+        "",
+      ].join("\r\n"),
+    );
+    writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.doesNotMatch(config, /plan-guard/u);
+    assert.match(config, /line-limits:\r\n  target: 125/u);
+    assert.doesNotMatch(config, /\r\n\r\n\r\n/u);
+  });
+
   it("prunes legacy deny-dangerous self-test files during upgrades", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
