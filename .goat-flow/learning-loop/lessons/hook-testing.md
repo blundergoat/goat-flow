@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-06-12
+last_reviewed: 2026-06-19
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -22,6 +22,16 @@ last_reviewed: 2026-06-12
 **Root cause:** The test generated dangerous fixture content by storing the exact dangerous strings in the source file. That made the repository source itself look like changed secret material, even though the test only needed the dangerous value inside a temporary repo at runtime.
 
 **Prevention:** Secret-scanner tests should construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
+
+## Lesson: Bash case patterns need syntax proof for template delimiters
+
+**Status:** active | **Created:** 2026-06-19
+
+**What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed before scanner logic ran with `syntax error near unexpected token '<'`, and ShellCheck flagged the brace literals after the parse error was fixed.
+
+**Root cause:** I treated delimiter strings as inert glob text inside a Bash `case` arm. In shell syntax, redirection-looking characters and brace literals still need quoting or escaping for a clean parser/static-analysis pass, even when the surrounding intent is just pattern matching.
+
+**Prevention:** For hook scanner changes that add template or shell delimiter patterns, run `bash -n` and ShellCheck before trusting behavior tests, and escape delimiter metacharacters in `case` arms. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`) and `test/integration/post-turn-safety-hook.test.ts` (search: `template interpolations`).
 
 ## Lesson: Generated hook templates need template-safe ShellCheck annotations
 

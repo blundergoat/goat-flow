@@ -21,6 +21,8 @@ MAX_FINDINGS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 findings=0
 reported_findings="
 "
+merge_conflict_scan_path=""
+merge_conflict_scan_state=0
 
 repo_root() {
   git rev-parse --show-toplevel 2>/dev/null
@@ -208,6 +210,18 @@ has_credential_entropy() {
   return 1
 }
 
+is_reference_or_interpolation() {
+  local value="$1"
+  case "$value" in
+    *%env\(*|*%ENV\(*) return 0 ;;
+    *\$\{*|*\$\(*) return 0 ;;
+    *\{\{*|*\}\}*|*\{%*|*%\}*) return 0 ;;
+    *\<%*|*%\>*) return 0 ;;
+  esac
+  [[ "$value" =~ ^%[^%[:space:]]+%$ ]] && return 0
+  return 1
+}
+
 literal_assignment_value() {
   local after
   local bare
@@ -232,8 +246,9 @@ literal_assignment_value() {
       [[ "$rest" == *\"* ]] || return 1
       value="${rest%%\"*}"
       case "$value" in
-        *'$'*) return 1 ;;
+        *[[:space:]]*|*'$'*) return 1 ;;
       esac
+      is_reference_or_interpolation "$value" && return 1
       after="${rest#*\"}"
       after="$(strip_space "$after")"
       case "$after" in
@@ -247,6 +262,10 @@ literal_assignment_value() {
       rest="${raw:1}"
       [[ "$rest" == *"'"* ]] || return 1
       value="${rest%%\'*}"
+      case "$value" in
+        *[[:space:]]*) return 1 ;;
+      esac
+      is_reference_or_interpolation "$value" && return 1
       after="${rest#*\'}"
       after="$(strip_space "$after")"
       case "$after" in
@@ -367,16 +386,56 @@ report_token_if_real() {
   report_finding "$path" "$family"
 }
 
+is_line_allowlisted() {
+  case "$1" in
+    *goat-flow-allow-secret*|*gitleaks:allow*|*'pragma: allowlist secret'*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+reset_merge_conflict_scan() {
+  merge_conflict_scan_path="$1"
+  merge_conflict_scan_state=0
+}
+
+scan_merge_conflict_marker() {
+  local path="$1"
+  local line="$2"
+
+  if [ "$merge_conflict_scan_path" != "$path" ]; then
+    reset_merge_conflict_scan "$path"
+  fi
+
+  case "$line" in
+    "<<<<<<< "*)
+      merge_conflict_scan_state=1
+      ;;
+    "=======")
+      if [ "$merge_conflict_scan_state" -eq 1 ]; then
+        merge_conflict_scan_state=2
+      fi
+      ;;
+    ">>>>>>> "*)
+      if [ "$merge_conflict_scan_state" -eq 2 ]; then
+        report_finding "$path" "merge conflict marker"
+      fi
+      merge_conflict_scan_state=0
+      ;;
+    *)
+      ;;
+  esac
+}
+
 scan_line() {
   local path="$1"
   local line="$2"
   local api_token_reported=0
 
-  case "$line" in
-    "<<<<<<< "*|"======="|">>>>>>> "*)
-      report_finding "$path" "merge conflict marker"
-      ;;
-  esac
+  is_line_allowlisted "$line" && return 0
+
+  scan_merge_conflict_marker "$path" "$line"
 
   if [[ "$line" =~ -----BEGIN[[:space:]](RSA[[:space:]]|DSA[[:space:]]|EC[[:space:]]|OPENSSH[[:space:]])?PRIVATE[[:space:]]KEY----- ]]; then
     report_finding "$path" "private key block"
@@ -428,6 +487,7 @@ scan_untracked_file() {
   local line
 
   is_scannable_file "$root" "$path" || return 0
+  reset_merge_conflict_scan "$path"
   while IFS= read -r line || [ -n "$line" ]; do
     scan_line "$path" "$line"
   done < "$root/$path"
@@ -438,6 +498,7 @@ scan_diff_added_lines() {
   local line
 
   shift 1
+  reset_merge_conflict_scan "$path"
   while IFS= read -r line; do
     case "$line" in
       "+++"*|"---"*|"@@"*) continue ;;
